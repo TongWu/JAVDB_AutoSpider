@@ -1,183 +1,183 @@
-# ADR-003: Metrics Pipeline（混合写入 + 空闲抑制）
+# ADR-003: Metrics Pipeline (Hybrid Write + Idle Suppression)
 
-**状态**: 已接受 (Accepted)
-**日期**: 2026-05-16
-**决策者**: Proxy Coordinator Dashboard 改造
-
----
-
-## 背景 (Context)
-
-Dashboard 需要展示时序图表（latency / health score / active runners / queue depth / CF-bypass 占比 / per-proxy 多线趋势 等）。当前 Worker 端**所有 DO 只保存"当前快照"**，没有历史时序数据。
-
-要画时序图，必须把每个时间点的状态持久化为一连串采样点。设计空间有 4 个相互独立的轴：
-
-1. **数据源粒度**：客户端浏览器内存累积 vs Worker DO 持久化
-2. **写入触发器**：Cron 定时拉取 vs Dashboard 轮询副作用 vs Runner 自上报 vs 混合
-3. **采样间隔**：5 秒 / 30 秒 / 1 分钟 / 更长
-4. **存储 schema**：单行 JSON 快照 vs 多行按 metric 拆分
-
-### 关键约束
-
-- **生产时间分布严重不均**：GH Actions 跑批一天活跃约 6 小时，其余 18 小时几乎完全空闲（active_runners=0）
-- **Cloudflare Cron 最小间隔 1 分钟**（不能 30 秒）
-- **DO IO 是计费项**：CF DO SQLite 按"rows written / read"计费，需要节省
-- **dashboard 主要价值在 active 时段**：空闲时段的"全零"数据点对运维无信息
+**Status**: Accepted
+**Date**: 2026-05-16
+**Deciders**: Proxy Coordinator Dashboard redesign
 
 ---
 
-## 决策 (Decision)
+## Context
 
-### 选择：Worker DO 持久化 + 混合写入 + JSON 快照 + 空闲抑制
+The dashboard needs to show time-series charts (latency / health score / active runners / queue depth / CF-bypass ratio / per-proxy multi-line trends, etc.). The Worker side currently keeps **only a "current snapshot" for every DO** — there is no historical time-series data.
 
-具体配置：
+To draw a time-series chart we must persist each point-in-time state as a series of sampling points. The design space has four independent axes:
 
-| 轴 | 选定 |
+1. **Data-source granularity**: in-browser memory accumulation vs. Worker DO persistence
+2. **Write trigger**: cron scheduled pull vs. dashboard polling side effect vs. runner self-report vs. hybrid
+3. **Sampling interval**: 5 seconds / 30 seconds / 1 minute / longer
+4. **Storage schema**: single-row JSON snapshot vs. one row per metric
+
+### Key Constraints
+
+- **Production time distribution is severely uneven**: the GH Actions batch is active for roughly 6 hours per day; the remaining 18 hours are almost entirely idle (`active_runners=0`).
+- **Cloudflare cron minimum interval is 1 minute** (30 seconds is not available).
+- **DO IO is a billed resource**: CF DO SQLite is billed by "rows written / read", so we need to economise.
+- **The dashboard is mostly valuable during active periods**: all-zero data points during idle periods carry no operational information.
+
+---
+
+## Decision
+
+### Choice: Worker DO persistence + hybrid write + JSON snapshot + idle suppression
+
+Concrete configuration:
+
+| Axis | Selected |
 |---|---|
-| 数据源粒度 | **新建 MetricsState DO 持久化** |
-| 写入触发器 | **Cron 1 分钟 + Dashboard 5 秒轮询副作用** |
-| 采样间隔 | **5 秒 bucket** (`floor(now_ms/5000)*5000`) |
-| 存储 schema | **单行 JSON 快照** (`metrics_snapshots(ts INTEGER PK, payload TEXT, source TEXT)`) |
-| 去重策略 | **`INSERT OR REPLACE`** —— 同 5 秒 bucket 内最后一次写覆盖 |
-| 空闲抑制 | **active 才写；active↔idle 边界写 transition；整点写心跳锚点** |
-| Retention | **30 天滚动 TTL + 100k 行硬上限** |
+| Data-source granularity | **New `MetricsState` DO persistence** |
+| Write trigger | **Cron at 1 minute + dashboard 5-second polling side effect** |
+| Sampling interval | **5-second bucket** (`floor(now_ms/5000)*5000`) |
+| Storage schema | **Single-row JSON snapshot** (`metrics_snapshots(ts INTEGER PK, payload TEXT, source TEXT)`) |
+| Deduplication strategy | **`INSERT OR REPLACE`** — within the same 5-second bucket, the last write overwrites the previous one |
+| Idle suppression | **Write only when active; write a transition marker at the active↔idle boundary; write a heartbeat anchor on the hour** |
+| Retention | **30-day rolling TTL + 100k-row hard cap** |
 
-### Idle 判定（全部同时满足）
+### Idle determination (all must hold simultaneously)
 ```
 active_runners == 0
   AND queue_depth == 0 AND in_flight == 0
   AND active_signals == 0
-  AND (过去 5 分钟无任何 proxy 的 lease / report 活动)
+  AND (no lease / report activity from any proxy in the past 5 minutes)
 ```
 
-### 写入决策矩阵
-| 上 tick | 本 tick | 行为 |
+### Write decision matrix
+| Previous tick | This tick | Behaviour |
 |---|---|---|
-| active | active | ✅ 写 |
-| active | idle | ✅ 写 **Transition Marker**（折线收尾） |
-| idle | active | ✅ 写恢复点 |
-| idle | idle | ❌ **跳过**（主要省 IO 场景） |
-| any | any（当前为整点 :00） | ✅ 写心跳锚点 |
+| active | active | Write |
+| active | idle | Write **transition marker** (closes the line segment) |
+| idle | active | Write recovery point |
+| idle | idle | **Skip** (the main IO-saving case) |
+| any | any (current time is exactly :00) | Write heartbeat anchor |
 
 ---
 
-## 备选方案 (Alternatives Considered)
+## Alternatives Considered
 
-### 备选 A：浏览器内存累积，不持久化
+### Alternative A: In-browser memory accumulation, no persistence
 
-dashboard JS 在内存里 ring buffer 累积每次轮询的数据；只显示开窗后的时段；刷新归零。
+The dashboard JS keeps a ring buffer of each polled sample in memory; it only shows the window since the page was opened; refreshing resets it.
 
-**优点**：实现极轻量；零 Worker storage 成本；零 IO
-**缺点（不选的原因）**：
-- **History 需求（grill-me Q5）要求跨刷新可见**——浏览器内存归零破坏审计价值
-- 多操作员同时打开 dashboard 看到不同的"历史"
-- 关闭后历史立刻丢失，事后分析无法回溯
+**Pros**: extremely lightweight implementation; zero Worker storage cost; zero IO.
+**Cons (why rejected)**:
+- The **history requirement (grill-me Q5) demands visibility across refreshes** — in-browser memory resetting breaks the audit value.
+- Multiple operators opening the dashboard concurrently would see different "histories".
+- History is lost the moment the tab closes; post-hoc analysis cannot replay it.
 
-### 备选 B：纯 Cron 1 分钟触发写入
+### Alternative B: Pure cron-driven write at 1 minute
 
-只在 cron alarm 里采样。完全解耦于 dashboard 使用情况。
+Sample only inside the cron alarm. Fully decoupled from dashboard usage.
 
-**优点**：实现最干净；不耦合主请求路径
-**缺点（部分不选的原因）**：
-- 1 分钟分辨率对 active 时段不够细——latency 抖动看不清
-- 实际上 1 分钟分辨率已经够用，**这是和 (IV) 混合方案的主要 trade-off**——参见"原因"
+**Pros**: cleanest implementation; does not couple to the main request path.
+**Cons (partially the reason for rejection)**:
+- 1-minute resolution is too coarse for active periods — latency jitter is invisible.
+- In practice 1-minute resolution is already sufficient, and **this is the main trade-off against the (IV) hybrid scheme** — see "Why" below.
 
-### 备选 C：Runner 自上报（每次 heartbeat 推送 metrics）
+### Alternative C: Runner self-report (push metrics on every heartbeat)
 
-Runner 每次 heartbeat（约 15 秒）推送自己视角的指标到 MetricsState DO。
+The runner pushes its view of metrics to `MetricsState` DO on every heartbeat (~15 seconds).
 
-**优点**：天然高分辨率；不依赖 dashboard
-**缺点（不选的原因）**：
-- 多 runner 同时上报需要去重逻辑（取最大？平均？）—— 复杂
-- 每次 heartbeat 多一次 DO 写入，主路径成本上升
-- 视角是 runner 本地的，不是 Worker 全局状态（health score 是 ProxyCoordinator DO 算的，不是 runner 能直接看到的）
+**Pros**: naturally high resolution; does not depend on the dashboard.
+**Cons (why rejected)**:
+- Multiple runners reporting concurrently requires deduplication logic (take max? average?) — complex.
+- One extra DO write per heartbeat raises the main-path cost.
+- The perspective is the runner's local view, not the Worker's global state (the health score is computed by the `ProxyCoordinator` DO and is not directly observable from a runner).
 
-### 备选 D：每 metric 一行的结构化 schema
+### Alternative D: Structured schema with one row per metric
 
-`metrics(ts, metric_kind, dim_key, value)` 多 row 存储。
+`metrics(ts, metric_kind, dim_key, value)` multi-row storage.
 
-**优点**：按 metric 精确查询，走 SQL index 高效
-**缺点（不选的原因）**：
-- **写放大严重**：10 proxies × 5 metrics + 4 global = ~54 rows/tick；与 (P) 单行 JSON 的 1 row/tick 相差 54 倍
-- Schema 演化需要 migration（加新 metric 就要 ALTER TABLE）
-- dashboard 主要用法是"读一个时段的全图"，并不需要按 metric 精挑
-
----
-
-## 为什么选 (IV) 混合写入而不是纯 Cron
-
-最初决策是纯 Cron 1 分钟。讨论后改成 Cron + Dashboard 5 秒混合，原因：
-
-- **Cron 保证基线**：即使 dashboard 没人开，过去活跃时段的 1 分钟分辨率历史已经写入。事后回看不会断档。
-- **Dashboard 加密 5 秒**：操作员盯盘时获得 5 秒分辨率（看 latency 抖动有用）。
-- **5 秒 bucket 主键 + INSERT OR REPLACE 自然去重**：Cron 和 Dashboard 偶然撞在同一桶里时，最后一次写覆盖前一次，无并发冲突。
-- **dashboard 写入用 `ctx.waitUntil()` 异步**：不阻塞 `/ops/snapshot` 主响应路径。
-- **空闲抑制对两者都生效**：dashboard 开着但系统空闲时也不写。
+**Pros**: precise per-metric queries that ride a SQL index efficiently.
+**Cons (why rejected)**:
+- **Severe write amplification**: 10 proxies × 5 metrics + 4 global ≈ 54 rows/tick; 54× more than the 1 row/tick of (P) single-row JSON.
+- Schema evolution requires migrations (adding a new metric means `ALTER TABLE`).
+- The dashboard's primary use is "read the full chart for a time range", not picking a specific metric.
 
 ---
 
-## 实现策略 (Implementation)
+## Why (IV) Hybrid Write Instead of Pure Cron
 
-### Phase 2：基础设施
+The initial decision was pure cron at 1 minute. After discussion we changed to cron + dashboard 5-second hybrid, for these reasons:
 
-1. 创建 `MetricsState` DO 类（`src/metrics_state.ts`），实现 `recordSnapshot(payload, source)` + `queryRange(fromTs, toTs)` + GC alarm 跑 retention sweep
-2. `wrangler.toml`：
-   - 新增 DO binding `METRICS_STATE_DO`
-   - 添加 cron trigger `* * * * *`（每分钟）
-3. Worker `scheduled` handler：每分钟拉取 `aggregateOpsSnapshot()` 结果，调用 `MetricsState.recordSnapshot(..., 'cron')`
-4. `/ops/snapshot` 末尾用 `ctx.waitUntil(metricsState.recordSnapshot(..., 'dashboard'))` fire-and-forget
-
-### Phase 3：dashboard 接入
-
-新增 `GET /metrics/range?from=...&to=...` 端点；dashboard JS 在选定时间范围时拉取并喂给 uPlot。
-
-### 测试覆盖
-
-- `test/metrics_state.test.ts`：
-  - 5 秒 bucket 去重
-  - idle 跳过逻辑
-  - transition marker 写入
-  - 心跳锚点写入
-  - retention sweep 删除超期行
-  - 100k 行硬上限触发清理
+- **Cron guarantees the baseline**: even if nobody opens the dashboard, the 1-minute resolution history for past active periods is already written. Looking back later, there is no gap.
+- **Dashboard densifies to 5 seconds**: when an operator is watching, they get 5-second resolution (useful for spotting latency jitter).
+- **5-second bucket primary key + `INSERT OR REPLACE` provides natural deduplication**: when cron and dashboard happen to land in the same bucket, the later write overwrites the earlier one — no concurrency conflict.
+- **Dashboard writes use `ctx.waitUntil()` asynchronously**: they do not block the `/ops/snapshot` main response path.
+- **Idle suppression applies to both**: even with the dashboard open, nothing is written while the system is idle.
 
 ---
 
-## 后果 (Consequences)
+## Implementation
 
-### 正面影响
+### Phase 2: infrastructure
 
-1. **跨刷新可见的真实历史**：操作员关闭 dashboard 也不丢数据
-2. **空闲时段几乎零 IO**：估算从 1440 写/天降到 ~320 写/天（约 -78%）
-3. **5 秒分辨率（active+dashboard 时）+ 1 分钟分辨率（active 但无 dashboard 时）+ 心跳锚点**——多档采样自然适配场景
-4. **统一 schema 简单**：单行 JSON 快照，未来加 metric 不需要 migration
+1. Create the `MetricsState` DO class (`src/metrics_state.ts`); implement `recordSnapshot(payload, source)` + `queryRange(fromTs, toTs)` + a GC alarm that runs the retention sweep.
+2. `wrangler.toml`:
+   - Add the DO binding `METRICS_STATE_DO`.
+   - Add a cron trigger `* * * * *` (every minute).
+3. Worker `scheduled` handler: every minute, pull the result of `aggregateOpsSnapshot()` and call `MetricsState.recordSnapshot(..., 'cron')`.
+4. At the end of `/ops/snapshot`, use `ctx.waitUntil(metricsState.recordSnapshot(..., 'dashboard'))` fire-and-forget.
 
-### 负面影响
+### Phase 3: dashboard integration
 
-1. **新增 1 个 DO + 1 个 cron trigger**：部署复杂度小幅上升
-2. **JSON 解析成本**：dashboard 读 24h 历史 = 解析 ~1440 个 JSON object（active 全开情况下），轻量但非零
-3. **dashboard 主路径增加一次 DO 写入**（`waitUntil` 异步，不阻塞响应但消耗 CPU 配额）
+Add the endpoint `GET /metrics/range?from=...&to=...`; the dashboard JS pulls it when a time range is selected and feeds the result into uPlot.
 
-### 风险
+### Test coverage
 
-1. **Cron 触发未触发**（CF 偶尔丢 cron 调度）→ history 出现空洞
-   - **缓解**：整点心跳锚点；dashboard 5 秒采样冗余兜底
-2. **5 秒 bucket 在跨 isolate 时钟漂移下偶尔错位**
-   - **缓解**：CF Worker 时钟同步精度 < 1 秒，5 秒 bucket 容忍度足够
-3. **MetricsState DO 存储意外膨胀**（idle suppression 失效 + 30 天 TTL 失效双重故障）
-   - **缓解**：100k 行硬上限；GC alarm 持续扫描
-
----
-
-## 相关决策 (Related Decisions)
-
-- **ADR-002**：可观测性数据存储拓扑（为什么 metrics 单独一个 DO 而不是合并到 RunnerRegistry）
-- **ADR-004**：Runner 上报 PROXY_POOL（影响 `metrics_snapshots` payload 里的 proxies 字段）
+- `test/metrics_state.test.ts`:
+  - 5-second bucket deduplication
+  - idle skip logic
+  - transition marker writes
+  - heartbeat anchor writes
+  - retention sweep deletes expired rows
+  - 100k-row hard cap triggers cleanup
 
 ---
 
-## 参考资料 (References)
+## Consequences
 
-- [CONTEXT.md](../../../CONTEXT.md) — Snapshots / Idle Suppression / Transition Marker 定义
+### Positive
+
+1. **Real history visible across refreshes**: closing the dashboard does not lose data.
+2. **Near-zero IO during idle periods**: estimated to drop from 1440 writes/day to ~320 writes/day (about -78%).
+3. **5-second resolution (active + dashboard open) + 1-minute resolution (active without dashboard) + heartbeat anchor** — the multi-tier sampling adapts naturally to the scenario.
+4. **Unified schema is simple**: single-row JSON snapshot; adding metrics in the future requires no migration.
+
+### Negative
+
+1. **One additional DO and one additional cron trigger**: deployment complexity grows slightly.
+2. **JSON parsing cost**: reading 24h of history on the dashboard means parsing ~1440 JSON objects (in the fully active case) — lightweight but non-zero.
+3. **The dashboard main path picks up one extra DO write** (`waitUntil` is asynchronous and does not block the response, but it does consume CPU quota).
+
+### Risks
+
+1. **Cron trigger may fail to fire** (CF occasionally drops cron schedules) → history develops holes.
+   - **Mitigation**: on-the-hour heartbeat anchor; the dashboard 5-second sampling provides redundant fallback.
+2. **The 5-second bucket may occasionally misalign under cross-isolate clock drift.**
+   - **Mitigation**: CF Worker clock sync precision is < 1 second; a 5-second bucket has ample tolerance.
+3. **`MetricsState` DO storage growing unexpectedly** (dual failure of idle suppression and the 30-day TTL).
+   - **Mitigation**: 100k-row hard cap; GC alarm scans continuously.
+
+---
+
+## Related Decisions
+
+- **ADR-002**: observability data storage topology (why metrics gets its own DO instead of being merged into `RunnerRegistry`).
+- **ADR-004**: runner reports `PROXY_POOL` (affects the `proxies` field inside the `metrics_snapshots` payload).
+
+---
+
+## References
+
+- [CONTEXT.md](../../../CONTEXT.md) — definitions of Snapshots / Idle Suppression / Transition Marker.
 - Cloudflare Cron Triggers minimum interval: <https://developers.cloudflare.com/workers/configuration/cron-triggers/>
 - Cloudflare DO SQLite pricing model: <https://developers.cloudflare.com/durable-objects/platform/pricing/>

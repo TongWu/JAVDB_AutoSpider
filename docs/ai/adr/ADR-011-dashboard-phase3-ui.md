@@ -1,5 +1,12 @@
-# Dashboard Overhaul — Phase 3: Main Dashboard UI
+# ADR-011: Dashboard Overhaul — Phase 3: Main Dashboard UI
 
+**Status**: Accepted — Planned
+**Date**: 2026-05-16
+**Deciders**: Proxy Coordinator Dashboard rewrite working stream
+**Related**: implements [ADR-003](ADR-003-metrics-pipeline.md); requires [ADR-010](ADR-010-dashboard-phase2-worker-backend.md) deployed; prerequisite for [ADR-012](ADR-012-dashboard-phase4-history-drilldowns.md)
+
+> **Note on format:** This ADR was originally written as a step-by-step implementation plan and relocated into the ADR space (per repo convention for design records). The decision context is captured in the **Goal / Architecture / Tech Stack** preamble below; the rest is the execution checklist preserved from the original plan.
+>
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Rebuild the dashboard's main view: visibility-aware polling, browser-local timezone with tz abbreviation, hover tooltips with complementary time format, auto-discovered per-proxy list with chip filter, ConfigState always shows merged config, and 5 priority charts (active runners trend, queue depth, CF-bypass ratio donut, per-proxy latency multi-line, per-proxy health-score multi-line).

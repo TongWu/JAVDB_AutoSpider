@@ -1,5 +1,12 @@
-# Dashboard Overhaul — Phase 2: Worker Backend Infrastructure
+# ADR-010: Dashboard Overhaul — Phase 2: Worker Backend Infrastructure
 
+**Status**: Accepted — Planned
+**Date**: 2026-05-16
+**Deciders**: Proxy Coordinator Dashboard rewrite working stream
+**Related**: implements [ADR-002](ADR-002-observability-data-storage-topology.md), [ADR-003](ADR-003-metrics-pipeline.md), [ADR-004](ADR-004-proxy-discovery-via-runner-pool-upload.md); requires [ADR-009](ADR-009-dashboard-phase1-proxy-pool-upload.md) deployed; prerequisite for [ADR-011](ADR-011-dashboard-phase3-ui.md)
+
+> **Note on format:** This ADR was originally written as a step-by-step implementation plan and relocated into the ADR space (per repo convention for design records). The decision context is captured in the **Goal / Architecture / Tech Stack** preamble below; the rest is the execution checklist preserved from the original plan.
+>
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build all server-side persistence and write paths that Phase 3 (UI) and Phase 4 (history drill-downs) will consume. No user-visible change after Phase 2 — the dashboard renders identically because the UI still uses the old fetch shape. **Phase 2 is verified entirely via curl + tests.**

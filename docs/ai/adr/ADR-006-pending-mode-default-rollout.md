@@ -1,169 +1,180 @@
-# ADR-006: Pending Mode 默认推全 + Audit auto-fallback 退役
+# ADR-006: Pending Mode Default Rollout + Retirement of Audit Auto-Fallback
 
-**状态**: 已接受 (Accepted)
-**日期**: 2026-05-16
-**决策者**: 架构深化第二轮（[ADR-005](ADR-005-db-py-retirement-and-repo-pattern.md) 的前置依赖）
-**后继触发**: ADR-006 完成后才能启动 ADR-005 的 PR-1
+**Status**: Accepted
+**Date**: 2026-05-16
+**Deciders**: Architecture depth-pass round 2 (prerequisite for [ADR-005](ADR-005-db-py-retirement-and-repo-pattern.md))
+**Successor Trigger**: ADR-005 PR-1 may only start after ADR-006 completes
 
-## 修订记录 (Amendments)
+## Amendments
 
-- **2026-05-16 amendment 1**：**PR-B 取消**。原计划"把 SQLite schema `WriteMode TEXT DEFAULT 'audit'` 改为 `DEFAULT 'pending'`"被否决——核查发现该 DEFAULT 仅在 v5→v6 migration 与 csv_to_sqlite backfill 两条**历史数据导入路径**上触发，那些路径处理的就是真正的 Audit Mode 历史 session，`'audit'` 是**正确**的标签而非"愿景默认"。普通写入路径（[`db_reports.py:128`](../../../packages/python/javdb_platform/db_reports.py)）始终显式传 `WriteMode`，DEFAULT 永不触发。改 DEFAULT 反而会错标历史数据。Schema DEFAULT 保留为 `'audit'`，作为"未知 WriteMode 时假定为遗留 audit session"的防御性标签。PR 序列从 6 个变 5 个。
+- **2026-05-16 amendment 1**: **PR-B cancelled**. The original plan to "change the SQLite schema `WriteMode TEXT DEFAULT 'audit'` to `DEFAULT 'pending'`" was rejected — investigation found that this DEFAULT only fires on two **historical data import paths**: the v5→v6 migration and the csv_to_sqlite backfill. Those paths handle genuinely Audit Mode historical sessions, where `'audit'` is the **correct** label, not a "target default". The normal write path ([`db_reports.py:128`](../../../packages/python/javdb_platform/db_reports.py)) always passes `WriteMode` explicitly, so the DEFAULT never fires. Changing the DEFAULT would instead mislabel historical data. The schema DEFAULT stays as `'audit'`, serving as a defensive label meaning "assume legacy audit session when WriteMode is unknown". The PR sequence shrinks from 6 to 5.
 
----
+- **2026-05-17 amendment 2**: After ADR-006 was accepted, [ADR-007](ADR-007-monorepo-restructure-2026-05.md) reorganised the Python namespace (`packages/python/javdb_*` → top-level `javdb/`). Any PRs from this ADR's implementation order that have not yet merged when ADR-007 Phase 1 lands must operate on the new paths:
 
-## 背景 (Context)
+  - `packages/python/javdb_platform/db_session.py:188` → `javdb/storage/db/db_session.py:188`
+  - `packages/python/javdb_platform/db_reports.py:128` → `javdb/storage/db/db_reports.py:128`
+  - `scripts/pending_mode_alert_and_pause.py` → `apps/cli/db/pending_alert.py` (moved by ADR-007 Phase 2)
+  - Workflow command `python3 -m scripts.pending_mode_alert_and_pause` → `python3 -m apps.cli.db.pending_alert` (updated in same Phase 2 PR)
+  - Workflow command `python3 -m scripts.aggregate_pending_health` → `python3 -m apps.cli.db.pending_health`
 
-ADR-005 起草后立即跑了 D10 Audit Mode 退役安全核查，**两项失败**：
-
-| Gate 项 | 状态 | 实测 |
-|---|---|---|
-| 近 30 天 `WriteMode='audit'` 计数为 0 | ❌ FAIL | 近 30 天 audit=54 / pending=13；全时段 audit=354 / pending=13 |
-| 无孤儿审计行 | ✅ PASS | 0 个 |
-| Workflow 7 天前移除 audit 选项 | ❌ FAIL | 3 个 workflow 仍把 `audit` 列为合法值；DailyIngestion 有 auto-fallback 到 audit 的活机制 |
-
-### 同时发现的文档失实
-
-| 来源 | 声称 | 实际 |
-|---|---|---|
-| CLAUDE.md L88 / CONTEXT.md "Write Mode" | "Pending Mode（默认）" | `db_session.py:188` `return "audit"` 是代码 fallback |
-| 同上 | "Audit Mode 已弃用，计划 2026-08-13 下线" | 80% 在线 session 仍是 audit |
-| ADR-001 docstring | Phase 3 / pending 已默认 | 实测 audit 是主路径 |
-
-### 为什么这样
-
-- `db_session.py:188` 在无 env var、无 explicit、无配置文件 override 时**默认返回 `'audit'`**——历史遗留：早期 Pending 表上线时为保护新代码先以 audit 为默认。
-- `.github/workflows/DailyIngestion.yml:1093` 实现了"critical pending alert 触发后自动 commit `.publish-config.yml` 切回 audit 24 小时"的 **auto-fallback** 机制，由 `scripts/pending_mode_auto_fallback.py` (212 行) 执行。这是 Pending Mode 不稳定时的运维安全网。
-- workflow 的 `write_mode_override` input 仍接受 `'audit'` 作为有效值；操作员心智上 audit/pending 仍是 dual options。
-
-ADR-005 的 D2(c) "完全退役 Audit Mode" 假设了文档为真，但 audit 实际是**主路径 + safety net**——硬退会移除安全网且需要修改 80% session 的运行模式。
+  Path rename only — the D1–D5 decision, the 30-day bake gate, and the relationship to ADR-005 are unchanged.
 
 ---
 
-## 决策 (Decision)
+## Context
 
-把 ADR-005 中 audit 退役的前提工作独立成本 ADR，按以下 4 步推 Pending Mode 到 100%，留出 30 天 bake 期，再放行 ADR-005 D10 gate。
+Immediately after ADR-005 was drafted, a D10 Audit Mode retirement safety check was run. **Two items failed**:
 
-### D1：代码默认改 pending
+| Gate item | Status | Measured |
+|---|---|---|
+| Last-30-day `WriteMode='audit'` count is 0 | FAIL | Last 30 days: audit=54 / pending=13; all-time: audit=354 / pending=13 |
+| No orphan audit rows | PASS | 0 |
+| Workflows removed audit option 7 days ago | FAIL | 3 workflows still list `audit` as a valid value; DailyIngestion has a live auto-fallback to audit |
 
-修改：
+### Documentation inaccuracies found alongside
+
+| Source | Claim | Reality |
+|---|---|---|
+| CLAUDE.md L88 / CONTEXT.md "Write Mode" | "Pending Mode (default)" | `db_session.py:188` `return "audit"` is the code fallback |
+| Same | "Audit Mode deprecated, scheduled to be removed 2026-08-13" | 80% of live sessions are still audit |
+| ADR-001 docstring | Phase 3 / pending already default | In practice audit is the main path |
+
+### Why this state
+
+- `db_session.py:188` **defaults to returning `'audit'`** when there is no env var, no explicit override, and no config file override — a legacy carry-over: when the Pending tables first shipped, audit was kept as the default to protect the new code.
+- `.github/workflows/DailyIngestion.yml:1093` implements an **auto-fallback** that, on a critical pending alert, auto-commits `.publish-config.yml` to switch back to audit for 24 hours; executed by `scripts/pending_mode_auto_fallback.py` (212 lines). This is the operational safety net for when Pending Mode is unstable.
+- The workflow `write_mode_override` input still accepts `'audit'` as a valid value; in the operator's mental model audit/pending remain dual options.
+
+ADR-005's D2(c) "fully retire Audit Mode" assumed the documentation was true, but audit is in fact **the main path + a safety net** — hard retirement would remove the safety net and require changing the runtime mode of 80% of sessions.
+
+---
+
+## Decision
+
+Lift the audit-retirement prerequisites out of ADR-005 into this dedicated ADR. Drive Pending Mode to 100% in the following 4 steps, leave a 30-day bake period, then release the ADR-005 D10 gate.
+
+### D1: Change the code default to pending
+
+Changes:
 - `packages/python/javdb_platform/db_session.py:188` `return "audit"` → `return "pending"`
-- 加 unit test 锁定新的 resolution 顺序
+- Add a unit test that pins the new resolution order
 
-**注**：原 D1 还包含"改 SQLite schema `WriteMode` 列 DEFAULT 为 `'pending'`"，已在 amendment 1 中取消。理由见上方修订记录——schema DEFAULT 仅服务历史 migration 路径，`'audit'` 在那里语义正确。运行时默认改由 Python fallback 控制。
+**Note**: The original D1 also included "change the SQLite schema `WriteMode` column DEFAULT to `'pending'`", which is cancelled in amendment 1. See the amendment above for rationale — the schema DEFAULT only serves historical migration paths, where `'audit'` is semantically correct. The runtime default is now controlled by the Python fallback alone.
 
-### D2：Workflow 默认改 pending
+### D2: Change the workflow defaults to pending
 
-修改 `DailyIngestion.yml` / `AdHocIngestion.yml` / `TestIngestion.yml` 的 `write_mode_override` input：
-- `options:` 列表从 `['', 'pending', 'audit']` 改为 `['', 'pending']`（移除 audit 选项；保留 pending + 空字符串）
-- 描述文案从 `"... (audit | pending)"` 改为 `"... (pending only)"`
-- `.publish-config.yml`（DailyIngestion 用的运行时配置）中 `pending_mode_disabled_until` 字段移除，相关条件分支精简
+Modify the `write_mode_override` input in `DailyIngestion.yml` / `AdHocIngestion.yml` / `TestIngestion.yml`:
+- `options:` list changes from `['', 'pending', 'audit']` to `['', 'pending']` (remove audit; keep pending + empty string)
+- Description text changes from `"... (audit | pending)"` to `"... (pending only)"`
+- Remove the `pending_mode_disabled_until` field in `.publish-config.yml` (the DailyIngestion runtime config) and prune the related conditional branches
 
-### D3：重设计 auto-fallback——不切 audit，改告警 + 暂停
+### D3: Redesign auto-fallback — don't switch to audit, alert and pause instead
 
-`scripts/pending_mode_auto_fallback.py` 重命名为 `scripts/pending_mode_alert_and_pause.py`，行为改为：
-- 检测到 critical pending alert 时**不**切 audit
-- 改为：发送告警邮件 + 在 `.publish-config.yml` 写入 `pipeline_paused_until: <timestamp+24h>`
-- `DailyIngestion.yml` setup 步骤新增 gate：检测到 `pipeline_paused_until` 在未来时直接 `exit 0`（job 成功但跳过运行）
-- 操作员检视告警，修复 Pending Mode 根因，手动清掉 `pipeline_paused_until` 重启
+Rename `scripts/pending_mode_auto_fallback.py` to `scripts/pending_mode_alert_and_pause.py`, with new behaviour:
+- On a critical pending alert, **do not** switch to audit
+- Instead: send an alert email + write `pipeline_paused_until: <timestamp+24h>` into `.publish-config.yml`
+- Add a gate in the `DailyIngestion.yml` setup step: when `pipeline_paused_until` is in the future, `exit 0` directly (job succeeds but skips the run)
+- The operator reviews the alert, fixes the Pending Mode root cause, and manually clears `pipeline_paused_until` to resume
 
-**理由**：audit fallback 把 Pending 的失败当"已知风险"忍受了下来；改成"告警+暂停"逼真正修 root cause。"修不动"的话也是显式决策，不能默默落入 audit 路径。
+**Rationale**: The audit fallback turned Pending failures into "known risks" we silently tolerated. Switching to "alert + pause" forces the root cause to actually be fixed. If it cannot be fixed, that is itself an explicit decision, not a silent slide back onto the audit path.
 
-### D4：30 天 bake 期 + 退场验证
+### D4: 30-day bake period + exit verification
 
-D1-D3 部署后，**bake 至少 30 天**，期间运维监控：
-- 每日检查 `SELECT COUNT(*) FROM ReportSessions WHERE WriteMode='audit' AND DateTimeCreated > date('now','-1 day')` 应稳定为 0
-- 检查 `scripts/pending_mode_alert_and_pause.py` 触发次数——若超过 1 次/月说明 Pending Mode 有未修缺陷
-- bake 结束后查询 D10 三项重新通过，作为 ADR-005 启动的前置 sign-off
+After D1-D3 ship, **bake for at least 30 days**. During the bake, operations monitors:
+- Daily check: `SELECT COUNT(*) FROM ReportSessions WHERE WriteMode='audit' AND DateTimeCreated > date('now','-1 day')` should hold steady at 0
+- Check the trigger count of `scripts/pending_mode_alert_and_pause.py` — more than 1/month indicates an unfixed defect in Pending Mode
+- After the bake, re-run the D10 trio; passing all three is the sign-off prerequisite to start ADR-005
 
-### D5：bake 期间禁止 ADR-005 任何 PR
+### D5: Block all ADR-005 PRs during the bake
 
-ADR-005 的 PR-1（建 Repo 类与函数族并存）虽然不动 audit 路径，但**仍受 bake 期约束**——避免重构与运行模式切换两件事在同一窗口内交叉影响监控数据。bake 完成 + D10 三项 sign-off 后才能启动 PR-1。
-
----
-
-## 备选方案 (Alternatives Considered)
-
-### 备选 A：保留 audit auto-fallback 永久作为 safety net
-
-**否决原因**：safety net 的存在让 Pending Mode 的根因 bug 永远有"绕开"的退路。维护者发现 alert 时第一反应是"反正 fallback 了，明天修"，bug 永远修不到位。ADR-005 之后 HistoryRepo 要承载这个分支也会破坏 D5（简单签名）。
-
-### 备选 B：保留 audit auto-fallback 但移到 ADR-005 之后
-
-**否决原因**：如果 ADR-005 执行期间 Pending alert 触发，没 fallback 就是 production 中断。bake 期必须在重构前完成，让 Pending Mode 在"无安全网"状态下证明自己可靠。
-
-### 备选 C：bake 期改为 7 天 / 14 天
-
-**否决原因**：现有运行频率约 daily，30 天 = 30 个 daily run + 数次 adhoc，足够覆盖月度 cron / 周末 / 节假日变化。<30 天的样本量在 audit 故障率 1% 数量级时不足以判定稳定。
+ADR-005's PR-1 (introducing the Repo class alongside the function family) does not touch the audit path, but it is **still subject to the bake period** — to avoid restructuring and runtime-mode switching colliding within the same monitoring window. ADR-005 PR-1 may only start after the bake completes and all three D10 items sign off.
 
 ---
 
-## 实施顺序（PR 序列）
+## Alternatives Considered
+
+### Alternative A: Keep the audit auto-fallback permanently as a safety net
+
+**Rejected**: The very existence of the safety net gives Pending Mode root-cause bugs a permanent "way around". When maintainers see the alert, their first reaction is "the fallback caught it, fix tomorrow", and the bug never actually gets fixed. After ADR-005, having HistoryRepo carry this branch would also break D5 (simple signature).
+
+### Alternative B: Keep the audit auto-fallback but move it after ADR-005
+
+**Rejected**: If a Pending alert fires during ADR-005 execution, without the fallback the result is a production outage. The bake period must complete before the restructure, forcing Pending Mode to prove itself reliable with no safety net.
+
+### Alternative C: Bake for 7 days / 14 days
+
+**Rejected**: Current run frequency is roughly daily; 30 days = 30 daily runs + several adhoc runs, enough to cover monthly cron / weekends / holidays variations. A sample size under 30 days is insufficient to declare stability at the ~1% audit failure-rate order of magnitude.
+
+---
+
+## Implementation Order (PR Sequence)
 
 ```
-PR-A  代码默认改 pending：db_session.py:188 + 新增 tests/unit/test_default_write_mode.py     [已合并 #35]
-      验证现有运行不破坏（旧 audit session 仍能完整跑完 commit/rollback）
+PR-A  Code default to pending: db_session.py:188 + new tests/unit/test_default_write_mode.py  [merged #35]
+      Verify existing runs are not broken (legacy audit sessions can still complete commit/rollback)
 
-PR-B  Schema default 切换                                                                    [已取消，见 amendment 1]
-      原计划 v14 migration 改 WriteMode 列 DEFAULT 为 'pending'。核查发现 DEFAULT
-      仅服务历史 migration / backfill 路径，那里 'audit' 是正确标签。Skip。
+PR-B  Schema default switch                                                                   [cancelled, see amendment 1]
+      The original plan was a v14 migration changing the WriteMode column DEFAULT to 'pending'.
+      Investigation found the DEFAULT only serves historical migration / backfill paths,
+      where 'audit' is the correct label. Skip.
 
-PR-C  Workflow 配置改 pending：3 个 workflow 移除 audit 选项 + 描述更新
+PR-C  Workflow config to pending: 3 workflows remove the audit option + description updates
 
-PR-D  Auto-fallback 重设计：pending_mode_alert_and_pause.py 替代
-      pending_mode_auto_fallback.py；DailyIngestion.yml setup 步骤加 pause gate
+PR-D  Auto-fallback redesign: pending_mode_alert_and_pause.py replaces
+      pending_mode_auto_fallback.py; DailyIngestion.yml setup step adds the pause gate
 
-PR-E  CONTEXT.md / CLAUDE.md / ADR-001 docstring 修正"pending is default"失实陈述           [已合并 #34]
-      （独立小 PR，可与 PR-A 并行；不必等 bake）
+PR-E  Fix the "pending is default" inaccuracy in CONTEXT.md / CLAUDE.md / ADR-001 docstring   [merged #34]
+      (independent small PR, may land in parallel with PR-A; no need to wait for the bake)
 
-PR-F  30 天 bake 后的 sign-off PR：在 ADR-005 顶部插入 "ADR-006 sign-off
-      完成于 YYYY-MM-DD" 标记，解除 ADR-005 PR-1 启动阻塞
+PR-F  Sign-off PR after the 30-day bake: insert "ADR-006 sign-off completed on YYYY-MM-DD"
+      at the top of ADR-005, unblocking ADR-005 PR-1 start
 ```
 
-每个 PR 独立可回滚。PR-A / PR-C / PR-D 是核心，PR-E 已先行，PR-F 是 bake 期结束的 ceremony。PR-A 与 PR-E 已合并；后续仅剩 PR-C → PR-D → bake → PR-F。
+Each PR is independently revertable. PR-A / PR-C / PR-D are the core; PR-E went ahead; PR-F is the ceremony at the end of the bake. PR-A and PR-E are merged; remaining work is PR-C → PR-D → bake → PR-F.
 
 ---
 
-## 后果 (Consequences)
+## Consequences
 
-### 正面影响
+### Positive
 
-1. **Pending Mode 真正成为主路径**——文档与现实统一
-2. **失败模式逼正面解决**——Pending alert 不再有静默后退路径
-3. **解锁 ADR-005**——D10 gate 在 bake 后可通过
-4. **运维心智模型简化**——"模式"只剩一种，operator 不需要在 audit/pending 间权衡
+1. **Pending Mode becomes the genuine main path** — docs and reality align
+2. **Failure modes are forced into the open** — Pending alerts no longer have a silent retreat path
+3. **Unblocks ADR-005** — the D10 gate can pass after the bake
+4. **Operator mental model simplifies** — only one mode remains; operators no longer weigh audit vs pending
 
-### 负面影响
+### Negative
 
-1. **30 天 bake 期延后 ADR-005 启动**——若 2026-05-16 落地 ADR-006，最早 2026-06-15 才能开 ADR-005 PR-1
-2. **Pending Mode 缺陷会更直接暴露为运维事件**——之前藏在 fallback 里的问题现在变 pipeline pause
-3. **手动 pause/resume 流程需要操作员培训**——Runbook 需要更新
+1. **The 30-day bake postpones ADR-005 start** — if ADR-006 lands on 2026-05-16, the earliest start for ADR-005 PR-1 is 2026-06-15
+2. **Pending Mode defects surface more directly as ops incidents** — issues previously hidden by the fallback now become pipeline pauses
+3. **Manual pause/resume flow requires operator training** — the runbook needs an update
 
-### 风险
+### Risks
 
-1. **bake 期内 Pending Mode 出现新缺陷** → pipeline 反复 pause，引发抱怨
-   - **缓解**：bake 第一周加密监控；告警阈值放宽，宁可多告警少漏
-2. **`.publish-config.yml` 已有的 `pending_mode_disabled_until` 字段被外部脚本读** → 删除引发故障
-   - **缓解**：grep 确认仅 DailyIngestion 自身和 `pending_mode_auto_fallback.py` 引用；外部无依赖
-3. **取消 PR-B 后 schema DEFAULT 与运行时默认错位**（schema 仍 `'audit'`、运行时默认 `'pending'`）
-   - **影响**：仅在那两条历史 migration 路径上 DEFAULT 触发；语义上"未知历史 session" 仍被标 audit，正确
-   - **缓解**：amendment 1 已记录决策理由；未来若代码新增不传 WriteMode 的 INSERT，需显式补值
-
----
-
-## 相关决策 (Related Decisions)
-
-- **后继**：[ADR-005](ADR-005-db-py-retirement-and-repo-pattern.md) — bake 完成后启动
-- **修正历史承诺**：[ADR-001](ADR-001-split-db-module.md) Phase 3 中"Pending Mode 默认"的承诺由本 ADR 真正兑现
+1. **New Pending Mode defects appear during the bake** → pipeline pauses repeatedly, triggering complaints
+   - **Mitigation**: tighten monitoring in the first week of the bake; loosen alert thresholds, preferring over-alerting to missing
+2. **An existing `pending_mode_disabled_until` field in `.publish-config.yml` is read by an external script** → deletion causes an outage
+   - **Mitigation**: grep confirms only DailyIngestion itself and `pending_mode_auto_fallback.py` reference it; no external dependencies
+3. **After cancelling PR-B, the schema DEFAULT and runtime default disagree** (schema is still `'audit'`, runtime default is `'pending'`)
+   - **Impact**: the DEFAULT only fires on the two historical migration paths; semantically "unknown historical session" is still labelled audit, which is correct
+   - **Mitigation**: amendment 1 records the decision rationale; if future code adds INSERTs that omit WriteMode, they must explicitly supply a value
 
 ---
 
-## 参考资料 (References)
+## Related ADRs
 
-- [CONTEXT.md](../../../CONTEXT.md) — Write Mode 章节
-- D10 核查所用 SQL：
+- **Successor**: [ADR-005](ADR-005-db-py-retirement-and-repo-pattern.md) — starts after the bake completes
+- **Corrects past commitment**: [ADR-001](ADR-001-split-db-module.md) Phase 3's "Pending Mode default" commitment is genuinely delivered by this ADR
+
+---
+
+## References
+
+- [CONTEXT.md](../../../CONTEXT.md) — Write Mode section
+- SQL used in the D10 check:
   ```sql
   SELECT WriteMode, COUNT(*) FROM ReportSessions
   WHERE DateTimeCreated > datetime('now','-30 days') GROUP BY WriteMode;
   ```
-- 现有 auto-fallback 实现：[`.github/workflows/DailyIngestion.yml:1075-1110`](../../../.github/workflows/DailyIngestion.yml)、[`scripts/pending_mode_auto_fallback.py`](../../../scripts/pending_mode_auto_fallback.py)
-- 现有默认实现：[`packages/python/javdb_platform/db_session.py:185-188`](../../../packages/python/javdb_platform/db_session.py)
+- Existing auto-fallback implementation: [`.github/workflows/DailyIngestion.yml:1075-1110`](../../../.github/workflows/DailyIngestion.yml), [`scripts/pending_mode_auto_fallback.py`](../../../scripts/pending_mode_auto_fallback.py)
+- Existing default implementation: [`packages/python/javdb_platform/db_session.py:185-188`](../../../packages/python/javdb_platform/db_session.py)
