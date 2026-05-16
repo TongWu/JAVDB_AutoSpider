@@ -19,8 +19,8 @@ def test_rollback_resolve_unions_explicit_and_window_sessions(monkeypatch):
     seen = []
     monkeypatch.setattr(
         rollback,
-        "db_find_in_progress_sessions",
-        lambda *, since=None, max_age_hours=None: seen.append(since) or [7, 8],
+        "find_window_sessions",
+        lambda since, **_kw: seen.append(since) or [7, 8],
     )
 
     # 2026-05-08: window scan only kicks in when --include-orphaned is set
@@ -34,13 +34,13 @@ def test_rollback_resolve_unions_explicit_and_window_sessions(monkeypatch):
 
 def test_rollback_normalizes_offset_timestamp_to_utc():
     assert (
-        rollback._normalize_run_started_at("2026-05-04T19:30:00-04:00")
+        rollback.normalize_run_started_at("2026-05-04T19:30:00-04:00")
         == "2026-05-04 23:30:00"
     )
 
 
 def test_rollback_normalize_returns_none_for_invalid_timestamp():
-    assert rollback._normalize_run_started_at("not-a-time") is None
+    assert rollback.normalize_run_started_at("not-a-time") is None
 
 
 def test_rollback_returns_partial_failure_on_real_drift(monkeypatch, capsys):
