@@ -14,7 +14,7 @@ logger = get_logger(__name__)
 # ---------------------------------------------------------------------------
 
 try:
-    from javdb_rust_core import extract_magnets as _rust_extract_magnets
+    from javdb.rust_core import extract_magnets as _rust_extract_magnets
     RUST_MAGNET_AVAILABLE = True
     logger.debug("✅ Rust magnet extractor available")
 except ImportError:

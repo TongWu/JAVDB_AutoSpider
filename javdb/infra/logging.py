@@ -111,14 +111,17 @@ _MODULE_SHORT_NAMES = {
     'packages.python.javdb_migrations.tools.reconcile_d1_drift': 'D1Reconcile',
     # Rust → Python bridge (pyo3_log targets).  Cover both `::` and `.`
     # separators since the bridge has historically emitted either.
-    'javdb_rust_core.proxy.pool': 'ProxyPool',
-    'javdb_rust_core::proxy::pool': 'ProxyPool',
-    'javdb_rust_core.proxy.ban_manager': 'BanManager',
-    'javdb_rust_core::proxy::ban_manager': 'BanManager',
-    'javdb_rust_core.fetch.engine': 'FetchEngine',
-    'javdb_rust_core::fetch::engine': 'FetchEngine',
-    'javdb_rust_core.parser': 'Parser',
-    'javdb_rust_core::parser': 'Parser',
+    # The Rust [lib] name is `rust_core` (the crate installs as
+    # `javdb.rust_core` but the log crate's module-path target is based
+    # on the Rust lib name only).
+    'rust_core.proxy.pool': 'ProxyPool',
+    'rust_core::proxy::pool': 'ProxyPool',
+    'rust_core.proxy.ban_manager': 'BanManager',
+    'rust_core::proxy::ban_manager': 'BanManager',
+    'rust_core.fetch.engine': 'FetchEngine',
+    'rust_core::fetch::engine': 'FetchEngine',
+    'rust_core.parser': 'Parser',
+    'rust_core::parser': 'Parser',
 }
 
 # Build reverse mapping for debug lookup

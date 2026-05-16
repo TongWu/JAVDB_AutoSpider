@@ -16,7 +16,7 @@ from typing import Callable, Dict, List, Optional
 from threading import Lock
 
 try:
-    from javdb_rust_core import (
+    from javdb.rust_core import (
         RustProxyBanManager,
         get_global_ban_manager as _rust_get_ban_manager,
     )

@@ -11,7 +11,7 @@ from packages.python.javdb_core.magnet_extractor import (
 )
 
 if RUST_MAGNET_AVAILABLE:
-    from javdb_rust_core import extract_magnets as _rust_extract_magnets
+    from javdb.rust_core import extract_magnets as _rust_extract_magnets
 
 pytestmark = pytest.mark.skipif(
     not RUST_MAGNET_AVAILABLE,

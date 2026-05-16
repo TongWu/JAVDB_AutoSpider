@@ -11,7 +11,7 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 RUN pip install --no-cache-dir maturin[patchelf]
 
-COPY packages/rust/javdb_rust_core/ /build/rust_core/
+COPY javdb/rust_core/ /build/rust_core/
 RUN cd /build/rust_core && maturin build --release --out /wheels
 
 # ============================================================

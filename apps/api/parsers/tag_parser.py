@@ -22,8 +22,8 @@ active selection and the href is ``javascript:;``) will have an empty
 ``tag_id`` field.  Combining results from pages with different selections
 lets callers build a complete mapping.
 
-FROZEN: Python fallback for ``javdb_rust_core.parse_tag_page``. DO NOT EXTEND.
-New parsing logic goes into ``packages/rust/javdb_rust_core/src/scraper/``.
+FROZEN: Python fallback for ``javdb.rust_core.parse_tag_page``. DO NOT EXTEND.
+New parsing logic goes into ``javdb/rust_core/src/scraper/``.
 See ``tests/parity/test_parser_parity.py`` for drift detection.
 """
 

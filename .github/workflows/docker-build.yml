@@ -13,8 +13,8 @@ on:
     paths:
       - '**.py'
       - '**.rs'
-      - 'packages/rust/javdb_rust_core/Cargo.toml'
-      - 'packages/rust/javdb_rust_core/Cargo.lock'
+      - 'javdb/rust_core/Cargo.toml'
+      - 'javdb/rust_core/Cargo.lock'
       - 'pytest.ini'
       - 'docker/**'
   push:
@@ -23,8 +23,8 @@ on:
     paths:
       - '**.py'
       - '**.rs'
-      - 'packages/rust/javdb_rust_core/Cargo.toml'
-      - 'packages/rust/javdb_rust_core/Cargo.lock'
+      - 'javdb/rust_core/Cargo.toml'
+      - 'javdb/rust_core/Cargo.lock'
       - 'pytest.ini'
       - 'docker/**'
   workflow_dispatch:  # Allow manual trigger

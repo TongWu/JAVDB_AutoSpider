@@ -5,7 +5,7 @@ edition = "2021"
 description = "High-performance Rust core for JAVDB AutoSpider"
 
 [lib]
-name = "javdb_rust_core"
+name = "rust_core"
 crate-type = ["cdylib"]
 
 [dependencies]

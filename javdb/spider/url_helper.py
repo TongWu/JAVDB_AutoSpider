@@ -10,7 +10,7 @@ import re
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse, quote_plus
 
 try:
-    from javdb_rust_core import (
+    from javdb.rust_core import (
         detect_url_type as _rs_detect_url_type,
         extract_url_identifier as _rs_extract_url_identifier,
         has_magnet_filter as _rs_has_magnet_filter,

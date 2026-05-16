@@ -144,7 +144,7 @@ source "$HOME/.cargo/env"
 pip install maturin
 
 # 3. Build and install the extension in release mode
-cd packages/rust/javdb_rust_core
+cd javdb/rust_core
 maturin develop --release
 cd ../../..
 ```
