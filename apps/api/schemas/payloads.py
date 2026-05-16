@@ -322,6 +322,13 @@ class StatusOkResponse(BaseModel):
     status: str = "ok"
 
 
+class JavdbLoginRefreshResponse(_AllowExtra):
+    """Returned by POST /api/login/refresh — wraps the JavDB login CLI run."""
+
+    status: str
+    output: str
+
+
 class ConfigResponse(RootModel[Dict[str, Any]]):
     """GET /api/config returns the masked runtime config dict verbatim."""
 
@@ -372,6 +379,7 @@ __all__ = [
     "HealthCheckPayload",
     "HealthResponse",
     "HtmlPayload",
+    "JavdbLoginRefreshResponse",
     "JobSummaryResponse",
     "ListTasksResponse",
     "LoginPayload",
