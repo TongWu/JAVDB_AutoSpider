@@ -660,13 +660,13 @@ def build_capabilities() -> CapabilitiesResponse:
 
 
 # Auth dependency — reuse the existing one from runtime module.
-from apps.api.services.runtime import require_user  # noqa: E402
+from apps.api.infra.auth import _require_auth  # noqa: E402
 
 router = APIRouter(prefix="/api", tags=["capabilities"])
 
 
 @router.get("/capabilities", response_model=CapabilitiesResponse)
-def get_capabilities(_user=Depends(require_user)) -> CapabilitiesResponse:
+def get_capabilities(_user=Depends(_require_auth)) -> CapabilitiesResponse:
     return build_capabilities()
 ```
 
@@ -1073,7 +1073,7 @@ from apps.api.schemas.capabilities_payloads import (
     SystemStateGetResponse,
     SystemStatePutPayload,
 )
-from apps.api.services.runtime import require_admin, require_user
+from apps.api.infra.auth import _require_auth, require_role
 from packages.python.javdb_platform.db_layer.system_state_repo import SystemStateRepo
 from packages.python.javdb_platform.db import get_db
 
@@ -1085,12 +1085,12 @@ def _repo() -> SystemStateRepo:
 
 
 @router.get("/state", response_model=SystemStateGetResponse)
-def get_state(key: str = Query(..., min_length=1), _user=Depends(require_user)) -> SystemStateGetResponse:
+def get_state(key: str = Query(..., min_length=1), _user=Depends(_require_auth)) -> SystemStateGetResponse:
     return SystemStateGetResponse(key=key, value=_repo().get(key))
 
 
 @router.put("/state", response_model=SystemStateGetResponse)
-def put_state(payload: SystemStatePutPayload, _user=Depends(require_admin)) -> SystemStateGetResponse:
+def put_state(payload: SystemStatePutPayload, _user=Depends(require_role("admin"))) -> SystemStateGetResponse:
     _repo().put(payload.key, payload.value)
     return SystemStateGetResponse(key=payload.key, value=payload.value)
 ```
@@ -1177,7 +1177,7 @@ import os
 from fastapi import APIRouter, Depends
 
 from apps.api.schemas.capabilities_payloads import OnboardingStatusResponse
-from apps.api.services.runtime import require_user
+from apps.api.infra.auth import _require_auth
 from packages.python.javdb_platform.db_layer.system_state_repo import SystemStateRepo
 from packages.python.javdb_platform.db import get_db
 
@@ -1210,7 +1210,7 @@ def _repo() -> SystemStateRepo:
 
 
 @router.get("/status", response_model=OnboardingStatusResponse)
-def get_status(_user=Depends(require_user)) -> OnboardingStatusResponse:
+def get_status(_user=Depends(_require_auth)) -> OnboardingStatusResponse:
     onboarded = _repo().get("onboarded") == "true"
     required_missing = [c for c in REQUIRED_COMPONENTS if not _is_configured(c)]
     skippable_missing = [c for c in SKIPPABLE_COMPONENTS if not _is_configured(c)]
@@ -1362,7 +1362,7 @@ _COMPONENT_TESTERS = {
 
 
 @router.post("/test", response_model=OnboardingTestResponse)
-def test_component(payload: OnboardingTestPayload, _user=Depends(require_user)) -> OnboardingTestResponse:
+def test_component(payload: OnboardingTestPayload, _user=Depends(_require_auth)) -> OnboardingTestResponse:
     ok, message, details = _COMPONENT_TESTERS[payload.component]()
     return OnboardingTestResponse(component=payload.component, ok=ok, message=message, details=details)
 ```
@@ -1451,13 +1451,13 @@ from apps.api.services.runtime import require_admin
 
 
 @router.post("/complete", response_model=OnboardingStatusResponse)
-def mark_complete(_user=Depends(require_admin)) -> OnboardingStatusResponse:
+def mark_complete(_user=Depends(require_role("admin"))) -> OnboardingStatusResponse:
     _repo().put("onboarded", "true")
     return get_status(_user=_user)
 
 
 @router.post("/dismiss-hint", response_model=dict)
-def dismiss_hint(payload: DismissHintPayload, _user=Depends(require_admin)) -> dict:
+def dismiss_hint(payload: DismissHintPayload, _user=Depends(require_role("admin"))) -> dict:
     repo = _repo()
     hints: list[str] = repo.get_json("dismissed_hints", default=[]) or []
     if payload.hint_id not in hints:
@@ -1828,7 +1828,7 @@ from apps.api.schemas.capabilities_payloads import (
     SessionItem,
     SessionListResponse,
 )
-from apps.api.services.runtime import require_user
+from apps.api.infra.auth import _require_auth
 from packages.python.javdb_platform.db_layer.sessions_repo import SessionsRepo
 from packages.python.javdb_platform.db import get_db
 
@@ -1844,7 +1844,7 @@ def list_sessions(
     state: str | None = Query(default=None),
     cursor: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
-    _user=Depends(require_user),
+    _user=Depends(_require_auth),
 ) -> SessionListResponse:
     result = _repo().list(state=state, cursor=cursor, limit=limit)
     return SessionListResponse(
@@ -1957,7 +1957,7 @@ from fastapi import HTTPException
 @router.get("/{session_id}", response_model=SessionDetailResponse)
 def get_session_detail(
     session_id: str,
-    _user=Depends(require_user),
+    _user=Depends(_require_auth),
 ) -> SessionDetailResponse:
     repo = _repo()
     row = repo.get(session_id)
@@ -2078,7 +2078,7 @@ from packages.python.javdb_platform.rollback import (
 def post_rollback(
     session_id: str,
     payload: SessionRollbackPayload,
-    _user=Depends(require_admin),
+    _user=Depends(require_role("admin")),
 ) -> SessionRollbackResponse:
     if not _repo().get(session_id):
         raise HTTPException(status_code=404, detail={"error": {"code": "session.not_found"}})
@@ -2240,7 +2240,7 @@ from packages.python.javdb_platform.sessions.commit import CommitRequest, commit
 def post_commit(
     session_id: str,
     payload: SessionCommitPayload,
-    _user=Depends(require_admin),
+    _user=Depends(require_role("admin")),
 ) -> SessionCommitResponse:
     if not _repo().get(session_id):
         raise HTTPException(status_code=404, detail={"error": {"code": "session.not_found"}})
