@@ -14,6 +14,8 @@ from apps.api.schemas.capabilities_payloads import (
     SessionDetailResponse,
     SessionItem,
     SessionListResponse,
+    SessionRollbackPayload,
+    SessionRollbackResponse,
 )
 import packages.python.javdb_platform.db_connection as _db_connection
 from packages.python.javdb_platform.db_layer.sessions_repo import SessionsRepo
@@ -49,6 +51,50 @@ def get_session_detail(
         movies=movies,
         torrents=torrents,
     )
+
+
+@router.post("/{session_id}/rollback", response_model=SessionRollbackResponse)
+def post_rollback(
+    session_id: str,
+    payload: SessionRollbackPayload,
+    _user=Depends(require_role("admin")),
+) -> SessionRollbackResponse:
+    from packages.python.javdb_platform.rollback import (
+        RollbackRequest,
+        apply_rollback,
+        plan_rollback,
+    )
+    reports_path = _db_connection.REPORTS_DB_PATH
+    with _db_connection.get_db(reports_path) as conn:
+        if not SessionsRepo(conn).get(session_id):
+            raise HTTPException(status_code=404, detail={"error": {"code": "session.not_found"}})
+    req = RollbackRequest(
+        session_id=session_id,
+        dry_run=payload.dry_run,
+        include_pending=payload.include_pending,
+        restore_from_audit=payload.restore_from_audit,
+    )
+    try:
+        if payload.dry_run:
+            result = plan_rollback(req)
+            return SessionRollbackResponse(
+                session_id=session_id,
+                dry_run=True,
+                actions=result.actions,
+                summary=result.summary,
+            )
+        applied = apply_rollback(req)
+        return SessionRollbackResponse(
+            session_id=session_id,
+            dry_run=False,
+            actions=applied.applied,
+            summary=applied.summary,
+        )
+    except LookupError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": {"code": "session.not_found", "message": str(exc)}},
+        )
 
 
 @router.get("", response_model=SessionListResponse)
