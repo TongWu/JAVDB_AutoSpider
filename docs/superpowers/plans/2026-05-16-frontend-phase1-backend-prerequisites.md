@@ -1075,23 +1075,22 @@ from apps.api.schemas.capabilities_payloads import (
 )
 from apps.api.infra.auth import _require_auth, require_role
 from packages.python.javdb_platform.db_layer.system_state_repo import SystemStateRepo
-from packages.python.javdb_platform.db import get_db
+from packages.python.javdb_platform.db_connection import get_db, OPERATIONS_DB_PATH
 
 router = APIRouter(prefix="/api/system", tags=["system-state"])
 
 
-def _repo() -> SystemStateRepo:
-    return SystemStateRepo(get_db("operations"))
-
-
 @router.get("/state", response_model=SystemStateGetResponse)
 def get_state(key: str = Query(..., min_length=1), _user=Depends(_require_auth)) -> SystemStateGetResponse:
-    return SystemStateGetResponse(key=key, value=_repo().get(key))
+    with get_db(OPERATIONS_DB_PATH) as conn:
+        value = SystemStateRepo(conn).get(key)
+    return SystemStateGetResponse(key=key, value=value)
 
 
 @router.put("/state", response_model=SystemStateGetResponse)
 def put_state(payload: SystemStatePutPayload, _user=Depends(require_role("admin"))) -> SystemStateGetResponse:
-    _repo().put(payload.key, payload.value)
+    with get_db(OPERATIONS_DB_PATH) as conn:
+        SystemStateRepo(conn).put(payload.key, payload.value)
     return SystemStateGetResponse(key=payload.key, value=payload.value)
 ```
 
@@ -1179,7 +1178,7 @@ from fastapi import APIRouter, Depends
 from apps.api.schemas.capabilities_payloads import OnboardingStatusResponse
 from apps.api.infra.auth import _require_auth
 from packages.python.javdb_platform.db_layer.system_state_repo import SystemStateRepo
-from packages.python.javdb_platform.db import get_db
+from packages.python.javdb_platform.db_connection import get_db, OPERATIONS_DB_PATH
 
 
 REQUIRED_COMPONENTS = ("javdb_session", "qb")
@@ -1205,17 +1204,17 @@ def _is_configured(component: str) -> bool:
 router = APIRouter(prefix="/api/onboarding", tags=["onboarding"])
 
 
-def _repo() -> SystemStateRepo:
-    return SystemStateRepo(get_db("operations"))
+def _read_onboarded() -> bool:
+    with get_db(OPERATIONS_DB_PATH) as conn:
+        return SystemStateRepo(conn).get("onboarded") == "true"
 
 
 @router.get("/status", response_model=OnboardingStatusResponse)
 def get_status(_user=Depends(_require_auth)) -> OnboardingStatusResponse:
-    onboarded = _repo().get("onboarded") == "true"
     required_missing = [c for c in REQUIRED_COMPONENTS if not _is_configured(c)]
     skippable_missing = [c for c in SKIPPABLE_COMPONENTS if not _is_configured(c)]
     return OnboardingStatusResponse(
-        completed=onboarded,
+        completed=_read_onboarded(),
         required_missing=required_missing,
         skippable_missing=skippable_missing,
     )
@@ -1447,22 +1446,24 @@ Add to `apps/api/routers/onboarding.py`:
 
 ```python
 from apps.api.schemas.capabilities_payloads import DismissHintPayload
-from apps.api.services.runtime import require_admin
+from apps.api.infra.auth import require_role
 
 
 @router.post("/complete", response_model=OnboardingStatusResponse)
 def mark_complete(_user=Depends(require_role("admin"))) -> OnboardingStatusResponse:
-    _repo().put("onboarded", "true")
+    with get_db(OPERATIONS_DB_PATH) as conn:
+        SystemStateRepo(conn).put("onboarded", "true")
     return get_status(_user=_user)
 
 
 @router.post("/dismiss-hint", response_model=dict)
 def dismiss_hint(payload: DismissHintPayload, _user=Depends(require_role("admin"))) -> dict:
-    repo = _repo()
-    hints: list[str] = repo.get_json("dismissed_hints", default=[]) or []
-    if payload.hint_id not in hints:
-        hints.append(payload.hint_id)
-        repo.put_json("dismissed_hints", hints)
+    with get_db(OPERATIONS_DB_PATH) as conn:
+        repo = SystemStateRepo(conn)
+        hints: list[str] = repo.get_json("dismissed_hints", default=[]) or []
+        if payload.hint_id not in hints:
+            hints.append(payload.hint_id)
+            repo.put_json("dismissed_hints", hints)
     return {"dismissed_hints": hints}
 ```
 
@@ -1830,13 +1831,9 @@ from apps.api.schemas.capabilities_payloads import (
 )
 from apps.api.infra.auth import _require_auth
 from packages.python.javdb_platform.db_layer.sessions_repo import SessionsRepo
-from packages.python.javdb_platform.db import get_db
+from packages.python.javdb_platform.db_connection import get_db, REPORTS_DB_PATH
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
-
-
-def _repo() -> SessionsRepo:
-    return SessionsRepo(get_db("reports"))
 
 
 @router.get("", response_model=SessionListResponse)
@@ -1846,7 +1843,8 @@ def list_sessions(
     limit: int = Query(default=50, ge=1, le=200),
     _user=Depends(_require_auth),
 ) -> SessionListResponse:
-    result = _repo().list(state=state, cursor=cursor, limit=limit)
+    with get_db(REPORTS_DB_PATH) as conn:
+        result = SessionsRepo(conn).list(state=state, cursor=cursor, limit=limit)
     return SessionListResponse(
         items=[SessionItem(**r.__dict__) for r in result.items],
         next_cursor=result.next_cursor,
@@ -1959,11 +1957,12 @@ def get_session_detail(
     session_id: str,
     _user=Depends(_require_auth),
 ) -> SessionDetailResponse:
-    repo = _repo()
-    row = repo.get(session_id)
-    if not row:
-        raise HTTPException(status_code=404, detail={"error": {"code": "session.not_found"}})
-    movies, torrents = repo.get_writes(session_id)
+    with get_db(REPORTS_DB_PATH) as conn:
+        repo = SessionsRepo(conn)
+        row = repo.get(session_id)
+        if not row:
+            raise HTTPException(status_code=404, detail={"error": {"code": "session.not_found"}})
+        movies, torrents = repo.get_writes(session_id)
     return SessionDetailResponse(
         session=SessionItem(**row.__dict__),
         movies=movies,
@@ -2066,7 +2065,7 @@ class SessionRollbackResponse(BaseModel):
 Add to `sessions.py` router:
 
 ```python
-from apps.api.services.runtime import require_admin
+from apps.api.infra.auth import require_role
 from packages.python.javdb_platform.rollback import (
     RollbackRequest,
     apply_rollback,
@@ -2080,8 +2079,9 @@ def post_rollback(
     payload: SessionRollbackPayload,
     _user=Depends(require_role("admin")),
 ) -> SessionRollbackResponse:
-    if not _repo().get(session_id):
-        raise HTTPException(status_code=404, detail={"error": {"code": "session.not_found"}})
+    with get_db(REPORTS_DB_PATH) as conn:
+        if not SessionsRepo(conn).get(session_id):
+            raise HTTPException(status_code=404, detail={"error": {"code": "session.not_found"}})
     req = RollbackRequest(
         session_id=session_id,
         dry_run=payload.dry_run,
@@ -2242,8 +2242,9 @@ def post_commit(
     payload: SessionCommitPayload,
     _user=Depends(require_role("admin")),
 ) -> SessionCommitResponse:
-    if not _repo().get(session_id):
-        raise HTTPException(status_code=404, detail={"error": {"code": "session.not_found"}})
+    with get_db(REPORTS_DB_PATH) as conn:
+        if not SessionsRepo(conn).get(session_id):
+            raise HTTPException(status_code=404, detail={"error": {"code": "session.not_found"}})
     try:
         result = commit_session(CommitRequest(
             session_id=session_id,
@@ -2314,6 +2315,8 @@ def test_each_fe_consumed_endpoint_has_typed_200_response(admin_client):
         ("/api/tasks", "get"),
         ("/api/tasks/stats", "get"),
         ("/api/tasks/{job_id}", "get"),
+        ("/api/jobs/spider", "post"),
+        ("/api/jobs/{job_id}/status", "get"),
         ("/api/auth/login", "post"),
         ("/api/auth/refresh", "post"),
         ("/api/config", "get"),
@@ -2603,5 +2606,11 @@ Expected: capabilities JSON prints.
 | 18 | Regenerate openapi.json + docs | docs | manual |
 
 **18 tasks, ~35 new tests (12 unit + 23 integration), ~16 commits.**
+
+## Known follow-ups (intentionally deferred from Plan A)
+
+- **Error envelope wrapping.** Spec §8.3 specifies BE error responses as `{"error": {"code", "message", "details", "request_id"}}`. FastAPI's default `HTTPException` produces `{"detail": ...}` instead. The new endpoints currently raise `HTTPException(detail={"error": {...}})` which works but produces `{"detail": {"error": ...}}` — one extra nesting level. A follow-up task should register a custom exception handler that unwraps `detail.error` to top-level `error`. Add to the next BE-side plan or to Plan F (cutover). FE wrappers in Plan B will compensate in the meantime by checking both shapes.
+- **Rollback library extraction (Task 11)** intentionally leaves the body of `plan_rollback` / `apply_rollback` as "migrate from apps/cli/rollback.py" rather than pasting the existing ~400 LOC inline. The engineer must read `apps/cli/rollback.py`, identify the planning and apply functions, and move them. Same shape for `commit_session` in Task 15.
+- **MovieClaim cleanup endpoints** (`sweep_movie_claim_stages`, `cleanup_stale_in_progress`) are Phase 2 endpoints per spec §8.4 — not in Plan A.
 
 Phase 1 BE prerequisites end here. After completion, Plan B (new repo bootstrap) can start in parallel with main repo work — the new repo just consumes the published `openapi.json` and image.
