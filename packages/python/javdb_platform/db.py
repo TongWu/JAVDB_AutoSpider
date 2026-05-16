@@ -3297,10 +3297,12 @@ def db_finish_commit_session(
 # default-on: every ingestion workflow (DailyIngestion, AdHocIngestion,
 # TestIngestion) ships under ``WriteMode='pending'`` unless the
 # ``write_mode_override`` workflow input or the
-# ``pending_mode_disabled_until`` marker in ``.publish-config.yml`` flips
-# it back to audit.  ``db_upsert_history`` is therefore only reached via
-# legacy / fallback routes today; Phase 4 will mark it ``@deprecated``
-# and reject new writes.
+# ``JAVDB_HISTORY_WRITE_MODE`` env var explicitly selects ``audit``.
+# (ADR-006 PR-D retired the automatic ``pending_mode_disabled_until``
+# fallback to audit; critical alerts now pause the pipeline via
+# ``pipeline_paused_until`` instead.) ``db_upsert_history`` is therefore
+# only reached via legacy / fallback routes today; ADR-005 PR-5 will
+# remove it entirely after the ADR-006 bake completes.
 #
 # Lifecycle:
 #   db_stage_history_write(...)     # zero or more, while Status='in_progress'

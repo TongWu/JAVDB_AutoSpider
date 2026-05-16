@@ -305,7 +305,7 @@ def parse_arguments():
             'Path to reports/D1/d1_drift.jsonl. When provided, the email '
             "renders a 'Pending Mode Verification' section using the "
             'pending_session_verify records and may prefix the subject '
-            "with [PENDING-ALERT] / [PENDING-ROLLBACK-AUTO]. Defaults to "
+            "with [PENDING-ALERT] / [PENDING-PAUSE]. Defaults to "
             '$REPORTS_DIR/D1/d1_drift.jsonl when the file exists.'
         ),
     )
@@ -1183,7 +1183,8 @@ def extract_dedup_statistics(dedup_csv_path, session_start_time=None):
 # records belonging to this run, and renders a "Pending Mode
 # Verification" table.  Any record above the alert threshold makes the
 # email subject line gain a `[PENDING-ALERT]` (soft) or
-# `[PENDING-ROLLBACK-AUTO]` (critical) prefix.
+# `[PENDING-PAUSE]` (critical, ADR-006 PR-D — was `[PENDING-ROLLBACK-AUTO]`
+# pre-ADR-006 when critical alerts auto-fell-back to audit mode) prefix.
 
 # Phase 2 alert thresholds — referenced by Phase 3 with tighter cuts.
 _PHASE2_PENDING_ALERT_THRESHOLDS = {
@@ -1394,7 +1395,7 @@ def _format_pending_verify_section(records, alerts):
     if not alerts:
         lines.append('All pending-mode metrics within Phase 3 thresholds.')
     else:
-        lines.append('See [PENDING-ALERT] / [PENDING-ROLLBACK-AUTO] subject.')
+        lines.append('See [PENDING-ALERT] / [PENDING-PAUSE] subject.')
     return '\n'.join(lines)
 
 
@@ -1552,8 +1553,14 @@ def _build_pending_subject_prefix(records, alerts, has_critical, mode):
 
     Returns ``''`` when there are no pending records or no alerts.
 
-    * Critical → ``[PENDING-ROLLBACK-AUTO]`` (auto-fallback also kicked).
+    * Critical → ``[PENDING-PAUSE]`` (ADR-006 PR-D: the email job's
+      ``Alert + pause on critical pending alert`` step writes
+      ``pipeline_paused_until`` into ``.publish-config.yml`` so the
+      next run is skipped by the pause gate). Pre-ADR-006 this prefix
+      was ``[PENDING-ROLLBACK-AUTO]``, when the same trigger flipped
+      the next run to audit mode for 24h instead of pausing.
     * Soft     → ``[PENDING-ALERT]``.
+
     The first alert's summary is appended in parentheses so the operator
     sees the trigger without opening the email body.
     """
@@ -1566,7 +1573,7 @@ def _build_pending_subject_prefix(records, alerts, has_critical, mode):
     sid = rec.get('session_id')
     summary = f"{field}={value:g} > {limit:g} session={sid}"
     if has_critical:
-        return f"[PENDING-ROLLBACK-AUTO] ({summary}) "
+        return f"[PENDING-PAUSE] ({summary}) "
     return f"[PENDING-ALERT] ({summary}) "
 
 
