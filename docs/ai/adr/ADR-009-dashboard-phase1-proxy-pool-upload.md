@@ -1,6 +1,13 @@
-# Dashboard Overhaul — Phase 1: Runner Reports `proxy_pool` to Worker
+# ADR-009: Dashboard Overhaul — Phase 1: Runner Reports `proxy_pool` to Worker
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+**Status**: Accepted — Completed 2026-05-16 (merged via #f4c5d23c + #e224c374 + #60797d16)
+**Date**: 2026-05-16
+**Deciders**: Proxy Coordinator Dashboard rewrite working stream
+**Related**: implements [ADR-004](ADR-004-proxy-discovery-via-runner-pool-upload.md); prerequisite for [ADR-010](ADR-010-dashboard-phase2-worker-backend.md)
+
+> **Note on format:** This ADR was originally written as a step-by-step implementation plan and relocated into the ADR space (per repo convention for design records). The decision context is captured in the **Goal / Architecture / Tech Stack** preamble below; the rest is the execution checklist preserved from the original plan.
+>
+> **For agentic workers (historical):** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Extend the Python-side `RunnerRegistryClient.register()` to upload the full PROXY_POOL (as `[{id, name}]`) on every register call so that future Phase 2 work can persist a `proxies_seen` table in the Worker. Backward compatible: old Workers ignore the new field.
 
