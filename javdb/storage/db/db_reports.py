@@ -19,8 +19,8 @@ from datetime import datetime
 import sqlite3
 from typing import Dict, List, Optional, Tuple
 
-from packages.python.javdb_platform.config_helper import cfg
-from packages.python.javdb_platform.logging_config import get_logger
+from javdb.infra.config import cfg
+from javdb.infra.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -39,13 +39,13 @@ def _ensure_imports():
     global _get_db, _get_local_sqlite_db, _REPORTS_DB_PATH, _HISTORY_DB_PATH
     global _generate_session_id, _resolve_write_mode, _DB_OPERATIONAL_ERRORS
     if _get_db is None:
-        from packages.python.javdb_platform.db_connection import (
+        from javdb.storage.db.db_connection import (
             get_db,
             get_local_sqlite_db,
             REPORTS_DB_PATH,
             HISTORY_DB_PATH,
         )
-        from packages.python.javdb_platform.db_session import (
+        from javdb.storage.db.db_session import (
             generate_session_id,
             _resolve_write_mode as resolve_wm,
         )
@@ -57,7 +57,7 @@ def _ensure_imports():
         _resolve_write_mode = resolve_wm
 
         try:
-            from packages.python.javdb_platform.d1_client import D1PermanentError
+            from javdb.storage.d1_client import D1PermanentError
             _DB_OPERATIONAL_ERRORS = (sqlite3.OperationalError, D1PermanentError)
         except ImportError:
             _DB_OPERATIONAL_ERRORS = (sqlite3.OperationalError,)
@@ -112,7 +112,7 @@ def db_create_report_session(
     """
     _ensure_imports()
 
-    from packages.python.javdb_platform.config_helper import db_writes_forbidden
+    from javdb.infra.config import db_writes_forbidden
     if db_writes_forbidden():
         raise RuntimeError(
             "db_create_report_session refused: "

@@ -5,9 +5,9 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Dict, List
 
-from packages.python.javdb_core.contracts import category_to_indicators, is_uncensored_category
-from packages.python.javdb_platform.logging_config import get_logger
-from packages.python.javdb_core.magnet_extractor import _parse_size
+from javdb.spider.contracts import category_to_indicators, is_uncensored_category
+from javdb.infra.logging import get_logger
+from javdb.spider.magnet_extractor import _parse_size
 
 logger = get_logger(__name__)
 

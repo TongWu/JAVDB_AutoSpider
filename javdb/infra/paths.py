@@ -12,7 +12,7 @@ Directory Structure:
     └── pikpak_bridge_history.csv
 
 Usage:
-    from packages.python.javdb_platform.path_helper import get_dated_report_path, get_history_file_path
+    from javdb.infra.paths import get_dated_report_path, get_history_file_path
     
     # Get path for today's report
     csv_path = get_dated_report_path('reports/DailyReport', 'report.csv')

@@ -39,7 +39,7 @@ if str(REPO_ROOT) not in sys.path:
 # Formatter, so call ``setup_logging`` defensively here (it's a no-op
 # when the root logger already has handlers).
 try:
-    from packages.python.javdb_platform.logging_config import (
+    from javdb.infra.logging import (
         get_logger,
         setup_logging,
     )
@@ -53,8 +53,8 @@ except ImportError:
     logger = logging.getLogger(__name__)
 
 # Import configuration
-from packages.python.javdb_platform.config_helper import cfg
-from packages.python.javdb_platform.path_helper import atomic_write
+from javdb.infra.config import cfg
+from javdb.infra.paths import atomic_write
 
 JAVDB_USERNAME = cfg('JAVDB_USERNAME', None)
 JAVDB_PASSWORD = cfg('JAVDB_PASSWORD', None)
@@ -82,7 +82,7 @@ PROXY_MODULES = cfg('PROXY_MODULES', ['spider'])
 
 
 # Import RequestHandler for Cloudflare bypass via curl_cffi TLS fingerprint
-from packages.python.javdb_platform.request_handler import RequestHandler, RequestConfig
+from javdb.infra.request import RequestHandler, RequestConfig
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +113,7 @@ def _is_cloudflare_challenge(response):
 
 def _create_handler():
     """Create a RequestHandler instance configured for login."""
-    from packages.python.javdb_spider.runtime.sleep import movie_sleep_mgr as _mgr
+    from javdb.spider.runtime.sleep import movie_sleep_mgr as _mgr
     _cd = _mgr.get_cooldown()
     config = RequestConfig(
         base_url=BASE_URL,
@@ -168,7 +168,7 @@ def _attempt_cf_warmup(handler, url, proxies=None):
 def _build_proxies_from_config():
     """Build a proxies dict from config settings for standalone usage."""
     try:
-        from packages.python.javdb_spider.fetch.session import resolve_login_proxy_endpoints
+        from javdb.spider.fetch.session import resolve_login_proxy_endpoints
 
         named_proxies, named_nm = resolve_login_proxy_endpoints()
         if named_proxies:
@@ -455,7 +455,7 @@ def login_javdb(username, password, proxies=None):
 
             # Attempt 1: CF bypass service warmup
             if _attempt_cf_warmup(handler, login_page_url, proxies):
-                from packages.python.javdb_spider.runtime.sleep import movie_sleep_mgr as _mgr
+                from javdb.spider.runtime.sleep import movie_sleep_mgr as _mgr
                 logger.info("CF warmup succeeded, retrying login page fetch after cooldown...")
                 time.sleep(_mgr.get_cooldown())
                 response = session.get(login_page_url, headers=headers, timeout=30, proxies=proxies)
@@ -697,7 +697,7 @@ def login_with_retry(username, password, max_retries=5, proxies=None):
             )
 
             if attempt < max_retries:
-                from packages.python.javdb_spider.runtime.sleep import movie_sleep_mgr as _mgr
+                from javdb.spider.runtime.sleep import movie_sleep_mgr as _mgr
                 if is_captcha_error:
                     logger.warning("Captcha error detected, retrying with new captcha...")
                     time.sleep(_mgr.get_cooldown())

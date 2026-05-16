@@ -28,7 +28,7 @@ os.chdir(REPO_ROOT)
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from packages.python.javdb_platform.logging_config import setup_logging, get_logger
+from javdb.infra.logging import setup_logging, get_logger
 
 setup_logging()
 logger = get_logger(__name__)
@@ -76,7 +76,7 @@ def backup_db(db_path: str) -> str:
 
 
 def _normalize_three_dbs(history_path: str, reports_path: str, operations_path: str) -> None:
-    from packages.python.javdb_platform.sqlite_datetime import rewrite_datetime_text_columns
+    from javdb.storage.sqlite_datetime import rewrite_datetime_text_columns
 
     logger.info("Normalizing DateTime TEXT columns ...")
     for p in (history_path, reports_path, operations_path):
@@ -90,7 +90,7 @@ def _normalize_three_dbs(history_path: str, reports_path: str, operations_path: 
 
 
 def verify_split(reports_dir: str) -> bool:
-    import packages.python.javdb_platform.db as db_mod
+    import javdb.storage.db.db as db_mod
 
     ok = True
     for db_name, expected_tables in [
@@ -170,7 +170,7 @@ def main():
         logger.info("Database is below v6. Run migration/tools/migrate_v5_to_v6.py first.")
         sys.exit(1)
 
-    import packages.python.javdb_platform.db as db_mod
+    import javdb.storage.db.db as db_mod
 
     reports_dir = os.path.dirname(db_path)
     db_mod.DB_PATH = db_path

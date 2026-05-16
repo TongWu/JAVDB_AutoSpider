@@ -35,8 +35,8 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from packages.python.javdb_platform.logging_config import setup_logging, get_logger
-from packages.python.javdb_integrations.rclone_helper import strip_drive_name, strip_root_folder, get_configured_root_folder
+from javdb.infra.logging import setup_logging, get_logger
+from javdb.integrations.rclone.helper import strip_drive_name, strip_root_folder, get_configured_root_folder
 
 setup_logging()
 logger = get_logger(__name__)

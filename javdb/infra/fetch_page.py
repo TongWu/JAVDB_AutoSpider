@@ -26,11 +26,11 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 # Setup logging before importing config (config may set log level)
-from packages.python.javdb_platform.logging_config import setup_logging, get_logger
+from javdb.infra.logging import setup_logging, get_logger
 setup_logging()
 logger = get_logger("fetch_page")
 
-from packages.python.javdb_platform.spider_gateway import create_gateway
+from javdb.spider.spider_gateway import create_gateway
 
 
 def default_output_path(url: str) -> str:

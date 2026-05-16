@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import SplitResult, urlsplit, urlunsplit
 
-from packages.python.javdb_core.masking import mask_ip_address
-from packages.python.javdb_platform.config_helper import cfg
+from javdb.infra.masking import mask_ip_address
+from javdb.infra.config import cfg
 
 _UNSET = object()
 _TRUE_VALUES = {"1", "true", "yes", "on"}

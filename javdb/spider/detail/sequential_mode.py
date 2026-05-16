@@ -2,10 +2,10 @@
 
 from typing import List
 
-from packages.python.javdb_spider.detail.runner import (
+from javdb.spider.detail.runner import (
     process_detail_entries,
 )
-from packages.python.javdb_spider.fetch.sequential_backend import SequentialFetchBackend
+from javdb.spider.fetch.sequential_backend import SequentialFetchBackend
 
 
 def build_sequential_detail_backend(

@@ -3,8 +3,8 @@
 import argparse
 from datetime import datetime
 
-from packages.python.javdb_platform.proxy_policy import add_proxy_arguments
-from packages.python.javdb_spider.runtime.config import PAGE_START, PAGE_END
+from javdb.proxy.policy import add_proxy_arguments
+from javdb.spider.runtime.config import PAGE_START, PAGE_END
 
 OUTPUT_CSV = f'Javdb_TodayTitle_{datetime.now().strftime("%Y%m%d")}.csv'
 

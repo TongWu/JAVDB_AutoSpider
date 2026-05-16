@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import re
 from typing import Iterable, List, Optional, Tuple
-from packages.python.javdb_core.contracts import (
+from javdb.spider.contracts import (
     get_video_code,
     get_sensor_category,
     get_subtitle_category,

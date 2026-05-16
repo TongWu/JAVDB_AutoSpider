@@ -29,11 +29,11 @@ os.chdir(REPO_ROOT)
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from packages.python.javdb_platform.logging_config import setup_logging, get_logger
-from packages.python.javdb_platform.sqlite_datetime import normalize_storage_datetime
-from packages.python.javdb_platform.db import _generate_session_id
+from javdb.infra.logging import setup_logging, get_logger
+from javdb.storage.sqlite_datetime import normalize_storage_datetime
+from javdb.storage.db.db import _generate_session_id
 from apps.api.parsers.common import javdb_absolute_url
-from packages.python.javdb_platform.config_helper import cfg
+from javdb.infra.config import cfg
 
 setup_logging()
 logger = get_logger(__name__)
@@ -72,7 +72,7 @@ def migrate_history(csv_path: str, db_path: str, dry_run: bool = False) -> int:
         logger.info(f"Skipping history: {csv_path} not found")
         return 0
 
-    from packages.python.javdb_platform.db import get_db
+    from javdb.storage.db.db import get_db
     with open(csv_path, 'r', encoding='utf-8-sig') as f:
         reader = csv.DictReader(f)
         rows = list(reader)
@@ -182,7 +182,7 @@ def migrate_inventory(csv_path: str, db_path: str, dry_run: bool = False) -> int
         logger.info(f"Skipping inventory: {csv_path} not found")
         return 0
 
-    from packages.python.javdb_platform.db import get_db
+    from javdb.storage.db.db import get_db
     with open(csv_path, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
         rows = list(reader)
@@ -222,7 +222,7 @@ def migrate_dedup(csv_path: str, db_path: str, dry_run: bool = False) -> int:
         logger.info(f"Skipping dedup: {csv_path} not found")
         return 0
 
-    from packages.python.javdb_platform.db import get_db
+    from javdb.storage.db.db import get_db
     with open(csv_path, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
         rows = list(reader)
@@ -336,7 +336,7 @@ def migrate_dedup_all(reports_dir: str, db_path: str, dry_run: bool = False) -> 
 
     After import the merged data is exported to ``reports/dedup_history.csv``.
     """
-    from packages.python.javdb_platform.db import get_db
+    from javdb.storage.db.db import get_db
     import glob as _glob
 
     all_rows: list = []
@@ -469,7 +469,7 @@ def migrate_pikpak(csv_path: str, db_path: str, dry_run: bool = False) -> int:
         logger.info(f"Skipping pikpak: {csv_path} not found")
         return 0
 
-    from packages.python.javdb_platform.db import get_db
+    from javdb.storage.db.db import get_db
     with open(csv_path, 'r', encoding='utf-8-sig') as f:
         reader = csv.DictReader(f)
         rows = list(reader)
@@ -628,7 +628,7 @@ def migrate_single_csv(csv_path: str, filename: str, is_adhoc: bool,
     Returns dict with keys: session_id, row_count, skipped.
     """
     from datetime import datetime
-    from packages.python.javdb_platform.db import get_db
+    from javdb.storage.db.db import get_db
 
     meta = parse_csv_filename(filename, is_adhoc)
 
@@ -707,7 +707,7 @@ def migrate_single_csv(csv_path: str, filename: str, is_adhoc: bool,
 
 def verify_session(session_id: str, csv_path: str, db_path: str) -> bool:
     """Verify a migrated session: movie count matches CSV row count."""
-    from packages.python.javdb_platform.db import get_db
+    from javdb.storage.db.db import get_db
 
     try:
         with open(csv_path, 'r', encoding='utf-8-sig') as f:
@@ -753,7 +753,7 @@ def main():
         logger.info("[VERIFY MODE]")
     logger.info("=" * 60)
 
-    import packages.python.javdb_platform.db as db_mod
+    import javdb.storage.db.db as db_mod
     db_mod.DB_PATH = db_path
     db_mod.init_db(db_path, force=True)
 

@@ -3,19 +3,19 @@
 import os
 from typing import Optional
 
-from packages.python.javdb_platform.logging_config import get_logger, log_section
-from packages.python.javdb_core.parser import parse_index
-from packages.python.javdb_core.url_helper import detect_url_type
-from packages.python.javdb_core.filename_helper import generate_output_csv_name_from_html
-from packages.python.javdb_ingestion.policies import (
+from javdb.infra.logging import get_logger, log_section
+from javdb.spider.parser import parse_index
+from javdb.spider.url_helper import detect_url_type
+from javdb.spider.filename_helper import generate_output_csv_name_from_html
+from javdb.pipeline.policies import (
     has_complete_subtitles,
     should_skip_recent_yesterday_release,
     should_skip_recent_today_release,
 )
 
-import packages.python.javdb_spider.runtime.state as state
-from packages.python.javdb_spider.fetch.fallback import get_page_url, fetch_index_page_with_fallback
-from packages.python.javdb_spider.runtime.sleep import movie_sleep_mgr
+import javdb.spider.runtime.state as state
+from javdb.spider.fetch.fallback import get_page_url, fetch_index_page_with_fallback
+from javdb.spider.runtime.sleep import movie_sleep_mgr
 
 logger = get_logger(__name__)
 
@@ -47,11 +47,11 @@ def fetch_all_index_pages(
         emoji='🌐',
     )
 
-    from packages.python.javdb_spider.runtime.config import PROXY_POOL
+    from javdb.spider.runtime.config import PROXY_POOL
     active_workers = len(PROXY_POOL) if (use_parallel and PROXY_POOL) else 1
 
     if use_parallel:
-        from packages.python.javdb_spider.fetch.index_parallel import (
+        from javdb.spider.fetch.index_parallel import (
             fetch_all_index_pages_parallel,
         )
         idx_result = fetch_all_index_pages_parallel(

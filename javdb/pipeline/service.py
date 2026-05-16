@@ -24,8 +24,8 @@ from compat import activate_repo_root
 activate_repo_root()
 
 # Import unified configuration
-from packages.python.javdb_platform.config_helper import cfg
-from packages.python.javdb_platform.proxy_policy import add_proxy_arguments, resolve_proxy_override
+from javdb.infra.config import cfg
+from javdb.proxy.policy import add_proxy_arguments, resolve_proxy_override
 
 PIPELINE_LOG_FILE = cfg('PIPELINE_LOG_FILE', 'logs/pipeline.log')
 LOG_LEVEL = cfg('LOG_LEVEL', 'INFO')
@@ -35,10 +35,10 @@ _REPORTS_DIR = cfg('REPORTS_DIR', 'reports')
 DEDUP_CSV = cfg('DEDUP_CSV', 'dedup.csv')
 
 # Import path helper for dated subdirectories
-from packages.python.javdb_platform.path_helper import get_dated_report_path
+from javdb.infra.paths import get_dated_report_path
 
 # --- LOGGING SETUP ---
-from packages.python.javdb_platform.logging_config import setup_logging, get_logger
+from javdb.infra.logging import setup_logging, get_logger
 setup_logging(PIPELINE_LOG_FILE, LOG_LEVEL)
 logger = get_logger(__name__)
 
@@ -56,21 +56,21 @@ def check_rust_core_status():
     
     # Check proxy pool
     try:
-        from packages.python.javdb_platform.proxy_pool import RUST_PROXY_AVAILABLE
+        from javdb.proxy.pool import RUST_PROXY_AVAILABLE
         status['proxy_pool'] = RUST_PROXY_AVAILABLE
     except Exception:
         status['proxy_pool'] = False
     
     # Check request handler
     try:
-        from packages.python.javdb_platform.request_handler import RUST_REQUEST_HANDLER_AVAILABLE
+        from javdb.infra.request import RUST_REQUEST_HANDLER_AVAILABLE
         status['request_handler'] = RUST_REQUEST_HANDLER_AVAILABLE
     except Exception:
         status['request_handler'] = False
     
     # Check history manager
     try:
-        from packages.python.javdb_platform.history_manager import RUST_HISTORY_AVAILABLE
+        from javdb.storage.history_manager import RUST_HISTORY_AVAILABLE
         status['history_manager'] = RUST_HISTORY_AVAILABLE
     except Exception:
         status['history_manager'] = False

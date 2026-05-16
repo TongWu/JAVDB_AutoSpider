@@ -47,13 +47,13 @@ if str(REPO_ROOT) not in sys.path:
 import requests  # noqa: E402
 
 from apps.api.parsers.common import javdb_absolute_url, absolutize_supporting_actors_json  # noqa: E402
-from packages.python.javdb_platform.config_helper import cfg  # noqa: E402
-from packages.python.javdb_platform.logging_config import setup_logging, get_logger  # noqa: E402
+from javdb.infra.config import cfg  # noqa: E402
+from javdb.infra.logging import setup_logging, get_logger  # noqa: E402
 
 setup_logging()
 logger = get_logger(__name__)
 
-from packages.python.javdb_platform.db import moviehistory_actor_layout_ok  # noqa: E402
+from javdb.storage.db.db import moviehistory_actor_layout_ok  # noqa: E402
 
 EXPECTED_VERSION = 9
 
@@ -163,8 +163,8 @@ def run_schema_migration(
     dry_run: bool,
     verify: bool,
 ) -> int:
-    import packages.python.javdb_platform.db as db_mod
-    from packages.python.javdb_platform.config_helper import use_sqlite
+    import javdb.storage.db.db as db_mod
+    from javdb.infra.config import use_sqlite
 
     if not use_sqlite():
         logger.error("SQLite storage mode required (config STORAGE_MODE / use_sqlite).")
@@ -406,8 +406,8 @@ def run_actor_backfill(
     no_proxy: bool,
     use_cf_bypass: bool,
 ) -> int:
-    from packages.python.javdb_platform.config_helper import use_sqlite
-    from packages.python.javdb_platform.db import init_db
+    from javdb.infra.config import use_sqlite
+    from javdb.storage.db.db import init_db
 
     if not use_sqlite():
         logger.error("SQLite storage mode required.")
@@ -419,12 +419,12 @@ def run_actor_backfill(
         logger.error("History database not found: %s", history_db)
         return 1
 
-    import packages.python.javdb_spider.runtime.state as state
-    from packages.python.javdb_spider.runtime.config import (
+    import javdb.spider.runtime.state as state
+    from javdb.spider.runtime.config import (
         BASE_URL, REPORTS_DIR, PROXY_POOL,
         MOVIE_SLEEP_MIN, MOVIE_SLEEP_MAX,
     )
-    from packages.python.javdb_spider.runtime.sleep import movie_sleep_mgr
+    from javdb.spider.runtime.sleep import movie_sleep_mgr
 
     os.makedirs(REPORTS_DIR, exist_ok=True)
     use_proxy = not no_proxy
@@ -462,8 +462,8 @@ def run_actor_backfill(
     # Parallel mode: FetchEngine with one worker per proxy
     # ------------------------------------------------------------------
     if use_proxy and PROXY_POOL:
-        from packages.python.javdb_spider.fetch.fetch_engine import FetchEngine, EngineTask
-        from packages.python.javdb_core.parser import parse_detail
+        from javdb.spider.fetch.fetch_engine import FetchEngine, EngineTask
+        from javdb.spider.parser import parse_detail
 
         completed_ids: set[int] = set()
         stop_event = threading.Event()
@@ -569,7 +569,7 @@ def run_actor_backfill(
     # ------------------------------------------------------------------
     # Sequential fallback (--no-proxy or no PROXY_POOL configured)
     # ------------------------------------------------------------------
-    from packages.python.javdb_spider.fetch.fallback import fetch_detail_page_with_fallback
+    from javdb.spider.fetch.fallback import fetch_detail_page_with_fallback
 
     session = requests.Session()
     processed = 0
@@ -695,7 +695,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    import packages.python.javdb_platform.db as db_mod
+    import javdb.storage.db.db as db_mod
 
     history_db = args.history_db or db_mod.HISTORY_DB_PATH
 

@@ -5,7 +5,7 @@ Tries to use the high-performance Rust implementation from
 implementation transparently when the Rust extension is unavailable.
 """
 
-from packages.python.javdb_platform.logging_config import get_logger
+from javdb.infra.logging import get_logger
 
 logger = get_logger(__name__)
 

@@ -33,11 +33,11 @@ from typing import Dict, List, Optional, Tuple
 
 import requests
 
-from packages.python.javdb_platform.do_client_base import (
+from javdb.proxy.coordinator.do_client_base import (
     BaseDOClient,
     DOClientUnavailable,
 )
-from packages.python.javdb_platform.logging_config import get_logger
+from javdb.infra.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -177,7 +177,7 @@ class ReportResult:
 #: this re-export keeps existing imports
 #: (``from proxy_coordinator_client import _normalize_proxy_id``) working
 #: without churn while internal call-sites migrate.
-from packages.python.javdb_platform.proxy_policy import (  # noqa: E402
+from javdb.proxy.policy import (  # noqa: E402
     normalize_proxy_id as _normalize_proxy_id,
 )
 

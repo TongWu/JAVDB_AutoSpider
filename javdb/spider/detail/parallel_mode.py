@@ -3,14 +3,14 @@
 from dataclasses import dataclass, field
 from typing import List
 
-from packages.python.javdb_platform.logging_config import get_logger
-from packages.python.javdb_core.parser import parse_detail
+from javdb.infra.logging import get_logger
+from javdb.spider.parser import parse_detail
 
-from packages.python.javdb_spider.detail.runner import (
+from javdb.spider.detail.runner import (
     process_detail_entries,
 )
-from packages.python.javdb_spider.fetch.backend import FetchRuntimeState
-from packages.python.javdb_spider.fetch.fetch_engine import (
+from javdb.spider.fetch.backend import FetchRuntimeState
+from javdb.spider.fetch.fetch_engine import (
     EngineTask,
     ParallelFetchBackend,
 )

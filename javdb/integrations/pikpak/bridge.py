@@ -15,7 +15,7 @@ os.chdir(REPO_ROOT)
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from packages.python.javdb_platform.config_helper import cfg
+from javdb.infra.config import cfg
 
 QB_HOST = cfg('QB_HOST', 'your_qbittorrent_ip')
 QB_PORT = cfg('QB_PORT', 'your_qbittorrent_port')
@@ -56,15 +56,15 @@ PROXY_POOL = cfg('PROXY_POOL', [])
 PROXY_POOL_MAX_FAILURES = cfg('PROXY_POOL_MAX_FAILURES', 3)
 QB_ALLOW_INSECURE_HTTP = cfg('QB_ALLOW_INSECURE_HTTP', False)
 
-from packages.python.javdb_platform.logging_config import setup_logging, get_logger
-from packages.python.javdb_platform.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
-from packages.python.javdb_platform.proxy_policy import (
+from javdb.infra.logging import setup_logging, get_logger
+from javdb.infra.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
+from javdb.proxy.policy import (
     add_proxy_arguments,
     describe_proxy_override,
     resolve_proxy_override,
     should_proxy_module,
 )
-from packages.python.javdb_core.masking import mask_ip_address, mask_username, mask_email, mask_full
+from javdb.infra.masking import mask_ip_address, mask_username, mask_email, mask_full
 
 # --------------------------
 # Setup Logging
@@ -73,16 +73,16 @@ setup_logging(log_file=PIKPAK_LOG_FILE)
 logger = get_logger(__name__)
 
 # Import proxy pool
-from packages.python.javdb_platform.proxy_pool import ProxyPool, create_proxy_pool_from_config
+from javdb.proxy.pool import ProxyPool, create_proxy_pool_from_config
 
 # Import proxy helper from request handler
-from packages.python.javdb_platform.request_handler import ProxyHelper, create_proxy_helper_from_config
-from packages.python.javdb_platform.qb_config import (
+from javdb.infra.request import ProxyHelper, create_proxy_helper_from_config
+from javdb.integrations.qb.config import (
     qb_allow_insecure_http,
     qb_base_url_candidates,
     qb_verify_tls,
 )
-from packages.python.javdb_integrations.qb_client import (
+from javdb.integrations.qb.client import (
     QBittorrentClient as _SharedQBittorrentClient,
     remove_completed_torrents_keep_files as _shared_remove_completed,
 )
@@ -409,7 +409,7 @@ async def process_pikpak_single(magnet, email, password, root_folder=None, categ
 # --------------------------
 def save_to_pikpak_history(torrent_info, transfer_status, error_msg=None):
     """Save torrent transfer information to PikPak history."""
-    from packages.python.javdb_platform.config_helper import use_sqlite, use_csv
+    from javdb.infra.config import use_sqlite, use_csv
 
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -427,8 +427,8 @@ def save_to_pikpak_history(torrent_info, transfer_status, error_msg=None):
 
     if use_sqlite():
         try:
-            from packages.python.javdb_platform.db_migrations import init_db
-            from packages.python.javdb_platform.db_operations import db_append_pikpak_history
+            from javdb.storage.db.db_migrations import init_db
+            from javdb.storage.db.db_operations import db_append_pikpak_history
             init_db()
             db_append_pikpak_history(record)
         except Exception as e:
@@ -460,7 +460,7 @@ def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=None, from_pipeline=
     # so a downstream rollback can scope cleanly to just our rows.
     if session_id is not None:
         try:
-            from packages.python.javdb_platform.db_session import set_active_session_id
+            from javdb.storage.db.db_session import set_active_session_id
             active_session_setter = set_active_session_id
             active_session_setter(session_id)
         except Exception as e:
@@ -793,10 +793,10 @@ def _pikpak_bridge_impl(days, dry_run, batch_mode=True, use_proxy=None, from_pip
 
     if session_id and not dry_run:
         try:
-            from packages.python.javdb_platform.config_helper import use_sqlite as _use_sqlite
+            from javdb.infra.config import use_sqlite as _use_sqlite
             if _use_sqlite():
-                from packages.python.javdb_platform.db_migrations import init_db
-                from packages.python.javdb_platform.db_stats import db_save_pikpak_stats
+                from javdb.storage.db.db_migrations import init_db
+                from javdb.storage.db.db_stats import db_save_pikpak_stats
                 init_db()
                 db_save_pikpak_stats(session_id, {
                     'threshold_days': days,
@@ -807,7 +807,7 @@ def _pikpak_bridge_impl(days, dry_run, batch_mode=True, use_proxy=None, from_pip
                     'uploaded_count': successful_count + delete_failed_count,
                     'delete_failed_count': delete_failed_count,
                 })
-                from packages.python.javdb_platform.db_connection import current_backend
+                from javdb.storage.db.db_connection import current_backend
                 logger.info(f"PikPak stats saved to {current_backend()} backend (session_id={session_id})")
         except Exception as e:
             logger.warning(f"Failed to save pikpak stats to db backend: {e}")
@@ -839,7 +839,7 @@ def _pikpak_bridge_impl(days, dry_run, batch_mode=True, use_proxy=None, from_pip
 
 def main():
     import atexit
-    from packages.python.javdb_platform.db_connection import close_db
+    from javdb.storage.db.db_connection import close_db
 
     atexit.register(close_db)
 

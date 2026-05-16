@@ -20,7 +20,7 @@ import time
 from datetime import datetime, timezone
 from typing import Optional, Tuple
 
-from packages.python.javdb_platform.logging_config import get_logger
+from javdb.infra.logging import get_logger
 
 logger = get_logger(__name__)
 

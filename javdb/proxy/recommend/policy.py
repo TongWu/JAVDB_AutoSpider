@@ -25,8 +25,8 @@ import threading
 import time
 from typing import Dict, List, Optional
 
-from packages.python.javdb_platform.logging_config import get_logger
-from packages.python.javdb_platform.recommend_proxy_client import (
+from javdb.infra.logging import get_logger
+from javdb.proxy.recommend.client import (
     RecommendProxyClient,
     RecommendProxyUnavailable,
 )

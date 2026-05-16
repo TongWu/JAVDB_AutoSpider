@@ -21,12 +21,12 @@ import os
 from dataclasses import dataclass, field
 from typing import Any, Iterable, List, Optional
 
-from packages.python.javdb_platform import config_helper
-from packages.python.javdb_platform.do_client_base import (
+from javdb.infra import config as config_helper
+from javdb.proxy.coordinator.do_client_base import (
     BaseDOClient,
     DOClientUnavailable,
 )
-from packages.python.javdb_platform.logging_config import get_logger
+from javdb.infra.logging import get_logger
 
 logger = get_logger(__name__)
 

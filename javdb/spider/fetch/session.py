@@ -2,11 +2,11 @@
 
 from typing import Iterable, Optional
 
-from packages.python.javdb_platform.logging_config import get_logger, log_section
-from packages.python.javdb_platform.login_state_client import LoginStateUnavailable
+from javdb.infra.logging import get_logger, log_section
+from javdb.proxy.coordinator.login_state_client import LoginStateUnavailable
 from javdb.spider.parser import is_login_page
-import packages.python.javdb_spider.runtime.state as state
-from packages.python.javdb_spider.runtime.config import (
+import javdb.spider.runtime.state as state
+from javdb.spider.runtime.config import (
     BASE_URL,
     LOGIN_FEATURE_AVAILABLE,
     JAVDB_USERNAME,
@@ -212,7 +212,7 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None,
     state.login_attempted = True
 
     try:
-        from packages.python.javdb_integrations.login import login_with_retry, update_config_file
+        from javdb.spider.auth.login import login_with_retry, update_config_file
 
         success, session_cookie, message = login_with_retry(
             JAVDB_USERNAME, JAVDB_PASSWORD, max_retries=10, proxies=login_proxies,

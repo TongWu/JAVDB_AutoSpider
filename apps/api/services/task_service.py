@@ -17,7 +17,7 @@ from fastapi import HTTPException
 
 from apps.api.infra.security import _sanitize_output_filename, _validate_target_url
 from apps.api.services import config_service, context
-from packages.python.javdb_platform.proxy_policy import resolve_proxy_override
+from javdb.proxy.policy import resolve_proxy_override
 
 JOBS: Dict[str, Dict[str, Any]] = {}
 JOB_LOCK = threading.Lock()

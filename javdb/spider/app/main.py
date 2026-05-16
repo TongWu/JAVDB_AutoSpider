@@ -1,6 +1,6 @@
 """Thin spider entrypoint wrapper."""
 
-from packages.python.javdb_spider.app.run_service import (
+from javdb.spider.app.run_service import (
     SpiderRunService,
     create_detail_backend,
 )

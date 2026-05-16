@@ -41,7 +41,7 @@ os.chdir(REPO_ROOT)
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from packages.python.javdb_platform.logging_config import setup_logging, get_logger
+from javdb.infra.logging import setup_logging, get_logger
 
 setup_logging()
 logger = get_logger(__name__)
@@ -196,7 +196,7 @@ def main():
         backup_db(db_path)
 
     logger.info("Running migration via init_db() ...")
-    import packages.python.javdb_platform.db as db_mod
+    import javdb.storage.db.db as db_mod
     db_mod.DB_PATH = db_path
     db_mod.init_db(db_path, force=True)
 

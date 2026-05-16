@@ -8,7 +8,7 @@ automatic login retry, CF bypass cascade, and adaptive sleep/throttle.
 
 Usage (simple mode — single-URL fetch + user-defined parse)::
 
-    from packages.python.javdb_spider.fetch.fetch_engine import FetchEngine, EngineTask
+    from javdb.spider.fetch.fetch_engine import FetchEngine, EngineTask
 
     def my_parse(html: str, task: EngineTask) -> dict | None:
         ...  # return parsed data or None on failure
@@ -24,7 +24,7 @@ Usage (simple mode — single-URL fetch + user-defined parse)::
 
 Usage (advanced mode — multi-step fetch inside process_fn)::
 
-    from packages.python.javdb_spider.fetch.fetch_engine import FetchEngine, WorkerContext, EngineTask
+    from javdb.spider.fetch.fetch_engine import FetchEngine, WorkerContext, EngineTask
 
     def my_process(ctx: WorkerContext, task: EngineTask) -> dict | None:
         html = ctx.fetch(task.url)      # raises LoginRequired on auth wall
@@ -47,22 +47,22 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Iterator, List, Optional, Union
 from urllib.parse import urlparse
 
-from packages.python.javdb_platform.logging_config import get_logger
-from packages.python.javdb_platform.login_state_client import LoginStateUnavailable
-from packages.python.javdb_platform.proxy_policy import (
+from javdb.infra.logging import get_logger
+from javdb.proxy.coordinator.login_state_client import LoginStateUnavailable
+from javdb.proxy.policy import (
     normalize_proxy_id as _normalize_proxy_id,
 )
-from packages.python.javdb_platform.proxy_ban_manager import get_ban_manager
-from packages.python.javdb_platform.proxy_pool import create_proxy_pool_from_config
-from packages.python.javdb_platform.request_handler import (
+from javdb.proxy.ban_manager import get_ban_manager
+from javdb.proxy.pool import create_proxy_pool_from_config
+from javdb.infra.request import (
     RequestHandler, RequestConfig, ProxyBannedError, ProxyExhaustedError,
 )
 
-import packages.python.javdb_spider.runtime.state as state
-from packages.python.javdb_spider.fetch.session import is_login_page
-from packages.python.javdb_spider.fetch.login_coordinator import LoginCoordinator, requeue_front
-from packages.python.javdb_spider.fetch.backend import FetchBackend, FetchRuntimeState
-from packages.python.javdb_spider.runtime.sleep import (
+import javdb.spider.runtime.state as state
+from javdb.spider.fetch.session import is_login_page
+from javdb.spider.fetch.login_coordinator import LoginCoordinator, requeue_front
+from javdb.spider.fetch.backend import FetchBackend, FetchRuntimeState
+from javdb.spider.runtime.sleep import (
     MovieSleepManager,
     movie_sleep_mgr as _global_sleep_mgr,
     PenaltyTracker,
@@ -70,7 +70,7 @@ from packages.python.javdb_spider.runtime.sleep import (
     penalty_tracker as _shared_penalty_tracker,
     _interpolate_multiplier,
 )
-from packages.python.javdb_spider.runtime.config import (
+from javdb.spider.runtime.config import (
     BASE_URL,
     CF_BYPASS_SERVICE_PORT,
     CF_BYPASS_ENABLED,
@@ -253,7 +253,7 @@ _TaskQueue = Union[queue_module.Queue, _PriorityTaskQueue]
 ProcessFn = Callable[['WorkerContext', EngineTask], Any]
 
 
-from packages.python.javdb_spider.fetch.utils import (  # noqa: E402
+from javdb.spider.fetch.utils import (  # noqa: E402
     task_worker_ctx as _task_worker_ctx,
 )
 

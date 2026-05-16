@@ -65,15 +65,15 @@ def commit_session(req: CommitRequest) -> CommitResult:
     RuntimeError
         If the commit DB call fails.
     """
-    import packages.python.javdb_platform.db_connection as _db_conn
-    from packages.python.javdb_platform.db_history_write import (
+    import javdb.storage.db.db_connection as _db_conn
+    from javdb.storage.db.db_history_write import (
         db_commit_session_history,
     )
-    from packages.python.javdb_platform.db_reports import (
+    from javdb.storage.db.db_reports import (
         db_find_in_progress_sessions,
         db_mark_session_committed,
     )
-    from packages.python.javdb_platform.logging_config import get_logger
+    from javdb.infra.logging import get_logger
 
     logger = get_logger(__name__)
 

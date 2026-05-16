@@ -11,7 +11,7 @@ from datetime import datetime
 
 from bs4 import BeautifulSoup
 from apps.api.parsers.common import extract_category_name as _api_extract_category_name
-from packages.python.javdb_core.url_helper import (
+from javdb.spider.url_helper import (
     detect_url_type,
     extract_url_identifier,
     sanitize_filename_part,

@@ -9,23 +9,23 @@ from typing import Optional
 import requests
 from datetime import datetime
 
-from packages.python.javdb_platform.logging_config import (
+from javdb.infra.logging import (
     get_logger,
     log_section,
 )
-from packages.python.javdb_platform.history_manager import load_parsed_movies_history, validate_history_file
-from packages.python.javdb_platform.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
-from packages.python.javdb_core.filename_helper import generate_output_csv_name
-from packages.python.javdb_platform.path_helper import ensure_dated_dir
-from packages.python.javdb_platform.csv_writer import set_active_session
-from packages.python.javdb_platform.proxy_policy import (
+from javdb.storage.history_manager import load_parsed_movies_history, validate_history_file
+from javdb.infra.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
+from javdb.spider.filename_helper import generate_output_csv_name
+from javdb.infra.paths import ensure_dated_dir
+from javdb.infra.csv_writer import set_active_session
+from javdb.proxy.policy import (
     describe_proxy_override,
     resolve_proxy_override,
     should_proxy_module,
 )
 
-import packages.python.javdb_spider.runtime.state as state
-from packages.python.javdb_spider.runtime.config import (
+import javdb.spider.runtime.state as state
+from javdb.spider.runtime.config import (
     BASE_URL,
     REPORTS_DIR, DAILY_REPORT_DIR, AD_HOC_DIR, PARSED_MOVIES_CSV,
     CF_BYPASS_ENABLED, CF_BYPASS_SERVICE_PORT,
@@ -36,20 +36,20 @@ from packages.python.javdb_spider.runtime.config import (
     RCLONE_INVENTORY_CSV, DEDUP_CSV, DEDUP_DIR,
     ENABLE_REDOWNLOAD, REDOWNLOAD_SIZE_THRESHOLD,
 )
-from packages.python.javdb_spider.services.dedup import (
+from javdb.spider.services.dedup import (
     load_rclone_inventory,
     should_skip_from_rclone,
     check_dedup_upgrade,
     append_dedup_record,
 )
-from packages.python.javdb_spider.app.cli import parse_arguments, OUTPUT_CSV
-from packages.python.javdb_spider.runtime.sleep import movie_sleep_mgr
-from packages.python.javdb_spider.fetch.index import fetch_all_index_pages
-from packages.python.javdb_spider.detail.parallel_mode import build_parallel_detail_backend
-from packages.python.javdb_spider.detail.runner import process_detail_entries
-from packages.python.javdb_spider.detail.sequential_mode import build_sequential_detail_backend
-from packages.python.javdb_spider.runtime.report import generate_summary_report
-from packages.python.javdb_spider.fetch.fallback import AdhocLoginFailedError
+from javdb.spider.app.cli import parse_arguments, OUTPUT_CSV
+from javdb.spider.runtime.sleep import movie_sleep_mgr
+from javdb.spider.fetch.index import fetch_all_index_pages
+from javdb.spider.detail.parallel_mode import build_parallel_detail_backend
+from javdb.spider.detail.runner import process_detail_entries
+from javdb.spider.detail.sequential_mode import build_sequential_detail_backend
+from javdb.spider.runtime.report import generate_summary_report
+from javdb.spider.fetch.fallback import AdhocLoginFailedError
 
 logger = get_logger(__name__)
 
@@ -314,19 +314,19 @@ def _main():
     _session_id = None
     db_storage_enabled = False
     try:
-        from packages.python.javdb_platform.config_helper import use_db_storage
+        from javdb.infra.config import use_db_storage
         db_storage_enabled = use_db_storage()
     except Exception as e:
         logger.warning(f"Failed to evaluate use_db_storage: {e}")
 
     if db_storage_enabled:
         try:
-            from packages.python.javdb_platform.db_migrations import init_db
-            from packages.python.javdb_platform.db_reports import (
+            from javdb.storage.db.db_migrations import init_db
+            from javdb.storage.db.db_reports import (
                 db_create_report_session,
                 db_find_in_progress_session_ids_for_run_csv,
             )
-            from packages.python.javdb_core.url_helper import detect_url_type, extract_url_identifier
+            from javdb.spider.url_helper import detect_url_type, extract_url_identifier
             init_db(force=True)
             report_type = 'adhoc' if custom_url else 'daily'
             report_date = datetime.now().strftime('%Y%m%d')
@@ -390,7 +390,7 @@ def _main():
             # (`save_parsed_movie_to_history`, etc.) consult.  Falling
             # back to ``_resolve_write_mode`` keeps the env-var/default
             # behaviour aligned with ``db_create_report_session``.
-            from packages.python.javdb_platform.db_session import (
+            from javdb.storage.db.db_session import (
                 _resolve_write_mode as _resolve_wm,
             )
             requested_write_mode = _resolve_wm(None)
@@ -418,10 +418,10 @@ def _main():
             # surgically undo just our rows (X3 hybrid strategy).
             effective_write_mode = requested_write_mode
             try:
-                from packages.python.javdb_platform.db_reports import (
+                from javdb.storage.db.db_reports import (
                     db_get_session_status as _db_get_session_status,
                 )
-                from packages.python.javdb_platform.db_session import (
+                from javdb.storage.db.db_session import (
                     set_active_run_identity as _set_active_run_identity,
                     set_active_session_id as _set_active_session_id,
                     set_active_write_mode as _set_active_write_mode,
@@ -448,7 +448,7 @@ def _main():
             # so the dashboard's Sessions panel reflects live state. Best-
             # effort: never let a registry hiccup abort spider startup.
             try:
-                from packages.python.javdb_spider.runtime import state as _runtime_state
+                from javdb.spider.runtime import state as _runtime_state
                 _runtime_state.set_active_runner_session(
                     session_id=str(_session_id),
                     status="in_progress",
@@ -617,8 +617,8 @@ def _main():
     # Save spider stats and end_page to SQLite (when session exists)
     if _session_id is not None:
         try:
-            from packages.python.javdb_platform.db_stats import db_save_spider_stats
-            from packages.python.javdb_platform.db_connection import get_db, REPORTS_DB_PATH
+            from javdb.storage.db.db_stats import db_save_spider_stats
+            from javdb.storage.db.db_connection import get_db, REPORTS_DB_PATH
             p1_discovered = len(all_index_results_phase1) if phase_mode in ('1', 'all') else 0
             p1_processed = len(phase1_rows)
             _p1 = p1_result if 'p1_result' in locals() else {}
@@ -660,7 +660,7 @@ def _main():
         # reflects the successful run even if the process exits before the
         # next heartbeat tick. Idempotent on session_id.
         try:
-            from packages.python.javdb_spider.runtime import state as _runtime_state
+            from javdb.spider.runtime import state as _runtime_state
             _runtime_state.set_active_runner_session(
                 session_id=str(_session_id),
                 status="committed",
@@ -700,8 +700,8 @@ def main():
         # webhook fires even when the spider crashes mid-run. SystemExit(0)
         # is treated as success — only non-zero exits transition to failed.
         try:
-            from packages.python.javdb_spider.runtime import state as _runtime_state
-            from packages.python.javdb_platform.db_session import (
+            from javdb.spider.runtime import state as _runtime_state
+            from javdb.storage.db.db_session import (
                 get_active_session_id as _get_active_session_id,
             )
             should_mark_failed = True
@@ -722,7 +722,7 @@ def main():
         raise
     finally:
         try:
-            from packages.python.javdb_platform.db_session import (
+            from javdb.storage.db.db_session import (
                 set_active_session_id as _set_active_session_id,
                 set_active_run_identity as _set_active_run_identity,
             )

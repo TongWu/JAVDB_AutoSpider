@@ -19,11 +19,11 @@ from __future__ import annotations
 import time
 from typing import Optional
 
-from packages.python.javdb_platform.logging_config import get_logger
-from packages.python.javdb_spider.runtime.config import (
+from javdb.infra.logging import get_logger
+from javdb.spider.runtime.config import (
     LOGIN_ATTEMPTS_PER_PROXY_LIMIT,
 )
-from packages.python.javdb_spider.runtime import state
+from javdb.spider.runtime import state
 
 logger = get_logger(__name__)
 

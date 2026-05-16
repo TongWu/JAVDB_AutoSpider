@@ -21,9 +21,9 @@ from dataclasses import asdict, dataclass, field
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import defaultdict
 
-from packages.python.javdb_core.contracts import UNCENSORED_SENSOR_PRIORITY
-from packages.python.javdb_platform.logging_config import get_logger
-from packages.python.javdb_platform.path_helper import (
+from javdb.spider.contracts import UNCENSORED_SENSOR_PRIORITY
+from javdb.infra.logging import get_logger
+from javdb.infra.paths import (
     atomic_write,
     ensure_dated_dir,
 )
@@ -264,7 +264,7 @@ def strip_drive_name(path: str) -> str:
 
 def get_configured_drive_name() -> str:
     """Read the rclone drive name from ``RCLONE_FOLDER_PATH`` config."""
-    from packages.python.javdb_platform.config_helper import cfg as _cfg
+    from javdb.infra.config import cfg as _cfg
     path = _cfg('RCLONE_FOLDER_PATH', None)
     if path and has_remote_prefix(str(path)):
         return str(path).split(':', 1)[0].strip()
@@ -283,7 +283,7 @@ def get_configured_root_folder() -> str:
 
     The returned value is normalised: no leading/trailing ``/``.
     """
-    from packages.python.javdb_platform.config_helper import cfg as _cfg
+    from javdb.infra.config import cfg as _cfg
 
     folder_path = _cfg('RCLONE_FOLDER_PATH', None)
     if folder_path and has_remote_prefix(str(folder_path)):

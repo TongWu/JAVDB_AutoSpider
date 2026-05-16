@@ -1,6 +1,6 @@
 """Thin pipeline CLI entrypoint."""
 
-from packages.python.javdb_platform.pipeline_service import (
+from javdb.pipeline.service import (
     PipelineRunService,
     main,
 )

@@ -13,7 +13,7 @@ Prefers the Rust implementation (``javdb_rust_core``) when available,
 falling back to the pure-Python implementation otherwise.
 
 Usage:
-    from packages.python.javdb_platform.request_handler import RequestHandler
+    from javdb.infra.request import RequestHandler
     
     handler = RequestHandler(proxy_pool=my_proxy_pool, config=my_config)
     html = handler.get_page(url, use_proxy=True)
@@ -31,14 +31,14 @@ from dataclasses import dataclass, field
 logger = logging.getLogger(__name__)
 
 # Import masking utilities
-from packages.python.javdb_core.masking import (
+from javdb.infra.masking import (
     mask_ip_address,
     mask_proxy_url,
     mask_error,
     mask_headers,
     mask_proxies,
 )
-from packages.python.javdb_platform.proxy_policy import should_proxy_module
+from javdb.proxy.policy import should_proxy_module
 from javdb.spider.parser import (
     is_login_page as _is_login_page,
     is_maintenance_page as _is_maintenance_page,
@@ -1523,7 +1523,7 @@ class ProxyHelper:
     but don't require the full RequestHandler functionality (like CF bypass).
     
     Usage:
-        from packages.python.javdb_platform.request_handler import ProxyHelper
+        from javdb.infra.request import ProxyHelper
         
         helper = ProxyHelper(proxy_pool, proxy_modules=['qbittorrent'])
         proxies = helper.get_proxies_dict('qbittorrent', use_proxy=True)

@@ -28,7 +28,7 @@ from typing import Optional
 
 import requests
 
-from packages.python.javdb_platform.logging_config import get_logger
+from javdb.infra.logging import get_logger
 
 logger = get_logger(__name__)
 

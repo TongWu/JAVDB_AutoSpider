@@ -27,10 +27,10 @@ import time
 from collections import deque
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
-from packages.python.javdb_platform.logging_config import get_logger
+from javdb.infra.logging import get_logger
 
 if TYPE_CHECKING:
-    from packages.python.javdb_platform.proxy_coordinator_client import (
+    from javdb.proxy.coordinator.proxy_coordinator_client import (
         ProxyCoordinatorClient,
     )
 
@@ -668,13 +668,13 @@ class MovieSleepManager:
         the original local-only behaviour, plus the throttle from the DO.
         """
         try:
-            from packages.python.javdb_spider.runtime import state as _state
+            from javdb.spider.runtime import state as _state
             pool = _state.global_proxy_pool
             if pool is None:
                 # Without a pool there's nowhere to mark the ban locally; we
                 # still record the proxy in the global ban manager so any
                 # future pool init sees it as banned.
-                from packages.python.javdb_platform.proxy_ban_manager import get_ban_manager
+                from javdb.proxy.ban_manager import get_ban_manager
                 get_ban_manager().add_ban(proxy_id)
                 return
             ban_proxy = getattr(pool, "ban_proxy", None)
@@ -683,7 +683,7 @@ class MovieSleepManager:
             else:
                 # Fallback: at minimum, register the ban so subsequent
                 # ``add_proxy`` calls reject the ID.
-                from packages.python.javdb_platform.proxy_ban_manager import get_ban_manager
+                from javdb.proxy.ban_manager import get_ban_manager
                 get_ban_manager().add_ban(proxy_id)
         except Exception:  # noqa: BLE001 — must never block lease processing
             logger.warning(
@@ -697,7 +697,7 @@ class MovieSleepManager:
         Best-effort fail-open; same caveats as :meth:`_mirror_remote_ban_locally`.
         """
         try:
-            from packages.python.javdb_spider.runtime import state as _state
+            from javdb.spider.runtime import state as _state
             # Only mirror when the local switch is enabled — otherwise we'd
             # populate ``proxies_requiring_cf_bypass`` with no consumers and
             # surprise the operator who explicitly disabled CF bypass via
@@ -875,7 +875,7 @@ class MovieSleepManager:
 
 def _resolve_base_range():
     """Return (min, max) using hardcoded defaults unless config overrides."""
-    from packages.python.javdb_spider.runtime.config import MOVIE_SLEEP_MIN, MOVIE_SLEEP_MAX
+    from javdb.spider.runtime.config import MOVIE_SLEEP_MIN, MOVIE_SLEEP_MAX
     _min = MOVIE_SLEEP_MIN if MOVIE_SLEEP_MIN is not None else _BASE_MIN
     _max = MOVIE_SLEEP_MAX if MOVIE_SLEEP_MAX is not None else _BASE_MAX
     if MOVIE_SLEEP_MIN is not None or MOVIE_SLEEP_MAX is not None:

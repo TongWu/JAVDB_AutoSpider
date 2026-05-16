@@ -14,8 +14,8 @@ from collections.abc import Iterable
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
-from packages.python.javdb_platform.logging_config import get_logger
-from packages.python.javdb_platform.db_session import (
+from javdb.infra.logging import get_logger
+from javdb.storage.db.db_session import (
     _SESSION_ID_SENTINEL,
     _resolve_session_id,
 )
@@ -39,11 +39,11 @@ def _ensure_imports():
     global _replace_rclone_inventory, _open_rclone_staging, _append_rclone_staging
     global _swap_rclone_inventory, _merge_rclone_inventory_from_stage, _drop_rclone_staging
     if _get_db is None:
-        from packages.python.javdb_platform.db_connection import (
+        from javdb.storage.db.db_connection import (
             get_db,
             OPERATIONS_DB_PATH,
         )
-        from packages.python.javdb_platform.db_layer.operations_repo import (
+        from javdb.storage.repos.operations_repo import (
             replace_rclone_inventory,
             open_rclone_staging,
             append_rclone_staging,

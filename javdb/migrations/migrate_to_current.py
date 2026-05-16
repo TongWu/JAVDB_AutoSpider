@@ -31,7 +31,7 @@ os.chdir(REPO_ROOT)
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from packages.python.javdb_platform.logging_config import (  # noqa: E402
+from javdb.infra.logging import (  # noqa: E402
     get_logger,
     log_section,
     setup_logging,
@@ -160,8 +160,8 @@ def main() -> int:
             "Use --align-no-proxy to disable proxy.",
         )
 
-    import packages.python.javdb_platform.db as db_mod
-    from packages.python.javdb_platform.config_helper import use_sqlite, cfg
+    import javdb.storage.db.db as db_mod
+    from javdb.infra.config import use_sqlite, cfg
 
     from migration.tools.migrate_v6_to_v7_split import _normalize_three_dbs
     from migration.tools.align_inventory_with_moviehistory import run_alignment

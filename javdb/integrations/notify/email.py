@@ -31,7 +31,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 # Import unified configuration
-from packages.python.javdb_platform.config_helper import cfg
+from javdb.infra.config import cfg
 
 GIT_USERNAME = cfg('GIT_USERNAME', 'your_github_username')
 GIT_PASSWORD = cfg('GIT_PASSWORD', 'your_github_password_or_token')
@@ -61,7 +61,7 @@ DEDUP_LOG_FILE = cfg('DEDUP_LOG_FILE', 'logs/rclone_dedup.log')
 EMAIL_NOTIFICATION_LOG_FILE = cfg('EMAIL_NOTIFICATION_LOG_FILE', 'logs/email_notification.log')
 
 # --- LOGGING SETUP ---
-from packages.python.javdb_platform.logging_config import setup_logging, get_logger
+from javdb.infra.logging import setup_logging, get_logger
 setup_logging(EMAIL_NOTIFICATION_LOG_FILE, LOG_LEVEL)
 logger = get_logger(__name__)
 
@@ -83,13 +83,13 @@ def _read_capped(path, max_bytes=_MAX_READ_BYTES, encoding="utf-8"):
         return ""
 
 # Import masking utilities
-from packages.python.javdb_core.masking import mask_email, mask_server, mask_full
+from javdb.infra.masking import mask_email, mask_server, mask_full
 
 # Import git helper
-from packages.python.javdb_platform.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
+from javdb.infra.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
 
 # Import path helper for dated subdirectories
-from packages.python.javdb_platform.path_helper import get_dated_report_path, find_latest_report_in_dated_dirs
+from javdb.infra.paths import get_dated_report_path, find_latest_report_in_dated_dirs
 
 
 def _parse_github_workflow_run_started_at():
@@ -826,7 +826,7 @@ def extract_pikpak_statistics(log_path):
 def get_proxy_ban_summary():
     """Get proxy ban summary for email notification"""
     try:
-        from packages.python.javdb_platform.proxy_ban_manager import get_ban_manager
+        from javdb.proxy.ban_manager import get_ban_manager
         ban_manager = get_ban_manager()
         return ban_manager.get_ban_summary(include_ip=True)
     except Exception as e:
@@ -1053,10 +1053,10 @@ def extract_dedup_statistics(dedup_csv_path, session_start_time=None):
 
     # Try DB first
     try:
-        from packages.python.javdb_platform.config_helper import use_sqlite
+        from javdb.infra.config import use_sqlite
         if use_sqlite():
-            from packages.python.javdb_platform.db_migrations import init_db
-            from packages.python.javdb_platform.db_operations import db_load_dedup_records
+            from javdb.storage.db.db_migrations import init_db
+            from javdb.storage.db.db_operations import db_load_dedup_records
             init_db()
             db_rows = db_load_dedup_records()
             if db_rows:
@@ -1997,16 +1997,16 @@ def main():
     _db_pikpak_stats = None
     _stats_backend_label = 'sqlite-local'
     try:
-        from packages.python.javdb_platform.config_helper import use_sqlite as _use_sqlite
+        from javdb.infra.config import use_sqlite as _use_sqlite
         if _use_sqlite():
-            from packages.python.javdb_platform.db_migrations import init_db
-            from packages.python.javdb_platform.db_reports import db_get_latest_session_local
-            from packages.python.javdb_platform.db_stats import (
+            from javdb.storage.db.db_migrations import init_db
+            from javdb.storage.db.db_reports import db_get_latest_session_local
+            from javdb.storage.db.db_stats import (
                 db_get_spider_stats_local,
                 db_get_uploader_stats_local,
                 db_get_pikpak_stats_local,
             )
-            from packages.python.javdb_platform.db_connection import current_backend as _cur_be
+            from javdb.storage.db.db_connection import current_backend as _cur_be
             init_db()
             _stats_backend_label = f"{_cur_be()} (stats forced sqlite-local)"
             _sid = args.session_id
@@ -2096,7 +2096,7 @@ def main():
         session_start_time = None
         if _sid is not None:
             try:
-                from packages.python.javdb_platform.db_connection import get_db, REPORTS_DB_PATH
+                from javdb.storage.db.db_connection import get_db, REPORTS_DB_PATH
                 with get_db(REPORTS_DB_PATH) as _conn:
                     _row = _conn.execute(
                         "SELECT DateTimeCreated FROM ReportSessions WHERE Id = ?", (_sid,)
@@ -2327,7 +2327,7 @@ Check attached logs for details.
     # but those records are audit trails, not drift events — surfacing
     # them as a "DRIFT ADVISORY" in d1-only mode is misleading.
     try:
-        from packages.python.javdb_platform.config_helper import cfg as _cfg
+        from javdb.infra.config import cfg as _cfg
         backend = (
             os.environ.get('STORAGE_BACKEND')
             or _cfg('STORAGE_BACKEND', 'sqlite')

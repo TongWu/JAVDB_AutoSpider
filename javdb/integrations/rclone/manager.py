@@ -57,11 +57,11 @@ os.chdir(REPO_ROOT)
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from packages.python.javdb_platform.config_helper import cfg
-from packages.python.javdb_platform.logging_config import setup_logging, get_logger
-from packages.python.javdb_platform.path_helper import find_latest_report_in_dated_dirs, ensure_dated_dir
+from javdb.infra.config import cfg
+from javdb.infra.logging import setup_logging, get_logger
+from javdb.infra.paths import find_latest_report_in_dated_dirs, ensure_dated_dir
 
-from packages.python.javdb_integrations.rclone_helper import (
+from javdb.integrations.rclone.helper import (
     FolderInfo,
     DedupResult,
     check_rclone_installed,
@@ -274,7 +274,7 @@ def scan_inventory(
 
 def export_db_to_csv(output_path: str) -> int:
     """Export the rclone_inventory table from SQLite to a CSV file."""
-    from packages.python.javdb_platform.db_connection import get_db, OPERATIONS_DB_PATH
+    from javdb.storage.db.db_connection import get_db, OPERATIONS_DB_PATH
 
     with get_db(OPERATIONS_DB_PATH) as conn:
         rows = conn.execute(
@@ -311,14 +311,14 @@ def load_inventory_as_folder_structure(
     ``{year: {actor: [FolderInfo, ...]}}`` structure usable by the
     dedup analysis pipeline.
     """
-    from packages.python.javdb_platform.config_helper import use_sqlite
+    from javdb.infra.config import use_sqlite
 
     rows: List[dict] = []
 
     if use_sqlite():
         try:
-            from packages.python.javdb_platform.db_operations import db_load_rclone_inventory
-            from packages.python.javdb_platform.db_connection import current_backend
+            from javdb.storage.db.db_operations import db_load_rclone_inventory
+            from javdb.storage.db.db_connection import current_backend
             raw = db_load_rclone_inventory()
             for entries in raw.values():
                 rows.extend(entries)
@@ -459,7 +459,7 @@ def _persist_dedup_records(dedup_results: List[DedupResult]) -> None:
     to produce a consolidated ``dedup_history.csv`` from the DB.
     """
     try:
-        from packages.python.javdb_spider.services.dedup import DedupRecord, append_dedup_record
+        from javdb.spider.services.dedup import DedupRecord, append_dedup_record
 
         now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         appended = 0
@@ -559,7 +559,7 @@ def validate_dedup_records_against_inventory() -> Tuple[int, List[dict]]:
     Returns ``(orphan_count, orphan_rows)``. Zero remote calls are made.
     """
     try:
-        from packages.python.javdb_platform.db_operations import (
+        from javdb.storage.db.db_operations import (
             db_load_rclone_inventory,
             db_load_dedup_records,
             db_mark_orphan_records,
@@ -742,7 +742,7 @@ def run_validate_inventory(
 
     Returns 0 on success, 1 on failure.
     """
-    from packages.python.javdb_platform.db_operations import (
+    from javdb.storage.db.db_operations import (
         db_load_rclone_inventory,
         db_delete_rclone_inventory_paths,
     )
@@ -827,7 +827,7 @@ def export_dedup_history() -> int:
 
     Mirrors the pattern used by :func:`export_db_to_csv` for inventory.
     """
-    from packages.python.javdb_spider.services.dedup import export_dedup_db_to_csv
+    from javdb.spider.services.dedup import export_dedup_db_to_csv
 
     output_path = os.path.join(REPORTS_DIR, 'dedup_history.csv')
     return export_dedup_db_to_csv(output_path)
@@ -840,7 +840,7 @@ def migrate_strip_drive_names() -> int:
     are updated; paths like ``dir/file:name`` are left unchanged.
     Returns the total number of rows updated across both tables.
     """
-    from packages.python.javdb_platform.db_connection import get_db, OPERATIONS_DB_PATH
+    from javdb.storage.db.db_connection import get_db, OPERATIONS_DB_PATH
 
     updated = 0
     with get_db(OPERATIONS_DB_PATH) as conn:
@@ -940,7 +940,7 @@ def run_execute_from_csv(
     Returns 0 when at least one purge succeeded (or nothing to do);
     returns 1 only when all attempted purges failed.
     """
-    from packages.python.javdb_spider.services.dedup import (
+    from javdb.spider.services.dedup import (
         load_dedup_csv, mark_records_deleted, cleanup_deleted_records,
     )
 
@@ -1348,7 +1348,7 @@ def main() -> int:
 
     # ── Scan phase ───────────────────────────────────────────────────
     if args.scan:
-        from packages.python.javdb_platform.config_helper import use_sqlite as _use_sqlite, use_csv as _use_csv
+        from javdb.infra.config import use_sqlite as _use_sqlite, use_csv as _use_csv
 
         total_written = 0
         _sqlite_ok = False
@@ -1356,20 +1356,20 @@ def main() -> int:
         _created_local_staging_session = False
         if _use_sqlite():
             try:
-                from packages.python.javdb_platform.db_migrations import init_db
-                from packages.python.javdb_platform.db_reports import (
+                from javdb.storage.db.db_migrations import init_db
+                from javdb.storage.db.db_reports import (
                     db_create_report_session,
                     db_mark_session_committed,
                     db_mark_session_failed,
                 )
-                from packages.python.javdb_platform.db_operations import (
+                from javdb.storage.db.db_operations import (
                     db_open_rclone_staging,
                     db_append_rclone_staging,
                     db_swap_rclone_inventory,
                     db_merge_rclone_inventory_from_stage,
                     db_drop_rclone_staging,
                 )
-                from packages.python.javdb_platform.db_session import get_active_session_id
+                from javdb.storage.db.db_session import get_active_session_id
                 init_db()
                 _staging_session_id = get_active_session_id()
                 if _staging_session_id is None:

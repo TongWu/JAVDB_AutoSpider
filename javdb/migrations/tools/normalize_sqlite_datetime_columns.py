@@ -15,8 +15,8 @@ os.chdir(REPO_ROOT)
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from packages.python.javdb_platform.logging_config import setup_logging, get_logger
-from packages.python.javdb_platform.sqlite_datetime import rewrite_datetime_text_columns
+from javdb.infra.logging import setup_logging, get_logger
+from javdb.storage.sqlite_datetime import rewrite_datetime_text_columns
 
 setup_logging()
 logger = get_logger(__name__)

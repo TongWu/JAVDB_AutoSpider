@@ -1,7 +1,7 @@
 """Configuration loading and initialisation for the spider package.
 
 All config constants are imported here (with safe fallbacks) so that other
-submodules can do ``from packages.python.javdb_spider.runtime.config import X``.
+submodules can do ``from javdb.spider.runtime.config import X``.
 """
 
 import os
@@ -18,7 +18,7 @@ if _project_root not in sys.path:
 # Unified configuration (with fallback defaults)
 # ---------------------------------------------------------------------------
 
-from packages.python.javdb_platform.config_helper import cfg
+from javdb.infra.config import cfg
 
 # Core spider settings
 BASE_URL = cfg('BASE_URL', 'https://javdb.com')
@@ -50,7 +50,7 @@ CF_BYPASS_ENABLED = cfg('CF_BYPASS_ENABLED', True)
 CF_BYPASS_PORT_MAP = cfg('CF_BYPASS_PORT_MAP', {})
 
 # Proxy pool
-from packages.python.javdb_platform.proxy_policy import normalize_proxy_mode
+from javdb.proxy.policy import normalize_proxy_mode
 PROXY_MODE = normalize_proxy_mode(cfg('PROXY_MODE', 'pool'))
 PROXY_POOL = cfg('PROXY_POOL', [])
 PROXY_POOL_MAX_FAILURES = cfg('PROXY_POOL_MAX_FAILURES', 3)
@@ -107,7 +107,7 @@ DEDUP_DIR = cfg('DEDUP_DIR', 'reports/Dedup')
 # Logging
 # ---------------------------------------------------------------------------
 
-from packages.python.javdb_platform.logging_config import setup_logging, get_logger  # noqa: E402
+from javdb.infra.logging import setup_logging, get_logger  # noqa: E402
 
 setup_logging(SPIDER_LOG_FILE, LOG_LEVEL)
 
@@ -123,7 +123,7 @@ def _log_rust_status():
     except Exception:
         _logger.debug("⚠️  Could not determine parser implementation status")
     try:
-        from packages.python.javdb_platform.history_manager import RUST_HISTORY_AVAILABLE
+        from javdb.storage.history_manager import RUST_HISTORY_AVAILABLE
         if RUST_HISTORY_AVAILABLE:
             _logger.debug("✅ Spider using Rust history manager - high-performance CSV I/O enabled")
         else:

@@ -44,9 +44,9 @@ from apps.api.parsers.common import (
     javdb_absolute_url,
     absolutize_supporting_actors_json,
 )
-from packages.python.javdb_platform.config_helper import cfg
-from packages.python.javdb_platform.logging_config import get_logger
-from packages.python.javdb_platform.db_layer.history_repo import (
+from javdb.infra.config import cfg
+from javdb.infra.logging import get_logger
+from javdb.storage.repos.history_repo import (
     load_history_joined as _load_history_joined,
     batch_update_movie_actors as _batch_update_movie_actors,
     _has_meaningful_actor_data,
@@ -71,7 +71,7 @@ logger = get_logger(__name__)
 # schema" / "concurrent run". The import is guarded so a sqlite-only
 # deployment without the d1_client deps still loads db.py.
 try:  # pragma: no cover - import wiring
-    from packages.python.javdb_platform.d1_client import (
+    from javdb.storage.d1_client import (
         D1PermanentError as _D1PermanentError,
     )
     _DB_OPERATIONAL_ERRORS: Tuple[type, ...] = (
@@ -167,7 +167,7 @@ _local = threading.local()
 
 # ── Active session context ─────────────────────────────────────────────────
 # Delegate to db_session.py so there is a single source of truth.
-from packages.python.javdb_platform.db_session import (
+from javdb.storage.db.db_session import (
     _SESSION_ID_SENTINEL,
     _resolve_session_id,
     set_active_session_id,
@@ -382,11 +382,11 @@ def _get_connection(db_path: str):
     if backend == 'sqlite':
         conn = _open_sqlite_connection(db_path)
     elif backend == 'd1':
-        from packages.python.javdb_platform.d1_client import make_d1_connection
+        from javdb.storage.d1_client import make_d1_connection
         conn = make_d1_connection(_logical_name_for(db_path))
     elif backend == 'dual':
-        from packages.python.javdb_platform.d1_client import make_d1_connection
-        from packages.python.javdb_platform.dual_connection import DualConnection
+        from javdb.storage.d1_client import make_d1_connection
+        from javdb.storage.dual_connection import DualConnection
         sqlite_conn = _open_sqlite_connection(db_path)
         d1_conn = make_d1_connection(_logical_name_for(db_path))
         conn = DualConnection(sqlite_conn, d1_conn, logical_name=_logical_name_for(db_path))
@@ -831,7 +831,7 @@ _TABLES_SQL = _HISTORY_DDL + _REPORTS_DDL + _OPERATIONS_DDL
 
 # ── Category ↔ Indicator mapping (delegated to contracts) ────────────────
 
-from packages.python.javdb_core.contracts import category_to_indicators, indicators_to_category  # noqa: E402
+from javdb.spider.contracts import category_to_indicators, indicators_to_category  # noqa: E402
 
 
 def _has_table(conn, name: str) -> bool:
@@ -1685,7 +1685,7 @@ def _dedupe_session_keyed_stats_rows(conn: sqlite3.Connection) -> None:
 def _init_single_db(db_path: str, ddl: str, *, force: bool = False):
     """Initialise one database file: create tables and set schema version."""
     if not force:
-        from packages.python.javdb_platform.config_helper import use_sqlite
+        from javdb.infra.config import use_sqlite
         if not use_sqlite():
             return
 
@@ -1695,7 +1695,7 @@ def _init_single_db(db_path: str, ddl: str, *, force: bool = False):
             "(possibly a Git LFS pointer that was not pulled). "
             "Falling back to CSV storage mode for this run."
         )
-        from packages.python.javdb_platform.config_helper import force_storage_mode
+        from javdb.infra.config import force_storage_mode
         force_storage_mode('csv')
         return
 
@@ -2036,7 +2036,7 @@ def init_db(db_path: Optional[str] = None, *, force: bool = False):
     already match.
     """
     if not force:
-        from packages.python.javdb_platform.config_helper import use_sqlite
+        from javdb.infra.config import use_sqlite
         if not use_sqlite():
             return
 
@@ -2105,7 +2105,7 @@ def _init_single_legacy_db(db_path: str, *, force: bool = False):
             "(possibly a Git LFS pointer that was not pulled). "
             "Falling back to CSV storage mode for this run."
         )
-        from packages.python.javdb_platform.config_helper import force_storage_mode
+        from javdb.infra.config import force_storage_mode
         force_storage_mode('csv')
         return
 
@@ -2151,7 +2151,7 @@ def _init_single_legacy_db(db_path: str, *, force: bool = False):
 
 def db_load_history(db_path: Optional[str] = None, phase: Optional[int] = None) -> Dict[str, dict]:
     """Load history from MovieHistory + TorrentHistory into a dict keyed by Href."""
-    from packages.python.javdb_platform.db_history_read import (
+    from javdb.storage.db.db_history_read import (
         db_load_history as _f,
     )
     return _f(db_path=db_path or HISTORY_DB_PATH, phase=phase)
@@ -2895,7 +2895,7 @@ def db_batch_update_movie_actors(
 
 def db_check_torrent_in_history(href: str, torrent_type: str, db_path: Optional[str] = None) -> bool:
     """Check if a specific torrent type exists for href."""
-    from packages.python.javdb_platform.db_history_read import (
+    from javdb.storage.db.db_history_read import (
         db_check_torrent_in_history as _f,
     )
     return _f(href, torrent_type, db_path=db_path)
@@ -2903,7 +2903,7 @@ def db_check_torrent_in_history(href: str, torrent_type: str, db_path: Optional[
 
 def db_get_all_history_records(db_path: Optional[str] = None) -> List[dict]:
     """Return all MovieHistory records as dicts (for migration verification)."""
-    from packages.python.javdb_platform.db_history_read import (
+    from javdb.storage.db.db_history_read import (
         db_get_all_history_records as _f,
     )
     return _f(db_path=db_path)
@@ -2917,7 +2917,7 @@ def db_replace_rclone_inventory(
     session_id: Any = _SESSION_ID_SENTINEL,
 ) -> int:
     """Replace the entire RcloneInventory table (full scan refresh)."""
-    from packages.python.javdb_platform.db_operations import (
+    from javdb.storage.db.db_operations import (
         db_replace_rclone_inventory as _f,
     )
     return _f(entries, db_path=db_path or OPERATIONS_DB_PATH, session_id=session_id)
@@ -2928,7 +2928,7 @@ def db_open_rclone_staging(
     db_path: Optional[str] = None,
 ) -> Optional[str]:
     """Initialise this session's RcloneInventory staging table."""
-    from packages.python.javdb_platform.db_operations import (
+    from javdb.storage.db.db_operations import (
         db_open_rclone_staging as _f,
     )
     return _f(session_id=session_id, db_path=db_path or OPERATIONS_DB_PATH)
@@ -2940,7 +2940,7 @@ def db_append_rclone_staging(
     db_path: Optional[str] = None,
 ) -> int:
     """Append rows to this session's RcloneInventory staging table."""
-    from packages.python.javdb_platform.db_operations import (
+    from javdb.storage.db.db_operations import (
         db_append_rclone_staging as _f,
     )
     return _f(entries, session_id=session_id, db_path=db_path or OPERATIONS_DB_PATH)
@@ -2951,7 +2951,7 @@ def db_swap_rclone_inventory(
     db_path: Optional[str] = None,
 ) -> int:
     """Atomically swap this session's staging into the live RcloneInventory."""
-    from packages.python.javdb_platform.db_operations import (
+    from javdb.storage.db.db_operations import (
         db_swap_rclone_inventory as _f,
     )
     return _f(session_id=session_id, db_path=db_path)
@@ -2963,7 +2963,7 @@ def db_merge_rclone_inventory_from_stage(
     db_path: Optional[str] = None,
 ) -> int:
     """Merge this session's staging rows into selected RcloneInventory years."""
-    from packages.python.javdb_platform.db_operations import (
+    from javdb.storage.db.db_operations import (
         db_merge_rclone_inventory_from_stage as _f,
     )
     return _f(session_id=session_id, years=years, db_path=db_path or OPERATIONS_DB_PATH)
@@ -2974,7 +2974,7 @@ def db_drop_rclone_staging(
     db_path: Optional[str] = None,
 ) -> None:
     """DROP TABLE IF EXISTS RcloneInventoryStaging_<session_id> (idempotent)."""
-    from packages.python.javdb_platform.db_operations import (
+    from javdb.storage.db.db_operations import (
         db_drop_rclone_staging as _f,
     )
     _f(session_id, db_path=db_path or OPERATIONS_DB_PATH)
@@ -2982,7 +2982,7 @@ def db_drop_rclone_staging(
 
 def db_clear_rclone_inventory(db_path: Optional[str] = None) -> None:
     """Delete all rows from RcloneInventory."""
-    from packages.python.javdb_platform.db_operations import (
+    from javdb.storage.db.db_operations import (
         db_clear_rclone_inventory as _f,
     )
     _f(db_path=db_path)
@@ -2990,7 +2990,7 @@ def db_clear_rclone_inventory(db_path: Optional[str] = None) -> None:
 
 def db_append_rclone_inventory(entries: List[dict], db_path: Optional[str] = None) -> int:
     """Append rows to RcloneInventory using executemany for speed."""
-    from packages.python.javdb_platform.db_operations import (
+    from javdb.storage.db.db_operations import (
         db_append_rclone_inventory as _f,
     )
     return _f(entries, db_path=db_path)
@@ -2998,7 +2998,7 @@ def db_append_rclone_inventory(entries: List[dict], db_path: Optional[str] = Non
 
 def db_load_rclone_inventory(db_path: Optional[str] = None) -> Dict[str, list]:
     """Load inventory grouped by VideoCode."""
-    from packages.python.javdb_platform.db_operations import (
+    from javdb.storage.db.db_operations import (
         db_load_rclone_inventory as _f,
     )
     return _f(db_path=db_path or OPERATIONS_DB_PATH)
@@ -3009,7 +3009,7 @@ def db_delete_rclone_inventory_paths(
     db_path: Optional[str] = None,
 ) -> int:
     """Bulk delete RcloneInventory rows by FolderPath."""
-    from packages.python.javdb_platform.db_operations import (
+    from javdb.storage.db.db_operations import (
         db_delete_rclone_inventory_paths as _f,
     )
     return _f(paths, db_path=db_path or OPERATIONS_DB_PATH)
@@ -3019,7 +3019,7 @@ def db_delete_rclone_inventory_paths(
 
 def db_load_dedup_records(db_path: Optional[str] = None) -> List[dict]:
     """Load all dedup records."""
-    from packages.python.javdb_platform.db_operations import (
+    from javdb.storage.db.db_operations import (
         db_load_dedup_records as _f,
     )
     return _f(db_path=db_path or OPERATIONS_DB_PATH)
@@ -3148,7 +3148,7 @@ def db_append_dedup_record(
     session_id: Any = _SESSION_ID_SENTINEL,
 ) -> int:
     """Append a single dedup record. Returns the new row id, or -1 if duplicate."""
-    from packages.python.javdb_platform.db_operations import (
+    from javdb.storage.db.db_operations import (
         db_append_dedup_record as _f,
     )
     return _f(record, db_path=db_path or OPERATIONS_DB_PATH, session_id=session_id)
@@ -3160,7 +3160,7 @@ def db_mark_records_deleted(
     session_id: Any = _SESSION_ID_SENTINEL,
 ) -> int:
     """Mark specific dedup records as deleted by gdrive path."""
-    from packages.python.javdb_platform.db_operations import (
+    from javdb.storage.db.db_operations import (
         db_mark_records_deleted as _f,
     )
     return _f(path_datetime_pairs, db_path=db_path or OPERATIONS_DB_PATH, session_id=session_id)
@@ -3174,7 +3174,7 @@ def db_mark_orphan_records(
     session_id: Any = _SESSION_ID_SENTINEL,
 ) -> int:
     """Mark dedup pending rows as deleted with custom reason suffix appended."""
-    from packages.python.javdb_platform.db_operations import (
+    from javdb.storage.db.db_operations import (
         db_mark_orphan_records as _f,
     )
     return _f(paths, reason_suffix, when, db_path=db_path or OPERATIONS_DB_PATH, session_id=session_id)
@@ -3185,7 +3185,7 @@ def db_cleanup_deleted_records(
     db_path: Optional[str] = None,
 ) -> int:
     """Remove dedup records that were deleted more than *older_than_days* ago."""
-    from packages.python.javdb_platform.db_operations import (
+    from javdb.storage.db.db_operations import (
         db_cleanup_deleted_records as _f,
     )
     return _f(older_than_days, db_path=db_path or OPERATIONS_DB_PATH)
@@ -3193,7 +3193,7 @@ def db_cleanup_deleted_records(
 
 def db_save_dedup_records(rows: List[dict], db_path: Optional[str] = None) -> None:
     """Overwrite all dedup records (deprecated)."""
-    from packages.python.javdb_platform.db_operations import (
+    from javdb.storage.db.db_operations import (
         db_save_dedup_records as _f,
     )
     return _f(rows, db_path=db_path)
@@ -3207,7 +3207,7 @@ def db_append_pikpak_history(
     session_id: Any = _SESSION_ID_SENTINEL,
 ) -> int:
     """Append a PikPak transfer record."""
-    from packages.python.javdb_platform.db_operations import (
+    from javdb.storage.db.db_operations import (
         db_append_pikpak_history as _f,
     )
     return _f(record, db_path=db_path or OPERATIONS_DB_PATH, session_id=session_id)
@@ -3222,7 +3222,7 @@ def db_upsert_align_no_exact_match(
     session_id: Any = _SESSION_ID_SENTINEL,
 ) -> None:
     """Record a video code that had no exact match on JavDB search."""
-    from packages.python.javdb_platform.db_operations import (
+    from javdb.storage.db.db_operations import (
         db_upsert_align_no_exact_match as _f,
     )
     return _f(video_code, reason=reason, db_path=db_path, session_id=session_id)
@@ -3230,7 +3230,7 @@ def db_upsert_align_no_exact_match(
 
 def db_load_align_no_exact_match_codes(db_path: Optional[str] = None) -> set:
     """Return the set of normalised video codes previously marked as no-exact-match."""
-    from packages.python.javdb_platform.db_operations import (
+    from javdb.storage.db.db_operations import (
         db_load_align_no_exact_match_codes as _f,
     )
     return _f(db_path=db_path)
@@ -3241,7 +3241,7 @@ def db_delete_align_no_exact_match(
     db_path: Optional[str] = None,
 ) -> None:
     """Remove a video code from the no-exact-match table."""
-    from packages.python.javdb_platform.db_operations import (
+    from javdb.storage.db.db_operations import (
         db_delete_align_no_exact_match as _f,
     )
     return _f(video_code, db_path=db_path)
@@ -3270,7 +3270,7 @@ def db_get_session_status(
     db_path: Optional[str] = None,
 ) -> Optional[Tuple[str, str]]:
     """Return ``(WriteMode, Status)`` for *session_id*, or ``None`` if absent."""
-    from packages.python.javdb_platform.db_reports import (
+    from javdb.storage.db.db_reports import (
         db_get_session_status as _f,
     )
     return _f(session_id, db_path=db_path or REPORTS_DB_PATH)
@@ -3282,7 +3282,7 @@ def db_begin_finalize_session(
     db_path: Optional[str] = None,
 ) -> int:
     """Flip ``Status`` from ``in_progress`` to ``finalizing``."""
-    from packages.python.javdb_platform.db_reports import (
+    from javdb.storage.db.db_reports import (
         db_begin_finalize_session as _f,
     )
     return _f(session_id, db_path=db_path)
@@ -3294,7 +3294,7 @@ def db_finish_commit_session(
     db_path: Optional[str] = None,
 ) -> int:
     """Flip ``Status`` from ``finalizing`` to ``committed``."""
-    from packages.python.javdb_platform.db_reports import (
+    from javdb.storage.db.db_reports import (
         db_finish_commit_session as _f,
     )
     return _f(session_id, db_path=db_path)
@@ -3522,7 +3522,7 @@ def _compute_indicators(
 
 def _merge_movie_overlay_rows(rows: Iterable[Any]) -> Dict[str, dict]:
     """Merge pending-movie rows (Seq-ascending order) into a sparse overlay."""
-    from packages.python.javdb_platform.db_history_read import (
+    from javdb.storage.db.db_history_read import (
         _merge_movie_overlay_rows as _f,
     )
     return _f(rows)
@@ -3536,7 +3536,7 @@ def _pending_movie_overlay(
     include_states: Tuple[str, ...] = ("pending",),
 ) -> Dict[str, dict]:
     """Return ``{href: merged_pending_movie_row}`` for *session_id*."""
-    from packages.python.javdb_platform.db_history_read import (
+    from javdb.storage.db.db_history_read import (
         _pending_movie_overlay_impl,
     )
     return _pending_movie_overlay_impl(
@@ -3548,7 +3548,7 @@ def _merge_torrent_overlay_rows(
     rows: Iterable[Any],
 ) -> Dict[Tuple[str, int, int], dict]:
     """Merge pending-torrent rows (Seq-ascending) into a sparse overlay."""
-    from packages.python.javdb_platform.db_history_read import (
+    from javdb.storage.db.db_history_read import (
         _merge_torrent_overlay_rows as _f,
     )
     return _f(rows)
@@ -3562,7 +3562,7 @@ def _pending_torrent_overlay(
     include_states: Tuple[str, ...] = ("pending",),
 ) -> Dict[Tuple[str, int, int], dict]:
     """Return ``{(href, sub, cen): merged_pending_torrent_row}`` for *session_id*."""
-    from packages.python.javdb_platform.db_history_read import (
+    from javdb.storage.db.db_history_read import (
         _pending_torrent_overlay_impl,
     )
     return _pending_torrent_overlay_impl(
@@ -3576,7 +3576,7 @@ def db_load_history_snapshot(
     db_path: Optional[str] = None,
 ) -> Dict[str, dict]:
     """Return committed-live history with the *session_id* pending overlay."""
-    from packages.python.javdb_platform.db_history_read import (
+    from javdb.storage.db.db_history_read import (
         db_load_history_snapshot as _f,
     )
     return _f(session_id, db_path=db_path)
@@ -4408,7 +4408,7 @@ def db_pending_session_stats(
     db_path: Optional[str] = None,
 ) -> Dict[str, int]:
     """Snapshot pending-table counts for *session_id* (Phase 2 verify)."""
-    from packages.python.javdb_platform.db_reports import (
+    from javdb.storage.db.db_reports import (
         db_pending_session_stats as _f,
     )
     return _f(session_id, db_path=db_path or HISTORY_DB_PATH)
@@ -4420,7 +4420,7 @@ def db_get_session_run_identity(
     db_path: Optional[str] = None,
 ) -> Optional[Tuple[Optional[str], Optional[int]]]:
     """Return ``(RunId, RunAttempt)`` for *session_id*, or ``None`` if absent."""
-    from packages.python.javdb_platform.db_reports import (
+    from javdb.storage.db.db_reports import (
         db_get_session_run_identity as _f,
     )
     return _f(session_id, db_path=db_path or REPORTS_DB_PATH)
@@ -4511,7 +4511,7 @@ def db_create_report_session(
     write_mode: Optional[str] = None,
 ) -> int:
     """Create a new report session and return its id."""
-    from packages.python.javdb_platform.db_reports import (
+    from javdb.storage.db.db_reports import (
         db_create_report_session as _f,
     )
     return _f(report_type, report_date, csv_filename, url_type=url_type,
@@ -4527,7 +4527,7 @@ def db_mark_session_committed(
     db_path: Optional[str] = None,
 ) -> int:
     """Mark a session as ``committed`` so it survives any future cleanup."""
-    from packages.python.javdb_platform.db_reports import (
+    from javdb.storage.db.db_reports import (
         db_mark_session_committed as _f,
     )
     return _f(session_id, db_path or REPORTS_DB_PATH)
@@ -4540,7 +4540,7 @@ def db_mark_session_failed(
     reason: Optional[str] = None,
 ) -> int:
     """Mark a session as ``failed`` (debug-only flag set right before delete)."""
-    from packages.python.javdb_platform.db_reports import (
+    from javdb.storage.db.db_reports import (
         db_mark_session_failed as _f,
     )
     return _f(session_id, db_path or REPORTS_DB_PATH, reason=reason)
@@ -4554,7 +4554,7 @@ def db_find_in_progress_sessions(
     require_run_identity: bool = False,
 ) -> List[str]:
     """Return ``ReportSessions.Id`` rows still flagged ``in_progress``."""
-    from packages.python.javdb_platform.db_reports import (
+    from javdb.storage.db.db_reports import (
         db_find_in_progress_sessions as _f,
     )
     return _f(since=since, db_path=db_path or REPORTS_DB_PATH,
@@ -4569,7 +4569,7 @@ def db_find_stale_pending_sessions(
     require_run_identity: bool = True,
 ) -> List[Tuple[int, str, str]]:
     """Return ``[(Id, Status, WriteMode), ...]`` for stale Phase 3 sessions."""
-    from packages.python.javdb_platform.db_reports import (
+    from javdb.storage.db.db_reports import (
         db_find_stale_pending_sessions as _f,
     )
     return _f(db_path=db_path or REPORTS_DB_PATH, max_age_hours=max_age_hours,
@@ -4583,7 +4583,7 @@ def db_count_in_progress_sessions_for_run(
     db_path: Optional[str] = None,
 ) -> int:
     """Count ``in_progress`` sessions belonging to a (RunId, RunAttempt) pair."""
-    from packages.python.javdb_platform.db_reports import (
+    from javdb.storage.db.db_reports import (
         db_count_in_progress_sessions_for_run as _f,
     )
     return _f(run_id, run_attempt, db_path=db_path or REPORTS_DB_PATH)
@@ -4597,7 +4597,7 @@ def db_find_in_progress_session_ids_for_run_csv(
     db_path: Optional[str] = None,
 ) -> List[str]:
     """Return ``in_progress`` SessionIds for the same (RunId, RunAttempt, CSVFilename)."""
-    from packages.python.javdb_platform.db_reports import (
+    from javdb.storage.db.db_reports import (
         db_find_in_progress_session_ids_for_run_csv as _f,
     )
     return _f(run_id, run_attempt, csv_filename,
@@ -4612,7 +4612,7 @@ def db_find_sessions_by_run(
     history_db_path: Optional[str] = None,
 ) -> List[str]:
     """Return every session id touched by a (RunId, RunAttempt) workflow run."""
-    from packages.python.javdb_platform.db_reports import (
+    from javdb.storage.db.db_reports import (
         db_find_sessions_by_run as _f,
     )
     return _f(run_id, run_attempt,
@@ -5172,7 +5172,7 @@ def db_rollback_session(
 
 def db_insert_report_rows(session_id: str, rows: List[dict], db_path: Optional[str] = None) -> int:
     """Insert report rows into ReportMovies + ReportTorrents."""
-    from packages.python.javdb_platform.db_reports import (
+    from javdb.storage.db.db_reports import (
         db_insert_report_rows as _f,
     )
     return _f(session_id, rows, db_path or REPORTS_DB_PATH)
@@ -5180,7 +5180,7 @@ def db_insert_report_rows(session_id: str, rows: List[dict], db_path: Optional[s
 
 def db_get_report_rows(session_id: str, db_path: Optional[str] = None) -> List[dict]:
     """Get all rows for a session as flat dicts (backward compatible)."""
-    from packages.python.javdb_platform.db_reports import (
+    from javdb.storage.db.db_reports import (
         db_get_report_rows as _f,
     )
     return _f(session_id, db_path or REPORTS_DB_PATH)
@@ -5188,7 +5188,7 @@ def db_get_report_rows(session_id: str, db_path: Optional[str] = None) -> List[d
 
 def db_get_latest_session(report_type: Optional[str] = None, db_path: Optional[str] = None) -> Optional[dict]:
     """Get the most recent report session, optionally filtered by type."""
-    from packages.python.javdb_platform.db_reports import (
+    from javdb.storage.db.db_reports import (
         db_get_latest_session as _f,
     )
     return _f(report_type, db_path or REPORTS_DB_PATH)
@@ -5197,7 +5197,7 @@ def db_get_latest_session(report_type: Optional[str] = None, db_path: Optional[s
 def db_get_sessions_by_date(report_date: str, report_type: Optional[str] = None,
                             db_path: Optional[str] = None) -> List[dict]:
     """Get all sessions for a given date."""
-    from packages.python.javdb_platform.db_reports import (
+    from javdb.storage.db.db_reports import (
         db_get_sessions_by_date as _f,
     )
     return _f(report_date, report_type=report_type, db_path=db_path)
@@ -5207,7 +5207,7 @@ def db_get_sessions_by_date(report_date: str, report_type: Optional[str] = None,
 
 def db_save_spider_stats(session_id: str, stats: dict, db_path: Optional[str] = None) -> int:
     """Save spider statistics for a session (idempotent via ON CONFLICT)."""
-    from packages.python.javdb_platform.db_stats import (
+    from javdb.storage.db.db_stats import (
         db_save_spider_stats as _f,
     )
     return _f(session_id, stats, db_path=db_path or REPORTS_DB_PATH)
@@ -5215,7 +5215,7 @@ def db_save_spider_stats(session_id: str, stats: dict, db_path: Optional[str] = 
 
 def db_save_uploader_stats(session_id: str, stats: dict, db_path: Optional[str] = None) -> int:
     """Save uploader statistics for a session (idempotent via ON CONFLICT)."""
-    from packages.python.javdb_platform.db_stats import (
+    from javdb.storage.db.db_stats import (
         db_save_uploader_stats as _f,
     )
     return _f(session_id, stats, db_path=db_path or REPORTS_DB_PATH)
@@ -5223,7 +5223,7 @@ def db_save_uploader_stats(session_id: str, stats: dict, db_path: Optional[str] 
 
 def db_save_pikpak_stats(session_id: str, stats: dict, db_path: Optional[str] = None) -> int:
     """Save PikPak bridge statistics for a session (idempotent via ON CONFLICT)."""
-    from packages.python.javdb_platform.db_stats import (
+    from javdb.storage.db.db_stats import (
         db_save_pikpak_stats as _f,
     )
     return _f(session_id, stats, db_path=db_path or REPORTS_DB_PATH)
@@ -5231,7 +5231,7 @@ def db_save_pikpak_stats(session_id: str, stats: dict, db_path: Optional[str] = 
 
 def db_get_spider_stats(session_id: str, db_path: Optional[str] = None) -> Optional[dict]:
     """Get spider stats for a session."""
-    from packages.python.javdb_platform.db_stats import (
+    from javdb.storage.db.db_stats import (
         db_get_spider_stats as _f,
     )
     return _f(session_id, db_path=db_path or REPORTS_DB_PATH)
@@ -5239,7 +5239,7 @@ def db_get_spider_stats(session_id: str, db_path: Optional[str] = None) -> Optio
 
 def db_get_uploader_stats(session_id: str, db_path: Optional[str] = None) -> Optional[dict]:
     """Get uploader stats for a session."""
-    from packages.python.javdb_platform.db_stats import (
+    from javdb.storage.db.db_stats import (
         db_get_uploader_stats as _f,
     )
     return _f(session_id, db_path=db_path or REPORTS_DB_PATH)
@@ -5247,7 +5247,7 @@ def db_get_uploader_stats(session_id: str, db_path: Optional[str] = None) -> Opt
 
 def db_get_pikpak_stats(session_id: str, db_path: Optional[str] = None) -> Optional[dict]:
     """Get PikPak stats for a session."""
-    from packages.python.javdb_platform.db_stats import (
+    from javdb.storage.db.db_stats import (
         db_get_pikpak_stats as _f,
     )
     return _f(session_id, db_path=db_path or REPORTS_DB_PATH)
@@ -5272,7 +5272,7 @@ def db_get_spider_stats_local(
     session_id: str, db_path: Optional[str] = None,
 ) -> Optional[dict]:
     """SQLite-only counterpart to :func:`db_get_spider_stats`."""
-    from packages.python.javdb_platform.db_stats import (
+    from javdb.storage.db.db_stats import (
         db_get_spider_stats_local as _f,
     )
     return _f(session_id, db_path=db_path or REPORTS_DB_PATH)
@@ -5282,7 +5282,7 @@ def db_get_uploader_stats_local(
     session_id: str, db_path: Optional[str] = None,
 ) -> Optional[dict]:
     """SQLite-only counterpart to :func:`db_get_uploader_stats`."""
-    from packages.python.javdb_platform.db_stats import (
+    from javdb.storage.db.db_stats import (
         db_get_uploader_stats_local as _f,
     )
     return _f(session_id, db_path=db_path or REPORTS_DB_PATH)
@@ -5292,7 +5292,7 @@ def db_get_pikpak_stats_local(
     session_id: str, db_path: Optional[str] = None,
 ) -> Optional[dict]:
     """SQLite-only counterpart to :func:`db_get_pikpak_stats`."""
-    from packages.python.javdb_platform.db_stats import (
+    from javdb.storage.db.db_stats import (
         db_get_pikpak_stats_local as _f,
     )
     return _f(session_id, db_path=db_path or REPORTS_DB_PATH)
@@ -5302,7 +5302,7 @@ def db_get_latest_session_local(
     report_type: Optional[str] = None, db_path: Optional[str] = None,
 ) -> Optional[dict]:
     """SQLite-only counterpart to :func:`db_get_latest_session`."""
-    from packages.python.javdb_platform.db_reports import (
+    from javdb.storage.db.db_reports import (
         db_get_latest_session_local as _f,
     )
     return _f(report_type, db_path=db_path or REPORTS_DB_PATH)

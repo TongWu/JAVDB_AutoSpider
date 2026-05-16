@@ -4,7 +4,7 @@ The package now separates models, policies, adapters, and planners. This
 module stays as a stable import target for older call sites and tests.
 """
 
-from packages.python.javdb_ingestion.adapters import (
+from javdb.pipeline.adapters import (
     build_alignment_purge_plan_rows,
     build_alignment_qb_row,
     check_torrent_status,
@@ -13,9 +13,9 @@ from packages.python.javdb_ingestion.adapters import (
     create_redownload_row,
     should_include_torrent_in_csv,
 )
-from packages.python.javdb_ingestion.models import AlignmentUpgradePlan, ParsedMovie, SpiderIngestionPlan
-from packages.python.javdb_ingestion.planner import build_alignment_upgrade_plan, build_spider_ingestion_plan
-from packages.python.javdb_ingestion.policies import (
+from javdb.pipeline.models import AlignmentUpgradePlan, ParsedMovie, SpiderIngestionPlan
+from javdb.pipeline.planner import build_alignment_upgrade_plan, build_spider_ingestion_plan
+from javdb.pipeline.policies import (
     ALIGNMENT_CENSORED_FAMILY,
     ALIGNMENT_PARSED_FAMILY_CANDIDATES,
     ALIGNMENT_UNCENSORED_FAMILY,

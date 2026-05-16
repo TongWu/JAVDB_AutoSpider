@@ -19,8 +19,8 @@ from apps.api.schemas.capabilities_payloads import (
     SessionRollbackPayload,
     SessionRollbackResponse,
 )
-import packages.python.javdb_platform.db_connection as _db_connection
-from packages.python.javdb_platform.db_layer.sessions_repo import SessionsRepo
+import javdb.storage.db.db_connection as _db_connection
+from javdb.storage.repos.sessions_repo import SessionsRepo
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
@@ -61,7 +61,7 @@ def post_commit(
     payload: SessionCommitPayload,
     _user=Depends(require_role("admin")),
 ) -> SessionCommitResponse:
-    from packages.python.javdb_platform.sessions import CommitRequest, commit_session
+    from javdb.storage.sessions import CommitRequest, commit_session
     reports_path = _db_connection.REPORTS_DB_PATH
     with _db_connection.get_db(reports_path) as conn:
         if not SessionsRepo(conn).get(session_id):
@@ -95,7 +95,7 @@ def post_rollback(
     payload: SessionRollbackPayload,
     _user=Depends(require_role("admin")),
 ) -> SessionRollbackResponse:
-    from packages.python.javdb_platform.rollback import (
+    from javdb.storage.rollback import (
         RollbackRequest,
         apply_rollback,
         plan_rollback,

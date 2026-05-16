@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from packages.python.javdb_spider.services.dedup import DedupRecord
+from javdb.spider.services.dedup import DedupRecord
 
 
 @dataclass

@@ -6,37 +6,37 @@ from dataclasses import dataclass
 from typing import List, Optional, Set, Tuple
 from urllib.parse import urljoin
 
-from packages.python.javdb_platform.logging_config import get_logger
-from packages.python.javdb_platform.config_helper import use_sqlite
-from packages.python.javdb_platform.db_history_read import db_batch_update_movie_actors
-from packages.python.javdb_platform.db_session import get_active_session_id
-from packages.python.javdb_platform.history_manager import (
+from javdb.infra.logging import get_logger
+from javdb.infra.config import use_sqlite
+from javdb.storage.db.db_history_read import db_batch_update_movie_actors
+from javdb.storage.db.db_session import get_active_session_id
+from javdb.storage.history_manager import (
     save_parsed_movie_to_history,
     batch_update_last_visited,
 )
-from packages.python.javdb_platform.csv_writer import write_csv
-from packages.python.javdb_platform.movie_claim_client import (
+from javdb.infra.csv_writer import write_csv
+from javdb.proxy.coordinator.movie_claim_client import (
     DEFAULT_CLAIM_TTL_MS,
     MovieClaimUnavailable,
     current_shard_date,
 )
-from packages.python.javdb_core.magnet_extractor import extract_magnets
+from javdb.spider.magnet_extractor import extract_magnets
 
-import packages.python.javdb_spider.runtime.state as state
-from packages.python.javdb_ingestion.models import ParsedMovie
-from packages.python.javdb_ingestion.planner import build_spider_ingestion_plan
-from packages.python.javdb_ingestion.policies import (
+import javdb.spider.runtime.state as state
+from javdb.pipeline.models import ParsedMovie
+from javdb.pipeline.planner import build_spider_ingestion_plan
+from javdb.pipeline.policies import (
     has_complete_subtitles,
     should_skip_recent_today_release,
     should_skip_recent_yesterday_release,
 )
-from packages.python.javdb_spider.services.dedup import (
+from javdb.spider.services.dedup import (
     should_skip_from_rclone,
     append_dedup_record,
 )
-from packages.python.javdb_spider.fetch.backend import FetchBackend
-from packages.python.javdb_spider.fetch.fetch_engine import EngineTask
-from packages.python.javdb_spider.runtime.config import BASE_URL
+from javdb.spider.fetch.backend import FetchBackend
+from javdb.spider.fetch.fetch_engine import EngineTask
+from javdb.spider.runtime.config import BASE_URL
 
 logger = get_logger(__name__)
 
