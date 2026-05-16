@@ -33,3 +33,13 @@ class CapabilitiesResponse(BaseModel):
     features: Features
     deployment: Literal["colocated", "split", "unknown"]
     build: Build
+
+
+class SystemStateGetResponse(BaseModel):
+    key: str
+    value: str | None
+
+
+class SystemStatePutPayload(BaseModel):
+    key: str = Field(min_length=1, max_length=128)
+    value: str

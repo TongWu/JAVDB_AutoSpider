@@ -27,7 +27,8 @@ class SystemStateRepo:
     def put(self, key: str, value: str) -> None:
         self._conn.execute(
             """
-            INSERT INTO system_state (key, value) VALUES (?, ?)
+            INSERT INTO system_state (key, value, updated_at)
+                VALUES (?, ?, datetime('now'))
             ON CONFLICT(key) DO UPDATE SET value = excluded.value,
                                             updated_at = datetime('now')
             """,
