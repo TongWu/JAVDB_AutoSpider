@@ -13,6 +13,8 @@ continue to work without modification.
 """
 
 import re
+from dataclasses import asdict
+from typing import Any, Tuple
 from bs4 import BeautifulSoup
 from bs4.element import Tag
 
@@ -32,7 +34,117 @@ from packages.python.javdb_platform.logging_config import get_logger
 from apps.api.parsers import (
     parse_index_page as _api_parse_index,
     parse_detail_page as _api_parse_detail,
+    parse_index_page,
+    parse_detail_page,
+    parse_category_page,
+    parse_top_page,
+    parse_tag_page,
+    detect_page_type,
 )
+
+# Optional Rust-backed helpers (inlined from the former bridges.rust_adapters.parser_adapter shim)
+try:
+    from javdb_rust_core import is_login_page as _rust_is_login_page
+    from javdb_rust_core import validate_index_html as _rust_validate_index_html
+
+    RUST_PARSER_EXTRAS_AVAILABLE = True
+except ImportError:
+    RUST_PARSER_EXTRAS_AVAILABLE = False
+    _rust_is_login_page = None
+    _rust_validate_index_html = None
+
+
+_LOGIN_REQUIRED_TEXT_MARKERS = (
+    "due to copyright restrictions",
+    "not available in your country",
+)
+
+_MAINTENANCE_MARKERS = (
+    "系統維護中",
+    "系统维护中",
+    "system maintenance",
+    "service unavailable",
+    "temporarily unavailable",
+    "暫時無法使用",
+)
+
+
+def _has_login_required_text(html: str) -> bool:
+    lower_html = html.lower()
+    return all(marker in lower_html for marker in _LOGIN_REQUIRED_TEXT_MARKERS)
+
+
+def is_maintenance_page(html: str) -> bool:
+    """Detect javdb maintenance or service-unavailable pages.
+
+    These should NOT trigger CF penalty events — the issue is site-wide,
+    not proxy-specific.
+    """
+    if not html:
+        return False
+    lower_html = html.lower()
+    if any(marker.lower() in lower_html for marker in _MAINTENANCE_MARKERS):
+        return True
+    if len(html) < 2000 and "<html" in lower_html:
+        if "movie-list" not in lower_html and "video-detail" not in lower_html:
+            if "503" in html or "502" in html or "maintenance" in lower_html:
+                return True
+    return False
+
+
+def result_to_dict(result: Any) -> dict:
+    if hasattr(result, "to_dict"):
+        return result.to_dict()
+    return asdict(result)
+
+
+def is_login_page(html: str) -> bool:
+    if not html:
+        return False
+    if _has_login_required_text(html):
+        return True
+    if RUST_PARSER_EXTRAS_AVAILABLE:
+        try:
+            return bool(_rust_is_login_page(html))
+        except Exception:
+            pass
+    soup = BeautifulSoup(html, "html.parser")
+    title_tag = soup.find("title")
+    if title_tag:
+        title_text = title_tag.get_text().strip().lower()
+        if "登入" in title_text or "login" in title_text:
+            return True
+    return False
+
+
+def validate_index_html(html: str) -> Tuple[bool, bool]:
+    if RUST_PARSER_EXTRAS_AVAILABLE:
+        try:
+            return _rust_validate_index_html(html)
+        except Exception:
+            pass
+    soup = BeautifulSoup(html, "html.parser")
+    movie_list = soup.find("div", class_=lambda x: x and "movie-list" in x)
+    if movie_list:
+        movie_items = movie_list.find_all("div", class_="item")
+        if len(movie_items) > 0:
+            return True, False
+        return False, True
+
+    page_text = soup.get_text()
+    empty_message_div = soup.find("div", class_="empty-message")
+    age_modal = soup.find("div", class_="modal is-active over18-modal")
+    has_no_content_msg = (
+        "No content yet" in page_text
+        or "No result" in page_text
+        or "暫無內容" in page_text
+        or "暂无内容" in page_text
+        or empty_message_div is not None
+    )
+    if empty_message_div is not None or (not age_modal and has_no_content_msg) or (not age_modal and len(html) > 20000):
+        return False, True
+    return False, False
+
 
 logger = get_logger(__name__)
 
