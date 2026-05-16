@@ -551,7 +551,8 @@ jobs:
         id: file_filter
         if: ${{ success() && steps.uploader.outcome == 'success' }}
         env:
-          # Filter/clean-up scope = the category the uploader just used for daily mode
+          # Filter/clean-up scope = the category the uploader just used for daily mode,
+          # plus the shared "顶级" category that lives on the same default qB instance.
           TORRENT_CATEGORY: ${{ vars.TORRENT_CATEGORY || 'JavDB' }}
           MIN_SIZE_MB: ${{ vars.QB_FILE_FILTER_MIN_SIZE_MB || '100' }}
         run: |
@@ -560,7 +561,7 @@ jobs:
 
           # Build JSON array of categories for --categories using Python's json
           # module so quotes, backslashes, and newlines in TORRENT_CATEGORY are escaped safely.
-          CATEGORIES_JSON=$(TORRENT_CATEGORY="$TORRENT_CATEGORY" python3 -c 'import json, os; print(json.dumps([os.environ["TORRENT_CATEGORY"]]))')
+          CATEGORIES_JSON=$(TORRENT_CATEGORY="$TORRENT_CATEGORY" python3 -c 'import json, os; print(json.dumps([os.environ["TORRENT_CATEGORY"], "顶级"]))')
 
           CMD_ARGS=(
             python3 -m apps.cli.qb_file_filter
