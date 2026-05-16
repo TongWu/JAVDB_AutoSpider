@@ -30,7 +30,7 @@ def get_active_session():
 # Optional Rust-backed helpers (the helpers below are inlined from the former
 # bridges.rust_adapters.csv_adapter shim).
 try:
-    from javdb_rust_core import (
+    from javdb.rust_core import (
         merge_row_data as _rs_merge_row_data,
         create_csv_row as _rust_create_csv_row,
         check_torrent_status as _rust_check_torrent_status,

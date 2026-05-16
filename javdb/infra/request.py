@@ -46,7 +46,7 @@ from javdb.spider.parser import (
 
 # Try Rust implementations
 try:
-    from javdb_rust_core import (
+    from javdb.rust_core import (
         RustRequestHandler,
         RustRequestConfig,
         RustProxyHelper,

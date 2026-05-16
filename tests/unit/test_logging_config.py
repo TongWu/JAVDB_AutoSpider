@@ -595,12 +595,12 @@ class TestRustBridgeShortNames:
     both so the compact console field stays at 12 chars wide."""
 
     def test_rust_dot_separator_maps_to_short_name(self):
-        assert _shorten_logger_name('javdb_rust_core.proxy.pool') == 'ProxyPool'
-        assert _shorten_logger_name('javdb_rust_core.proxy.ban_manager') == 'BanManager'
+        assert _shorten_logger_name('rust_core.proxy.pool') == 'ProxyPool'
+        assert _shorten_logger_name('rust_core.proxy.ban_manager') == 'BanManager'
 
     def test_rust_double_colon_separator_maps_to_short_name(self):
-        assert _shorten_logger_name('javdb_rust_core::proxy::pool') == 'ProxyPool'
-        assert _shorten_logger_name('javdb_rust_core::proxy::ban_manager') == 'BanManager'
+        assert _shorten_logger_name('rust_core::proxy::pool') == 'ProxyPool'
+        assert _shorten_logger_name('rust_core::proxy::ban_manager') == 'BanManager'
 
     def test_new_javdb_platform_clients_have_short_names(self):
         # These were unmapped before the log redesign and showed up as

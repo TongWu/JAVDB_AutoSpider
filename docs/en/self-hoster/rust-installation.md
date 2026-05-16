@@ -60,7 +60,7 @@ maturin --version
 From the project root:
 
 ```bash
-cd packages/rust/javdb_rust_core
+cd javdb/rust_core
 maturin develop --release
 ```
 

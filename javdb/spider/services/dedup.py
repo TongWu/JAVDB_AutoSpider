@@ -38,8 +38,8 @@ from packages.python.javdb_platform.logging_config import get_logger
 
 # Optional Rust-backed dedup helpers (inlined from the former bridges.rust_adapters.dedup_adapter shim)
 try:
-    from javdb_rust_core import should_skip_from_rclone as _rs_should_skip_from_rclone
-    from javdb_rust_core import check_dedup_upgrade as _rs_check_dedup_upgrade
+    from javdb.rust_core import should_skip_from_rclone as _rs_should_skip_from_rclone
+    from javdb.rust_core import check_dedup_upgrade as _rs_check_dedup_upgrade
 
     RUST_DEDUP_AVAILABLE = True
 except ImportError:

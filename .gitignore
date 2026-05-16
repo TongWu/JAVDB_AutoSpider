@@ -77,6 +77,8 @@ coverage.xml
 # Compiled files
 rust_core/target/
 packages/rust/**/target/
+javdb/rust_core/target/
+javdb/rust_core/python/javdb/*.so
 **/*.rs.bk
 **/*.rs.bak
 
@@ -100,6 +102,9 @@ rust-analyzer/
 rust_core/target/wheels/
 rust_core/target/dist/
 rust_core/target/sdist/
+javdb/rust_core/target/wheels/
+javdb/rust_core/target/dist/
+javdb/rust_core/target/sdist/
 
 # Private keys / certificates
 *.pem

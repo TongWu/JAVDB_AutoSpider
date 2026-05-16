@@ -44,8 +44,8 @@ from apps.api.parsers import (
 
 # Optional Rust-backed helpers (inlined from the former bridges.rust_adapters.parser_adapter shim)
 try:
-    from javdb_rust_core import is_login_page as _rust_is_login_page
-    from javdb_rust_core import validate_index_html as _rust_validate_index_html
+    from javdb.rust_core import is_login_page as _rust_is_login_page
+    from javdb.rust_core import validate_index_html as _rust_validate_index_html
 
     RUST_PARSER_EXTRAS_AVAILABLE = True
 except ImportError:

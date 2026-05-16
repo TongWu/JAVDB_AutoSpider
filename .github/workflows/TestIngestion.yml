@@ -44,10 +44,10 @@ on:
   #     # Python dependency manifest
   #     - 'requirements.txt'
   #     # Rust extension (affects spider / dedup / rclone / history ops)
-  #     - 'packages/rust/javdb_rust_core/**/*.rs'
-  #     - 'packages/rust/javdb_rust_core/Cargo.toml'
-  #     - 'packages/rust/javdb_rust_core/Cargo.lock'
-  #     - 'packages/rust/javdb_rust_core/pyproject.toml'
+  #     - 'javdb/rust_core/**/*.rs'
+  #     - 'javdb/rust_core/Cargo.toml'
+  #     - 'javdb/rust_core/Cargo.lock'
+  #     - 'javdb/rust_core/pyproject.toml'
   #     # The workflow itself
   #     - '.github/workflows/TestIngestion.yml'
   #     - '.github/actions/setup-python-env/**'
