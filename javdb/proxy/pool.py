@@ -24,7 +24,7 @@ from datetime import datetime, timedelta
 from threading import Lock
 
 try:
-    from javdb_rust_core import (
+    from javdb.rust_core import (
         RustProxyPool,
         RustProxyInfo,
         create_proxy_pool_from_config as _rust_create_proxy_pool,

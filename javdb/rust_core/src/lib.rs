@@ -80,7 +80,7 @@ fn validate_index_html(html_content: &str) -> (bool, bool) {
 }
 
 #[pymodule]
-fn javdb_rust_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn rust_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Initialize logging bridge
     pyo3_log::init();
 

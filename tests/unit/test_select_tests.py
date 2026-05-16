@@ -44,7 +44,7 @@ def test_legacy_wrapper_change_uses_import_graph():
 
 
 def test_rust_scraper_change_runs_rust_wheel_fallback_and_parser_tests():
-    result = select("packages/rust/javdb_rust_core/src/scraper/detail_parser.rs")
+    result = select("javdb/rust_core/src/scraper/detail_parser.rs")
 
     assert result.run_rust is True
     assert result.build_rust_wheel is True
@@ -56,7 +56,7 @@ def test_rust_scraper_change_runs_rust_wheel_fallback_and_parser_tests():
 
 
 def test_cargo_manifest_change_runs_full_rust_tests():
-    result = select("packages/rust/javdb_rust_core/Cargo.toml")
+    result = select("javdb/rust_core/Cargo.toml")
 
     assert result.run_rust is True
     assert result.rust_full is True

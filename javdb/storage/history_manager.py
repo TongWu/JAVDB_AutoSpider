@@ -736,7 +736,7 @@ def _csv_check_torrent_in_history(history_file, href, torrent_type):
 
 if not use_sqlite():
     try:
-        from javdb_rust_core import (
+        from javdb.rust_core import (
             load_parsed_movies_history,
             cleanup_history_file,
             maintain_history_limit,

@@ -558,7 +558,7 @@ def parse_leaf_name(leaf_name: str) -> Optional[Tuple[str, str]]:
 
 
 try:
-    from javdb_rust_core import (
+    from javdb.rust_core import (
         parse_folder_name as _rs_parse_folder_name,
     )
     _RUST_RCLONE_PARSE = True

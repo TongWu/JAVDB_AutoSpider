@@ -14,7 +14,7 @@ import re
 from typing import Optional
 
 try:
-    from javdb_rust_core import (
+    from javdb.rust_core import (
         mask_full as _rust_mask_full,
         mask_partial as _rust_mask_partial,
         mask_email as _rust_mask_email,
