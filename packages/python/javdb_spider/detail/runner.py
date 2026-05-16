@@ -404,6 +404,32 @@ def process_detail_entries(
     # a lease to release.
     held_claims: Set[str] = set(leased_hrefs)
 
+    # W6.C (W5.2) — opt-in WorkDistributor enqueue. When the queue is
+    # enabled, advertise this runner's survivors to the cross-runner
+    # queue so peers can pull them (idempotent on key — re-enqueue of
+    # an already-queued href is a no-op). We deliberately keep the
+    # local dispatch loop below unchanged so this commit is producer-
+    # only; the consumer-side pull → submit → ack integration is a
+    # follow-up that needs per-task completion callbacks plumbed
+    # through the backend. Operators still gain queue-depth visibility
+    # via /work/stats today.
+    work_client = state.global_work_distributor_client
+    if work_client is not None and prepared_entries:
+        try:
+            keys = [c.href for c in prepared_entries if c.href]
+            result = work_client.enqueue(keys)
+            logger.info(
+                "Phase %d: W5.2 enqueued %d hrefs to WorkDistributor "
+                "(queue_size=%d, %d duplicates ignored)",
+                phase, len(result.enqueued), result.queue_size,
+                len(result.duplicates),
+            )
+        except Exception:  # noqa: BLE001 — queue is best-effort
+            logger.warning(
+                "Phase %d: WorkDistributor enqueue failed; continuing with local dispatch",
+                phase, exc_info=True,
+            )
+
     for candidate in prepared_entries:
         detail_url = urljoin(BASE_URL, candidate.href)
         logger.debug(
