@@ -1,6 +1,6 @@
 """Canonical email notification CLI entrypoint."""
 
-from packages.python.javdb_integrations.email_notification import main
+from javdb.integrations.notify.email import main
 
 
 if __name__ == "__main__":

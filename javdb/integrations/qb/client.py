@@ -8,7 +8,7 @@ consistent.
 
 Typical usage:
 
-    from packages.python.javdb_integrations.qb_client import (
+    from javdb.integrations.qb.client import (
         QBittorrentClient,
         remove_completed_torrents_keep_files,
     )
@@ -23,9 +23,9 @@ from typing import Callable, Iterable, List, Optional, Tuple
 
 import requests
 
-from packages.python.javdb_core.masking import mask_error, mask_ip_address, mask_username
-from packages.python.javdb_platform.logging_config import get_logger
-from packages.python.javdb_platform.qb_config import (
+from javdb.infra.masking import mask_error, mask_ip_address, mask_username
+from javdb.infra.logging import get_logger
+from javdb.integrations.qb.config import (
     masked_qb_base_url as _masked_qb_base_url,
     qb_verify_tls,
 )

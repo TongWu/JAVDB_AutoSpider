@@ -55,23 +55,23 @@ from apps.api.parsers.index_parser import (
     parse_index_page,
 )
 from apps.api.parsers.search_exact import find_exact_entry_first_search_page
-from packages.python.javdb_spider.fetch.fallback import get_page_url
-from packages.python.javdb_spider.fetch.fetch_engine import PER_WORKER_TASK_CAP_ERROR
-from packages.python.javdb_spider.fetch.session import is_login_page
-import packages.python.javdb_spider.runtime.state as spider_state
-from packages.python.javdb_ingestion.adapters import (
+from javdb.spider.fetch.fallback import get_page_url
+from javdb.spider.fetch.fetch_engine import PER_WORKER_TASK_CAP_ERROR
+from javdb.spider.fetch.session import is_login_page
+import javdb.spider.runtime.state as spider_state
+from javdb.pipeline.adapters import (
     build_alignment_purge_plan_rows as _ie_build_alignment_purge_plan_rows,
     build_alignment_qb_row as _ie_build_alignment_qb_row,
 )
-from packages.python.javdb_ingestion.planner import build_alignment_upgrade_plan
-from packages.python.javdb_ingestion.policies import (
+from javdb.pipeline.planner import build_alignment_upgrade_plan
+from javdb.pipeline.policies import (
     alignment_best_inventory_rank as _ie_best_inventory_rank,
     alignment_best_parsed_category as _ie_best_parsed_category,
     alignment_inventory_entry_rank as _ie_inventory_entry_rank,
     alignment_parsed_category_rank as _ie_parsed_category_rank,
 )
-from packages.python.javdb_platform.config_helper import cfg
-from packages.python.javdb_platform.db import (
+from javdb.infra.config import cfg
+from javdb.storage.db.db import (
     db_delete_align_no_exact_match,
     db_load_align_no_exact_match_codes,
     db_load_history,
@@ -80,11 +80,11 @@ from packages.python.javdb_platform.db import (
     db_upsert_history,
     init_db,
 )
-from packages.python.javdb_platform.logging_config import get_logger, setup_logging
-from packages.python.javdb_core.magnet_extractor import extract_magnets
-from packages.python.javdb_platform.path_helper import ensure_dated_dir
-from packages.python.javdb_core.url_helper import build_search_url
-from packages.python.javdb_spider.runtime.sleep import movie_sleep_mgr
+from javdb.infra.logging import get_logger, setup_logging
+from javdb.spider.magnet_extractor import extract_magnets
+from javdb.infra.paths import ensure_dated_dir
+from javdb.spider.url_helper import build_search_url
+from javdb.spider.runtime.sleep import movie_sleep_mgr
 
 setup_logging()
 logger = get_logger(__name__)
@@ -410,10 +410,10 @@ def _make_align_process_fn(inventory_map, *, no_login: bool = False):
     function and returned as a ``login_required`` result instead of propagating
     to the engine's login coordinator.
     """
-    from packages.python.javdb_spider.fetch.fetch_engine import LoginRequired, WorkerContext, EngineTask
+    from javdb.spider.fetch.fetch_engine import LoginRequired, WorkerContext, EngineTask
 
     def _align_process(ctx: WorkerContext, task: EngineTask):
-        from packages.python.javdb_core.url_helper import get_page_url as _get_page_url
+        from javdb.spider.url_helper import get_page_url as _get_page_url
 
         meta = task.meta
         video_code = meta['video_code']
@@ -574,7 +574,7 @@ def run_alignment(args: argparse.Namespace) -> int:
     absolute_limit = int(getattr(args, 'limit', 0) or 0)
 
     if limit_per_worker > 0:
-        from packages.python.javdb_spider.runtime.config import PROXY_POOL
+        from javdb.spider.runtime.config import PROXY_POOL
 
         num_workers = len(PROXY_POOL) if (use_proxy and PROXY_POOL) else 1
         effective_limit = limit_per_worker * num_workers
@@ -615,13 +615,13 @@ def run_alignment(args: argparse.Namespace) -> int:
     purge_plan_rows: List[dict] = []
     rc = 0
 
-    from packages.python.javdb_spider.runtime.config import PROXY_POOL
+    from javdb.spider.runtime.config import PROXY_POOL
 
     # ------------------------------------------------------------------
     # Parallel mode: FetchEngine (advanced) with one worker per proxy
     # ------------------------------------------------------------------
     if use_proxy and PROXY_POOL:
-        from packages.python.javdb_spider.fetch.fetch_engine import FetchEngine
+        from javdb.spider.fetch.fetch_engine import FetchEngine
 
         movie_sleep_mgr.apply_volume_multiplier(
             total, num_workers=len(PROXY_POOL),
@@ -1010,7 +1010,7 @@ def run_alignment(args: argparse.Namespace) -> int:
             return 1
 
     if args.execute_delete and purge_plan_rows:
-        from packages.python.javdb_integrations.rclone_manager import run_execute_inventory_purge_from_csv
+        from javdb.integrations.rclone.manager import run_execute_inventory_purge_from_csv
 
         sdrc = run_execute_inventory_purge_from_csv(
             purge_plan_csv,
@@ -1095,7 +1095,7 @@ def main() -> int:
     # process tag their writes with it.
     if getattr(args, 'session_id', None) is not None:
         try:
-            from packages.python.javdb_platform.db import set_active_session_id
+            from javdb.storage.db.db import set_active_session_id
             set_active_session_id(args.session_id)
         except Exception as e:
             logger.warning(

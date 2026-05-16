@@ -29,7 +29,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 # Import unified configuration
-from packages.python.javdb_platform.config_helper import cfg
+from javdb.infra.config import cfg
 
 QB_HOST = cfg('QB_HOST', 'your_qbittorrent_ip')
 QB_PORT = cfg('QB_PORT', 'your_qbittorrent_port')
@@ -51,25 +51,25 @@ QB_FILE_FILTER_MIN_SIZE_MB = cfg('QB_FILE_FILTER_MIN_SIZE_MB', 100)
 QB_FILE_FILTER_LOG_FILE = cfg('QB_FILE_FILTER_LOG_FILE', 'logs/qb_file_filter.log')
 
 # Configure logging
-from packages.python.javdb_platform.logging_config import setup_logging, get_logger
+from javdb.infra.logging import setup_logging, get_logger
 setup_logging(QB_FILE_FILTER_LOG_FILE, LOG_LEVEL)
 logger = get_logger(__name__)
 
 # Import masking utilities
-from packages.python.javdb_core.masking import mask_error, mask_username
+from javdb.infra.masking import mask_error, mask_username
 
 # Import proxy pool
-from packages.python.javdb_platform.proxy_pool import create_proxy_pool_from_config
+from javdb.proxy.pool import create_proxy_pool_from_config
 
 # Import proxy helper from request handler
-from packages.python.javdb_platform.proxy_policy import (
+from javdb.proxy.policy import (
     add_proxy_arguments,
     describe_proxy_override,
     resolve_proxy_override,
     should_proxy_module,
 )
-from packages.python.javdb_platform.request_handler import create_proxy_helper_from_config
-from packages.python.javdb_platform.qb_config import (
+from javdb.infra.request import create_proxy_helper_from_config
+from javdb.integrations.qb.config import (
     qb_allow_insecure_http,
     qb_base_url_candidates,
     masked_qb_base_url,
@@ -235,7 +235,7 @@ def test_qbittorrent_connection(use_proxy=False):
     """Test if qBittorrent is accessible.
 
     Thin wrapper around :func:`qb_client.try_ping_base_urls`."""
-    from packages.python.javdb_integrations.qb_client import try_ping_base_urls
+    from javdb.integrations.qb.client import try_ping_base_urls
 
     proxies = get_proxies_dict('qbittorrent', use_proxy)
     url, _ = try_ping_base_urls(
@@ -256,7 +256,7 @@ def login_to_qbittorrent(session, use_proxy=False):
     """Login to qBittorrent web UI.
 
     Thin wrapper around :func:`qb_client.try_login_base_urls`."""
-    from packages.python.javdb_integrations.qb_client import (
+    from javdb.integrations.qb.client import (
         LOGIN_SUCCESS,
         try_login_base_urls,
     )
@@ -287,7 +287,7 @@ def cleanup_completed_torrents(session, categories, dry_run=False, use_proxy=Fal
     ``packages.python.javdb_integrations.qb_client.remove_completed_torrents_keep_files``.
     Returns a stats dict ``{'scanned', 'deleted', 'hashes'}``.
     """
-    from packages.python.javdb_integrations.qb_client import (
+    from javdb.integrations.qb.client import (
         QBittorrentClient as _SharedQBClient,
         remove_completed_torrents_keep_files as _shared_remove,
     )

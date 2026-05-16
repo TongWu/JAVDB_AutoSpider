@@ -36,13 +36,13 @@ except ImportError as e:
     RUST_PROXY_AVAILABLE = False
     RUST_IMPORT_ERROR = str(e)
 
-from packages.python.javdb_platform.proxy_ban_manager import (
+from javdb.proxy.ban_manager import (
     _dispatch_remote_ban,
     _dispatch_remote_unban,
     get_ban_manager,
     ProxyBanManager,
 )
-from packages.python.javdb_platform.proxy_policy import is_proxy_usable
+from javdb.proxy.policy import is_proxy_usable
 
 
 logger = logging.getLogger(__name__)

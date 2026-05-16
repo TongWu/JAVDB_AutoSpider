@@ -24,8 +24,8 @@ from apps.api.parsers.common import (  # noqa: E402
     javdb_absolute_url,
     absolutize_supporting_actors_json,
 )
-from packages.python.javdb_platform.config_helper import cfg  # noqa: E402
-from packages.python.javdb_platform.db import HISTORY_DB_PATH, REPORTS_DB_PATH  # noqa: E402
+from javdb.infra.config import cfg  # noqa: E402
+from javdb.storage.db.db import HISTORY_DB_PATH, REPORTS_DB_PATH  # noqa: E402
 
 
 @dataclass

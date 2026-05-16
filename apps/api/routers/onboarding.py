@@ -11,8 +11,8 @@ from apps.api.schemas.capabilities_payloads import (
     OnboardingTestResponse,
 )
 from apps.api.infra.auth import _require_auth, require_role
-from packages.python.javdb_platform.db_layer.system_state_repo import SystemStateRepo
-from packages.python.javdb_platform.db_connection import get_db, OPERATIONS_DB_PATH
+from javdb.storage.repos.system_state_repo import SystemStateRepo
+from javdb.storage.db.db_connection import get_db, OPERATIONS_DB_PATH
 
 
 REQUIRED_COMPONENTS = ("javdb_session", "qb")

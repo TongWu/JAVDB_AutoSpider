@@ -15,7 +15,7 @@ from apps.api.parsers.index_parser import (
 from apps.api.parsers.search_exact import find_exact_entry_first_search_page
 from apps.api.services import config_service, context
 from apps.api.services.explore_service import _fetch_javdb_html
-from packages.python.javdb_core.url_helper import build_search_url
+from javdb.spider.url_helper import build_search_url
 from javdb.spider.parser import (
     is_login_page,
 )

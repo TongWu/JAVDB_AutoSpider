@@ -50,11 +50,11 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
-from packages.python.javdb_platform.do_client_base import (
+from javdb.proxy.coordinator.do_client_base import (
     BaseDOClient,
     DOClientUnavailable,
 )
-from packages.python.javdb_platform.logging_config import get_logger
+from javdb.infra.logging import get_logger
 
 logger = get_logger(__name__)
 

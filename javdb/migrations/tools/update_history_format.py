@@ -25,18 +25,18 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 # Import existing modules
-from packages.python.javdb_platform.history_manager import (
+from javdb.storage.history_manager import (
     load_parsed_movies_history, 
     save_parsed_movie_to_history,
     validate_history_file
 )
-from packages.python.javdb_core.parser import parse_detail
-from packages.python.javdb_core.magnet_extractor import extract_magnets
-from packages.python.javdb_platform.logging_config import setup_logging, get_logger
-from packages.python.javdb_platform.spider_gateway import create_gateway
+from javdb.spider.parser import parse_detail
+from javdb.spider.magnet_extractor import extract_magnets
+from javdb.infra.logging import setup_logging, get_logger
+from javdb.spider.spider_gateway import create_gateway
 
 # Import configuration
-from packages.python.javdb_platform.config_helper import cfg
+from javdb.infra.config import cfg
 
 BASE_URL = cfg('BASE_URL', 'https://javdb.com')
 PARSED_MOVIES_CSV = cfg('PARSED_MOVIES_CSV', 'parsed_movies_history.csv')

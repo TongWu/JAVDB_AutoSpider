@@ -1,7 +1,7 @@
 """Global mutable state for the spider package.
 
 Every module that needs to read or *mutate* shared state should
-``import packages.python.javdb_spider.runtime.state as state`` and access ``state.<var>``.
+``import javdb.spider.runtime.state as state`` and access ``state.<var>``.
 """
 
 import atexit
@@ -16,11 +16,11 @@ import uuid
 from typing import Optional, Dict
 from datetime import datetime
 
-from packages.python.javdb_platform.logging_config import get_logger
-from packages.python.javdb_platform.login_state_client import (
+from javdb.infra.logging import get_logger
+from javdb.proxy.coordinator.login_state_client import (
     LoginStateClient,
 )
-from packages.python.javdb_platform.movie_claim_client import (
+from javdb.proxy.coordinator.movie_claim_client import (
     MOVIE_CLAIM_MODE_AUTO,
     MOVIE_CLAIM_MODE_FORCE_ON,
     MOVIE_CLAIM_MODE_OFF,
@@ -29,14 +29,14 @@ from packages.python.javdb_platform.movie_claim_client import (
     create_movie_claim_client_with_mode_from_env,
     parse_movie_claim_mode,
 )
-from packages.python.javdb_platform.proxy_ban_manager import (
+from javdb.proxy.ban_manager import (
     set_remote_ban_hook,
     set_remote_unban_hook,
 )
-from packages.python.javdb_platform.proxy_coordinator_client import (
+from javdb.proxy.coordinator.proxy_coordinator_client import (
     ProxyCoordinatorClient,
 )
-from packages.python.javdb_platform.runner_registry_client import (
+from javdb.proxy.coordinator.runner_registry_client import (
     ConfigSnapshot,
     RunnerRegistryClient,
     RunnerRegistryUnavailable,
@@ -46,12 +46,12 @@ from packages.python.javdb_platform.runner_registry_client import (
     proxy_pool_hash,
     proxy_pool_summary_for_registry,
 )
-from packages.python.javdb_platform.proxy_pool import ProxyPool, create_proxy_pool_from_config
-from packages.python.javdb_platform.proxy_policy import should_proxy_module
-from packages.python.javdb_platform.request_handler import RequestHandler, RequestConfig
-from packages.python.javdb_platform.path_helper import ensure_dated_dir
+from javdb.proxy.pool import ProxyPool, create_proxy_pool_from_config
+from javdb.proxy.policy import should_proxy_module
+from javdb.infra.request import RequestHandler, RequestConfig
+from javdb.infra.paths import ensure_dated_dir
 
-from packages.python.javdb_spider.runtime.config import (
+from javdb.spider.runtime.config import (
     BASE_URL,
     CF_BYPASS_SERVICE_PORT, CF_BYPASS_ENABLED,
     CF_BYPASS_PORT_MAP,
@@ -220,7 +220,7 @@ _login_budget_lock = threading.Lock()
 # cycle (``proxy_state`` reads ``state.<global>``) resolves cleanly.
 # ---------------------------------------------------------------------------
 
-from packages.python.javdb_spider.runtime.proxy_state import (  # noqa: E402
+from javdb.spider.runtime.proxy_state import (  # noqa: E402
     _deduct_proxy_login_budget_locked,
     deduct_proxy_login_budget,
     proxy_needs_cf_bypass,
@@ -291,7 +291,7 @@ def setup_proxy_coordinator() -> Optional[ProxyCoordinatorClient]:
     if global_proxy_coordinator is not None:
         return global_proxy_coordinator
 
-    from packages.python.javdb_platform.config_helper import cfg
+    from javdb.infra.config import cfg
     url = (cfg('PROXY_COORDINATOR_URL', '') or '').strip()
     token = (cfg('PROXY_COORDINATOR_TOKEN', '') or '').strip()
     if not url or not token:
@@ -326,7 +326,7 @@ def setup_proxy_coordinator() -> Optional[ProxyCoordinatorClient]:
     # The singleton is created at import time before the coordinator is
     # available, so we wire it up here once the coordinator is ready.
     try:
-        from packages.python.javdb_spider.runtime.sleep import movie_sleep_mgr as _mgr
+        from javdb.spider.runtime.sleep import movie_sleep_mgr as _mgr
         if _mgr._coordinator is None:
             _mgr.set_coordinator(client)
             logger.debug("Coordinator injected into movie_sleep_mgr")
@@ -352,7 +352,7 @@ def setup_login_state_client() -> Optional[LoginStateClient]:
     if global_login_state_client is not None:
         return global_login_state_client
 
-    from packages.python.javdb_platform.config_helper import cfg
+    from javdb.infra.config import cfg
     url = (cfg('PROXY_COORDINATOR_URL', '') or '').strip()
     token = (cfg('PROXY_COORDINATOR_TOKEN', '') or '').strip()
     if not url or not token:
@@ -524,7 +524,7 @@ def setup_movie_claim_client() -> Optional[MovieClaimClient]:
                 global_movie_claim_client = _movie_claim_client_pending
             return _movie_claim_client_pending
 
-    from packages.python.javdb_platform.config_helper import cfg
+    from javdb.infra.config import cfg
     url = (cfg('PROXY_COORDINATOR_URL', '') or '').strip()
     token = (cfg('PROXY_COORDINATOR_TOKEN', '') or '').strip()
     raw_enabled_cfg = cfg('MOVIE_CLAIM_ENABLED', None)
@@ -542,7 +542,7 @@ def setup_movie_claim_client() -> Optional[MovieClaimClient]:
     # ``enabled_mode_override`` parameter instead of manipulating
     # ``os.environ``.  The factory reads URL/token from ``cfg()`` already,
     # so no env manipulation is needed for those.
-    from packages.python.javdb_platform.movie_claim_client import _ENABLED_UNSET
+    from javdb.proxy.coordinator.movie_claim_client import _ENABLED_UNSET
     override = _ENABLED_UNSET if raw_enabled_cfg is None else raw_enabled_cfg
     client, mode = create_movie_claim_client_with_mode_from_env(
         enabled_mode_override=override,
@@ -657,7 +657,7 @@ def enforce_movie_claim_for_d1() -> None:
     canonical fallback there) and when the operator's *intended* mode is
     ``OFF`` (a deliberate choice, not a misconfiguration).
     """
-    from packages.python.javdb_platform.config_helper import storage_backend
+    from javdb.infra.config import storage_backend
 
     if storage_backend() != "d1":
         return
@@ -718,7 +718,7 @@ def _resolve_proxy_pool_json() -> str:
     an empty string when nothing is configured (no drift detection
     available); callers must accept the empty hash as "no info".
     """
-    from packages.python.javdb_platform.config_helper import cfg
+    from javdb.infra.config import cfg
     raw = (cfg('PROXY_POOL_JSON', '') or '').strip()
     if raw:
         return raw
@@ -777,7 +777,7 @@ def _update_sleep_runner_count(count: int) -> None:
     if count <= 0:
         return
     try:
-        from packages.python.javdb_spider.runtime.sleep import movie_sleep_mgr as _mgr
+        from javdb.spider.runtime.sleep import movie_sleep_mgr as _mgr
         _mgr.set_active_runners(count)
     except Exception:  # noqa: BLE001
         pass
@@ -828,7 +828,7 @@ def _apply_config_snapshot(snap: ConfigSnapshot) -> None:
             return None
 
     try:
-        from packages.python.javdb_spider.runtime.sleep import (
+        from javdb.spider.runtime.sleep import (
             triple_window_throttle as _throttle,
         )
         _throttle.apply_config(
@@ -927,7 +927,7 @@ def _apply_active_signals(signals: list) -> None:
 
     # Apply throttle_global.
     try:
-        from packages.python.javdb_spider.runtime.sleep import (
+        from javdb.spider.runtime.sleep import (
             movie_sleep_mgr as _mgr,
         )
         _mgr.set_global_factor(desired_factor)
@@ -1320,7 +1320,7 @@ def setup_runner_registry_client() -> Optional[RunnerRegistryClient]:
     if global_runner_registry_client is not None:
         return global_runner_registry_client
 
-    from packages.python.javdb_platform.config_helper import cfg
+    from javdb.infra.config import cfg
     url = (cfg('PROXY_COORDINATOR_URL', '') or '').strip()
     token = (cfg('PROXY_COORDINATOR_TOKEN', '') or '').strip()
     enabled_raw = (str(cfg('RUNNER_REGISTRY_ENABLED', '') or '')).strip().lower()
@@ -1449,7 +1449,7 @@ def setup_work_distributor_client():
         return global_work_distributor_client
 
     try:
-        from packages.python.javdb_platform.work_distributor_client import (
+        from javdb.proxy.coordinator.work_distributor_client import (
             create_work_distributor_client_from_env,
         )
     except Exception:  # noqa: BLE001 — import failure must not crash startup
@@ -1469,7 +1469,7 @@ def setup_work_distributor_client():
 def initialize_request_handler():
     """Create the global RequestHandler from configuration."""
     global global_request_handler
-    from packages.python.javdb_spider.runtime.sleep import (
+    from javdb.spider.runtime.sleep import (
         penalty_tracker as _pt,
         movie_sleep_mgr as _mgr,
     )
@@ -1535,7 +1535,7 @@ def setup_proxy_pool(use_proxy) -> None:
     :data:`global_runner_registry_client`.  All four are independent
     and may be ``None`` (fail-open).
     """
-    from packages.python.javdb_platform.proxy_policy import is_proxy_mode_disabled
+    from javdb.proxy.policy import is_proxy_mode_disabled
     global global_proxy_pool
 
     setup_proxy_coordinator()
@@ -1604,10 +1604,10 @@ def setup_proxy_pool(use_proxy) -> None:
     ):
         provider_label = None
         try:
-            from packages.python.javdb_platform.recommend_proxy_client import (
+            from javdb.proxy.recommend.client import (
                 create_recommend_proxy_client_from_env,
             )
-            from packages.python.javdb_platform.recommend_proxy_policy import (
+            from javdb.proxy.recommend.policy import (
                 RecommendProxyPolicy,
             )
             global global_recommend_proxy_policy

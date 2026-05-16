@@ -51,13 +51,13 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from packages.python.javdb_platform.config_helper import cfg  # noqa: E402
-from packages.python.javdb_platform.d1_client import (  # noqa: E402
+from javdb.infra.config import cfg  # noqa: E402
+from javdb.storage.d1_client import (  # noqa: E402
     D1Connection,
     D1Error,
     make_d1_connection,
 )
-from packages.python.javdb_platform.logging_config import (  # noqa: E402
+from javdb.infra.logging import (  # noqa: E402
     get_logger,
     log_section,
     setup_logging,

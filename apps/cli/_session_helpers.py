@@ -38,14 +38,14 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence
 
-from packages.python.javdb_platform.db_reports import (
+from javdb.storage.db.db_reports import (
     db_find_in_progress_sessions,
     db_find_sessions_by_run,
     db_get_session_run_identity,
     db_get_session_status,
 )
-from packages.python.javdb_platform.logging_config import get_logger
-from packages.python.javdb_platform.movie_claim_client import (
+from javdb.infra.logging import get_logger
+from javdb.proxy.coordinator.movie_claim_client import (
     MovieClaimUnavailable,
     create_movie_claim_client_from_env,
     current_shard_date,

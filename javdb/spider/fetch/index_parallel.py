@@ -18,22 +18,22 @@ from __future__ import annotations
 import os
 from typing import Dict, List, Optional
 
-from packages.python.javdb_platform.logging_config import get_logger
-from packages.python.javdb_core.parser import parse_index
-from packages.python.javdb_core.url_helper import detect_url_type
-from packages.python.javdb_core.filename_helper import generate_output_csv_name_from_html
+from javdb.infra.logging import get_logger
+from javdb.spider.parser import parse_index
+from javdb.spider.url_helper import detect_url_type
+from javdb.spider.filename_helper import generate_output_csv_name_from_html
 
-from packages.python.javdb_spider.fetch.fallback import (
+from javdb.spider.fetch.fallback import (
     get_page_url,
     validate_index_html,
 )
-from packages.python.javdb_spider.fetch.backend import FetchRuntimeState
-from packages.python.javdb_spider.fetch.fetch_engine import (
+from javdb.spider.fetch.backend import FetchRuntimeState
+from javdb.spider.fetch.fetch_engine import (
     EngineTask,
     EngineResult,
     ParallelFetchBackend,
 )
-from packages.python.javdb_spider.runtime.config import PROXY_POOL
+from javdb.spider.runtime.config import PROXY_POOL
 
 logger = get_logger(__name__)
 

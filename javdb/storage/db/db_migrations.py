@@ -16,7 +16,7 @@ import sqlite3
 import threading
 from typing import Optional
 
-from packages.python.javdb_platform.logging_config import get_logger
+from javdb.infra.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -36,7 +36,7 @@ def _ensure_imports():
     global _HISTORY_DB_PATH, _REPORTS_DB_PATH, _OPERATIONS_DB_PATH
     global _DB_PATH, _SCHEMA_VERSION
     if _get_db is None:
-        from packages.python.javdb_platform.db_connection import (
+        from javdb.storage.db.db_connection import (
             get_db,
             get_local_sqlite_db,
             HISTORY_DB_PATH,
@@ -75,7 +75,7 @@ def init_db(db_path: Optional[str] = None, *, force: bool = False) -> None:
     _ensure_imports()
 
     # Delegate to db.py's init_db (will be refactored later)
-    from packages.python.javdb_platform.db import init_db as _init_db_impl
+    from javdb.storage.db.db import init_db as _init_db_impl
     _init_db_impl(db_path, force=force)
 
 
@@ -91,7 +91,7 @@ def detect_schema_version(db_path: str) -> int:
     _ensure_imports()
 
     # Delegate to db.py's _detect_version
-    from packages.python.javdb_platform.db import _detect_version
+    from javdb.storage.db.db import _detect_version
 
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
@@ -112,7 +112,7 @@ def migrate_single_to_split() -> None:
     _ensure_imports()
 
     # Delegate to db.py's _migrate_single_to_split
-    from packages.python.javdb_platform.db import _migrate_single_to_split
+    from javdb.storage.db.db import _migrate_single_to_split
     _migrate_single_to_split()
 
 
@@ -124,7 +124,7 @@ def ensure_moviehistory_actor_columns(db_path: Optional[str] = None) -> None:
     """
     _ensure_imports()
 
-    from packages.python.javdb_platform.db import _ensure_moviehistory_actor_columns
+    from javdb.storage.db.db import _ensure_moviehistory_actor_columns
 
     conn = sqlite3.connect(db_path or _HISTORY_DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -143,7 +143,7 @@ def ensure_rollback_columns(db_path: Optional[str] = None) -> None:
     """
     _ensure_imports()
 
-    from packages.python.javdb_platform.db import _ensure_rollback_columns
+    from javdb.storage.db.db import _ensure_rollback_columns
 
     conn = sqlite3.connect(db_path or _HISTORY_DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -165,7 +165,7 @@ def moviehistory_actor_layout_ok(db_path: Optional[str] = None) -> bool:
     """
     _ensure_imports()
 
-    from packages.python.javdb_platform.db import moviehistory_actor_layout_ok as _check
+    from javdb.storage.db.db import moviehistory_actor_layout_ok as _check
 
     conn = sqlite3.connect(db_path or _HISTORY_DB_PATH)
     conn.row_factory = sqlite3.Row

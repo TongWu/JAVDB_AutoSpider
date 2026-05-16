@@ -12,14 +12,14 @@ from cryptography.fernet import Fernet, InvalidToken
 from fastapi import HTTPException
 
 from apps.api.services import context
-from packages.python.javdb_core.masking import mask_full, mask_proxy_url
-from packages.python.javdb_platform.config_generator import (
+from javdb.infra.masking import mask_full, mask_proxy_url
+from javdb.infra.config_generator import (
     get_env_bool,
     get_env_float,
     get_env_int,
     get_env_json,
 )
-from packages.python.javdb_platform.qb_config import build_qb_base_url
+from javdb.integrations.qb.config import build_qb_base_url
 
 
 def _build_fernet() -> Fernet | None:

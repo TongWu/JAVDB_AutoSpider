@@ -103,7 +103,7 @@ from apps.api.schemas.payloads import (
     VideoCodeSearchPayload,
 )
 from apps.api.services import config_service, context, explore_service, spider_jobs, task_service
-from packages.python.javdb_platform.spider_gateway import create_gateway
+from javdb.spider.spider_gateway import create_gateway
 
 RUST_CORE_AVAILABLE = RUST_PARSERS_AVAILABLE
 _payload_to_cli_args = spider_jobs._payload_to_cli_args

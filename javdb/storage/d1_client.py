@@ -26,8 +26,8 @@ from typing import Any, Iterable, List, Optional, Sequence, Tuple
 
 import requests
 
-from packages.python.javdb_platform.config_helper import cfg
-from packages.python.javdb_platform.logging_config import get_logger
+from javdb.infra.config import cfg
+from javdb.infra.logging import get_logger
 
 logger = get_logger(__name__)
 

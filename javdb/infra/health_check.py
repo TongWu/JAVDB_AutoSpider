@@ -37,13 +37,13 @@ if str(REPO_ROOT) not in sys.path:
 
 
 # Import masking utilities
-from packages.python.javdb_core.masking import mask_ip_address
+from javdb.infra.masking import mask_ip_address
 
 # Import configuration
-from packages.python.javdb_platform.config_helper import cfg
-from packages.python.javdb_platform.logging_config import setup_logging, get_logger
-from packages.python.javdb_platform.proxy_policy import add_proxy_arguments, resolve_proxy_override, should_proxy_module
-from packages.python.javdb_platform.qb_config import (
+from javdb.infra.config import cfg
+from javdb.infra.logging import setup_logging, get_logger
+from javdb.proxy.policy import add_proxy_arguments, resolve_proxy_override, should_proxy_module
+from javdb.integrations.qb.config import (
     qb_allow_insecure_http,
     qb_base_url_candidates,
     masked_qb_base_url,
@@ -172,7 +172,7 @@ def check_proxy_pool_status() -> Tuple[bool, str]:
         Tuple of (success, message)
     """
     try:
-        from packages.python.javdb_platform.proxy_ban_manager import get_ban_manager
+        from javdb.proxy.ban_manager import get_ban_manager
         
         if not PROXY_POOL:
             if PROXY_MODE == 'pool':

@@ -62,7 +62,7 @@ import threading
 from datetime import datetime, timezone
 from typing import Any, Iterable, Optional, Sequence, Tuple
 
-from packages.python.javdb_platform.logging_config import get_logger
+from javdb.infra.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -654,7 +654,7 @@ class DualConnection:
 
         # Import lazily so we keep the legacy import surface stable and
         # avoid a hard circular dependency at module load time.
-        from packages.python.javdb_platform.d1_client import _BATCH_LIMIT
+        from javdb.storage.d1_client import _BATCH_LIMIT
 
         chunk_size = max(1, int(_BATCH_LIMIT))
         partial_prefix_count = 0

@@ -8,7 +8,7 @@ have been processed, used for incremental scraping (avoiding re-downloads).
 
 from typing import Any, Dict, Iterable, Optional, Tuple
 
-from packages.python.javdb_platform.logging_config import get_logger
+from javdb.infra.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -28,17 +28,17 @@ def _ensure_imports():
     global _load_history_joined, _batch_update_movie_actors
     global _category_to_indicators, _movie_href_lookup_values, _cfg
     if _get_db is None:
-        from packages.python.javdb_platform.db_connection import (
+        from javdb.storage.db.db_connection import (
             get_db,
             HISTORY_DB_PATH,
         )
-        from packages.python.javdb_platform.db_layer.history_repo import (
+        from javdb.storage.repos.history_repo import (
             load_history_joined,
             batch_update_movie_actors,
         )
-        from packages.python.javdb_core.contracts import category_to_indicators
+        from javdb.spider.contracts import category_to_indicators
         from apps.api.parsers.common import movie_href_lookup_values
-        from packages.python.javdb_platform.config_helper import cfg
+        from javdb.infra.config import cfg
         _get_db = get_db
         _HISTORY_DB_PATH = HISTORY_DB_PATH
         _load_history_joined = load_history_joined
@@ -367,5 +367,5 @@ def db_get_all_history_records(db_path: Optional[str] = None) -> list:
 
 def db_batch_update_last_visited(*args, **kwargs):
     """Update DateTimeVisited for a batch of hrefs. Delegates to db.py."""
-    from packages.python.javdb_platform.db import db_batch_update_last_visited as _f
+    from javdb.storage.db.db import db_batch_update_last_visited as _f
     return _f(*args, **kwargs)

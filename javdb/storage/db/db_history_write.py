@@ -13,8 +13,8 @@ import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-from packages.python.javdb_platform.config_helper import cfg
-from packages.python.javdb_platform.logging_config import get_logger
+from javdb.infra.config import cfg
+from javdb.infra.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -31,11 +31,11 @@ def _ensure_imports():
     global _get_db, _HISTORY_DB_PATH, _generate_session_id
     global _get_active_run_identity, _SESSION_ID_PATTERN
     if _get_db is None:
-        from packages.python.javdb_platform.db_connection import (
+        from javdb.storage.db.db_connection import (
             get_db,
             HISTORY_DB_PATH,
         )
-        from packages.python.javdb_platform.db_session import (
+        from javdb.storage.db.db_session import (
             generate_session_id,
             get_active_run_identity,
             SESSION_ID_PATTERN,
@@ -197,7 +197,7 @@ def db_stage_history_write(
 
 def db_commit_session_history(session_id, **kwargs):
     """Commit all pending writes for a session. Delegates to db.py."""
-    from packages.python.javdb_platform.db import db_commit_session_history as _f
+    from javdb.storage.db.db import db_commit_session_history as _f
     return _f(session_id, **kwargs)
 
 
@@ -206,7 +206,7 @@ def db_commit_session_history(session_id, **kwargs):
 
 def db_upsert_history(*args, **kwargs):
     """Legacy audit-mode upsert. Delegates to db.py."""
-    from packages.python.javdb_platform.db import db_upsert_history as _f
+    from javdb.storage.db.db import db_upsert_history as _f
     return _f(*args, **kwargs)
 
 
@@ -232,7 +232,7 @@ def rollback_history_for_session(
     _ensure_imports()
 
     # Import rollback logic from db.py (will be refactored later)
-    from packages.python.javdb_platform.db import _rollback_history
+    from javdb.storage.db.db import _rollback_history
 
     with _get_db(db_path or _HISTORY_DB_PATH) as conn:
         return _rollback_history(conn, session_id)
