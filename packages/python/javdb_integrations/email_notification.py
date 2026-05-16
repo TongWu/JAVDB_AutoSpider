@@ -2312,6 +2312,13 @@ Check attached logs for details.
     # is sourced from SQLite-local (forced via ``db_get_*_local``); the
     # banner makes it visible to operators that D1 and SQLite may have
     # diverged, and points at the reconcile tool.
+    #
+    # Gated to dual mode only: in d1-only there is no SQLite-side write
+    # path, so SQLite-vs-D1 drift cannot occur by construction. The
+    # ``d1_drift.jsonl`` file is still appended by operational tooling
+    # (``commit_session._emit_pending_verify``, sweep / cleanup metrics),
+    # but those records are audit trails, not drift events — surfacing
+    # them as a "DRIFT ADVISORY" in d1-only mode is misleading.
     try:
         from packages.python.javdb_platform.config_helper import cfg as _cfg
         backend = (
@@ -2321,7 +2328,7 @@ Check attached logs for details.
         ).strip().lower()
     except Exception:  # noqa: BLE001
         backend = 'sqlite'
-    if backend in ('dual', 'd1'):
+    if backend == 'dual':
         reports_dir_for_advisory = os.environ.get('REPORTS_DIR', _EMAIL_REPORTS_DIR)
         advisory = _build_dual_drift_advisory(reports_dir_for_advisory)
         if advisory:
