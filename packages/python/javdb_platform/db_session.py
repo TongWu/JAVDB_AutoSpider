@@ -150,7 +150,7 @@ def get_active_write_mode() -> str:
     Resolution order:
       1. Process-local override set by set_active_write_mode().
       2. Env var JAVDB_HISTORY_WRITE_MODE.
-      3. Default 'audit'.
+      3. Default 'pending' (per ADR-006).
 
     Returns:
         'audit' or 'pending'
@@ -168,8 +168,9 @@ def _resolve_write_mode(explicit: Optional[str]) -> str:
     Resolution order:
       1. Explicit argument (when set).
       2. JAVDB_HISTORY_WRITE_MODE env var.
-      3. Default 'audit' so the historic X3 path stays in effect for
-         every workflow that has not opted in.
+      3. Default 'pending' (per ADR-006). Workflows or operators that
+         still need the legacy audit path must set the env var or pass
+         it explicitly.
 
     Args:
         explicit: Explicit write mode override
@@ -184,7 +185,7 @@ def _resolve_write_mode(explicit: Optional[str]) -> str:
     if candidate is None:
         candidate = os.environ.get("JAVDB_HISTORY_WRITE_MODE")
     if not candidate:
-        return "audit"
+        return "pending"
     candidate = candidate.strip().lower()
     if candidate not in _ALLOWED_WRITE_MODES:
         raise ValueError(
