@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -140,7 +142,9 @@ async def auth_csrf_middleware(request: Request, call_next):
             # /api/explore/* endpoints are read-only HTML proxies consumed
             # by the SPA via fetch(); they carry no side-effects, so CSRF
             # protection is intentionally skipped for navigation requests.
-            if not request.url.path.startswith("/api/explore/"):
+            # /api/test/* endpoints only exist in TEST_MODE and are called
+            # by the E2E harness directly — no CSRF token available.
+            if not request.url.path.startswith("/api/explore/") and not request.url.path.startswith("/api/test/"):
                 _verify_csrf(request)
         except Exception as exc:
             if hasattr(exc, "status_code") and hasattr(exc, "detail"):
@@ -161,6 +165,10 @@ for router in (
     capabilities_router,
 ):
     app.include_router(router)
+
+if os.getenv("TEST_MODE") == "1":
+    from apps.api.routers.test_mode import router as test_mode_router
+    app.include_router(test_mode_router)
 
 
 __all__ = [
