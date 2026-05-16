@@ -10,6 +10,7 @@ Also writes report rows to SQLite when a ``session_id`` is provided.
 import csv
 import os
 import logging
+from typing import Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -26,11 +27,59 @@ def get_active_session():
     """Return the current active session_id (or None)."""
     return _active_session_id
 
+# Optional Rust-backed helpers (the helpers below are inlined from the former
+# bridges.rust_adapters.csv_adapter shim).
 try:
-    from javdb_rust_core import merge_row_data as _rs_merge_row_data
+    from javdb_rust_core import (
+        merge_row_data as _rs_merge_row_data,
+        create_csv_row as _rust_create_csv_row,
+        check_torrent_status as _rust_check_torrent_status,
+        collect_new_magnet_links as _rust_collect_new_magnet_links,
+    )
     RUST_CSV_AVAILABLE = True
 except ImportError:
     RUST_CSV_AVAILABLE = False
+    _rs_merge_row_data = None
+    _rust_create_csv_row = None
+    _rust_check_torrent_status = None
+    _rust_collect_new_magnet_links = None
+
+
+def rust_create_csv_row(*args, **kwargs):
+    if not RUST_CSV_AVAILABLE:
+        return None
+    try:
+        return _rust_create_csv_row(*args, **kwargs)
+    except Exception:
+        return None
+
+
+def rust_check_torrent_status(
+    row: dict, include_downloaded: bool = False,
+) -> Optional[Tuple[bool, bool, bool]]:
+    if not RUST_CSV_AVAILABLE:
+        return None
+    try:
+        result = _rust_check_torrent_status(row, include_downloaded)
+        if isinstance(result, tuple) and len(result) == 3:
+            return bool(result[0]), bool(result[1]), bool(result[2])
+    except Exception:
+        pass
+    return None
+
+
+def rust_collect_new_magnet_links(
+    row: dict, magnet_links: dict,
+) -> Optional[Tuple[Dict, Dict, Dict, Dict]]:
+    if not RUST_CSV_AVAILABLE:
+        return None
+    try:
+        result = _rust_collect_new_magnet_links(row, magnet_links)
+        if isinstance(result, tuple) and len(result) == 4:
+            return result
+    except Exception:
+        pass
+    return None
 
 # ---------------------------------------------------------------------------
 # merge_row_data

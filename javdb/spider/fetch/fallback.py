@@ -2,7 +2,7 @@
 
 from packages.python.javdb_platform.logging_config import get_logger
 from packages.python.javdb_core.parser import parse_detail
-from packages.python.javdb_platform.bridges.rust_adapters.parser_adapter import validate_index_html as _validate_index_html_fast
+from javdb.spider.parser import validate_index_html as _validate_index_html_fast
 from packages.python.javdb_core.url_helper import get_page_url as _url_helper_get_page_url
 from packages.python.javdb_platform.request_handler import ProxyBannedError, ProxyExhaustedError
 

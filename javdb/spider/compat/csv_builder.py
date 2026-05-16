@@ -10,7 +10,7 @@ from packages.python.javdb_ingestion.adapters import (
     create_redownload_row,
     should_include_torrent_in_csv,
 )
-from packages.python.javdb_platform.bridges.rust_adapters.csv_adapter import RUST_CSV_AVAILABLE
+from javdb.infra.csv_writer import RUST_CSV_AVAILABLE
 
 __all__ = [
     'RUST_CSV_AVAILABLE',

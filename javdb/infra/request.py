@@ -39,7 +39,7 @@ from packages.python.javdb_core.masking import (
     mask_proxies,
 )
 from packages.python.javdb_platform.proxy_policy import should_proxy_module
-from packages.python.javdb_platform.bridges.rust_adapters.parser_adapter import (
+from javdb.spider.parser import (
     is_login_page as _is_login_page,
     is_maintenance_page as _is_maintenance_page,
 )

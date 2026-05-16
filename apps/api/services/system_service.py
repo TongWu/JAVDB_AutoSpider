@@ -20,7 +20,7 @@ from apps.api.parsers import (
 )
 from apps.api.services import context
 from packages.python.javdb_platform.proxy_policy import resolve_proxy_override
-from packages.python.javdb_platform.bridges.rust_adapters.parser_adapter import (
+from javdb.spider.parser import (
     result_to_dict,
 )
 

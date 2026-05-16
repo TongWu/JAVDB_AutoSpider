@@ -4,7 +4,7 @@ from typing import Iterable, Optional
 
 from packages.python.javdb_platform.logging_config import get_logger, log_section
 from packages.python.javdb_platform.login_state_client import LoginStateUnavailable
-from packages.python.javdb_platform.bridges.rust_adapters.parser_adapter import is_login_page
+from javdb.spider.parser import is_login_page
 import packages.python.javdb_spider.runtime.state as state
 from packages.python.javdb_spider.runtime.config import (
     BASE_URL,
