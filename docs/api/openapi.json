@@ -103,6 +103,97 @@
         "title": "AdhocTaskPayload",
         "type": "object"
       },
+      "Build": {
+        "properties": {
+          "backend_version": {
+            "title": "Backend Version",
+            "type": "string"
+          },
+          "frontend_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frontend Version"
+          },
+          "git_sha": {
+            "title": "Git Sha",
+            "type": "string"
+          }
+        },
+        "required": [
+          "backend_version",
+          "git_sha"
+        ],
+        "title": "Build",
+        "type": "object"
+      },
+      "CapabilitiesResponse": {
+        "properties": {
+          "build": {
+            "$ref": "#/components/schemas/Build"
+          },
+          "deployment": {
+            "enum": [
+              "colocated",
+              "split",
+              "unknown"
+            ],
+            "title": "Deployment",
+            "type": "string"
+          },
+          "features": {
+            "$ref": "#/components/schemas/Features"
+          },
+          "gh_actions": {
+            "$ref": "#/components/schemas/GhActions"
+          },
+          "ingestion_mode": {
+            "enum": [
+              "local",
+              "github",
+              "dual"
+            ],
+            "title": "Ingestion Mode",
+            "type": "string"
+          },
+          "storage_backend": {
+            "enum": [
+              "sqlite",
+              "d1",
+              "dual"
+            ],
+            "title": "Storage Backend",
+            "type": "string"
+          },
+          "version": {
+            "default": "2.0.0",
+            "description": "Capabilities schema version",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ingestion_mode",
+          "gh_actions",
+          "storage_backend",
+          "features",
+          "deployment",
+          "build"
+        ],
+        "title": "CapabilitiesResponse",
+        "type": "object"
+      },
+      "ConfigResponse": {
+        "additionalProperties": true,
+        "description": "GET /api/config returns the masked runtime config dict verbatim.",
+        "title": "ConfigResponse",
+        "type": "object"
+      },
       "CrawlIndexPayload": {
         "properties": {
           "crawl_all": {
@@ -264,6 +355,21 @@
         "title": "DailyTaskPayload",
         "type": "object"
       },
+      "DismissHintPayload": {
+        "properties": {
+          "hint_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Hint Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "hint_id"
+        ],
+        "title": "DismissHintPayload",
+        "type": "object"
+      },
       "ExploreCookiePayload": {
         "properties": {
           "cookie": {
@@ -277,6 +383,25 @@
           "cookie"
         ],
         "title": "ExploreCookiePayload",
+        "type": "object"
+      },
+      "ExploreIndexStatusItem": {
+        "additionalProperties": true,
+        "properties": {
+          "downloaded": {
+            "title": "Downloaded",
+            "type": "boolean"
+          },
+          "has_uncensored": {
+            "title": "Has Uncensored",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "downloaded",
+          "has_uncensored"
+        ],
+        "title": "ExploreIndexStatusItem",
         "type": "object"
       },
       "ExploreIndexStatusPayload": {
@@ -303,6 +428,23 @@
           }
         },
         "title": "ExploreIndexStatusPayload",
+        "type": "object"
+      },
+      "ExploreIndexStatusResponse": {
+        "additionalProperties": true,
+        "properties": {
+          "items": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ExploreIndexStatusItem"
+            },
+            "title": "Items",
+            "type": "object"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ExploreIndexStatusResponse",
         "type": "object"
       },
       "ExploreMagnetPayload": {
@@ -375,6 +517,43 @@
         "title": "ExploreOneClickPayload",
         "type": "object"
       },
+      "ExploreOneClickResponse": {
+        "additionalProperties": true,
+        "properties": {
+          "selected": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "video_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Code"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "ExploreOneClickResponse",
+        "type": "object"
+      },
       "ExploreResolvePayload": {
         "properties": {
           "page_num": {
@@ -405,6 +584,123 @@
           "url"
         ],
         "title": "ExploreResolvePayload",
+        "type": "object"
+      },
+      "ExploreResolveResponse": {
+        "additionalProperties": true,
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "index": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index"
+          },
+          "page_type": {
+            "title": "Page Type",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "page_type"
+        ],
+        "title": "ExploreResolveResponse",
+        "type": "object"
+      },
+      "Features": {
+        "properties": {
+          "javdb_login": {
+            "title": "Javdb Login",
+            "type": "boolean"
+          },
+          "pikpak": {
+            "title": "Pikpak",
+            "type": "boolean"
+          },
+          "proxy_pool": {
+            "title": "Proxy Pool",
+            "type": "boolean"
+          },
+          "proxy_preview": {
+            "title": "Proxy Preview",
+            "type": "boolean"
+          },
+          "rclone": {
+            "title": "Rclone",
+            "type": "boolean"
+          },
+          "smtp": {
+            "title": "Smtp",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "pikpak",
+          "rclone",
+          "smtp",
+          "proxy_pool",
+          "javdb_login",
+          "proxy_preview"
+        ],
+        "title": "Features",
+        "type": "object"
+      },
+      "GhActions": {
+        "properties": {
+          "repo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repo"
+          },
+          "tier": {
+            "enum": [
+              "none",
+              "monitor",
+              "edit",
+              "admin"
+            ],
+            "title": "Tier",
+            "type": "string"
+          },
+          "token_configured": {
+            "title": "Token Configured",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tier",
+          "repo",
+          "token_configured"
+        ],
+        "title": "GhActions",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -478,6 +774,169 @@
         "title": "HtmlPayload",
         "type": "object"
       },
+      "JavdbLoginRefreshResponse": {
+        "additionalProperties": true,
+        "description": "Returned by POST /api/login/refresh \u2014 wraps the JavDB login CLI run.",
+        "properties": {
+          "output": {
+            "title": "Output",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "output"
+        ],
+        "title": "JavdbLoginRefreshResponse",
+        "type": "object"
+      },
+      "JobSummaryResponse": {
+        "additionalProperties": true,
+        "description": "Per-job summary returned by /api/tasks endpoints.",
+        "properties": {
+          "command": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Command"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "log": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Log"
+          },
+          "log_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Log Size"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "job_id",
+          "status"
+        ],
+        "title": "JobSummaryResponse",
+        "type": "object"
+      },
+      "ListTasksResponse": {
+        "additionalProperties": true,
+        "properties": {
+          "next_schedule": {
+            "$ref": "#/components/schemas/NextScheduleInfo"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/JobSummaryResponse"
+            },
+            "title": "Tasks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tasks",
+          "next_schedule"
+        ],
+        "title": "ListTasksResponse",
+        "type": "object"
+      },
       "LoginPayload": {
         "properties": {
           "password": {
@@ -498,6 +957,395 @@
           "password"
         ],
         "title": "LoginPayload",
+        "type": "object"
+      },
+      "LoginResponse": {
+        "additionalProperties": true,
+        "properties": {
+          "access_token": {
+            "title": "Access Token",
+            "type": "string"
+          },
+          "csrf_token": {
+            "title": "Csrf Token",
+            "type": "string"
+          },
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "refresh_token": {
+            "title": "Refresh Token",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "token_type": {
+            "title": "Token Type",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "access_token",
+          "refresh_token",
+          "token_type",
+          "expires_in",
+          "csrf_token",
+          "role",
+          "username"
+        ],
+        "title": "LoginResponse",
+        "type": "object"
+      },
+      "NextScheduleInfo": {
+        "additionalProperties": true,
+        "properties": {
+          "cron_pipeline": {
+            "title": "Cron Pipeline",
+            "type": "string"
+          },
+          "cron_spider": {
+            "title": "Cron Spider",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "cron_pipeline",
+          "cron_spider"
+        ],
+        "title": "NextScheduleInfo",
+        "type": "object"
+      },
+      "OnboardingStatusResponse": {
+        "properties": {
+          "completed": {
+            "title": "Completed",
+            "type": "boolean"
+          },
+          "required_missing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Missing",
+            "type": "array"
+          },
+          "skippable_missing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Skippable Missing",
+            "type": "array"
+          }
+        },
+        "required": [
+          "completed",
+          "required_missing",
+          "skippable_missing"
+        ],
+        "title": "OnboardingStatusResponse",
+        "type": "object"
+      },
+      "OnboardingTestPayload": {
+        "properties": {
+          "component": {
+            "enum": [
+              "javdb",
+              "qb",
+              "proxy",
+              "smtp"
+            ],
+            "title": "Component",
+            "type": "string"
+          }
+        },
+        "required": [
+          "component"
+        ],
+        "title": "OnboardingTestPayload",
+        "type": "object"
+      },
+      "OnboardingTestResponse": {
+        "properties": {
+          "component": {
+            "title": "Component",
+            "type": "string"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "component",
+          "ok",
+          "message"
+        ],
+        "title": "OnboardingTestResponse",
+        "type": "object"
+      },
+      "RefreshTokenResponse": {
+        "additionalProperties": true,
+        "properties": {
+          "access_token": {
+            "title": "Access Token",
+            "type": "string"
+          },
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "token_type": {
+            "title": "Token Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "access_token",
+          "token_type",
+          "expires_in"
+        ],
+        "title": "RefreshTokenResponse",
+        "type": "object"
+      },
+      "SessionCommitPayload": {
+        "properties": {
+          "drop_pending": {
+            "default": false,
+            "title": "Drop Pending",
+            "type": "boolean"
+          },
+          "force": {
+            "default": false,
+            "title": "Force",
+            "type": "boolean"
+          }
+        },
+        "title": "SessionCommitPayload",
+        "type": "object"
+      },
+      "SessionCommitResponse": {
+        "properties": {
+          "new_state": {
+            "title": "New State",
+            "type": "string"
+          },
+          "pending_dropped": {
+            "default": 0,
+            "title": "Pending Dropped",
+            "type": "integer"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "new_state"
+        ],
+        "title": "SessionCommitResponse",
+        "type": "object"
+      },
+      "SessionDetailResponse": {
+        "properties": {
+          "movies": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Movies",
+            "type": "array"
+          },
+          "session": {
+            "$ref": "#/components/schemas/SessionItem"
+          },
+          "torrents": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Torrents",
+            "type": "array"
+          }
+        },
+        "required": [
+          "session",
+          "movies",
+          "torrents"
+        ],
+        "title": "SessionDetailResponse",
+        "type": "object"
+      },
+      "SessionItem": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "run_attempt": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Attempt"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "write_mode": {
+            "title": "Write Mode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "state",
+          "write_mode",
+          "run_id",
+          "run_attempt",
+          "created_at"
+        ],
+        "title": "SessionItem",
+        "type": "object"
+      },
+      "SessionListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SessionItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "total_estimate": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Estimate"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "SessionListResponse",
+        "type": "object"
+      },
+      "SessionRollbackPayload": {
+        "properties": {
+          "dry_run": {
+            "default": true,
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "include_pending": {
+            "default": true,
+            "title": "Include Pending",
+            "type": "boolean"
+          },
+          "restore_from_audit": {
+            "default": true,
+            "title": "Restore From Audit",
+            "type": "boolean"
+          }
+        },
+        "title": "SessionRollbackPayload",
+        "type": "object"
+      },
+      "SessionRollbackResponse": {
+        "properties": {
+          "actions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "dry_run": {
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "summary": {
+            "additionalProperties": true,
+            "title": "Summary",
+            "type": "object"
+          }
+        },
+        "required": [
+          "session_id",
+          "dry_run",
+          "actions",
+          "summary"
+        ],
+        "title": "SessionRollbackResponse",
         "type": "object"
       },
       "SpiderJobPayload": {
@@ -631,6 +1479,261 @@
         "title": "SpiderJobPayload",
         "type": "object"
       },
+      "SpiderJobStatusResponse": {
+        "additionalProperties": true,
+        "properties": {
+          "cli_args": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Cli Args",
+            "type": "array"
+          },
+          "csv_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Csv Path"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "output": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output"
+          },
+          "pid": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pid"
+          },
+          "return_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Return Code"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "status",
+          "cli_args"
+        ],
+        "title": "SpiderJobStatusResponse",
+        "type": "object"
+      },
+      "SpiderJobSubmitResponse": {
+        "additionalProperties": true,
+        "properties": {
+          "cli_args": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Cli Args",
+            "type": "array"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "status",
+          "cli_args"
+        ],
+        "title": "SpiderJobSubmitResponse",
+        "type": "object"
+      },
+      "StatusOkResponse": {
+        "properties": {
+          "status": {
+            "default": "ok",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "title": "StatusOkResponse",
+        "type": "object"
+      },
+      "SystemStateGetResponse": {
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "key",
+          "value"
+        ],
+        "title": "SystemStateGetResponse",
+        "type": "object"
+      },
+      "SystemStatePutPayload": {
+        "properties": {
+          "key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Key",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "value"
+        ],
+        "title": "SystemStatePutPayload",
+        "type": "object"
+      },
+      "TaskStatsResponse": {
+        "additionalProperties": true,
+        "properties": {
+          "adhoc_running": {
+            "title": "Adhoc Running",
+            "type": "integer"
+          },
+          "daily_failed": {
+            "title": "Daily Failed",
+            "type": "integer"
+          },
+          "daily_running": {
+            "title": "Daily Running",
+            "type": "integer"
+          },
+          "daily_success": {
+            "title": "Daily Success",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "daily_success",
+          "daily_failed",
+          "daily_running",
+          "adhoc_running"
+        ],
+        "title": "TaskStatsResponse",
+        "type": "object"
+      },
+      "TriggerTaskResponse": {
+        "additionalProperties": true,
+        "description": "Returned by POST /api/tasks/daily and POST /api/tasks/adhoc.",
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "status",
+          "created_at"
+        ],
+        "title": "TriggerTaskResponse",
+        "type": "object"
+      },
       "UrlPayload": {
         "properties": {
           "page_num": {
@@ -734,6 +1837,53 @@
         ],
         "title": "VideoCodeSearchPayload",
         "type": "object"
+      },
+      "VideoCodeSearchResponse": {
+        "additionalProperties": true,
+        "properties": {
+          "exact_match_entry": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exact Match Entry"
+          },
+          "letter_suffix_fallback_searched": {
+            "title": "Letter Suffix Fallback Searched",
+            "type": "boolean"
+          },
+          "movies": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Movies",
+            "type": "array"
+          },
+          "search_url": {
+            "title": "Search Url",
+            "type": "string"
+          },
+          "video_code": {
+            "title": "Video Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "video_code",
+          "search_url",
+          "movies",
+          "letter_suffix_fallback_searched"
+        ],
+        "title": "VideoCodeSearchResponse",
+        "type": "object"
       }
     }
   },
@@ -761,7 +1911,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -787,7 +1939,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOkResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -803,13 +1957,36 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/RefreshTokenResponse"
+                }
               }
             },
             "description": "Successful Response"
           }
         },
         "summary": "Refresh Token"
+      }
+    },
+    "/api/capabilities": {
+      "get": {
+        "operationId": "get_capabilities_api_capabilities_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilitiesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Capabilities",
+        "tags": [
+          "capabilities"
+        ]
       }
     },
     "/api/config": {
@@ -819,7 +1996,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -845,7 +2024,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOkResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -969,7 +2150,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOkResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -1005,7 +2188,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ExploreIndexStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -1041,7 +2226,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ExploreOneClickResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -1116,7 +2303,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ExploreResolveResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -1152,7 +2341,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/VideoCodeSearchResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -1188,7 +2379,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOkResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -1278,7 +2471,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SpiderJobSubmitResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -1315,7 +2510,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SpiderJobStatusResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -1341,13 +2538,141 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/JavdbLoginRefreshResponse"
+                }
               }
             },
             "description": "Successful Response"
           }
         },
         "summary": "Refresh Javdb Session"
+      }
+    },
+    "/api/onboarding/complete": {
+      "post": {
+        "operationId": "mark_complete_api_onboarding_complete_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnboardingStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Mark Complete",
+        "tags": [
+          "onboarding"
+        ]
+      }
+    },
+    "/api/onboarding/dismiss-hint": {
+      "post": {
+        "operationId": "dismiss_hint_api_onboarding_dismiss_hint_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DismissHintPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Dismiss Hint Api Onboarding Dismiss Hint Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Dismiss Hint",
+        "tags": [
+          "onboarding"
+        ]
+      }
+    },
+    "/api/onboarding/status": {
+      "get": {
+        "operationId": "get_status_api_onboarding_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnboardingStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Status",
+        "tags": [
+          "onboarding"
+        ]
+      }
+    },
+    "/api/onboarding/test": {
+      "post": {
+        "operationId": "test_component_api_onboarding_test_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OnboardingTestPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnboardingTestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Test Component",
+        "tags": [
+          "onboarding"
+        ]
       }
     },
     "/api/parse/category": {
@@ -1566,6 +2891,311 @@
         "summary": "Api Parse Url"
       }
     },
+    "/api/sessions": {
+      "get": {
+        "operationId": "list_sessions_api_sessions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Sessions",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/api/sessions/{session_id}": {
+      "get": {
+        "operationId": "get_session_detail_api_sessions__session_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Session Detail",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/api/sessions/{session_id}/commit": {
+      "post": {
+        "operationId": "post_commit_api_sessions__session_id__commit_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionCommitPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionCommitResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Commit",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/api/sessions/{session_id}/rollback": {
+      "post": {
+        "operationId": "post_rollback_api_sessions__session_id__rollback_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionRollbackPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionRollbackResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Rollback",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/api/system/state": {
+      "get": {
+        "operationId": "get_state_api_system_state_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemStateGetResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get State",
+        "tags": [
+          "system-state"
+        ]
+      },
+      "put": {
+        "operationId": "put_state_api_system_state_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SystemStatePutPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemStateGetResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put State",
+        "tags": [
+          "system-state"
+        ]
+      }
+    },
     "/api/tasks": {
       "get": {
         "operationId": "list_tasks_api_tasks_get",
@@ -1585,7 +3215,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ListTasksResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -1621,7 +3253,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TriggerTaskResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -1657,7 +3291,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TriggerTaskResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -1683,7 +3319,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/TaskStatsResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -1710,7 +3348,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/JobSummaryResponse"
+                }
               }
             },
             "description": "Successful Response"
