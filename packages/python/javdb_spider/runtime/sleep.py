@@ -414,6 +414,16 @@ class MovieSleepManager:
         self._volume_min_mult = 1.0
         self._volume_max_mult = 1.0
 
+        # W6.A.2 — operator-pushed multiplier from `throttle_global` signal
+        # (W5.4). Reconciled on every heartbeat by ``state._apply_active_signals``;
+        # 1.0 when no signal is active.
+        self._global_factor: float = 1.0
+
+        # W6.A.2 — operator-pushed pause until wall-clock ms from
+        # `pause_all` signal. Each ``sleep()`` call blocks until this
+        # timestamp passes. 0 = not paused.
+        self._pause_until_ms: int = 0
+
         self._penalty_tracker = penalty_tracker
         self._throttle = throttle
         self._proxy_label = proxy_label
@@ -450,6 +460,38 @@ class MovieSleepManager:
         """Scale local throttle windows by runner count for degraded-mode safety."""
         if self._throttle is not None:
             self._throttle.set_runner_scale(count)
+
+    def set_global_factor(self, factor: float) -> None:
+        """W6.A.2 — apply the W5.4 ``throttle_global`` signal's multiplier.
+
+        ``factor=1.0`` (the default) means "no signal active". Larger
+        values multiply both ``sleep_min`` and ``sleep_max`` so workers
+        wait proportionally longer between requests. Clamped to
+        ``[1.0, COMPOSITE_MULTIPLIER_CAP]`` so a runaway operator value
+        can't blow the per-request sleep past ABSOLUTE_MAX_SLEEP.
+        """
+        try:
+            f = float(factor)
+        except (TypeError, ValueError):
+            return
+        f = max(1.0, min(f, COMPOSITE_MULTIPLIER_CAP))
+        with self._lock:
+            self._global_factor = f
+            self._recalc_range()
+
+    def set_pause_until_ms(self, expires_at_ms: int) -> None:
+        """W6.A.2 — apply the W5.4 ``pause_all`` signal's expiry.
+
+        ``0`` clears the pause. Each subsequent :meth:`sleep` call
+        blocks until ``time.time() * 1000 >= expires_at_ms`` before
+        doing its normal pacing.
+        """
+        try:
+            value = int(expires_at_ms)
+        except (TypeError, ValueError):
+            value = 0
+        with self._lock:
+            self._pause_until_ms = max(0, value)
 
     # -- factor setters ----------------------------------------------------
 
@@ -499,9 +541,20 @@ class MovieSleepManager:
 
         The dynamic ``penalty_factor`` is applied at sampling time so that
         it tracks real-time CF events.
+
+        W6.A.2 — the operator-pushed ``_global_factor`` (from a W5.4
+        ``throttle_global`` signal) is composed with the volume multiplier
+        before the COMPOSITE_MULTIPLIER_CAP. Both multipliers can pile up
+        but never push the effective range past the cap.
         """
-        eff_min_mult = min(self._volume_min_mult, COMPOSITE_MULTIPLIER_CAP)
-        eff_max_mult = min(self._volume_max_mult, COMPOSITE_MULTIPLIER_CAP)
+        eff_min_mult = min(
+            self._volume_min_mult * self._global_factor,
+            COMPOSITE_MULTIPLIER_CAP,
+        )
+        eff_max_mult = min(
+            self._volume_max_mult * self._global_factor,
+            COMPOSITE_MULTIPLIER_CAP,
+        )
         self.sleep_min = round(self.base_min * eff_min_mult, 2)
         self.sleep_max = round(self.base_max * eff_max_mult, 2)
 
@@ -772,12 +825,22 @@ class MovieSleepManager:
         outage cannot block the spider.
 
         Returns the total time spent (sleep + any throttle wait).
+
+        W6.A.2 — when a ``pause_all`` signal is active
+        (``self._pause_until_ms`` in the future), the call blocks until
+        the pause expires BEFORE doing its normal pacing. The pause is
+        not racy against signal updates: a longer pause arriving mid-
+        sleep won't shorten the current sleep, and a shorter pause that
+        arrives mid-sleep takes effect on the NEXT call (acceptable for
+        the heartbeat-driven signal model).
         """
+        pause_wait = self._wait_for_pause()
+
         wait_seconds, used_coordinator = self.plan_sleep()
 
         if used_coordinator:
             time.sleep(wait_seconds)
-            return wait_seconds
+            return pause_wait + wait_seconds
 
         time.sleep(wait_seconds)
 
@@ -787,7 +850,27 @@ class MovieSleepManager:
             if throttle_wait > 0:
                 logger.debug("Throttle additional wait: %.1fs", throttle_wait)
 
-        return wait_seconds + throttle_wait
+        return pause_wait + wait_seconds + throttle_wait
+
+    def _wait_for_pause(self) -> float:
+        """Block while a ``pause_all`` signal is active. Returns ms slept."""
+        with self._lock:
+            target = self._pause_until_ms
+        if target <= 0:
+            return 0.0
+        now_ms = time.time() * 1000.0
+        remaining_ms = target - now_ms
+        if remaining_ms <= 0:
+            return 0.0
+        # Cap each iteration at ABSOLUTE_MAX_SLEEP to remain interruptible
+        # by signal updates that shorten the pause.
+        wait_s = min(remaining_ms / 1000.0, ABSOLUTE_MAX_SLEEP)
+        logger.info(
+            "W5.4 pause_all signal active; waiting %.1fs until %d",
+            wait_s, target,
+        )
+        time.sleep(wait_s)
+        return wait_s
 
 
 def _resolve_base_range():

@@ -39,6 +39,7 @@ from packages.python.javdb_platform.runner_registry_client import (
     ConfigSnapshot,
     RunnerRegistryClient,
     RunnerRegistryUnavailable,
+    Signal,
     create_runner_registry_client_from_env,
     proxy_pool_hash,
 )
@@ -840,6 +841,105 @@ def _apply_config_snapshot(snap: ConfigSnapshot) -> None:
     )
 
 
+# ---------------------------------------------------------------------------
+# W6.A.2 — W5.4 active signals state
+# ---------------------------------------------------------------------------
+
+# Proxies the spider has banned in response to a `ban_proxy` signal. Tracked
+# so the same signal arriving on every heartbeat doesn't keep re-issuing
+# ban_proxy() calls.
+_signal_banned_proxies: set = set()
+# Serialises mutations to the three signal-state fields above so concurrent
+# heartbeat ticks (e.g., a re-register racing the main loop) cannot
+# interleave reads and writes.
+_signal_lock = threading.Lock()
+
+
+def _apply_active_signals(signals: list) -> None:
+    """Reconcile the runtime state against the W5.4 ``active_signals`` set.
+
+    Signals are STATE, not events: every heartbeat delivers the full
+    current set. This function diff'd against the last-applied state
+    each tick:
+
+    * ``throttle_global`` (factor) → ``movie_sleep_mgr.set_global_factor``.
+      When no such signal exists, factor resets to 1.0.
+    * ``ban_proxy`` (proxy_id, ttl) → ``proxy_pool.ban_proxy(name)``.
+      Once banned, the runner does NOT unban (ProxyPool bans are
+      session-permanent today). Signal TTL is intentionally not
+      honoured locally — see plan W6 trade-off #1.
+    * ``pause_all`` (ttl) → ``movie_sleep_mgr.set_pause_until_ms``.
+      When no such signal exists, the pause expiry resets to 0.
+    * ``resume`` never appears in this list (Worker consumes it as a
+      clear-all directive); a list with no other signals is equivalent.
+
+    Fail-open: every individual signal's application is wrapped in
+    try/except so a single malformed signal cannot disable the rest.
+    """
+    if signals is None:
+        signals = []
+
+    desired_factor = 1.0
+    desired_pause_until_ms = 0
+    desired_bans: set = set()
+    for sig in signals:
+        try:
+            kind = getattr(sig, "kind", None)
+            if kind == "throttle_global":
+                f = getattr(sig, "factor", None)
+                if f is not None:
+                    desired_factor = max(desired_factor, float(f))
+            elif kind == "pause_all":
+                exp = int(getattr(sig, "expires_at_ms", 0) or 0)
+                if exp > desired_pause_until_ms:
+                    desired_pause_until_ms = exp
+            elif kind == "ban_proxy":
+                pid = getattr(sig, "proxy_id", None)
+                if pid:
+                    desired_bans.add(str(pid))
+            # ``resume`` is consumed Worker-side; clients never see it in
+            # ``active_signals``. An empty list naturally restores defaults.
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "Skipping malformed signal during apply: %r", sig,
+                exc_info=True,
+            )
+
+    # Apply throttle_global.
+    try:
+        from packages.python.javdb_spider.runtime.sleep import (
+            movie_sleep_mgr as _mgr,
+        )
+        _mgr.set_global_factor(desired_factor)
+        _mgr.set_pause_until_ms(desired_pause_until_ms)
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "Failed to apply throttle_global / pause_all signal",
+            exc_info=True,
+        )
+
+    # Apply ban_proxy deltas: ban anything new, never unban (session-permanent).
+    with _signal_lock:
+        new_bans = desired_bans - _signal_banned_proxies
+        _signal_banned_proxies.update(desired_bans)
+
+    if new_bans:
+        pool = global_proxy_pool
+        if pool is not None:
+            for proxy_id in new_bans:
+                try:
+                    pool.ban_proxy(proxy_id)
+                    logger.warning(
+                        "W5.4 ban_proxy signal applied: %s now banned",
+                        proxy_id,
+                    )
+                except Exception:  # noqa: BLE001
+                    logger.warning(
+                        "Failed to apply ban_proxy signal for %s",
+                        proxy_id, exc_info=True,
+                    )
+
+
 def _runner_heartbeat_loop(client: RunnerRegistryClient, holder_id: str) -> None:
     """Background thread: ping ``/heartbeat`` until stopped.
 
@@ -896,6 +996,7 @@ def _runner_heartbeat_loop(client: RunnerRegistryClient, holder_id: str) -> None
                 _update_sleep_runner_count(len(rereg.active_runners))
                 if rereg.config is not None:
                     _apply_config_snapshot(rereg.config)
+                _apply_active_signals(rereg.active_signals)
             except RunnerRegistryUnavailable:
                 logger.debug("Runner-registry re-register unavailable; will retry")
             except Exception:  # noqa: BLE001
@@ -912,6 +1013,7 @@ def _runner_heartbeat_loop(client: RunnerRegistryClient, holder_id: str) -> None
         _update_sleep_runner_count(result.active_runners_count)
         if result.config is not None:
             _apply_config_snapshot(result.config)
+        _apply_active_signals(result.active_signals)
 
 
 def _unregister_runner_at_exit() -> None:
