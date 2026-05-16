@@ -46,3 +46,15 @@ def test_each_fe_consumed_endpoint_has_typed_200_response(admin_client):
             f"{method.upper()} {path} returns untyped object — add response_model= "
             f"(schema was {schema_block!r})"
         )
+
+
+def test_login_refresh_and_sync_cookie_exist_and_typed(admin_client):
+    schema = admin_client.get("/openapi.json").json()
+    paths = schema["paths"]
+    assert "/api/login/refresh" in paths
+    op = paths["/api/login/refresh"]["post"]
+    assert "$ref" in op["responses"]["200"]["content"]["application/json"]["schema"]
+
+    assert "/api/explore/sync-cookie" in paths
+    op = paths["/api/explore/sync-cookie"]["post"]
+    assert "$ref" in op["responses"]["200"]["content"]["application/json"]["schema"]
