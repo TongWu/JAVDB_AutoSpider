@@ -121,3 +121,6 @@ proxy_coordinator/
 
 # Cursor rules
 .cursor/
+
+# Superpowers brainstorm mockups
+.superpowers/
