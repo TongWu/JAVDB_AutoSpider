@@ -96,6 +96,31 @@ def proxy_pool_hash(proxy_pool_json: str) -> str:
     ).hexdigest()[:16]
 
 
+def proxy_pool_summary_for_registry(pool) -> list[dict]:
+    """Serialise the in-memory PROXY_POOL list to the Worker register payload.
+
+    Returns ``[{id, name}]`` items only. URLs, credentials, and any other
+    PROXY_POOL fields are intentionally dropped — the Worker stores the
+    summary in ``proxies_seen`` for dashboard display, and no part of the
+    Worker handles or needs the upstream proxy URL.
+
+    See ADR-004 for the security rationale (no creds cross the
+    autospider/Worker boundary).
+    """
+    if not pool:
+        return []
+    out: list[dict] = []
+    for entry in pool:
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get("name")
+        if not isinstance(name, str) or not name.strip():
+            continue
+        clean = name.strip()
+        out.append({"id": clean, "name": clean})
+    return out
+
+
 class RunnerRegistryUnavailable(DOClientUnavailable):
     """Raised when the runner-registry Worker cannot be reached or returns an error.
 
