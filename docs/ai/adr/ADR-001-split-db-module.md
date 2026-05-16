@@ -256,9 +256,9 @@ def _ensure_imports():
 
 ## 参考资料 (References)
 
-- [CONTEXT.md](../../CONTEXT.md) — 领域术语词汇表
-- [CLAUDE.md](../../CLAUDE.md) — 项目概览
-- [docs/D1_ROLLBACK.md](../D1_ROLLBACK.md) — 存储后端架构
+- [CONTEXT.md](../../../CONTEXT.md) — 领域术语词汇表
+- [CLAUDE.md](../../../CLAUDE.md) — 项目概览
+- [docs/en/ops/d1-rollback.md](../../en/ops/d1-rollback.md) — 存储后端架构
 - [A Philosophy of Software Design](https://web.stanford.edu/~ouster/cgi-bin/book.php) — 深度模块理论
 
 ---

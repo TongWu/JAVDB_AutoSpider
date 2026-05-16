@@ -80,7 +80,7 @@ maturin --version
 安装完成后，在项目根目录运行：
 
 ```bash
-cd rust_core
+cd packages/rust/javdb_rust_core
 maturin develop --release
 ```
 
@@ -140,7 +140,7 @@ maturin --version
 python3 --version
 
 # 尝试编译项目
-cd rust_core
+cd packages/rust/javdb_rust_core
 cargo check
 ```
 
