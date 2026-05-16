@@ -8,7 +8,7 @@
 - 手动 `RollbackD1.yml` 工作流。
 - "重新运行失败任务"安全矩阵——告诉你何时可以安全地点击 GitHub 原生的重试按钮而无需先执行 rollback。
 - 直接 CLI 使用方式及 audit 表取证工作流。
-- Phase 3 告警 + 自动回退（`pending_session_verify`、健康快照、`pending_mode_disabled_until`）。
+- Phase 3 告警 + ADR-006 **告警-暂停**（`pending_session_verify`、健康快照、`pipeline_paused_until`）。原 audit 自动回退已由 ADR-006 PR-D 于 2026-05-16 退役；严重告警现在暂停 pipeline 而非降级到 audit 模式。
 - 6 步预升级验证手册。
 - **附录 A（Phase 4，2026-05-13）** — 遗留 audit 废弃时间线、日落日期及新的 `audit_archive` 定时任务。
 
@@ -43,7 +43,7 @@
   - [清理调度矩阵（Phase 3）](#清理调度矩阵phase-3)
   - [Pending 模式指标（`pending_session_verify`）](#pending-模式指标pending_session_verify)
   - [邮件 Pending 模式验证 + 健康快照](#邮件-pending-模式验证--健康快照)
-  - [自动回退（`.publish-config.yml`）](#自动回退publish-configyml)
+  - [告警 + 暂停（`.publish-config.yml`）— ADR-006 PR-D](#告警--暂停publish-configyml-adr-006-pr-d)
   - [操作员恢复 SOP](#操作员恢复-sop)
 - [验证手册（dev 分支 — Phase 3，6 步）](#验证手册dev-分支--phase-36-步)
 - [文件索引](#文件索引)
@@ -73,7 +73,7 @@
 |---|---|---|
 | `ReportMovies`, `ReportTorrents`, `ReportSessions`, `SpiderStats`, `UploaderStats`, `PikpakStats` | 按 `SessionId` 级联删除；拒绝删除 `Status='committed'` 的 `ReportSessions` 行 | `ReportSessions.Status TEXT DEFAULT 'in_progress'`；Phase 3 新增 `WriteMode` 和 `Status` 的 `finalizing` 值 |
 | `MovieHistory`, `TorrentHistory`（Pending 模式 — Phase 3 默认） | 所有写入先暂存到 `PendingMovie/TorrentHistoryWrites`；提交时一次性重算派生字段并 UPSERT 到正式表；回滚时对 `Status='in_progress'` 的行执行 `DELETE`，对 `Status='finalizing'` 的行执行 `db_resume_finalizing_session`。无需 audit 重放。 | `PendingMovieHistoryWrites` 和 `PendingTorrentHistoryWrites` 表（各含显式应用生成的雪花 `Seq`、`ApplyState`、`SessionId` / `RunId` / `RunAttempt`） |
-| `MovieHistory`, `TorrentHistory`（Audit 回退 — **自 Phase 4 起废弃，2026-08-13 日落**） | 反向重放 `*_Audit` 表以撤销每个 `INSERT` / `UPDATE` / `DELETE`；跳过当前 `SessionId` 不再匹配的行（漂移）。通过 `pending_mode_disabled_until` 自动回退或工作流 `write_mode_override` 启用。Audit 表为只读取证——参见[附录 A](#appendix-a-legacy-audit-fallback-sunset-2026-08)。 | 每个正式表上的 `SessionId INTEGER`；`MovieHistoryAudit` 和 `TorrentHistoryAudit` 表（自 2026-05-13 起只读，由 `scripts/audit_archive.py` 每周归档） |
+| `MovieHistory`, `TorrentHistory`（Audit 回退 — **已废弃，退役由 ADR-005 决定**） | 反向重放 `*_Audit` 表以撤销每个 `INSERT` / `UPDATE` / `DELETE`；跳过当前 `SessionId` 不再匹配的行（漂移）。仅可通过工作流 `write_mode_override=audit` 或 `JAVDB_HISTORY_WRITE_MODE=audit` 环境变量显式启用。ADR-006 PR-D（2026-05-16）已移除之前 `pending_mode_disabled_until` 自动切 audit 的机制。Audit 表为只读取证——参见[附录 A](#appendix-a-legacy-audit-fallback-sunset-2026-08)。 | 每个正式表上的 `SessionId INTEGER`；`MovieHistoryAudit` 和 `TorrentHistoryAudit` 表（自 2026-05-13 起只读，由 `scripts/audit_archive.py` 每周归档） |
 | `PikpakHistory`, `DedupRecords`, `InventoryAlignNoExactMatch` | 删除按 session 范围划定的行。`DedupRecords` 的软删除/孤立更新会先将其前像快照到 `DedupRecordsRollback_<session_id>`，因此回滚可恢复已有行并删除失败 session 创建的行 | 每个表上的 `SessionId INTEGER`；按 session 的 `DedupRecordsRollback_<session_id>` 备份表 |
 | `RcloneInventory` | 按 session 暂存表 → 原子 D1 批量交换。失败的扫描丢弃暂存表；正式表永远不会看到半写入的扫描 | `RcloneInventoryStaging_<session_id>`（每次运行创建/丢弃） |
 
@@ -454,30 +454,41 @@ in_progress ─(db_begin_finalize)─▶ finalizing ─(db_finish_commit)─▶ 
 邮件步骤（[`packages/python/javdb_integrations/email_notification.py`](../../../packages/python/javdb_integrations/email_notification.py)）现在读取 `reports/D1/d1_drift.jsonl`，限制为 `$GITHUB_RUN_ID` / `$GITHUB_RUN_ATTEMPT` 拥有的 `pending_session_verify` 记录，并渲染 **Pending Mode Verification** 正文块，列出每个 pending session 的计数。任何阈值违规会在行内标记（`[CRITICAL]` / `[ALERT]`）并在邮件主题前添加前缀：
 
 - **软告警**（主题 `[PENDING-ALERT] (...)`）— `commit_attempts > Phase3_max`、`worker_stage_rollback_failed > 0`、`staged_claim_orphan_count > 0`、`d1_request_count_audit_baseline_ratio > 1.8`、或 `final_status='finalizing'`。
-- **严重告警**（主题 `[PENDING-ROLLBACK-AUTO] (...)`）— `pending_residual_count > 0`、`derived_recompute_drift > 0`、或 `cleanup_path_mismatch_count > 0`。同时触发下方的[自动回退](#自动回退publish-configyml)。
+- **严重告警**（主题 `[PENDING-PAUSE] (...)`，ADR-006 之前为 `[PENDING-ROLLBACK-AUTO]`）— `pending_residual_count > 0`、`derived_recompute_drift > 0`、或 `cleanup_path_mismatch_count > 0`。同时触发下方的[告警 + 暂停](#告警--暂停publish-configyml-adr-006-pr-d)。
 
 当 [`scripts/aggregate_pending_health.py`](../../../scripts/aggregate_pending_health.py) 生成了 `reports/D1/pending_health_24h.json` 时，**健康快照**块跟随在每 session 表后面。DailyIngestion 和 AdHocIngestion 都在 `Run Email Notification` 之前调用此聚合器，使快照覆盖过去 24 小时的 pending session 以及过期定时任务的 resume 成功/失败。
 
 Phase 2 阈值仍可通过环境变量 `JAVDB_PENDING_ALERT_PHASE=2` 使用——在 TestIngestion canary 预热期间有用。
 
-### 自动回退（`.publish-config.yml`）
+### 告警 + 暂停（`.publish-config.yml`）— ADR-006 PR-D
 
-DailyIngestion / AdHocIngestion 中的**严重** pending 告警会运行邮件任务中的 `Auto-fallback on critical pending alert` 步骤。它调用 [`scripts/pending_mode_auto_fallback.py`](../../../scripts/pending_mode_auto_fallback.py)，写入（或延长）：
+DailyIngestion / AdHocIngestion 中的**严重** pending 告警会运行邮件任务中的 `Alert + pause on critical pending alert (ADR-006)` 步骤。它调用 [`scripts/pending_mode_alert_and_pause.py`](../../../scripts/pending_mode_alert_and_pause.py)，写入（或延长）：
 
 ```yaml
-# Phase 3 auto-fallback marker — written by scripts/pending_mode_auto_fallback.py.
-pending_mode_disabled_until: '2026-05-11T07:00:00+00:00'
-pending_mode_disabled_reason: 'DailyIngestion run 12345: pending_residual_count=2 session=67890'
+# ADR-006 pause marker — written by scripts/pending_mode_alert_and_pause.py.
+pipeline_paused_until: '2026-05-17T07:00:00+00:00'
+pipeline_paused_reason: 'DailyIngestion run 12345: pending_residual_count=2 session=67890'
 ```
 
-到 `.publish-config.yml`，然后提交 + 推送更改，使**下一次**摄取运行的 `Resolve effective WriteMode` 步骤选择 `audit` 而非默认的 `pending`。窗口为 24 小时；操作员通过回滚自动提交或等待计时器过期来恢复 pending 路径。
+到 `.publish-config.yml`，然后提交 + 推送更改。**下一次**计划或手动分发的摄取运行会命中 `setup` job 新增的 `Pipeline pause gate (ADR-006)` 步骤，看到标记时间戳仍在未来时短路：每个下游 job（`run-pipeline`、`cleanup-on-failure`、`email-notification`、`commit-results`）都基于 `needs.setup.outputs.paused != 'true'` 跳过。workflow 干净退出，避免定时任务把整个 workflow 永久标记为失败。
+
+**为什么用暂停而非回退？** 详见 [ADR-006](../../ai/adr/ADR-006-pending-mode-default-rollout.md) §D3：旧的 audit 自动回退把 Pending Mode 故障静默降级到一个"看起来工作但不对劲"的状态，移除了修复根因的压力。暂停强迫操作员看到事故并显式介入，事件永远可见。
+
+窗口为 24 小时。恢复步骤：
+
+1. 调查告警（根因记录在该运行的 `reports/D1/d1_drift.jsonl`）。
+2. 修复底层 bug。
+3. 从 `.publish-config.yml` 删除 `# ADR-006 pause marker` 整段（或 `git revert` 引擎暂停的自动提交）。
+4. Commit + push。下一次运行正常拾起。
+
+如果不动 marker，24 小时后自动过期，pipeline 自动恢复——但仅在根因验证已修复时才这么做，否则下次运行会再次触发同一告警。
 
 ### 操作员恢复 SOP
 
 | 症状 | 查找内容 | 修复方法 |
 |---|---|---|
 | 邮件主题仅有 `[PENDING-ALERT]` | 正文中的 `commit_attempts`、ratio 或 finalizing 标志 | 检查 `reports/D1/d1_drift.jsonl`；通常是暂时性的（Worker 租约超时）。无自动操作。 |
-| 邮件主题为 `[PENDING-ROLLBACK-AUTO]` | `pending_residual_count`、`derived_recompute_drift`、`cleanup_path_mismatch_count` | 系统已自动禁用 pending 24 小时。调查、修复，然后回滚 `.publish-config.yml` 上的自动提交或等待。 |
+| 邮件主题为 `[PENDING-PAUSE]`（ADR-006 之前为 `[PENDING-ROLLBACK-AUTO]`） | `pending_residual_count`、`derived_recompute_drift`、`cleanup_path_mismatch_count` | Pipeline 已通过 `.publish-config.yml` 中的 `pipeline_paused_until` 暂停 24 小时。调查 `reports/D1/d1_drift.jsonl` 中的根因，修复后从 `.publish-config.yml` 删除 pause marker（或 `git revert` 自动提交）。让 marker 过期但不修根因只会让下次运行再次触发同一告警。 |
 | `final_status='finalizing'` 连续两个定时任务周期 | StaleSessionCleanup 无法将 session 驱动到 `committed` | `python3 -m apps.cli.commit_session --session-id <id> --shadow-audit --log-level DEBUG`；如果 3 次尝试仍失败，`python3 -m apps.cli.rollback --session-id <id> --no-auto-resume-finalizing --apply` 标记为 `failed`。 |
 | `worker_stage_rollback_failed > 0` | Rollback CLI 无法连接到 MovieClaim coordinator | 检查 coordinator 健康状态；孤立清扫定时任务将在 4 小时内对账。 |
 | 已提交 session 上 `pending_residual_count > 0` | 半应用的 commit，残留 `ApplyState='pending'` 行 | 正式表已经正确（`committed` 翻转是事实来源）；残留行只需清除。安全选项按优先级排列：(1) 手动 `DELETE FROM PendingMovieHistoryWrites WHERE SessionId=? AND ApplyState='pending'` 加上 `PendingTorrentHistoryWrites` 上的相同操作，在断言 `SELECT Status FROM ReportSessions WHERE Id=?` 返回 `'committed'` 之后执行——这些表从不参与正式读取，因此 DELETE 是非破坏性的；(2) 一次性 Python：`python3 -c "from packages.python.javdb_platform.db import db_commit_session_history; print(db_commit_session_history(<id>))"` — 通过提交时使用的相同 applied-cleanup 路径排空然后删除。（`apps.cli.commit_session` 在 session 行已为 `committed` 时跳过排空，因此 CLI 路由**不会**清除残留。） |
@@ -501,13 +512,13 @@ pending_mode_disabled_reason: 'DailyIngestion run 12345: pending_residual_count=
    - 邮件主题前缀 `[PENDING-ALERT]`（`commit_attempts=2`）；正文确认恢复成功。
 4. **强制软告警** — 以环境覆盖 `JAVDB_PENDING_BATCH_SIZE=1` 分发（强制每行 N 次 D1 调用）。预期结果：
    - `d1_request_count_audit_baseline_ratio > 1.8` 触发 `[PENDING-ALERT]`。
-   - **无**自动回退（软告警仅标注主题）。
-5. **强制严重告警** — 在 `dev` 上临时猴子补丁 `_commit_one_movie` 写入错误的 `PerfectMatchIndicator`，确保 `JAVDB_PENDING_SHADOW_AUDIT=1`。重新分发。预期结果：
-   - 邮件主题前缀 `[PENDING-ROLLBACK-AUTO]`。
-   - `.publish-config.yml` 通过邮件任务的自动回退步骤获得 `pending_mode_disabled_until` 块。
-   - 立即重新分发：`Resolve effective WriteMode` 报告 `audit`；spider 回退到遗留 X3。
-6. **手动恢复** — `git revert` 自动回退提交（或手动删除 `pending_mode_disabled_*` 行）并再次分发。预期结果：
-   - `Resolve effective WriteMode` 再次报告 `pending`。
+   - **无**暂停触发（软告警仅标注主题）。
+5. **强制严重告警（ADR-006 暂停路径）** — 在 `dev` 上临时猴子补丁 `_commit_one_movie` 写入错误的 `PerfectMatchIndicator`，确保 `JAVDB_PENDING_SHADOW_AUDIT=1`。重新分发。预期结果：
+   - 邮件主题前缀 `[PENDING-PAUSE]`。
+   - `.publish-config.yml` 通过邮件任务的 `Alert + pause on critical pending alert (ADR-006)` 步骤获得 `pipeline_paused_until` 块。
+   - 立即重新分发：`setup` job 中的 `Pipeline pause gate (ADR-006)` 看到未来时间戳，emit `paused=true`，所有下游 job 跳过。workflow 显示绿色但 spider / uploader / pikpak 都未执行。
+6. **手动恢复** — `git revert` 暂停提交（或手动删除 `# ADR-006 pause marker` 整块）并再次分发。预期结果：
+   - `Pipeline pause gate (ADR-006)` 报告 `paused=false`；下游 job 正常执行。
    - 验证行干净；邮件无告警前缀。
 
 如果以上六步中任何一步偏离预期结果，**不要**将 Phase 3 升级到 `main`。捕获失败运行的验证行 + rollback 日志并提交 issue。
@@ -520,7 +531,7 @@ pending_mode_disabled_reason: 'DailyIngestion run 12345: pending_residual_count=
 
 - CLI：[`apps/cli/rollback.py`](../../../apps/cli/rollback.py)、[`apps/cli/commit_session.py`](../../../apps/cli/commit_session.py)、[`apps/cli/cleanup_stale_in_progress.py`](../../../apps/cli/cleanup_stale_in_progress.py)
 - 核心辅助函数：[`packages/python/javdb_platform/db.py`](../../../packages/python/javdb_platform/db.py)（`db_stage_history_write`、`db_commit_session_history`、`db_resume_finalizing_session`、`db_rollback_session`、`db_mark_session_committed`、`db_find_in_progress_sessions`、`db_find_stale_pending_sessions`、`db_pending_session_stats`、`_audit_record_movie_change`、`_rollback_history` 等）
-- Phase 3 脚本：[`scripts/aggregate_pending_health.py`](../../../scripts/aggregate_pending_health.py)、[`scripts/pending_mode_auto_fallback.py`](../../../scripts/pending_mode_auto_fallback.py)
+- Phase 3 脚本：[`scripts/aggregate_pending_health.py`](../../../scripts/aggregate_pending_health.py)、[`scripts/pending_mode_alert_and_pause.py`](../../../scripts/pending_mode_alert_and_pause.py) *（ADR-006 PR-D 替代了已退役的 `pending_mode_auto_fallback.py`）*
 - Phase 4 脚本：[`scripts/audit_archive.py`](../../../scripts/audit_archive.py)、[`scripts/cleanup_stale_session_audits.py`](../../../scripts/cleanup_stale_session_audits.py)（自 2026-05-13 起只读）
 - 邮件集成：[`packages/python/javdb_integrations/email_notification.py`](../../../packages/python/javdb_integrations/email_notification.py)（`_format_pending_verify_section`、`_evaluate_pending_alerts`、`_format_health_snapshot_section`）
 - 工作流：[`.github/workflows/DailyIngestion.yml`](../../../.github/workflows/DailyIngestion.yml)、[`.github/workflows/AdHocIngestion.yml`](../../../.github/workflows/AdHocIngestion.yml)、[`.github/workflows/RollbackD1.yml`](../../../.github/workflows/RollbackD1.yml)、[`.github/workflows/StaleSessionCleanup.yml`](../../../.github/workflows/StaleSessionCleanup.yml)、[`.github/workflows/AuditArchive.yml`](../../../.github/workflows/AuditArchive.yml)
@@ -531,8 +542,8 @@ pending_mode_disabled_reason: 'DailyIngestion run 12345: pending_residual_count=
 
 ## Appendix A — 遗留 audit 回退（2026-08 日落）
 
-> **状态** — *自 Phase 4 起废弃，2026-05-13。*
-> **日落日期** — *2026-08-13。* 届时 audit 回退将被完全移除：`JAVDB_HISTORY_WRITE_MODE=audit` 在 session 创建时将被拒绝，`_rollback_history` 的 audit 重放路径将被删除，`MovieHistoryAudit` / `TorrentHistoryAudit` 表将从 schema 中移除。在该日期之后仍固定 `audit` 的任何 session 将拒绝启动。
+> **状态** — *自 Phase 4 起废弃，2026-05-13。退役现由 [ADR-005](../../ai/adr/ADR-005-db-py-retirement-and-repo-pattern.md) D10 gate 决定，不再绑定固定日历日期。* 原 2026-08-13 日落已被取代：gate 在 [ADR-006](../../ai/adr/ADR-006-pending-mode-default-rollout.md) 的 30 天 pending 默认 bake 期顺利完成后触发（要求：尾部 30 天无 `WriteMode='audit'` session、无孤儿 audit 行、告警-暂停脚本触发次数 ≤ 1 次/月）。
+> **退役后的样子** — `JAVDB_HISTORY_WRITE_MODE=audit` 在 session 创建时将被拒绝，`_rollback_history` 的 audit 重放路径将被删除，`MovieHistoryAudit` / `TorrentHistoryAudit` 表将从 schema 中移除（migration `v14`）。
 
 ### A.1 时间线
 
@@ -542,8 +553,9 @@ pending_mode_disabled_reason: 'DailyIngestion run 12345: pending_residual_count=
 | 2026-05-09 | Phase 0 / 1 / 2 — `PendingMovie/TorrentHistoryWrites` schema + pending 模式写入路径在 `JAVDB_HISTORY_WRITE_MODE` 后交付。 |
 | 2026-05-11 | Phase 3 — Daily / AdHoc / TestIngestion 默认切换为 `WriteMode='pending'`；audit 回退保留用于紧急分发。 |
 | **2026-05-13** | **Phase 4 — 宣布 Audit 废弃。** `db_upsert_history` 发出 `DeprecationWarning`；`JAVDB_AUDIT_WRITES_DISABLED` 终止开关可用；`scripts/cleanup_stale_session_audits.py` 切换为只读；`scripts/audit_archive.py` 定时任务开始运行。 |
-| 2026-07-13 | 软切换 — 每个工作流文件从其分发矩阵中移除 `write_mode_override=audit`；操作员设置的覆盖被记录但尚未拒绝。 |
-| **2026-08-13** | **硬日落。** `_resolve_write_mode('audit')` 抛出异常；rollback CLI 的 audit 重放分支被移除；audit 表从新的 SQLite + D1 schema 中删除（现有行通过最终归档运行迁出）。 |
+| **2026-05-16** | **ADR-006 落地。** PR-A 把 Python `_resolve_write_mode` 默认从 `'audit'` 翻转为 `'pending'`。PR-C 把 Daily / AdHoc 上 `workflow_dispatch` 输入选项中的 `audit` 移除。PR-D 把 audit 自动回退替换为告警-暂停门（脚本重命名，`.publish-config.yml` 键从 `pending_mode_disabled_until` 切换为 `pipeline_paused_until`）。30 天 bake 期开始。 |
+| *bake + ~30 天* | **ADR-005 D10 sign-off。** 若 bake 指标稳定（audit session 计数 = 0、无孤儿 audit、暂停脚本触发 ≤ 1 次/月），ADR-005 PR-1 启动。 |
+| *ADR-005 PR-5 之后* | **硬退役。** `_resolve_write_mode('audit')` 抛出异常；rollback CLI 的 audit 重放分支被移除；audit 表从新的 SQLite + D1 schema 中删除（`MovieHistoryAudit` / `TorrentHistoryAudit` 通过 migration `v14` drop）。 |
 
 ### A.2 "废弃"在实践中的含义
 
