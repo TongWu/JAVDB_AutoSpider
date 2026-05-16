@@ -60,3 +60,7 @@ class OnboardingTestResponse(BaseModel):
     ok: bool
     message: str
     details: dict | None = None
+
+
+class DismissHintPayload(BaseModel):
+    hint_id: str = Field(min_length=1, max_length=64)
