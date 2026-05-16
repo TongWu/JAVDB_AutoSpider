@@ -5,6 +5,7 @@ import os
 from fastapi import APIRouter, Depends
 
 from apps.api.schemas.capabilities_payloads import (
+    DismissHintPayload,
     OnboardingStatusResponse,
     OnboardingTestPayload,
     OnboardingTestResponse,
@@ -112,3 +113,21 @@ def get_status(_user=Depends(_require_auth)) -> OnboardingStatusResponse:
         required_missing=required_missing,
         skippable_missing=skippable_missing,
     )
+
+
+@router.post("/complete", response_model=OnboardingStatusResponse)
+def mark_complete(_user=Depends(require_role("admin"))) -> OnboardingStatusResponse:
+    with get_db(OPERATIONS_DB_PATH) as conn:
+        SystemStateRepo(conn).put("onboarded", "true")
+    return get_status(_user=_user)
+
+
+@router.post("/dismiss-hint", response_model=dict)
+def dismiss_hint(payload: DismissHintPayload, _user=Depends(require_role("admin"))) -> dict:
+    with get_db(OPERATIONS_DB_PATH) as conn:
+        repo = SystemStateRepo(conn)
+        hints: list[str] = repo.get_json("dismissed_hints", default=[]) or []
+        if payload.hint_id not in hints:
+            hints.append(payload.hint_id)
+            repo.put_json("dismissed_hints", hints)
+    return {"dismissed_hints": hints}

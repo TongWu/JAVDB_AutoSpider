@@ -40,3 +40,30 @@ def test_test_javdb_returns_result(admin_client, monkeypatch):
 def test_test_unknown_component_422(admin_client):
     r = admin_client.post("/api/onboarding/test", json={"component": "nonsense"})
     assert r.status_code == 422
+
+
+def test_complete_marks_onboarded(admin_client):
+    r = admin_client.post("/api/onboarding/complete")
+    assert r.status_code == 200
+    status = admin_client.get("/api/onboarding/status").json()
+    assert status["completed"] is True
+
+
+def test_complete_requires_admin(readonly_client):
+    r = readonly_client.post("/api/onboarding/complete")
+    assert r.status_code in (401, 403)
+
+
+def test_dismiss_hint_persists(admin_client):
+    admin_client.post("/api/onboarding/dismiss-hint", json={"hint_id": "smtp"})
+    state = admin_client.get("/api/system/state", params={"key": "dismissed_hints"})
+    assert "smtp" in state.json()["value"]
+
+
+def test_dismiss_hint_idempotent(admin_client):
+    admin_client.post("/api/onboarding/dismiss-hint", json={"hint_id": "pikpak"})
+    admin_client.post("/api/onboarding/dismiss-hint", json={"hint_id": "pikpak"})
+    state = admin_client.get("/api/system/state", params={"key": "dismissed_hints"})
+    import json
+    hints = json.loads(state.json()["value"])
+    assert hints.count("pikpak") == 1
