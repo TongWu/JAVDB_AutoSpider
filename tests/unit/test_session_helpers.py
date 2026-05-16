@@ -235,11 +235,30 @@ def test_find_window_sessions_passes_since_through(monkeypatch):
 
 
 def test_find_window_sessions_returns_empty_on_lookup_error(monkeypatch):
+    """Default behaviour: warn + empty list."""
     def boom(**_kw):
         raise RuntimeError("DB down")
 
     monkeypatch.setattr(helpers, "db_find_in_progress_sessions", boom)
     assert helpers.find_window_sessions("2026-05-04 00:00:00") == []
+
+
+def test_find_window_sessions_raises_when_opted_in(monkeypatch):
+    """``raise_on_error=True`` — the rollback CLI's exit-3 contract.
+
+    Without this opt-in the lookup failure is swallowed and the caller
+    treats the empty result as "no sessions", which in rollback would
+    silently downgrade a DB outage from ``exit 3`` to ``exit 0``. This
+    is the regression flagged on PR #40.
+    """
+    def boom(**_kw):
+        raise RuntimeError("DB down")
+
+    monkeypatch.setattr(helpers, "db_find_in_progress_sessions", boom)
+    with pytest.raises(RuntimeError, match="DB down"):
+        helpers.find_window_sessions(
+            "2026-05-04 00:00:00", raise_on_error=True,
+        )
 
 
 # ── fanout_movie_claim ─────────────────────────────────────────────────

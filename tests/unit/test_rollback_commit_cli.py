@@ -20,7 +20,7 @@ def test_rollback_resolve_unions_explicit_and_window_sessions(monkeypatch):
     monkeypatch.setattr(
         rollback,
         "find_window_sessions",
-        lambda since: seen.append(since) or [7, 8],
+        lambda since, **_kw: seen.append(since) or [7, 8],
     )
 
     # 2026-05-08: window scan only kicks in when --include-orphaned is set
