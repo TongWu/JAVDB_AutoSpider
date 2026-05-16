@@ -109,15 +109,23 @@ class SessionsRepo:
         return _row_to_session(row)
 
     def get_writes(self, session_id: str) -> tuple[list[dict], list[dict]]:
-        """Return (movies, torrents) for a session — from ReportMovies/ReportTorrents."""
+        """Return (movies, torrents) for a session.
+
+        ReportMovies is linked to sessions via SessionId.
+        ReportTorrents is linked via ReportMovieId → ReportMovies.
+        """
         movies = [
             dict(row) for row in self._conn.execute(
                 "SELECT * FROM ReportMovies WHERE SessionId = ?", (session_id,)
             ).fetchall()
         ]
+        # Torrents join through movies for this session.
         torrents = [
             dict(row) for row in self._conn.execute(
-                "SELECT * FROM ReportTorrents WHERE SessionId = ?", (session_id,)
+                "SELECT t.* FROM ReportTorrents t "
+                "JOIN ReportMovies m ON m.Id = t.ReportMovieId "
+                "WHERE m.SessionId = ?",
+                (session_id,),
             ).fetchall()
         ]
         return movies, torrents
