@@ -74,3 +74,32 @@ def test_detail_returns_shape_for_known_id(admin_client, seeded_session_id):
     assert body["session"]["session_id"] == seeded_session_id
     assert "movies" in body
     assert "torrents" in body
+
+
+# ── Task 14: POST /api/sessions/{id}/rollback ────────────────────────────────
+
+def test_rollback_dry_run_returns_plan(admin_client, seeded_session_id):
+    r = admin_client.post(
+        f"/api/sessions/{seeded_session_id}/rollback",
+        json={"dry_run": True, "include_pending": True, "restore_from_audit": True},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert "actions" in body
+    assert isinstance(body["actions"], list)
+
+
+def test_rollback_requires_admin(readonly_client):
+    r = readonly_client.post(
+        "/api/sessions/any-id/rollback",
+        json={"dry_run": True, "include_pending": False, "restore_from_audit": True},
+    )
+    assert r.status_code in (401, 403)
+
+
+def test_rollback_unknown_session_404(admin_client):
+    r = admin_client.post(
+        "/api/sessions/nonexistent/rollback",
+        json={"dry_run": True, "include_pending": False, "restore_from_audit": True},
+    )
+    assert r.status_code == 404
