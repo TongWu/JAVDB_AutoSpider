@@ -38,8 +38,8 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-import packages.python.javdb_spider.runtime.state as state  # noqa: E402
-from packages.python.javdb_platform.work_distributor_client import (  # noqa: E402
+import javdb.spider.runtime.state as state  # noqa: E402
+from javdb.proxy.coordinator.work_distributor_client import (  # noqa: E402
     CompleteResult,
     EnqueueResult,
     PullResult,
@@ -47,9 +47,9 @@ from packages.python.javdb_platform.work_distributor_client import (  # noqa: E4
     WorkDistributorUnavailable,
     WorkItem,
 )
-from packages.python.javdb_spider.fetch.backend import FetchRuntimeState  # noqa: E402
-from packages.python.javdb_spider.detail import runner as detail_runner  # noqa: E402
-from packages.python.javdb_spider.detail.runner import (  # noqa: E402
+from javdb.spider.fetch.backend import FetchRuntimeState  # noqa: E402
+from javdb.spider.detail import runner as detail_runner  # noqa: E402
+from javdb.spider.detail.runner import (  # noqa: E402
     DetailPersistOutcome,
     process_detail_entries,
 )

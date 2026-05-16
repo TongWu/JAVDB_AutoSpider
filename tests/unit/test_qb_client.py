@@ -9,7 +9,7 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from packages.python.javdb_integrations.qb_client import (
+from javdb.integrations.qb.client import (
     LOGIN_REJECTED,
     LOGIN_SUCCESS,
     LOGIN_UNREACHABLE,
@@ -655,7 +655,7 @@ class TestQBittorrentClientLoginFallback:
 
         # Patch requests.Session so we can drive its post() return sequence.
         with patch(
-            'packages.python.javdb_integrations.qb_client.requests.Session'
+            'javdb.integrations.qb.client.requests.Session'
         ) as session_cls:
             mock_session = MagicMock()
             session_cls.return_value = mock_session
@@ -675,7 +675,7 @@ class TestQBittorrentClientLoginFallback:
         import requests as _requests
 
         with patch(
-            'packages.python.javdb_integrations.qb_client.requests.Session'
+            'javdb.integrations.qb.client.requests.Session'
         ) as session_cls:
             mock_session = MagicMock()
             session_cls.return_value = mock_session

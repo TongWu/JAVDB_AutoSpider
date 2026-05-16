@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from packages.python.javdb_platform.rollback import (
+from javdb.storage.rollback import (
     RollbackPlan,
     RollbackRequest,
     RollbackResult,

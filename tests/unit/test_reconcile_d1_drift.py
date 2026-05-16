@@ -15,7 +15,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from packages.python.javdb_migrations.tools import reconcile_d1_drift as recon  # noqa: E402
+from javdb.migrations.tools import reconcile_d1_drift as recon  # noqa: E402
 
 
 # ── Test doubles for D1 ───────────────────────────────────────────────────
@@ -601,7 +601,7 @@ def test_lookup_failure_does_not_trigger_spurious_insert(history_sqlite):
     consumer treated as "row missing → INSERT", producing duplicates the next
     time D1 came back online.
     """
-    from packages.python.javdb_platform.d1_client import D1Error
+    from javdb.storage.d1_client import D1Error
 
     sqlite_path, sqlite_conn = history_sqlite
     sqlite_conn.execute(
@@ -663,7 +663,7 @@ def test_flush_writes_falls_back_per_row_on_batch_failure():
     Locks in resilience against race-induced UNIQUE collisions: one bad row
     must not cause the whole batch's worth of work to be lost.
     """
-    from packages.python.javdb_platform.d1_client import D1Error
+    from javdb.storage.d1_client import D1Error
 
     class FlakyD1:
         def __init__(self):

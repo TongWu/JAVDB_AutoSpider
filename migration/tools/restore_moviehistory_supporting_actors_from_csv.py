@@ -13,7 +13,7 @@ from compat import alias_module
 
 _module = alias_module(
     __name__,
-    "packages.python.javdb_migrations.tools.restore_moviehistory_supporting_actors_from_csv",
+    "javdb.migrations.tools.restore_moviehistory_supporting_actors_from_csv",
 )
 
 if __name__ == "__main__":

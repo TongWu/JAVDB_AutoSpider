@@ -27,7 +27,7 @@ import requests
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from packages.python.javdb_platform.movie_claim_client import (  # noqa: E402
+from javdb.proxy.coordinator.movie_claim_client import (  # noqa: E402
     CLAIM_TTL_MAX_MS,
     CLAIM_TTL_MIN_MS,
     DEFAULT_CLAIM_TTL_MS,
@@ -701,7 +701,7 @@ def test_factory_reads_proxy_credentials_from_config_only(monkeypatch):
     monkeypatch.setenv("PROXY_COORDINATOR_TOKEN", "env-token")
     monkeypatch.delenv("MOVIE_CLAIM_ENABLED", raising=False)
     with patch(
-        "packages.python.javdb_platform.config_helper.cfg",
+        "javdb.infra.config.cfg",
         side_effect=_movie_claim_cfg_mapping(
             PROXY_COORDINATOR_URL="https://coord.test",
             PROXY_COORDINATOR_TOKEN="t",
@@ -719,7 +719,7 @@ def test_factory_empty_proxy_in_config_disables(monkeypatch):
     monkeypatch.setenv("PROXY_COORDINATOR_URL", "https://env-ignored.test")
     monkeypatch.setenv("PROXY_COORDINATOR_TOKEN", "env-ignored")
     with patch(
-        "packages.python.javdb_platform.config_helper.cfg",
+        "javdb.infra.config.cfg",
         side_effect=_movie_claim_cfg_mapping(
             PROXY_COORDINATOR_URL="",
             PROXY_COORDINATOR_TOKEN="t",
@@ -739,7 +739,7 @@ def test_factory_returns_none_when_movie_claim_explicitly_false(monkeypatch):
 def test_factory_accepts_truthy_enable_values(monkeypatch, enabled):
     monkeypatch.setenv("MOVIE_CLAIM_ENABLED", enabled)
     with patch(
-        "packages.python.javdb_platform.config_helper.cfg",
+        "javdb.infra.config.cfg",
         side_effect=_movie_claim_cfg_mapping(
             PROXY_COORDINATOR_URL="https://coord.test",
             PROXY_COORDINATOR_TOKEN="t",
@@ -754,7 +754,7 @@ def test_factory_accepts_truthy_enable_values(monkeypatch, enabled):
 def test_factory_returns_none_when_url_unset(monkeypatch):
     monkeypatch.setenv("MOVIE_CLAIM_ENABLED", "true")
     with patch(
-        "packages.python.javdb_platform.config_helper.cfg",
+        "javdb.infra.config.cfg",
         side_effect=_movie_claim_cfg_mapping(
             PROXY_COORDINATOR_URL=None,
             PROXY_COORDINATOR_TOKEN="t",
@@ -766,7 +766,7 @@ def test_factory_returns_none_when_url_unset(monkeypatch):
 def test_factory_returns_none_when_token_unset(monkeypatch):
     monkeypatch.setenv("MOVIE_CLAIM_ENABLED", "true")
     with patch(
-        "packages.python.javdb_platform.config_helper.cfg",
+        "javdb.infra.config.cfg",
         side_effect=_movie_claim_cfg_mapping(
             PROXY_COORDINATOR_URL="https://coord.test",
             PROXY_COORDINATOR_TOKEN=None,
@@ -778,7 +778,7 @@ def test_factory_returns_none_when_token_unset(monkeypatch):
 def test_factory_returns_none_and_closes_when_health_fails(monkeypatch):
     monkeypatch.setenv("MOVIE_CLAIM_ENABLED", "true")
     with patch(
-        "packages.python.javdb_platform.config_helper.cfg",
+        "javdb.infra.config.cfg",
         side_effect=_movie_claim_cfg_mapping(
             PROXY_COORDINATOR_URL="https://coord.test",
             PROXY_COORDINATOR_TOKEN="t",
@@ -827,7 +827,7 @@ def test_with_mode_factory_default_unset_is_auto(monkeypatch):
     """``MOVIE_CLAIM_ENABLED`` not set in env → ``auto`` (new default)."""
     monkeypatch.delenv("MOVIE_CLAIM_ENABLED", raising=False)
     with patch(
-        "packages.python.javdb_platform.config_helper.cfg",
+        "javdb.infra.config.cfg",
         side_effect=_movie_claim_cfg_mapping(
             PROXY_COORDINATOR_URL="https://coord.test",
             PROXY_COORDINATOR_TOKEN="t",
@@ -842,7 +842,7 @@ def test_with_mode_factory_default_unset_is_auto(monkeypatch):
 def test_with_mode_factory_explicit_auto_returns_auto(monkeypatch):
     monkeypatch.setenv("MOVIE_CLAIM_ENABLED", "auto")
     with patch(
-        "packages.python.javdb_platform.config_helper.cfg",
+        "javdb.infra.config.cfg",
         side_effect=_movie_claim_cfg_mapping(
             PROXY_COORDINATOR_URL="https://coord.test",
             PROXY_COORDINATOR_TOKEN="t",
@@ -857,7 +857,7 @@ def test_with_mode_factory_explicit_auto_returns_auto(monkeypatch):
 def test_with_mode_factory_force_on_returns_force_on(monkeypatch):
     monkeypatch.setenv("MOVIE_CLAIM_ENABLED", "true")
     with patch(
-        "packages.python.javdb_platform.config_helper.cfg",
+        "javdb.infra.config.cfg",
         side_effect=_movie_claim_cfg_mapping(
             PROXY_COORDINATOR_URL="https://coord.test",
             PROXY_COORDINATOR_TOKEN="t",
@@ -884,7 +884,7 @@ def test_with_mode_factory_unconfigured_collapses_to_off(monkeypatch):
     short-circuits the auto-toggle path entirely."""
     monkeypatch.setenv("MOVIE_CLAIM_ENABLED", "auto")
     with patch(
-        "packages.python.javdb_platform.config_helper.cfg",
+        "javdb.infra.config.cfg",
         side_effect=_movie_claim_cfg_mapping(
             PROXY_COORDINATOR_URL=None,
             PROXY_COORDINATOR_TOKEN="t",
@@ -898,7 +898,7 @@ def test_with_mode_factory_unconfigured_collapses_to_off(monkeypatch):
 def test_with_mode_factory_health_failure_collapses_to_off(monkeypatch):
     monkeypatch.setenv("MOVIE_CLAIM_ENABLED", "auto")
     with patch(
-        "packages.python.javdb_platform.config_helper.cfg",
+        "javdb.infra.config.cfg",
         side_effect=_movie_claim_cfg_mapping(
             PROXY_COORDINATOR_URL="https://coord.test",
             PROXY_COORDINATOR_TOKEN="t",
@@ -917,7 +917,7 @@ def test_legacy_factory_default_unset_now_returns_client_in_auto_mode(monkeypatc
     explicitly (covered by the factory-disabled case above)."""
     monkeypatch.delenv("MOVIE_CLAIM_ENABLED", raising=False)
     with patch(
-        "packages.python.javdb_platform.config_helper.cfg",
+        "javdb.infra.config.cfg",
         side_effect=_movie_claim_cfg_mapping(
             PROXY_COORDINATOR_URL="https://coord.test",
             PROXY_COORDINATOR_TOKEN="t",
@@ -932,7 +932,7 @@ def test_with_mode_factory_override_unset_resolves_to_auto(monkeypatch):
     """enabled_mode_override=_ENABLED_UNSET → raw_value=None → auto mode."""
     monkeypatch.setenv("MOVIE_CLAIM_ENABLED", "false")  # env says off
     with patch(
-        "packages.python.javdb_platform.config_helper.cfg",
+        "javdb.infra.config.cfg",
         side_effect=_movie_claim_cfg_mapping(
             PROXY_COORDINATOR_URL="https://coord.test",
             PROXY_COORDINATOR_TOKEN="t",
@@ -950,7 +950,7 @@ def test_with_mode_factory_override_true_forces_on(monkeypatch):
     """enabled_mode_override='true' → force_on, ignoring env."""
     monkeypatch.setenv("MOVIE_CLAIM_ENABLED", "false")  # env says off
     with patch(
-        "packages.python.javdb_platform.config_helper.cfg",
+        "javdb.infra.config.cfg",
         side_effect=_movie_claim_cfg_mapping(
             PROXY_COORDINATOR_URL="https://coord.test",
             PROXY_COORDINATOR_TOKEN="t",

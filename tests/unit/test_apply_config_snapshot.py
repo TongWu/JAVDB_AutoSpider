@@ -18,10 +18,10 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from packages.python.javdb_platform.runner_registry_client import (  # noqa: E402
+from javdb.proxy.coordinator.runner_registry_client import (  # noqa: E402
     ConfigSnapshot,
 )
-from packages.python.javdb_spider.runtime.sleep import (  # noqa: E402
+from javdb.spider.runtime.sleep import (  # noqa: E402
     TripleWindowThrottle,
     triple_window_throttle,
 )
@@ -93,7 +93,7 @@ def reset_state_version_and_throttle():
     mutations persist across the whole pytest session unless we restore
     them, which would break unrelated tests that assert the baseline.
     """
-    import packages.python.javdb_spider.runtime.state as state_mod
+    import javdb.spider.runtime.state as state_mod
     state_mod._last_applied_config_version = -1
     original = (
         triple_window_throttle.short_max,
@@ -129,7 +129,7 @@ def reset_state_version_and_throttle():
 
 class TestApplyConfigSnapshot:
     def test_applies_throttle_max_overrides(self):
-        from packages.python.javdb_spider.runtime.state import (
+        from javdb.spider.runtime.state import (
             _apply_config_snapshot,
         )
         snap = ConfigSnapshot(
@@ -142,7 +142,7 @@ class TestApplyConfigSnapshot:
         assert triple_window_throttle.extra_max == 42
 
     def test_applies_throttle_window_overrides(self):
-        from packages.python.javdb_spider.runtime.state import (
+        from javdb.spider.runtime.state import (
             _apply_config_snapshot,
         )
         snap = ConfigSnapshot(
@@ -159,7 +159,7 @@ class TestApplyConfigSnapshot:
         assert triple_window_throttle.extra_window == 900.0
 
     def test_skips_when_version_unchanged(self):
-        from packages.python.javdb_spider.runtime.state import (
+        from javdb.spider.runtime.state import (
             _apply_config_snapshot,
         )
         snap1 = ConfigSnapshot(
@@ -175,7 +175,7 @@ class TestApplyConfigSnapshot:
         assert triple_window_throttle.short_max == 2  # unchanged
 
     def test_reapplies_when_version_increments(self):
-        from packages.python.javdb_spider.runtime.state import (
+        from javdb.spider.runtime.state import (
             _apply_config_snapshot,
         )
         _apply_config_snapshot(
@@ -187,7 +187,7 @@ class TestApplyConfigSnapshot:
         assert triple_window_throttle.short_max == 8
 
     def test_unknown_keys_are_silently_skipped(self):
-        from packages.python.javdb_spider.runtime.state import (
+        from javdb.spider.runtime.state import (
             _apply_config_snapshot,
         )
         original_short = triple_window_throttle.short_max
@@ -200,7 +200,7 @@ class TestApplyConfigSnapshot:
         assert triple_window_throttle.short_max == original_short
 
     def test_non_numeric_value_warns_and_skips_that_key(self):
-        from packages.python.javdb_spider.runtime.state import (
+        from javdb.spider.runtime.state import (
             _apply_config_snapshot,
         )
         original_short = triple_window_throttle.short_max
@@ -209,7 +209,7 @@ class TestApplyConfigSnapshot:
             values={"short_max": "not-a-number", "long_max": "12"},
         )
         with patch(
-            "packages.python.javdb_spider.runtime.state.logger.warning",
+            "javdb.spider.runtime.state.logger.warning",
         ) as warn:
             _apply_config_snapshot(snap)
         # Bad key skipped; good key still applied.
@@ -218,22 +218,22 @@ class TestApplyConfigSnapshot:
         assert warn.called
 
     def test_empty_values_is_safe(self):
-        from packages.python.javdb_spider.runtime.state import (
+        from javdb.spider.runtime.state import (
             _apply_config_snapshot,
         )
         snap = ConfigSnapshot(version=1, updated_at_ms=0, values={})
         original_short = triple_window_throttle.short_max
         _apply_config_snapshot(snap)
         # Nothing changed, but the version watermark advanced.
-        import packages.python.javdb_spider.runtime.state as state_mod
+        import javdb.spider.runtime.state as state_mod
         assert state_mod._last_applied_config_version == 1
         assert triple_window_throttle.short_max == original_short
 
     def test_heartbeat_interval_override_takes_effect(self):
-        from packages.python.javdb_spider.runtime.state import (
+        from javdb.spider.runtime.state import (
             _apply_config_snapshot,
         )
-        import packages.python.javdb_spider.runtime.state as state_mod
+        import javdb.spider.runtime.state as state_mod
         snap = ConfigSnapshot(
             version=1, updated_at_ms=0,
             values={"heartbeat_interval_sec": "30"},

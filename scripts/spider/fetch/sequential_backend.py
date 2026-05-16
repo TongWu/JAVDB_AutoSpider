@@ -11,4 +11,4 @@ if str(REPO_ROOT) not in sys.path:
 
 from compat import alias_module
 
-alias_module(__name__, "packages.python.javdb_spider.fetch.sequential_backend")
+alias_module(__name__, "javdb.spider.fetch.sequential_backend")

@@ -4,4 +4,4 @@ from __future__ import annotations
 
 from compat import alias_module
 
-alias_module(__name__, "packages.python.javdb_platform.config_generator")
+alias_module(__name__, "javdb.infra.config_generator")

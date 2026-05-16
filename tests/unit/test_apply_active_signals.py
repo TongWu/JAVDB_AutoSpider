@@ -23,10 +23,10 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from packages.python.javdb_platform.runner_registry_client import (  # noqa: E402
+from javdb.proxy.coordinator.runner_registry_client import (  # noqa: E402
     Signal,
 )
-from packages.python.javdb_spider.runtime.sleep import (  # noqa: E402
+from javdb.spider.runtime.sleep import (  # noqa: E402
     COMPOSITE_MULTIPLIER_CAP,
     MovieSleepManager,
     PenaltyTracker,
@@ -157,8 +157,8 @@ def _sig(kind: str, **kw) -> Signal:
 @pytest.fixture(autouse=True)
 def isolate_state():
     """Each test gets a fresh signal-state snapshot to undo after run."""
-    import packages.python.javdb_spider.runtime.state as state_mod
-    import packages.python.javdb_spider.runtime.sleep as sleep_mod
+    import javdb.spider.runtime.state as state_mod
+    import javdb.spider.runtime.sleep as sleep_mod
     saved_bans = set(state_mod._signal_banned_proxies)
     saved_factor = sleep_mod.movie_sleep_mgr._global_factor
     saved_pause = sleep_mod.movie_sleep_mgr._pause_until_ms
@@ -171,16 +171,16 @@ def isolate_state():
 
 class TestApplyActiveSignals:
     def test_throttle_global_signal_sets_factor(self):
-        import packages.python.javdb_spider.runtime.sleep as sleep_mod
-        from packages.python.javdb_spider.runtime.state import (
+        import javdb.spider.runtime.sleep as sleep_mod
+        from javdb.spider.runtime.state import (
             _apply_active_signals,
         )
         _apply_active_signals([_sig("throttle_global", factor=2.5)])
         assert sleep_mod.movie_sleep_mgr._global_factor == 2.5
 
     def test_pause_all_signal_sets_expiry(self):
-        import packages.python.javdb_spider.runtime.sleep as sleep_mod
-        from packages.python.javdb_spider.runtime.state import (
+        import javdb.spider.runtime.sleep as sleep_mod
+        from javdb.spider.runtime.state import (
             _apply_active_signals,
         )
         exp = int((time.time() + 5) * 1000)
@@ -188,20 +188,20 @@ class TestApplyActiveSignals:
         assert sleep_mod.movie_sleep_mgr._pause_until_ms == exp
 
     def test_ban_proxy_signal_calls_pool_ban(self):
-        from packages.python.javdb_spider.runtime.state import (
+        from javdb.spider.runtime.state import (
             _apply_active_signals,
         )
-        import packages.python.javdb_spider.runtime.state as state_mod
+        import javdb.spider.runtime.state as state_mod
         fake_pool = MagicMock()
         with patch.object(state_mod, "global_proxy_pool", fake_pool):
             _apply_active_signals([_sig("ban_proxy", proxy_id="Proxy-3")])
         fake_pool.ban_proxy.assert_called_once_with("Proxy-3")
 
     def test_ban_proxy_signal_idempotent_across_heartbeats(self):
-        from packages.python.javdb_spider.runtime.state import (
+        from javdb.spider.runtime.state import (
             _apply_active_signals,
         )
-        import packages.python.javdb_spider.runtime.state as state_mod
+        import javdb.spider.runtime.state as state_mod
         fake_pool = MagicMock()
         with patch.object(state_mod, "global_proxy_pool", fake_pool):
             sig = _sig("ban_proxy", proxy_id="Proxy-X")
@@ -213,10 +213,10 @@ class TestApplyActiveSignals:
 
     def test_ban_proxy_signal_unbanned_when_removed_from_active_set(self):
         """W6.A.2 follow-up — signal TTL expiry triggers local unban."""
-        from packages.python.javdb_spider.runtime.state import (
+        from javdb.spider.runtime.state import (
             _apply_active_signals,
         )
-        import packages.python.javdb_spider.runtime.state as state_mod
+        import javdb.spider.runtime.state as state_mod
         fake_pool = MagicMock()
         with patch.object(state_mod, "global_proxy_pool", fake_pool):
             _apply_active_signals([_sig("ban_proxy", proxy_id="Proxy-Y")])
@@ -231,10 +231,10 @@ class TestApplyActiveSignals:
 
     def test_ban_proxy_partial_expiry_unbans_only_removed(self):
         """Two bans, one expires → only that one is unbanned."""
-        from packages.python.javdb_spider.runtime.state import (
+        from javdb.spider.runtime.state import (
             _apply_active_signals,
         )
-        import packages.python.javdb_spider.runtime.state as state_mod
+        import javdb.spider.runtime.state as state_mod
         fake_pool = MagicMock()
         with patch.object(state_mod, "global_proxy_pool", fake_pool):
             _apply_active_signals([
@@ -250,8 +250,8 @@ class TestApplyActiveSignals:
         fake_pool.unban_proxy.assert_called_once_with("Drop")
 
     def test_empty_signal_list_restores_defaults(self):
-        import packages.python.javdb_spider.runtime.sleep as sleep_mod
-        from packages.python.javdb_spider.runtime.state import (
+        import javdb.spider.runtime.sleep as sleep_mod
+        from javdb.spider.runtime.state import (
             _apply_active_signals,
         )
         _apply_active_signals([_sig("throttle_global", factor=3.0)])
@@ -262,8 +262,8 @@ class TestApplyActiveSignals:
         assert sleep_mod.movie_sleep_mgr._pause_until_ms == 0
 
     def test_multiple_throttle_global_signals_take_max(self):
-        import packages.python.javdb_spider.runtime.sleep as sleep_mod
-        from packages.python.javdb_spider.runtime.state import (
+        import javdb.spider.runtime.sleep as sleep_mod
+        from javdb.spider.runtime.state import (
             _apply_active_signals,
         )
         _apply_active_signals([
@@ -274,11 +274,11 @@ class TestApplyActiveSignals:
         assert sleep_mod.movie_sleep_mgr._global_factor == 4.0
 
     def test_multiple_signal_kinds_apply_simultaneously(self):
-        import packages.python.javdb_spider.runtime.sleep as sleep_mod
-        from packages.python.javdb_spider.runtime.state import (
+        import javdb.spider.runtime.sleep as sleep_mod
+        from javdb.spider.runtime.state import (
             _apply_active_signals,
         )
-        import packages.python.javdb_spider.runtime.state as state_mod
+        import javdb.spider.runtime.state as state_mod
         fake_pool = MagicMock()
         exp = int((time.time() + 30) * 1000)
         with patch.object(state_mod, "global_proxy_pool", fake_pool):
@@ -293,8 +293,8 @@ class TestApplyActiveSignals:
         assert fake_pool.ban_proxy.call_count == 2
 
     def test_malformed_signal_does_not_break_others(self):
-        import packages.python.javdb_spider.runtime.sleep as sleep_mod
-        from packages.python.javdb_spider.runtime.state import (
+        import javdb.spider.runtime.sleep as sleep_mod
+        from javdb.spider.runtime.state import (
             _apply_active_signals,
         )
         # Mix a malformed entry (None) with valid ones — should not raise.
@@ -305,8 +305,8 @@ class TestApplyActiveSignals:
         assert sleep_mod.movie_sleep_mgr._global_factor == 2.0
 
     def test_unknown_signal_kind_is_ignored(self):
-        import packages.python.javdb_spider.runtime.sleep as sleep_mod
-        from packages.python.javdb_spider.runtime.state import (
+        import javdb.spider.runtime.sleep as sleep_mod
+        from javdb.spider.runtime.state import (
             _apply_active_signals,
         )
         _apply_active_signals([_sig("totally_unknown_kind", factor=99.0)])
@@ -314,10 +314,10 @@ class TestApplyActiveSignals:
         assert sleep_mod.movie_sleep_mgr._pause_until_ms == 0
 
     def test_concurrent_calls_safe(self):
-        from packages.python.javdb_spider.runtime.state import (
+        from javdb.spider.runtime.state import (
             _apply_active_signals,
         )
-        import packages.python.javdb_spider.runtime.state as state_mod
+        import javdb.spider.runtime.state as state_mod
         fake_pool = MagicMock()
         errors: list = []
 

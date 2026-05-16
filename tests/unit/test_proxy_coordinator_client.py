@@ -17,7 +17,7 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from packages.python.javdb_platform.proxy_coordinator_client import (  # noqa: E402
+from javdb.proxy.coordinator.proxy_coordinator_client import (  # noqa: E402
     CoordinatorUnavailable,
     DEFAULT_BAN_TTL_MS,
     LeaseResult,
