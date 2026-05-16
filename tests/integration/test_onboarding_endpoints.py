@@ -25,3 +25,18 @@ def test_status_default_returns_required_missing(admin_client, monkeypatch):
     assert isinstance(body["required_missing"], list)
     assert isinstance(body["skippable_missing"], list)
     assert "javdb_session" in body["required_missing"] or "qb" in body["required_missing"]
+
+
+def test_test_javdb_returns_result(admin_client, monkeypatch):
+    monkeypatch.setenv("JAVDB_SESSION_COOKIE", "stub-cookie-value")
+    r = admin_client.post("/api/onboarding/test", json={"component": "javdb"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["component"] == "javdb"
+    assert isinstance(body["ok"], bool)
+    assert isinstance(body["message"], str)
+
+
+def test_test_unknown_component_422(admin_client):
+    r = admin_client.post("/api/onboarding/test", json={"component": "nonsense"})
+    assert r.status_code == 422
