@@ -503,6 +503,73 @@ class ProxyPool:
             logger.debug("ban_proxy: all proxies are unavailable after ban")
             return False
 
+    def unban_proxy(self, proxy_name: str) -> bool:
+        """W6.A.2 follow-up — clear a previously-applied ban.
+
+        Used by the W5.4 signal reconciliation loop in ``state.py``:
+        when a ``ban_proxy`` signal is no longer in the active set
+        (it ttl-expired Worker-side), this method restores the proxy
+        to rotation. Three actions, all under the pool lock:
+
+        1. Drop the entry from the local :class:`ProxyBanManager` so
+           subsequent ``add_proxy(name)`` for the same name doesn't
+           skip it.
+        2. Clear the :class:`ProxyInfo` flags so :func:`is_proxy_usable`
+           starts returning True again: ``banned = False``,
+           ``is_available = True``, ``cooldown_until = None``.
+        3. Best-effort cross-runner unban dispatch via
+           :func:`_dispatch_remote_unban` (fires when the ban manager
+           reported the removal).
+
+        Semantic note: this method does NOT distinguish *why* a proxy
+        was banned. If the proxy was banned by failure-threshold *and*
+        a signal, unban will restore it for both — operator override
+        is the documented intent. Operators who want permanent local
+        bans should not use ttl-bounded signals.
+
+        Returns ``True`` when an entry was matched + cleared, ``False``
+        when the proxy is unknown to the pool.
+        """
+        if self.no_proxy_mode or not self.proxies:
+            return False
+
+        # The Rust ban-manager implementation (RustProxyBanManager) does
+        # not yet expose ``remove_ban``; guard with hasattr so the
+        # Python fallback path works on both. When the Rust manager is
+        # active the local ban-manager entry persists until the next
+        # Rust upgrade — fine for W5.4 signal unban because the
+        # ProxyInfo flag clearing below is what actually returns the
+        # proxy to rotation.
+        manager_supports_remove = hasattr(self.ban_manager, "remove_ban")
+
+        with self.lock:
+            target: Optional[ProxyInfo] = None
+            for p in self.proxies:
+                if p.name == proxy_name:
+                    target = p
+                    break
+            if target is None:
+                logger.debug("unban_proxy: proxy '%s' not in pool", proxy_name)
+                # Even when the proxy isn't in this runner's pool config,
+                # clear the ban-manager entry so a future `add_proxy` of
+                # the same name isn't filtered out.
+                if manager_supports_remove:
+                    self.ban_manager.remove_ban(proxy_name)
+                return False
+
+            if manager_supports_remove:
+                # Ban-manager removal via the public method so the
+                # cross-runner unban dispatch fires too.
+                self.ban_manager.remove_ban(target.name)
+            target.banned = False
+            target.is_available = True
+            target.cooldown_until = None
+            logger.info(
+                "Proxy '%s' unbanned (W5.4 signal expiry / operator override)",
+                target.name,
+            )
+            return True
+
     def get_proxy_count(self) -> int:
         """Return the number of proxies in the pool"""
         return len(self.proxies)

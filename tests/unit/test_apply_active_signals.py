@@ -211,6 +211,44 @@ class TestApplyActiveSignals:
         # ban_proxy() must NOT be called repeatedly.
         assert fake_pool.ban_proxy.call_count == 1
 
+    def test_ban_proxy_signal_unbanned_when_removed_from_active_set(self):
+        """W6.A.2 follow-up — signal TTL expiry triggers local unban."""
+        from packages.python.javdb_spider.runtime.state import (
+            _apply_active_signals,
+        )
+        import packages.python.javdb_spider.runtime.state as state_mod
+        fake_pool = MagicMock()
+        with patch.object(state_mod, "global_proxy_pool", fake_pool):
+            _apply_active_signals([_sig("ban_proxy", proxy_id="Proxy-Y")])
+            assert fake_pool.ban_proxy.call_count == 1
+            # Signal TTL'd on the Worker → empty list on next heartbeat.
+            _apply_active_signals([])
+            fake_pool.unban_proxy.assert_called_once_with("Proxy-Y")
+        # Reapplying after expiry should ban again (idempotent state-based).
+        with patch.object(state_mod, "global_proxy_pool", fake_pool):
+            _apply_active_signals([_sig("ban_proxy", proxy_id="Proxy-Y")])
+            assert fake_pool.ban_proxy.call_count == 2
+
+    def test_ban_proxy_partial_expiry_unbans_only_removed(self):
+        """Two bans, one expires → only that one is unbanned."""
+        from packages.python.javdb_spider.runtime.state import (
+            _apply_active_signals,
+        )
+        import packages.python.javdb_spider.runtime.state as state_mod
+        fake_pool = MagicMock()
+        with patch.object(state_mod, "global_proxy_pool", fake_pool):
+            _apply_active_signals([
+                _sig("ban_proxy", proxy_id="Keep", id="A"),
+                _sig("ban_proxy", proxy_id="Drop", id="B"),
+            ])
+            assert fake_pool.ban_proxy.call_count == 2
+            # Only "Keep" survives next heartbeat.
+            _apply_active_signals([
+                _sig("ban_proxy", proxy_id="Keep", id="A"),
+            ])
+        # Exactly one unban call, for the dropped proxy.
+        fake_pool.unban_proxy.assert_called_once_with("Drop")
+
     def test_empty_signal_list_restores_defaults(self):
         import packages.python.javdb_spider.runtime.sleep as sleep_mod
         from packages.python.javdb_spider.runtime.state import (
