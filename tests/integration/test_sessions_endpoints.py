@@ -76,6 +76,50 @@ def test_detail_returns_shape_for_known_id(admin_client, seeded_session_id):
     assert "torrents" in body
 
 
+# ── Task 15: POST /api/sessions/{id}/commit ──────────────────────────────────
+
+def test_commit_force_works_on_in_progress(admin_client):
+    """Seed an in_progress session and force-commit it."""
+    import sqlite3 as _sqlite3
+    from packages.python.javdb_platform.db_connection import REPORTS_DB_PATH
+    fin_sid = "20260516T130000.000000Z-TEST-FIN1"
+    with _sqlite3.connect(str(REPORTS_DB_PATH)) as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO ReportSessions "
+            "(Id, ReportType, ReportDate, CsvFilename, DateTimeCreated, Status, WriteMode, RunId, RunAttempt) "
+            "VALUES (?, ?, ?, ?, datetime('now'), ?, ?, ?, ?)",
+            (fin_sid, "test", "2026-05-16", "test.csv", "in_progress", "audit", "test-run", 1),
+        )
+    try:
+        r = admin_client.post(
+            f"/api/sessions/{fin_sid}/commit",
+            json={"force": True, "drop_pending": False},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["session_id"] == fin_sid
+        assert body["new_state"] == "committed"
+    finally:
+        with _sqlite3.connect(str(REPORTS_DB_PATH)) as conn:
+            conn.execute("DELETE FROM ReportSessions WHERE Id = ?", (fin_sid,))
+
+
+def test_commit_requires_admin(readonly_client):
+    r = readonly_client.post(
+        "/api/sessions/any-id/commit",
+        json={"force": True, "drop_pending": False},
+    )
+    assert r.status_code in (401, 403)
+
+
+def test_commit_unknown_session_404(admin_client):
+    r = admin_client.post(
+        "/api/sessions/nonexistent/commit",
+        json={"force": False, "drop_pending": False},
+    )
+    assert r.status_code == 404
+
+
 # ── Task 14: POST /api/sessions/{id}/rollback ────────────────────────────────
 
 def test_rollback_dry_run_returns_plan(admin_client, seeded_session_id):

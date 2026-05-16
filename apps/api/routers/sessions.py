@@ -11,6 +11,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from apps.api.infra.auth import _require_auth, require_role
 from apps.api.schemas.capabilities_payloads import (
+    SessionCommitPayload,
+    SessionCommitResponse,
     SessionDetailResponse,
     SessionItem,
     SessionListResponse,
@@ -51,6 +53,40 @@ def get_session_detail(
         movies=movies,
         torrents=torrents,
     )
+
+
+@router.post("/{session_id}/commit", response_model=SessionCommitResponse)
+def post_commit(
+    session_id: str,
+    payload: SessionCommitPayload,
+    _user=Depends(require_role("admin")),
+) -> SessionCommitResponse:
+    from packages.python.javdb_platform.sessions import CommitRequest, commit_session
+    reports_path = _db_connection.REPORTS_DB_PATH
+    with _db_connection.get_db(reports_path) as conn:
+        if not SessionsRepo(conn).get(session_id):
+            raise HTTPException(status_code=404, detail={"error": {"code": "session.not_found"}})
+    try:
+        result = commit_session(CommitRequest(
+            session_id=session_id,
+            force=payload.force,
+            drop_pending=payload.drop_pending,
+        ))
+        return SessionCommitResponse(
+            session_id=result.session_id,
+            new_state=result.new_state,
+            pending_dropped=result.pending_dropped,
+        )
+    except LookupError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": {"code": "session.not_found", "message": str(exc)}},
+        )
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={"error": {"code": "commit.failed", "message": str(exc)}},
+        )
 
 
 @router.post("/{session_id}/rollback", response_model=SessionRollbackResponse)
