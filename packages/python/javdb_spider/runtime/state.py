@@ -125,6 +125,11 @@ _movie_claim_lock: threading.Lock = threading.Lock()
 # ``RUNNER_REGISTRY_ENABLED`` is truthy AND the URL/token pair is
 # configured AND the Worker's ``/health`` probe succeeds.
 global_runner_registry_client: Optional[RunnerRegistryClient] = None
+# W6.B (W5.5) — TTL-cached cross-DO proxy-health policy. Constructed in
+# ``setup_proxy_pool`` when RECOMMEND_PROXY_ENABLED is truthy AND the
+# Worker /health probe succeeds. ``None`` means the runner is using
+# the legacy local-cache health provider (or no provider at all).
+global_recommend_proxy_policy = None
 # Background daemon thread that pings ``/heartbeat`` every 60 s once a
 # registry client is configured.  Holds a reference here so the atexit
 # handler can flag it for shutdown without leaking a reference cycle.
@@ -1417,27 +1422,59 @@ def setup_proxy_pool(use_proxy) -> None:
             logger.warning("Proxy enabled but no proxy configuration found (neither PROXY_POOL nor PROXY_HTTP/PROXY_HTTPS)")
         global_proxy_pool = None
 
-    # P2-D — when both the pool and the cross-instance coordinator are
-    # available AND the pool exposes ``set_health_provider``, wire the
-    # coordinator's per-proxy health cache as the weighting source.
-    # Reads from the cache populated by ``lease()`` so weighted selection
-    # piggy-backs on the requests the spider was already making.
+    # W6.B (W5.5) — when the operator has enabled cross-DO health
+    # aggregation via RECOMMEND_PROXY_ENABLED=true, prefer that policy
+    # over the local per-proxy cache: it integrates cohort-wide health
+    # data rather than only this runner's lease history. The local
+    # ``coord.get_proxy_health_score`` fallback runs unchanged when
+    # RecommendProxy is disabled or unreachable.
     if (
         global_proxy_pool is not None
-        and global_proxy_coordinator is not None
         and hasattr(global_proxy_pool, "set_health_provider")
     ):
+        provider_label = None
         try:
-            global_proxy_pool.set_health_provider(
-                global_proxy_coordinator.get_proxy_health_score
+            from packages.python.javdb_platform.recommend_proxy_client import (
+                create_recommend_proxy_client_from_env,
             )
-            logger.info(
-                "Proxy pool health-weighted selection enabled (P2-D coordinator)"
+            from packages.python.javdb_platform.recommend_proxy_policy import (
+                RecommendProxyPolicy,
             )
-        except Exception:  # noqa: BLE001 — wiring must not block startup
+            global global_recommend_proxy_policy
+            rec_client = create_recommend_proxy_client_from_env()
+            if rec_client is not None:
+                proxy_ids = [p.get('name', '') for p in (PROXY_POOL or [])
+                             if isinstance(p, dict) and p.get('name')]
+                policy = RecommendProxyPolicy(rec_client, proxy_ids=proxy_ids)
+                policy.start()
+                global_recommend_proxy_policy = policy
+                global_proxy_pool.set_health_provider(policy.score_for)
+                atexit.register(policy.shutdown)
+                provider_label = "W5.5 /recommend_proxy"
+        except Exception:  # noqa: BLE001 — Worker policy is best-effort
             logger.warning(
-                "Failed to wire proxy health provider; falling back to round-robin",
+                "Failed to wire RecommendProxy policy; will fall back to local cache",
                 exc_info=True,
+            )
+
+        # Fallback: existing P2-D local-cache provider when RecommendProxy
+        # is off or failed to start.
+        if provider_label is None and global_proxy_coordinator is not None:
+            try:
+                global_proxy_pool.set_health_provider(
+                    global_proxy_coordinator.get_proxy_health_score
+                )
+                provider_label = "P2-D coordinator cache"
+            except Exception:  # noqa: BLE001
+                logger.warning(
+                    "Failed to wire proxy health provider; falling back to round-robin",
+                    exc_info=True,
+                )
+
+        if provider_label is not None:
+            logger.info(
+                "Proxy pool health-weighted selection enabled (%s)",
+                provider_label,
             )
 
 # ---------------------------------------------------------------------------
