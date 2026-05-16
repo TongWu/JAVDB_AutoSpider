@@ -15,6 +15,7 @@ permissions:
 jobs:
   sync-wiki:
     runs-on: ubuntu-latest
+    environment: Production
     steps:
       - name: Checkout main repo
         uses: actions/checkout@v4
