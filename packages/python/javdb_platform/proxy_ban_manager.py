@@ -160,6 +160,27 @@ class ProxyBanManager:
         # but firing on every call would amplify queue pressure pointlessly.
         if newly_banned:
             _dispatch_remote_ban(proxy_name)
+
+    def remove_ban(self, proxy_name: str) -> bool:
+        """Remove a ban record (W6.A.2 follow-up — used by signal unban).
+
+        Returns ``True`` when a ban was present and removed, ``False``
+        when the proxy wasn't in the banned set. Fires the cross-runner
+        ``_dispatch_remote_unban`` hook outside the lock so a slow
+        coordinator can never block the unban path. Repeated calls are
+        idempotent: only the first one fires the dispatcher.
+        """
+        removed = False
+        with self.lock:
+            if proxy_name in self.banned_proxies:
+                del self.banned_proxies[proxy_name]
+                removed = True
+                logger.debug(
+                    "Proxy '%s' ban removed [W5.4 unban path]", proxy_name,
+                )
+        if removed:
+            _dispatch_remote_unban(proxy_name)
+        return removed
     
     def get_banned_proxies(self) -> List[ProxyBanRecord]:
         """Get list of currently banned proxies."""

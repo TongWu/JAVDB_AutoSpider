@@ -600,6 +600,82 @@ class TestProxyPoolBanProxy:
         assert pool.proxies[0].banned is True
         assert pool.proxies[0].is_available is False
 
+
+class TestProxyPoolUnbanProxy:
+    """W6.A.2 follow-up — ProxyPool.unban_proxy()."""
+
+    def test_unban_restores_proxy_to_rotation(self):
+        pool = ProxyPool()
+        pool.add_proxy(http_url="http://un1:8080", name="un-1")
+        pool.add_proxy(http_url="http://un2:8080", name="un-2")
+        pool.ban_proxy("un-1")
+        assert pool.proxies[0].banned is True
+
+        result = pool.unban_proxy("un-1")
+
+        assert result is True
+        assert pool.proxies[0].banned is False
+        assert pool.proxies[0].is_available is True
+        assert pool.proxies[0].cooldown_until is None
+
+    def test_unban_removes_ban_manager_entry(self):
+        pool = ProxyPool()
+        pool.add_proxy(http_url="http://un-bm:8080", name="un-bm-1")
+        pool.add_proxy(http_url="http://un-bm2:8080", name="un-bm-2")
+        pool.ban_proxy("un-bm-1")
+        assert pool.ban_manager.is_proxy_banned("un-bm-1")
+
+        pool.unban_proxy("un-bm-1")
+
+        # Rust ban-manager (W2 build) doesn't expose remove_ban yet; the
+        # Python implementation does. ``unban_proxy`` is hasattr-guarded
+        # so the ProxyInfo flag clear works either way — the ban-manager
+        # entry only clears on the Python path. Assert conditionally so
+        # this test passes on both deployments.
+        if hasattr(pool.ban_manager, "remove_ban"):
+            assert not pool.ban_manager.is_proxy_banned("un-bm-1")
+
+    def test_unban_unknown_proxy_returns_false(self):
+        pool = ProxyPool()
+        pool.add_proxy(http_url="http://un-unk:8080", name="un-unk-1")
+        # Still removes any lingering ban-manager entry; returns False
+        # because there's no ProxyInfo to clear flags on.
+        assert pool.unban_proxy("not-in-pool") is False
+
+    def test_unban_unknown_still_clears_ban_manager(self):
+        """A proxy banned without being in the pool config still gets the
+        ban-manager entry cleared on unban — otherwise a future
+        ``add_proxy(name)`` for that name would silently skip the entry.
+
+        Only exercised on the Python ban-manager backend (Rust manager
+        currently lacks ``remove_ban``).
+        """
+        pool = ProxyPool()
+        if not hasattr(pool.ban_manager, "remove_ban"):
+            pytest.skip("Rust ban-manager lacks remove_ban; Python-only behaviour")
+        pool.add_proxy(http_url="http://un-bm-orphan-keep:8080", name="keep")
+        # Manually seed an "orphan" ban that doesn't have a ProxyInfo.
+        pool.ban_manager.add_ban("orphan-name")
+        assert pool.ban_manager.is_proxy_banned("orphan-name")
+
+        result = pool.unban_proxy("orphan-name")
+        assert result is False  # no ProxyInfo to update
+        assert not pool.ban_manager.is_proxy_banned("orphan-name")
+
+    def test_unban_makes_proxy_eligible_for_selection_again(self):
+        pool = ProxyPool()
+        pool.add_proxy(http_url="http://un-rot1:8080", name="un-rot-1")
+        pool.add_proxy(http_url="http://un-rot2:8080", name="un-rot-2")
+        pool.ban_proxy("un-rot-1")
+        # Confirm the next-rotation cannot return un-rot-1.
+        assert pool.proxies[0].is_available is False
+
+        pool.unban_proxy("un-rot-1")
+
+        # is_proxy_usable should now hold again on un-rot-1.
+        from packages.python.javdb_platform.proxy_policy import is_proxy_usable
+        assert is_proxy_usable(pool.proxies[0])
+
     def test_get_current_proxy_skips_banned(self):
         """get_current_proxy must never return a banned proxy."""
         pool = ProxyPool()

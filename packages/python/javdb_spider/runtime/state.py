@@ -929,14 +929,21 @@ def _apply_active_signals(signals: list) -> None:
             exc_info=True,
         )
 
-    # Apply ban_proxy deltas: ban anything new, never unban (session-permanent).
+    # Apply ban_proxy deltas. The full reconcile model:
+    #   new_bans     = desired - applied → call pool.ban_proxy()
+    #   removed_bans = applied - desired → call pool.unban_proxy()
+    # Bookkeeping uses set replacement (not update) so an empty
+    # desired set correctly produces an empty applied set, restoring
+    # full proxy availability after every signal expires.
+    global _signal_banned_proxies
     with _signal_lock:
         new_bans = desired_bans - _signal_banned_proxies
-        _signal_banned_proxies.update(desired_bans)
+        removed_bans = _signal_banned_proxies - desired_bans
+        _signal_banned_proxies = set(desired_bans)
 
-    if new_bans:
-        pool = global_proxy_pool
-        if pool is not None:
+    pool = global_proxy_pool
+    if pool is not None:
+        if new_bans:
             for proxy_id in new_bans:
                 try:
                     pool.ban_proxy(proxy_id)
@@ -947,6 +954,19 @@ def _apply_active_signals(signals: list) -> None:
                 except Exception:  # noqa: BLE001
                     logger.warning(
                         "Failed to apply ban_proxy signal for %s",
+                        proxy_id, exc_info=True,
+                    )
+        if removed_bans:
+            for proxy_id in removed_bans:
+                try:
+                    pool.unban_proxy(proxy_id)
+                    logger.info(
+                        "W5.4 ban_proxy signal expired: %s restored to rotation",
+                        proxy_id,
+                    )
+                except Exception:  # noqa: BLE001
+                    logger.warning(
+                        "Failed to unban %s after signal expiry",
                         proxy_id, exc_info=True,
                     )
 
