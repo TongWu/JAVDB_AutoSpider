@@ -23,13 +23,13 @@ import shutil
 import utils.infra.db as _db_mod
 import utils.infra.config_helper as _cfg_mod
 import scripts.spider.services.dedup as _dedup_mod
-import packages.python.javdb_platform.db_connection as _db_conn_mod
-import packages.python.javdb_platform.db_history_read as _db_history_read_mod
-import packages.python.javdb_platform.db_history_write as _db_history_write_mod
-import packages.python.javdb_platform.db_reports as _db_reports_mod
-import packages.python.javdb_platform.db_migrations as _db_migrations_mod
-import packages.python.javdb_platform.db_operations as _db_operations_mod
-import packages.python.javdb_platform.db_stats as _db_stats_mod
+import javdb.storage.db.db_connection as _db_conn_mod
+import javdb.storage.db.db_history_read as _db_history_read_mod
+import javdb.storage.db.db_history_write as _db_history_write_mod
+import javdb.storage.db.db_reports as _db_reports_mod
+import javdb.storage.db.db_migrations as _db_migrations_mod
+import javdb.storage.db.db_operations as _db_operations_mod
+import javdb.storage.db.db_stats as _db_stats_mod
 
 
 @pytest.fixture(autouse=True)

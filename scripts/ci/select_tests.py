@@ -204,6 +204,7 @@ IMPACT_RULES = (
     ImpactRule(
         "ingestion",
         (
+            "javdb/pipeline/**",
             "packages/python/javdb_ingestion/**",
             "scripts/ingestion/**",
         ),

@@ -5,9 +5,9 @@ from typing import Any, Iterable, List
 
 import pytest
 
-from packages.python.javdb_platform.db_layer.system_state_repo import SystemStateRepo
-from packages.python.javdb_platform import dual_connection as _dual_module
-from packages.python.javdb_platform.dual_connection import DualConnection, _is_read
+from javdb.storage.repos.system_state_repo import SystemStateRepo
+from javdb.storage import dual_connection as _dual_module
+from javdb.storage.dual_connection import DualConnection, _is_read
 
 _SYSTEM_STATE_DDL = (
     "CREATE TABLE system_state (key TEXT PRIMARY KEY, value TEXT NOT NULL,"
@@ -55,7 +55,7 @@ def test_delete(repo):
 def test_init_db_creates_system_state_table(tmp_path, monkeypatch):
     """Regression: _OPERATIONS_DDL must declare the system_state table,
     not just the migration SQL file that nobody auto-loads."""
-    from packages.python.javdb_platform.db import _init_single_db, _OPERATIONS_DDL
+    from javdb.storage.db.db import _init_single_db, _OPERATIONS_DDL
     db = tmp_path / "ops.db"
     _init_single_db(str(db), _OPERATIONS_DDL, force=True)
     import sqlite3

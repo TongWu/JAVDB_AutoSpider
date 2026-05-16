@@ -13,7 +13,7 @@ from compat import alias_module
 
 _module = alias_module(
     __name__,
-    "packages.python.javdb_migrations.tools.reclassify_c_hacked_torrents",
+    "javdb.migrations.tools.reclassify_c_hacked_torrents",
 )
 
 if __name__ == "__main__":

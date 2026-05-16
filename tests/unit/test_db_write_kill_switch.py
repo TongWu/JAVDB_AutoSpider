@@ -21,7 +21,7 @@ import os
 import pytest
 
 import utils.infra.db as db_mod
-from packages.python.javdb_platform import config_helper
+from javdb.infra import config as config_helper
 
 
 @pytest.fixture

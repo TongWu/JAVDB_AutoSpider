@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from packages.python.javdb_platform import pipeline_service
+from javdb.pipeline import service as pipeline_service
 
 
 def _make_args(**overrides):

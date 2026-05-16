@@ -710,7 +710,7 @@ class TestGitPushBasicAuthNoPlaintextInArgv:
 
     def test_basic_auth_helper_does_not_embed_plaintext_password_in_argv(self):
         from unittest.mock import patch as _patch
-        from packages.python.javdb_platform.git_helper import (
+        from javdb.infra.git_helper import (
             _git_push_with_basic_auth,
         )
         captured_cmds = []
@@ -723,7 +723,7 @@ class TestGitPushBasicAuthNoPlaintextInArgv:
             return _Result()
 
         with _patch(
-            "packages.python.javdb_platform.git_helper.subprocess.run",
+            "javdb.infra.git_helper.subprocess.run",
             _fake_run,
         ):
             _git_push_with_basic_auth(

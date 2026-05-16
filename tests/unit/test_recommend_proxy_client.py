@@ -16,7 +16,7 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from packages.python.javdb_platform.recommend_proxy_client import (  # noqa: E402
+from javdb.proxy.recommend.client import (  # noqa: E402
     ProxyRecommendation,
     RecommendProxyClient,
     RecommendProxyUnavailable,
@@ -199,7 +199,7 @@ def test_factory_returns_none_when_flag_off_explicit(monkeypatch):
 def test_factory_returns_none_when_url_missing(monkeypatch):
     monkeypatch.setenv("RECOMMEND_PROXY_ENABLED", "true")
     with patch(
-        "packages.python.javdb_platform.config_helper.cfg",
+        "javdb.infra.config.cfg",
         side_effect=_cfg_mapping(PROXY_COORDINATOR_URL="", PROXY_COORDINATOR_TOKEN=""),
     ):
         assert create_recommend_proxy_client_from_env() is None
@@ -208,7 +208,7 @@ def test_factory_returns_none_when_url_missing(monkeypatch):
 def test_factory_returns_client_when_health_passes(monkeypatch):
     monkeypatch.setenv("RECOMMEND_PROXY_ENABLED", "true")
     with patch(
-        "packages.python.javdb_platform.config_helper.cfg",
+        "javdb.infra.config.cfg",
         side_effect=_cfg_mapping(
             PROXY_COORDINATOR_URL="https://w.test",
             PROXY_COORDINATOR_TOKEN="tok",
@@ -223,7 +223,7 @@ def test_factory_returns_client_when_health_passes(monkeypatch):
 def test_factory_returns_none_when_health_fails(monkeypatch):
     monkeypatch.setenv("RECOMMEND_PROXY_ENABLED", "true")
     with patch(
-        "packages.python.javdb_platform.config_helper.cfg",
+        "javdb.infra.config.cfg",
         side_effect=_cfg_mapping(
             PROXY_COORDINATOR_URL="https://w.test",
             PROXY_COORDINATOR_TOKEN="tok",

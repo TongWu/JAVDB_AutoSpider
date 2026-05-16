@@ -976,7 +976,7 @@ class TestCleanupCompletedTorrentsAdapter:
         mock_session.get.assert_not_called()
         mock_session.post.assert_not_called()
 
-    @patch('packages.python.javdb_integrations.qb_client.remove_completed_torrents_keep_files')
+    @patch('javdb.integrations.qb.client.remove_completed_torrents_keep_files')
     @patch('scripts.qb_file_filter.get_proxies_dict')
     def test_delegates_to_shared_implementation(self, mock_proxies, mock_shared):
         mock_proxies.return_value = None

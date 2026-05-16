@@ -2,7 +2,7 @@
 
 import pytest
 
-from packages.python.javdb_platform.runner_registry_client import (
+from javdb.proxy.coordinator.runner_registry_client import (
     RunnerRegistryClient,
 )
 

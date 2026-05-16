@@ -16,12 +16,12 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from packages.python.javdb_platform.recommend_proxy_client import (  # noqa: E402
+from javdb.proxy.recommend.client import (  # noqa: E402
     ProxyRecommendation,
     RecommendProxyUnavailable,
     RecommendResult,
 )
-from packages.python.javdb_platform.recommend_proxy_policy import (  # noqa: E402
+from javdb.proxy.recommend.policy import (  # noqa: E402
     RecommendProxyPolicy,
 )
 

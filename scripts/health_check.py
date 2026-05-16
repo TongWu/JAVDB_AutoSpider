@@ -11,7 +11,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from compat import alias_module
 
-_module = alias_module(__name__, "packages.python.javdb_integrations.health_check")
+_module = alias_module(__name__, "javdb.infra.health_check")
 
 if __name__ == "__main__":
     raise SystemExit(_module.main())

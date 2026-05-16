@@ -29,7 +29,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fi
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
-from packages.python.javdb_platform import db as db_mod
+from javdb.storage.db import db as db_mod
 
 
 # A value past Number.MAX_SAFE_INTEGER (2**53 - 1) — the exact problem we
