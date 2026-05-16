@@ -38,6 +38,7 @@ from apps.api.infra.security import (
 )
 from apps.api.parsers import RUST_PARSERS_AVAILABLE
 from apps.api.routers.auth import login, logout, refresh_token, router as auth_router
+from apps.api.routers.capabilities import router as capabilities_router
 from apps.api.routers.config import (
     get_config,
     get_config_meta,
@@ -157,6 +158,7 @@ for router in (
     config_router,
     tasks_router,
     explore_router,
+    capabilities_router,
 ):
     app.include_router(router)
 
