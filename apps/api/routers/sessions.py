@@ -11,10 +11,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from apps.api.infra.auth import _require_auth, require_role
 from apps.api.schemas.capabilities_payloads import (
+    SessionDetailResponse,
     SessionItem,
     SessionListResponse,
 )
-from packages.python.javdb_platform.db_connection import REPORTS_DB_PATH, get_db
+import packages.python.javdb_platform.db_connection as _db_connection
 from packages.python.javdb_platform.db_layer.sessions_repo import SessionsRepo
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
@@ -31,6 +32,25 @@ def _row_to_item(row) -> SessionItem:
     )
 
 
+@router.get("/{session_id}", response_model=SessionDetailResponse)
+def get_session_detail(
+    session_id: str,
+    _user=Depends(_require_auth),
+) -> SessionDetailResponse:
+    reports_path = _db_connection.REPORTS_DB_PATH
+    with _db_connection.get_db(reports_path) as conn:
+        repo = SessionsRepo(conn)
+        row = repo.get(session_id)
+        if not row:
+            raise HTTPException(status_code=404, detail={"error": {"code": "session.not_found"}})
+        movies, torrents = repo.get_writes(session_id)
+    return SessionDetailResponse(
+        session=_row_to_item(row),
+        movies=movies,
+        torrents=torrents,
+    )
+
+
 @router.get("", response_model=SessionListResponse)
 def list_sessions(
     state: str | None = Query(default=None),
@@ -38,7 +58,8 @@ def list_sessions(
     limit: int = Query(default=50, ge=1, le=200),
     _user=Depends(_require_auth),
 ) -> SessionListResponse:
-    with get_db(REPORTS_DB_PATH) as conn:
+    reports_path = _db_connection.REPORTS_DB_PATH
+    with _db_connection.get_db(reports_path) as conn:
         result = SessionsRepo(conn).list(state=state, cursor=cursor, limit=limit)
     return SessionListResponse(
         items=[_row_to_item(r) for r in result.items],
