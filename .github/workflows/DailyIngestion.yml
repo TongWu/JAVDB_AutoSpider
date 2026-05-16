@@ -108,9 +108,10 @@ jobs:
       branch: ${{ steps.branch_check.outputs.branch }}
       pipeline_workflow_run_started_at: ${{ steps.capture_run_started_at.outputs.started_at }}
       effective_write_mode: ${{ steps.resolve_write_mode.outputs.mode }}
+      paused: ${{ steps.pause_gate.outputs.paused }}
     env:
       TZ: Asia/Singapore
-    
+
     steps:
       - name: Capture workflow run start (UTC ISO)
         id: capture_run_started_at
@@ -121,40 +122,27 @@ jobs:
         with:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
 
-      # Ingestion Perfect Rollback (Phase 3): resolve the effective
-      # JAVDB_HISTORY_WRITE_MODE for this run so every downstream job
-      # uses the same value.  Precedence (highest first):
-      #   1. workflow_dispatch input `write_mode_override`
-      #   2. `.publish-config.yml` -> pending_mode_disabled_until (when
-      #      set and in the future, auto-fallback engaged → audit)
-      #   3. Phase 3 default 'pending'
-      - name: Resolve effective WriteMode
-        id: resolve_write_mode
+      # ADR-006: pipeline-wide pause gate. If a prior run hit a critical
+      # pending-mode alert, scripts/pending_mode_alert_and_pause.py wrote
+      # pipeline_paused_until into .publish-config.yml. While that
+      # timestamp is in the future, every downstream job skips via
+      # `needs.setup.outputs.paused != 'true'` and the workflow exits
+      # cleanly (so cron does not flag the workflow as failing). Once an
+      # operator fixes the root cause they delete pipeline_paused_until
+      # (or wait for it to expire) to resume normal scheduling.
+      - name: Pipeline pause gate (ADR-006)
+        id: pause_gate
         run: |
           set -euo pipefail
-          OVERRIDE="${{ inputs.write_mode_override }}"
-          if [ -n "$OVERRIDE" ]; then
-            echo "Honouring workflow_dispatch override: $OVERRIDE"
-            echo "mode=$OVERRIDE" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          MODE="pending"
+          PAUSED_UNTIL=""
           if [ -f .publish-config.yml ]; then
-            # NOTE: must use stdin heredoc (`python3 - <<'PY'`) here, NOT
-            # `python3 -c "..."`.  YAML's literal block strips the common
-            # leading indent but leaves any extra; an inline `python3 -c`
-            # script then gets non-zero leading whitespace and dies with
-            # IndentationError, silently dropping us back to pending and
-            # breaking the Phase 3 auto-fallback contract.  The heredoc
-            # form lets YAML strip every line uniformly so Python sees
-            # column-0 source.  See R1 in the audit plan.
-            DISABLE=$(python3 - <<'PY'
+            PAUSED_UNTIL=$(python3 - <<'PY'
           import datetime, re, sys
           try:
               with open('.publish-config.yml') as f:
                   for line in f:
                       m = re.match(
-                          r"^\s*pending_mode_disabled_until:\s*['\"]?([0-9T:\-+Z.]+)['\"]?",
+                          r"^\s*pipeline_paused_until:\s*['\"]?([0-9T:\-+Z.]+)['\"]?",
                           line,
                       )
                       if not m:
@@ -169,19 +157,38 @@ jobs:
                           tz=until.tzinfo or datetime.timezone.utc
                       )
                       if now < until:
-                          print('audit')
+                          print(until.isoformat())
                       sys.exit(0)
           except FileNotFoundError:
               pass
           PY
           )
-            if [ "$DISABLE" = "audit" ]; then
-              echo "pending_mode_disabled_until is in the future → forcing audit"
-              MODE="audit"
-            fi
           fi
-          echo "Effective JAVDB_HISTORY_WRITE_MODE: $MODE"
-          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+          if [ -n "$PAUSED_UNTIL" ]; then
+            echo "::warning::Pipeline paused until $PAUSED_UNTIL — downstream jobs will be skipped. Clear pipeline_paused_until in .publish-config.yml after fixing the root cause."
+            echo "paused=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Pipeline not paused; proceeding."
+            echo "paused=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ADR-006: resolve effective JAVDB_HISTORY_WRITE_MODE. The
+      # legacy ``.publish-config.yml`` audit fallback is gone — pause
+      # replaces it. Precedence:
+      #   1. workflow_dispatch input `write_mode_override`
+      #   2. Python default 'pending' (db_session._resolve_write_mode)
+      - name: Resolve effective WriteMode
+        id: resolve_write_mode
+        run: |
+          set -euo pipefail
+          OVERRIDE="${{ inputs.write_mode_override }}"
+          if [ -n "$OVERRIDE" ]; then
+            echo "Honouring workflow_dispatch override: $OVERRIDE"
+            echo "mode=$OVERRIDE" >> "$GITHUB_OUTPUT"
+          else
+            echo "No override; downstream defaults to pending."
+            echo "mode=pending" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Get current branch
         id: branch_check
@@ -340,6 +347,7 @@ jobs:
     permissions:
       contents: read
     needs: [setup]
+    if: needs.setup.outputs.paused != 'true'
     outputs:
       spider_success: ${{ steps.spider.outcome == 'success' }}
       uploader_success: ${{ steps.uploader.outcome == 'success' }}
@@ -758,7 +766,8 @@ jobs:
     permissions:
       contents: read
     needs: [setup, run-pipeline]
-    if: ${{ always() && (needs.run-pipeline.result == 'failure' || needs.run-pipeline.result == 'cancelled') }}
+    # Skip if paused — run-pipeline was skipped, so nothing to clean up.
+    if: ${{ always() && needs.setup.outputs.paused != 'true' && (needs.run-pipeline.result == 'failure' || needs.run-pipeline.result == 'cancelled') }}
     env:
       TZ: Asia/Singapore
       STORAGE_BACKEND: ${{ vars.STORAGE_BACKEND || 'sqlite' }}
@@ -853,11 +862,12 @@ jobs:
     runs-on: ubuntu-latest
     environment: Production
     permissions:
-      # Phase 3 — email job also runs the auto-fallback step which may
-      # commit + push pending_mode_disabled_until to .publish-config.yml.
+      # ADR-006 — email job also runs the alert+pause step which may
+      # commit + push pipeline_paused_until to .publish-config.yml.
       contents: write
     needs: [setup, run-pipeline]
-    if: always()
+    # Skip when paused — there is no run-pipeline result to summarise.
+    if: ${{ always() && needs.setup.outputs.paused != 'true' }}
     env:
       TZ: Asia/Singapore
       # Email subject/body date ≈ workflow start (first job UTC timestamp), not send time
@@ -1037,10 +1047,10 @@ jobs:
       # GITHUB_RUN_ID inside the script) and, if any critical metric is
       # over threshold, writes pending_mode_disabled_until to
       # .publish-config.yml so the next ingestion run downgrades to
-      # audit.  Soft alerts (commit_attempts, ratio, worker_stage_
-      # rollback_failed) only annotate the email subject — they do
-      # NOT trigger this block.
-      - name: Auto-fallback on critical pending alert
+      # pause the pipeline. Soft alerts (commit_attempts, ratio,
+      # worker_stage_rollback_failed) only annotate the email subject —
+      # they do NOT trigger this block.
+      - name: Alert + pause on critical pending alert (ADR-006)
         if: always()
         env:
           GITHUB_RUN_ID: ${{ github.run_id }}
@@ -1085,22 +1095,23 @@ jobs:
           PY
           )
           if [ -z "$DECISION" ]; then
-            echo "No critical pending-mode alert — auto-fallback NOT triggered."
+            echo "No critical pending-mode alert — pause NOT engaged."
             exit 0
           fi
           echo "::warning::Critical pending alert detected: $DECISION"
-          echo "Engaging Phase 3 auto-fallback (24h audit window)."
-          python3 -m scripts.pending_mode_auto_fallback \
+          echo "Engaging ADR-006 pipeline pause (24h)."
+          python3 -m scripts.pending_mode_alert_and_pause \
             --hours 24 \
             --reason "DailyIngestion run ${{ github.run_id }}: $DECISION"
-          # Best-effort commit + push so the next run sees the change.
-          # Non-fatal: a missing token / write permission only logs a warning.
+          # Best-effort commit + push so the next scheduled run sees the
+          # pause. Non-fatal: a missing token / write permission only
+          # logs a warning. An operator can still commit manually.
           if [ -n "${GH_TOKEN:-}" ] || [ -n "${GITHUB_TOKEN:-}" ]; then
             git config user.name "github-actions[bot]" || true
             git config user.email "github-actions[bot]@users.noreply.github.com" || true
             git add .publish-config.yml || true
-            git commit -m "ci(rollback): auto-fallback to audit (24h) — $DECISION" || true
-            git push || echo "::warning::auto-fallback commit push failed"
+            git commit -m "ci(pipeline): pause for 24h — $DECISION" || true
+            git push || echo "::warning::pause commit push failed"
           else
             echo "::warning::No GH_TOKEN — leaving .publish-config.yml uncommitted; operator must commit manually."
           fi
@@ -1115,7 +1126,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: Production
     needs: [setup, run-pipeline]
-    if: ${{ !cancelled() && needs.run-pipeline.result == 'success' && needs.run-pipeline.outputs.spider_success == 'true' && needs.run-pipeline.outputs.uploader_success == 'true' }}
+    if: ${{ !cancelled() && needs.setup.outputs.paused != 'true' && needs.run-pipeline.result == 'success' && needs.run-pipeline.outputs.spider_success == 'true' && needs.run-pipeline.outputs.uploader_success == 'true' }}
     permissions:
       contents: write
       pull-requests: write
