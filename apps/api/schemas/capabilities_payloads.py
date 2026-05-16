@@ -49,3 +49,14 @@ class OnboardingStatusResponse(BaseModel):
     completed: bool
     required_missing: list[str]
     skippable_missing: list[str]
+
+
+class OnboardingTestPayload(BaseModel):
+    component: Literal["javdb", "qb", "proxy", "smtp"]
+
+
+class OnboardingTestResponse(BaseModel):
+    component: str
+    ok: bool
+    message: str
+    details: dict | None = None
