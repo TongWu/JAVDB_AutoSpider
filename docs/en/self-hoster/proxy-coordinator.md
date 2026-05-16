@@ -1083,3 +1083,169 @@ When a runner re-stages a movie without holding an active claim (claim TTL elaps
 ### 20.7 Heartbeat Runner Count (W2.1)
 
 The heartbeat response now includes `active_runners_count` (post-prune snapshot). The Python client propagates this to `MovieSleepManager.set_active_runners()`, which scales `TripleWindowThrottle` limits. This field is also present in the `alive=false` (eviction) response path so the evicted runner can still scale its throttle correctly before re-registering.
+
+## 21. ADR-008: Session Reporting, Alerts, and Mutation Dashboard (Phase 1 + 2)
+
+ADR-008 closes the operator-loop gap between Coordinator state and CICD repo state. It is rolled out in two phases on the same Cloudflare Worker; both phases are backward-compatible (old Python clients keep working unchanged).
+
+### 21.1 Why
+
+Two operational pain points motivated this work:
+
+1. **Pipeline failure visibility**: when a runner failed mid-session, the dashboard showed it as "alive then gone" — operators had to cross-reference D1 `ReportSessions` and GitHub Actions logs to learn what failed and why.
+2. **No mutation surface**: clearing a bad CF state, banning a flapping proxy, or freezing the pipeline for a release required `wrangler` commands. The dashboard was read-only.
+
+### 21.2 What
+
+**Phase 1 — observability + simple mutations** (no Python consumer dependency):
+
+- Runner-reported session lifecycle. Every `register` / `heartbeat` / `unregister` carries an optional `session` payload (`session_id`, `status`, `write_mode`, `failure_reason`, `report_type`). The Worker upserts it into a `sessions` SQLite table inside `RunnerRegistry`. The dashboard renders three buckets: **Active**, **Recent Failures (24h)**, **Recent Committed**.
+- Alerts with webhook dispatch. Three trigger sources emit alerts:
+  - `session_failed` — runner reports `status: "failed"`.
+  - `ban_spike` — `ban_spike_threshold` bans in 1h for one proxy (hourly bucket idempotency).
+  - `login_cooldown` — `GlobalLoginState` enters its P2-C cooldown.
+  - Plus operator-triggered `manual_test` (the dashboard's "Test alert webhook" button).
+  Each alert is written to `alert_history` and POSTed to every matching webhook configured via `alert_webhooks_json`. Retries: 2 with exponential back-off (1s / 3s), per-webhook 10s timeout. Alert idempotency keys (`sessfail-<session_id>`, `banspike-<proxy_id>-<hour_bucket>`, `logincd-<cooldown_until_ms>`) prevent multiplication when the same event re-fires.
+- Dashboard banner shows unacknowledged alerts; **Ack** button flips the `ack` flag (visible in history forever, just suppressed from the banner).
+- Mutation buttons that don't need Python consumer work:
+  - **Ban proxy** / **Unban proxy** — per-row in the proxy table. Routes through `POST /proxies/ban` (wraps `/report kind=ban`) and `POST /proxies/unban`.
+  - **Force re-login** — clears the current cookie via `POST /login/invalidate_force`. The next runner re-logs in.
+  - **Pause pipeline 1h / 3h / 6h / 24h** — sets `pipeline_paused_until` in ConfigState. Spider startup honours this and exits 0 with a marker file.
+  - **Test alert webhook** — fires `POST /alerts/test` to verify your webhook destination receives events.
+
+**Phase 2 — runtime signals + inline config edit** (relies on the W6.A.1/W6.A.2 Python consumer wiring already shipped):
+
+- **Throttle global x2 / x4** buttons send `POST /signal { kind: "throttle_global", factor, ttl_ms }`. The spider's `_apply_active_signals` reconciles every heartbeat: `MovieSleepManager.set_global_factor(factor)` multiplies every worker's sleep range.
+- **Pause all runners** sends `POST /signal { kind: "pause_all", ttl_ms }`. `MovieSleepManager.set_pause_until_ms()` blocks every `sleep()` call until expiry.
+- **Resume (clear signals)** sends `POST /signal { kind: "resume" }`. The Worker drops every active signal in one go.
+- **Inline config edit** — every config key has an `[edit]` button. PATCHes `/config` in the audit-friendly single-key shape `{ key, value, reason }` so each change leaves one row in `config_audit_log`.
+
+### 21.3 Configuration
+
+New `CONFIG_ALLOWED_KEYS` (PATCH `/config`):
+
+- `alert_webhooks_json` — JSON-encoded `Array<{url, kinds: AlertKind[]}>`. Empty string disables all webhooks. URLs MUST be `https://`.
+- `ban_spike_threshold` — integer; default 3 bans / 1h triggers `ban_spike`.
+- `pipeline_paused_until` — wall-clock ms-epoch (string). Runners exit at startup when this is in the future.
+- `pipeline_pause_reason` — free-form operator note shown to runners that exit due to a pause.
+
+New env var (`wrangler.toml [vars]`): `BAN_SPIKE_THRESHOLD` — fallback when `ban_spike_threshold` ConfigState key isn't set.
+
+Example webhook config:
+
+```bash
+# Send only session_failed + login_cooldown to Slack, everything to Discord
+curl -X PATCH https://proxy-coordinator.example.workers.dev/config \
+  -H "Authorization: Bearer $PROXY_COORDINATOR_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"key":"alert_webhooks_json","value":"[{\"url\":\"https://hooks.slack.com/...\",\"kinds\":[\"session_failed\",\"login_cooldown\"]},{\"url\":\"https://discord.com/api/webhooks/...\"}]","reason":"alert routing"}'
+```
+
+### 21.4 New API Endpoints (Phase 1 + 2)
+
+Read (cookie or Bearer auth):
+
+- `GET /sessions?since_ms=&limit=` — three buckets of session rows.
+- `GET /alerts?since_ms=&limit=` — alert history (descending ts).
+- `GET /ops/snapshot` — now includes `sessions` and `alerts` blocks.
+
+Mutation (cookie or Bearer auth):
+
+- `POST /alerts/ack` — body `{id}`. Flips `ack=1` on the row.
+- `POST /alerts/test` — body `{summary?}`. Records + dispatches a `manual_test` alert.
+- `POST /proxies/ban` — body `{proxy_id, ttl_ms?, reason?}`. Wraps `/report kind=ban`.
+- `POST /proxies/unban` — body `{proxy_id, reason?}`. Wraps `/report kind=unban`.
+- `POST /login/invalidate_force` — reads current version and invalidates. Next runner re-logs in.
+- `POST /signal` — see Phase 2 above; already existed (W5.4) but now reachable via dashboard cookie.
+
+### 21.5 Operator SOP
+
+Day-to-day:
+
+- **A pipeline failed at 03:00 UTC and I want to know why** -> open dashboard, scroll to **Sessions -> Recent Failures (24h)**, hover the `failure_reason` column. Click the GH run id to jump to logs.
+- **A proxy started banning every request** -> find it in the proxy table, click **Ban** with a TTL (e.g. 6h). The next `/lease` for that proxy returns `banned=true` immediately. Confirm via the Cloudflare logs that `ban_spike` did not also fire (means the threshold is tuned right).
+- **Login is failing across all runners** -> click **Force re-login**. The next runner will acquire the lease, log in, and publish a new cookie. Watch the `login` audit log via the History drawer.
+- **Need to freeze ingestion for a release** -> click **Pause pipeline · 1h** (or longer). Already-running pipelines finish, but new GitHub Actions runs exit 0 immediately with a marker. Resume manually or wait for TTL.
+
+Phase 2 (runtime signals — affect live runners within one heartbeat ~60s):
+
+- **Cohort is hitting a CF wave** -> **Throttle global x2**, 30 min. Watch the dashboard ban + CF charts come back down. **Resume** when calm.
+- **Detected scraper detection** -> **Pause all runners**, 15 min. All workers stop dispatching new requests immediately on next heartbeat. In-flight requests complete normally.
+
+### 21.6 Webhook Payload Format
+
+The Worker POSTs JSON like:
+
+```json
+{
+  "id": "sessfail-20260516T180000.123456Z-abcd-ef12",
+  "kind": "session_failed",
+  "ts": 1747416000000,
+  "severity": "warning",
+  "summary": "Session 20260516T180000.123456Z-abcd-ef12 failed (workflow=DailyIngestion, write_mode=audit, holder=runner-abc123)",
+  "details": {
+    "session_id": "20260516T180000.123456Z-abcd-ef12",
+    "workflow_run_id": "12345678",
+    "workflow_name": "DailyIngestion",
+    "write_mode": "audit",
+    "failure_reason": "spider crash: connection reset",
+    "holder_id": "runner-abc123"
+  }
+}
+```
+
+Webhook receivers should look at `kind` to route. Two retries with exponential back-off + 10s per-request timeout — beyond that the alert is dropped from the webhook path (still in `alert_history` on the dashboard).
+
+### 21.7 Rollback
+
+Phase 1 mutations are independent of Phase 2 signals — either can be turned off without affecting the other.
+
+- **Disable webhooks**: PATCH `/config { key: "alert_webhooks_json", value: "" }`. Alerts still land in `alert_history` for the dashboard.
+- **Disable session reporting**: roll back the Python client to a pre-ADR-008 build. The Worker drops malformed/missing session payloads silently — old clients are forward-compatible.
+- **Disable mutation buttons in dashboard**: delete the `data-op="..."` attributes from `dashboard_html.ts` or revert the file. The endpoints stay; only the UI vanishes.
+- **Full revert**: drop the `sessions` + `alert_history` tables (DO storage) and revert the source files. The `wrangler.toml` doesn't need changes — no new DO bindings.
+
+### 21.8 Phase 3 — MovieClaim / WorkDistributor panels + responsive UI
+
+Phase 3 adds three observability surfaces that were already supplied by existing DOs but never rendered on the dashboard. No new bindings, no schema migration — purely consumption of data the Worker already had.
+
+**Today's Claims panel** — reads `GET /movie_claim/stats?date=YYYY-MM-DD` which fans out across every sub-shard of the current Asia/Singapore date and sums the per-shard counters. Six numbers surface on the dashboard:
+
+- `claims_active` — in-flight claims that haven't expired
+- `staged_count` — staged completions awaiting commit / rollback (Phase-1 protocol)
+- `completed_committed_count` — finished movies for the day (the badge headline)
+- `failures_count` — distinct hrefs with at least one recorded failure
+- `in_cooldown_count` — hrefs whose `next_attempt_at > now`
+- `dead_lettered_count` — hrefs past the `MOVIE_CLAIM_DEAD_LETTER_THRESHOLD`
+
+A high `dead_lettered_count` is the canonical "investigate me" signal — the same hrefs keep failing across runners, so the cluster is reaching its scrape ceiling.
+
+**Work queue panel** — reads `GET /work/stats` which the WorkDistributor DO already exposed. Four numbers:
+
+- `queue_size` — total items (visible + leased)
+- `visible` — claimable items not currently leased
+- `leased` — items held by an active visibility lease
+- `oldest_enqueued_at_ms` — age of the longest-waiting item; >30 min turns red
+
+The dashboard surfaces this even though the spider's `fetch_engine` doesn't yet consume the queue; the WorkDistributor is staged and the panel shows whether anyone is using it.
+
+**Responsive layout** — three changes:
+
+- Drawer width clamped to `min(360px, 95vw)` so it fits inside narrow mobile viewports.
+- A `@media (max-width: 480px)` breakpoint shrinks padding, drops the stats grid to 2 columns, makes tables horizontally scrollable, and makes the first column sticky so the proxy identifier stays visible while scrolling.
+- uPlot charts now compute their width from `clientWidth` of their `.chart-body` container; a single `ResizeObserver` calls `chart.setSize()` whenever the container width changes. No more 360px hard-coded width.
+
+**Explicitly NOT in Phase 3** (deferred):
+
+- Active proactive proxy health checks — would consume Free-plan outbound traffic.
+- KV/D1-backed pool registry for `/add_proxy` / `/remove_proxy` — requires Paid plan.
+- Role-based dashboard auth — single `DASHBOARD_PASSWORD` is enough for current ops.
+- Switching `fetch_engine` to pull from WorkDistributor — independent decision, panel exists so the data is observable when that switch happens.
+- Active cookie probing in GlobalLoginState — relies on the existing spider-triggered re-login path.
+
+### 21.9 Phase 3 Rollback
+
+- **Hide the MovieClaim panel**: delete `id="movie-claim-stats"` and `renderMovieClaimStats` from `dashboard_html.ts`. The `/movie_claim/stats` endpoint stays callable via `curl`.
+- **Hide the Work queue panel**: same pattern, delete `id="work-stats"` and `renderWorkStats`.
+- **Revert chart sizing**: restore the `width: 360` constant in `chartOptions` and drop the `ResizeObserver` block. Charts go back to fixed-size at the cost of mobile usability.
+- **Full revert**: revert `src/movie_claim_state.ts`, `src/index.ts`, and `src/dashboard_html.ts` to pre-Phase-3 commit. No DO storage changes — the `handleClaimStats` method is read-only.

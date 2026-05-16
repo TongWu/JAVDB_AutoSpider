@@ -296,6 +296,40 @@ def _parse_config_snapshot(payload: Any) -> Optional[ConfigSnapshot]:
 
 
 @dataclass(frozen=True)
+class SessionPayload:
+    """Phase-1 ADR-008 — runner-reported session lifecycle.
+
+    Sent on every ``register`` / ``heartbeat`` / ``unregister`` call so the
+    Coordinator dashboard can show what a runner was doing when it failed
+    (write_mode, status, failure_reason) without cross-referencing
+    GitHub Actions logs.
+
+    All fields are optional except ``session_id`` and ``status``. The
+    Worker silently drops malformed payloads (fail-open) so an
+    extension to this dataclass cannot break heartbeat coordination.
+    """
+
+    session_id: str
+    status: str  # "in_progress" | "finalizing" | "committed" | "failed" | "cancelled"
+    write_mode: Optional[str] = None  # "audit" | "pending" | "unknown"
+    report_type: Optional[str] = None  # "daily" | "adhoc" | "dedup" | ...
+    failure_reason: Optional[str] = None
+
+    def to_payload(self) -> dict:
+        body: dict = {
+            "session_id": str(self.session_id),
+            "status": str(self.status),
+        }
+        if self.write_mode is not None:
+            body["write_mode"] = str(self.write_mode)
+        if self.report_type is not None:
+            body["report_type"] = str(self.report_type)
+        if self.failure_reason is not None:
+            body["failure_reason"] = str(self.failure_reason)
+        return body
+
+
+@dataclass(frozen=True)
 class RegisterResult:
     """Reply from ``POST /register``.
 
@@ -330,6 +364,12 @@ class RegisterResult:
     #: W5.4 — operator-pushed active signals (always a list, possibly empty;
     #: never ``None`` so call-sites don't need to guard).
     active_signals: List[Signal] = field(default_factory=list)
+    #: Phase-1 ADR-008 — operator-set pipeline pause (wall-clock ms epoch).
+    #: ``0`` when no active pause. Runners MUST exit cleanly at startup if
+    #: ``pipeline_paused_until > now`` so a freshly-started workflow run
+    #: doesn't consume API quota during a paused window.
+    pipeline_paused_until: int = 0
+    pipeline_pause_reason: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -362,6 +402,9 @@ class HeartbeatResult:
     config: Optional[ConfigSnapshot] = None
     #: W5.4 — see :attr:`RegisterResult.active_signals`.
     active_signals: List[Signal] = field(default_factory=list)
+    #: Phase-1 ADR-008 — see :attr:`RegisterResult.pipeline_paused_until`.
+    pipeline_paused_until: int = 0
+    pipeline_pause_reason: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -481,6 +524,7 @@ class RunnerRegistryClient(BaseDOClient):
         proxy_hash: str = "",
         page_range: Optional[str] = None,
         proxy_pool: Optional[list[dict]] = None,
+        session: Optional[SessionPayload] = None,
     ) -> RegisterResult:
         """Register *this* runner with the singleton registry.
 
@@ -518,6 +562,8 @@ class RunnerRegistryClient(BaseDOClient):
             body["started_at"] = int(started_at)
         if proxy_pool is not None:
             body["proxy_pool"] = proxy_pool
+        if session is not None:
+            body["session"] = session.to_payload()
         resp = self._do_request("POST", "/register", body)
         try:
             return RegisterResult(
@@ -541,13 +587,25 @@ class RunnerRegistryClient(BaseDOClient):
                 config=_parse_config_snapshot(resp.get("config")),
                 # W5.4 — operator signals; empty list on pre-W5.4 Workers.
                 active_signals=_parse_signal_list(resp.get("active_signals")),
+                # Phase-1 ADR-008 — pipeline pause state (default 0 = no pause).
+                pipeline_paused_until=int(resp.get("pipeline_paused_until", 0) or 0),
+                pipeline_pause_reason=(
+                    str(resp["pipeline_pause_reason"])
+                    if resp.get("pipeline_pause_reason")
+                    else None
+                ),
             )
         except (KeyError, TypeError, ValueError) as e:
             raise RunnerRegistryUnavailable(
                 f"malformed register response: {resp!r} ({e})"
             ) from e
 
-    def heartbeat(self, holder_id: str) -> HeartbeatResult:
+    def heartbeat(
+        self,
+        holder_id: str,
+        *,
+        session: Optional[SessionPayload] = None,
+    ) -> HeartbeatResult:
         """Refresh ``last_heartbeat`` for *holder_id*.
 
         Designed to run on a 60 s daemon loop.  Returns
@@ -557,7 +615,10 @@ class RunnerRegistryClient(BaseDOClient):
         """
         if not isinstance(holder_id, str) or not holder_id:
             raise ValueError("holder_id must be a non-empty string")
-        resp = self._do_request("POST", "/heartbeat", {"holder_id": holder_id})
+        body: dict = {"holder_id": holder_id}
+        if session is not None:
+            body["session"] = session.to_payload()
+        resp = self._do_request("POST", "/heartbeat", body)
         try:
             return HeartbeatResult(
                 alive=_strict_bool(resp.get("alive")),
@@ -579,13 +640,25 @@ class RunnerRegistryClient(BaseDOClient):
                 config=_parse_config_snapshot(resp.get("config")),
                 # W5.4 — operator signals; empty list on pre-W5.4 Workers.
                 active_signals=_parse_signal_list(resp.get("active_signals")),
+                # Phase-1 ADR-008 — pipeline pause state.
+                pipeline_paused_until=int(resp.get("pipeline_paused_until", 0) or 0),
+                pipeline_pause_reason=(
+                    str(resp["pipeline_pause_reason"])
+                    if resp.get("pipeline_pause_reason")
+                    else None
+                ),
             )
         except (KeyError, TypeError, ValueError) as e:
             raise RunnerRegistryUnavailable(
                 f"malformed heartbeat response: {resp!r} ({e})"
             ) from e
 
-    def unregister(self, holder_id: str) -> UnregisterResult:
+    def unregister(
+        self,
+        holder_id: str,
+        *,
+        session: Optional[SessionPayload] = None,
+    ) -> UnregisterResult:
         """Remove *holder_id* from the registry (atexit / signal handler).
 
         Idempotent — calling for an unknown holder returns
@@ -595,7 +668,10 @@ class RunnerRegistryClient(BaseDOClient):
         """
         if not isinstance(holder_id, str) or not holder_id:
             raise ValueError("holder_id must be a non-empty string")
-        resp = self._do_request("POST", "/unregister", {"holder_id": holder_id})
+        body: dict = {"holder_id": holder_id}
+        if session is not None:
+            body["session"] = session.to_payload()
+        resp = self._do_request("POST", "/unregister", body)
         try:
             return UnregisterResult(
                 unregistered=_strict_bool(resp.get("unregistered")),
