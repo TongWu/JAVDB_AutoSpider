@@ -84,9 +84,15 @@ class TestApplyConfigDirect:
 
 @pytest.fixture(autouse=True)
 def reset_state_version_and_throttle():
-    """Reset the module-level version + throttle baselines so each test
-    starts from a known state. The single shared ``triple_window_throttle``
-    is mutated by the production code path; rewind it after each test."""
+    """Reset the module-level version + throttle baselines + heartbeat
+    constants so each test starts from a known state.
+
+    ``_apply_config_snapshot`` mutates module-level constants
+    (``_RUNNER_HEARTBEAT_INTERVAL_SEC``, ``_HEARTBEAT_INTERVAL_MULTI_RUNNER_SEC``)
+    when ``heartbeat_interval_sec`` is present in the snapshot; those
+    mutations persist across the whole pytest session unless we restore
+    them, which would break unrelated tests that assert the baseline.
+    """
     import packages.python.javdb_spider.runtime.state as state_mod
     state_mod._last_applied_config_version = -1
     original = (
@@ -99,6 +105,10 @@ def reset_state_version_and_throttle():
         triple_window_throttle._base_short_max,
         triple_window_throttle._base_long_max,
         triple_window_throttle._base_extra_max,
+    )
+    original_heartbeat = (
+        state_mod._RUNNER_HEARTBEAT_INTERVAL_SEC,
+        state_mod._HEARTBEAT_INTERVAL_MULTI_RUNNER_SEC,
     )
     yield
     state_mod._last_applied_config_version = -1
@@ -113,6 +123,8 @@ def reset_state_version_and_throttle():
         triple_window_throttle._base_long_max,
         triple_window_throttle._base_extra_max,
     ) = original
+    state_mod._RUNNER_HEARTBEAT_INTERVAL_SEC = original_heartbeat[0]
+    state_mod._HEARTBEAT_INTERVAL_MULTI_RUNNER_SEC = original_heartbeat[1]
 
 
 class TestApplyConfigSnapshot:

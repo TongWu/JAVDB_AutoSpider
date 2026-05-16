@@ -130,6 +130,12 @@ global_runner_registry_client: Optional[RunnerRegistryClient] = None
 # Worker /health probe succeeds. ``None`` means the runner is using
 # the legacy local-cache health provider (or no provider at all).
 global_recommend_proxy_policy = None
+# W6.C (W5.2) — opt-in cross-runner work queue client. Constructed by
+# ``setup_work_distributor_client`` when WORK_DISTRIBUTOR_ENABLED is
+# truthy AND /health succeeds. ``None`` means the spider falls back
+# to its existing "iterate local list + MovieClaim mutex" dispatch
+# path (the default and zero-overhead model).
+global_work_distributor_client = None
 # Background daemon thread that pings ``/heartbeat`` every 60 s once a
 # registry client is configured.  Holds a reference here so the atexit
 # handler can flag it for shutdown without leaking a reference cycle.
@@ -1297,6 +1303,43 @@ def setup_runner_registry_client() -> Optional[RunnerRegistryClient]:
     return client
 
 
+def setup_work_distributor_client():
+    """W6.C (W5.2) — initialise the opt-in work-distribution queue client.
+
+    Companion of the other DO setup functions; gated by
+    ``WORK_DISTRIBUTOR_ENABLED`` so the default (off) keeps the spider
+    on its existing local-iteration + MovieClaim dispatch path with
+    zero overhead.
+
+    On success caches the client in :data:`global_work_distributor_client`.
+    On any failure (flag off, URL/token missing, /health failing) returns
+    ``None`` and leaves the global as ``None`` — the consumer loop in
+    :mod:`javdb_spider.detail.runner` checks for that and falls back.
+
+    Idempotent.
+    """
+    global global_work_distributor_client
+    if global_work_distributor_client is not None:
+        return global_work_distributor_client
+
+    try:
+        from packages.python.javdb_platform.work_distributor_client import (
+            create_work_distributor_client_from_env,
+        )
+    except Exception:  # noqa: BLE001 — import failure must not crash startup
+        logger.warning("WorkDistributor client import failed", exc_info=True)
+        return None
+
+    try:
+        client = create_work_distributor_client_from_env()
+    except Exception:  # noqa: BLE001 — factory wrapping is best-effort
+        logger.warning("WorkDistributor client setup failed", exc_info=True)
+        return None
+
+    global_work_distributor_client = client
+    return client
+
+
 def initialize_request_handler():
     """Create the global RequestHandler from configuration."""
     global global_request_handler
@@ -1383,6 +1426,7 @@ def setup_proxy_pool(use_proxy) -> None:
     # in one place alongside the runner-registry atexit hook.
     atexit.register(_sweep_movie_claim_stages_at_exit)
     setup_runner_registry_client()
+    setup_work_distributor_client()
 
     if is_proxy_mode_disabled(PROXY_MODE):
         logger.info("Proxy globally disabled (PROXY_MODE='%s') - skipping pool init", PROXY_MODE)
