@@ -133,7 +133,7 @@ class TestRollbackCliTargetResolution:
             raise AssertionError("lookup should not run for --session-id alone")
 
         monkeypatch.setattr(
-            rollback_cli, "db_find_in_progress_sessions", fail_lookup,
+            rollback_cli, "find_window_sessions", fail_lookup,
         )
         args = argparse.Namespace(
             session_id=42,
@@ -154,7 +154,7 @@ class TestRollbackCliTargetResolution:
             )
 
         monkeypatch.setattr(
-            rollback_cli, "db_find_in_progress_sessions", fail_lookup,
+            rollback_cli, "find_window_sessions", fail_lookup,
         )
         args = argparse.Namespace(
             session_id=42,
@@ -174,12 +174,12 @@ class TestRollbackCliTargetResolution:
 
         captured = {}
 
-        def fake_lookup(*, since=None, max_age_hours=None):
+        def fake_lookup(since, *, raise_on_error=False):
             captured["since"] = since
             return [7, 42]
 
         monkeypatch.setattr(
-            rollback_cli, "db_find_in_progress_sessions", fake_lookup,
+            rollback_cli, "find_window_sessions", fake_lookup,
         )
         args = argparse.Namespace(
             session_id=42,
@@ -199,14 +199,14 @@ class TestRollbackCliTargetResolution:
 
         monkeypatch.setattr(
             rollback_cli,
-            "db_find_sessions_by_run",
+            "find_run_sessions",
             lambda run_id, attempt: [101, 102],
         )
         # Also assert that window scan does NOT run when targets came
         # from the run-id path.
         monkeypatch.setattr(
             rollback_cli,
-            "db_find_in_progress_sessions",
+            "find_window_sessions",
             lambda *args, **kwargs: pytest.fail(
                 "window scan must not run when run-id yielded targets"
             ),
@@ -223,6 +223,37 @@ class TestRollbackCliTargetResolution:
         assert rollback_cli._resolve_target_sessions(args, None) == [
             42, 101, 102,
         ]
+
+    def test_window_scan_db_error_propagates_as_exit_3(self, monkeypatch):
+        """A transient DB error during the window-scan fallback must
+        bubble up as exit-3 (the documented "could not connect" code),
+        not be silently downgraded to a "nothing to clean up, exit 0"
+        success.
+
+        Regression for the PR #40 review finding: ``find_window_sessions``
+        used to swallow exceptions universally; rollback now opts into
+        ``raise_on_error=True`` so its main() try/except still catches
+        the failure and returns 3.
+        """
+        from apps.cli import rollback as rollback_cli
+
+        monkeypatch.setattr(rollback_cli, "init_db", lambda: None)
+        monkeypatch.setattr(rollback_cli, "close_db", lambda: None)
+        # No --session-id, no --run-id → only the window scan path is
+        # consulted, and it raises.
+        def boom(*_a, **_kw):
+            raise RuntimeError("DB hiccup")
+
+        monkeypatch.setattr(rollback_cli, "find_window_sessions", boom)
+
+        rc = rollback_cli.main([
+            "--run-started-at", "2026-05-04T19:30:00Z",
+            "--include-orphaned",
+        ])
+        assert rc == 3, (
+            f"expected exit 3 (DB unavailable) but got {rc}; "
+            "window-scan failures must not silently succeed"
+        )
 
     def test_main_continues_after_refused_session(self, monkeypatch):
         from apps.cli import rollback as rollback_cli
