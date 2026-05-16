@@ -99,7 +99,7 @@ class SessionRollbackResponse(BaseModel):
     session_id: str
     dry_run: bool
     actions: list[dict]
-    summary: dict[str, int]
+    summary: dict
 
 
 class SessionCommitPayload(BaseModel):
