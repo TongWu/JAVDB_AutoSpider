@@ -51,31 +51,28 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sys
+import time
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
-import time
-
+from apps.cli._session_helpers import (
+    append_jsonl_record,
+    attach_run_identity,
+    fanout_movie_claim,
+    find_run_sessions,
+    find_window_sessions,
+    normalize_run_started_at,
+    read_session_pre_state,
+    write_github_output,
+)
 from packages.python.javdb_platform import db as _db
 from packages.python.javdb_platform.db_connection import close_db, get_db
-from packages.python.javdb_platform.db_reports import (
-    db_find_in_progress_sessions,
-    db_find_sessions_by_run,
-    db_get_session_run_identity,
-    db_get_session_status,
-    db_pending_session_stats,
-)
+from packages.python.javdb_platform.db_reports import db_pending_session_stats
 from packages.python.javdb_platform.db_rollback import db_rollback_session
 from packages.python.javdb_platform.db_migrations import init_db
 from packages.python.javdb_platform.logging_config import (
     get_logger,
     setup_logging,
-)
-from packages.python.javdb_platform.movie_claim_client import (
-    MovieClaimUnavailable,
-    create_movie_claim_client_from_env,
-    current_shard_date,
 )
 
 
@@ -249,114 +246,6 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _rollback_movie_claim_stages(
-    session_ids: List[int],
-    shard_date: Optional[str],
-    *,
-    max_attempts: int,
-) -> List[dict]:
-    """Drop staged completions for *session_ids* on the coordinator.
-
-    Best-effort with bounded retries: a coordinator outage MUST NOT
-    block the DB-side rollback.  Each session is retried up to
-    *max_attempts* times with exponential backoff (1s, 2s, 4s, ...);
-    persistent failures are recorded so the StaleSessionCleanup orphan
-    sweep can reconcile the leftover stages.
-
-    Returns one summary record per session for the CLI's JSON output;
-    an empty list when no client is configured.
-    """
-    if not session_ids:
-        return []
-    client = create_movie_claim_client_from_env()
-    if client is None:
-        logger.info(
-            "MovieClaim coordinator not configured — skipping "
-            "rollback_staged_movies (DB-side rollback unaffected)",
-        )
-        return []
-    attempts = max(1, int(max_attempts))
-    target_date = shard_date or current_shard_date()
-    summaries: List[dict] = []
-    try:
-        for sid in session_ids:
-            removed: Optional[int] = None
-            last_error: Optional[str] = None
-            for attempt in range(1, attempts + 1):
-                try:
-                    result = client.rollback_staged_movies(
-                        str(sid), date=target_date,
-                    )
-                    removed = result.removed
-                    last_error = None
-                    break
-                except MovieClaimUnavailable as exc:
-                    last_error = str(exc)
-                    logger.warning(
-                        "MovieClaim rollback attempt %d/%d failed for "
-                        "session=%s shard=%s: %s",
-                        attempt, attempts, sid, target_date, exc,
-                    )
-                except Exception as exc:  # noqa: BLE001
-                    last_error = str(exc)
-                    logger.warning(
-                        "Unexpected MovieClaim rollback error attempt %d/%d "
-                        "for session=%s shard=%s",
-                        attempt, attempts, sid, target_date, exc_info=True,
-                    )
-                if attempt < attempts:
-                    time.sleep(2 ** (attempt - 1))
-            if removed is None:
-                logger.error(
-                    "MovieClaim rollback gave up for session=%s shard=%s "
-                    "after %d attempts — orphan sweep will reconcile",
-                    sid, target_date, attempts,
-                )
-                summaries.append({
-                    "session_id": sid,
-                    "shard_date": target_date,
-                    "removed": 0,
-                    "ok": False,
-                    "error": last_error or "unknown",
-                    "attempts": attempts,
-                })
-            else:
-                logger.info(
-                    "MovieClaim rollback: session=%s shard=%s removed=%s",
-                    sid, target_date, removed,
-                )
-                summaries.append({
-                    "session_id": sid,
-                    "shard_date": target_date,
-                    "removed": removed,
-                    "ok": True,
-                })
-    finally:
-        client.close()
-    return summaries
-
-
-def _normalize_run_started_at(raw: Optional[str]) -> Optional[str]:
-    """Convert an ISO timestamp into the SQLite-friendly UTC form.
-
-    GitHub passes timestamps like ``2026-05-04T19:30:00Z``; ``ReportSessions
-    .DateTimeCreated`` stores UTC as ``2026-05-04 19:30:00``. Offset-aware
-    inputs are normalized to naive UTC before lexicographic comparison.
-    """
-    if not raw:
-        return None
-    s = raw.strip()
-    if not s:
-        return None
-    try:
-        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
-    except (TypeError, ValueError):
-        return None
-    if dt.tzinfo is not None:
-        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
-    return dt.strftime("%Y-%m-%d %H:%M:%S")
-
-
 def _resolve_target_sessions(
     args: argparse.Namespace,
     run_started_at_normalized: Optional[str],
@@ -383,25 +272,13 @@ def _resolve_target_sessions(
         # ``--attempt`` is now ``type=int`` so argparse rejects malformed
         # input at parse time; ``None`` here means the caller explicitly
         # opted into all-attempts lookup.
-        attempt: Optional[int] = args.attempt
-        try:
-            run_sessions = db_find_sessions_by_run(args.run_id, attempt)
-        except Exception as e:
-            logger.warning(
-                "db_find_sessions_by_run(run_id=%s attempt=%s) failed: %s",
-                args.run_id, attempt, e,
-            )
-            run_sessions = []
-        for sid in run_sessions:
+        for sid in find_run_sessions(args.run_id, args.attempt):
             targets.add(sid)
 
     # Legacy / fallback: --run-started-at window scan.
     if args.run_started_at is not None:
         if args.include_orphaned or not targets:
-            sessions = db_find_in_progress_sessions(
-                since=run_started_at_normalized,
-            )
-            for sid in sessions:
+            for sid in find_window_sessions(run_started_at_normalized):
                 targets.add(sid)
 
     return sorted(targets)
@@ -544,25 +421,8 @@ def _emit_pending_verify_for_session(
     }
     if error is not None:
         record["error"] = error
-    try:
-        identity = db_get_session_run_identity(session_id)
-    except Exception:  # noqa: BLE001
-        identity = None
-    if identity is not None:
-        record["run_id"] = identity[0]
-        record["run_attempt"] = identity[1]
-
-    try:
-        reports_dir = os.environ.get("REPORTS_DIR", "reports")
-        path = os.path.join(reports_dir, "D1", "d1_drift.jsonl")
-        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "Failed to append pending_session_verify metric to "
-            "d1_drift.jsonl: %s", exc,
-        )
+    attach_run_identity(record, session_id)
+    append_jsonl_record(record)
 
 
 def _emit_metrics(summary: dict) -> None:
@@ -591,28 +451,13 @@ def _emit_metrics(summary: dict) -> None:
         # everything succeeded (or the coordinator was not configured).
         "movie_claim_rollback_failures": claim_failed,
     }
-    try:
-        reports_dir = os.environ.get("REPORTS_DIR", "reports")
-        path = os.path.join(reports_dir, "D1", "d1_drift.jsonl")
-        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
-    except Exception as exc:  # noqa: BLE001 - metric emission must never fail rollback
-        logger.warning("Failed to append rollback metric to d1_drift.jsonl: %s", exc)
+    append_jsonl_record(record)
 
-    gh_output = os.environ.get("GITHUB_OUTPUT")
-    if gh_output:
-        try:
-            with open(gh_output, "a", encoding="utf-8") as f:
-                f.write(f"drift_total={record['drift_total']}\n")
-                f.write(f"orphan_pruned_total={record['orphan_pruned_total']}\n")
-                f.write(
-                    "session_count={}\n".format(
-                        len(record["session_ids"])
-                    )
-                )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Failed to write GITHUB_OUTPUT metrics: %s", exc)
+    write_github_output(
+        drift_total=record["drift_total"],
+        orphan_pruned_total=record["orphan_pruned_total"],
+        session_count=len(record["session_ids"]),
+    )
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -634,7 +479,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         logger.error("Failed to init DB: %s", e)
         return 3
 
-    run_started_at_normalized = _normalize_run_started_at(args.run_started_at)
+    run_started_at_normalized = normalize_run_started_at(args.run_started_at)
     failure_reason = _resolve_failure_reason(args)
     if args.run_started_at is not None and run_started_at_normalized is None:
         logger.error(
@@ -716,9 +561,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         # Capture (WriteMode, Status) BEFORE rollback so the verify
         # record sees the pre-state — _rollback_reports might delete
         # the ReportSessions row and obliterate the snapshot.
-        pre_state = db_get_session_status(sid)
-        pre_write_mode = pre_state[0] if pre_state else None
-        pre_status = pre_state[1] if pre_state else None
+        pre_state = read_session_pre_state(sid)
+        pre_write_mode = pre_state.write_mode
+        pre_status = pre_state.status
         rollback_started = time.monotonic()
         try:
             counts = db_rollback_session(
@@ -804,9 +649,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             sid for sid in sessions
             if sid not in failed_sessions
         ]
-        claim_rollback_summaries = _rollback_movie_claim_stages(
+        claim_rollback_summaries = fanout_movie_claim(
             rollback_targets,
-            args.shard_date,
+            operation="rollback",
+            shard_date=args.shard_date,
             max_attempts=args.claim_rollback_attempts,
         )
 
