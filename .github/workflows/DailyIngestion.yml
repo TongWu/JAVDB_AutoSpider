@@ -22,13 +22,12 @@ on:
   workflow_dispatch:
     inputs:
       write_mode_override:
-        description: 'Override JAVDB_HISTORY_WRITE_MODE for this run only (audit | pending). Leave empty to honour the default + .publish-config.yml override.'
+        description: 'Force JAVDB_HISTORY_WRITE_MODE=pending for this run, bypassing any .publish-config.yml auto-fallback. Leave empty to honour the default (pending) + .publish-config.yml override. Audit is no longer a manual choice per ADR-006.'
         required: false
         default: ''
         type: choice
         options:
           - ''
-          - 'audit'
           - 'pending'
       disable_all_filters:
         description: 'Disable ALL filters (history, rclone inventory, release date) — process every entry from index'
