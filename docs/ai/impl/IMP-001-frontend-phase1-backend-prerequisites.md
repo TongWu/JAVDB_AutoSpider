@@ -1,11 +1,11 @@
-# ADR-008: Frontend Phase 1 — Backend Prerequisites
+# IMP-001: Frontend Phase 1 — Backend Prerequisites
 
 **Status**: Accepted — Completed 2026-05-16 (merged via #33065718)
 **Date**: 2026-05-16
 **Deciders**: Frontend rewrite working stream (in support of the new `javdb-autospider-web` repo)
 **Related**: design spec at `docs/superpowers/specs/2026-05-16-frontend-rewrite-design.md` (sections §4.2, §8.2, §8.4 Phase 1 column, §11 steps 1–2); succeeded by Phase 2 frontend implementation in the separate frontend repo
 
-> **Note on format:** This ADR was originally written as a step-by-step implementation plan and relocated into the ADR space (per repo convention for design records). The decision context is captured in the **Goal / Architecture / Tech Stack** preamble below; the rest is the execution checklist preserved from the original plan.
+> **Note on format:** This file is an **implementation plan** — written by the writing-plans workflow, not a design document. It records HOW to execute the related design decisions (see **Related** above). The preamble (Goal / Architecture / Tech Stack) frames the work; the body is the step-by-step execution checklist. English-only by repo convention.
 >
 > **For agentic workers (historical):** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
