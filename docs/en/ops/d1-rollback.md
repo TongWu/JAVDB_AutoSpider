@@ -18,6 +18,41 @@ This document is the operator's reference for rolling back partial Cloudflare D1
 
 > Every workflow run that performs D1 writes is now logically tied to a single `ReportSessions.Id` — the **session_id** — *and* a `(RunId, RunAttempt)` pair derived from `GITHUB_RUN_ID` / `GITHUB_RUN_ATTEMPT`. Rollback can be addressed by either; the run identity is the primary lookup path because it remains valid even if a prior failed rollback deleted the owning `ReportSessions` row.
 
+## Table of Contents
+
+- [TL;DR](#tldr)
+- [Strategy summary (Pending default + X3 audit fallback)](#strategy-summary-pending-default--x3-audit-fallback)
+  - [Why audit tables for history? *(legacy — kept for context, see Appendix A)*](#why-audit-tables-for-history-legacy--kept-for-context-see-appendix-a)
+  - [SessionId generation (2026-05-08+)](#sessionid-generation-2026-05-08)
+  - [Rollback CLI lookup precedence](#rollback-cli-lookup-precedence)
+  - [Audit retention on commit](#audit-retention-on-commit)
+  - [Smoke-test cleanup strategy](#smoke-test-cleanup-strategy)
+  - [`(RunId, RunAttempt, CsvFilename)` invariant](#runid-runattempt-csvfilename-invariant)
+- [Session lifecycle](#session-lifecycle)
+- [Automatic cleanup-on-failure](#automatic-cleanup-on-failure)
+- [Manual rollback workflow (`RollbackD1.yml`)](#manual-rollback-workflow-rollbackd1yml)
+- ["Re-run failed jobs" safety matrix](#re-run-failed-jobs-safety-matrix)
+- [Direct CLI usage](#direct-cli-usage)
+  - [Incident-response tooling (one-shot scripts)](#incident-response-tooling-one-shot-scripts)
+  - [Marking a session committed manually](#marking-a-session-committed-manually)
+- [Audit table forensics *(read-only since Phase 4, 2026-05-13)*](#audit-table-forensics-read-only-since-phase-4-2026-05-13)
+- [Drift handling](#drift-handling)
+- [Schema migration](#schema-migration)
+- [Pending mode (current default)](#pending-mode-current-default)
+  - [Pending state machine](#pending-state-machine)
+  - [Cleanup dispatch matrix (Phase 3)](#cleanup-dispatch-matrix-phase-3)
+  - [Pending mode metrics (`pending_session_verify`)](#pending-mode-metrics-pending_session_verify)
+  - [Email Pending Mode Verification + Health Snapshot](#email-pending-mode-verification--health-snapshot)
+  - [Auto-fallback (`.publish-config.yml`)](#auto-fallback-publish-configyml)
+  - [Operator recovery SOP](#operator-recovery-sop)
+- [Validation playbook (dev branch — Phase 3, 6 steps)](#validation-playbook-dev-branch--phase-3-6-steps)
+- [File pointers](#file-pointers)
+- [Appendix A — Legacy audit fallback (sunset 2026-08)](#appendix-a--legacy-audit-fallback-sunset-2026-08)
+  - [A.1 Timeline](#a1-timeline)
+  - [A.2 What "deprecated" means in practice](#a2-what-deprecated-means-in-practice)
+  - [A.3 Audit-archive cron (`AuditArchive.yml`)](#a3-audit-archive-cron-auditarchiveyml)
+  - [A.4 Legacy audit-mode validation playbook (kept for fallback)](#a4-legacy-audit-mode-validation-playbook-kept-for-fallback)
+
 ## TL;DR
 
 - **Failed run?** Don't touch anything. The `cleanup-on-failure` job runs automatically on `DailyIngestion` / `AdHocIngestion` and undoes uncommitted D1 writes for that run.
@@ -25,8 +60,8 @@ This document is the operator's reference for rolling back partial Cloudflare D1
 - **Lost the session_id?** Pass `run_id` + `attempt` (the failed run's GitHub identity) — the rollback CLI's primary lookup path will find every session that workflow run touched, even if the `ReportSessions` row was already deleted. `run_started_at` is still accepted as a fallback time-window scan, but only when `--include-orphaned` is set (the legacy unconditional sweep is now opt-in to avoid clobbering sibling sessions).
 - **Cross-day reject:** the CLI refuses any candidate session whose `DateTimeCreated` predates `--run-started-at` by more than one hour. This prevents the 2026-05-08 incident class where a stale `--session-id` accidentally pointed at a session from a prior day. Pass `--force` to override.
 - **Successful runs are protected.** Any session marked `Status='committed'` is refused for rollback unless `force=true` is set. Committed sessions also have their `MovieHistoryAudit` / `TorrentHistoryAudit` rows pruned automatically (no rollback needed → no audit needed).
-- **Stale-session cron:** [`StaleSessionCleanup.yml`](../.github/workflows/StaleSessionCleanup.yml) runs daily at 02:00 UTC and unwinds any session stuck `in_progress` for more than 48h, tagging them `FailureReason='stale_timeout'`. The same job now also calls `apps.cli.sweep_movie_claim_stages` to clean up Phase-1 orphaned `staged_complete{}` entries on the MovieClaim Durable Object (cutoff 48h, server-floored to ≥ 1h).
-- **MovieClaim cross-session rollback safety (Phase 1):** detail-page completions are now staged per-session on the MovieClaim DO before they enter the permanent `completed_committed[]` list. `apps.cli.commit_session` promotes the stage on success; `apps.cli.rollback` calls `rollback_staged_movies` (with up to 3 retries) before completing the DB rollback. A failed peer session no longer blocks an ad-hoc retry on the same href in another session — only `completed_committed[]` does. See [`docs/PROXY_COORDINATOR_DEPLOY.md` §15.2](PROXY_COORDINATOR_DEPLOY.md) for the protocol and `JAVDB_AutoSpider.wiki/Cross-Runner-State.md` §2.3 for the runtime semantics.
+- **Stale-session cron:** [`StaleSessionCleanup.yml`](../../../.github/workflows/StaleSessionCleanup.yml) runs daily at 02:00 UTC and unwinds any session stuck `in_progress` for more than 48h, tagging them `FailureReason='stale_timeout'`. The same job now also calls `apps.cli.sweep_movie_claim_stages` to clean up Phase-1 orphaned `staged_complete{}` entries on the MovieClaim Durable Object (cutoff 48h, server-floored to ≥ 1h).
+- **MovieClaim cross-session rollback safety (Phase 1):** detail-page completions are now staged per-session on the MovieClaim DO before they enter the permanent `completed_committed[]` list. `apps.cli.commit_session` promotes the stage on success; `apps.cli.rollback` calls `rollback_staged_movies` (with up to 3 retries) before completing the DB rollback. A failed peer session no longer blocks an ad-hoc retry on the same href in another session — only `completed_committed[]` does. See [`docs/zh/self-hoster/proxy-coordinator.md` §15.2](../../../docs/zh/self-hoster/proxy-coordinator.md) for the protocol and `JAVDB_AutoSpider.wiki/Cross-Runner-State.md` §2.3 for the runtime semantics.
 
 ---
 
@@ -59,23 +94,27 @@ Phase 4 obsoletes this approach for new sessions: the Pending write path recompu
 
 ### SessionId generation (2026-05-08+)
 
-`ReportSessions.Id` is **no longer** allocated by the per-backend AUTOINCREMENT counter. The application generates the id itself via `_generate_session_id()` in [`packages/python/javdb_platform/db.py`](../packages/python/javdb_platform/db.py):
+`ReportSessions.Id` is **no longer** allocated by the per-backend AUTOINCREMENT counter. The application generates the id itself via `_generate_session_id()` in [`packages/python/javdb_platform/db.py`](../../../packages/python/javdb_platform/db.py):
 
 ```python
-candidate = (time.time_ns() // 1_000_000) << 10  # 41-bit ms timestamp + 10-bit slot
+# Format: YYYYMMDDTHHMMSS.ffffffZ-TTTT-SSSS
+# (UTC, microsecond precision, per-process random 16-bit tag, monotonic 16-bit counter)
+dt = datetime.fromtimestamp(us / 1_000_000, tz=timezone.utc)
+ts = dt.strftime("%Y%m%dT%H%M%S") + f".{us % 1_000_000:06d}Z"
+candidate = f"{ts}-{tag_hex}-{counter:04x}"
 ```
 
-The same id is INSERTed explicitly on both backends. Why:
+The same TEXT id is INSERTed explicitly on both backends. Why:
 
 - Under `STORAGE_BACKEND=dual`, SQLite and D1 each maintain their own AUTOINCREMENT counter; any past asymmetric INSERT (one side committed, the other failed) leaves them permanently out of sync.
 - `DualCursor.lastrowid` returns whichever backend the cursor wraps. Trusting it as `SessionId` for downstream tables is what caused the 2026-05-08 incident: the SQLite-side allocated `Id=332`, but on D1 `Id=332` was a stale row from a 2026-05-07 workflow, and the spider tagged its history writes with `SessionId=332`. The rollback CLI later saw 145 audit rows spanning 35 hours and refused to roll most of them back as drift.
-- See [`migration/d1/2026_05_08_sessionid_decouple.md`](../migration/d1/2026_05_08_sessionid_decouple.md) for the migration writeup.
+- See [`migration/d1/2026_05_08_sessionid_decouple.md`](../../../migration/d1/2026_05_08_sessionid_decouple.md) for the migration writeup.
 
-A guard in [`packages/python/javdb_platform/dual_connection.py`](../packages/python/javdb_platform/dual_connection.py) (`DualCursor.for_write`) raises `DualWriteIdMismatchError` if any future code path attempts to INSERT into a guarded table (`APPLICATION_GENERATED_ID_TABLES`) without supplying an explicit Id and the two backends disagree on `lastrowid`.
+A guard in [`packages/python/javdb_platform/dual_connection.py`](../../../packages/python/javdb_platform/dual_connection.py) (`DualCursor.for_write`) raises `DualWriteIdMismatchError` if any future code path attempts to INSERT into a guarded table (`APPLICATION_GENERATED_ID_TABLES`) without supplying an explicit Id and the two backends disagree on `lastrowid`.
 
 ### Rollback CLI lookup precedence
 
-The CLI ([`apps/cli/rollback.py`](../apps/cli/rollback.py)) walks three sources in order, unioning the results:
+The CLI ([`apps/cli/rollback.py`](../../../apps/cli/rollback.py)) walks three sources in order, unioning the results:
 
 1. **`--session-id`** (most specific). Targets that one session and **does not expand** into a window scan unless `--include-orphaned` is set.
 2. **`--run-id` + `--attempt`** (primary path for run-aware lookups). Calls `db_find_sessions_by_run` which queries both `ReportSessions` and the audit tables (so a run whose `ReportSessions` row was already deleted by a previous failed rollback is still recoverable).
@@ -85,7 +124,9 @@ Cross-day sanity filter: every candidate session's `DateTimeCreated` is checked 
 
 ### Audit retention on commit
 
-Once `db_mark_session_committed` flips a session to `Status='committed'`, the rollback CLI refuses to roll it back (without `--force`). The `MovieHistoryAudit` / `TorrentHistoryAudit` rows for that session are no longer needed and would only bloat the tables, so the same call eagerly `DELETE`s them (no-op if the session is already committed). ### Smoke-test cleanup strategy
+Once `db_mark_session_committed` flips a session to `Status='committed'`, the rollback CLI refuses to roll it back (without `--force`). The `MovieHistoryAudit` / `TorrentHistoryAudit` rows for that session are no longer needed and would only bloat the tables, so the same call eagerly `DELETE`s them (no-op if the session is already committed).
+
+### Smoke-test cleanup strategy
 
 `TestIngestion.yml` runs the spider on every push/PR and **must** exercise the full dual-write path (otherwise it can't catch D1 / SQLite drift, schema-migration regressions, `DualWriteIdMismatchError` triggers, etc. before they reach the production DailyIngestion / AdHocIngestion runs). To prevent mock rows from accumulating in production, every TestIngestion run is paired with a guaranteed cleanup:
 
@@ -278,7 +319,7 @@ python3 -m scripts.audit_archive --apply --target sqlite --older-than-days 60
 
 All three scripts default to dry-run and write a JSON report under `reports/`. Use `--target` to restrict to one side; for `cleanup_stale_session_audits` use `--session-ids 332,346` to restrict to specific ids and `--cross-day-hours 12` to tune the phantom-detection threshold.
 
-`sync_d1_to_sqlite` + `cleanup_stale_session_audits` are manual incident-response tools (don't wire into cron). `audit_archive` **is** a cron job and runs weekly via [`.github/workflows/AuditArchive.yml`](../.github/workflows/AuditArchive.yml). The recurring stale-session cleanup lives in [`StaleSessionCleanup.yml`](../.github/workflows/StaleSessionCleanup.yml) and uses [`apps.cli.cleanup_stale_in_progress`](../apps/cli/cleanup_stale_in_progress.py).
+`sync_d1_to_sqlite` + `cleanup_stale_session_audits` are manual incident-response tools (don't wire into cron). `audit_archive` **is** a cron job and runs weekly via [`.github/workflows/AuditArchive.yml`](../../../.github/workflows/AuditArchive.yml). The recurring stale-session cleanup lives in [`StaleSessionCleanup.yml`](../../../.github/workflows/StaleSessionCleanup.yml) and uses [`apps.cli.cleanup_stale_in_progress`](../../../apps/cli/cleanup_stale_in_progress.py).
 
 ### Marking a session committed manually
 
@@ -294,7 +335,7 @@ python3 -m apps.cli.commit_session --session-id 123
 
 ## Audit table forensics *(read-only since Phase 4, 2026-05-13)*
 
-> Phase 4 contract: the audit tables are **historical-session forensics only**. No new sessions append rows to them — the Pending write path is the default. Until the sunset date in [Appendix A](#appendix-a-legacy-audit-fallback-sunset-2026-08), rows for any committed/failed session linger long enough for operators to query them; the [`scripts/audit_archive.py`](../scripts/audit_archive.py) cron prunes anything > 30 days old every Monday.
+> Phase 4 contract: the audit tables are **historical-session forensics only**. No new sessions append rows to them — the Pending write path is the default. Until the sunset date in [Appendix A](#appendix-a-legacy-audit-fallback-sunset-2026-08), rows for any committed/failed session linger long enough for operators to query them; the [`scripts/audit_archive.py`](../../../scripts/audit_archive.py) cron prunes anything > 30 days old every Monday.
 
 The `MovieHistoryAudit` and `TorrentHistoryAudit` tables are scratch storage — `db_rollback_session` deletes their rows after a successful replay. Until then, they're a useful diagnostic trail.
 
@@ -366,7 +407,7 @@ After migration, `db.SCHEMA_VERSION == 11`. The `_ensure_rollback_columns` helpe
 
 ## Pending mode (current default)
 
-`ReportSessions.WriteMode` (added 2026-05-09) selects the dispatch path for cleanup-on-failure and the stale-session cron. The default has been **`pending`** since Phase 3 (DailyIngestion / AdHocIngestion / TestIngestion); the legacy audit path remains selectable via env var `JAVDB_HISTORY_WRITE_MODE=audit` or via the workflow_dispatch input `write_mode_override`. See [the architecture plan](../.cursor/plans/ingestion_perfect_rollback_2152bae2.plan.md) for the design rationale.
+`ReportSessions.WriteMode` (added 2026-05-09) selects the dispatch path for cleanup-on-failure and the stale-session cron. The default has been **`pending`** since Phase 3 (DailyIngestion / AdHocIngestion / TestIngestion); the legacy audit path remains selectable via env var `JAVDB_HISTORY_WRITE_MODE=audit` or via the workflow_dispatch input `write_mode_override`. See [the architecture plan](../../../.cursor/plans/ingestion_perfect_rollback_2152bae2.plan.md) for the design rationale.
 
 ### Pending state machine
 
@@ -410,18 +451,18 @@ The same file also receives `stale_session_cleanup` and `rollback_summary` recor
 
 ### Email Pending Mode Verification + Health Snapshot
 
-The email step ([`packages/python/javdb_integrations/email_notification.py`](../packages/python/javdb_integrations/email_notification.py)) now reads `reports/D1/d1_drift.jsonl`, restricts to `pending_session_verify` records owned by `$GITHUB_RUN_ID` / `$GITHUB_RUN_ATTEMPT`, and renders a **Pending Mode Verification** body block listing every pending session's counts. Any threshold violation flags the row inline (`[CRITICAL]` / `[ALERT]`) and prefixes the email subject:
+The email step ([`packages/python/javdb_integrations/email_notification.py`](../../../packages/python/javdb_integrations/email_notification.py)) now reads `reports/D1/d1_drift.jsonl`, restricts to `pending_session_verify` records owned by `$GITHUB_RUN_ID` / `$GITHUB_RUN_ATTEMPT`, and renders a **Pending Mode Verification** body block listing every pending session's counts. Any threshold violation flags the row inline (`[CRITICAL]` / `[ALERT]`) and prefixes the email subject:
 
 - **Soft alert** (subject `[PENDING-ALERT] (...)`) — `commit_attempts > Phase3_max`, `worker_stage_rollback_failed > 0`, `staged_claim_orphan_count > 0`, `d1_request_count_audit_baseline_ratio > 1.8`, or `final_status='finalizing'`.
 - **Critical alert** (subject `[PENDING-ROLLBACK-AUTO] (...)`) — `pending_residual_count > 0`, `derived_recompute_drift > 0`, or `cleanup_path_mismatch_count > 0`. Also engages the [auto-fallback](#auto-fallback-publish-configyml) below.
 
-A **Health Snapshot** block follows the per-session table when [`scripts/aggregate_pending_health.py`](../scripts/aggregate_pending_health.py) has produced `reports/D1/pending_health_24h.json`. Both DailyIngestion and AdHocIngestion call this aggregator before `Run Email Notification` so the snapshot covers the trailing 24h of pending sessions, plus stale-cron resume successes / failures.
+A **Health Snapshot** block follows the per-session table when [`scripts/aggregate_pending_health.py`](../../../scripts/aggregate_pending_health.py) has produced `reports/D1/pending_health_24h.json`. Both DailyIngestion and AdHocIngestion call this aggregator before `Run Email Notification` so the snapshot covers the trailing 24h of pending sessions, plus stale-cron resume successes / failures.
 
 Phase 2 thresholds remain available via the env var `JAVDB_PENDING_ALERT_PHASE=2` — useful for the TestIngestion canary while it warms up.
 
 ### Auto-fallback (`.publish-config.yml`)
 
-A **critical** pending alert in DailyIngestion / AdHocIngestion runs the `Auto-fallback on critical pending alert` step in the email job. It calls [`scripts/pending_mode_auto_fallback.py`](../scripts/pending_mode_auto_fallback.py) which writes (or extends):
+A **critical** pending alert in DailyIngestion / AdHocIngestion runs the `Auto-fallback on critical pending alert` step in the email job. It calls [`scripts/pending_mode_auto_fallback.py`](../../../scripts/pending_mode_auto_fallback.py) which writes (or extends):
 
 ```yaml
 # Phase 3 auto-fallback marker — written by scripts/pending_mode_auto_fallback.py.
@@ -477,14 +518,14 @@ If any of these six steps deviates from the expected outcome, **do not** promote
 
 ## File pointers
 
-- CLI: [`apps/cli/rollback.py`](../apps/cli/rollback.py), [`apps/cli/commit_session.py`](../apps/cli/commit_session.py), [`apps/cli/cleanup_stale_in_progress.py`](../apps/cli/cleanup_stale_in_progress.py)
-- Core helpers: [`packages/python/javdb_platform/db.py`](../packages/python/javdb_platform/db.py) (`db_stage_history_write`, `db_commit_session_history`, `db_resume_finalizing_session`, `db_rollback_session`, `db_mark_session_committed`, `db_find_in_progress_sessions`, `db_find_stale_pending_sessions`, `db_pending_session_stats`, `_audit_record_movie_change`, `_rollback_history`, etc.)
-- Phase 3 scripts: [`scripts/aggregate_pending_health.py`](../scripts/aggregate_pending_health.py), [`scripts/pending_mode_auto_fallback.py`](../scripts/pending_mode_auto_fallback.py)
-- Phase 4 scripts: [`scripts/audit_archive.py`](../scripts/audit_archive.py), [`scripts/cleanup_stale_session_audits.py`](../scripts/cleanup_stale_session_audits.py) (read-only since 2026-05-13)
-- Email integration: [`packages/python/javdb_integrations/email_notification.py`](../packages/python/javdb_integrations/email_notification.py) (`_format_pending_verify_section`, `_evaluate_pending_alerts`, `_format_health_snapshot_section`)
-- Workflows: [`.github/workflows/DailyIngestion.yml`](../.github/workflows/DailyIngestion.yml), [`.github/workflows/AdHocIngestion.yml`](../.github/workflows/AdHocIngestion.yml), [`.github/workflows/RollbackD1.yml`](../.github/workflows/RollbackD1.yml), [`.github/workflows/StaleSessionCleanup.yml`](../.github/workflows/StaleSessionCleanup.yml), [`.github/workflows/AuditArchive.yml`](../.github/workflows/AuditArchive.yml)
-- Migrations: [`migration/d1/2026_05_04_add_rollback_columns_*.sql`](../migration/d1/), [`migration/d1/2026_05_09_add_pending_history_tables.sql`](../migration/d1/)
-- Plan reference: [`.cursor/plans/ingestion_perfect_rollback_2152bae2.plan.md`](../.cursor/plans/ingestion_perfect_rollback_2152bae2.plan.md)
+- CLI: [`apps/cli/rollback.py`](../../../apps/cli/rollback.py), [`apps/cli/commit_session.py`](../../../apps/cli/commit_session.py), [`apps/cli/cleanup_stale_in_progress.py`](../../../apps/cli/cleanup_stale_in_progress.py)
+- Core helpers: [`packages/python/javdb_platform/db.py`](../../../packages/python/javdb_platform/db.py) (`db_stage_history_write`, `db_commit_session_history`, `db_resume_finalizing_session`, `db_rollback_session`, `db_mark_session_committed`, `db_find_in_progress_sessions`, `db_find_stale_pending_sessions`, `db_pending_session_stats`, `_audit_record_movie_change`, `_rollback_history`, etc.)
+- Phase 3 scripts: [`scripts/aggregate_pending_health.py`](../../../scripts/aggregate_pending_health.py), [`scripts/pending_mode_auto_fallback.py`](../../../scripts/pending_mode_auto_fallback.py)
+- Phase 4 scripts: [`scripts/audit_archive.py`](../../../scripts/audit_archive.py), [`scripts/cleanup_stale_session_audits.py`](../../../scripts/cleanup_stale_session_audits.py) (read-only since 2026-05-13)
+- Email integration: [`packages/python/javdb_integrations/email_notification.py`](../../../packages/python/javdb_integrations/email_notification.py) (`_format_pending_verify_section`, `_evaluate_pending_alerts`, `_format_health_snapshot_section`)
+- Workflows: [`.github/workflows/DailyIngestion.yml`](../../../.github/workflows/DailyIngestion.yml), [`.github/workflows/AdHocIngestion.yml`](../../../.github/workflows/AdHocIngestion.yml), [`.github/workflows/RollbackD1.yml`](../../../.github/workflows/RollbackD1.yml), [`.github/workflows/StaleSessionCleanup.yml`](../../../.github/workflows/StaleSessionCleanup.yml), [`.github/workflows/AuditArchive.yml`](../../../.github/workflows/AuditArchive.yml)
+- Migrations: [`migration/d1/2026_05_04_add_rollback_columns_*.sql`](../../../migration/d1/), [`migration/d1/2026_05_09_add_pending_history_tables.sql`](../../../migration/d1/)
+- Plan reference: [`.cursor/plans/ingestion_perfect_rollback_2152bae2.plan.md`](../../../.cursor/plans/ingestion_perfect_rollback_2152bae2.plan.md)
 
 ---
 
@@ -507,11 +548,11 @@ If any of these six steps deviates from the expected outcome, **do not** promote
 ### A.2 What "deprecated" means in practice
 
 - `db_upsert_history()` emits `DeprecationWarning` on every call. The function still works (audit-fallback rollback depends on it for legacy sessions) — direct callers must migrate to `save_parsed_movie_to_history` (which auto-stages under `WriteMode='pending'` and only reaches `db_upsert_history` for explicit audit fallbacks).
-- The `JAVDB_AUDIT_WRITES_DISABLED=1` env var (added 2026-05-13, [`packages/python/javdb_platform/db.py`](../packages/python/javdb_platform/db.py)) turns every audit-row INSERT into a no-op while still letting `MovieHistory` / `TorrentHistory` UPSERTs land. Default is `0` because the audit fallback still needs audit rows during the deprecation window; flip to `1` once every workflow has been verified to run pending-only.
+- The `JAVDB_AUDIT_WRITES_DISABLED=1` env var (added 2026-05-13, [`packages/python/javdb_platform/db.py`](../../../packages/python/javdb_platform/db.py)) turns every audit-row INSERT into a no-op while still letting `MovieHistory` / `TorrentHistory` UPSERTs land. Default is `0` because the audit fallback still needs audit rows during the deprecation window; flip to `1` once every workflow has been verified to run pending-only.
 - `MovieHistoryAudit` / `TorrentHistoryAudit` rows remain queryable for forensics — manual rollback via `apps.cli.rollback --scope history --session-id <id>` still works for any legacy session that has audit rows. The expectation is that no *new* sessions land in this branch.
 - The destructive cleanup helper `scripts/cleanup_stale_session_audits.py` is now strictly read-only — passing `--apply` logs a deprecation warning and silently degrades to dry-run.
 
-### A.3 Audit-archive cron ([`AuditArchive.yml`](../.github/workflows/AuditArchive.yml))
+### A.3 Audit-archive cron ([`AuditArchive.yml`](../../../.github/workflows/AuditArchive.yml))
 
 Runs every Monday at 04:00 UTC (12:00 Asia/Singapore). Default mode is dry-run; an operator promotes to `apply=true` through `workflow_dispatch` once a week's worth of dry-run reports look sane.
 
@@ -540,4 +581,4 @@ The pre-Phase-3 5-step audit playbook still applies when an operator forces `Wri
 5. Revert the injected failure before promoting.
 
 > After 2026-08-13 this playbook is not runnable — the `audit` value is rejected. Pending-mode is the only supported path; manual incidents that need byte-for-byte historical reconstruction have to fall back to `scripts/sync_d1_to_sqlite.py` against a pre-sunset backup.
-- Tests: [`tests/unit/test_rollback.py`](../tests/unit/test_rollback.py), [`tests/unit/test_rollback_pending_mode.py`](../tests/unit/test_rollback_pending_mode.py)
+- Tests: [`tests/unit/test_rollback.py`](../../../tests/unit/test_rollback.py), [`tests/unit/test_rollback_pending_mode.py`](../../../tests/unit/test_rollback_pending_mode.py)

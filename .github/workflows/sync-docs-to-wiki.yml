@@ -1,0 +1,48 @@
+name: Sync Docs to Wiki
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/en/**'
+      - 'scripts/ci/wiki_mapping.json'
+      - 'scripts/ci/sync_docs_to_wiki.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync-wiki:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main repo
+        uses: actions/checkout@v4
+
+      - name: Checkout wiki
+        uses: actions/checkout@v4
+        with:
+          repository: TongWu/JAVDB_AutoSpider_CICD.wiki
+          path: wiki
+          token: ${{ secrets.WIKI_PUSH_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Sync docs to wiki
+        run: python scripts/ci/sync_docs_to_wiki.py --wiki-dir wiki --repo-root .
+
+      - name: Push wiki changes
+        working-directory: wiki
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No wiki changes to commit"
+          else
+            git commit -m "docs: sync from docs/en/ ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
+            git push
+          fi
