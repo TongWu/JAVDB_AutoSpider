@@ -36,6 +36,7 @@ from packages.python.javdb_platform.proxy_coordinator_client import (
     ProxyCoordinatorClient,
 )
 from packages.python.javdb_platform.runner_registry_client import (
+    ConfigSnapshot,
     RunnerRegistryClient,
     RunnerRegistryUnavailable,
     create_runner_registry_client_from_env,
@@ -761,6 +762,84 @@ def _update_sleep_runner_count(count: int) -> None:
         pass
 
 
+# W6.A.1 — most recently applied ConfigState snapshot version. Used to
+# skip redundant re-applications when the heartbeat returns the same
+# snapshot it returned last tick (the common case).
+_last_applied_config_version: int = -1
+
+
+def _apply_config_snapshot(snap: ConfigSnapshot) -> None:
+    """Apply an operator-pushed config snapshot from the heartbeat.
+
+    Only keys the Python client actually consumes locally are honoured;
+    Worker-side knobs (ban_ttl_ms, movie_claim_ttl_ms, etc.) are silently
+    ignored because the Worker DOs read them directly from env vars,
+    not via this snapshot.
+
+    Skips work when ``snap.version`` matches the last applied version
+    (the steady-state case — every heartbeat carries the same snapshot).
+    Fail-open: every exception is swallowed; an invalid value MUST NOT
+    take down the heartbeat loop.
+    """
+    global _last_applied_config_version
+    if snap.version == _last_applied_config_version:
+        return
+    values = snap.values or {}
+
+    def _to_int(key: str) -> Optional[int]:
+        raw = values.get(key)
+        if raw is None or raw == "":
+            return None
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            logger.warning("Config %s=%r is not an integer; ignoring", key, raw)
+            return None
+
+    def _to_float(key: str) -> Optional[float]:
+        raw = values.get(key)
+        if raw is None or raw == "":
+            return None
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            logger.warning("Config %s=%r is not a float; ignoring", key, raw)
+            return None
+
+    try:
+        from packages.python.javdb_spider.runtime.sleep import (
+            triple_window_throttle as _throttle,
+        )
+        _throttle.apply_config(
+            short_max=_to_int("short_max"),
+            long_max=_to_int("long_max"),
+            extra_max=_to_int("extra_max"),
+            short_window_sec=_to_float("short_window_sec"),
+            long_window_sec=_to_float("long_window_sec"),
+            extra_window_sec=_to_float("extra_window_sec"),
+        )
+    except Exception:  # noqa: BLE001 — config application is best-effort
+        logger.warning(
+            "Failed to apply throttle config from snapshot v%d", snap.version,
+            exc_info=True,
+        )
+
+    # heartbeat_interval_sec — module-level; affects the NEXT tick because
+    # the current loop iteration is already inside ``_runner_heartbeat_stop.wait()``.
+    hb_interval = _to_float("heartbeat_interval_sec")
+    if hb_interval is not None and hb_interval > 0:
+        global _RUNNER_HEARTBEAT_INTERVAL_SEC
+        global _HEARTBEAT_INTERVAL_MULTI_RUNNER_SEC
+        _HEARTBEAT_INTERVAL_MULTI_RUNNER_SEC = hb_interval
+        _RUNNER_HEARTBEAT_INTERVAL_SEC = hb_interval
+
+    _last_applied_config_version = snap.version
+    logger.info(
+        "Applied W5.3 config snapshot version=%d (%d operator overrides)",
+        snap.version, len(values),
+    )
+
+
 def _runner_heartbeat_loop(client: RunnerRegistryClient, holder_id: str) -> None:
     """Background thread: ping ``/heartbeat`` until stopped.
 
@@ -815,6 +894,8 @@ def _runner_heartbeat_loop(client: RunnerRegistryClient, holder_id: str) -> None
                 # changed while we were missing).
                 _apply_movie_claim_recommendation(rereg.movie_claim_recommended)
                 _update_sleep_runner_count(len(rereg.active_runners))
+                if rereg.config is not None:
+                    _apply_config_snapshot(rereg.config)
             except RunnerRegistryUnavailable:
                 logger.debug("Runner-registry re-register unavailable; will retry")
             except Exception:  # noqa: BLE001
@@ -829,6 +910,8 @@ def _runner_heartbeat_loop(client: RunnerRegistryClient, holder_id: str) -> None
         # which the auto path treats as "single runner, unmount".
         _apply_movie_claim_recommendation(result.movie_claim_recommended)
         _update_sleep_runner_count(result.active_runners_count)
+        if result.config is not None:
+            _apply_config_snapshot(result.config)
 
 
 def _unregister_runner_at_exit() -> None:

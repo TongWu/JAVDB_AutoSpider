@@ -303,6 +303,48 @@ class TripleWindowThrottle:
             self.long_max = max(1, self._base_long_max // n)
             self.extra_max = max(1, self._base_extra_max // n)
 
+    def apply_config(
+        self,
+        *,
+        short_max: Optional[int] = None,
+        long_max: Optional[int] = None,
+        extra_max: Optional[int] = None,
+        short_window_sec: Optional[float] = None,
+        long_window_sec: Optional[float] = None,
+        extra_window_sec: Optional[float] = None,
+    ) -> None:
+        """W6.A.1 — apply operator-pushed config overrides from ConfigState.
+
+        Updates the active limits AND the ``_base_*`` baselines so
+        downstream ``set_runner_scale`` divides by the correct base. Any
+        argument left as ``None`` is preserved verbatim — operators can
+        PATCH a single key without inadvertently resetting the others.
+
+        Window-duration fields don't have ``_base_*`` baselines today;
+        they're applied directly. Negative / zero values are clamped to
+        1 (or 1.0 for seconds) so a typo in a PATCH can't poison the
+        purge / counting math.
+        """
+        with self._lock:
+            if short_max is not None:
+                value = max(1, int(short_max))
+                self._base_short_max = value
+                self.short_max = value
+            if long_max is not None:
+                value = max(1, int(long_max))
+                self._base_long_max = value
+                self.long_max = value
+            if extra_max is not None:
+                value = max(1, int(extra_max))
+                self._base_extra_max = value
+                self.extra_max = value
+            if short_window_sec is not None:
+                self.short_window = max(1.0, float(short_window_sec))
+            if long_window_sec is not None:
+                self.long_window = max(1.0, float(long_window_sec))
+            if extra_window_sec is not None:
+                self.extra_window = max(1.0, float(extra_window_sec))
+
     def tighten_short_window(self, per_worker_n: int) -> None:
         """Adjust short-window burst limit from volume; restores toward constructor baseline."""
         if per_worker_n >= 50:
