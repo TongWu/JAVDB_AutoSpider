@@ -1,20 +1,20 @@
-"""Regression test for the `Resolve effective WriteMode` workflow step.
+"""Regression tests for two workflow setup steps:
 
-Phase 3 (Ingestion Perfect Rollback) auto-fallback contract: when a
-critical pending-mode alert fires, the email job writes
-``pending_mode_disabled_until: <ISO>`` into ``.publish-config.yml`` and
-pushes; the **next** ingestion run reads that key in this step and forces
-``JAVDB_HISTORY_WRITE_MODE=audit`` for 24h.  The original implementation
-inlined the parsing as ``python3 -c "<multi-line>"`` which silently
-failed with ``IndentationError`` after YAML stripped the literal-block
-indent unevenly — leaving the auto-fallback marker permanently ignored
-and breaking the whole emergency rollback path.
+1. ``resolve_write_mode`` — selects ``JAVDB_HISTORY_WRITE_MODE`` for the
+   run. Per ADR-006 this step no longer reads ``.publish-config.yml`` —
+   the audit fallback is replaced by a hard pause. The remaining
+   precedence is: ``workflow_dispatch`` override → default ``pending``.
 
-This test parses the actual workflow YAML, extracts the step's `run`
-script verbatim, and runs it under bash against six fabricated
-``.publish-config.yml`` states.  A future regression that re-introduces
-the indentation bug — or breaks any of the six branches — fails here
-before reaching CI.
+2. ``pause_gate`` (new in ADR-006) — reads ``pipeline_paused_until``
+   from ``.publish-config.yml``. If the timestamp is in the future the
+   step records ``paused=true`` so every downstream job gates on
+   ``needs.setup.outputs.paused != 'true'`` and skips. This is the
+   replacement for the legacy ``pending_mode_disabled_until`` flag.
+
+The pause-gate test specifically guards against the 2026-05
+``IndentationError`` regression: YAML's literal-block indent stripping
+silently broke the previous ``python3 -c "<multi-line>"`` form. The
+heredoc ``python3 - <<'PY'`` is the fix and must not be reverted.
 """
 
 from __future__ import annotations
@@ -36,34 +36,24 @@ WORKFLOWS = (
 )
 
 
-def _extract_run(workflow_path: Path) -> str:
-    """Return the parsed ``run:`` body of the resolve_write_mode step."""
+def _extract_run(workflow_path: Path, step_id: str) -> str:
+    """Return the parsed ``run:`` body of the named step."""
     with workflow_path.open() as f:
         data = yaml.safe_load(f)
     for step in data["jobs"]["setup"]["steps"]:
-        if step.get("id") == "resolve_write_mode":
+        if step.get("id") == step_id:
             return step["run"]
     raise AssertionError(
-        f"resolve_write_mode step not found in {workflow_path.name}"
+        f"step id={step_id!r} not found in {workflow_path.name}"
     )
-
-
-def _strip_dispatch_template(run_script: str) -> str:
-    """Replace the ``${{ inputs.write_mode_override }}`` template with empty.
-
-    The workflow_dispatch override is exercised by a separate case below;
-    every other case must see an empty override so the script falls
-    through to the .publish-config.yml branch.
-    """
-    return run_script.replace("${{ inputs.write_mode_override }}", "")
 
 
 def _inject_override(run_script: str, value: str) -> str:
     return run_script.replace("${{ inputs.write_mode_override }}", value)
 
 
-def _run(script: str, cwd: Path) -> tuple[str, str, int, str]:
-    """Run *script* under bash in *cwd* and capture (stdout, stderr, rc, mode)."""
+def _run(script: str, cwd: Path) -> tuple[str, str, int, dict[str, str]]:
+    """Run *script* under bash in *cwd* and capture stdout/stderr/rc/outputs."""
     gh_output = cwd / "gh_output"
     gh_output.write_text("")
     env = os.environ.copy()
@@ -75,11 +65,12 @@ def _run(script: str, cwd: Path) -> tuple[str, str, int, str]:
         capture_output=True,
         text=True,
     )
-    mode = ""
+    outputs: dict[str, str] = {}
     for line in gh_output.read_text().splitlines():
-        if line.startswith("mode="):
-            mode = line.split("=", 1)[1]
-    return proc.stdout, proc.stderr, proc.returncode, mode
+        if "=" in line:
+            k, v = line.split("=", 1)
+            outputs[k] = v
+    return proc.stdout, proc.stderr, proc.returncode, outputs
 
 
 def _future_iso(hours: int = 1) -> str:
@@ -94,92 +85,129 @@ def _past_iso(hours: int = 1) -> str:
     ).isoformat()
 
 
+# ──────────────────────────────────────────────────────────────────────
+# resolve_write_mode: trivial after ADR-006 — workflow_dispatch override
+# or default 'pending'. .publish-config.yml is no longer consulted here.
+# ──────────────────────────────────────────────────────────────────────
+
+
 @pytest.mark.parametrize("workflow", WORKFLOWS, ids=lambda p: p.name)
-def test_resolve_write_mode_handles_all_branches(workflow, tmp_path):
-    """Every state of .publish-config.yml maps to the documented mode."""
-    base = _extract_run(workflow)
+def test_resolve_write_mode_honours_override(workflow, tmp_path):
+    base = _extract_run(workflow, "resolve_write_mode")
+    script = _inject_override(base, "pending")
+    _, stderr, rc, outputs = _run(script, tmp_path)
+    assert rc == 0, f"script exited {rc}; stderr={stderr!r}"
+    assert outputs.get("mode") == "pending"
+
+
+@pytest.mark.parametrize("workflow", WORKFLOWS, ids=lambda p: p.name)
+def test_resolve_write_mode_defaults_to_pending(workflow, tmp_path):
+    """Empty override → mode=pending. Even if a .publish-config.yml with
+    the legacy ``pending_mode_disabled_until`` exists, this step no
+    longer reads it (the pause gate handles pauses now)."""
+    base = _extract_run(workflow, "resolve_write_mode")
+    # Drop a legacy marker to prove resolve_write_mode ignores it.
+    (tmp_path / ".publish-config.yml").write_text(
+        f"pending_mode_disabled_until: '{_future_iso()}'\n"
+    )
+    script = _inject_override(base, "")
+    _, stderr, rc, outputs = _run(script, tmp_path)
+    assert rc == 0, f"script exited {rc}; stderr={stderr!r}"
+    assert outputs.get("mode") == "pending", (
+        "resolve_write_mode must not consult .publish-config.yml after ADR-006"
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# pause_gate: the new ADR-006 step. Reads pipeline_paused_until from
+# .publish-config.yml and emits paused=true|false.
+# ──────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("workflow", WORKFLOWS, ids=lambda p: p.name)
+def test_pause_gate_handles_all_branches(workflow, tmp_path):
+    """Every state of .publish-config.yml maps to the documented paused value."""
+    base = _extract_run(workflow, "pause_gate")
 
     future_iso = _future_iso()
     past_iso = _past_iso()
-    case_configs = {
-        "no_config_file":             (None, ""),
-        "config_no_marker":           ("exclude_paths: []\n", ""),
-        "future_marker_unquoted":     (f"pending_mode_disabled_until: {future_iso}\n", ""),
-        "future_marker_quoted":       (f"pending_mode_disabled_until: '{future_iso}'\n", ""),
-        "past_marker_quoted":         (f"pending_mode_disabled_until: '{past_iso}'\n", ""),
-        "invalid_marker":             ("pending_mode_disabled_until: 'not-a-date'\n", ""),
-        "dispatch_override_audit":    ("pending_mode_disabled_until: '2026-01-01T00:00:00+00:00'\n", "audit"),
-        "dispatch_override_pending":  (f"pending_mode_disabled_until: '{future_iso}'\n", "pending"),
+    case_configs: dict[str, str | None] = {
+        "no_config_file":           None,
+        "config_no_marker":         "exclude_paths: []\n",
+        "future_marker_unquoted":   f"pipeline_paused_until: {future_iso}\n",
+        "future_marker_quoted":     f"pipeline_paused_until: '{future_iso}'\n",
+        "past_marker_quoted":       f"pipeline_paused_until: '{past_iso}'\n",
+        "invalid_marker":           "pipeline_paused_until: 'not-a-date'\n",
+        "legacy_marker_ignored":    f"pending_mode_disabled_until: '{future_iso}'\n",
     }
     case_expected = {
-        "no_config_file":             "pending",
-        "config_no_marker":           "pending",
-        "future_marker_unquoted":     "audit",
-        "future_marker_quoted":       "audit",
-        "past_marker_quoted":         "pending",
-        "invalid_marker":             "pending",
-        "dispatch_override_audit":    "audit",
-        "dispatch_override_pending":  "pending",
+        "no_config_file":         "false",
+        "config_no_marker":       "false",
+        "future_marker_unquoted": "true",
+        "future_marker_quoted":   "true",
+        "past_marker_quoted":     "false",
+        "invalid_marker":         "false",
+        # ADR-006 explicitly switched from pending_mode_disabled_until to
+        # pipeline_paused_until — the legacy key must be silently ignored
+        # so a stale .publish-config.yml entry can't pause the pipeline
+        # forever post-rollout.
+        "legacy_marker_ignored":  "false",
     }
 
     failures = []
-    for label, (config_yaml, override) in case_configs.items():
+    for label, config_yaml in case_configs.items():
         case_dir = tmp_path / label
         case_dir.mkdir()
         if config_yaml is not None:
             (case_dir / ".publish-config.yml").write_text(config_yaml)
-        script = _inject_override(base, override)
-        stdout, stderr, rc, mode = _run(script, case_dir)
+        stdout, stderr, rc, outputs = _run(base, case_dir)
         expected = case_expected[label]
-        if rc != 0 or mode != expected:
+        if rc != 0 or outputs.get("paused") != expected:
             failures.append(
-                f"{label}: rc={rc} mode={mode!r} expected={expected!r}\n"
+                f"{label}: rc={rc} paused={outputs.get('paused')!r} "
+                f"expected={expected!r}\n"
                 f"  stdout={stdout!r}\n  stderr={stderr!r}"
             )
     assert not failures, (
-        f"resolve_write_mode regressed in {workflow.name}:\n"
+        f"pause_gate regressed in {workflow.name}:\n"
         + "\n".join(failures)
     )
 
 
-def test_resolve_write_mode_no_indentation_error(tmp_path):
-    """Smoke test that catches the 2026-05 IndentationError specifically.
-
-    Even with the marker in place, the original `python3 -c` form printed
-    `IndentationError: unexpected indent` to stderr and exited 1.  The
-    fixed heredoc form must never emit IndentationError.
-    """
-    base = _extract_run(WORKFLOWS[0])
-    script = _strip_dispatch_template(base)
+def test_pause_gate_no_indentation_error(tmp_path):
+    """Pause-gate inherits the heredoc form from the retired
+    ``resolve_write_mode`` reader; if a future refactor reverts to
+    inline ``python3 -c "..."``, YAML's literal-block indent stripping
+    will silently turn this into an ``IndentationError`` and the gate
+    will permanently miss future pauses. Lock in the heredoc form."""
+    base = _extract_run(WORKFLOWS[0], "pause_gate")
     case_dir = tmp_path / "indent_check"
     case_dir.mkdir()
     (case_dir / ".publish-config.yml").write_text(
-        f"pending_mode_disabled_until: '{_future_iso()}'\n"
+        f"pipeline_paused_until: '{_future_iso()}'\n"
     )
-    _, stderr, rc, mode = _run(script, case_dir)
+    _, stderr, rc, outputs = _run(base, case_dir)
     assert "IndentationError" not in stderr, (
         f"Python heredoc regression: {stderr}"
     )
     assert rc == 0, f"script exited {rc}; stderr={stderr!r}"
-    assert mode == "audit", (
-        f"future marker not honoured (mode={mode!r}); auto-fallback broken"
+    assert outputs.get("paused") == "true", (
+        f"future marker not honoured (paused={outputs.get('paused')!r}); "
+        "pause gate broken"
     )
 
 
 @pytest.mark.parametrize("workflow", WORKFLOWS, ids=lambda p: p.name)
-def test_resolve_write_mode_uses_heredoc_form(workflow):
-    """Lock in the heredoc form so a future refactor doesn't reintroduce
-    the inline `python3 -c "..."` bug.  Either heredoc or a separate
-    script invocation is OK; inline `python3 -c` with a multi-line
-    string literal is NOT.
-    """
-    body = _extract_run(workflow)
+def test_pause_gate_uses_heredoc_form(workflow):
+    """The pause gate must use ``python3 - <<'PY'`` (heredoc) or invoke
+    a separate script. Inline ``python3 -c`` with a multi-line literal
+    is the 2026-05 regression mode and is banned."""
+    body = _extract_run(workflow, "pause_gate")
     if "python3 -c" in body and "<<" not in body:
         pytest.fail(
-            f"{workflow.name}: resolve_write_mode reverted to inline "
-            f"`python3 -c` — this re-introduces the IndentationError "
-            f"bug (R1).  Use `python3 - <<'PY'` heredoc or extract to "
-            f"a separate script."
+            f"{workflow.name}: pause_gate uses inline `python3 -c` — "
+            f"this re-introduces the YAML literal-block indent bug "
+            f"(see ADR-006 §D3 history). Use `python3 - <<'PY'` heredoc."
         )
 
 
