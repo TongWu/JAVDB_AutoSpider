@@ -9,10 +9,12 @@ name: JavDB Daily Ingestion Pipeline
 #   - docs/D1_ROLLBACK.md       (architecture + validation playbook)
 #   - apps/cli/commit_session.py (Status='committed' transition)
 #   - apps/cli/rollback.py      (cleanup-on-failure dispatcher)
-#   - .publish-config.yml `pending_mode_disabled_until` (emergency
-#     audit fallback set by the auto-fallback step on critical alert)
+#   - .publish-config.yml `pipeline_paused_until` (ADR-006 pause
+#     marker written by the alert-and-pause step on critical alert;
+#     the setup-job's pause gate skips downstream jobs while the
+#     timestamp is in the future)
 # Override per run via the workflow_dispatch `write_mode_override`
-# input or globally by writing `pending_mode_disabled_until: <ISO>`
+# input. To globally pause future runs, write `pipeline_paused_until: <ISO>`
 # into .publish-config.yml.
 
 permissions:
@@ -367,8 +369,10 @@ jobs:
       # Ingestion Perfect Rollback (Phase 3): default WriteMode='pending'.
       # Resolved by the setup job so downstream commit_session.py /
       # rollback.py see the same value. Override at workflow_dispatch
-      # via `write_mode_override` input or by writing
-      # `pending_mode_disabled_until: <ISO>` to .publish-config.yml.
+      # via `write_mode_override` input. (ADR-006 PR-D replaced the
+      # legacy `.publish-config.yml` pending_mode_disabled_until
+      # auto-fallback with a pipeline_paused_until pause gate; the
+      # pause skips the entire workflow rather than degrading WriteMode.)
       JAVDB_HISTORY_WRITE_MODE: ${{ needs.setup.outputs.effective_write_mode }}
     
     steps:
@@ -879,9 +883,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          # Phase 3: SSH key needed so the auto-fallback step can push
-          # pending_mode_disabled_until back to the branch when a
-          # critical pending alert fires.  No-op cost on healthy runs.
+          # ADR-006: SSH key needed so the alert-and-pause step can push
+          # pipeline_paused_until back to the branch when a critical
+          # pending alert fires.  No-op cost on healthy runs.
           ssh-key: ${{ secrets.DEPLOY_KEY }}
 
       - name: Set up Python, venv, dependencies, Rust extension
@@ -1043,12 +1047,12 @@ jobs:
           echo "Executing: ${CMD_ARGS[*]}"
           "${CMD_ARGS[@]}"
 
-      # Phase 3 — auto-fallback on critical pending-mode alerts.  Reads
+      # ADR-006 — alert + pause on critical pending-mode alerts. Reads
       # this run's pending_session_verify records (filtered by
       # GITHUB_RUN_ID inside the script) and, if any critical metric is
-      # over threshold, writes pending_mode_disabled_until to
-      # .publish-config.yml so the next ingestion run downgrades to
-      # pause the pipeline. Soft alerts (commit_attempts, ratio,
+      # over threshold, writes pipeline_paused_until to .publish-config.yml
+      # so the next ingestion run is short-circuited by the setup-job
+      # pause gate. Soft alerts (commit_attempts, ratio,
       # worker_stage_rollback_failed) only annotate the email subject —
       # they do NOT trigger this block.
       - name: Alert + pause on critical pending alert (ADR-006)
