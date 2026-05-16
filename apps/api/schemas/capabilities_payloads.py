@@ -43,3 +43,9 @@ class SystemStateGetResponse(BaseModel):
 class SystemStatePutPayload(BaseModel):
     key: str = Field(min_length=1, max_length=128)
     value: str
+
+
+class OnboardingStatusResponse(BaseModel):
+    completed: bool
+    required_missing: list[str]
+    skippable_missing: list[str]
