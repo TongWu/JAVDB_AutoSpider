@@ -105,16 +105,31 @@ def find_run_sessions(
         return []
 
 
-def find_window_sessions(since: Optional[str]) -> List[str]:
-    """Wrap ``db_find_in_progress_sessions`` with the same warn-and-empty
-    semantics. ``since`` is expected to be a normalised string (see
-    :func:`normalize_run_started_at`).
+def find_window_sessions(
+    since: Optional[str], *, raise_on_error: bool = False,
+) -> List[str]:
+    """Wrap ``db_find_in_progress_sessions``. ``since`` is expected to
+    be a normalised string (see :func:`normalize_run_started_at`).
+
+    Error handling is **opt-in** because the two CLIs disagree on what a
+    DB lookup failure means:
+
+    * ``raise_on_error=False`` (default) — warn-and-empty. The caller
+      treats an empty list as "no targets" and continues with whatever
+      it already has. ``commit_session`` and any best-effort discovery
+      use this mode.
+    * ``raise_on_error=True`` — let the exception propagate. The
+      ``rollback`` CLI uses this so a transient DB error in the window
+      scan still produces its documented ``exit 3`` instead of being
+      silently downgraded to a successful no-op cleanup.
     """
     if not since:
         return []
     try:
         return list(db_find_in_progress_sessions(since=since))
     except Exception as exc:  # noqa: BLE001
+        if raise_on_error:
+            raise
         logger.warning(
             "db_find_in_progress_sessions(since=%s) failed: %s",
             since, exc,

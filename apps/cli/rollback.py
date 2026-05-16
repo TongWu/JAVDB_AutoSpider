@@ -278,7 +278,14 @@ def _resolve_target_sessions(
     # Legacy / fallback: --run-started-at window scan.
     if args.run_started_at is not None:
         if args.include_orphaned or not targets:
-            for sid in find_window_sessions(run_started_at_normalized):
+            # rollback documents ``exit 3`` for "could not connect to
+            # D1 / SQLite". A silent empty result here would downgrade
+            # that to an "exit 0 nothing to do" success, hiding a real
+            # outage from the operator. raise_on_error=True keeps the
+            # exception propagating up to main()'s try/except.
+            for sid in find_window_sessions(
+                run_started_at_normalized, raise_on_error=True,
+            ):
                 targets.add(sid)
 
     return sorted(targets)
