@@ -44,3 +44,16 @@ def test_delete(repo):
     repo.put("k", "v")
     repo.delete("k")
     assert repo.get("k") is None
+
+
+def test_init_db_creates_system_state_table(tmp_path, monkeypatch):
+    """Regression: _OPERATIONS_DDL must declare the system_state table,
+    not just the migration SQL file that nobody auto-loads."""
+    from packages.python.javdb_platform.db import _init_single_db, _OPERATIONS_DDL
+    db = tmp_path / "ops.db"
+    _init_single_db(str(db), _OPERATIONS_DDL, force=True)
+    import sqlite3
+    tables = {r[0] for r in sqlite3.connect(str(db)).execute(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+    )}
+    assert "system_state" in tables

@@ -815,6 +815,14 @@ CREATE TABLE IF NOT EXISTS InventoryAlignNoExactMatch (
     SessionId TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_align_no_match_session ON InventoryAlignNoExactMatch(SessionId);
+
+CREATE TABLE IF NOT EXISTS system_state (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_system_state_updated_at ON system_state(updated_at);
 """
 
 # Combined DDL for single-DB mode (backward compat, csv_to_sqlite, testing)
