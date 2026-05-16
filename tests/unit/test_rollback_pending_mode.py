@@ -697,28 +697,32 @@ class TestMixedModeCleanup:
 # ──────────────────────────────────────────────────────────────────────
 
 
-class TestAuditModeStillWorks:
-    """Trivial guard so future refactors don't accidentally break the
-    default-WriteMode path that Phase 0 ships dark."""
+class TestWriteModeResolution:
+    """Trivial guard against future refactors silently flipping the
+    resolved WriteMode. ADR-006 made 'pending' the default; audit
+    mode is still reachable via the env var / explicit override."""
 
-    def test_default_session_is_audit_mode(self):
+    def test_default_session_is_pending_mode(self, monkeypatch):
+        # ADR-006: pending is the default per _resolve_write_mode().
+        monkeypatch.delenv("JAVDB_HISTORY_WRITE_MODE", raising=False)
+        db_mod.set_active_write_mode(None)
         sid = db_mod.db_create_report_session(
             report_type="DailyReport",
             report_date="2026-05-09",
             csv_filename="default-mode.csv",
         )
         state = db_mod.db_get_session_status(sid)
-        assert state == ("audit", "in_progress")
+        assert state == ("pending", "in_progress")
 
-    def test_env_var_overrides_default(self, monkeypatch):
-        monkeypatch.setenv("JAVDB_HISTORY_WRITE_MODE", "pending")
+    def test_env_var_can_select_audit(self, monkeypatch):
+        monkeypatch.setenv("JAVDB_HISTORY_WRITE_MODE", "audit")
         sid = db_mod.db_create_report_session(
             report_type="DailyReport",
             report_date="2026-05-09",
-            csv_filename="env-mode.csv",
+            csv_filename="env-audit.csv",
         )
         state = db_mod.db_get_session_status(sid)
-        assert state == ("pending", "in_progress")
+        assert state == ("audit", "in_progress")
 
     def test_invalid_write_mode_raises(self):
         with pytest.raises(ValueError, match="WriteMode"):
@@ -828,8 +832,9 @@ class TestSpiderWritePathRoutesToPending:
         assert (mh, mha, th, tha) == (0, 0, 0, 0)
 
     def test_audit_active_mode_keeps_in_place_upsert(self, monkeypatch):
-        # Make sure the env var doesn't leak from a prior test.
-        monkeypatch.delenv("JAVDB_HISTORY_WRITE_MODE", raising=False)
+        # ADR-006 made 'pending' the default, so audit mode must be
+        # selected explicitly to exercise the legacy in-place path.
+        monkeypatch.setenv("JAVDB_HISTORY_WRITE_MODE", "audit")
         from packages.python.javdb_platform.history_manager import (
             save_parsed_movie_to_history,
         )
@@ -843,7 +848,6 @@ class TestSpiderWritePathRoutesToPending:
         )
         db_mod.set_active_session_id(sid)
         db_mod.set_active_run_identity("rid-audit", 1)
-        # Active mode left as None; resolves to 'audit' via env/default.
         try:
             save_parsed_movie_to_history(
                 history_file=None,
@@ -1155,8 +1159,10 @@ class TestBatchUpdatesRouteToPending:
         assert n_audit == 0
         assert n_pending == 1
 
-    def test_audit_session_keeps_in_place_batch_update(self):
-        # Default WriteMode='audit'; routes must continue to UPDATE live.
+    def test_audit_session_keeps_in_place_batch_update(self, monkeypatch):
+        # ADR-006 made 'pending' the default; select audit explicitly
+        # to keep exercising the legacy in-place UPDATE path.
+        monkeypatch.setenv("JAVDB_HISTORY_WRITE_MODE", "audit")
         db_mod.set_active_session_id(None)
         db_mod.set_active_run_identity(None, None)
         db_mod.set_active_write_mode(None)
