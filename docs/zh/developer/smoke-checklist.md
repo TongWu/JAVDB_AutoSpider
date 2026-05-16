@@ -12,7 +12,7 @@
 ## 1. 后端 API 本地检查
 
 - 启动：
-  - `uvicorn api.server:app --host 0.0.0.0 --port 8100 --reload`
+  - `uvicorn apps.api.server:app --host 0.0.0.0 --port 8100 --reload`
 - 检查健康：
   - `curl http://localhost:8100/api/health`
   - 预期：返回 `status=ok`
