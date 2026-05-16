@@ -38,6 +38,7 @@ except ImportError as e:
 
 from packages.python.javdb_platform.proxy_ban_manager import (
     _dispatch_remote_ban,
+    _dispatch_remote_unban,
     get_ban_manager,
     ProxyBanManager,
 )
@@ -533,15 +534,6 @@ class ProxyPool:
         if self.no_proxy_mode or not self.proxies:
             return False
 
-        # The Rust ban-manager implementation (RustProxyBanManager) does
-        # not yet expose ``remove_ban``; guard with hasattr so the
-        # Python fallback path works on both. When the Rust manager is
-        # active the local ban-manager entry persists until the next
-        # Rust upgrade — fine for W5.4 signal unban because the
-        # ProxyInfo flag clearing below is what actually returns the
-        # proxy to rotation.
-        manager_supports_remove = hasattr(self.ban_manager, "remove_ban")
-
         with self.lock:
             target: Optional[ProxyInfo] = None
             for p in self.proxies:
@@ -553,14 +545,12 @@ class ProxyPool:
                 # Even when the proxy isn't in this runner's pool config,
                 # clear the ban-manager entry so a future `add_proxy` of
                 # the same name isn't filtered out.
-                if manager_supports_remove:
-                    self.ban_manager.remove_ban(proxy_name)
+                removed = bool(self.ban_manager.remove_ban(proxy_name))
+                if removed:
+                    _dispatch_remote_unban(proxy_name)
                 return False
 
-            if manager_supports_remove:
-                # Ban-manager removal via the public method so the
-                # cross-runner unban dispatch fires too.
-                self.ban_manager.remove_ban(target.name)
+            removed = bool(self.ban_manager.remove_ban(target.name))
             target.banned = False
             target.is_available = True
             target.cooldown_until = None
@@ -568,7 +558,15 @@ class ProxyPool:
                 "Proxy '%s' unbanned (W5.4 signal expiry / operator override)",
                 target.name,
             )
-            return True
+
+        # W5.4 cross-runner unban dispatch, fired outside the pool lock so
+        # a slow Worker can never block the unban path. Both the Python
+        # and Rust ban-manager implementations now expose ``remove_ban``
+        # returning a bool; only fire when the ban actually came down to
+        # avoid amplifying queue pressure on repeated no-op calls.
+        if removed:
+            _dispatch_remote_unban(target.name)
+        return True
 
     def get_proxy_count(self) -> int:
         """Return the number of proxies in the pool"""

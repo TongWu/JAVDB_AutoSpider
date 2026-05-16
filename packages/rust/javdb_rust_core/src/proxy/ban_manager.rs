@@ -67,6 +67,23 @@ impl ProxyBanManager {
         );
     }
 
+    /// W6.A.2 follow-up — drop a ban record so the proxy can be
+    /// returned to rotation by ``ProxyPool.unban_proxy``. Returns
+    /// ``true`` iff an entry was present and removed.
+    ///
+    /// The cross-runner unban dispatch (``_dispatch_remote_unban``)
+    /// lives on the Python side and fires in ``ProxyPool.unban_proxy``
+    /// when this method returns ``true`` — keeps the Rust ban-manager
+    /// FFI-free of Python hook plumbing.
+    pub fn remove_ban(&self, proxy_name: &str) -> bool {
+        let mut banned = self.inner.banned_proxies.lock();
+        let removed = banned.remove(proxy_name).is_some();
+        if removed {
+            debug!("Proxy '{}' ban removed [W5.4 unban path]", proxy_name);
+        }
+        removed
+    }
+
     #[pyo3(signature = (include_ip=false))]
     pub fn get_ban_summary(&self, include_ip: bool) -> String {
         let banned = self.inner.banned_proxies.lock();
