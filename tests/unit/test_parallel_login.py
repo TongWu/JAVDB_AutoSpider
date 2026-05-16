@@ -9,7 +9,7 @@ from unittest.mock import patch, MagicMock, ANY
 import scripts.spider.fetch.session as session_mod
 import scripts.spider.fetch.fallback as fallback_mod
 import scripts.spider.runtime.state as state_mod
-from packages.python.javdb_platform.proxy_policy import (
+from javdb.proxy.policy import (
     is_proxy_mode_disabled,
     normalize_proxy_mode,
     should_proxy_module,
@@ -77,10 +77,10 @@ class TestSpiderUsesProxyFlag:
             # login.py calls sys.exit(1) at import time when config.py is missing (typical CI);
             # mock.patch loads that module to patch login_with_retry, so sys.exit must be stubbed first.
             with patch('sys.exit'), patch(
-                'packages.python.javdb_integrations.login.login_with_retry',
+                'javdb.spider.auth.login.login_with_retry',
                 mock_login,
             ), patch(
-                'packages.python.javdb_integrations.login.update_config_file',
+                'javdb.spider.auth.login.update_config_file',
                 return_value=False,
             ):
                 success, _cookie, proxy_name = session_mod.attempt_login_refresh(
@@ -118,10 +118,10 @@ class TestSpiderUsesProxyFlag:
             p.start()
         try:
             with patch('sys.exit'), patch(
-                'packages.python.javdb_integrations.login.login_with_retry',
+                'javdb.spider.auth.login.login_with_retry',
                 mock_login,
             ), patch(
-                'packages.python.javdb_integrations.login.update_config_file',
+                'javdb.spider.auth.login.update_config_file',
                 return_value=False,
             ):
                 success, _cookie, _proxy_name = session_mod.attempt_login_refresh(
@@ -398,10 +398,10 @@ class TestCrossRuntimeDoIntegration:
             p.start()
         try:
             with patch('sys.exit'), patch(
-                'packages.python.javdb_integrations.login.login_with_retry',
+                'javdb.spider.auth.login.login_with_retry',
                 return_value=(True, 'cookie-XYZ', 'ok'),
             ), patch(
-                'packages.python.javdb_integrations.login.update_config_file',
+                'javdb.spider.auth.login.update_config_file',
                 return_value=False,  # simulates write failure → second return path
             ):
                 success, _cookie, _proxy_name = session_mod.attempt_login_refresh(
@@ -432,10 +432,10 @@ class TestCrossRuntimeDoIntegration:
             p.start()
         try:
             with patch('sys.exit'), patch(
-                'packages.python.javdb_integrations.login.login_with_retry',
+                'javdb.spider.auth.login.login_with_retry',
                 return_value=(True, 'cookie-XYZ', 'ok'),
             ), patch(
-                'packages.python.javdb_integrations.login.update_config_file',
+                'javdb.spider.auth.login.update_config_file',
                 return_value=False,
             ):
                 success, _cookie, _proxy_name = session_mod.attempt_login_refresh(
@@ -454,7 +454,7 @@ class TestCrossRuntimeDoIntegration:
         lease_required when caller didn't acquire), the login result is
         still surfaced as success — local cookie is intact, only other
         runners miss the broadcast."""
-        from packages.python.javdb_platform.login_state_client import (
+        from javdb.proxy.coordinator.login_state_client import (
             LoginStateUnavailable,
         )
         do_client = MagicMock()
@@ -469,10 +469,10 @@ class TestCrossRuntimeDoIntegration:
             p.start()
         try:
             with patch('sys.exit'), patch(
-                'packages.python.javdb_integrations.login.login_with_retry',
+                'javdb.spider.auth.login.login_with_retry',
                 return_value=(True, 'cookie-XYZ', 'ok'),
             ), patch(
-                'packages.python.javdb_integrations.login.update_config_file',
+                'javdb.spider.auth.login.update_config_file',
                 return_value=False,
             ):
                 success, _cookie, _proxy_name = session_mod.attempt_login_refresh(
@@ -501,10 +501,10 @@ class TestCrossRuntimeDoIntegration:
             p.start()
         try:
             with patch('sys.exit'), patch(
-                'packages.python.javdb_integrations.login.login_with_retry',
+                'javdb.spider.auth.login.login_with_retry',
                 return_value=(True, 'cookie-XYZ', 'ok'),
             ), patch(
-                'packages.python.javdb_integrations.login.update_config_file',
+                'javdb.spider.auth.login.update_config_file',
                 return_value=False,
             ):
                 success, _cookie, _proxy_name = session_mod.attempt_login_refresh(
@@ -531,10 +531,10 @@ class TestCrossRuntimeDoIntegration:
             p.start()
         try:
             with patch('sys.exit'), patch(
-                'packages.python.javdb_integrations.login.login_with_retry',
+                'javdb.spider.auth.login.login_with_retry',
                 return_value=(True, 'cookie-XYZ', 'ok'),
             ), patch(
-                'packages.python.javdb_integrations.login.update_config_file',
+                'javdb.spider.auth.login.update_config_file',
                 return_value=False,
             ):
                 success, _cookie, proxy_name = session_mod.attempt_login_refresh(

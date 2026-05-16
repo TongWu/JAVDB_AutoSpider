@@ -5,7 +5,7 @@ Skipped automatically when the Rust extension is not installed.
 
 import pytest
 
-from packages.python.javdb_core.magnet_extractor import (
+from javdb.spider.magnet_extractor import (
     RUST_MAGNET_AVAILABLE,
     _python_extract_magnets,
 )

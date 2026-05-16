@@ -13,7 +13,7 @@ def _ensure_operations_schema():
     init_db() here so the system_state table is guaranteed to exist before any
     request is made.
     """
-    from packages.python.javdb_platform.db import init_db
+    from javdb.storage.db.db import init_db
     init_db()
 
 

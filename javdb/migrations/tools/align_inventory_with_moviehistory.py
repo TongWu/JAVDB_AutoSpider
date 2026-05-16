@@ -89,7 +89,7 @@ from javdb.spider.runtime.sleep import movie_sleep_mgr
 setup_logging()
 logger = get_logger(__name__)
 # Same channel as fetch_engine so "Per-worker cap" lines keep the FetchEngine label.
-_fetch_engine_logger = get_logger('packages.python.javdb_spider.fetch.fetch_engine')
+_fetch_engine_logger = get_logger('javdb.spider.fetch.fetch_engine')
 
 _QB_FIELDNAMES = [
     'href',

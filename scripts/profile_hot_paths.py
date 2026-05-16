@@ -155,7 +155,7 @@ def bench_parse_detail_canonical(iterations: int) -> Dict[str, float]:
 
 def bench_parse_detail_wrapper(iterations: int) -> Dict[str, float]:
     """Spider-side wrapper: parse_detail (includes tuple reshape)."""
-    from packages.python.javdb_core.parser import parse_detail
+    from javdb.spider.parser import parse_detail
     html = _load_fixture("detail_page_AVSW-067.html")
     return _bench(
         "parse_detail_wrapper", iterations,
@@ -198,7 +198,7 @@ def bench_parse_index_canonical(iterations: int) -> Dict[str, float]:
 
 def bench_plan_sleep_no_coord(iterations: int) -> Dict[str, float]:
     """MovieSleepManager.plan_sleep with no coordinator (pure-CPU path)."""
-    from packages.python.javdb_spider.runtime.sleep import (
+    from javdb.spider.runtime.sleep import (
         MovieSleepManager, PenaltyTracker,
     )
     mgr = MovieSleepManager(
@@ -216,7 +216,7 @@ def bench_plan_sleep_no_coord(iterations: int) -> Dict[str, float]:
 
 def bench_throttle_compute(iterations: int) -> Dict[str, float]:
     """TripleWindowThrottle.wait_if_needed with capacity to spare (no sleep)."""
-    from packages.python.javdb_spider.runtime.sleep import TripleWindowThrottle
+    from javdb.spider.runtime.sleep import TripleWindowThrottle
     # Limits set to 10^9 so even a high-iteration benchmark never hits the
     # wait branch — we want to time the index-lookup hot path, not the
     # 1-3 s random.uniform back-off. Production limits are 3/30/200, but
@@ -243,14 +243,14 @@ def _setup_in_memory_db() -> str:
     # path the get_db() routing layer can consistently reopen.
     fd, path = tempfile.mkstemp(suffix=".db", prefix="profile_hot_paths_")
     os.close(fd)
-    from packages.python.javdb_platform.db import init_db
+    from javdb.storage.db.db import init_db
     init_db(db_path=path, force=True)
     return path
 
 
 def _seed_history(db_path: str, n_movies: int) -> None:
     """Insert ``n_movies`` synthetic rows into MovieHistory + TorrentHistory."""
-    from packages.python.javdb_platform.db import get_db
+    from javdb.storage.db.db import get_db
     with get_db(db_path) as conn:
         for i in range(n_movies):
             cur = conn.execute(
@@ -273,7 +273,7 @@ def _seed_history(db_path: str, n_movies: int) -> None:
 
 def bench_db_load_history(iterations: int) -> Dict[str, float]:
     """db_load_history with 1000 seeded rows in an in-memory DB."""
-    from packages.python.javdb_platform.db_history_read import db_load_history
+    from javdb.storage.db.db_history_read import db_load_history
     db_path = _setup_in_memory_db()
     try:
         _seed_history(db_path, n_movies=1000)
@@ -290,7 +290,7 @@ def bench_db_load_history(iterations: int) -> Dict[str, float]:
 
 def bench_compute_indicators(iterations: int) -> Dict[str, float]:
     """_compute_indicators on synthetic torrent tuples (pure CPU)."""
-    from packages.python.javdb_platform.db import _compute_indicators
+    from javdb.storage.db.db import _compute_indicators
     torrents = [
         (1, 1, 1080),   # subtitle
         (1, 0, 720),    # hacked_subtitle
@@ -305,7 +305,7 @@ def bench_compute_indicators(iterations: int) -> Dict[str, float]:
 
 def bench_category_to_indicators(iterations: int) -> Dict[str, float]:
     """category_to_indicators dispatch (pure dict lookup)."""
-    from packages.python.javdb_core.contracts import category_to_indicators
+    from javdb.spider.contracts import category_to_indicators
     cats = ["subtitle", "no_subtitle", "hacked_subtitle", "hacked_no_subtitle"]
     return _bench(
         "category_to_indicators", iterations,
@@ -320,7 +320,7 @@ def bench_category_to_indicators(iterations: int) -> Dict[str, float]:
 
 def _build_pool(n_proxies: int = 5):
     """Build a ProxyPool with ``n_proxies`` fake proxies."""
-    from packages.python.javdb_platform.proxy_pool import ProxyPool
+    from javdb.proxy.pool import ProxyPool
     pool = ProxyPool()
     for i in range(n_proxies):
         pool.add_proxy(
@@ -353,8 +353,8 @@ def bench_get_next_proxy_weighted(iterations: int) -> Dict[str, float]:
 
 def bench_is_proxy_usable(iterations: int) -> Dict[str, float]:
     """is_proxy_usable predicate on a ProxyInfo."""
-    from packages.python.javdb_platform.proxy_pool import ProxyInfo
-    from packages.python.javdb_platform.proxy_policy import is_proxy_usable
+    from javdb.proxy.pool import ProxyInfo
+    from javdb.proxy.policy import is_proxy_usable
     proxy = ProxyInfo(
         http_url="http://10.0.0.1:8080",
         https_url="http://10.0.0.1:8080",

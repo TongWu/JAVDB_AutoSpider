@@ -61,15 +61,15 @@ if __package__ in (None, ""):
         0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     )
 
-from packages.python.javdb_platform import db as _db
-from packages.python.javdb_platform.config_helper import cfg
-from packages.python.javdb_platform.d1_client import (
+from javdb.storage.db import db as _db
+from javdb.infra.config import cfg
+from javdb.storage.d1_client import (
     D1Connection,
     get_d1_account_id,
     get_d1_api_token,
     get_d1_database_id,
 )
-from packages.python.javdb_platform.logging_config import (
+from javdb.infra.logging import (
     get_logger,
     setup_logging,
 )

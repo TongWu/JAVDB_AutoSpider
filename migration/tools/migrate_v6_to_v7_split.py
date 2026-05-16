@@ -13,7 +13,7 @@ from compat import alias_module
 
 _module = alias_module(
     __name__,
-    "packages.python.javdb_migrations.tools.migrate_v6_to_v7_split",
+    "javdb.migrations.tools.migrate_v6_to_v7_split",
 )
 
 if __name__ == "__main__":

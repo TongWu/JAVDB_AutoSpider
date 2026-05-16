@@ -591,7 +591,7 @@ class TestExtractDedupStatistics:
         }
 
     def test_extract_dedup_statistics_filters_items_to_executor_window(self, temp_dir, monkeypatch):
-        import packages.python.javdb_platform.config_helper as config_helper
+        import javdb.infra.config as config_helper
         import scripts.email_notification as email_notification
 
         monkeypatch.setattr(config_helper, 'use_sqlite', lambda: False)
@@ -640,7 +640,7 @@ class TestExtractDedupStatistics:
         assert 'IPZZ-414' in stats['deleted_items'][0]
 
     def test_extract_dedup_statistics_tracks_redownload_upgrades(self, temp_dir, monkeypatch):
-        import packages.python.javdb_platform.config_helper as config_helper
+        import javdb.infra.config as config_helper
 
         monkeypatch.setattr(config_helper, 'use_sqlite', lambda: False)
         monkeypatch.setattr(email_notification, 'DEDUP_LOG_FILE', '/nonexistent/path')

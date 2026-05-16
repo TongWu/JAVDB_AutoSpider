@@ -18,7 +18,7 @@ def select(*changed_files: str, event_name: str = "", ref_name: str = "") -> sel
 
 
 def test_ingestion_change_selects_ingestion_tests_without_full_run():
-    result = select("packages/python/javdb_ingestion/engine.py")
+    result = select("javdb/pipeline/engine.py")
 
     assert result.run_full_python is False
     assert result.run_selected_python is True

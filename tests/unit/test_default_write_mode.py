@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import pytest
 
-from packages.python.javdb_platform import db_session
+from javdb.storage.db import db_session
 
 
 @pytest.fixture(autouse=True)

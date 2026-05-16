@@ -785,7 +785,7 @@ class TestSpiderWritePathRoutesToPending:
     def test_pending_active_mode_stages_into_pending_tables(
         self, monkeypatch,
     ):
-        from packages.python.javdb_platform.history_manager import (
+        from javdb.storage.history_manager import (
             save_parsed_movie_to_history,
         )
         # Reset any stale active state from earlier tests.
@@ -835,7 +835,7 @@ class TestSpiderWritePathRoutesToPending:
         # ADR-006 made 'pending' the default, so audit mode must be
         # selected explicitly to exercise the legacy in-place path.
         monkeypatch.setenv("JAVDB_HISTORY_WRITE_MODE", "audit")
-        from packages.python.javdb_platform.history_manager import (
+        from javdb.storage.history_manager import (
             save_parsed_movie_to_history,
         )
         db_mod.set_active_session_id(None)

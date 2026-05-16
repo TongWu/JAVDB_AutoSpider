@@ -13,12 +13,12 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from packages.python.javdb_spider.fetch.index_parallel import _check_stop_condition
-from packages.python.javdb_spider.fetch.fetch_engine import (
+from javdb.spider.fetch.index_parallel import _check_stop_condition
+from javdb.spider.fetch.fetch_engine import (
     EngineTask,
     _PriorityTaskQueue,
 )
-from packages.python.javdb_spider.fetch.login_coordinator import requeue_front
+from javdb.spider.fetch.login_coordinator import requeue_front
 
 
 # ---------------------------------------------------------------------------

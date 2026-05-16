@@ -13,7 +13,7 @@ from compat import alias_module
 
 _module = alias_module(
     __name__,
-    "packages.python.javdb_migrations.tools.rename_columns_add_last_visited",
+    "javdb.migrations.tools.rename_columns_add_last_visited",
 )
 
 if __name__ == "__main__":

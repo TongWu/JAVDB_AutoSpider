@@ -372,7 +372,7 @@ def test_fanout_movie_claim_records_failure_after_exhausting_retries(
 
     def always_fail(sid, date):
         calls.append((sid, date))
-        from packages.python.javdb_platform.movie_claim_client import (
+        from javdb.proxy.coordinator.movie_claim_client import (
             MovieClaimUnavailable,
         )
         raise MovieClaimUnavailable("transient")
@@ -396,7 +396,7 @@ def test_fanout_movie_claim_commit_does_not_retry(patch_claim_client):
 
     def fail_once(sid, date):
         calls.append((sid, date))
-        from packages.python.javdb_platform.movie_claim_client import (
+        from javdb.proxy.coordinator.movie_claim_client import (
             MovieClaimUnavailable,
         )
         raise MovieClaimUnavailable("nope")

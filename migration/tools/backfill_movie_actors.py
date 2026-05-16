@@ -13,7 +13,7 @@ from compat import alias_module
 
 _module = alias_module(
     __name__,
-    "packages.python.javdb_migrations.tools.backfill_movie_actors",
+    "javdb.migrations.tools.backfill_movie_actors",
 )
 
 if __name__ == "__main__":

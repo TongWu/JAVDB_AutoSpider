@@ -16,7 +16,7 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from packages.python.javdb_platform.work_distributor_client import (  # noqa: E402
+from javdb.proxy.coordinator.work_distributor_client import (  # noqa: E402
     CompleteResult,
     EnqueueResult,
     PullResult,
@@ -310,7 +310,7 @@ def test_factory_disabled_when_flag_false(monkeypatch):
 def test_factory_returns_client_when_healthy(monkeypatch):
     monkeypatch.setenv("WORK_DISTRIBUTOR_ENABLED", "true")
     with patch(
-        "packages.python.javdb_platform.config_helper.cfg",
+        "javdb.infra.config.cfg",
         side_effect=_cfg_mapping(
             PROXY_COORDINATOR_URL="https://w.test",
             PROXY_COORDINATOR_TOKEN="tok",
@@ -324,7 +324,7 @@ def test_factory_returns_client_when_healthy(monkeypatch):
 def test_factory_returns_none_when_health_fails(monkeypatch):
     monkeypatch.setenv("WORK_DISTRIBUTOR_ENABLED", "true")
     with patch(
-        "packages.python.javdb_platform.config_helper.cfg",
+        "javdb.infra.config.cfg",
         side_effect=_cfg_mapping(
             PROXY_COORDINATOR_URL="https://w.test",
             PROXY_COORDINATOR_TOKEN="tok",
