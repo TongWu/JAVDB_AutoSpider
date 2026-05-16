@@ -5,12 +5,12 @@ from __future__ import annotations
 import queue as queue_module
 from typing import Optional
 
-from packages.python.javdb_platform.logging_config import get_logger
+from javdb.infra.logging import get_logger
 
-from packages.python.javdb_spider.fetch.backend import FetchBackend, FetchRuntimeState
-from packages.python.javdb_spider.fetch.fallback import fetch_detail_page_with_fallback
-from packages.python.javdb_spider.fetch.fetch_engine import EngineResult, EngineTask
-from packages.python.javdb_spider.runtime.sleep import movie_sleep_mgr
+from javdb.spider.fetch.backend import FetchBackend, FetchRuntimeState
+from javdb.spider.fetch.fallback import fetch_detail_page_with_fallback
+from javdb.spider.fetch.fetch_engine import EngineResult, EngineTask
+from javdb.spider.runtime.sleep import movie_sleep_mgr
 
 logger = get_logger(__name__)
 

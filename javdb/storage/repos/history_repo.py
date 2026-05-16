@@ -11,8 +11,8 @@ from apps.api.parsers.common import (
     javdb_absolute_url,
     absolutize_supporting_actors_json,
 )
-from packages.python.javdb_platform.config_helper import cfg
-from packages.python.javdb_core.contracts import indicators_to_category as _indicators_to_category
+from javdb.infra.config import cfg
+from javdb.spider.contracts import indicators_to_category as _indicators_to_category
 
 
 def _execute_backend_batch(conn, statements):

@@ -127,7 +127,7 @@ def write_csv(rows, csv_path, fieldnames, dry_run=False, append_mode=False):
     Respects ``STORAGE_MODE``: CSV I/O is skipped in ``db``-only mode;
     SQLite writes are skipped in ``csv``-only mode.
     """
-    from packages.python.javdb_platform.config_helper import use_csv as _use_csv
+    from javdb.infra.config import use_csv as _use_csv
 
     if dry_run:
         logger.info(f"[DRY RUN] Would write {len(rows)} entries to {csv_path}")
@@ -211,9 +211,9 @@ def write_csv(rows, csv_path, fieldnames, dry_run=False, append_mode=False):
 
     if _active_session_id is not None and rows:
         try:
-            from packages.python.javdb_platform.config_helper import use_sqlite
+            from javdb.infra.config import use_sqlite
             if use_sqlite():
-                from packages.python.javdb_platform.db_reports import db_insert_report_rows
+                from javdb.storage.db.db_reports import db_insert_report_rows
                 db_insert_report_rows(_active_session_id, rows)
         except Exception as e:
             logger.warning(f"[CSV] Failed to write rows to SQLite: {e}")

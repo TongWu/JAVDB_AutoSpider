@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Iterator, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from packages.python.javdb_spider.fetch.fetch_engine import EngineResult, EngineTask
+    from javdb.spider.fetch.fetch_engine import EngineResult, EngineTask
 
 
 @dataclass(frozen=True)

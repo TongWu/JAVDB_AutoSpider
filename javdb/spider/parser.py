@@ -19,14 +19,14 @@ from bs4 import BeautifulSoup
 from bs4.element import Tag
 
 # Import configuration
-from packages.python.javdb_platform.config_helper import cfg
+from javdb.infra.config import cfg
 
 PHASE2_MIN_RATE = cfg('PHASE2_MIN_RATE', 4.0)
 PHASE2_MIN_COMMENTS = cfg('PHASE2_MIN_COMMENTS', 100)
 LOG_LEVEL = cfg('LOG_LEVEL', 'INFO')
 IGNORE_RELEASE_DATE_FILTER = cfg('IGNORE_RELEASE_DATE_FILTER', False)
 
-from packages.python.javdb_platform.logging_config import get_logger
+from javdb.infra.logging import get_logger
 
 # New API layer imports — go through the package __init__ so the Rust-first
 # routing in apps/api/parsers/__init__.py applies. Importing the submodules

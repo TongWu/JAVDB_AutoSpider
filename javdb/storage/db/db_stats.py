@@ -14,7 +14,7 @@ import json
 import sqlite3
 from typing import Optional
 
-from packages.python.javdb_platform.logging_config import get_logger
+from javdb.infra.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -28,7 +28,7 @@ def _ensure_imports():
     """Lazy import to avoid circular dependency with db_connection."""
     global _get_db, _get_local_sqlite_db, _REPORTS_DB_PATH
     if _get_db is None:
-        from packages.python.javdb_platform.db_connection import (
+        from javdb.storage.db.db_connection import (
             get_db,
             get_local_sqlite_db,
             REPORTS_DB_PATH,

@@ -129,8 +129,8 @@ def _session_exists(session_id: str) -> bool:
     transient DB errors do not masquerade as 404s — the caller will get
     a proper exception from the rollback pipeline instead.
     """
-    from packages.python.javdb_platform import db as _db
-    from packages.python.javdb_platform.db_connection import get_db
+    from javdb.storage.db import db as _db
+    from javdb.storage.db.db_connection import get_db
 
     try:
         with get_db(_db.REPORTS_DB_PATH) as conn:

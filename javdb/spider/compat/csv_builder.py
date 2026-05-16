@@ -3,7 +3,7 @@
 The canonical implementations now live in ``scripts.ingestion.adapters``.
 """
 
-from packages.python.javdb_ingestion.adapters import (
+from javdb.pipeline.adapters import (
     check_torrent_status,
     collect_new_magnet_links,
     create_csv_row_with_history_filter,

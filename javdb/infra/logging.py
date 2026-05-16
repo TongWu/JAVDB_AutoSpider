@@ -38,7 +38,7 @@ import logging
 import os
 import time
 
-from packages.python.javdb_platform.config_helper import cfg
+from javdb.infra.config import cfg
 
 
 # ---------------------------------------------------------------------------

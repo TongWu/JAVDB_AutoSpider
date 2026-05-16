@@ -12,7 +12,7 @@ to ensure all session-related data is cleaned up atomically.
 
 from typing import Optional
 
-from packages.python.javdb_platform.logging_config import get_logger
+from javdb.infra.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -28,14 +28,14 @@ def _ensure_imports():
     global _rollback_history_for_session, _rollback_reports_for_session
     global _rollback_operations_for_session, _get_session_status
     if _rollback_history_for_session is None:
-        from packages.python.javdb_platform.db_history_write import (
+        from javdb.storage.db.db_history_write import (
             rollback_history_for_session,
         )
-        from packages.python.javdb_platform.db_reports import (
+        from javdb.storage.db.db_reports import (
             rollback_reports_for_session,
             db_get_session_status,
         )
-        from packages.python.javdb_platform.db_operations import (
+        from javdb.storage.db.db_operations import (
             rollback_operations_for_session,
         )
         _rollback_history_for_session = rollback_history_for_session
@@ -49,11 +49,11 @@ def _ensure_imports():
 
 def db_rollback_session(session_id, **kwargs):
     """Rollback all changes for a session. Delegates to db.py."""
-    from packages.python.javdb_platform.db import db_rollback_session as _f
+    from javdb.storage.db.db import db_rollback_session as _f
     return _f(session_id, **kwargs)
 
 
 def db_resume_finalizing_session(session_id, **kwargs):
     """Resume a session stuck in 'finalizing' status. Delegates to db.py."""
-    from packages.python.javdb_platform.db import db_resume_finalizing_session as _f
+    from javdb.storage.db.db import db_resume_finalizing_session as _f
     return _f(session_id, **kwargs)

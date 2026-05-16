@@ -4,18 +4,18 @@ from __future__ import annotations
 
 from typing import Dict, List, Tuple
 
-from packages.python.javdb_ingestion.policies import (
+from javdb.pipeline.policies import (
     alignment_category_family,
     alignment_inventory_entry_family,
     alignment_inventory_entry_rank,
     determine_torrent_types,
     get_missing_torrent_types,
 )
-from packages.python.javdb_platform.config_helper import cfg
-from packages.python.javdb_core.contracts import DOWNLOADED_PLACEHOLDER, TORRENT_CATEGORIES
+from javdb.infra.config import cfg
+from javdb.spider.contracts import DOWNLOADED_PLACEHOLDER, TORRENT_CATEGORIES
 
 INCLUDE_DOWNLOADED_IN_REPORT = cfg('INCLUDE_DOWNLOADED_IN_REPORT', False)
-from packages.python.javdb_platform.logging_config import get_logger
+from javdb.infra.logging import get_logger
 from javdb.infra.csv_writer import (
     RUST_CSV_AVAILABLE,
     rust_check_torrent_status,

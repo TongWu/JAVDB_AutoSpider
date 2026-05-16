@@ -42,15 +42,15 @@ from apps.cli._session_helpers import (
     read_session_pre_state,
     write_github_output,
 )
-from packages.python.javdb_platform.db_connection import close_db
-from packages.python.javdb_platform.db_history_write import db_commit_session_history
-from packages.python.javdb_platform.db_reports import (
+from javdb.storage.db.db_connection import close_db
+from javdb.storage.db.db_history_write import db_commit_session_history
+from javdb.storage.db.db_reports import (
     db_find_in_progress_sessions,
     db_mark_session_committed,
     db_pending_session_stats,
 )
-from packages.python.javdb_platform.db_migrations import init_db
-from packages.python.javdb_platform.logging_config import (
+from javdb.storage.db.db_migrations import init_db
+from javdb.infra.logging import (
     get_logger,
     setup_logging,
 )
@@ -165,7 +165,7 @@ def _shadow_audit_drift(
     drift=0 with the error captured in ``derived_drift_error`` so the
     metric still emits.
     """
-    from packages.python.javdb_platform.db_connection import (
+    from javdb.storage.db.db_connection import (
         get_db,
         HISTORY_DB_PATH,
     )

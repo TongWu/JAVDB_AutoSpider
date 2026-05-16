@@ -15,7 +15,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 # Import unified configuration
-from packages.python.javdb_platform.config_helper import cfg
+from javdb.infra.config import cfg
 
 QB_HOST = cfg('QB_HOST', 'your_qbittorrent_ip')
 QB_PORT = cfg('QB_PORT', 'your_qbittorrent_port')
@@ -47,7 +47,7 @@ PROXY_POOL_MAX_FAILURES = cfg('PROXY_POOL_MAX_FAILURES', 3)
 
 # Import history manager functions
 try:
-    from packages.python.javdb_platform.history_manager import is_downloaded_torrent
+    from javdb.storage.history_manager import is_downloaded_torrent
 except ImportError:
     # Fallback function if import fails
     def is_downloaded_torrent(torrent_content):
@@ -55,8 +55,8 @@ except ImportError:
         return torrent_content.strip().startswith("[DOWNLOADED]")
 
 # Import path helper for dated subdirectories
-from packages.python.javdb_platform.path_helper import get_dated_report_path, get_dated_subdir, find_latest_report_in_dated_dirs
-from packages.python.javdb_platform.proxy_policy import (
+from javdb.infra.paths import get_dated_report_path, get_dated_subdir, find_latest_report_in_dated_dirs
+from javdb.proxy.policy import (
     add_proxy_arguments,
     describe_proxy_override,
     resolve_proxy_override,
@@ -64,22 +64,22 @@ from packages.python.javdb_platform.proxy_policy import (
 )
 
 # Configure logging
-from packages.python.javdb_platform.logging_config import setup_logging, get_logger
+from javdb.infra.logging import setup_logging, get_logger
 setup_logging(UPLOADER_LOG_FILE, LOG_LEVEL)
 logger = get_logger(__name__)
 
 # Import git helper
-from packages.python.javdb_platform.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
+from javdb.infra.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
 
 # Import masking utilities
-from packages.python.javdb_core.masking import mask_error, mask_username
+from javdb.infra.masking import mask_error, mask_username
 
 # Import proxy pool
-from packages.python.javdb_platform.proxy_pool import ProxyPool, create_proxy_pool_from_config
+from javdb.proxy.pool import ProxyPool, create_proxy_pool_from_config
 
 # Import proxy helper from request handler
-from packages.python.javdb_platform.request_handler import ProxyHelper, create_proxy_helper_from_config
-from packages.python.javdb_platform.qb_config import (
+from javdb.infra.request import ProxyHelper, create_proxy_helper_from_config
+from javdb.integrations.qb.config import (
     qb_allow_insecure_http,
     qb_base_url_candidates,
     masked_qb_base_url,
@@ -261,7 +261,7 @@ def test_qbittorrent_connection(use_proxy=False):
     ``scripts.qb_uploader.requests.get`` continue to work. On success the
     resolved base URL is persisted via ``_set_active_qb_base_url`` (which
     also flips ``QB_ALLOW_INSECURE_HTTP`` when an HTTP fallback succeeds)."""
-    from packages.python.javdb_integrations.qb_client import try_ping_base_urls
+    from javdb.integrations.qb.client import try_ping_base_urls
 
     proxies = get_proxies_dict('qbittorrent', use_proxy)
     url, _ = try_ping_base_urls(
@@ -285,7 +285,7 @@ def login_to_qbittorrent(session, use_proxy=False):
     argument stays in the signature for backwards compatibility — we pass
     its ``post`` method as the HTTP callable so existing tests that mock
     ``session.post`` continue to work."""
-    from packages.python.javdb_integrations.qb_client import (
+    from javdb.integrations.qb.client import (
         LOGIN_SUCCESS,
         LOGIN_REJECTED,
         try_login_base_urls,
@@ -310,7 +310,7 @@ def login_to_qbittorrent(session, use_proxy=False):
     return False
 
 
-from packages.python.javdb_integrations.qb_client import (
+from javdb.integrations.qb.client import (
     extract_hash_from_magnet,
     is_torrent_exists,
 )
@@ -320,7 +320,7 @@ def _wrap_session_as_client(session, use_proxy=False):
     """Wrap ``qb_uploader``'s already-logged-in ``requests.Session`` into
     a :class:`QBittorrentClient` so it can reuse the shared helpers
     without doing a second login."""
-    from packages.python.javdb_integrations.qb_client import QBittorrentClient
+    from javdb.integrations.qb.client import QBittorrentClient
     return QBittorrentClient.from_existing_session(
         session,
         base_url=QB_BASE_URL,
@@ -530,7 +530,7 @@ def initialize_proxy_helper(proxy_override):
 
 def main():
     import atexit
-    from packages.python.javdb_platform.db_connection import close_db
+    from javdb.storage.db.db_connection import close_db
     atexit.register(close_db)
 
     args = parse_arguments()
@@ -692,10 +692,10 @@ def main():
     _session_id = getattr(args, 'session_id', None)
     if _session_id:
         try:
-            from packages.python.javdb_platform.config_helper import use_sqlite as _use_sqlite
+            from javdb.infra.config import use_sqlite as _use_sqlite
             if _use_sqlite():
-                from packages.python.javdb_platform.db_migrations import init_db
-                from packages.python.javdb_platform.db_stats import db_save_uploader_stats
+                from javdb.storage.db.db_migrations import init_db
+                from javdb.storage.db.db_stats import db_save_uploader_stats
                 init_db()
                 _rate = (successfully_added / attempted * 100) if attempted > 0 else 0.0
                 db_save_uploader_stats(_session_id, {
@@ -710,7 +710,7 @@ def main():
                     'no_subtitle_count': no_subtitle_count,
                     'success_rate': _rate,
                 })
-                from packages.python.javdb_platform.db_connection import current_backend
+                from javdb.storage.db.db_connection import current_backend
                 logger.info(f"Uploader stats saved to {current_backend()} backend (session_id={_session_id})")
         except Exception as e:
             logger.warning(f"Failed to save uploader stats to db backend: {e}")

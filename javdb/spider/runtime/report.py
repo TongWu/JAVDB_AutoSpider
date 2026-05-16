@@ -4,14 +4,14 @@ import os
 import sys
 import logging
 
-from packages.python.javdb_platform.logging_config import (
+from javdb.infra.logging import (
     get_logger,
     log_section,
     log_summary_block,
 )
 
-import packages.python.javdb_spider.runtime.state as state
-from packages.python.javdb_spider.runtime.config import (
+import javdb.spider.runtime.state as state
+from javdb.spider.runtime.config import (
     PROXY_MODE, REPORTS_DIR, PARSED_MOVIES_CSV,
     INCLUDE_DOWNLOADED_IN_REPORT,
 )

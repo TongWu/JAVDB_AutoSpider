@@ -28,21 +28,21 @@ import types
 from collections import deque
 from typing import Deque, Optional, Tuple
 
-import packages.python.javdb_spider.runtime.state as state
-from packages.python.javdb_platform.login_state_client import (
+import javdb.spider.runtime.state as state
+from javdb.proxy.coordinator.login_state_client import (
     LoginStateUnavailable,
 )
-from packages.python.javdb_spider.fetch.session import (
+from javdb.spider.fetch.session import (
     _publish_login_state_to_do,
     attempt_login_refresh,
     verify_login_via_fixed_pages,
 )
-from packages.python.javdb_spider.runtime.config import (
+from javdb.spider.runtime.config import (
     LOGIN_ATTEMPTS_PER_PROXY_LIMIT,
     LOGIN_MAX_FAILURES_BEFORE_PROXY_SWITCH,
     LOGIN_VERIFICATION_URLS,
 )
-from packages.python.javdb_platform.logging_config import get_logger
+from javdb.infra.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -65,7 +65,7 @@ _POLL_IDLE_ITERATIONS_BEFORE_EXIT = 5
 _POLL_MAX_CONSECUTIVE_GET_STATE_FAILURES = 3
 
 
-from packages.python.javdb_spider.fetch.utils import (  # noqa: E402
+from javdb.spider.fetch.utils import (  # noqa: E402
     task_worker_ctx as _task_worker_ctx,
 )
 

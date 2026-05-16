@@ -16,8 +16,8 @@ import threading
 from contextlib import contextmanager
 from typing import Optional
 
-from packages.python.javdb_platform.config_helper import cfg
-from packages.python.javdb_platform.logging_config import get_logger
+from javdb.infra.config import cfg
+from javdb.infra.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -192,11 +192,11 @@ def _get_connection(db_path: str):
     if backend == 'sqlite':
         conn = _open_sqlite_connection(db_path)
     elif backend == 'd1':
-        from packages.python.javdb_platform.d1_client import make_d1_connection
+        from javdb.storage.d1_client import make_d1_connection
         conn = make_d1_connection(_logical_name_for(db_path))
     elif backend == 'dual':
-        from packages.python.javdb_platform.d1_client import make_d1_connection
-        from packages.python.javdb_platform.dual_connection import DualConnection
+        from javdb.storage.d1_client import make_d1_connection
+        from javdb.storage.dual_connection import DualConnection
         sqlite_conn = _open_sqlite_connection(db_path)
         d1_conn = make_d1_connection(_logical_name_for(db_path))
         conn = DualConnection(sqlite_conn, d1_conn, logical_name=_logical_name_for(db_path))

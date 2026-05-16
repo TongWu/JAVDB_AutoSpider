@@ -1,20 +1,20 @@
 """Multi-level fallback logic for fetching index and detail pages."""
 
-from packages.python.javdb_platform.logging_config import get_logger
-from packages.python.javdb_core.parser import parse_detail
+from javdb.infra.logging import get_logger
+from javdb.spider.parser import parse_detail
 from javdb.spider.parser import validate_index_html as _validate_index_html_fast
-from packages.python.javdb_core.url_helper import get_page_url as _url_helper_get_page_url
-from packages.python.javdb_platform.request_handler import ProxyBannedError, ProxyExhaustedError
+from javdb.spider.url_helper import get_page_url as _url_helper_get_page_url
+from javdb.infra.request import ProxyBannedError, ProxyExhaustedError
 
-import packages.python.javdb_spider.runtime.state as state
-from packages.python.javdb_spider.fetch.session import is_login_page, can_attempt_login, attempt_login_refresh
-from packages.python.javdb_spider.runtime.config import (
+import javdb.spider.runtime.state as state
+from javdb.spider.fetch.session import is_login_page, can_attempt_login, attempt_login_refresh
+from javdb.spider.runtime.config import (
     BASE_URL,
     CF_BYPASS_ENABLED, CF_BYPASS_SERVICE_PORT,
     PROXY_MODE, PROXY_POOL_MAX_FAILURES,
 )
-from packages.python.javdb_platform.proxy_policy import is_cf_bypass_reachable
-from packages.python.javdb_spider.runtime.sleep import movie_sleep_mgr as _sleep_mgr
+from javdb.proxy.policy import is_cf_bypass_reachable
+from javdb.spider.runtime.sleep import movie_sleep_mgr as _sleep_mgr
 
 logger = get_logger(__name__)
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from packages.python.javdb_ingestion.adapters import (
+from javdb.pipeline.adapters import (
     build_alignment_purge_plan_rows,
     build_alignment_qb_row,
     check_torrent_status,
@@ -12,8 +12,8 @@ from packages.python.javdb_ingestion.adapters import (
     create_csv_row_with_history_filter,
     create_redownload_row,
 )
-from packages.python.javdb_ingestion.models import AlignmentUpgradePlan, ParsedMovie, SpiderIngestionPlan
-from packages.python.javdb_ingestion.policies import (
+from javdb.pipeline.models import AlignmentUpgradePlan, ParsedMovie, SpiderIngestionPlan
+from javdb.pipeline.policies import (
     ALIGNMENT_CENSORED_FAMILY,
     ALIGNMENT_UNCENSORED_FAMILY,
     alignment_best_inventory_rank,
@@ -23,7 +23,7 @@ from packages.python.javdb_ingestion.policies import (
     check_redownload_upgrade,
     should_process_movie,
 )
-from packages.python.javdb_spider.services.dedup import (
+from javdb.spider.services.dedup import (
     DedupRecord,
     check_dedup_upgrade,
     check_redownload_dedup_upgrade,

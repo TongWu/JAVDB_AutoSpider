@@ -6,7 +6,7 @@ assemble proxy pools, request handlers, or parser dispatch logic.
 
 Usage::
 
-    from packages.python.javdb_platform.spider_gateway import create_gateway, fetch_and_parse_url
+    from javdb.spider.spider_gateway import create_gateway, fetch_and_parse_url
 
     # One-shot (uses default config.py settings):
     result = fetch_and_parse_url("https://javdb.com/v/AbC12")
@@ -33,8 +33,8 @@ from apps.api.parsers import (
     parse_tag_page,
     detect_page_type,
 )
-from packages.python.javdb_platform.proxy_pool import create_proxy_pool_from_config
-from packages.python.javdb_platform.request_handler import RequestConfig, RequestHandler
+from javdb.proxy.pool import create_proxy_pool_from_config
+from javdb.infra.request import RequestConfig, RequestHandler
 from javdb.spider.parser import result_to_dict
 
 logger = logging.getLogger(__name__)
@@ -325,7 +325,7 @@ def create_handler_for_proxy(
     but want to avoid duplicating the config-assembly boilerplate.
     """
     cfg = _load_config()
-    from packages.python.javdb_platform.proxy_pool import create_proxy_pool_from_config
+    from javdb.proxy.pool import create_proxy_pool_from_config
 
     pool = create_proxy_pool_from_config(
         [proxy_config],
