@@ -15,13 +15,28 @@ from fastapi import HTTPException, Request
 from passlib.context import CryptContext
 
 from apps.api.services import context
+from javdb.infra.config import cfg
 
 PASSWORD_CTX = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 _RUNTIME_ENV = os.getenv("ENVIRONMENT", os.getenv("FLASK_ENV", "")).strip().lower()
 _IS_PRODUCTION_ENV = _RUNTIME_ENV == "production"
 
-API_SECRET_KEY = os.getenv("API_SECRET_KEY", "").strip()
+
+def _resolve(name: str, default: str = "") -> str:
+    """Return *name* from env if set and non-empty, else from config.py via cfg(), else default.
+
+    Empty env values fall through to config.py too — so an unset env and an
+    empty env are treated the same.
+    """
+    env_val = os.getenv(name)
+    if env_val is not None and env_val.strip():
+        return env_val.strip()
+    cfg_val = cfg(name, default)
+    return str(cfg_val).strip() if cfg_val is not None else default
+
+
+API_SECRET_KEY = _resolve("API_SECRET_KEY", "")
 if not API_SECRET_KEY:
     if _IS_PRODUCTION_ENV:
         raise RuntimeError("API_SECRET_KEY is required.")
@@ -35,11 +50,11 @@ if len(API_SECRET_KEY) < 32:
         raise RuntimeError(message)
     context.logger.warning("%s Running in non-production mode.", message)
 
-ACCESS_TOKEN_EXPIRE_SECONDS = int(os.getenv("ACCESS_TOKEN_EXPIRE_SECONDS", "1800"))
+ACCESS_TOKEN_EXPIRE_SECONDS = int(_resolve("ACCESS_TOKEN_EXPIRE_SECONDS", "1800") or "1800")
 REFRESH_TOKEN_EXPIRE_SECONDS = int(
-    os.getenv("REFRESH_TOKEN_EXPIRE_SECONDS", str(7 * 24 * 3600))
+    _resolve("REFRESH_TOKEN_EXPIRE_SECONDS", str(7 * 24 * 3600)) or str(7 * 24 * 3600)
 )
-MAX_SESSIONS_PER_USER = int(os.getenv("MAX_SESSIONS_PER_USER", "3"))
+MAX_SESSIONS_PER_USER = int(_resolve("MAX_SESSIONS_PER_USER", "3") or "3")
 
 ACTIVE_TOKENS: Dict[str, list[tuple[str, int]]] = {}
 REVOKED_JTI: Dict[str, int] = {}
@@ -59,10 +74,10 @@ def _hash_password(plain: str) -> str:
     return PASSWORD_CTX.hash(plain)
 
 
-ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
-ADMIN_PASSWORD_HASH = os.getenv("ADMIN_PASSWORD_HASH")
+ADMIN_USERNAME = _resolve("ADMIN_USERNAME", "admin") or "admin"
+ADMIN_PASSWORD_HASH = _resolve("ADMIN_PASSWORD_HASH") or None
 if not ADMIN_PASSWORD_HASH:
-    admin_password = os.getenv("ADMIN_PASSWORD", "").strip()
+    admin_password = _resolve("ADMIN_PASSWORD")
     if not admin_password:
         if _IS_PRODUCTION_ENV:
             raise RuntimeError(
@@ -75,13 +90,13 @@ if not ADMIN_PASSWORD_HASH:
         )
     ADMIN_PASSWORD_HASH = _hash_password(admin_password)
 
-READONLY_USERNAME = os.getenv("READONLY_USERNAME", "readonly")
-READONLY_PASSWORD_HASH = os.getenv("READONLY_PASSWORD_HASH")
+READONLY_USERNAME = _resolve("READONLY_USERNAME", "readonly") or "readonly"
+READONLY_PASSWORD_HASH = _resolve("READONLY_PASSWORD_HASH") or None
 if not READONLY_PASSWORD_HASH:
-    readonly_password = os.getenv("READONLY_PASSWORD", "").strip()
+    readonly_password = _resolve("READONLY_PASSWORD")
     if readonly_password:
         context.logger.warning(
-            "READONLY_PASSWORD is provided in plaintext env and will be hashed at startup."
+            "READONLY_PASSWORD is provided in plaintext and will be hashed at startup."
         )
         READONLY_PASSWORD_HASH = _hash_password(readonly_password)
 
