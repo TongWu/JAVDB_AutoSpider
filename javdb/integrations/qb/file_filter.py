@@ -7,11 +7,11 @@ It sets the download priority to 0 (do not download) for files below the thresho
 Optionally, it can also delete local files that have already been downloaded.
 
 Usage:
-    python3 -m apps.cli.qb_file_filter  # Uses QB_FILE_FILTER_MIN_SIZE_MB from config (default 100MB if no config)
-    python3 -m apps.cli.qb_file_filter --min-size 50  # Override threshold to 50MB
-    python3 -m apps.cli.qb_file_filter --min-size 100 --days 2  # Explicit 100MB, last 2 days
-    python3 -m apps.cli.qb_file_filter --min-size 100 --use-proxy  # With proxy
-    python3 -m apps.cli.qb_file_filter --min-size 100 --delete-local-files  # Also delete downloaded files
+    python3 -m apps.cli.qb.file_filter  # Uses QB_FILE_FILTER_MIN_SIZE_MB from config (default 100MB if no config)
+    python3 -m apps.cli.qb.file_filter --min-size 50  # Override threshold to 50MB
+    python3 -m apps.cli.qb.file_filter --min-size 100 --days 2  # Explicit 100MB, last 2 days
+    python3 -m apps.cli.qb.file_filter --min-size 100 --use-proxy  # With proxy
+    python3 -m apps.cli.qb.file_filter --min-size 100 --delete-local-files  # Also delete downloaded files
 """
 
 import requests
@@ -284,7 +284,7 @@ def cleanup_completed_torrents(session, categories, dry_run=False, use_proxy=Fal
 
     Thin adapter that wires ``qb_file_filter``'s already-authenticated
     session into the shared helper
-    ``packages.python.javdb_integrations.qb_client.remove_completed_torrents_keep_files``.
+    ``javdb.integrations.qb.client.remove_completed_torrents_keep_files``.
     Returns a stats dict ``{'scanned', 'deleted', 'hashes'}``.
     """
     from javdb.integrations.qb.client import (
@@ -769,7 +769,7 @@ def main():
         """Run completed-torrent cleanup (remove entry, keep files) on the same
         categories the filter was asked to process. Delegates to the shared
         implementation in
-        ``packages.python.javdb_integrations.qb_client``."""
+        ``javdb.integrations.qb.client``."""
         if not cleanup_categories:
             logger.info(
                 "Skipping completed-torrent cleanup: no categories specified "

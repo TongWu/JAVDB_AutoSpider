@@ -546,9 +546,9 @@ CREATE INDEX IF NOT EXISTS idx_th_audit_run ON TorrentHistoryAudit(RunId, RunAtt
 -- Pending history write tables (Ingestion Perfect Rollback, Phase 0).
 --
 -- Every ingestion mutation against MovieHistory / TorrentHistory under
--- ``WriteMode='pending'`` is staged here first.  ``apps.cli.commit_session``
+-- ``WriteMode='pending'`` is staged here first.  ``apps.cli.db.commit_session``
 -- promotes them into the live tables atomically per movie at the end of
--- a successful run; ``apps.cli.rollback`` deletes them on in_progress
+-- a successful run; ``apps.cli.db.rollback`` deletes them on in_progress
 -- failure or resumes the commit on finalizing failure (so the audit
 -- replay path is never needed in pending mode).
 --
@@ -2162,7 +2162,7 @@ def db_load_history(db_path: Optional[str] = None, phase: Optional[int] = None) 
 # Every mutation of ``MovieHistory`` / ``TorrentHistory`` that originates
 # from a tagged session (``session_id is not None``) records a companion
 # audit row in ``MovieHistoryAudit`` / ``TorrentHistoryAudit`` describing
-# what changed. ``apps.cli.rollback`` later replays the audit log in
+# what changed. ``apps.cli.db.rollback`` later replays the audit log in
 # reverse order to undo the mutations of a failed run while leaving the
 # committed state of any other concurrent run untouched.
 #
@@ -2396,7 +2396,7 @@ def db_upsert_history(
 
     .. deprecated:: Phase 4 (2026-05-13)
         Direct callers must switch to
-        :func:`packages.python.javdb_platform.history_manager.save_parsed_movie_to_history`
+        :func:`javdb.storage.history_manager.save_parsed_movie_to_history`
         (or :func:`db_stage_history_write` when the active session is in
         ``WriteMode='pending'``).  Calling this function emits
         :class:`DeprecationWarning` so the remaining audit-mode callsites
