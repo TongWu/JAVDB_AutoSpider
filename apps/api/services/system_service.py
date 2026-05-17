@@ -41,7 +41,7 @@ def _runtime_facade():
 
 
 async def run_health_check_payload(payload: Any, username: str) -> Dict[str, Any]:
-    command = ["python3", "-m", "apps.cli.health_check"]
+    command = ["python3", "-m", "apps.cli.ops.health_check"]
     if payload.check_smtp:
         command.append("--check-smtp")
     proxy_override = resolve_proxy_override(

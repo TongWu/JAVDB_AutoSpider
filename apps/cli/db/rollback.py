@@ -63,7 +63,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
-from apps.cli._session_helpers import (
+from apps.cli.db._session_helpers import (
     append_jsonl_record,
     attach_run_identity,
     fanout_movie_claim,
@@ -487,9 +487,9 @@ def _drive_rollback(args: argparse.Namespace) -> tuple[dict, int]:
     etc.) and see the patch take effect end-to-end.
     """
     # NOTE: do not capture module-level names into locals here — every
-    # reference must go through the ``apps.cli.rollback`` namespace so
+    # reference must go through the ``apps.cli.db.rollback`` namespace so
     # monkeypatches in tests reach this code.
-    import apps.cli.rollback as _self
+    import apps.cli.db.rollback as _self
 
     run_started_at_normalized = _self.normalize_run_started_at(
         args.run_started_at,
