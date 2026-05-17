@@ -1,7 +1,6 @@
 """Onboarding endpoints: status, test, complete, dismiss-hint."""
 from __future__ import annotations
 
-import os
 from fastapi import APIRouter, Depends
 
 from apps.api.schemas.capabilities_payloads import (
@@ -11,6 +10,7 @@ from apps.api.schemas.capabilities_payloads import (
     OnboardingTestResponse,
 )
 from apps.api.infra.auth import _require_auth, require_role
+from apps.api.services import config_service
 from javdb.storage.repos.system_state_repo import SystemStateRepo
 from javdb.storage.db.db_connection import get_db, OPERATIONS_DB_PATH
 
@@ -20,18 +20,22 @@ SKIPPABLE_COMPONENTS = ("smtp", "pikpak", "rclone", "proxy")
 
 
 def _is_configured(component: str) -> bool:
+    cfg = config_service.load_runtime_config()
     if component == "javdb_session":
-        return bool(os.getenv("JAVDB_SESSION_COOKIE") or os.getenv("JAVDB_USERNAME"))
+        return bool(cfg.get("JAVDB_SESSION_COOKIE") or cfg.get("JAVDB_USERNAME"))
     if component == "qb":
-        return bool(os.getenv("QB_URL"))
+        return bool(cfg.get("QB_URL"))
     if component == "smtp":
-        return bool(os.getenv("SMTP_HOST") or os.getenv("SMTP_SERVER"))
+        return bool(cfg.get("SMTP_HOST") or cfg.get("SMTP_SERVER"))
     if component == "pikpak":
-        return bool(os.getenv("PIKPAK_USERNAME"))
+        return bool(cfg.get("PIKPAK_EMAIL") or cfg.get("PIKPAK_USERNAME"))
     if component == "rclone":
-        return bool(os.getenv("RCLONE_REMOTE"))
+        return bool(cfg.get("RCLONE_FOLDER_PATH") or cfg.get("RCLONE_REMOTE"))
     if component == "proxy":
-        return bool(os.getenv("PROXY_HTTP") or os.getenv("PROXY_POOL"))
+        mode = str(cfg.get("PROXY_MODE", "")).lower()
+        if mode in ("pool", "single") and (cfg.get("PROXY_HTTP") or cfg.get("PROXY_POOL")):
+            return True
+        return bool(cfg.get("PROXY_HTTP") or cfg.get("PROXY_POOL"))
     return False
 
 
@@ -44,50 +48,89 @@ def _read_onboarded() -> bool:
 
 
 def _test_javdb() -> tuple[bool, str, dict | None]:
-    cookie = os.getenv("JAVDB_SESSION_COOKIE")
+    cfg = config_service.load_runtime_config()
+    cookie = cfg.get("JAVDB_SESSION_COOKIE")
     if not cookie:
         return False, "JAVDB_SESSION_COOKIE not set", None
-    return True, "cookie present", {"length": len(cookie)}
+    return True, "cookie present", {"length": len(str(cookie))}
 
 
 def _test_qb() -> tuple[bool, str, dict | None]:
-    url = os.getenv("QB_URL")
+    cfg = config_service.load_runtime_config()
+    url = cfg.get("QB_URL")
     if not url:
         return False, "QB_URL not set", None
+    username = cfg.get("QB_USERNAME") or ""
+    password = cfg.get("QB_PASSWORD") or ""
+    verify_tls = bool(cfg.get("QB_VERIFY_TLS", True))
     try:
         import requests
-        r = requests.get(f"{url.rstrip('/')}/api/v2/app/version", timeout=5, verify=False)
-        if r.status_code == 200:
-            return True, f"qB {r.text}", {"url": url}
-        return False, f"qB returned HTTP {r.status_code}", {"url": url}
+        session = requests.Session()
+        base = str(url).rstrip('/')
+        if username and password:
+            login_resp = session.post(
+                f"{base}/api/v2/auth/login",
+                data={"username": username, "password": password},
+                timeout=5,
+                verify=verify_tls,
+            )
+            if login_resp.status_code != 200 or login_resp.text.strip().lower() == 'fails.':
+                return False, f"qB auth failed (HTTP {login_resp.status_code})", {"url": base}
+        version_resp = session.get(f"{base}/api/v2/app/version", timeout=5, verify=verify_tls)
+        if version_resp.status_code == 200:
+            return True, f"qBittorrent {version_resp.text}", {"url": base}
+        return False, f"qB returned HTTP {version_resp.status_code}", {"url": base}
     except Exception as exc:
-        return False, f"connect failed: {exc}", {"url": url}
+        return False, f"connect failed: {exc}", {"url": str(url)}
 
 
 def _test_proxy() -> tuple[bool, str, dict | None]:
-    proxy = os.getenv("PROXY_HTTP")
-    if not proxy:
-        return False, "no proxy configured", None
+    cfg = config_service.load_runtime_config()
+    mode = str(cfg.get("PROXY_MODE", "")).lower()
+    pool = cfg.get("PROXY_POOL")
+    single = cfg.get("PROXY_HTTP")
+
+    proxy_url: str | None = None
+    proxy_label: str = ""
+    if mode == "pool" and isinstance(pool, list) and pool:
+        first = pool[0]
+        if isinstance(first, dict):
+            proxy_url = str(first.get("http") or first.get("https") or "") or None
+            proxy_label = str(first.get("name") or proxy_url or "")
+    elif mode == "single" and single:
+        proxy_url = str(single)
+        proxy_label = proxy_url
+
+    if not proxy_url:
+        return False, "no proxy configured (PROXY_MODE/PROXY_POOL/PROXY_HTTP missing)", None
+
     try:
         import requests
-        r = requests.get("https://api.ipify.org", proxies={"http": proxy, "https": proxy}, timeout=5)
-        return r.status_code == 200, f"egress IP: {r.text}", {"proxy": proxy}
+        r = requests.get(
+            "https://api.ipify.org",
+            proxies={"http": proxy_url, "https": proxy_url},
+            timeout=8,
+        )
+        if r.status_code == 200:
+            return True, f"egress IP: {r.text}", {"proxy": proxy_label}
+        return False, f"proxy returned HTTP {r.status_code}", {"proxy": proxy_label}
     except Exception as exc:
-        return False, f"proxy test failed: {exc}", {"proxy": proxy}
+        return False, f"proxy test failed: {exc}", {"proxy": proxy_label}
 
 
 def _test_smtp() -> tuple[bool, str, dict | None]:
-    host = os.getenv("SMTP_HOST") or os.getenv("SMTP_SERVER")
+    cfg = config_service.load_runtime_config()
+    host = cfg.get("SMTP_HOST") or cfg.get("SMTP_SERVER")
     if not host:
-        return False, "SMTP_HOST not set", None
+        return False, "SMTP_HOST/SMTP_SERVER not set", None
+    port = int(cfg.get("SMTP_PORT") or 587)
     import smtplib
-    port = int(os.getenv("SMTP_PORT", "587"))
     try:
-        with smtplib.SMTP(host, port, timeout=5) as smtp:
+        with smtplib.SMTP(str(host), port, timeout=8) as smtp:
             smtp.ehlo()
-        return True, f"SMTP {host}:{port} reachable", {"host": host, "port": port}
+        return True, f"SMTP {host}:{port} reachable", {"host": str(host), "port": port}
     except Exception as exc:
-        return False, f"SMTP test failed: {exc}", {"host": host, "port": port}
+        return False, f"SMTP test failed: {exc}", {"host": str(host), "port": port}
 
 
 _COMPONENT_TESTERS = {
