@@ -486,7 +486,7 @@ class TestCreateProxyPoolFromConfig:
         ]
         
         # Mock the ban manager to avoid shared state
-        with patch('utils.infra.proxy_pool.get_ban_manager') as mock_ban_manager:
+        with patch('javdb.proxy.pool.get_ban_manager') as mock_ban_manager:
             mock_ban_manager.return_value = MagicMock()
             mock_ban_manager.return_value.is_proxy_banned.return_value = False
             

@@ -8,7 +8,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 sys.path.insert(0, project_root)
 
 import pytest
-import utils.infra.db as db_mod
+import javdb.storage.db.db as db_mod
 
 
 # ── init / schema ─────────────────────────────────────────────────────────
@@ -112,7 +112,7 @@ class TestInitDb:
 
     def test_split_db_init(self, tmp_path):
         """init_db() without db_path should create three separate DB files."""
-        import utils.infra.config_helper as _cfg_mod
+        import javdb.infra.config as _cfg_mod
         orig_override = _cfg_mod._storage_mode_override
         _cfg_mod._storage_mode_override = 'db'
 
@@ -174,7 +174,7 @@ class TestInitDb:
         fix, ``_ensure_rollback_columns`` runs both before AND after the
         DDL, so the columns exist when the index DDL is evaluated.
         """
-        import utils.infra.config_helper as _cfg_mod
+        import javdb.infra.config as _cfg_mod
         orig_override = _cfg_mod._storage_mode_override
         _cfg_mod._storage_mode_override = 'db'
 
@@ -195,7 +195,7 @@ class TestInitDb:
         try:
             # Hand-craft pre-rollback schema (no SessionId / Status columns,
             # no SessionId-indexed indexes). Mirrors a real legacy file
-            # produced before migration/d1/2026_05_04_add_rollback_columns_*.sql.
+            # produced before javdb/migrations/d1/2026_05_04_add_rollback_columns_*.sql.
             legacy_history_ddl = """
             CREATE TABLE SchemaVersion (Version INTEGER NOT NULL);
             CREATE TABLE MovieHistory (
@@ -467,7 +467,7 @@ class TestInitDb:
 
     def test_split_migration_from_single_db(self, tmp_path):
         """Placing a v6 single DB at DB_PATH triggers automatic split."""
-        import utils.infra.config_helper as _cfg_mod
+        import javdb.infra.config as _cfg_mod
         orig_override = _cfg_mod._storage_mode_override
         _cfg_mod._storage_mode_override = 'db'
 
