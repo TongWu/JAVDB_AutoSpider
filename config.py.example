@@ -411,3 +411,48 @@ QB_FILE_FILTER_MIN_SIZE_MB = 100
 
 # Log file for the file filter script
 QB_FILE_FILTER_LOG_FILE = 'logs/qb_file_filter.log'
+
+# =============================================================================
+# API CONSOLE / BACKEND SERVICE
+# =============================================================================
+# These settings configure the FastAPI service that backs the web console
+# (javdb-autospider-web). Environment variables override these values, so
+# CI / Docker secrets / cloud-secret-managers continue to work — but for
+# single-host self-hosting you can keep everything here in this single file.
+#
+# CHANGE ADMIN_PASSWORD AND API_SECRET_KEY BEFORE EXPOSING THE SERVICE
+# TO THE INTERNET.
+
+# Storage backend: 'sqlite' (local files), 'd1' (Cloudflare), or 'dual'.
+STORAGE_BACKEND = 'sqlite'
+
+# Ingestion mode: 'local' (run spider in-process), 'github' (dispatch
+# GitHub Actions workflows), or 'dual'.
+INGESTION_MODE = 'local'
+
+# HS256 signing key for JWT. MUST be >= 32 chars. The API generates an
+# ephemeral random key in non-production if this is empty; in production
+# (ENVIRONMENT=production) startup fails when this is empty.
+API_SECRET_KEY = ''
+
+# Admin login. Username defaults to 'admin' if blank. Password is
+# REQUIRED in production; in non-production a random ephemeral password
+# is generated and printed to the log when left blank. Alternatively,
+# pre-hash the password with bcrypt and set ADMIN_PASSWORD_HASH directly.
+ADMIN_USERNAME = 'admin'
+ADMIN_PASSWORD = 'changeme'
+ADMIN_PASSWORD_HASH = ''
+
+# Optional readonly login. Leave both blank to disable readonly access.
+READONLY_USERNAME = 'readonly'
+READONLY_PASSWORD = ''
+READONLY_PASSWORD_HASH = ''
+
+# GitHub Actions integration tier:
+#   'none'    - disabled
+#   'monitor' - list runs, dispatch workflows, view logs
+#   'edit'    - above + edit workflow YAML
+#   'admin'   - above + manage secrets
+GH_ACTIONS_TIER = 'none'
+GH_ACTIONS_REPO = ''          # 'owner/repo' format; empty defaults to github.repository
+GH_ACTIONS_TOKEN = ''         # PAT with 'workflow' scope (or 'admin:repo_hook' for tier=admin)
