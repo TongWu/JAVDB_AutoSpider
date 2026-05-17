@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 from importlib.metadata import PackageNotFoundError, version as pkg_version
-from typing import cast
+from typing import Literal, cast
 
 from fastapi import APIRouter, Depends
 
