@@ -194,7 +194,7 @@ class TestGetBanManager:
     
     def test_get_ban_manager_creates_singleton(self):
         """Test that get_ban_manager creates a singleton instance."""
-        import utils.proxy_ban_manager as pbm
+        import javdb.proxy.ban_manager as pbm
         pbm._global_ban_manager = None
         
         manager1 = get_ban_manager()
