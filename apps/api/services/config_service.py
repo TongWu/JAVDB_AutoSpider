@@ -229,15 +229,22 @@ def get_config_meta_payload() -> Dict[str, Any]:
 
 
 def update_config_payload(config_updates: Dict[str, Any], username: str) -> Dict[str, str]:
-    config_data = load_runtime_config()
+    # Sparse store-write: only the keys the caller asked to change land in
+    # the override store. Reading uses load_runtime_config() which merges
+    # config.py + store, so callers still see a complete config. Writing
+    # the full merged dict back (previous behaviour) made the store a
+    # config.py snapshot and amplified any single bad value into a
+    # permanent override — e.g. an accidental "QB_URL = <ADHOC_URL>"
+    # entered once in the wizard would then mask config.py forever.
+    store_data = load_store()
     changed_keys: list[str] = []
     for key, value in config_updates.items():
         coerced = coerce_value(key, value)
         if coerced == "__UNCHANGED__":
             continue
-        config_data[key] = coerced
+        store_data[key] = coerced
         changed_keys.append(key)
-    save_store(config_data)
+    save_store(store_data)
     # NOTE: do NOT call run_config_generator() here. It rewrites config.py
     # from CONFIG_MAP only, dropping every field not registered there —
     # including ADMIN_*, API_SECRET_KEY, READONLY_*, QB_URL_ADHOC, and any
@@ -255,9 +262,12 @@ def update_config_payload(config_updates: Dict[str, Any], username: str) -> Dict
 
 
 def set_javdb_session_cookie(cookie: str, username: str) -> Dict[str, str]:
-    config_data = load_runtime_config()
-    config_data["JAVDB_SESSION_COOKIE"] = cookie.strip()
-    save_store(config_data)
+    # Sparse store-write: only the cookie key is persisted. See the note
+    # on update_config_payload above for why we don't write the full
+    # merged config back to the store.
+    store_data = load_store()
+    store_data["JAVDB_SESSION_COOKIE"] = cookie.strip()
+    save_store(store_data)
     # NOTE: do NOT call run_config_generator() here — same data-loss reason
     # as update_config_payload above. The session cookie is stored in the
     # override store and picked up by load_runtime_config() on the next read.

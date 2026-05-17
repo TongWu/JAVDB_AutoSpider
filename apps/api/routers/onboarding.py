@@ -60,28 +60,57 @@ def _test_qb() -> tuple[bool, str, dict | None]:
     url = cfg.get("QB_URL")
     if not url:
         return False, "QB_URL not set", None
-    username = cfg.get("QB_USERNAME") or ""
-    password = cfg.get("QB_PASSWORD") or ""
+    username = str(cfg.get("QB_USERNAME") or "").strip()
+    password = str(cfg.get("QB_PASSWORD") or "").strip()
     verify_tls = bool(cfg.get("QB_VERIFY_TLS", True))
+    base = str(url).rstrip("/")
+
+    import requests
+    from javdb.integrations.qb.client import (
+        LOGIN_REJECTED,
+        LOGIN_SUCCESS,
+        try_login_base_urls,
+        try_ping_base_urls,
+    )
+
+    session = requests.Session()
+    session.verify = verify_tls
     try:
-        import requests
-        session = requests.Session()
-        base = str(url).rstrip('/')
         if username and password:
-            login_resp = session.post(
-                f"{base}/api/v2/auth/login",
-                data={"username": username, "password": password},
+            outcome, login_url, err = try_login_base_urls(
+                [base],
+                username,
+                password,
+                post_fn=session.post,
                 timeout=5,
                 verify=verify_tls,
             )
-            if login_resp.status_code != 200 or login_resp.text.strip().lower() == 'fails.':
-                return False, f"qB auth failed (HTTP {login_resp.status_code})", {"url": base}
-        version_resp = session.get(f"{base}/api/v2/app/version", timeout=5, verify=verify_tls)
-        if version_resp.status_code == 200:
-            return True, f"qBittorrent {version_resp.text}", {"url": base}
-        return False, f"qB returned HTTP {version_resp.status_code}", {"url": base}
+            if outcome == LOGIN_REJECTED:
+                return False, "qB auth failed: credentials rejected", {"url": base}
+            if outcome != LOGIN_SUCCESS or not login_url:
+                return False, f"qB unreachable: {err}", {"url": base}
+            reachable = login_url
+        else:
+            ping_url, ping_err = try_ping_base_urls(
+                [base],
+                get_fn=session.get,
+                timeout=5,
+                verify=verify_tls,
+            )
+            if not ping_url:
+                return False, f"qB unreachable: {ping_err}", {"url": base}
+            reachable = ping_url
+
+        version_resp = session.get(
+            f"{reachable}/api/v2/app/version",
+            timeout=5,
+            verify=verify_tls,
+        )
+        if version_resp.status_code == 200 and version_resp.text:
+            return True, f"qBittorrent {version_resp.text}", {"url": reachable}
+        return True, "qBittorrent reachable", {"url": reachable}
     except Exception as exc:
-        return False, f"connect failed: {exc}", {"url": str(url)}
+        return False, f"connect failed: {exc}", {"url": base}
 
 
 def _test_proxy() -> tuple[bool, str, dict | None]:
