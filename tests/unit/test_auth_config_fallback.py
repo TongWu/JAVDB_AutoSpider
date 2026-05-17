@@ -81,3 +81,29 @@ def test_empty_env_falls_through_to_config(monkeypatch):
     monkeypatch.setenv("ADMIN_PASSWORD", "any")
     auth = _reload_auth_module()
     assert auth.ADMIN_USERNAME == "from-config-py"
+
+
+def test_context_does_not_auto_load_dotenv():
+    """Regression: apps/api/services/context.py must not auto-load .env files.
+
+    A previous version called ``load_dotenv(REPO_ROOT / ".env")`` at module
+    import time. That had two surprising side-effects:
+
+    1. Values in the repo-root .env file silently entered ``os.environ`` —
+       overriding config.py via the env>config precedence in _resolve().
+    2. Stale .env entries (from earlier debugging sessions) confused
+       self-hosters editing config.py to set, e.g., ADMIN_PASSWORD: their
+       new value would be ignored in favor of the leaked .env value.
+
+    .env is now strictly for tools that read it directly (docker-compose
+    env_file:, the cron-bash entrypoint). The Python API process never
+    reads it.
+    """
+    import inspect
+    import apps.api.services.context as ctx
+    source = inspect.getsource(ctx)
+    assert "load_dotenv" not in source, (
+        "context.py is calling load_dotenv() — that auto-leaks .env values "
+        "into os.environ at import time and silently overrides config.py."
+    )
+    assert "from dotenv" not in source, "Drop the dotenv import too."
