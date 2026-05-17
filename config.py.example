@@ -423,9 +423,6 @@ QB_FILE_FILTER_LOG_FILE = 'logs/qb_file_filter.log'
 # CHANGE ADMIN_PASSWORD AND API_SECRET_KEY BEFORE EXPOSING THE SERVICE
 # TO THE INTERNET.
 
-# Storage backend: 'sqlite' (local files), 'd1' (Cloudflare), or 'dual'.
-STORAGE_BACKEND = 'sqlite'
-
 # Ingestion mode: 'local' (run spider in-process), 'github' (dispatch
 # GitHub Actions workflows), or 'dual'.
 INGESTION_MODE = 'local'
