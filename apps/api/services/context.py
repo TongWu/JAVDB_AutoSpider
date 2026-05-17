@@ -7,8 +7,6 @@ import os
 from pathlib import Path
 from typing import Any, Callable, Dict
 
-from dotenv import load_dotenv
-
 from compat import activate_repo_root
 from javdb.infra.config_generator import (
     get_config_map,
@@ -22,8 +20,6 @@ from javdb.infra.config_generator import (
 
 REPO_ROOT = Path(activate_repo_root())
 logger = logging.getLogger("apps.api")
-
-load_dotenv(REPO_ROOT / ".env")
 
 LOG_DIR = REPO_ROOT / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
