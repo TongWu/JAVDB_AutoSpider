@@ -13,7 +13,7 @@ from compat import alias_module
 
 _module = alias_module(
     __name__,
-    "packages.python.javdb_migrations.tools.normalize_sqlite_datetime_columns",
+    "javdb.migrations.tools.normalize_sqlite_datetime_columns",
 )
 
 if __name__ == "__main__":

@@ -41,7 +41,7 @@ IGNORED_PARTS = {
     "node_modules",
     "target",
 }
-RUST_ROOT = "packages/rust/javdb_rust_core"
+RUST_ROOT = "javdb/rust_core"
 RUST_SRC_ROOT = f"{RUST_ROOT}/src"
 
 SOURCE_CHANGE_LIMIT = 20
@@ -204,6 +204,7 @@ IMPACT_RULES = (
     ImpactRule(
         "ingestion",
         (
+            "javdb/pipeline/**",
             "packages/python/javdb_ingestion/**",
             "scripts/ingestion/**",
         ),

@@ -17,7 +17,7 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from packages.python.javdb_platform.proxy_policy import (  # noqa: E402
+from javdb.proxy.policy import (  # noqa: E402
     is_proxy_usable,
     normalize_proxy_id,
 )
@@ -66,7 +66,7 @@ class TestNormalizeProxyId:
 
     def test_coordinator_client_alias_matches(self):
         """The _normalize_proxy_id re-export must alias the same function."""
-        from packages.python.javdb_platform.proxy_coordinator_client import (
+        from javdb.proxy.coordinator.proxy_coordinator_client import (
             _normalize_proxy_id,
         )
         assert _normalize_proxy_id is normalize_proxy_id

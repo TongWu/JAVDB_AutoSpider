@@ -3,7 +3,7 @@ import sqlite3
 
 import pytest
 
-from packages.python.javdb_migrations.tools import migrate_rclone_paths_to_code_dir as migrate
+from javdb.migrations.tools import migrate_rclone_paths_to_code_dir as migrate
 
 
 def test_dry_run_integrity_error_message_does_not_reference_backup(

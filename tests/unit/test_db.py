@@ -1133,12 +1133,12 @@ class TestBackendAgnosticErrorTuples:
     """
 
     def test_operational_errors_tuple_includes_d1_permanent(self):
-        from packages.python.javdb_platform.d1_client import D1PermanentError
+        from javdb.storage.d1_client import D1PermanentError
         assert sqlite3.OperationalError in db_mod._DB_OPERATIONAL_ERRORS
         assert D1PermanentError in db_mod._DB_OPERATIONAL_ERRORS
 
     def test_integrity_errors_tuple_includes_d1_permanent(self):
-        from packages.python.javdb_platform.d1_client import D1PermanentError
+        from javdb.storage.d1_client import D1PermanentError
         assert sqlite3.IntegrityError in db_mod._DB_INTEGRITY_ERRORS
         assert D1PermanentError in db_mod._DB_INTEGRITY_ERRORS
 
@@ -1147,7 +1147,7 @@ class TestBackendAgnosticErrorTuples:
         surfaces from execute() the retries are already exhausted, and
         silently treating it as 'legacy schema' / 'concurrent run' would
         lose data on a genuine network failure."""
-        from packages.python.javdb_platform.d1_client import D1TransientError
+        from javdb.storage.d1_client import D1TransientError
         assert D1TransientError not in db_mod._DB_OPERATIONAL_ERRORS
         assert D1TransientError not in db_mod._DB_INTEGRITY_ERRORS
 
@@ -1155,7 +1155,7 @@ class TestBackendAgnosticErrorTuples:
         """A raised D1PermanentError is actually caught by the tuple —
         guards against the tuple being assembled but the except clause
         somehow not matching (e.g. subclass mismatch)."""
-        from packages.python.javdb_platform.d1_client import D1PermanentError
+        from javdb.storage.d1_client import D1PermanentError
         caught = False
         try:
             raise D1PermanentError("D1 API returned HTTP 400: no such table: X")
@@ -1175,7 +1175,7 @@ class TestSnowflakeProcessTag:
     """
 
     def test_ids_within_one_process_are_monotonic(self):
-        from packages.python.javdb_platform.db import _generate_session_id
+        from javdb.storage.db.db import _generate_session_id
         ids = [_generate_session_id() for _ in range(50)]
         assert ids == sorted(ids), "snowflake Ids must be monotonic"
         assert len(set(ids)) == len(ids), "snowflake Ids must be unique"
@@ -1184,7 +1184,7 @@ class TestSnowflakeProcessTag:
         """Tag is fixed at import time, so every Id from one process
         shares the same hex tag segment (the second ``-``-delimited block).
         """
-        from packages.python.javdb_platform.db import _generate_session_id
+        from javdb.storage.db.db import _generate_session_id
         ids = [_generate_session_id() for _ in range(30)]
         tags = {sid.split("-")[1] for sid in ids}
         assert len(tags) == 1, (
@@ -1196,7 +1196,7 @@ class TestSnowflakeProcessTag:
         sibling Python process that drew a different ``secrets.randbits``)
         and confirm the two Id streams are disjoint.
         """
-        from packages.python.javdb_platform import db as dbmod
+        from javdb.storage.db import db as dbmod
 
         ids_a = [dbmod._generate_session_id() for _ in range(3)]
 

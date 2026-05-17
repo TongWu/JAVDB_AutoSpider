@@ -8,7 +8,7 @@ import pytest
 def test_register_payload_has_both_hash_and_pool(monkeypatch):
     """End-to-end: a runner that calls register() emits a payload containing
     proxy_pool_hash (legacy) AND proxy_pool (Phase 1, ADR-004)."""
-    from packages.python.javdb_platform import runner_registry_client as rrc
+    from javdb.proxy.coordinator import runner_registry_client as rrc
 
     # Patch the network call to capture the body.
     captured = []

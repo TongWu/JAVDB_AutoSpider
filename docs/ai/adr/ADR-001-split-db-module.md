@@ -1,176 +1,176 @@
-# ADR-001: 拆分巨型 db.py 模块
+# ADR-001: Split the Monolithic db.py Module
 
-**状态**: 已接受 (Accepted)  
-**日期**: 2026-05-15  
-**决策者**: 架构重构团队  
-
----
-
-## 背景 (Context)
-
-`packages/python/javdb_platform/db.py` 是一个 **6,370 行、138 个函数**的巨型模块，混合了 8 个不同的职责：
-
-1. 连接管理（SQLite/D1/Dual 后端路由）
-2. 会话状态管理（Session ID、Run ID、Write Mode）
-3. 历史记录写入（MovieHistory/TorrentHistory 的 upsert + audit）
-4. 历史记录读取（查询和快照）
-5. 报告会话管理（ReportSessions 的 CRUD）
-6. 统计数据管理（SpiderStats, UploaderStats, PikpakStats）
-7. 操作表管理（RcloneInventory, DedupRecords, PikpakHistory）
-8. 回滚逻辑（pending 模式 + audit 模式）
-9. 迁移助手（v5→v6, v6→v7, 列迁移）
-
-### 问题
-
-- **缺乏局部性 (Locality)**：理解一个操作（如"保存历史记录"）需要在 6,370 行中跳转
-- **浅模块 (Shallow Module)**：接口复杂度接近实现复杂度，没有提供足够的杠杆 (Leverage)
-- **难以测试**：大部分测试是集成测试，单元测试稀少
-- **42 个导入点**：所有模块都依赖这个巨型模块
+**Status**: Accepted
+**Date**: 2026-05-15
+**Deciders**: Architecture restructure team
 
 ---
 
-## 决策 (Decision)
+## Context
 
-我们决定将 `db.py` 拆分为 **9 个按功能职责划分的模块**：
+`packages/python/javdb_platform/db.py` is a monolithic module of **6,370 lines and 138 functions** that conflates 8 distinct responsibilities:
 
-1. **`db_connection.py`** — 连接池、后端路由、WAL 设置
-2. **`db_session.py`** — Session ID、Run ID、Write Mode 状态管理
-3. **`db_history_write.py`** — MovieHistory/TorrentHistory 写入（stage + commit）
-4. **`db_history_read.py`** — MovieHistory/TorrentHistory 读取
+1. Connection management (SQLite/D1/Dual backend routing)
+2. Session state management (Session ID, Run ID, Write Mode)
+3. History record writes (MovieHistory/TorrentHistory upsert + audit)
+4. History record reads (queries and snapshots)
+5. Report session management (CRUD for ReportSessions)
+6. Statistics management (SpiderStats, UploaderStats, PikpakStats)
+7. Operations-table management (RcloneInventory, DedupRecords, PikpakHistory)
+8. Rollback logic (Pending Mode + Audit Mode)
+9. Migration helpers (v5→v6, v6→v7, column migrations)
+
+### Problems
+
+- **Lack of locality**: understanding a single operation (e.g. "save a history record") requires jumping around 6,370 lines.
+- **Shallow module**: the interface complexity is close to the implementation complexity — it offers insufficient leverage.
+- **Hard to test**: most tests are integration tests; unit tests are scarce.
+- **42 import sites**: every other module depends on this giant module.
+
+---
+
+## Decision
+
+We will split `db.py` into **9 modules partitioned by functional responsibility**:
+
+1. **`db_connection.py`** — connection pool, backend routing, WAL setup
+2. **`db_session.py`** — Session ID, Run ID, Write Mode state management
+3. **`db_history_write.py`** — MovieHistory/TorrentHistory writes (stage + commit)
+4. **`db_history_read.py`** — MovieHistory/TorrentHistory reads
 5. **`db_reports.py`** — ReportSessions CRUD
 6. **`db_stats.py`** — SpiderStats, UploaderStats, PikpakStats
 7. **`db_operations.py`** — RcloneInventory, DedupRecords, PikpakHistory
-8. **`db_rollback.py`** — 回滚协调器
-9. **`db_migrations.py`** — 迁移助手
+8. **`db_rollback.py`** — rollback coordinator
+9. **`db_migrations.py`** — migration helpers
 
-### 关键设计决策
+### Key Design Decisions
 
-#### 1. 按功能拆分 vs 按数据库文件拆分
+#### 1. Split by Function vs Split by Database File
 
-**选择**：按功能拆分（方案 B）
+**Choice**: split by function (Option B).
 
-**理由**：
-- 更符合"深度"原则——每个模块的接口更小、职责更单一
-- 读/写分离（`db_history_read.py` vs `db_history_write.py`）使测试更容易
-- 回滚逻辑独立（`db_rollback.py`）避免与其他模块耦合
+**Rationale**:
+- Better aligns with the "depth" principle — each module's interface is smaller and has a single responsibility.
+- Read/write separation (`db_history_read.py` vs `db_history_write.py`) makes testing easier.
+- Rollback logic stays independent (`db_rollback.py`), avoiding coupling with other modules.
 
-**权衡**：
-- 模块数量更多（9 个 vs 6 个）
-- 需要处理循环依赖（通过懒加载解决）
+**Tradeoffs**:
+- More modules (9 vs 6).
+- Need to handle circular dependencies (resolved via lazy loading).
 
-#### 2. 保留 db.py 门面 vs 强制更新导入
+#### 2. Keep db.py as a Facade vs Force Import Updates
 
-**选择**：强制更新导入（选项 2）
+**Choice**: force import updates (Option 2).
 
-**理由**：
-- 调用方明确知道自己在用哪个模块
-- 避免 `from db import *` 的隐式依赖
-- 长期来看更易维护
+**Rationale**:
+- Callers know exactly which module they depend on.
+- Avoids the implicit dependencies caused by `from db import *`.
+- More maintainable in the long run.
 
-**权衡**：
-- 破坏性变更，需要修改 42 个文件
-- 需要分阶段迁移（Phase 1 → Phase 2 → Phase 3）
+**Tradeoffs**:
+- Breaking change — 42 files need to be modified.
+- Requires phased migration (Phase 1 → Phase 2 → Phase 3).
 
-#### 3. 回滚逻辑的位置
+#### 3. Where to Put Rollback Logic
 
-**选择**：独立的 `db_rollback.py` 协调器（选项 1）
+**Choice**: a standalone `db_rollback.py` coordinator (Option 1).
 
-**理由**：
-- 每个模块提供公开的 `rollback_*_for_session()` API
-- `db_rollback.py` 协调跨表的回滚操作
-- 清晰的职责边界
+**Rationale**:
+- Each module exposes a public `rollback_*_for_session()` API.
+- `db_rollback.py` orchestrates cross-table rollback operations.
+- Clear responsibility boundaries.
 
-**权衡**：
-- 增加了一个额外的模块
-- 需要每个模块实现 rollback 接口
+**Tradeoffs**:
+- Adds one extra module.
+- Each module must implement the rollback interface.
 
-#### 4. 全局状态的处理
+#### 4. Handling Global State
 
-**选择**：渐进式策略（A → B → C）
+**Choice**: a gradual strategy (A → B → C).
 
-**理由**：
-- Phase 1：保持全局状态（最小改动）
-- Phase 2：引入 `SessionContext` 对象（封装状态）
-- Phase 3：参数传递（彻底消除全局状态）
+**Rationale**:
+- Phase 1: keep global state (minimal change).
+- Phase 2: introduce a `SessionContext` object (encapsulate state).
+- Phase 3: parameter passing (eliminate global state entirely).
 
-**权衡**：
-- 需要多次重构
-- 但每次重构都是可验证的小步骤
+**Tradeoffs**:
+- Requires multiple refactors.
+- But each refactor is a verifiable small step.
 
-#### 5. 测试策略
+#### 5. Testing Strategy
 
-**选择**：使用 `unittest.mock.patch`（选项 A）
+**Choice**: use `unittest.mock.patch` (Option A).
 
-**理由**：
-- 标准库，无需额外依赖
-- 可以 mock `get_db()` 和 `get_active_session_id()`
-- 单元测试运行快速（0.09-0.11 秒）
+**Rationale**:
+- Standard library, no extra dependencies.
+- Can mock `get_db()` and `get_active_session_id()`.
+- Unit tests run fast (0.09–0.11 seconds).
 
-**权衡**：
-- Mock 代码略显冗长
-- 需要小心处理 mock 的生命周期
-
----
-
-## 实现策略 (Implementation)
-
-### Phase 1：创建新模块，保留 db.py 作为门面
-
-1. 创建 9 个新模块
-2. `db.py` 变成重导出层（~100 行）
-3. 运行测试，确保功能不变
-4. **此时 42 个导入点不需要改动**
-
-### Phase 2：逐步迁移导入点
-
-按包（package）逐个迁移：
-- `javdb_spider/` 先迁移（最核心）
-- `javdb_integrations/` 后迁移
-- `javdb_migrations/` 最后迁移
-
-每迁移一个包，运行该包的测试。
-
-### Phase 3：删除 db.py 门面
-
-- 确认所有导入点都已迁移
-- 删除 `db.py`
-- 运行全量测试
+**Tradeoffs**:
+- Mock code is somewhat verbose.
+- Mock lifecycle has to be handled carefully.
 
 ---
 
-## 原型验证 (Prototype)
+## Implementation Strategy
 
-我们创建了两个原型模块来验证设计：
+### Phase 1: Create new modules, keep db.py as a facade
 
-### 1. `db_stats.py`（370 行，9 个函数）
+1. Create the 9 new modules.
+2. Turn `db.py` into a re-export layer (~100 lines).
+3. Run tests to confirm behaviour is unchanged.
+4. **At this point the 42 import sites do not need to change.**
 
-**验证内容**：
-- 懒加载机制避免循环依赖 ✅
-- 从 `db_connection.py` 导入（fallback 到 `db.py`）✅
-- 单元测试策略（11 个测试，全部通过）✅
+### Phase 2: Migrate import sites incrementally
 
-**关键发现**：
-- 懒加载 + fallback 模式有效
-- `unittest.mock.patch` 可以隔离依赖
-- 需要 mock `_ensure_imports()` 避免导入错误
+Migrate package by package:
+- `javdb_spider/` first (most central).
+- `javdb_integrations/` next.
+- `javdb_migrations/` last.
 
-### 2. `db_connection.py`（310 行，8 个函数）
+After each package migration, run that package's tests.
 
-**验证内容**：
-- 作为基础模块被其他模块依赖 ✅
-- 连接池、后端路由、WAL 设置 ✅
-- `db_stats.py` 成功从 `db_connection.py` 导入 ✅
+### Phase 3: Delete the db.py facade
 
-**关键发现**：
-- 基础模块应该零依赖（除了 `config_helper` 和 `logging_config`）
-- 线程本地存储 (`threading.local()`) 用于连接池
-- 后端路由逻辑清晰（sqlite/d1/dual）
+- Confirm all import sites have been migrated.
+- Delete `db.py`.
+- Run the full test suite.
 
 ---
 
-## 经验教训 (Lessons Learned)
+## Prototype Validation
 
-### 1. 懒加载是避免循环依赖的关键
+We built two prototype modules to validate the design:
+
+### 1. `db_stats.py` (370 lines, 9 functions)
+
+**What was validated**:
+- Lazy loading avoids circular dependencies ✅
+- Imports from `db_connection.py` (with fallback to `db.py`) ✅
+- Unit test strategy (11 tests, all passing) ✅
+
+**Key findings**:
+- The lazy-loading + fallback pattern works.
+- `unittest.mock.patch` can isolate dependencies.
+- `_ensure_imports()` must be mocked to avoid import errors.
+
+### 2. `db_connection.py` (310 lines, 8 functions)
+
+**What was validated**:
+- Serves as the base module that other modules depend on ✅
+- Connection pool, backend routing, WAL setup ✅
+- `db_stats.py` successfully imports from `db_connection.py` ✅
+
+**Key findings**:
+- The base module should have zero dependencies (except `config_helper` and `logging_config`).
+- Thread-local storage (`threading.local()`) is used for the connection pool.
+- Backend routing logic is clear (sqlite/d1/dual).
+
+---
+
+## Lessons Learned
+
+### 1. Lazy loading is the key to avoiding circular dependencies
 
 ```python
 # db_stats.py
@@ -188,114 +188,114 @@ def _ensure_imports():
             _get_db = get_db
 ```
 
-### 2. 原型优先，避免大规模返工
+### 2. Prototype first to avoid large-scale rework
 
-创建 `db_stats.py` 原型（最简单的模块）验证了：
-- 拆分方案可行
-- 测试策略有效
-- 懒加载机制正确
+Building the `db_stats.py` prototype (the simplest module) validated:
+- The split design is feasible.
+- The testing strategy works.
+- The lazy-loading mechanism is correct.
 
-如果直接创建所有 9 个模块，发现问题后返工成本会很高。
+Had we built all 9 modules upfront, the cost of reworking after discovering an issue would have been very high.
 
-### 3. 测试中的 mock 需要小心处理
+### 3. Mocks in tests need careful handling
 
-**问题**：直接设置 `db_stats._get_db = mock_get_db` 不生效，因为 `_ensure_imports()` 会覆盖。
+**Problem**: directly setting `db_stats._get_db = mock_get_db` does not take effect because `_ensure_imports()` overwrites it.
 
-**解决**：使用 `@patch('..._ensure_imports')` 阻止重新导入。
+**Solution**: use `@patch('..._ensure_imports')` to prevent re-imports.
 
-### 4. 模块边界应该基于职责，而非物理结构
+### 4. Module boundaries should be based on responsibility, not physical structure
 
-**错误**：按数据库文件拆分（`db_history.py` 包含所有 history.db 操作）
+**Wrong**: split by database file (`db_history.py` contains all history.db operations).
 
-**正确**：按功能拆分（`db_history_read.py` vs `db_history_write.py`）
+**Right**: split by function (`db_history_read.py` vs `db_history_write.py`).
 
-理由：读/写分离使测试更容易，职责更清晰。
+Rationale: read/write separation makes testing easier and responsibilities clearer.
 
-### 5. 破坏性变更需要分阶段迁移
+### 5. Breaking changes need phased migration
 
-强制更新 42 个导入点是破坏性变更，但通过分阶段迁移可以降低风险：
-- Phase 1：创建新模块，保留门面（零破坏）
-- Phase 2：逐包迁移（渐进式验证）
-- Phase 3：删除门面（最终清理）
-
----
-
-## 后果 (Consequences)
-
-### 正面影响
-
-1. **局部性提升**：每个模块职责单一，代码集中
-2. **可测试性提升**：单元测试可以隔离依赖，运行快速
-3. **可维护性提升**：新开发者更容易理解模块边界
-4. **深度提升**：每个模块提供简单的接口，隐藏复杂的实现
-
-### 负面影响
-
-1. **模块数量增加**：从 1 个模块变成 9 个模块
-2. **导入路径变长**：`from db import get_db` → `from db_connection import get_db`
-3. **迁移成本**：需要修改 42 个文件
-4. **学习曲线**：新开发者需要理解模块边界
-
-### 风险
-
-1. **循环依赖**：如果模块间依赖关系设计不当，可能出现循环依赖
-   - **缓解**：使用懒加载 + fallback 机制
-2. **测试覆盖率下降**：拆分过程中可能遗漏测试
-   - **缓解**：每个新模块都创建单元测试
-3. **性能回退**：懒加载可能增加首次调用的开销
-   - **缓解**：懒加载只在首次调用时执行，后续调用无开销
+Forcing updates on 42 import sites is a breaking change, but phased migration reduces risk:
+- Phase 1: create new modules, keep the facade (zero breakage).
+- Phase 2: migrate package by package (incremental validation).
+- Phase 3: delete the facade (final cleanup).
 
 ---
 
-## 相关决策 (Related Decisions)
+## Consequences
 
-- **ADR-002**（未来）：Session 状态管理的参数传递策略
-- **ADR-003**（未来）：Pending Mode vs Audit Mode 的迁移计划
+### Positive
+
+1. **Improved locality**: each module has a single responsibility and the relevant code is co-located.
+2. **Improved testability**: unit tests can isolate dependencies and run quickly.
+3. **Improved maintainability**: new developers can grasp module boundaries more easily.
+4. **Improved depth**: each module exposes a simple interface and hides a complex implementation.
+
+### Negative
+
+1. **More modules**: from 1 module to 9.
+2. **Longer import paths**: `from db import get_db` → `from db_connection import get_db`.
+3. **Migration cost**: 42 files need to be edited.
+4. **Learning curve**: new developers need to learn the module boundaries.
+
+### Risks
+
+1. **Circular dependencies**: if inter-module dependencies are designed poorly, cycles may appear.
+   - **Mitigation**: use the lazy-loading + fallback mechanism.
+2. **Test coverage regression**: tests may be missed during the split.
+   - **Mitigation**: add unit tests for every new module.
+3. **Performance regression**: lazy loading may add overhead on the first call.
+   - **Mitigation**: lazy loading runs only on the first call; subsequent calls have no overhead.
 
 ---
 
-## 参考资料 (References)
+## Related Decisions
 
-- [CONTEXT.md](../../../CONTEXT.md) — 领域术语词汇表
-- [CLAUDE.md](../../../CLAUDE.md) — 项目概览
-- [docs/en/ops/d1-rollback.md](../../en/ops/d1-rollback.md) — 存储后端架构
-- [A Philosophy of Software Design](https://web.stanford.edu/~ouster/cgi-bin/book.php) — 深度模块理论
+- **ADR-002** (future): parameter-passing strategy for Session state management.
+- **ADR-003** (future): migration plan from Audit Mode to Pending Mode.
 
 ---
 
-## 附录：模块依赖图
+## References
+
+- [CONTEXT.md](../../../CONTEXT.md) — domain terminology glossary
+- [CLAUDE.md](../../../CLAUDE.md) — project overview
+- [docs/en/ops/d1-rollback.md](../../en/ops/d1-rollback.md) — storage backend architecture
+- [A Philosophy of Software Design](https://web.stanford.edu/~ouster/cgi-bin/book.php) — deep-module theory
+
+---
+
+## Appendix: Module Dependency Graph
 
 ```
-db_connection.py (基础模块，零依赖)
+db_connection.py (base module, zero dependencies)
     ↓
-db_session.py (依赖 db_connection)
+db_session.py (depends on db_connection)
     ↓
-db_history_write.py (依赖 db_connection + db_session)
-db_history_read.py (依赖 db_connection)
-db_reports.py (依赖 db_connection + db_session)
-db_stats.py (依赖 db_connection)
-db_operations.py (依赖 db_connection)
+db_history_write.py (depends on db_connection + db_session)
+db_history_read.py (depends on db_connection)
+db_reports.py (depends on db_connection + db_session)
+db_stats.py (depends on db_connection)
+db_operations.py (depends on db_connection)
     ↓
-db_rollback.py (协调器，依赖上述所有模块)
+db_rollback.py (coordinator, depends on all of the above)
     ↓
-db_migrations.py (依赖 db_connection，用于初始化)
+db_migrations.py (depends on db_connection, used during initialization)
 ```
 
 ---
 
-## 附录：测试覆盖率
+## Appendix: Test Coverage
 
-| 模块 | 行数 | 函数数 | 测试数 | 覆盖率 |
+| Module | Lines | Functions | Tests | Coverage |
 |------|------|--------|--------|--------|
-| `db_connection.py` | 310 | 8 | 待添加 | - |
+| `db_connection.py` | 310 | 8 | TBD | - |
 | `db_stats.py` | 370 | 9 | 11 | 100% |
-| 其他 7 个模块 | 待创建 | - | 待添加 | - |
+| Other 7 modules | TBD | - | TBD | - |
 
 ---
 
-## 附录：原型代码示例
+## Appendix: Prototype Code Samples
 
-### db_stats.py 的懒加载机制
+### Lazy-loading mechanism in db_stats.py
 
 ```python
 # Lazy imports to avoid circular dependencies
@@ -329,7 +329,7 @@ def _ensure_imports():
             _REPORTS_DB_PATH = REPORTS_DB_PATH
 ```
 
-### 测试中的 mock 策略
+### Mocking strategy in tests
 
 ```python
 @patch('packages.python.javdb_platform.db_stats._ensure_imports')

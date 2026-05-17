@@ -10,7 +10,7 @@ from typing import Any, Callable, Dict
 from dotenv import load_dotenv
 
 from compat import activate_repo_root
-from packages.python.javdb_platform.config_generator import (
+from javdb.infra.config_generator import (
     get_config_map,
     get_env_bool,
     get_env_float,

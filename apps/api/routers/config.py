@@ -7,12 +7,13 @@ from typing import Any, Dict
 from fastapi import APIRouter, Depends
 
 from apps.api.infra.auth import _require_auth, require_role
+from apps.api.schemas.payloads import ConfigResponse, StatusOkResponse
 from apps.api.services import config_service
 
 router = APIRouter(prefix="/api")
 
 
-@router.get("/config")
+@router.get("/config", response_model=ConfigResponse)
 async def get_config(current=Depends(_require_auth)):
     return config_service.get_config_payload(current["sub"])
 
@@ -22,7 +23,7 @@ async def get_config_meta(_: Dict[str, Any] = Depends(_require_auth)):
     return config_service.get_config_meta_payload()
 
 
-@router.put("/config")
+@router.put("/config", response_model=StatusOkResponse)
 async def update_config(
     config_updates: Dict[str, Any],
     current=Depends(require_role("admin")),

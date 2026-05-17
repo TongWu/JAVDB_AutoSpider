@@ -1,4 +1,4 @@
-"""Compatibility wrapper for the canonical packages.python.javdb_core.masking module."""
+"""Compatibility wrapper for the canonical javdb.infra.masking module."""
 
 from __future__ import annotations
 
@@ -11,4 +11,4 @@ if str(REPO_ROOT) not in sys.path:
 
 from compat import alias_module
 
-alias_module(__name__, "packages.python.javdb_core.masking")
+alias_module(__name__, "javdb.infra.masking")

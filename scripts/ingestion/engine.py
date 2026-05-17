@@ -11,4 +11,4 @@ if str(REPO_ROOT) not in sys.path:
 
 from compat import alias_module
 
-alias_module(__name__, "packages.python.javdb_ingestion.engine")
+alias_module(__name__, "javdb.pipeline.engine")
