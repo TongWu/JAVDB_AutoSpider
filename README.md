@@ -47,24 +47,24 @@ For complete setup instructions, see the [Local Setup Guide](docs/en/self-hoster
 
 ```
 apps/
-├── cli/          Canonical CLI entrypoints (spider, pipeline, qb_uploader, etc.)
+├── cli/          Canonical CLI entrypoints (spider, pipeline, db/, qb/, pikpak/, rclone/, notify/, ops/)
 ├── api/          FastAPI REST API
 ├── web/          Vite + Vue.js frontend
 └── desktop/      Electron shell (MVP)
 
-packages/
-├── python/
-│   ├── javdb_spider/        Spider package (14 modules)
-│   ├── javdb_platform/      Platform services (db, proxy, logging)
-│   ├── javdb_core/          Domain models and utilities
-│   ├── javdb_ingestion/     Pipeline orchestration
-│   ├── javdb_integrations/  External integrations (qB, PikPak, Rclone)
-│   └── javdb_migrations/    Database migrations
-└── rust/
-    └── javdb_rust_core/     PyO3 Rust extension (optional)
+javdb/            Python namespace (PEP 420 — no top-level __init__.py)
+├── spider/       Scraping runtime + parser/contracts/url/filename/magnet + auth/login
+├── pipeline/     Ingestion orchestration
+├── storage/      DB layer + sessions + rollback + d1 + dual + history_manager
+├── proxy/        Pool + ban_manager + policy + coordinator (Worker DO clients)
+├── integrations/ qb/, pikpak/, rclone/, notify/
+├── infra/        Cross-cutting: config, logging, paths, csv_writer, git, request, masking
+├── migrations/   SQL + Python migrate tools
+├── legacy/       Pre-Phase-1 spider, preserved for rollback only
+└── rust_core/    Rust crate source (PyO3 + maturin; installs as javdb.rust_core)
 ```
 
-Legacy paths (`scripts/`, `pipeline.py`, `migration/`, `api/`) are kept as compatibility wrappers.
+Canonical layout established by [ADR-007](docs/ai/adr/ADR-007-monorepo-restructure-2026-05.md); all legacy paths (`utils/`, `api/`, `migration/`, `legacy/`, `scripts/spider/`, `scripts/ingestion/`, root `compat.py`/`pipeline.py`) were retired in Phase 3.
 
 ## Configuration
 

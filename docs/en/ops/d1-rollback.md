@@ -114,7 +114,7 @@ A guard in [`javdb/storage/dual_connection.py`](../../../javdb/storage/dual_conn
 
 ### Rollback CLI lookup precedence
 
-The CLI ([`apps/cli/rollback.py`](../../../apps/cli/rollback.py)) walks three sources in order, unioning the results:
+The CLI ([`apps/cli/db/rollback.py`](../../../apps/cli/db/rollback.py)) walks three sources in order, unioning the results:
 
 1. **`--session-id`** (most specific). Targets that one session and **does not expand** into a window scan unless `--include-orphaned` is set.
 2. **`--run-id` + `--attempt`** (primary path for run-aware lookups). Calls `db_find_sessions_by_run` which queries both `ReportSessions` and the audit tables (so a run whose `ReportSessions` row was already deleted by a previous failed rollback is still recoverable).
@@ -319,7 +319,7 @@ python3 -m scripts.audit_archive --apply --target sqlite --older-than-days 60
 
 All three scripts default to dry-run and write a JSON report under `reports/`. Use `--target` to restrict to one side; for `cleanup_stale_session_audits` use `--session-ids 332,346` to restrict to specific ids and `--cross-day-hours 12` to tune the phantom-detection threshold.
 
-`sync_d1_to_sqlite` + `cleanup_stale_session_audits` are manual incident-response tools (don't wire into cron). `audit_archive` **is** a cron job and runs weekly via [`.github/workflows/AuditArchive.yml`](../../../.github/workflows/AuditArchive.yml). The recurring stale-session cleanup lives in [`StaleSessionCleanup.yml`](../../../.github/workflows/StaleSessionCleanup.yml) and uses [`apps.cli.cleanup_stale_in_progress`](../../../apps/cli/cleanup_stale_in_progress.py).
+`sync_d1_to_sqlite` + `cleanup_stale_session_audits` are manual incident-response tools (don't wire into cron). `audit_archive` **is** a cron job and runs weekly via [`.github/workflows/AuditArchive.yml`](../../../.github/workflows/AuditArchive.yml). The recurring stale-session cleanup lives in [`StaleSessionCleanup.yml`](../../../.github/workflows/StaleSessionCleanup.yml) and uses [`apps.cli.cleanup_stale_in_progress`](../../../apps/cli/db/cleanup_stale_in_progress.py).
 
 ### Marking a session committed manually
 
@@ -529,7 +529,7 @@ If any of these six steps deviates from the expected outcome, **do not** promote
 
 ## File pointers
 
-- CLI: [`apps/cli/rollback.py`](../../../apps/cli/rollback.py), [`apps/cli/commit_session.py`](../../../apps/cli/commit_session.py), [`apps/cli/cleanup_stale_in_progress.py`](../../../apps/cli/cleanup_stale_in_progress.py)
+- CLI: [`apps/cli/db/rollback.py`](../../../apps/cli/db/rollback.py), [`apps/cli/db/commit_session.py`](../../../apps/cli/db/commit_session.py), [`apps/cli/db/cleanup_stale_in_progress.py`](../../../apps/cli/db/cleanup_stale_in_progress.py)
 - Core helpers: [`javdb/storage/db/db.py`](../../../javdb/storage/db/db.py) (`db_stage_history_write`, `db_commit_session_history`, `db_resume_finalizing_session`, `db_rollback_session`, `db_mark_session_committed`, `db_find_in_progress_sessions`, `db_find_stale_pending_sessions`, `db_pending_session_stats`, `_audit_record_movie_change`, `_rollback_history`, etc.)
 - Phase 3 scripts: [`scripts/aggregate_pending_health.py`](../../../scripts/aggregate_pending_health.py), [`scripts/pending_mode_alert_and_pause.py`](../../../scripts/pending_mode_alert_and_pause.py) *(replaced the retired `pending_mode_auto_fallback.py` in ADR-006 PR-D)*
 - Phase 4 scripts: [`scripts/audit_archive.py`](../../../scripts/audit_archive.py), [`scripts/cleanup_stale_session_audits.py`](../../../scripts/cleanup_stale_session_audits.py) (read-only since 2026-05-13)
