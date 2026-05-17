@@ -79,12 +79,12 @@ jobs:
             test -f /app/config.py.example && echo '✓ config.py.example exists' &&
             test -f /app/compat.py && echo '✓ compat.py exists' &&
             test -d /app/apps && echo '✓ apps directory exists' &&
-            test -d /app/packages && echo '✓ packages directory exists' &&
+            test -d /app/javdb && echo '✓ javdb directory exists' &&
             test -d /app/apps/cli && echo '✓ apps/cli exists' &&
             test -d /app/apps/api && echo '✓ apps/api exists' &&
             test -f /app/apps/cli/pipeline.py && echo '✓ apps/cli/pipeline.py canonical entry exists' &&
             test -f /app/apps/cli/config_generator.py && echo '✓ apps/cli/config_generator.py canonical entry exists' &&
-            test -d /app/packages/python/javdb_spider && echo '✓ canonical spider package exists' &&
+            test -d /app/javdb/spider && echo '✓ canonical spider package exists' &&
             test -d /app/javdb/rust_core && echo '✓ canonical rust package exists' &&
             test -d /app/utils && echo '✓ utils directory exists' &&
             test -d /app/scripts && echo '✓ scripts compatibility directory exists' &&
