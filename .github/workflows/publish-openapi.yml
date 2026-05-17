@@ -6,7 +6,7 @@ on:
     paths:
       - 'apps/api/**'
       - 'apps/cli/**'
-      - 'packages/python/**'
+      - 'javdb/**'
       - 'scripts/dump_openapi.py'
   workflow_dispatch:
 
