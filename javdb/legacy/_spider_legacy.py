@@ -22,8 +22,12 @@ from bs4.element import Tag
 from urllib.parse import urljoin, urlparse, quote
 from datetime import datetime
 
-# Change to project root directory (parent of scripts folder)
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Change to project root directory.
+# Walk three levels up from this file: javdb/legacy/_spider_legacy.py → javdb/legacy/ → javdb/ → <repo-root>/
+# (Pre-ADR-007 the file lived at <repo-root>/legacy/, hence the original two-level walk.)
+project_root = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
 os.chdir(project_root)
 sys.path.insert(0, project_root)
 
