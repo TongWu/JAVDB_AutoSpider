@@ -133,7 +133,7 @@ jobs:
           set -e
           set -o pipefail
 
-          CMD=(python3 -m scripts.audit_archive
+          CMD=(python3 -m apps.cli.db.audit_archive
                --older-than-days "$INPUT_OLDER_THAN_DAYS"
                --target "$INPUT_TARGET"
                --log-level "$INPUT_LOG_LEVEL")
