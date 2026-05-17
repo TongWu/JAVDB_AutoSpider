@@ -24,8 +24,8 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-import packages.python.javdb_spider.runtime.state as state  # noqa: E402
-from packages.python.javdb_platform.movie_claim_client import (  # noqa: E402
+import javdb.spider.runtime.state as state  # noqa: E402
+from javdb.proxy.coordinator.movie_claim_client import (  # noqa: E402
     MOVIE_CLAIM_MODE_AUTO,
     MOVIE_CLAIM_MODE_FORCE_ON,
     MOVIE_CLAIM_MODE_OFF,

@@ -11,7 +11,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from compat import alias_module
 
-_module = alias_module(__name__, "packages.python.javdb_integrations.email_notification")
+_module = alias_module(__name__, "javdb.integrations.notify.email")
 
 if __name__ == "__main__":
     _module.main()

@@ -9,10 +9,15 @@ from apps.api.infra.auth import _require_auth, _require_auth_or_token, require_r
 from apps.api.schemas.payloads import (
     ExploreCookiePayload,
     ExploreIndexStatusPayload,
+    ExploreIndexStatusResponse,
     ExploreMagnetPayload,
     ExploreOneClickPayload,
+    ExploreOneClickResponse,
     ExploreResolvePayload,
+    ExploreResolveResponse,
+    StatusOkResponse,
     VideoCodeSearchPayload,
+    VideoCodeSearchResponse,
 )
 from apps.api.services import explore_service
 from apps.api.services import video_code_search_service
@@ -20,7 +25,7 @@ from apps.api.services import video_code_search_service
 router = APIRouter(prefix="/api/explore")
 
 
-@router.post("/sync-cookie")
+@router.post("/sync-cookie", response_model=StatusOkResponse)
 async def explore_sync_cookie(
     payload: ExploreCookiePayload,
     current=Depends(require_role("admin")),
@@ -33,7 +38,7 @@ async def explore_proxy_page(url: str, current=Depends(_require_auth_or_token)):
     return await explore_service.proxy_page_payload(url, current["sub"])
 
 
-@router.post("/resolve")
+@router.post("/resolve", response_model=ExploreResolveResponse)
 async def explore_resolve(
     payload: ExploreResolvePayload,
     current=Depends(_require_auth),
@@ -41,7 +46,7 @@ async def explore_resolve(
     return await explore_service.resolve_payload(payload, current["sub"])
 
 
-@router.post("/download-magnet")
+@router.post("/download-magnet", response_model=StatusOkResponse)
 async def explore_download_magnet(
     payload: ExploreMagnetPayload,
     current=Depends(require_role("admin")),
@@ -49,7 +54,7 @@ async def explore_download_magnet(
     return await explore_service.download_magnet_payload(payload, current["sub"])
 
 
-@router.post("/one-click")
+@router.post("/one-click", response_model=ExploreOneClickResponse)
 async def explore_one_click(
     payload: ExploreOneClickPayload,
     current=Depends(require_role("admin")),
@@ -57,7 +62,7 @@ async def explore_one_click(
     return await explore_service.one_click_payload(payload, current["sub"])
 
 
-@router.post("/index-status")
+@router.post("/index-status", response_model=ExploreIndexStatusResponse)
 async def explore_index_status(
     payload: ExploreIndexStatusPayload,
     current=Depends(_require_auth),
@@ -65,7 +70,7 @@ async def explore_index_status(
     return await explore_service.index_status_payload(payload, current["sub"])
 
 
-@router.post("/search-by-video-code")
+@router.post("/search-by-video-code", response_model=VideoCodeSearchResponse)
 async def explore_search_by_video_code(
     payload: VideoCodeSearchPayload,
     current=Depends(_require_auth),

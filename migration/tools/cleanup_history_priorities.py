@@ -13,7 +13,7 @@ from compat import alias_module
 
 _module = alias_module(
     __name__,
-    "packages.python.javdb_migrations.tools.cleanup_history_priorities",
+    "javdb.migrations.tools.cleanup_history_priorities",
 )
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 # ============================================================
 # Stage 1: Build Rust extension wheel
 # This layer is cached by Docker BuildKit and only rebuilds
-# when packages/rust/javdb_rust_core/ source files change.
+# when javdb/rust_core/ source files change.
 # ============================================================
 FROM python:3.11-slim AS rust-builder
 
@@ -17,7 +17,7 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 
 RUN pip install --no-cache-dir maturin[patchelf]
 
-COPY packages/rust/javdb_rust_core/ /build/rust_core/
+COPY javdb/rust_core/ /build/rust_core/
 RUN cd /build/rust_core && maturin build --release --out /wheels
 
 # ============================================================
@@ -50,7 +50,7 @@ RUN pip install /tmp/*.whl && rm -f /tmp/*.whl
 
 # Copy application files
 COPY apps/ ./apps/
-COPY packages/ ./packages/
+COPY javdb/ ./javdb/
 COPY api/ ./api/
 COPY legacy/ ./legacy/
 COPY migration/ ./migration/

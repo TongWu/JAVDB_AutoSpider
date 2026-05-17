@@ -32,18 +32,18 @@ import sys
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from packages.python.javdb_platform import db as _db
-from packages.python.javdb_platform.db_connection import close_db, get_db
-from packages.python.javdb_platform.db_reports import (
+from javdb.storage.db import db as _db
+from javdb.storage.db.db_connection import close_db, get_db
+from javdb.storage.db.db_reports import (
     db_find_in_progress_sessions,
     db_get_session_status,
 )
-from packages.python.javdb_platform.db_rollback import (
+from javdb.storage.db.db_rollback import (
     db_resume_finalizing_session,
     db_rollback_session,
 )
-from packages.python.javdb_platform.db_migrations import init_db
-from packages.python.javdb_platform.logging_config import (
+from javdb.storage.db.db_migrations import init_db
+from javdb.infra.logging import (
     get_logger,
     setup_logging,
 )
@@ -139,7 +139,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     #   in_progress → db_rollback_session (audit replay or DELETE pending)
     #   finalizing  → db_resume_finalizing_session (idempotent commit drive)
     try:
-        from packages.python.javdb_platform.db_reports import (
+        from javdb.storage.db.db_reports import (
             db_find_stale_pending_sessions,
         )
         rows = db_find_stale_pending_sessions(

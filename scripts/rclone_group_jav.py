@@ -379,7 +379,7 @@ def _init_logging(verbose: bool) -> None:
     if str(repo_root) not in _sys.path:
         _sys.path.insert(0, str(repo_root))
     try:
-        from packages.python.javdb_platform.logging_config import setup_logging
+        from javdb.infra.logging import setup_logging
         setup_logging(log_level='DEBUG' if verbose else 'INFO')
     except ImportError:
         _logging.basicConfig(

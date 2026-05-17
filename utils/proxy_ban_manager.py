@@ -4,4 +4,4 @@ from __future__ import annotations
 
 from compat import alias_module
 
-alias_module(__name__, "packages.python.javdb_platform.proxy_ban_manager")
+alias_module(__name__, "javdb.proxy.ban_manager")

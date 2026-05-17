@@ -13,7 +13,7 @@ from fastapi import HTTPException
 
 from apps.api.infra.security import _validate_target_url
 from apps.api.services import context
-from packages.python.javdb_platform.proxy_policy import resolve_proxy_override
+from javdb.proxy.policy import resolve_proxy_override
 
 MAX_CONCURRENT_SPIDER_JOBS = 2
 MAX_OUTPUT_LINES = 5000

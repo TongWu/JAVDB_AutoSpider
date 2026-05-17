@@ -39,6 +39,8 @@ Ad Hoc/
 Daily Report/
 parsed_movies_history.csv
 logs/
+reports/
+node_modules/
 *.log
 *.csv
 config.py

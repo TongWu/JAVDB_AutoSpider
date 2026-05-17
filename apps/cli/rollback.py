@@ -44,6 +44,14 @@ Exit codes
 * 4 — partial failure (one or more sessions left ``Status='failed'``
   with non-zero ``drift_skipped``); operator should investigate the
   drift log and re-run with ``--scope`` if needed
+
+Implementation note
+-------------------
+The argparse / printing / exit-code-mapping bits live here.  Other
+callers (notably the Sessions HTTP endpoints) reuse the same planning
+and apply pipeline through
+:mod:`packages.python.javdb_platform.rollback`, which dispatches into
+this module's helpers so behaviour stays in lock-step with the CLI.
 """
 
 from __future__ import annotations
@@ -65,12 +73,12 @@ from apps.cli._session_helpers import (
     read_session_pre_state,
     write_github_output,
 )
-from packages.python.javdb_platform import db as _db
-from packages.python.javdb_platform.db_connection import close_db, get_db
-from packages.python.javdb_platform.db_reports import db_pending_session_stats
-from packages.python.javdb_platform.db_rollback import db_rollback_session
-from packages.python.javdb_platform.db_migrations import init_db
-from packages.python.javdb_platform.logging_config import (
+from javdb.storage.db import db as _db
+from javdb.storage.db.db_connection import close_db, get_db
+from javdb.storage.db.db_reports import db_pending_session_stats
+from javdb.storage.db.db_rollback import db_rollback_session
+from javdb.storage.db.db_migrations import init_db
+from javdb.infra.logging import (
     get_logger,
     setup_logging,
 )
@@ -467,42 +475,39 @@ def _emit_metrics(summary: dict) -> None:
     )
 
 
-def main(argv: Optional[List[str]] = None) -> int:
-    args = _parse_args(argv)
-    setup_logging(log_level=args.log_level)
+def _drive_rollback(args: argparse.Namespace) -> tuple[dict, int]:
+    """Run the planning + apply pipeline, return (summary, exit_code).
 
-    logger.info(
-        "Rollback CLI invoked: session_id=%s run_id=%s attempt=%s "
-        "run_started_at=%s scope=%s dry_run=%s force=%s "
-        "include_orphaned=%s",
-        args.session_id, args.run_id, args.attempt,
-        args.run_started_at, args.scope, args.dry_run, args.force,
-        args.include_orphaned,
+    Extracted from ``main()`` so the rollback library
+    (:mod:`packages.python.javdb_platform.rollback`) can reuse the same
+    pipeline without going through argparse.  Every name it references
+    is looked up through this module's namespace so existing tests can
+    monkeypatch any helper (``_resolve_target_sessions``,
+    ``_detect_cross_day``, ``db_rollback_session``, ``_emit_metrics``,
+    etc.) and see the patch take effect end-to-end.
+    """
+    # NOTE: do not capture module-level names into locals here — every
+    # reference must go through the ``apps.cli.rollback`` namespace so
+    # monkeypatches in tests reach this code.
+    import apps.cli.rollback as _self
+
+    run_started_at_normalized = _self.normalize_run_started_at(
+        args.run_started_at,
     )
-
-    try:
-        init_db()
-    except Exception as e:
-        logger.error("Failed to init DB: %s", e)
-        return 3
-
-    run_started_at_normalized = normalize_run_started_at(args.run_started_at)
-    failure_reason = _resolve_failure_reason(args)
+    failure_reason = _self._resolve_failure_reason(args)
     if args.run_started_at is not None and run_started_at_normalized is None:
         logger.error(
             "Invalid --run-started-at value %r; refusing rollback so the "
             "fallback window scan cannot expand to every in-progress session.",
             args.run_started_at,
         )
-        close_db()
-        return 2
+        return ({}, 2)
 
     try:
-        sessions = _resolve_target_sessions(args, run_started_at_normalized)
+        sessions = _self._resolve_target_sessions(args, run_started_at_normalized)
     except Exception as e:
         logger.error("Failed to resolve target sessions: %s", e)
-        close_db()
-        return 3
+        return ({}, 3)
 
     if not sessions:
         logger.info(
@@ -510,15 +515,14 @@ def main(argv: Optional[List[str]] = None) -> int:
             "normal outcome when a run failed before the spider could "
             "create its session.)"
         )
-        close_db()
-        return 0
+        return ({"_no_targets": True}, 0)
 
     # Cross-day sanity filter: refuse sessions older than the run window.
     refused_sessions: List[int] = []
     if run_started_at_normalized and not args.force:
         valid_targets: List[int] = []
         for sid in sessions:
-            if _detect_cross_day(sid, run_started_at_normalized):
+            if _self._detect_cross_day(sid, run_started_at_normalized):
                 logger.error(
                     "Refusing session %s: DateTimeCreated predates "
                     "--run-started-at (%s) by more than %dh — looks like "
@@ -545,10 +549,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             "failed_sessions": [],
             "refused_sessions": refused_sessions,
         }
-        print(json.dumps(summary, ensure_ascii=False, indent=2))
-        _emit_metrics(summary)
-        close_db()
-        return 2
+        _self._emit_metrics(summary)
+        return (summary, 2)
 
     logger.info(
         "Targeting %d session(s) for %s rollback: %s%s",
@@ -563,7 +565,6 @@ def main(argv: Optional[List[str]] = None) -> int:
     failed_sessions: List[int] = []
     refused_committed_sessions: List[int] = []
     summaries: List[dict] = []
-    pending_verify_records: List[dict] = []
     for sid in sessions:
         # Capture (WriteMode, Status) BEFORE rollback so the verify
         # record sees the pre-state — _rollback_reports might delete
@@ -573,7 +574,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         pre_status = pre_state.status
         rollback_started = time.monotonic()
         try:
-            counts = db_rollback_session(
+            counts = _self.db_rollback_session(
                 sid,
                 dry_run=args.dry_run,
                 scope=args.scope,
@@ -589,7 +590,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             summaries.append({"session_id": sid, "error": str(e)})
             if pre_write_mode == "pending" and not args.dry_run:
                 duration_ms = int((time.monotonic() - rollback_started) * 1000)
-                _emit_pending_verify_for_session(
+                _self._emit_pending_verify_for_session(
                     sid,
                     pre_status=pre_status,
                     pre_write_mode=pre_write_mode,
@@ -604,7 +605,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             summaries.append({"session_id": sid, "error": str(e)})
             if pre_write_mode == "pending" and not args.dry_run:
                 duration_ms = int((time.monotonic() - rollback_started) * 1000)
-                _emit_pending_verify_for_session(
+                _self._emit_pending_verify_for_session(
                     sid,
                     pre_status=pre_status,
                     pre_write_mode=pre_write_mode,
@@ -631,13 +632,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         # numbers.
         if pre_write_mode == "pending" and not args.dry_run:
             duration_ms = int((time.monotonic() - rollback_started) * 1000)
-            verify_record = {
-                "session_id": sid,
-                "pre_status": pre_status,
-                "rollback_mode": history_counts.get("mode"),
-            }
-            pending_verify_records.append(verify_record)
-            _emit_pending_verify_for_session(
+            _self._emit_pending_verify_for_session(
                 sid,
                 pre_status=pre_status,
                 pre_write_mode=pre_write_mode,
@@ -676,10 +671,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "refused_sessions": refused_sessions,
         "movie_claim_rollbacks": claim_rollback_summaries,
     }
-    print(json.dumps(summary, ensure_ascii=False, indent=2))
-
-    _emit_metrics(summary)
-    close_db()
+    _self._emit_metrics(summary)
 
     if failed_sessions:
         logger.error(
@@ -691,12 +683,12 @@ def main(argv: Optional[List[str]] = None) -> int:
             len(refused_committed_sessions) == len(failed_sessions)
             and not refused_sessions
         ):
-            return 2
-        return 4
+            return (summary, 2)
+        return (summary, 4)
     if refused_sessions:
         # Cross-day rejects are themselves a refusal even when no other
         # session failed — surface as exit 2 so the workflow notices.
-        return 2
+        return (summary, 2)
     if drift_total > 0 and not args.dry_run:
         logger.warning(
             "Rollback completed but %d audit row(s) skipped due to "
@@ -705,8 +697,37 @@ def main(argv: Optional[List[str]] = None) -> int:
             "settles.",
             drift_total,
         )
-        return 4
-    return 0
+        return (summary, 4)
+    return (summary, 0)
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    args = _parse_args(argv)
+    setup_logging(log_level=args.log_level)
+
+    logger.info(
+        "Rollback CLI invoked: session_id=%s run_id=%s attempt=%s "
+        "run_started_at=%s scope=%s dry_run=%s force=%s "
+        "include_orphaned=%s",
+        args.session_id, args.run_id, args.attempt,
+        args.run_started_at, args.scope, args.dry_run, args.force,
+        args.include_orphaned,
+    )
+
+    try:
+        init_db()
+    except Exception as e:
+        logger.error("Failed to init DB: %s", e)
+        return 3
+
+    summary, exit_code = _drive_rollback(args)
+    if summary and not summary.get("_no_targets"):
+        # Strip our internal hint key before printing.
+        printable = {k: v for k, v in summary.items() if not k.startswith("_")}
+        print(json.dumps(printable, ensure_ascii=False, indent=2))
+
+    close_db()
+    return exit_code
 
 
 if __name__ == "__main__":

@@ -13,23 +13,23 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from packages.python.javdb_platform.d1_client import (  # noqa: E402
+from javdb.storage.d1_client import (  # noqa: E402
     D1Connection,
     D1Cursor,
     D1PermanentError,
     D1TransientError,
     _split,
 )
-from packages.python.javdb_platform import d1_client as _d1_client_module  # noqa: E402
-from packages.python.javdb_platform import dual_connection as _dual_module  # noqa: E402
-from packages.python.javdb_platform.dual_connection import (  # noqa: E402
+from javdb.storage import d1_client as _d1_client_module  # noqa: E402
+from javdb.storage import dual_connection as _dual_module  # noqa: E402
+from javdb.storage.dual_connection import (  # noqa: E402
     APPLICATION_GENERATED_ID_TABLES,
     DualConnection,
     DualWriteIdMismatchError,
     _is_read,
     _iter_complete_statements,
 )
-from packages.python.javdb_platform.db_layer.operations_repo import (  # noqa: E402
+from javdb.storage.repos.operations_repo import (  # noqa: E402
     append_rclone_staging,
     open_rclone_staging,
     swap_rclone_inventory,
@@ -911,7 +911,7 @@ def test_uncommitted_writes_reset_after_commit(monkeypatch, sqlite_conn, tmp_pat
 
 def test_current_backend_reflects_env(monkeypatch):
     """``current_backend()`` should reflect the active STORAGE_BACKEND."""
-    from packages.python.javdb_platform import db as _db
+    from javdb.storage.db import db as _db
 
     monkeypatch.delenv("_STORAGE_BACKEND_INIT_OVERRIDE", raising=False)
 
@@ -932,7 +932,7 @@ def test_current_backend_reflects_env(monkeypatch):
 
 
 def test_use_db_storage_includes_d1_backends(monkeypatch):
-    from packages.python.javdb_platform import config_helper
+    from javdb.infra import config as config_helper
 
     monkeypatch.setattr(config_helper, "storage_mode", lambda: "csv")
     monkeypatch.delenv("_STORAGE_BACKEND_INIT_OVERRIDE", raising=False)
@@ -961,7 +961,7 @@ def test_backend_mode_thread_local_invisible_to_siblings(monkeypatch):
     """
     import threading
 
-    from packages.python.javdb_platform import db as _db
+    from javdb.storage.db import db as _db
 
     monkeypatch.delenv("_STORAGE_BACKEND_INIT_OVERRIDE", raising=False)
     monkeypatch.setenv("STORAGE_BACKEND", "dual")
@@ -1020,8 +1020,8 @@ def test_init_db_dual_does_not_set_global_env_var(monkeypatch):
     """
     import threading
 
-    import packages.python.javdb_platform.config_helper as _cfg
-    from packages.python.javdb_platform import db as _db
+    import javdb.infra.config as _cfg
+    from javdb.storage.db import db as _db
 
     monkeypatch.delenv("_STORAGE_BACKEND_INIT_OVERRIDE", raising=False)
     monkeypatch.setenv("STORAGE_BACKEND", "dual")
@@ -1281,7 +1281,7 @@ def test_explicit_pk_insert_does_not_emit_drift_warning(tmp_path, caplog):
     with bogus "drift CHANGED" warnings.
     """
     import logging
-    from packages.python.javdb_platform import dual_connection as _dual_mod
+    from javdb.storage import dual_connection as _dual_mod
 
     sqlite_conn = _make_pending_tables_sqlite(tmp_path)
     fake_d1 = FakeD1Connection()
@@ -1308,7 +1308,7 @@ def test_explicit_pk_insert_does_not_emit_drift_warning(tmp_path, caplog):
         _dual_mod._ID_DELTA_BY_TABLE.pop("PendingTorrentHistoryWrites", None)
 
     dual = DualConnection(sqlite_conn, fake_d1, logical_name="history")
-    with caplog.at_level(logging.WARNING, logger="packages.python.javdb_platform.dual_connection"):
+    with caplog.at_level(logging.WARNING, logger="javdb.storage.dual_connection"):
         for sid_seq, _ in plan:
             dual.execute(
                 "INSERT INTO PendingTorrentHistoryWrites "
@@ -1527,7 +1527,7 @@ def test_db_stage_history_write_supplies_explicit_seq():
     because production writes go back through AUTOINCREMENT (and that's
     exactly the silent-residual scenario R2 was filed against).
     """
-    from packages.python.javdb_platform import db as _db
+    from javdb.storage.db import db as _db
 
     # The autouse `_isolate_sqlite` conftest fixture has already pointed
     # _db.HISTORY_DB_PATH at a temp file and run init_db.  Stage one
@@ -1562,7 +1562,7 @@ def test_db_stage_history_write_supplies_explicit_seq():
 
 def test_db_stage_history_write_torrent_supplies_explicit_seq():
     """Same as above for the torrent staging path."""
-    from packages.python.javdb_platform import db as _db
+    from javdb.storage.db import db as _db
 
     _db.db_create_report_session(
         report_type="DailyReport",
@@ -1601,7 +1601,7 @@ def test_db_stage_history_write_torrent_supplies_explicit_seq():
 # mode (no behaviour change there — only opt-in).
 
 
-from packages.python.javdb_platform.dual_connection import (  # noqa: E402
+from javdb.storage.dual_connection import (  # noqa: E402
     DualWriteAsymmetryError,
     DualWriteStrictError,
 )
@@ -1808,7 +1808,7 @@ def test_batch_execute_missing_d1_cursor_strict_mode_raises(
 
 def test_bracket_quoted_table_name_recognised():
     """P1: [Table]-style identifiers must route through the guarded-table check."""
-    from packages.python.javdb_platform.dual_connection import (
+    from javdb.storage.dual_connection import (
         _extract_insert_table,
     )
 

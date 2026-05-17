@@ -1,79 +1,98 @@
-# ADR-005: db.py 彻底退役 + Repo 类抽象 + Audit Mode 退役
+# ADR-005: Full Retirement of db.py + Repo Class Abstraction + Audit Mode Retirement
 
-**状态**: 已接受，但**启动前置阻塞于 [ADR-006](ADR-006-pending-mode-default-rollout.md)**
-**日期**: 2026-05-16
-**决策者**: 架构深化第二轮
-**前置**: [ADR-006](ADR-006-pending-mode-default-rollout.md) — 必须先把 Pending Mode 默认推到 100% + 重设计 auto-fallback，本 ADR 才能执行 D10 gate
-**后继关系**: [ADR-001](ADR-001-split-db-module.md) — 完成其未交付的 Phase 3，并修正其"按读/写拆分"的过细决策
+**Status**: Accepted, but **start is blocked behind [ADR-006](ADR-006-pending-mode-default-rollout.md)**
+**Date**: 2026-05-16
+**Deciders**: Architecture depth-pass round 2
+**Prerequisites**: [ADR-006](ADR-006-pending-mode-default-rollout.md) — Pending Mode default must first be rolled out to 100% and the auto-fallback redesigned before this ADR can execute its D10 gate
+**Successor**: [ADR-001](ADR-001-split-db-module.md) — delivers the Phase 3 that ADR-001 never finished, and corrects its over-fine "split by read/write" decision
+
+## Amendments
+
+- **2026-05-17 amendment 1**: After this ADR was accepted, [ADR-007](ADR-007-monorepo-restructure-2026-05.md) reorganised the Python namespace (`packages/python/javdb_*` → top-level `javdb/`). Any PRs from this ADR's implementation order that have not yet merged when ADR-007 Phase 1 lands must operate on the new paths:
+
+  | This ADR refers to | After ADR-007 Phase 1 |
+  |---|---|
+  | `packages/python/javdb_platform/db.py` | (deleted by ADR-005 D1; its internals already moved to `javdb/storage/db/` by ADR-007) |
+  | `packages/python/javdb_platform/db_layer/history_repo.py` | `javdb/storage/repos/history_repo.py` |
+  | `packages/python/javdb_platform/db_layer/operations_repo.py` | `javdb/storage/repos/operations_repo.py` |
+  | `packages/python/javdb_platform/db_layer/reports_repo.py` (new in D1) | `javdb/storage/repos/reports_repo.py` |
+  | `packages/python/javdb_platform/db_layer/stats_repo.py` (new in D1) | `javdb/storage/repos/stats_repo.py` |
+  | `packages/python/javdb_platform/db_session.py` | `javdb/storage/db/db_session.py` |
+  | `packages/python/javdb_platform/db_history_write.py` etc. | `javdb/storage/db/db_history_write.py` etc. |
+  | callers under `packages/python/javdb_spider/` | `javdb/spider/` |
+  | callers under `apps/cli/`, `apps/api/`, `scripts/` | `apps/cli/<subdir>/`, `apps/api/`, `apps/cli/` (per ADR-007 Phase 2) |
+  | callers under `packages/python/javdb_migrations/tools/` | `javdb/migrations/tools/` |
+
+  Path rename only — Repo class semantics, D1–D10 gate logic, and the 30-day bake dependency on ADR-006 are unchanged. ADR-007's deletion manifest ensures no unfinished work references the legacy paths.
 
 ---
 
-## D10 Gate 核查结果（2026-05-16）
+## D10 Gate Check Results (2026-05-16)
 
-ADR-005 起草后立即跑了 D10 Audit Mode 退役安全核查，**两项失败**：
+Immediately after drafting ADR-005 we ran the D10 Audit Mode retirement safety check. **Two items failed**:
 
-| Gate 项 | 状态 | 证据 |
+| Gate item | Status | Evidence |
 |---|---|---|
-| #1 近 30 天 `WriteMode='audit'` 计数 = 0 | ❌ FAIL | 近 30 天 audit=54 / pending=13；全时段 audit=354 / pending=13 |
-| #2 无孤儿审计行 | ✅ PASS | `MovieHistoryAudit`=9, `TorrentHistoryAudit`=3，0 个绑定 committed session |
-| #3 workflow 7 天前已移除 audit 选项 | ❌ FAIL | 3 个 workflow 仍把 `audit` 列为 `write_mode_override` 合法值；`DailyIngestion.yml` L1093 有 auto-fallback 到 audit 的活机制 |
+| #1 Count of `WriteMode='audit'` in the last 30 days = 0 | FAIL | Last 30 days audit=54 / pending=13; all-time audit=354 / pending=13 |
+| #2 No orphan audit rows | PASS | `MovieHistoryAudit`=9, `TorrentHistoryAudit`=3, 0 bound to committed sessions |
+| #3 Workflows removed the `audit` option at least 7 days ago | FAIL | 3 workflows still list `audit` as a valid `write_mode_override` value; `DailyIngestion.yml` L1093 has a live auto-fallback to audit |
 
-同时发现的**文档失实**：CONTEXT.md / CLAUDE.md / ADR-001 docstring 声称 "Pending Mode is default"，但 `db_session.py:188` 的代码 fallback 与 SQLite schema 的 `WriteMode TEXT DEFAULT 'audit'` 都说明**实际默认仍是 audit**——这是愿景而非事实。
+A **documentation discrepancy** also surfaced: CONTEXT.md / CLAUDE.md / the ADR-001 docstring claim "Pending Mode is default", but the code fallback at `db_session.py:188` and the SQLite schema's `WriteMode TEXT DEFAULT 'audit'` both show the **actual default is still audit**. This is aspirational, not factual.
 
-**结论**：D2(c) "完全退役 Audit Mode" 当前不可执行，因为 Audit Mode 是 80% session 的实际运行模式 + 是 Pending Mode 失败时的 live safety net。在 ADR-006 落地前，本 ADR 的 PR-1 不可启动。
-
----
+**Conclusion**: D2(c) "fully retire Audit Mode" is not executable today, because Audit Mode is the actual runtime mode for 80% of sessions and the live safety net for Pending Mode failures. Until ADR-006 lands, PR-1 of this ADR cannot start.
 
 ---
 
-## 背景 (Context)
+---
 
-ADR-001 计划把 6,370 行的 `db.py` 拆为 9 个按功能划分的模块（`db_connection.py` / `db_session.py` / `db_history_read.py` / `db_history_write.py` / `db_reports.py` / `db_stats.py` / `db_operations.py` / `db_rollback.py` / `db_migrations.py`），分 3 阶段执行：Phase 1 抽模块 → Phase 2 迁移 importer → Phase 3 删 db.py 门面 + 消除全局状态。
+## Context
 
-### 实际现状（架构深化第二轮探测）
+ADR-001 planned to split the 6,370-line `db.py` into nine function-scoped modules (`db_connection.py` / `db_session.py` / `db_history_read.py` / `db_history_write.py` / `db_reports.py` / `db_stats.py` / `db_operations.py` / `db_rollback.py` / `db_migrations.py`) across three phases: Phase 1 extract modules → Phase 2 migrate importers → Phase 3 delete the `db.py` façade and eliminate global state.
 
-- `db.py` 仍有 **5,298 行 + 131 个 `def/class`**，**承载实质实现**：
-  - `db_upsert_history` (line 2373) — Audit Mode 写入路径
-  - `_audit_*` 辅助 (line 2178–2361)
-  - 全部 schema migration (`_migrate_v5_to_v6` / `_migrate_single_to_split` / `init_db` / `_ensure_*_columns`)
-  - 全部 Operations 域助手（与几乎空壳的 `db_operations.py` 并存）
-  - Connection 池 / Session ID 生成（与 `db_connection.py` / `db_session.py` 并存）
-- 新抽出的 `db_history_read.py` (371 行) / `db_history_write.py` (238 行) 多数函数**就是转发到 db.py**，例如 `db_history_write.db_upsert_history(*args, **kwargs)` 一行代理。
-- 第三层抽象 `db_layer/history_repo.py` 已存在，但只有 4 个模块级函数（无 `HistoryRepo` 类——CLAUDE.md 示例代码写的是空头支票）。
-- `db.py` 反向 import `apps.api.parsers.common` (line 45–50)，破坏 monorepo 分层。
-- `db_session._active` 全局状态仍是写入路径隐式契约。
-- Audit Mode 在 CONTEXT.md 中标"计划 2026-08-13 sunset"，但代码仍承载主写入路径；kill switch `JAVDB_AUDIT_WRITES_DISABLED` 已存在但未默认启用。
+### Actual state (round 2 depth-pass probing)
 
-### 问题
+- `db.py` still has **5,298 lines and 131 `def`/`class` declarations** and still **carries real implementation**:
+  - `db_upsert_history` (line 2373) — the Audit Mode write path
+  - `_audit_*` helpers (lines 2178–2361)
+  - Every schema migration (`_migrate_v5_to_v6` / `_migrate_single_to_split` / `init_db` / `_ensure_*_columns`)
+  - All Operations-domain helpers (alongside the almost-empty `db_operations.py`)
+  - Connection pooling and session-ID generation (alongside `db_connection.py` / `db_session.py`)
+- The newly extracted `db_history_read.py` (371 lines) and `db_history_write.py` (238 lines) are mostly forwarders into `db.py`, e.g. `db_history_write.db_upsert_history(*args, **kwargs)` is a one-line proxy.
+- The third-layer abstraction `db_layer/history_repo.py` already exists, but contains only four module-level functions (no `HistoryRepo` class — the CLAUDE.md example code wrote a check the codebase couldn't cash).
+- `db.py` reverse-imports `apps.api.parsers.common` (lines 45–50), breaking the monorepo layering.
+- `db_session._active` global state remains the implicit contract of the write path.
+- Audit Mode is marked "scheduled to sunset 2026-08-13" in CONTEXT.md, but the code still routes the main write path through it; the `JAVDB_AUDIT_WRITES_DISABLED` kill switch exists but is not enabled by default.
 
-1. **三层抽象 forward 来 forward 去**，违反 ADR-001 自己的 **locality** 原则——理解一次 history 写入仍需在 3 个文件间跳。
-2. ADR-001 关于"读/写拆分"的决策 #1 经实测**未带来收益**：所有真实 caller (`history_manager.py`、`db_rollback.py`、CLI tools) 同时跨用读和写两个 seam——这不是 seam，是单一使用方式上的多余切口。
-3. ADR-001 Phase 3 计划的"消除全局状态"未启动，写入接口的 invariant（"线程已设置 active session"）藏在签名之外。
-4. Audit Mode 与 Pending Mode 双轨长期共存意味着 `db_history_write.py` 必须同时支持两条路径——增加 surface area 而无业务收益（默认就是 pending）。
-5. Migrations 全在 db.py 里没拆。
+### Problems
+
+1. **Three-layer abstraction forwards through forwards**, violating ADR-001's own **locality** principle — understanding one history write still requires hopping across three files.
+2. ADR-001's decision #1 ("split by read/write") **delivered no benefit** in practice: every real caller (`history_manager.py`, `db_rollback.py`, CLI tools) crosses both seams simultaneously. Per LANGUAGE.md, that is not a seam — it is a redundant cut through a single usage pattern.
+3. ADR-001 Phase 3's "eliminate global state" never started, so the write interface's invariant ("thread has set an active session") hides outside the function signatures.
+4. Long-running coexistence of Audit Mode and Pending Mode forces `db_history_write.py` to support both paths — extra surface area for no business value (pending is meant to be the default anyway).
+5. Migrations are still all in `db.py`, unsplit.
 
 ---
 
-## 决策 (Decision)
+## Decision
 
-下面 11 项作为一组生效，不可拆分挑选——其中任何一项单独存在都会让另一些项失去意义。
+The 11 items below take effect as one group; they are not separately cherry-pickable — any single item alone would render some of the others meaningless.
 
-### D1：清空 db.py 内的全部实质实现
+### D1: Empty `db.py` of all real implementation
 
-四个域（History / Operations / Migrations / Connection+Session 工具）的代码一并迁出。`db.py` 最终删除，不保留任何门面。
+Code in the four domains (History / Operations / Migrations / Connection+Session utilities) moves out together. `db.py` is ultimately deleted; no façade is preserved.
 
-### D2：完全退役 Audit Mode（含读写）
+### D2: Fully retire Audit Mode (read and write)
 
-- 删除 `db_upsert_history` audit 路径与所有 `_audit_*` 辅助；
-- 删除 `MovieHistoryAudit` / `TorrentHistoryAudit` 两张表（migration v14）；
-- 删除 `db_rollback` 中"读 audit 表 → 恢复"的分支；
-- workflow 输入 `write_mode_override` 移除选项 `audit`，仅保留 `pending`；
-- 删除环境变量 `JAVDB_HISTORY_WRITE_MODE`、`JAVDB_AUDIT_WRITES_DISABLED`；
-- `ReportSessions.WriteMode` 列保留（兼容历史行），新写入始终为 `pending`。
+- Delete the `db_upsert_history` audit path and all `_audit_*` helpers.
+- Drop the two tables `MovieHistoryAudit` and `TorrentHistoryAudit` (migration v14).
+- Delete the "read audit table → restore" branch in `db_rollback`.
+- Remove the `audit` option from the workflow input `write_mode_override`; keep only `pending`.
+- Delete the environment variables `JAVDB_HISTORY_WRITE_MODE` and `JAVDB_AUDIT_WRITES_DISABLED`.
+- Keep the `ReportSessions.WriteMode` column (for backward compatibility with historical rows); new writes always set `pending`.
 
-### D3：引入 Repo 类风格
+### D3: Introduce the Repo class style
 
-不再用模块级函数族暴露 DB 访问入口，改用类：
+Stop exposing DB access via families of module-level functions; use classes instead:
 
 ```python
 class HistoryRepo:
@@ -87,34 +106,34 @@ class HistoryRepo:
     def check_torrent_in_history(self, href: str, kind: str): ...
 ```
 
-写入方法要求构造时传入非空 `session_id`；读取方法允许 `session_id=None`。
+Write methods require a non-empty `session_id` at construction; read methods accept `session_id=None`.
 
-### D4：URL/解析工具下沉
+### D4: Sink URL / parsing utilities
 
-`apps.api.parsers.common` 中被 `db.py` 使用的 3 个函数（`movie_href_lookup_values`、`javdb_absolute_url`、`absolutize_supporting_actors_json`）下沉到 `packages/python/javdb_core/url_utils.py`。`apps.api.parsers.common` 改为 re-export 这些工具，逐步迁移 caller 后删除 re-export。
+The three functions in `apps.api.parsers.common` that `db.py` uses (`movie_href_lookup_values`, `javdb_absolute_url`, `absolutize_supporting_actors_json`) move down to `packages/python/javdb_core/url_utils.py`. `apps.api.parsers.common` becomes a re-export of these utilities; once callers are migrated, the re-export is deleted.
 
-确立**分层不变量**：`packages/**` 不得 import `apps/**`（CI lint 强制）。
+Establish a **layering invariant**: `packages/**` must not import `apps/**` (enforced by CI lint).
 
-### D5：`Repo(conn, session_id)` 构造签名
+### D5: `Repo(conn, session_id)` constructor signature
 
-`session_id` 绑定到构造时刻；不再有 `db_session._active` 全局；测试用 `HistoryRepo(test_conn, "test-session-id")` 显式构造即可，无需 patch 全局。
+`session_id` is bound at construction time; there is no more `db_session._active` global. Tests construct `HistoryRepo(test_conn, "test-session-id")` explicitly — no global to patch.
 
-### D6：四个 Repo 同步转类
+### D6: Four Repos converted to classes in lockstep
 
-| Repo | 物理位置 | 状态 |
+| Repo | Physical location | Status |
 |---|---|---|
-| `HistoryRepo` | `packages/python/javdb_platform/db_layer/history_repo.py` | 升级（已有文件，添加类） |
-| `OperationsRepo` | `packages/python/javdb_platform/db_layer/operations_repo.py` | 升级（已有文件，添加类） |
-| `ReportsRepo` | `packages/python/javdb_platform/db_layer/reports_repo.py` | 新建 |
-| `StatsRepo` | `packages/python/javdb_platform/db_layer/stats_repo.py` | 新建 |
+| `HistoryRepo` | `packages/python/javdb_platform/db_layer/history_repo.py` | Upgrade (file exists, add the class) |
+| `OperationsRepo` | `packages/python/javdb_platform/db_layer/operations_repo.py` | Upgrade (file exists, add the class) |
+| `ReportsRepo` | `packages/python/javdb_platform/db_layer/reports_repo.py` | New |
+| `StatsRepo` | `packages/python/javdb_platform/db_layer/stats_repo.py` | New |
 
-所有 Repo 共享 `BaseRepo(conn, session_id=None)` 构造协议；写入方法以 `_require_session()` 守卫确保 `session_id` 非空。
+All Repos share the `BaseRepo(conn, session_id=None)` constructor protocol; write methods guard with `_require_session()` to ensure `session_id` is non-empty.
 
-四个 Repo 之外，新增 `RollbackCoordinator(conn).rollback_session(session_id)` 协调器，负责按顺序调用各 Repo 的 `.rollback()`（替代 `db_rollback.db_rollback_session()`）。
+Alongside the four Repos, introduce a `RollbackCoordinator(conn).rollback_session(session_id)` coordinator. It invokes each Repo's `.rollback()` in order (replacing `db_rollback.db_rollback_session()`).
 
-### D7：Migrations 一文件一版本
+### D7: Migrations — one file per version
 
-按 schema 版本切片：
+Slice migrations by schema version:
 
 ```
 packages/python/javdb_migrations/
@@ -124,144 +143,149 @@ packages/python/javdb_migrations/
 │   ├── v6_split_dbs.py             # def migrate(conn) -> None
 │   ├── v7_actor_columns.py
 │   ├── v8_rollback_columns.py
-│   ├── v9_to_v13_*.py              # 现有版本
-│   └── v14_drop_audit_tables.py    # 新增：drop MovieHistoryAudit / TorrentHistoryAudit
-└── tools/                          # ad-hoc 维护脚本，结构不变
+│   ├── v9_to_v13_*.py              # existing versions
+│   └── v14_drop_audit_tables.py    # new: drop MovieHistoryAudit / TorrentHistoryAudit
+└── tools/                          # ad-hoc maintenance scripts, structure unchanged
     ├── cleanup_history_priorities.py
     └── ...
 ```
 
-`packages/python/javdb_platform/db_migrations.py` 删除。
+Delete `packages/python/javdb_platform/db_migrations.py`.
 
-### D8：迁移接口是函数不是类
+### D8: Migration interface is a function, not a class
 
-每个 `v{N}_*.py` 暴露 `def migrate(conn) -> None`。Migration 是一次性 schema 变更，无状态，无需类模板；Repo 类是有状态的领域操作。两者形式可以不同。
+Every `v{N}_*.py` exposes `def migrate(conn) -> None`. A migration is a one-shot stateless schema change; it needs no class template. Repos are stateful domain operations. The two forms are allowed to differ.
 
-### D9：分层 PR rollout（零破坏）
+### D9: Phased PR roll-out (zero-breakage)
 
 ```
-PR-1  在 db_layer/ 下建立 4 个新 Repo 类（与现有函数族并存，零 caller 改动）
-PR-2  db.py 内部转调 Repo 类（双写并行：caller 用 db.py 一切照旧，但底层走新代码）
-PR-3a 迁移 packages/python/javdb_spider/ 与 javdb_platform/history_manager.py 的 caller
-PR-3b 迁移 packages/python/javdb_ingestion/ 与 javdb_integrations/ 的 caller
-PR-3c 迁移 apps/cli/、apps/api/、scripts/、packages/python/javdb_migrations/tools/ 的 caller
-PR-4  在 ReportSessions 中确认全部 in_progress session 退场 → 启用 v14 migration drop audit 表
-      → 删除 db.py / db_history_read.py / db_history_write.py / db_session.py 中的 audit 代码
-PR-5  删除 db.py、删除 db_history_read.py / db_history_write.py / db_stats.py 等 ADR-001 抽出的
-      空壳模块；删除 db_session 全局；删除 JAVDB_HISTORY_WRITE_MODE 环境变量
-PR-6  下沉 apps.api.parsers.common 的 3 个工具到 packages/python/javdb_core/url_utils.py，
-      启用 CI lint 强制"packages 不依赖 apps"
-PR-7  按 D7 重排 migrations 为版本文件，删 db_migrations.py
+PR-1  Build the 4 new Repo classes under db_layer/ (coexist with existing function families;
+      zero caller changes)
+PR-2  db.py internals delegate to the Repo classes (dual-write parallel: callers keep using
+      db.py unchanged, but the underlying code path goes through the new Repos)
+PR-3a Migrate callers in packages/python/javdb_spider/ and javdb_platform/history_manager.py
+PR-3b Migrate callers in packages/python/javdb_ingestion/ and javdb_integrations/
+PR-3c Migrate callers in apps/cli/, apps/api/, scripts/, packages/python/javdb_migrations/tools/
+PR-4  Confirm no in_progress sessions remain in ReportSessions → run v14 migration to drop
+      the audit tables → delete the audit code in db.py / db_history_read.py /
+      db_history_write.py / db_session.py
+PR-5  Delete db.py; delete the ADR-001 shell modules db_history_read.py /
+      db_history_write.py / db_stats.py; delete the db_session global;
+      delete the JAVDB_HISTORY_WRITE_MODE environment variable
+PR-6  Sink the 3 utilities from apps.api.parsers.common to
+      packages/python/javdb_core/url_utils.py; enable the CI lint
+      enforcing "packages must not depend on apps"
+PR-7  Re-arrange migrations into per-version files per D7; delete db_migrations.py
 ```
 
-每个 PR 独立可回滚。PR-1/PR-2 不引入行为变更，可独立合并；PR-3a/b/c 渐进。
+Each PR is independently revertable. PR-1 and PR-2 introduce no behavioural change and can land on their own; PR-3a/b/c is incremental.
 
-### D10：Audit Mode 退役安全 gate
+### D10: Audit Mode retirement safety gate
 
-PR-4 启动前必须确认：
+Before PR-4 starts, confirm:
 
-1. `ReportSessions` 最近 30 天 `WriteMode='audit'` 计数为 0；
-2. `MovieHistoryAudit` / `TorrentHistoryAudit` 中无 `committed` session 的孤儿审计（或已通过 `StaleSessionCleanup` 清完）；
-3. 三个 workflow（`DailyIngestion` / `AdHocIngestion` / `TestIngestion`）的 `write_mode_override` input 已经移除 `audit` 选项至少 7 天。
+1. `ReportSessions` has 0 rows with `WriteMode='audit'` in the last 30 days.
+2. `MovieHistoryAudit` / `TorrentHistoryAudit` contain no orphan audit rows from committed sessions (or have been cleared by `StaleSessionCleanup`).
+3. The three workflows (`DailyIngestion`, `AdHocIngestion`, `TestIngestion`) have had the `audit` option removed from `write_mode_override` for at least 7 days.
 
-如核查失败，先 set `JAVDB_AUDIT_WRITES_DISABLED=1` org-wide bake 1–2 周再继续。
+If the check fails, first set `JAVDB_AUDIT_WRITES_DISABLED=1` org-wide and bake for 1–2 weeks before continuing.
 
-### D11：测试策略——替换不叠加
+### D11: Test strategy — replace, don't layer
 
-- 现有针对 `db_history_write.py` / `db_session.py` 全局的 unit test 在新 Repo 接口完成后**删除**（per DEEPENING.md "Replace, don't layer"）；
-- 新 unit test 写在 Repo 类接口上：`HistoryRepo(in_memory_conn, "session-x").stage_movie(...)` → assert observable outcome；
-- 集成测试（跨 Repo 协调，如 `RollbackCoordinator.rollback_session`）保留；
-- 测试不 mock `get_active_session_id()`——构造时传即可。
-
----
-
-## 备选方案 (Alternatives Considered)
-
-### 备选 A：保留 ADR-001 的 9 模块函数族，只完成 Phase 3 删 db.py
-
-**否决原因**：经 caller 走查 (`history_manager.py` 50 行内同时 import `db_history_read` + `db_history_write`)，"读/写分离"的 seam 在真实使用模式下根本没被独立用过——LANGUAGE.md "two adapters = real seam" 原则下这两个文件不构成真 seam。继续保留只增加 import 路径与文件计数。
-
-### 备选 B：只把 `HistoryRepo` 转类，其他保持函数族
-
-**否决原因**：单 Repo 不构成模式（"one Repo = hypothetical seam"）。要么所有写入域统一为 Repo 类形式以获取"测试时不需要 mock 全局状态"的好处，要么完全保持函数族——混用会让新 contributor 反复猜测。
-
-### 备选 C：保留 Audit Mode 写入路径作为 D1/SQLite 间漂移诊断的回退
-
-**否决原因**：Audit Mode 解决的是 ADR-001 之前的"无 Pending 表的回滚"问题；Pending Mode 已完整覆盖。Dual Mode 漂移诊断由 `dual_connection.DualConnection.drift_jsonl` 负责，与 Audit Mode 无关。保留双轨意味着 `HistoryRepo.stage_movie` 永远要 `if write_mode == 'audit': ...`，破坏 D5 的简单签名。
-
-### 备选 D：单 PR 一次性完成
-
-**否决原因**：~4,000–5,000 行迁移 + 数十 caller 改动 + 测试重写，单 PR 评审风险过高，回滚粒度过粗。D9 的 7-PR rollout 是必要代价。
-
-### 备选 E：把 db.py 的 Connection/Session 工具留在 db.py 当门面
-
-**否决原因**：D1 的目标就是"db.py 真正消失"。留任何工具都意味着 `db.py` 继续作为"逃生通道"——新代码再次倾向于 `from packages.python.javdb_platform.db import ...` 而非 `from db_connection import ...`。要彻底就要彻底。
+- Existing unit tests targeting `db_history_write.py` / `db_session.py` globals are **deleted** once the new Repo interface is in place (per DEEPENING.md "Replace, don't layer").
+- New unit tests are written against the Repo class interface: `HistoryRepo(in_memory_conn, "session-x").stage_movie(...)` → assert observable outcome.
+- Integration tests that exercise cross-Repo coordination (e.g. `RollbackCoordinator.rollback_session`) are kept.
+- Tests do not mock `get_active_session_id()` — they pass `session_id` at construction.
 
 ---
 
-## 后果 (Consequences)
+## Alternatives Considered
 
-### 正面影响
+### Alternative A — Keep ADR-001's 9-module function families; only finish Phase 3 by deleting `db.py`
 
-1. **Locality 真正落地**——理解一次 history 写入只需读 `HistoryRepo`，不必跨 3 个文件
-2. **Interface 就是测试面**——`HistoryRepo(test_conn, "x").stage_movie(...)` 直接调，无须 patch 全局
-3. **Audit Mode 彻底退役** —— 删除 ~1,200 行旧代码（audit 写入 + audit helpers + audit rollback 分支 + audit 表）
-4. **分层不变量** —— `packages` 单向依赖 `apps`，避免新代码无意中加反向 import
-5. **ADR-001 真正完成** —— Phase 3 + 修正 ADR-001 决策 #1（读/写拆分）
+**Rejected**. A caller walk-through (`history_manager.py` imports both `db_history_read` and `db_history_write` within 50 lines) showed that the "read/write split" seam is never used independently in real usage patterns. Per LANGUAGE.md ("two adapters = real seam"), these two files do not constitute a real seam. Keeping them only adds import paths and file counts.
 
-### 负面影响
+### Alternative B — Convert only `HistoryRepo` to a class; keep the other domains as function families
 
-1. **7 个 PR 的协调成本**——每个独立但需要顺序合并
-2. **caller 改动面广**——估算 50+ 文件需要换 import 与调用形式
-3. **测试重写**——`tests/unit/test_workflow_resolve_write_mode.py` 类的全局 mock 测试整批删除并重写
-4. **CLAUDE.md 中给出的 `HistoryRepo` 示例代码现在是契约**——必须实现，不能再"空头支票"
+**Rejected**. A single Repo is not a pattern ("one Repo = hypothetical seam"). Either every write domain unifies on the Repo-class form (to gain "tests don't need to mock global state"), or all domains stay as function families. A mixed style would make every new contributor guess every time.
 
-### 风险
+### Alternative C — Keep the Audit Mode write path as a fallback for diagnosing D1 / SQLite drift
 
-1. **PR-4 之前 audit 仍能写入** → 升级路径上 in-flight audit session 残留
-   - **缓解**：D10 三项 gate；先 bake `JAVDB_AUDIT_WRITES_DISABLED=1` 再删码
-2. **`db.py` 删除时漏掉某个隐式 caller**（外部脚本、用户私有自动化）
-   - **缓解**：PR-5 之前先在 `db.py` 顶端加 `DeprecationWarning("use HistoryRepo")` 一个 release cycle，看日志是否还有命中
-3. **Repo 类的 `session_id=None` 默认让"忘传 session"重新变成隐式 bug**
-   - **缓解**：所有 stage/commit/rollback 方法首行 `self._require_session()` 抛 `RuntimeError`，**接口契约可执行**
-4. **`apps.api.parsers.common` re-export 期间仍可能被外部 import**
-   - **缓解**：PR-6 中 re-export 保留一个 release cycle，加 `DeprecationWarning`
+**Rejected**. Audit Mode was the answer to the pre-ADR-001 problem of "rollback without a Pending table". Pending Mode now covers that fully. Dual Mode drift diagnosis lives in `dual_connection.DualConnection.drift_jsonl`, separate from Audit Mode. Keeping both paths means `HistoryRepo.stage_movie` carries `if write_mode == 'audit': ...` forever, defeating the simple signature in D5.
+
+### Alternative D — Land everything in one big PR
+
+**Rejected**. ~4,000–5,000 lines of migration + dozens of caller changes + test rewrites in a single PR makes review unsafe and revert granularity too coarse. The 7-PR roll-out in D9 is a necessary price.
+
+### Alternative E — Keep the Connection / Session utilities in `db.py` as a façade
+
+**Rejected**. The goal of D1 is for `db.py` to **actually disappear**. Leaving any utility behind means `db.py` keeps functioning as an "escape hatch", and new code drifts back to `from packages.python.javdb_platform.db import ...` instead of `from db_connection import ...`. If we do this, we do it all the way.
 
 ---
 
-## 相关决策 (Related Decisions)
+## Consequences
 
-- **ADR-001**（部分修正 + 完成）：本 ADR 是 ADR-001 Phase 3 的实际交付，并修正其"按读/写拆分 History 模块"的决策。
-- **ADR-002 / ADR-003 / ADR-004**：Worker 侧改造，与本 ADR 无直接耦合。
+### Positive
+
+1. **Locality genuinely lands** — understanding one history write requires reading only `HistoryRepo`, not three files.
+2. **The interface is the test surface** — `HistoryRepo(test_conn, "x").stage_movie(...)` is a direct call; no globals to patch.
+3. **Audit Mode is fully retired** — ~1,200 lines of legacy code go away (audit writes + audit helpers + audit rollback branch + audit tables).
+4. **Layering invariant** — `packages` depends on `apps` one-directionally; new code cannot accidentally add a reverse import.
+5. **ADR-001 actually completes** — Phase 3 lands, and ADR-001's decision #1 (read/write split) is corrected.
+
+### Negative
+
+1. **Coordination cost across 7 PRs** — each is independent but they must land in order.
+2. **Caller change surface is wide** — an estimated 50+ files need their imports and call shape updated.
+3. **Test rewrite** — the entire batch of global-mock tests like `tests/unit/test_workflow_resolve_write_mode.py` is deleted and rewritten.
+4. **The `HistoryRepo` example in CLAUDE.md is now a contract** — it must be implemented; no more "writing checks the codebase can't cash".
+
+### Risks
+
+1. **Audit can still be written before PR-4** → in-flight audit sessions linger across the upgrade path.
+   - **Mitigation**: the three D10 gates; bake `JAVDB_AUDIT_WRITES_DISABLED=1` before removing code.
+2. **`db.py` deletion misses an implicit caller** (external scripts, the user's private automation).
+   - **Mitigation**: before PR-5, add `DeprecationWarning("use HistoryRepo")` at the top of `db.py` for one release cycle and watch the logs for hits.
+3. **The Repo class's `session_id=None` default lets "forgot to pass session" become an implicit bug again.**
+   - **Mitigation**: every `stage` / `commit` / `rollback` method's first line is `self._require_session()`, which raises `RuntimeError`. The interface contract is executable.
+4. **`apps.api.parsers.common` re-exports may still be imported externally during the migration.**
+   - **Mitigation**: keep the re-export for one release cycle inside PR-6, with a `DeprecationWarning` attached.
 
 ---
 
-## 参考资料 (References)
+## Related Decisions
 
-- [CONTEXT.md](../../../CONTEXT.md) — 领域术语词汇表（已随本 ADR 更新 Repo / Layering Invariant / Audit Mode 退役状态）
-- [LANGUAGE.md](https://example.invalid/skill/improve-codebase-architecture/LANGUAGE.md) — 架构语言（Module / Interface / Seam / Adapter / Depth）
-- [DEEPENING.md](https://example.invalid/skill/improve-codebase-architecture/DEEPENING.md) — 测试策略 "Replace, don't layer"
-- ADR-001 经验教训 §4：模块边界应基于职责而非物理结构 —— 本 ADR 进一步修正：**也要基于真实使用模式而非假设的使用模式**
+- **ADR-001** (partially corrected + completed): this ADR is the real delivery of ADR-001 Phase 3, and corrects its "split History module by read/write" decision.
+- **ADR-002 / ADR-003 / ADR-004**: Worker-side refactors, no direct coupling with this ADR.
 
 ---
 
-## 附录 A：迁移前后接口对照
+## References
+
+- [CONTEXT.md](../../../CONTEXT.md) — Domain vocabulary (updated alongside this ADR with Repo / Layering Invariant / Audit Mode retirement status)
+- [LANGUAGE.md](https://example.invalid/skill/improve-codebase-architecture/LANGUAGE.md) — Architecture language (Module / Interface / Seam / Adapter / Depth)
+- [DEEPENING.md](https://example.invalid/skill/improve-codebase-architecture/DEEPENING.md) — Test strategy "Replace, don't layer"
+- ADR-001 lessons-learned §4: module boundaries should be based on responsibility rather than physical structure — this ADR adds a further correction: **also based on real usage patterns rather than hypothetical ones**.
+
+---
+
+## Appendix A: Before / After Interface Comparison
 
 ```python
-# 之前
+# Before
 from packages.python.javdb_platform.db_session import set_active_session_id
 from packages.python.javdb_platform.db_history_write import db_stage_history_write
 set_active_session_id("20260516T093000.000000Z-0001-0001")
-db_stage_history_write(conn, movie_data)  # 隐式依赖 thread-local session
+db_stage_history_write(conn, movie_data)  # implicit dependency on thread-local session
 
-# 之后
+# After
 from packages.python.javdb_platform.db_layer.history_repo import HistoryRepo
 repo = HistoryRepo(conn, "20260516T093000.000000Z-0001-0001")
-repo.stage_movie(href="/movies/abc123", ...)  # session 显式
+repo.stage_movie(href="/movies/abc123", ...)  # session explicit
 repo.commit()
 ```
 
-## 附录 B：v14 migration 草图
+## Appendix B: v14 Migration Sketch
 
 ```python
 # packages/python/javdb_migrations/versions/v14_drop_audit_tables.py

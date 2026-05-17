@@ -20,12 +20,12 @@ from fastapi.responses import HTMLResponse
 from apps.api.infra.security import _resolve_public_target_or_422
 from apps.api.parsers import detect_page_type, parse_detail_page, parse_index_page
 from apps.api.services import config_service, context
-from packages.python.javdb_platform.bridges.rust_adapters.parser_adapter import (
+from javdb.spider.parser import (
     result_to_dict,
 )
-from packages.python.javdb_platform.proxy_pool import create_proxy_pool_from_config
-from packages.python.javdb_platform.qb_config import qb_base_url_candidates, qb_verify_tls
-from packages.python.javdb_platform.request_handler import (
+from javdb.proxy.pool import create_proxy_pool_from_config
+from javdb.integrations.qb.config import qb_base_url_candidates, qb_verify_tls
+from javdb.infra.request import (
     create_request_handler_from_config,
 )
 

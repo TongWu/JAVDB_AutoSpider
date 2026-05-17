@@ -12,6 +12,7 @@ from apps.api.schemas.payloads import (
     HealthCheckPayload,
     HealthResponse,
     HtmlPayload,
+    JavdbLoginRefreshResponse,
     UrlPayload,
 )
 from apps.api.services import system_service
@@ -32,7 +33,7 @@ async def run_health_check(
     return await system_service.run_health_check_payload(payload, current["sub"])
 
 
-@router.post("/login/refresh")
+@router.post("/login/refresh", response_model=JavdbLoginRefreshResponse)
 async def refresh_javdb_session(current=Depends(require_role("admin"))):
     return await system_service.refresh_javdb_session_payload(current["sub"])
 

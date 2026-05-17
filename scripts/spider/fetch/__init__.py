@@ -2,4 +2,4 @@
 
 from compat import extend_package_path
 
-extend_package_path(__path__, "packages", "python", "javdb_spider", "fetch")
+extend_package_path(__path__, "javdb", "spider", "fetch")

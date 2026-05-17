@@ -1,0 +1,1695 @@
+"""Global mutable state for the spider package.
+
+Every module that needs to read or *mutate* shared state should
+``import javdb.spider.runtime.state as state`` and access ``state.<var>``.
+"""
+
+import atexit
+import json
+import os
+import re
+import logging
+import sys
+import threading
+import time
+import uuid
+from typing import Optional, Dict
+from datetime import datetime
+
+from javdb.infra.logging import get_logger
+from javdb.proxy.coordinator.login_state_client import (
+    LoginStateClient,
+)
+from javdb.proxy.coordinator.movie_claim_client import (
+    MOVIE_CLAIM_MODE_AUTO,
+    MOVIE_CLAIM_MODE_FORCE_ON,
+    MOVIE_CLAIM_MODE_OFF,
+    MovieClaimClient,
+    create_movie_claim_client_from_env,
+    create_movie_claim_client_with_mode_from_env,
+    parse_movie_claim_mode,
+)
+from javdb.proxy.ban_manager import (
+    set_remote_ban_hook,
+    set_remote_unban_hook,
+)
+from javdb.proxy.coordinator.proxy_coordinator_client import (
+    ProxyCoordinatorClient,
+)
+from javdb.proxy.coordinator.runner_registry_client import (
+    ConfigSnapshot,
+    RunnerRegistryClient,
+    RunnerRegistryUnavailable,
+    SessionPayload,
+    Signal,
+    create_runner_registry_client_from_env,
+    proxy_pool_hash,
+    proxy_pool_summary_for_registry,
+)
+from javdb.proxy.pool import ProxyPool, create_proxy_pool_from_config
+from javdb.proxy.policy import should_proxy_module
+from javdb.infra.request import RequestHandler, RequestConfig
+from javdb.infra.paths import ensure_dated_dir
+
+from javdb.spider.runtime.config import (
+    BASE_URL,
+    CF_BYPASS_SERVICE_PORT, CF_BYPASS_ENABLED,
+    CF_BYPASS_PORT_MAP,
+    JAVDB_SESSION_COOKIE,
+    PROXY_HTTP, PROXY_HTTPS, PROXY_MODULES, PROXY_MODE,
+    PROXY_POOL, PROXY_POOL_MAX_FAILURES,
+    REPORTS_DIR,
+    LOGIN_ATTEMPTS_PER_PROXY_LIMIT,
+)
+
+logger = get_logger(__name__)
+
+# ---------------------------------------------------------------------------
+# Mutable globals
+# ---------------------------------------------------------------------------
+
+global_proxy_pool: Optional[ProxyPool] = None
+global_request_handler: Optional[RequestHandler] = None
+# Cross-instance proxy coordinator (Cloudflare DO).  Lazily initialised by
+# :func:`setup_proxy_coordinator`; ``None`` means "use local throttling
+# only" — equivalent to the pre-coordinator behaviour.
+global_proxy_coordinator: Optional[ProxyCoordinatorClient] = None
+# Cross-instance login-state coordinator (singleton GlobalLoginState DO on
+# the same Cloudflare Worker as ``global_proxy_coordinator``).  Lazily
+# initialised by :func:`setup_login_state_client`; ``None`` means
+# "per-runner login only" — equivalent to the pre-DO behaviour.  Both
+# coordinators are independent: either, neither, or both can be active.
+global_login_state_client: Optional[LoginStateClient] = None
+# Cross-instance movie-detail claim coordinator (P1-B; per-day-sharded
+# ``MovieClaimState`` DO on the same Worker as the proxy/login DOs).
+# Lazily initialised by :func:`setup_movie_claim_client`; ``None`` means
+# "per-process dedup only" — equivalent to the pre-DO behaviour.  Default
+# OFF: only enabled when ``MOVIE_CLAIM_ENABLED`` is truthy AND the URL/token
+# pair is configured AND the Worker's ``/health`` probe succeeds.
+global_movie_claim_client: Optional[MovieClaimClient] = None
+# Auto-toggle scaffolding for ``global_movie_claim_client``.  See
+# :func:`_apply_movie_claim_recommendation` for the state machine.
+#
+# - ``_movie_claim_client_pending`` keeps a constructed-but-not-yet-public
+#   client when the runner is in ``auto`` mode and the registry has not
+#   yet recommended activation; mounting / unmounting flips the public
+#   ``global_movie_claim_client`` reference but never recreates the
+#   underlying ``requests.Session``.
+# - ``_movie_claim_mode`` is the resolved tri-state from
+#   :data:`MOVIE_CLAIM_MODE_AUTO` / ``FORCE_ON`` / ``OFF``.  ``force_on``
+#   reproduces the legacy P1-B behaviour (always mounted, signal
+#   ignored); ``off`` is the never-mount path.
+# - ``_movie_claim_last_recommended`` caches the most recent
+#   ``movie_claim_recommended`` flag the registry surfaced; the
+#   heartbeat loop reads it (under the lock) to pick the next sleep
+#   interval, and ``_apply_movie_claim_recommendation`` updates it on
+#   every successful signal.
+# - ``_movie_claim_lock`` serialises mount/unmount transitions so a
+#   concurrent heartbeat tick + atexit unregister cannot toggle the
+#   global out from under each other.
+_movie_claim_client_pending: Optional[MovieClaimClient] = None
+_movie_claim_mode: str = MOVIE_CLAIM_MODE_OFF
+# MR-4 (multi-runtime): the operator's *intended* mode, parsed from the
+# raw ``MOVIE_CLAIM_ENABLED`` cfg BEFORE the factory collapses
+# unconfigured / unreachable into ``OFF``. ``setup_movie_claim_client``
+# records it so :func:`enforce_movie_claim_for_d1` can tell apart
+# "operator deliberately disabled coordination" (intended==OFF, fine)
+# from "operator wanted coordination but the Worker is unreachable"
+# (intended!=OFF but client is None — fatal in d1-only mode, since
+# there is no local SQLite fallback and uncoordinated parallel runtimes
+# would duplicate every detail fetch and race PRIMARY KEY INSERTs).
+_movie_claim_intended_mode: str = MOVIE_CLAIM_MODE_OFF
+_movie_claim_last_recommended: bool = False
+_movie_claim_lock: threading.Lock = threading.Lock()
+# Cross-instance runner registry (P2-E; singleton ``RunnerRegistry`` DO).
+# Lazily initialised by :func:`setup_runner_registry_client`; ``None``
+# means "no registry, runner is invisible to peers" — equivalent to the
+# pre-DO behaviour.  Default OFF: only enabled when
+# ``RUNNER_REGISTRY_ENABLED`` is truthy AND the URL/token pair is
+# configured AND the Worker's ``/health`` probe succeeds.
+global_runner_registry_client: Optional[RunnerRegistryClient] = None
+# W6.B (W5.5) — TTL-cached cross-DO proxy-health policy. Constructed in
+# ``setup_proxy_pool`` when RECOMMEND_PROXY_ENABLED is truthy AND the
+# Worker /health probe succeeds. ``None`` means the runner is using
+# the legacy local-cache health provider (or no provider at all).
+global_recommend_proxy_policy = None
+# W6.C (W5.2) — opt-in cross-runner work queue client. Constructed by
+# ``setup_work_distributor_client`` when WORK_DISTRIBUTOR_ENABLED is
+# truthy AND /health succeeds. ``None`` means the spider falls back
+# to its existing "iterate local list + MovieClaim mutex" dispatch
+# path (the default and zero-overhead model).
+global_work_distributor_client = None
+# Background daemon thread that pings ``/heartbeat`` every 60 s once a
+# registry client is configured.  Holds a reference here so the atexit
+# handler can flag it for shutdown without leaking a reference cycle.
+_runner_heartbeat_thread: Optional[threading.Thread] = None
+_runner_heartbeat_stop = threading.Event()
+# Track that we already ran ``unregister`` so atexit + signal handlers
+# can both fire without sending two requests.
+_runner_unregistered: bool = False
+
+# Phase-1 ADR-008 — cached session lifecycle state. Updated by
+# :func:`set_active_runner_session` and consumed by the heartbeat thread +
+# :func:`_unregister_runner_at_exit` so every Coordinator round-trip
+# carries the current `SessionPayload`.
+_runner_session: Optional[SessionPayload] = None
+
+# Heartbeat cadences.
+#
+# ``_HEARTBEAT_INTERVAL_MULTI_RUNNER_SEC`` (60 s) matches the Worker's
+# ``RUNNER_STALE_TTL_MS / 5`` so a single missed heartbeat never evicts a
+# healthy runner.  Used in ``force_on`` / ``off`` modes and in ``auto``
+# mode once the registry has recommended activation.
+#
+# ``_HEARTBEAT_INTERVAL_SINGLE_RUNNER_SEC`` (15 s) is used in ``auto`` mode
+# while the registry still says "single runner": the cohort is one tick
+# away from crossing the threshold, and the worst-case "lock-leak"
+# window when a peer joins but neither side has refreshed yet is bounded
+# by the heartbeat cadence.  15 s keeps that window small without
+# materially increasing cost — heartbeats hit a singleton DO, far cheaper
+# than per-href claim DO calls.
+#
+# ``_RUNNER_HEARTBEAT_INTERVAL_SEC`` is preserved as an alias for the
+# multi-runner cadence so existing tests / docs that monkeypatch it keep
+# working unchanged.
+_HEARTBEAT_INTERVAL_MULTI_RUNNER_SEC = 60.0
+_HEARTBEAT_INTERVAL_SINGLE_RUNNER_SEC = 15.0
+_RUNNER_HEARTBEAT_INTERVAL_SEC = _HEARTBEAT_INTERVAL_MULTI_RUNNER_SEC
+
+parsed_links: set = set()
+proxy_ban_html_files: list = []
+
+login_attempted: bool = False
+refreshed_session_cookie: Optional[str] = None
+logged_in_proxy_name: Optional[str] = None
+# Monotonic version of the cookie published in
+# :data:`global_login_state_client`.  Tracked so we can pass it back to
+# :meth:`LoginStateClient.invalidate` as the optimistic lock token; ``None``
+# when the DO is not configured or this runner has never observed a publish.
+current_login_state_version: Optional[int] = None
+# Per-process opaque identity used as the ``holder_id`` for DO leases.
+# Generated once at import time so every module in this runner sees the
+# same value — required by ``acquire_lease`` / ``publish`` /
+# ``release_lease`` to stay matched across the re-login flow.
+runtime_holder_id: str = f"runner-{uuid.uuid4().hex[:16]}"
+
+# Per-proxy and global login budget tracking
+login_attempts_per_proxy: Dict[str, int] = {}
+login_failures_per_proxy: Dict[str, int] = {}
+login_total_attempts: int = 0
+login_total_budget: int = len(PROXY_POOL) * LOGIN_ATTEMPTS_PER_PROXY_LIMIT if PROXY_POOL else 0
+
+always_bypass_time: Optional[int] = None
+proxies_requiring_cf_bypass: Dict[str, float] = {}
+_cf_bypass_lock = threading.Lock()
+
+# Proxies whose remaining login budget has already been deducted from
+# ``login_total_budget`` (idempotency guard for ``deduct_proxy_login_budget``).
+_login_budget_deducted_proxies: set = set()
+# Serialises ``deduct_proxy_login_budget`` so the check-and-update against
+# ``_login_budget_deducted_proxies`` / ``login_total_budget`` is atomic
+# across concurrent proxy-ban callers.
+_login_budget_lock = threading.Lock()
+
+
+# ---------------------------------------------------------------------------
+# Login-budget + CF-bypass helpers — moved to :mod:`runtime.proxy_state`
+# (W3.4). Re-exported here so the canonical ``state.X`` API is unchanged.
+#
+# Imported AFTER the mutable globals above are defined so the cross-import
+# cycle (``proxy_state`` reads ``state.<global>``) resolves cleanly.
+# ---------------------------------------------------------------------------
+
+from javdb.spider.runtime.proxy_state import (  # noqa: E402
+    _deduct_proxy_login_budget_locked,
+    deduct_proxy_login_budget,
+    proxy_needs_cf_bypass,
+    mark_proxy_cf_bypass,
+)
+
+
+# ---------------------------------------------------------------------------
+# Request delegation
+# ---------------------------------------------------------------------------
+
+
+def get_page(url, session=None, use_cookie=False, use_proxy=False,
+             module_name='unknown', max_retries=3, use_cf_bypass=False):
+    """Fetch a webpage via the global request handler."""
+    if global_request_handler is None:
+        logger.error("Request handler not initialized. Call initialize_request_handler() first.")
+        return None
+    return global_request_handler.get_page(
+        url=url, session=session, use_cookie=use_cookie,
+        use_proxy=use_proxy, module_name=module_name,
+        max_retries=max_retries, use_cf_bypass=use_cf_bypass,
+    )
+
+
+def should_use_proxy_for_module(module_name: str, use_proxy_flag) -> bool:
+    if global_request_handler:
+        return global_request_handler.should_use_proxy_for_module(module_name, use_proxy_flag)
+    return should_proxy_module(module_name, use_proxy_flag, PROXY_MODULES, proxy_mode=PROXY_MODE)
+
+
+def extract_ip_from_proxy_url(proxy_url: str) -> Optional[str]:
+    return RequestHandler.extract_ip_from_proxy_url(proxy_url)
+
+
+def get_cf_bypass_service_url(proxy_ip: Optional[str] = None) -> str:
+    if global_request_handler:
+        return global_request_handler.get_cf_bypass_service_url(proxy_ip)
+    if proxy_ip:
+        return f"http://{proxy_ip}:{CF_BYPASS_SERVICE_PORT}"
+    return f"http://127.0.0.1:{CF_BYPASS_SERVICE_PORT}"
+
+
+def is_cf_bypass_failure(html_content: str) -> bool:
+    return RequestHandler.is_cf_bypass_failure(html_content)
+
+# ---------------------------------------------------------------------------
+# Initialisation helpers (called from main)
+# ---------------------------------------------------------------------------
+
+
+def setup_proxy_coordinator() -> Optional[ProxyCoordinatorClient]:
+    """Initialise the cross-instance proxy coordinator from configuration.
+
+    Reads ``PROXY_COORDINATOR_URL`` / ``PROXY_COORDINATOR_TOKEN`` from the
+    rendered ``config.py`` (i.e. injected by ``config_generator``).  Both
+    must be non-empty to enable the coordinator; otherwise spider continues
+    with local-only throttling (this is the supported "disabled" path).
+
+    Returns ``None`` (and logs an ERROR) when configured but the
+    ``/health`` probe fails, so deployment misconfiguration surfaces
+    early without breaking the spider.
+
+    The result is cached in :data:`global_proxy_coordinator`.  Idempotent:
+    calling twice returns the existing client.
+    """
+    global global_proxy_coordinator
+    if global_proxy_coordinator is not None:
+        return global_proxy_coordinator
+
+    from javdb.infra.config import cfg
+    url = (cfg('PROXY_COORDINATOR_URL', '') or '').strip()
+    token = (cfg('PROXY_COORDINATOR_TOKEN', '') or '').strip()
+    if not url or not token:
+        logger.info(
+            "Proxy coordinator not configured (PROXY_COORDINATOR_URL/TOKEN unset) "
+            "— using local throttling only",
+        )
+        global_proxy_coordinator = None
+        return None
+
+    client = ProxyCoordinatorClient(base_url=url, token=token)
+    if not client.health_check():
+        logger.error(
+            "Proxy coordinator URL %s is configured but /health did not respond — "
+            "falling back to local throttling for this run",
+            url,
+        )
+        global_proxy_coordinator = None
+        return None
+    logger.info(
+        "Proxy coordinator client initialised: base_url=%s",
+        url,
+    )
+    global_proxy_coordinator = client
+    # P1-A — wire the ProxyBanManager → coordinator bridge.  Bound to ``client``
+    # via closure so a later disable / re-init naturally rebinds; pure
+    # fire-and-forget so a coordinator outage cannot stall the ban path.
+    set_remote_ban_hook(lambda name: client.mark_proxy_banned(name))
+    set_remote_unban_hook(lambda name: client.mark_proxy_unbanned(name))
+
+    # P0-5 — inject coordinator into the module-level movie_sleep_mgr singleton.
+    # The singleton is created at import time before the coordinator is
+    # available, so we wire it up here once the coordinator is ready.
+    try:
+        from javdb.spider.runtime.sleep import movie_sleep_mgr as _mgr
+        if _mgr._coordinator is None:
+            _mgr.set_coordinator(client)
+            logger.debug("Coordinator injected into movie_sleep_mgr")
+    except Exception:
+        logger.debug("Failed to inject coordinator into movie_sleep_mgr", exc_info=True)
+
+    return client
+
+
+def setup_login_state_client() -> Optional[LoginStateClient]:
+    """Initialise the cross-instance login-state coordinator.
+
+    Sister function of :func:`setup_proxy_coordinator`: reads the **same**
+    ``PROXY_COORDINATOR_URL`` / ``PROXY_COORDINATOR_TOKEN`` (the Worker
+    hosts both the per-proxy throttle DO and the singleton login-state
+    DO).  Returns ``None`` (the supported disabled path) when env vars
+    are unset; returns ``None`` and logs an ERROR when configured but the
+    Worker's ``/health`` probe fails.
+
+    The result is cached in :data:`global_login_state_client`; idempotent.
+    """
+    global global_login_state_client
+    if global_login_state_client is not None:
+        return global_login_state_client
+
+    from javdb.infra.config import cfg
+    url = (cfg('PROXY_COORDINATOR_URL', '') or '').strip()
+    token = (cfg('PROXY_COORDINATOR_TOKEN', '') or '').strip()
+    if not url or not token:
+        logger.info(
+            "Login-state client not configured (PROXY_COORDINATOR_URL/TOKEN unset) "
+            "— using per-runner login only",
+        )
+        global_login_state_client = None
+        return None
+
+    client = LoginStateClient(base_url=url, token=token)
+    if not client.health_check():
+        logger.error(
+            "Login-state Worker URL %s is configured but /health did not respond — "
+            "falling back to per-runner login for this run",
+            url,
+        )
+        client.close()
+        global_login_state_client = None
+        return None
+    logger.info(
+        "Login-state client initialised: base_url=%s, holder_id=%s",
+        url, runtime_holder_id,
+    )
+    global_login_state_client = client
+    return client
+
+
+def _apply_movie_claim_recommendation(recommended: bool) -> None:
+    """Mount or unmount :data:`global_movie_claim_client` per *recommended*.
+
+    Called from three places: once at the end of
+    :func:`setup_runner_registry_client` (the first ``register`` response),
+    on every successful heartbeat in :func:`_runner_heartbeat_loop`, and
+    on every successful re-register inside the same loop.  The function
+    is idempotent and edge-triggered: the mount/unmount transition only
+    happens when the public ``global_movie_claim_client`` actually
+    changes, so a steady-state cluster doesn't spam INFO logs.
+
+    Mode semantics (matches the docs in §15.4 of
+    ``docs/PROXY_COORDINATOR_DEPLOY.md``):
+
+    - :data:`MOVIE_CLAIM_MODE_OFF` — never mount; signal is ignored.
+      ``_movie_claim_last_recommended`` is still updated so the
+      heartbeat-interval helper can run uniformly across modes.
+    - :data:`MOVIE_CLAIM_MODE_FORCE_ON` — always mount (idempotently);
+      signal is ignored.  Reproduces the legacy P1-B "operator
+      explicitly enabled it" behaviour.  Mounts ``_movie_claim_client_pending``
+      onto the global if the global is still ``None`` (defensive: keeps
+      the function safe even if a future caller blanks the global).
+    - :data:`MOVIE_CLAIM_MODE_AUTO` — drive the global purely from the
+      recommendation: ``True`` mounts pending → global, ``False``
+      unmounts global (keeps pending alive so the next ``True`` is a
+      cheap pointer copy, no new HTTP session).
+
+    Thread safety: held under :data:`_movie_claim_lock` so a concurrent
+    heartbeat tick + atexit unregister cannot toggle the global out
+    from under each other.  Callers must NEVER hold the lock across
+    network I/O.
+    """
+    global global_movie_claim_client, _movie_claim_last_recommended
+
+    with _movie_claim_lock:
+        _movie_claim_last_recommended = bool(recommended)
+        mode = _movie_claim_mode
+
+        if mode == MOVIE_CLAIM_MODE_OFF:
+            # Signal ignored; never mount.  Update the cached flag so
+            # the heartbeat interval helper still has a value to read,
+            # even though it will only honour 60 s for non-auto modes.
+            return
+
+        if mode == MOVIE_CLAIM_MODE_FORCE_ON:
+            # Force-on: idempotently mount pending → global if the
+            # global got blanked for any reason.  Do NOT log on the
+            # steady-state path (already-mounted is the common case).
+            if (
+                global_movie_claim_client is None
+                and _movie_claim_client_pending is not None
+            ):
+                global_movie_claim_client = _movie_claim_client_pending
+                logger.info(
+                    "movie-claim force_on: mounted (signal recommended=%s ignored)",
+                    recommended,
+                )
+            return
+
+        # Auto mode: drive the global from the registry signal,
+        # edge-triggered so steady state stays log-quiet.
+        if recommended:
+            if (
+                global_movie_claim_client is None
+                and _movie_claim_client_pending is not None
+            ):
+                global_movie_claim_client = _movie_claim_client_pending
+                logger.info(
+                    "movie-claim auto: mounted (active_runners >= threshold)",
+                )
+        else:
+            if global_movie_claim_client is not None:
+                # Keep ``_movie_claim_client_pending`` alive (do NOT
+                # close it) so a subsequent recommended=True can mount
+                # the same client without rebuilding the session.
+                global_movie_claim_client = None
+                logger.info(
+                    "movie-claim auto: unmounted (active_runners < threshold)",
+                )
+
+
+def setup_movie_claim_client() -> Optional[MovieClaimClient]:
+    """Initialise the cross-instance movie-detail claim coordinator (P1-B).
+
+    Companion of :func:`setup_proxy_coordinator` /
+    :func:`setup_login_state_client`: the three DO clients live behind the
+    same Cloudflare Worker but each gates independently so an operator
+    can roll any subset out without touching the others.
+
+    Behaviour now branches on the resolved
+    ``MOVIE_CLAIM_ENABLED`` mode (see
+    :func:`packages.python.javdb_platform.movie_claim_client.parse_movie_claim_mode`):
+
+    - :data:`MOVIE_CLAIM_MODE_OFF` — return ``None`` and leave
+      :data:`global_movie_claim_client` un-mounted, identical to the
+      pre-auto world.  This is the explicit ``MOVIE_CLAIM_ENABLED=false``
+      / ``0`` / ``no`` / ``""`` path.
+    - :data:`MOVIE_CLAIM_MODE_FORCE_ON` — create the client, run the
+      ``/health`` probe, then mount immediately on the global so peers
+      observe claim coordination from the very first detail page (this
+      is the legacy P1-B contract preserved for the mixed old-Worker /
+      new-client window).
+    - :data:`MOVIE_CLAIM_MODE_AUTO` — same construction + ``/health`` as
+      force-on, BUT mount the client *optimistically* on the global and
+      keep a copy in :data:`_movie_claim_client_pending`.  The first
+      ``register`` response from the registry then drives the final
+      mount/unmount via :func:`_apply_movie_claim_recommendation` —
+      single-runner deployments unmount within seconds, multi-runner
+      deployments stay mounted with zero operator action.
+
+    Cached in :data:`global_movie_claim_client`.  Idempotent.
+
+    Thread safety: the network I/O (cfg lookup, env splice,
+    ``/health`` probe inside :func:`create_movie_claim_client_with_mode_from_env`)
+    must NOT run under :data:`_movie_claim_lock` — a slow Worker would
+    otherwise stall every other lock acquirer (including the heartbeat
+    thread reading interval state and :func:`_apply_movie_claim_recommendation`).
+    The fix is to bracket the I/O with two short critical sections:
+
+    1. First section: handle the idempotent fast paths.
+    2. I/O outside the lock.
+    3. Second section: re-check (another thread may have raced past us
+       during the I/O window) and commit ``_movie_claim_mode``,
+       ``_movie_claim_client_pending``, ``global_movie_claim_client``
+       atomically. Any client we constructed but lost the race for is
+       :meth:`MovieClaimClient.close`-d so we don't leak its session.
+    """
+    global global_movie_claim_client, _movie_claim_client_pending, _movie_claim_mode
+    global _movie_claim_intended_mode
+    with _movie_claim_lock:
+        if global_movie_claim_client is not None:
+            return global_movie_claim_client
+        if _movie_claim_client_pending is not None:
+            if (
+                _movie_claim_mode == MOVIE_CLAIM_MODE_FORCE_ON
+                or (
+                    _movie_claim_mode == MOVIE_CLAIM_MODE_AUTO
+                    and _movie_claim_last_recommended
+                )
+            ):
+                global_movie_claim_client = _movie_claim_client_pending
+            return _movie_claim_client_pending
+
+    from javdb.infra.config import cfg
+    url = (cfg('PROXY_COORDINATOR_URL', '') or '').strip()
+    token = (cfg('PROXY_COORDINATOR_TOKEN', '') or '').strip()
+    raw_enabled_cfg = cfg('MOVIE_CLAIM_ENABLED', None)
+    # MR-4: capture the operator's *intended* mode now, before the factory
+    # collapses "unconfigured" / "/health failed" into a plain OFF. ``None``
+    # cfg means "var unset" → the factory's auto default; any explicit value
+    # is parsed through the same helper the factory uses.
+    intended_mode = (
+        MOVIE_CLAIM_MODE_AUTO
+        if raw_enabled_cfg is None
+        else parse_movie_claim_mode(str(raw_enabled_cfg))
+    )
+
+    # P0-3: Pass the enabled mode directly to the factory via the new
+    # ``enabled_mode_override`` parameter instead of manipulating
+    # ``os.environ``.  The factory reads URL/token from ``cfg()`` already,
+    # so no env manipulation is needed for those.
+    from javdb.proxy.coordinator.movie_claim_client import _ENABLED_UNSET
+    override = _ENABLED_UNSET if raw_enabled_cfg is None else raw_enabled_cfg
+    client, mode = create_movie_claim_client_with_mode_from_env(
+        enabled_mode_override=override,
+    )
+
+    # Re-acquire the lock to commit the resolved state atomically with the
+    # other readers (``_apply_movie_claim_recommendation``,
+    # ``_next_heartbeat_interval``, the early-return paths above, and any
+    # idempotent re-entry of this function).
+    with _movie_claim_lock:
+        # Double-checked locking: another thread may have completed
+        # ``setup_movie_claim_client`` while we were doing I/O. If so,
+        # mirror its decision and dispose of our duplicate client to
+        # avoid leaking the underlying ``requests.Session``.
+        if global_movie_claim_client is not None:
+            if client is not None and client is not global_movie_claim_client:
+                try:
+                    client.close()
+                except Exception:  # noqa: BLE001 - best-effort cleanup
+                    pass
+            return global_movie_claim_client
+        if _movie_claim_client_pending is not None:
+            if client is not None and client is not _movie_claim_client_pending:
+                try:
+                    client.close()
+                except Exception:  # noqa: BLE001 - best-effort cleanup
+                    pass
+            if (
+                _movie_claim_mode == MOVIE_CLAIM_MODE_FORCE_ON
+                or (
+                    _movie_claim_mode == MOVIE_CLAIM_MODE_AUTO
+                    and _movie_claim_last_recommended
+                )
+            ):
+                global_movie_claim_client = _movie_claim_client_pending
+            return _movie_claim_client_pending
+
+        # We're the winner — persist the resolved mode so the
+        # registry-signal handler and the heartbeat-interval picker can
+        # branch on it later.
+        _movie_claim_mode = mode
+        # MR-4: also persist the operator's *intended* mode. The factory
+        # collapses unconfigured / unreachable into ``mode == OFF``, so
+        # ``_movie_claim_mode`` alone cannot distinguish a deliberate
+        # disable from a broken Worker — ``enforce_movie_claim_for_d1``
+        # needs the intended value to decide whether to fail closed.
+        _movie_claim_intended_mode = intended_mode
+
+        if client is None or mode == MOVIE_CLAIM_MODE_OFF:
+            # Off path covers: explicit disable, missing URL/token,
+            # /health failure, or auto/force_on resolved → off due to
+            # the gates. Make sure the pending slot is empty so a stale
+            # handle from a prior ``setup_movie_claim_client`` doesn't
+            # accidentally mount.
+            _movie_claim_client_pending = None
+            global_movie_claim_client = None
+            return None
+
+        _movie_claim_client_pending = client
+
+        if mode == MOVIE_CLAIM_MODE_FORCE_ON:
+            # Legacy P1-B contract: mount immediately so the first
+            # detail page coordinates with peers. Subsequent registry
+            # signals are ignored by ``_apply_movie_claim_recommendation``.
+            global_movie_claim_client = client
+            logger.info(
+                "Movie-claim client mounted (force_on): base_url=%s, holder_id=%s",
+                url, runtime_holder_id,
+            )
+            return client
+
+        # Auto mode: mount optimistically so the runner doesn't spend
+        # the first few seconds (before the first ``register`` response
+        # lands) racing peers without coordination. The maximum cost
+        # is N claim DO calls per page during that startup window for
+        # a single-runner deploy, immediately reverted on the first
+        # ``register`` response.
+        global_movie_claim_client = client
+        logger.info(
+            "Movie-claim client optimistically mounted (auto, awaiting registry signal): "
+            "base_url=%s, holder_id=%s",
+            url, runtime_holder_id,
+        )
+        return client
+
+
+def enforce_movie_claim_for_d1() -> None:
+    """MR-4 (multi-runtime): fail closed when d1-only mode wants movie
+    claim coordination but the Worker is unreachable.
+
+    Must be called AFTER :func:`setup_movie_claim_client`. The rationale:
+
+    * In ``STORAGE_BACKEND=d1`` there is no local SQLite fallback. If two
+      runtimes run without MovieClaim coordination they each fetch every
+      detail page (wasted D1 / proxy / Worker quota) and then race
+      concurrent same-``Href`` ``INSERT``s into ``MovieHistory``, hitting
+      the ``UNIQUE(Href)`` constraint and aborting one runner mid-run.
+    * ``create_movie_claim_client_with_mode_from_env`` collapses three
+      very different situations into ``(None, OFF)``: (a) operator
+      explicitly disabled coordination, (b) URL/token not configured,
+      (c) the Worker ``/health`` probe failed. Only (a) is safe to
+      proceed on; (b) and (c) mean the operator *wanted* coordination
+      and it silently isn't there.
+
+    This guard raises ``RuntimeError`` for (b)/(c) under d1-only mode so
+    the misconfiguration surfaces at startup instead of as duplicated
+    work + PRIMARY KEY aborts mid-run. The intentional escape hatch is
+    ``JAVDB_ALLOW_UNCOORDINATED_D1=1`` for an operator who knowingly
+    wants to run a single d1-only runtime without the Worker.
+
+    No-op in ``sqlite`` / ``dual`` modes (the local mirror still gives a
+    canonical fallback there) and when the operator's *intended* mode is
+    ``OFF`` (a deliberate choice, not a misconfiguration).
+    """
+    from javdb.infra.config import storage_backend
+
+    if storage_backend() != "d1":
+        return
+
+    if _movie_claim_intended_mode == MOVIE_CLAIM_MODE_OFF:
+        # Operator explicitly disabled coordination. Respect it, but make
+        # the risk visible — uncoordinated parallel d1-only runtimes will
+        # duplicate work and may race PRIMARY KEY INSERTs.
+        logger.warning(
+            "MOVIE_CLAIM_ENABLED resolves to OFF under STORAGE_BACKEND=d1 — "
+            "running without cross-runtime detail-claim coordination. Parallel "
+            "runtimes will duplicate detail fetches and may race UNIQUE(Href) "
+            "INSERTs. Set MOVIE_CLAIM_ENABLED=auto to enable coordination."
+        )
+        return
+
+    with _movie_claim_lock:
+        have_client = (
+            global_movie_claim_client is not None
+            or _movie_claim_client_pending is not None
+        )
+    if have_client:
+        return
+
+    allow_uncoordinated = (
+        os.environ.get("JAVDB_ALLOW_UNCOORDINATED_D1", "").strip().lower()
+        in ("1", "true", "yes", "on")
+    )
+    if allow_uncoordinated:
+        logger.warning(
+            "STORAGE_BACKEND=d1 wants movie-claim coordination "
+            "(intended mode=%s) but the Worker is unreachable / unconfigured; "
+            "JAVDB_ALLOW_UNCOORDINATED_D1 is set so proceeding anyway. This is "
+            "only safe for a SINGLE d1-only runtime — concurrent runs will "
+            "duplicate fetches and race PRIMARY KEY INSERTs.",
+            _movie_claim_intended_mode,
+        )
+        return
+
+    raise RuntimeError(
+        "STORAGE_BACKEND=d1 requires the MovieClaim coordinator but it is "
+        "unreachable or unconfigured (intended MOVIE_CLAIM_ENABLED mode="
+        f"{_movie_claim_intended_mode!r}; PROXY_COORDINATOR_URL/TOKEN must be "
+        "set and the Worker /health probe must succeed). Without it, parallel "
+        "d1-only runtimes duplicate every detail fetch and race UNIQUE(Href) "
+        "INSERTs into MovieHistory. Fix the Worker deployment, or set "
+        "JAVDB_ALLOW_UNCOORDINATED_D1=1 to deliberately run a single "
+        "uncoordinated d1-only runtime."
+    )
+
+
+def _resolve_proxy_pool_json() -> str:
+    """Pull the rendered ``PROXY_POOL_JSON`` payload (or its env override).
+
+    Used for the cross-runner ``proxy_pool_hash`` drift signal — falls back
+    to a JSON-serialised view of :data:`PROXY_POOL` so the hash still
+    catches drift even when ``config.PROXY_POOL_JSON`` is empty.  Returns
+    an empty string when nothing is configured (no drift detection
+    available); callers must accept the empty hash as "no info".
+    """
+    from javdb.infra.config import cfg
+    raw = (cfg('PROXY_POOL_JSON', '') or '').strip()
+    if raw:
+        return raw
+    if PROXY_POOL:
+        try:
+            return json.dumps(PROXY_POOL, sort_keys=True, separators=(",", ":"))
+        except (TypeError, ValueError):
+            return ""
+    return ""
+
+
+def _next_heartbeat_interval() -> float:
+    """Pick the next ``_runner_heartbeat_stop.wait`` duration.
+
+    The auto-toggle wants two cadences:
+
+    - 60 s (multi-runner) — the cohort has crossed the threshold and the
+      claim mutex is mounted; further refresh is purely for liveness so
+      the canonical TTL/5 cadence is enough.
+    - 15 s (single-runner) — the cohort is below the threshold and the
+      next peer to join would otherwise have to wait up to a heartbeat
+      interval before either side notices.  15 s caps that "lock-leak"
+      window without inflating heartbeat costs (the heartbeat hits a
+      singleton DO, far cheaper than per-href claim DO calls).
+
+    Force-on / off modes always use the multi-runner cadence — there is
+    no recommendation edge to detect, so the faster cadence buys nothing.
+
+    The multi-runner branch reads :data:`_RUNNER_HEARTBEAT_INTERVAL_SEC`
+    (rather than :data:`_HEARTBEAT_INTERVAL_MULTI_RUNNER_SEC` directly)
+    so existing tests that monkeypatch the legacy alias to a small
+    value keep speeding the loop up as before.
+
+    Thread safety: ``_movie_claim_mode`` and ``_movie_claim_last_recommended``
+    are mutated under :data:`_movie_claim_lock` (by
+    :func:`setup_movie_claim_client` and :func:`_apply_movie_claim_recommendation`),
+    so we briefly take the lock here too in order to read a consistent
+    snapshot. The lock is released before returning so a slow caller
+    (e.g. ``_runner_heartbeat_stop.wait`` followed by an HTTP heartbeat)
+    doesn't block writers.
+    """
+    with _movie_claim_lock:
+        mode = _movie_claim_mode
+        recommended = _movie_claim_last_recommended
+    if mode != MOVIE_CLAIM_MODE_AUTO:
+        return _RUNNER_HEARTBEAT_INTERVAL_SEC
+    return (
+        _RUNNER_HEARTBEAT_INTERVAL_SEC
+        if recommended
+        else _HEARTBEAT_INTERVAL_SINGLE_RUNNER_SEC
+    )
+
+
+def _update_sleep_runner_count(count: int) -> None:
+    """Feed active runner count to the sleep manager for degraded-mode throttle scaling."""
+    if count <= 0:
+        return
+    try:
+        from javdb.spider.runtime.sleep import movie_sleep_mgr as _mgr
+        _mgr.set_active_runners(count)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+# W6.A.1 — most recently applied ConfigState snapshot version. Used to
+# skip redundant re-applications when the heartbeat returns the same
+# snapshot it returned last tick (the common case).
+_last_applied_config_version: int = -1
+
+
+def _apply_config_snapshot(snap: ConfigSnapshot) -> None:
+    """Apply an operator-pushed config snapshot from the heartbeat.
+
+    Only keys the Python client actually consumes locally are honoured;
+    Worker-side knobs (ban_ttl_ms, movie_claim_ttl_ms, etc.) are silently
+    ignored because the Worker DOs read them directly from env vars,
+    not via this snapshot.
+
+    Skips work when ``snap.version`` matches the last applied version
+    (the steady-state case — every heartbeat carries the same snapshot).
+    Fail-open: every exception is swallowed; an invalid value MUST NOT
+    take down the heartbeat loop.
+    """
+    global _last_applied_config_version
+    if snap.version == _last_applied_config_version:
+        return
+    values = snap.values or {}
+
+    def _to_int(key: str) -> Optional[int]:
+        raw = values.get(key)
+        if raw is None or raw == "":
+            return None
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            logger.warning("Config %s=%r is not an integer; ignoring", key, raw)
+            return None
+
+    def _to_float(key: str) -> Optional[float]:
+        raw = values.get(key)
+        if raw is None or raw == "":
+            return None
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            logger.warning("Config %s=%r is not a float; ignoring", key, raw)
+            return None
+
+    try:
+        from javdb.spider.runtime.sleep import (
+            triple_window_throttle as _throttle,
+        )
+        _throttle.apply_config(
+            short_max=_to_int("short_max"),
+            long_max=_to_int("long_max"),
+            extra_max=_to_int("extra_max"),
+            short_window_sec=_to_float("short_window_sec"),
+            long_window_sec=_to_float("long_window_sec"),
+            extra_window_sec=_to_float("extra_window_sec"),
+        )
+    except Exception:  # noqa: BLE001 — config application is best-effort
+        logger.warning(
+            "Failed to apply throttle config from snapshot v%d", snap.version,
+            exc_info=True,
+        )
+
+    # heartbeat_interval_sec — module-level; affects the NEXT tick because
+    # the current loop iteration is already inside ``_runner_heartbeat_stop.wait()``.
+    hb_interval = _to_float("heartbeat_interval_sec")
+    if hb_interval is not None and hb_interval > 0:
+        global _RUNNER_HEARTBEAT_INTERVAL_SEC
+        global _HEARTBEAT_INTERVAL_MULTI_RUNNER_SEC
+        _HEARTBEAT_INTERVAL_MULTI_RUNNER_SEC = hb_interval
+        _RUNNER_HEARTBEAT_INTERVAL_SEC = hb_interval
+
+    _last_applied_config_version = snap.version
+    logger.info(
+        "Applied W5.3 config snapshot version=%d (%d operator overrides)",
+        snap.version, len(values),
+    )
+
+
+# ---------------------------------------------------------------------------
+# W6.A.2 — W5.4 active signals state
+# ---------------------------------------------------------------------------
+
+# Proxies the spider has banned in response to a `ban_proxy` signal. Tracked
+# so the same signal arriving on every heartbeat doesn't keep re-issuing
+# ban_proxy() calls.
+_signal_banned_proxies: set = set()
+# Serialises mutations to the three signal-state fields above so concurrent
+# heartbeat ticks (e.g., a re-register racing the main loop) cannot
+# interleave reads and writes.
+_signal_lock = threading.Lock()
+
+
+def _apply_active_signals(signals: list) -> None:
+    """Reconcile the runtime state against the W5.4 ``active_signals`` set.
+
+    Signals are STATE, not events: every heartbeat delivers the full
+    current set. This function diff'd against the last-applied state
+    each tick:
+
+    * ``throttle_global`` (factor) → ``movie_sleep_mgr.set_global_factor``.
+      When no such signal exists, factor resets to 1.0.
+    * ``ban_proxy`` (proxy_id, ttl) → ``proxy_pool.ban_proxy(name)``.
+      Once banned, the runner does NOT unban (ProxyPool bans are
+      session-permanent today). Signal TTL is intentionally not
+      honoured locally — see plan W6 trade-off #1.
+    * ``pause_all`` (ttl) → ``movie_sleep_mgr.set_pause_until_ms``.
+      When no such signal exists, the pause expiry resets to 0.
+    * ``resume`` never appears in this list (Worker consumes it as a
+      clear-all directive); a list with no other signals is equivalent.
+
+    Fail-open: every individual signal's application is wrapped in
+    try/except so a single malformed signal cannot disable the rest.
+    """
+    if signals is None:
+        signals = []
+
+    desired_factor = 1.0
+    desired_pause_until_ms = 0
+    desired_bans: set = set()
+    for sig in signals:
+        try:
+            kind = getattr(sig, "kind", None)
+            if kind == "throttle_global":
+                f = getattr(sig, "factor", None)
+                if f is not None:
+                    desired_factor = max(desired_factor, float(f))
+            elif kind == "pause_all":
+                exp = int(getattr(sig, "expires_at_ms", 0) or 0)
+                if exp > desired_pause_until_ms:
+                    desired_pause_until_ms = exp
+            elif kind == "ban_proxy":
+                pid = getattr(sig, "proxy_id", None)
+                if pid:
+                    desired_bans.add(str(pid))
+            # ``resume`` is consumed Worker-side; clients never see it in
+            # ``active_signals``. An empty list naturally restores defaults.
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "Skipping malformed signal during apply: %r", sig,
+                exc_info=True,
+            )
+
+    # Apply throttle_global.
+    try:
+        from javdb.spider.runtime.sleep import (
+            movie_sleep_mgr as _mgr,
+        )
+        _mgr.set_global_factor(desired_factor)
+        _mgr.set_pause_until_ms(desired_pause_until_ms)
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "Failed to apply throttle_global / pause_all signal",
+            exc_info=True,
+        )
+
+    # Apply ban_proxy deltas. The full reconcile model:
+    #   new_bans     = desired - applied → call pool.ban_proxy()
+    #   removed_bans = applied - desired → call pool.unban_proxy()
+    # Bookkeeping uses set replacement (not update) so an empty
+    # desired set correctly produces an empty applied set, restoring
+    # full proxy availability after every signal expires.
+    global _signal_banned_proxies
+    with _signal_lock:
+        new_bans = desired_bans - _signal_banned_proxies
+        removed_bans = _signal_banned_proxies - desired_bans
+        _signal_banned_proxies = set(desired_bans)
+
+    pool = global_proxy_pool
+    if pool is not None:
+        if new_bans:
+            for proxy_id in new_bans:
+                try:
+                    pool.ban_proxy(proxy_id)
+                    logger.warning(
+                        "W5.4 ban_proxy signal applied: %s now banned",
+                        proxy_id,
+                    )
+                except Exception:  # noqa: BLE001
+                    logger.warning(
+                        "Failed to apply ban_proxy signal for %s",
+                        proxy_id, exc_info=True,
+                    )
+        if removed_bans:
+            for proxy_id in removed_bans:
+                try:
+                    pool.unban_proxy(proxy_id)
+                    logger.info(
+                        "W5.4 ban_proxy signal expired: %s restored to rotation",
+                        proxy_id,
+                    )
+                except Exception:  # noqa: BLE001
+                    logger.warning(
+                        "Failed to unban %s after signal expiry",
+                        proxy_id, exc_info=True,
+                    )
+
+
+def _maybe_honour_pipeline_pause(
+    *,
+    pipeline_paused_until_ms: int,
+    reason: Optional[str],
+) -> None:
+    """Phase-1 ADR-008 — exit cleanly when an operator-set pause is active.
+
+    The Coordinator's ConfigState carries ``pipeline_paused_until`` (ms
+    epoch). When that future-dated value is present, the runner SHOULD
+    NOT start a fresh ingestion — the operator is signalling a freeze.
+    We log + write `.publish-config.yml: pipeline_paused: true` (existing
+    ADR-006 gate) for downstream workflow steps, then exit 0.
+
+    `sys.exit(0)` keeps the workflow run "successful" rather than failed
+    — pausing is a deliberate operational decision, not an error.
+    """
+    if not pipeline_paused_until_ms or pipeline_paused_until_ms <= 0:
+        return
+    now_ms = int(time.time() * 1000)
+    if pipeline_paused_until_ms <= now_ms:
+        return
+    remaining_min = (pipeline_paused_until_ms - now_ms) / 60_000
+    logger.warning(
+        "Pipeline paused by operator (Coordinator config). Exiting cleanly. "
+        "paused_until_ms=%s remaining=%.1f min reason=%s",
+        pipeline_paused_until_ms, remaining_min, reason or "",
+    )
+    # Best-effort: write a marker the downstream workflow steps can read.
+    try:
+        with open(".publish-config.yml", "w", encoding="utf-8") as fh:
+            fh.write(
+                "# Phase-1 ADR-008 — written by runner startup pause check.\n"
+                "pipeline_paused: true\n"
+                f"paused_until_ms: {pipeline_paused_until_ms}\n"
+                f"reason: {reason or ''}\n"
+            )
+    except Exception:  # noqa: BLE001
+        logger.debug("Failed to write .publish-config.yml pause marker", exc_info=True)
+    sys.exit(0)
+
+
+def set_active_runner_session(
+    *,
+    session_id: str,
+    status: str,
+    write_mode: Optional[str] = None,
+    report_type: Optional[str] = None,
+    failure_reason: Optional[str] = None,
+    flush_immediately: bool = False,
+) -> None:
+    """Phase-1 ADR-008 — update the session payload echoed to the Coordinator.
+
+    Call this from the spider's `run_service` whenever the session
+    transitions: ``in_progress`` on create, ``finalizing`` before
+    commit, ``committed`` on success, ``failed`` on error, etc.
+
+    The new payload rides on the next heartbeat tick (≤60s by default).
+    Pass ``flush_immediately=True`` for terminal transitions (committed
+    / failed / cancelled) so the dashboard sees the final status without
+    waiting for the next periodic heartbeat — this is fire-and-forget
+    and never raises.
+    """
+    global _runner_session
+    _runner_session = SessionPayload(
+        session_id=str(session_id),
+        status=str(status),
+        write_mode=write_mode,
+        report_type=report_type,
+        failure_reason=failure_reason,
+    )
+    if not flush_immediately:
+        return
+    client = global_runner_registry_client
+    if client is None:
+        return
+    try:
+        client.heartbeat(runtime_holder_id, session=_runner_session)
+    except Exception:  # noqa: BLE001
+        logger.debug(
+            "Coordinator session-status flush failed; will retry on next heartbeat",
+            exc_info=True,
+        )
+
+
+def _runner_heartbeat_loop(client: RunnerRegistryClient, holder_id: str) -> None:
+    """Background thread: ping ``/heartbeat`` until stopped.
+
+    Cadence is dynamic via :func:`_next_heartbeat_interval` so that auto
+    mode can shorten the polling interval while it's still single-runner
+    (= claim coordination off) and fall back to the canonical 60 s once a
+    peer joins.
+
+    On ``alive=False`` (the holder was evicted by the registry's GC alarm
+    after we missed the staleness window) we re-``register`` so the
+    registry recovers without operator intervention.  All exceptions are
+    swallowed — the registry is purely operational metadata and must
+    NEVER take down the spider.
+
+    The successful ``heartbeat`` and re-``register`` paths each forward
+    the response's ``movie_claim_recommended`` flag into
+    :func:`_apply_movie_claim_recommendation` so an `auto`-mode runner
+    mounts / unmounts ``global_movie_claim_client`` automatically.
+    Failure paths (network blip, malformed response) intentionally do
+    NOT update the cached recommendation — a single transient hiccup
+    must not unmount an already-active claim coordinator.
+    """
+    while not _runner_heartbeat_stop.wait(_next_heartbeat_interval()):
+        try:
+            result = client.heartbeat(holder_id, session=_runner_session)
+        except RunnerRegistryUnavailable:
+            # Transient outage; just try again on the next tick.
+            logger.debug("Runner-registry heartbeat unavailable; will retry")
+            continue
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "Unexpected runner-registry heartbeat error; will retry",
+                exc_info=True,
+            )
+            continue
+
+        if not result.alive:
+            # Registry GC'd us (heartbeat lapsed past stale TTL) — try to
+            # rejoin so ops dashboards stop showing us as missing.  No
+            # need to re-emit drift summaries on reconnection: the
+            # response was already logged at original ``register`` time.
+            try:
+                rereg = client.register(
+                    holder_id=holder_id,
+                    workflow_run_id=os.environ.get("GITHUB_RUN_ID", ""),
+                    workflow_name=os.environ.get("GITHUB_WORKFLOW", ""),
+                    proxy_hash=proxy_pool_hash(_resolve_proxy_pool_json()),
+                    proxy_pool=proxy_pool_summary_for_registry(PROXY_POOL),
+                    session=_runner_session,
+                )
+                logger.info("Runner-registry recovered after eviction")
+                # Feed the registry's fresh recommendation so the auto-
+                # toggle re-syncs after eviction (the cohort may have
+                # changed while we were missing).
+                _apply_movie_claim_recommendation(rereg.movie_claim_recommended)
+                _update_sleep_runner_count(len(rereg.active_runners))
+                if rereg.config is not None:
+                    _apply_config_snapshot(rereg.config)
+                _apply_active_signals(rereg.active_signals)
+            except RunnerRegistryUnavailable:
+                logger.debug("Runner-registry re-register unavailable; will retry")
+            except Exception:  # noqa: BLE001
+                logger.warning(
+                    "Unexpected runner-registry re-register error",
+                    exc_info=True,
+                )
+            continue
+
+        # Healthy heartbeat: forward the cohort signal to the auto-toggle.
+        # Old Workers omit the field; the parser defaults it to False
+        # which the auto path treats as "single runner, unmount".
+        _apply_movie_claim_recommendation(result.movie_claim_recommended)
+        _update_sleep_runner_count(result.active_runners_count)
+        if result.config is not None:
+            _apply_config_snapshot(result.config)
+        _apply_active_signals(result.active_signals)
+
+
+def _unregister_runner_at_exit() -> None:
+    """Best-effort cleanup of this runner's registry entry.
+
+    Registered via :func:`atexit.register` from :func:`setup_runner_registry_client`.
+    Idempotent (``_runner_unregistered`` flag) so atexit + a signal
+    handler both calling this is safe.  Never raises — registry hygiene
+    must not block the spider's shutdown.
+    """
+    global global_runner_registry_client, _runner_heartbeat_thread, _runner_unregistered
+    if _runner_unregistered:
+        return
+    client = global_runner_registry_client
+    if client is None:
+        return
+    _runner_heartbeat_stop.set()
+    thread = _runner_heartbeat_thread
+    if (
+        thread is not None
+        and thread.is_alive()
+        and thread is not threading.current_thread()
+    ):
+        thread.join(timeout=5.0)
+        if thread.is_alive():
+            logger.warning("Runner-registry heartbeat thread did not stop before unregister")
+        else:
+            _runner_heartbeat_thread = None
+    try:
+        # Phase-1 ADR-008 — surface the final session state to the Coordinator
+        # so the dashboard never shows a runner stuck in `in_progress` after
+        # it has actually exited.
+        client.unregister(runtime_holder_id, session=_runner_session)
+    except RunnerRegistryUnavailable:
+        logger.debug("Runner-registry unregister unavailable at exit")
+    except Exception:  # noqa: BLE001
+        logger.warning("Unexpected runner-registry unregister error", exc_info=True)
+    else:
+        _runner_unregistered = True
+    try:
+        client.close()
+    except Exception:  # noqa: BLE001
+        pass
+    global_runner_registry_client = None
+    if _runner_heartbeat_thread is not None and not _runner_heartbeat_thread.is_alive():
+        _runner_heartbeat_thread = None
+
+
+# MR-5 (multi-runtime): opportunistic orphan-stage sweep on clean exit.
+#
+# The StaleSessionCleanup cron sweeps once a day; a stage orphaned by a
+# crashed peer therefore lingered up to ~24h + the (now 6h) cutoff. By
+# also sweeping when ANY runner exits cleanly, the effective sweep
+# cadence becomes "every runner shutdown" — far more frequent, at zero
+# extra GH Actions minutes (it piggy-backs on the existing atexit
+# lifecycle). The 6h cutoff means a clean runner only reaps stages that
+# have been orphaned long enough to be unambiguously dead, never a live
+# peer's in-flight stage.
+_MOVIE_CLAIM_SWEEP_AT_EXIT_OLDER_THAN_MS = 6 * 60 * 60 * 1000
+_movie_claim_swept_at_exit: bool = False
+
+
+def _movie_claim_sweep_shard_dates() -> list:
+    """Today + yesterday in the ops timezone (Asia/Singapore, UTC+8).
+
+    Two days covers a session that staged just before midnight and a
+    runner exiting just after — the same cross-midnight window the
+    ``sweep_movie_claim_stages`` CLI guards with its 3-day default.
+    """
+    import datetime as _dt
+
+    ops_tz = _dt.timezone(_dt.timedelta(hours=8))
+    base = _dt.datetime.now(ops_tz)
+    return [
+        (base - _dt.timedelta(days=offset)).strftime("%Y-%m-%d")
+        for offset in (0, 1)
+    ]
+
+
+def _sweep_movie_claim_stages_at_exit() -> None:
+    """Best-effort opportunistic sweep of orphaned MovieClaim stages.
+
+    Registered via :func:`atexit.register` from
+    :func:`setup_movie_claim_client`.  Idempotent
+    (``_movie_claim_swept_at_exit`` flag).  Never raises — orphan-stage
+    hygiene must not block the spider's shutdown.
+
+    Only meaningful when a MovieClaim client is mounted; a no-op
+    otherwise.  Uses a conservative 6h cutoff (well above the Worker's
+    1h server floor) so a clean runner can never wipe a live peer's
+    in-flight stage — it only reaps stages old enough to be
+    unambiguously orphaned by a crashed runner.
+    """
+    global _movie_claim_swept_at_exit
+    if _movie_claim_swept_at_exit:
+        return
+    _movie_claim_swept_at_exit = True
+    client = global_movie_claim_client or _movie_claim_client_pending
+    if client is None:
+        return
+    for shard_date in _movie_claim_sweep_shard_dates():
+        try:
+            result = client.sweep_orphan_stages(
+                older_than_ms=_MOVIE_CLAIM_SWEEP_AT_EXIT_OLDER_THAN_MS,
+                date=shard_date,
+            )
+        except Exception as exc:  # noqa: BLE001 — never block shutdown
+            logger.debug(
+                "Movie-claim orphan-stage sweep at exit failed for shard %s "
+                "(non-fatal): %s",
+                shard_date, exc,
+            )
+            continue
+        if result.removed:
+            logger.info(
+                "Movie-claim orphan-stage sweep at exit: removed %d stale "
+                "stage(s) from shard %s",
+                result.removed, shard_date,
+            )
+
+
+def _warn_on_proxy_pool_drift(
+    self_hash: str,
+    summary,  # type: ignore[no-untyped-def] — sequence of PoolHashBucket
+) -> None:
+    """Emit a single WARNING when *self_hash* is not the majority hash.
+
+    Mirrors the contract of the Worker's ``pool_hash_summary`` field
+    (subsumes the original P3-B "drift detection" plan item): a runner
+    joining with a hash that doesn't match the rest of the cohort gets
+    one log line at startup so ops can act before throughput skews.
+    """
+    if not summary or not self_hash:
+        return
+    by_hash = {bucket.hash: bucket.count for bucket in summary}
+    own_count = by_hash.get(self_hash, 0)
+    other_total = sum(c for h, c in by_hash.items() if h != self_hash)
+    if other_total > 0 and own_count <= other_total:
+        # Render compact summary for the ops log.  Keep it on one line so
+        # log aggregators can grep for "proxy_pool_hash drift".
+        rendered = ", ".join(
+            f"{b.hash or '<empty>'}={b.count}"
+            for b in summary
+        )
+        logger.warning(
+            "proxy_pool_hash drift detected: this runner has %s but cohort is {%s} — "
+            "check PROXY_POOL_JSON across workflows",
+            self_hash, rendered,
+        )
+
+
+def setup_runner_registry_client() -> Optional[RunnerRegistryClient]:
+    """Initialise the singleton runner-registry client (P2-E).
+
+    Companion of :func:`setup_proxy_coordinator` /
+    :func:`setup_login_state_client` / :func:`setup_movie_claim_client`:
+    all four DO clients live behind the same Cloudflare Worker but each
+    gates independently so an operator can roll any subset out without
+    touching the others.
+
+    On a successful initialisation we ALSO:
+
+    1. Send a ``/register`` call with this runner's GH Actions metadata
+       (``GITHUB_RUN_ID`` / ``GITHUB_WORKFLOW``) and the canonical
+       ``proxy_pool_hash`` of ``PROXY_POOL_JSON``.  The server response
+       is inspected for cohort drift — if peers have a different hash
+       we emit one ``WARNING`` log line so ops can investigate.
+    2. Spawn a daemon thread that calls ``/heartbeat`` every 60 s.
+    3. Register an :mod:`atexit` hook that calls ``/unregister``.
+
+    All three are best-effort: any failure is logged and the spider
+    continues exactly as if the registry were not configured.
+
+    Cached in :data:`global_runner_registry_client`.  Idempotent.
+    """
+    global global_runner_registry_client, _runner_heartbeat_thread
+
+    if global_runner_registry_client is not None:
+        return global_runner_registry_client
+
+    from javdb.infra.config import cfg
+    url = (cfg('PROXY_COORDINATOR_URL', '') or '').strip()
+    token = (cfg('PROXY_COORDINATOR_TOKEN', '') or '').strip()
+    enabled_raw = (str(cfg('RUNNER_REGISTRY_ENABLED', '') or '')).strip().lower()
+    if enabled_raw not in {"1", "true", "yes"}:
+        logger.info(
+            "Runner-registry client disabled (RUNNER_REGISTRY_ENABLED=%r) — "
+            "runner is invisible to peers",
+            enabled_raw,
+        )
+        global_runner_registry_client = None
+        return None
+    if not url or not token:
+        logger.info(
+            "Runner-registry client not configured (PROXY_COORDINATOR_URL/TOKEN "
+            "unset) — runner is invisible to peers",
+        )
+        global_runner_registry_client = None
+        return None
+
+    # Delegate to the factory so the disable paths and ``/health`` semantics
+    # stay defined in one place.  Mirror the trick used in setup_movie_claim_client.
+    prior = (
+        os.environ.get('PROXY_COORDINATOR_URL'),
+        os.environ.get('PROXY_COORDINATOR_TOKEN'),
+        os.environ.get('RUNNER_REGISTRY_ENABLED'),
+    )
+    try:
+        os.environ['PROXY_COORDINATOR_URL'] = url
+        os.environ['PROXY_COORDINATOR_TOKEN'] = token
+        os.environ['RUNNER_REGISTRY_ENABLED'] = enabled_raw
+        client = create_runner_registry_client_from_env()
+    finally:
+        for key, value in zip(
+            ('PROXY_COORDINATOR_URL', 'PROXY_COORDINATOR_TOKEN', 'RUNNER_REGISTRY_ENABLED'),
+            prior,
+        ):
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    if client is None:
+        global_runner_registry_client = None
+        return None
+
+    # Best-effort startup register — failure here MUST NOT block the spider.
+    pool_json = _resolve_proxy_pool_json()
+    self_hash = proxy_pool_hash(pool_json)
+    try:
+        result = client.register(
+            holder_id=runtime_holder_id,
+            workflow_run_id=os.environ.get("GITHUB_RUN_ID", ""),
+            workflow_name=os.environ.get("GITHUB_WORKFLOW", ""),
+            proxy_hash=self_hash,
+            proxy_pool=proxy_pool_summary_for_registry(PROXY_POOL),
+        )
+        logger.info(
+            "Runner-registry client initialised: base_url=%s, holder_id=%s, "
+            "active_runners=%d, movie_claim_recommended=%s",
+            url, runtime_holder_id, len(result.active_runners),
+            result.movie_claim_recommended,
+        )
+        _warn_on_proxy_pool_drift(self_hash, result.pool_hash_summary)
+        # Phase-1 ADR-008 — honour operator-set pipeline pause. The pause is
+        # surfaced by the Worker via the embedded ConfigState snapshot; if
+        # active, this runner exits cleanly without touching JavDB.
+        _maybe_honour_pipeline_pause(
+            pipeline_paused_until_ms=result.pipeline_paused_until,
+            reason=result.pipeline_pause_reason,
+        )
+        # Feed the auto-toggle with the very first cohort snapshot.  In
+        # auto mode this either keeps the optimistically-mounted client
+        # in place (≥2 runners) or unmounts it (single runner) within
+        # milliseconds of startup; force_on / off modes ignore it.
+        _apply_movie_claim_recommendation(result.movie_claim_recommended)
+        _update_sleep_runner_count(len(result.active_runners))
+    except RunnerRegistryUnavailable:
+        logger.warning(
+            "Runner-registry register failed at startup; continuing without "
+            "registry coordination this run",
+        )
+        client.close()
+        global_runner_registry_client = None
+        return None
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "Unexpected runner-registry register error; continuing without "
+            "registry coordination this run",
+            exc_info=True,
+        )
+        client.close()
+        global_runner_registry_client = None
+        return None
+
+    global_runner_registry_client = client
+    _runner_heartbeat_stop.clear()
+    if _runner_heartbeat_thread is None or not _runner_heartbeat_thread.is_alive():
+        _runner_heartbeat_thread = threading.Thread(
+            target=_runner_heartbeat_loop,
+            args=(client, runtime_holder_id),
+            name="runner-heartbeat",
+            daemon=True,
+        )
+        _runner_heartbeat_thread.start()
+    atexit.register(_unregister_runner_at_exit)
+    return client
+
+
+def setup_work_distributor_client():
+    """W6.C (W5.2) — initialise the opt-in work-distribution queue client.
+
+    Companion of the other DO setup functions; gated by
+    ``WORK_DISTRIBUTOR_ENABLED`` so the default (off) keeps the spider
+    on its existing local-iteration + MovieClaim dispatch path with
+    zero overhead.
+
+    On success caches the client in :data:`global_work_distributor_client`.
+    On any failure (flag off, URL/token missing, /health failing) returns
+    ``None`` and leaves the global as ``None`` — the consumer loop in
+    :mod:`javdb_spider.detail.runner` checks for that and falls back.
+
+    Idempotent.
+    """
+    global global_work_distributor_client
+    if global_work_distributor_client is not None:
+        return global_work_distributor_client
+
+    try:
+        from javdb.proxy.coordinator.work_distributor_client import (
+            create_work_distributor_client_from_env,
+        )
+    except Exception:  # noqa: BLE001 — import failure must not crash startup
+        logger.warning("WorkDistributor client import failed", exc_info=True)
+        return None
+
+    try:
+        client = create_work_distributor_client_from_env()
+    except Exception:  # noqa: BLE001 — factory wrapping is best-effort
+        logger.warning("WorkDistributor client setup failed", exc_info=True)
+        return None
+
+    global_work_distributor_client = client
+    return client
+
+
+def initialize_request_handler():
+    """Create the global RequestHandler from configuration."""
+    global global_request_handler
+    from javdb.spider.runtime.sleep import (
+        penalty_tracker as _pt,
+        movie_sleep_mgr as _mgr,
+    )
+    _cd = _mgr.get_cooldown()
+    config = RequestConfig(
+        base_url=BASE_URL,
+        cf_bypass_service_port=CF_BYPASS_SERVICE_PORT,
+        cf_bypass_port_map=CF_BYPASS_PORT_MAP,
+        cf_bypass_enabled=CF_BYPASS_ENABLED,
+        cf_bypass_max_failures=3,
+        cf_turnstile_cooldown=_cd,
+        fallback_cooldown=_cd,
+        javdb_session_cookie=JAVDB_SESSION_COOKIE,
+        proxy_http=PROXY_HTTP,
+        proxy_https=PROXY_HTTPS,
+        proxy_modules=PROXY_MODULES,
+        proxy_mode=PROXY_MODE,
+        between_attempt_sleep=_mgr.sleep,
+    )
+    # Cross-instance CF event callback for the global handler.  Unlike the
+    # per-worker handlers in fetch_engine.py — which bind a single proxy via
+    # closure — the global handler walks the proxy pool, so the proxy that
+    # actually triggered the CF event is only known per-call.  We therefore
+    # accept the positional ``proxy_name`` from RequestHandler and forward
+    # it to the coordinator at report time.  A live ``global_proxy_coordinator``
+    # is required; without it (or without a proxy_name) reports are skipped
+    # silently — matching the local-only fallback semantics elsewhere.
+    def _global_cf_event_cb(proxy_name):
+        coord = global_proxy_coordinator
+        if coord is None or not proxy_name:
+            return
+        coord.report_async(proxy_name, "cf")
+
+    # P2-D — fold per-attempt success/failure + latency into the per-proxy
+    # health snapshot.  Like ``_global_cf_event_cb`` above, this fallback
+    # handler walks the proxy pool so the proxy_name is per-call, not bound
+    # at construction time.  No-op when the coordinator is absent or the
+    # request was direct (proxy_name=None) — the spider falls back to the
+    # local proxy_pool's success/failure counters in that case.
+    def _global_request_complete_cb(proxy_name, kind, latency_ms):
+        coord = global_proxy_coordinator
+        if coord is None or not proxy_name:
+            return
+        coord.report_async(proxy_name, kind, latency_ms=latency_ms)
+
+    global_request_handler = RequestHandler(
+        proxy_pool=global_proxy_pool, config=config, penalty_tracker=_pt,
+        on_cf_event=_global_cf_event_cb,
+        on_request_complete=_global_request_complete_cb,
+    )
+    logger.info("Request handler initialized successfully")
+
+
+def setup_proxy_pool(use_proxy) -> None:
+    """Initialize the global proxy pool from configuration.
+
+    Also lazily initialises all four cross-instance coordinators
+    (per-proxy throttle, global login state, per-day movie-claim
+    mutex, and runner registry) so every worker thread spawned later
+    automatically picks them up via :data:`global_proxy_coordinator`,
+    :data:`global_login_state_client`,
+    :data:`global_movie_claim_client`, and
+    :data:`global_runner_registry_client`.  All four are independent
+    and may be ``None`` (fail-open).
+    """
+    from javdb.proxy.policy import is_proxy_mode_disabled
+    global global_proxy_pool
+
+    setup_proxy_coordinator()
+    setup_login_state_client()
+    setup_movie_claim_client()
+    # MR-4: in d1-only mode, refuse to start when the operator wanted
+    # movie-claim coordination but the Worker is unreachable. Must run
+    # after setup_movie_claim_client() so the client / pending slots and
+    # _movie_claim_intended_mode are populated.
+    enforce_movie_claim_for_d1()
+    # MR-5: opportunistic orphan-stage sweep on clean shutdown. Registered
+    # unconditionally — the hook itself no-ops when no MovieClaim client
+    # was mounted, and registering once here keeps the lifecycle wiring
+    # in one place alongside the runner-registry atexit hook.
+    atexit.register(_sweep_movie_claim_stages_at_exit)
+    setup_runner_registry_client()
+    setup_work_distributor_client()
+
+    if is_proxy_mode_disabled(PROXY_MODE):
+        logger.info("Proxy globally disabled (PROXY_MODE='%s') - skipping pool init", PROXY_MODE)
+        global_proxy_pool = None
+        return
+
+    if not use_proxy:
+        logger.info("Proxy disabled for this run (--no-proxy) - skipping pool init")
+        global_proxy_pool = None
+        return
+
+    if PROXY_POOL and len(PROXY_POOL) > 0:
+        if PROXY_MODE == 'pool':
+            logger.info(f"Initializing proxy pool with {len(PROXY_POOL)} proxies...")
+            global_proxy_pool = create_proxy_pool_from_config(
+                PROXY_POOL,
+                max_failures=PROXY_POOL_MAX_FAILURES,
+            )
+            logger.info("Proxy pool initialized successfully")
+            logger.info("Max failures before ban: %d (session-scoped)", PROXY_POOL_MAX_FAILURES)
+        elif PROXY_MODE == 'single':
+            logger.info("Initializing single proxy mode (using first proxy from pool)...")
+            global_proxy_pool = create_proxy_pool_from_config(
+                [PROXY_POOL[0]],
+                max_failures=PROXY_POOL_MAX_FAILURES,
+            )
+            logger.info(f"Single proxy initialized: {PROXY_POOL[0].get('name', 'Main-Proxy')}")
+    elif PROXY_HTTP or PROXY_HTTPS:
+        logger.info("Using legacy PROXY_HTTP/PROXY_HTTPS configuration")
+        legacy_proxy = {'name': 'Legacy-Proxy', 'http': PROXY_HTTP, 'https': PROXY_HTTPS}
+        global_proxy_pool = create_proxy_pool_from_config(
+            [legacy_proxy],
+            max_failures=PROXY_POOL_MAX_FAILURES,
+        )
+    else:
+        if should_proxy_module('spider', use_proxy, PROXY_MODULES, proxy_mode=PROXY_MODE):
+            logger.warning("Proxy enabled but no proxy configuration found (neither PROXY_POOL nor PROXY_HTTP/PROXY_HTTPS)")
+        global_proxy_pool = None
+
+    # W6.B (W5.5) — when the operator has enabled cross-DO health
+    # aggregation via RECOMMEND_PROXY_ENABLED=true, prefer that policy
+    # over the local per-proxy cache: it integrates cohort-wide health
+    # data rather than only this runner's lease history. The local
+    # ``coord.get_proxy_health_score`` fallback runs unchanged when
+    # RecommendProxy is disabled or unreachable.
+    if (
+        global_proxy_pool is not None
+        and hasattr(global_proxy_pool, "set_health_provider")
+    ):
+        provider_label = None
+        try:
+            from javdb.proxy.recommend.client import (
+                create_recommend_proxy_client_from_env,
+            )
+            from javdb.proxy.recommend.policy import (
+                RecommendProxyPolicy,
+            )
+            global global_recommend_proxy_policy
+            rec_client = create_recommend_proxy_client_from_env()
+            if rec_client is not None:
+                proxy_ids = [p.get('name', '') for p in (PROXY_POOL or [])
+                             if isinstance(p, dict) and p.get('name')]
+                policy = RecommendProxyPolicy(rec_client, proxy_ids=proxy_ids)
+                policy.start()
+                global_recommend_proxy_policy = policy
+                global_proxy_pool.set_health_provider(policy.score_for)
+                atexit.register(policy.shutdown)
+                provider_label = "W5.5 /recommend_proxy"
+        except Exception:  # noqa: BLE001 — Worker policy is best-effort
+            logger.warning(
+                "Failed to wire RecommendProxy policy; will fall back to local cache",
+                exc_info=True,
+            )
+
+        # Fallback: existing P2-D local-cache provider when RecommendProxy
+        # is off or failed to start.
+        if provider_label is None and global_proxy_coordinator is not None:
+            try:
+                global_proxy_pool.set_health_provider(
+                    global_proxy_coordinator.get_proxy_health_score
+                )
+                provider_label = "P2-D coordinator cache"
+            except Exception:  # noqa: BLE001
+                logger.warning(
+                    "Failed to wire proxy health provider; falling back to round-robin",
+                    exc_info=True,
+                )
+
+        if provider_label is not None:
+            logger.info(
+                "Proxy pool health-weighted selection enabled (%s)",
+                provider_label,
+            )
+
+# ---------------------------------------------------------------------------
+# Directory / file helpers
+# ---------------------------------------------------------------------------
+
+
+def ensure_reports_dir():
+    """Ensure the reports root directory exists (for history files)."""
+    if not os.path.exists(REPORTS_DIR):
+        os.makedirs(REPORTS_DIR)
+        logger.info(f"Created directory: {REPORTS_DIR}")
+
+
+def ensure_report_dated_dir(base_dir):
+    """Ensure the dated subdirectory (YYYY/MM) exists for report files."""
+    dated_dir = ensure_dated_dir(base_dir)
+    logger.info(f"Using dated directory: {dated_dir}")
+    return dated_dir
+
+
+def save_proxy_ban_html(html_content, proxy_name, page_num):
+    """Save the HTML content that caused a proxy to be banned."""
+    if not html_content:
+        logger.warning(f"No HTML content to save for banned proxy {proxy_name}")
+        return None
+    try:
+        logs_dir = 'logs'
+        if not os.path.exists(logs_dir):
+            os.makedirs(logs_dir)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        safe_proxy_name = re.sub(r'[^\w\-]', '_', proxy_name)
+        filename = f"proxy_ban_{safe_proxy_name}_page{page_num}_{timestamp}.txt"
+        filepath = os.path.join(logs_dir, filename)
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write("# Proxy Ban HTML Capture\n")
+            f.write(f"# Proxy: {proxy_name}\n")
+            f.write(f"# Page: {page_num}\n")
+            f.write(f"# Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"# HTML Length: {len(html_content)} bytes\n")
+            f.write("=" * 60 + "\n\n")
+            f.write(html_content)
+        logger.debug(f"Saved proxy ban HTML to: {filepath}")
+        proxy_ban_html_files.append(filepath)
+        return filepath
+    except Exception:
+        logger.exception("Failed to save proxy ban HTML")
+        return None

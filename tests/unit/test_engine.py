@@ -78,8 +78,8 @@ def _patch_workers(engine, fetch_fn):
 
 class TestStableProxyId:
     def test_url_fallback_matches_coordinator_host_port_hash(self):
-        from packages.python.javdb_platform.proxy_coordinator_client import _normalize_proxy_id
-        from packages.python.javdb_spider.fetch.fetch_engine import _stable_proxy_id
+        from javdb.proxy.coordinator.proxy_coordinator_client import _normalize_proxy_id
+        from javdb.spider.fetch.fetch_engine import _stable_proxy_id
 
         expected = _normalize_proxy_id(None, fallback_seed="proxy.example.com:8080")
 
@@ -391,7 +391,7 @@ class TestEngineProxyBanned:
     def test_proxy_banned_stops_worker(self, *_mocks):
         """ProxyBannedError should stop the worker and produce a failure result."""
         from scripts.spider.fetch.fetch_engine import FetchEngine, EngineTask
-        from packages.python.javdb_platform.request_handler import ProxyBannedError
+        from javdb.infra.request import ProxyBannedError
 
         engine = FetchEngine.simple(
             parse_fn=lambda html, task: {'ok': True},
@@ -538,17 +538,17 @@ class TestQueuePressureProperty:
         return _Stub()
 
     def test_low_when_queue_empty_and_many_workers(self):
-        from packages.python.javdb_spider.fetch.fetch_engine import _EngineWorker
+        from javdb.spider.fetch.fetch_engine import _EngineWorker
         w = self._make_worker_stub(qsize=0, active_workers=5)
         assert _EngineWorker._queue_pressure.fget(w) == 'low'
 
     def test_normal_when_queue_has_items(self):
-        from packages.python.javdb_spider.fetch.fetch_engine import _EngineWorker
+        from javdb.spider.fetch.fetch_engine import _EngineWorker
         w = self._make_worker_stub(qsize=5, active_workers=5)
         assert _EngineWorker._queue_pressure.fget(w) == 'normal'
 
     def test_normal_when_few_workers(self):
-        from packages.python.javdb_spider.fetch.fetch_engine import _EngineWorker
+        from javdb.spider.fetch.fetch_engine import _EngineWorker
         w = self._make_worker_stub(qsize=0, active_workers=2)
         assert _EngineWorker._queue_pressure.fget(w) == 'normal'
 
@@ -621,7 +621,7 @@ class TestTaskTimeBudget:
 
     def test_engine_task_deadline_field(self):
         """EngineTask should have a _deadline field defaulting to None."""
-        from packages.python.javdb_spider.fetch.fetch_engine import EngineTask
+        from javdb.spider.fetch.fetch_engine import EngineTask
         t = EngineTask(url='https://example.com')
         assert t._deadline is None
         assert t._speculative is False
@@ -636,7 +636,7 @@ class TestRequestHandlerDeadline:
     """Plan D: deadline-aware pausing in RequestHandler."""
 
     def test_pause_skipped_when_deadline_exceeded(self):
-        from packages.python.javdb_platform.request_handler import (
+        from javdb.infra.request import (
             RequestHandler, RequestConfig,
         )
         config = RequestConfig(task_deadline=time.monotonic() - 1.0)
@@ -647,7 +647,7 @@ class TestRequestHandlerDeadline:
         assert elapsed < 1.0
 
     def test_pause_truncated_to_remaining_budget(self):
-        from packages.python.javdb_platform.request_handler import (
+        from javdb.infra.request import (
             RequestHandler, RequestConfig,
         )
         config = RequestConfig(task_deadline=time.monotonic() + 0.1)
@@ -658,14 +658,14 @@ class TestRequestHandlerDeadline:
         assert elapsed < 0.5
 
     def test_is_deadline_exceeded_false_when_no_deadline(self):
-        from packages.python.javdb_platform.request_handler import (
+        from javdb.infra.request import (
             RequestHandler, RequestConfig,
         )
         handler = RequestHandler(config=RequestConfig())
         assert handler._is_deadline_exceeded() is False
 
     def test_is_deadline_exceeded_true_when_past(self):
-        from packages.python.javdb_platform.request_handler import (
+        from javdb.infra.request import (
             RequestHandler, RequestConfig,
         )
         config = RequestConfig(task_deadline=time.monotonic() - 1.0)
@@ -719,13 +719,13 @@ class TestSpeculativeExecution:
         assert results[0].success is True
 
     def test_speculative_flag_on_task(self):
-        from packages.python.javdb_spider.fetch.fetch_engine import EngineTask
+        from javdb.spider.fetch.fetch_engine import EngineTask
         t = EngineTask(url='https://example.com', _speculative=True)
         assert t._speculative is True
 
     def test_mark_entry_completed_atomicity(self):
         """Only the first caller to mark_entry_completed should get True."""
-        from packages.python.javdb_spider.fetch.fetch_engine import _EngineWorker
+        from javdb.spider.fetch.fetch_engine import _EngineWorker
 
         worker = MagicMock(spec=_EngineWorker)
         completed = set()
@@ -739,7 +739,7 @@ class TestSpeculativeExecution:
 
     def test_mark_entry_completed_empty_index(self):
         """Empty entry_index should always return True (no dedup)."""
-        from packages.python.javdb_spider.fetch.fetch_engine import _EngineWorker
+        from javdb.spider.fetch.fetch_engine import _EngineWorker
 
         worker = MagicMock(spec=_EngineWorker)
         worker._completed_entries = set()
@@ -758,7 +758,7 @@ class TestVerifyLoginViaFixedPages:
     """``verify_login_via_fixed_pages`` correctly gates a fresh login."""
 
     def test_returns_true_when_no_urls_configured(self):
-        from packages.python.javdb_spider.fetch.session import (
+        from javdb.spider.fetch.session import (
             verify_login_via_fixed_pages,
         )
         handler = MagicMock()
@@ -766,7 +766,7 @@ class TestVerifyLoginViaFixedPages:
         handler.get_page.assert_not_called()
 
     def test_returns_true_when_all_urls_pass(self):
-        from packages.python.javdb_spider.fetch import session as session_mod
+        from javdb.spider.fetch import session as session_mod
 
         handler = MagicMock()
         handler.get_page.return_value = '<html>logged in dashboard</html>'
@@ -779,7 +779,7 @@ class TestVerifyLoginViaFixedPages:
         assert handler.get_page.call_count == 2
 
     def test_returns_false_when_any_page_is_login_wall(self):
-        from packages.python.javdb_spider.fetch import session as session_mod
+        from javdb.spider.fetch import session as session_mod
 
         handler = MagicMock()
         handler.get_page.return_value = '<html>login form</html>'
@@ -791,7 +791,7 @@ class TestVerifyLoginViaFixedPages:
         assert ok is False
 
     def test_returns_false_when_fetch_returns_empty(self):
-        from packages.python.javdb_spider.fetch.session import (
+        from javdb.spider.fetch.session import (
             verify_login_via_fixed_pages,
         )
         handler = MagicMock()
@@ -800,7 +800,7 @@ class TestVerifyLoginViaFixedPages:
         assert ok is False
 
     def test_relative_paths_are_prefixed_with_base_url(self):
-        from packages.python.javdb_spider.fetch import session as session_mod
+        from javdb.spider.fetch import session as session_mod
 
         handler = MagicMock()
         handler.get_page.return_value = '<html>ok</html>'
@@ -819,7 +819,7 @@ class TestLoginBudgetReduction:
     """``state.deduct_proxy_login_budget`` shrinks budget for banned proxies."""
 
     def _reset(self, *, budget, attempts=0, per_proxy=None):
-        import packages.python.javdb_spider.runtime.state as st
+        import javdb.spider.runtime.state as st
         st.login_total_budget = budget
         st.login_total_attempts = attempts
         st.login_attempts_per_proxy.clear()
@@ -828,8 +828,8 @@ class TestLoginBudgetReduction:
         st._login_budget_deducted_proxies.clear()
 
     def test_deducts_full_per_proxy_limit_when_unused(self):
-        import packages.python.javdb_spider.runtime.state as st
-        from packages.python.javdb_spider.runtime.config import (
+        import javdb.spider.runtime.state as st
+        from javdb.spider.runtime.config import (
             LOGIN_ATTEMPTS_PER_PROXY_LIMIT,
         )
         self._reset(budget=4 * LOGIN_ATTEMPTS_PER_PROXY_LIMIT)
@@ -840,8 +840,8 @@ class TestLoginBudgetReduction:
         assert st.login_total_budget == original - LOGIN_ATTEMPTS_PER_PROXY_LIMIT
 
     def test_deducts_only_remaining_when_some_attempts_used(self):
-        import packages.python.javdb_spider.runtime.state as st
-        from packages.python.javdb_spider.runtime.config import (
+        import javdb.spider.runtime.state as st
+        from javdb.spider.runtime.config import (
             LOGIN_ATTEMPTS_PER_PROXY_LIMIT,
         )
         self._reset(
@@ -856,8 +856,8 @@ class TestLoginBudgetReduction:
         assert st.login_total_budget == original - (LOGIN_ATTEMPTS_PER_PROXY_LIMIT - 2)
 
     def test_idempotent_for_same_proxy(self):
-        import packages.python.javdb_spider.runtime.state as st
-        from packages.python.javdb_spider.runtime.config import (
+        import javdb.spider.runtime.state as st
+        from javdb.spider.runtime.config import (
             LOGIN_ATTEMPTS_PER_PROXY_LIMIT,
         )
         self._reset(budget=4 * LOGIN_ATTEMPTS_PER_PROXY_LIMIT)
@@ -870,8 +870,8 @@ class TestLoginBudgetReduction:
         assert st.login_total_budget == before
 
     def test_never_drops_below_attempts_already_spent(self):
-        import packages.python.javdb_spider.runtime.state as st
-        from packages.python.javdb_spider.runtime.config import (
+        import javdb.spider.runtime.state as st
+        from javdb.spider.runtime.config import (
             LOGIN_ATTEMPTS_PER_PROXY_LIMIT,
         )
         # 1 proxy already spent everything, only 1 attempt total left.
@@ -887,10 +887,10 @@ class TestLoginBudgetReduction:
 
     def test_banned_proxy_runtime_path_calls_deduct(self):
         """``_handle_proxy_banned`` invokes ``deduct_proxy_login_budget``."""
-        import packages.python.javdb_spider.runtime.state as st
-        from packages.python.javdb_platform.request_handler import ProxyBannedError
+        import javdb.spider.runtime.state as st
+        from javdb.infra.request import ProxyBannedError
         from scripts.spider.fetch.fetch_engine import FetchEngine
-        from packages.python.javdb_spider.runtime.config import (
+        from javdb.spider.runtime.config import (
             LOGIN_ATTEMPTS_PER_PROXY_LIMIT,
         )
 
@@ -930,7 +930,7 @@ class TestEngineTaskLoginVerifiedFlag:
     """``EngineTask.login_verified_after_refresh`` propagates through the engine."""
 
     def test_default_is_false(self):
-        from packages.python.javdb_spider.fetch.fetch_engine import EngineTask
+        from javdb.spider.fetch.fetch_engine import EngineTask
         assert EngineTask(url='https://x').login_verified_after_refresh is False
 
 
@@ -938,11 +938,11 @@ class TestLoginCoordinatorVerifiedShortCircuit:
     """When a verified-login task hits the wall again, no extra login fires."""
 
     def test_verified_task_routed_back_without_relogin(self):
-        import packages.python.javdb_spider.runtime.state as st
-        from packages.python.javdb_spider.fetch.login_coordinator import (
+        import javdb.spider.runtime.state as st
+        from javdb.spider.fetch.login_coordinator import (
             LoginCoordinator,
         )
-        from packages.python.javdb_spider.fetch.fetch_engine import EngineTask
+        from javdb.spider.fetch.fetch_engine import EngineTask
         import queue as queue_module
 
         st.login_total_budget = 10
@@ -969,7 +969,7 @@ class TestLoginCoordinatorVerifiedShortCircuit:
         login_q: queue_module.Queue = queue_module.Queue()
 
         with patch(
-            'packages.python.javdb_spider.fetch.login_coordinator.attempt_login_refresh',
+            'javdb.spider.fetch.login_coordinator.attempt_login_refresh',
         ) as mock_login:
             coord.handle_login_required(
                 worker=worker, task=task, video_code='V-1',

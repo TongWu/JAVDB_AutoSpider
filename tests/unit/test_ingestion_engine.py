@@ -102,7 +102,7 @@ def test_check_redownload_upgrade_logs_video_code(caplog):
         'size_no_subtitle': '3.52GB',
     }
 
-    with caplog.at_level(logging.INFO, logger='packages.python.javdb_ingestion.policies'):
+    with caplog.at_level(logging.INFO, logger='javdb.pipeline.policies'):
         categories = check_redownload_upgrade('/v/z4bgy5', history_data, magnet_links, threshold=0.30)
 
     assert categories == ['no_subtitle']

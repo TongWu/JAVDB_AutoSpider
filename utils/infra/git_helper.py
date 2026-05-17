@@ -1,4 +1,4 @@
-"""Compatibility wrapper for the canonical packages.python.javdb_platform.git_helper module."""
+"""Compatibility wrapper for the canonical javdb.infra.git_helper module."""
 
 from __future__ import annotations
 
@@ -11,4 +11,4 @@ if str(REPO_ROOT) not in sys.path:
 
 from compat import alias_module
 
-alias_module(__name__, "packages.python.javdb_platform.git_helper")
+alias_module(__name__, "javdb.infra.git_helper")

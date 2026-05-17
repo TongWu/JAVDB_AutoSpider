@@ -1,1 +1,0 @@
-"""Canonical Rust package container."""

@@ -144,7 +144,7 @@ def test_scan_inventory_counts_process_year_none_as_error(monkeypatch):
 
 def test_scan_csv_temp_removed_on_scan_failure(monkeypatch, tmp_path):
     import scripts.rclone_manager as rm
-    from packages.python.javdb_platform import config_helper
+    from javdb.infra import config as config_helper
 
     output = tmp_path / "inventory.csv"
     row = {field: "" for field in INVENTORY_FIELDNAMES}
@@ -250,10 +250,10 @@ def test_scan_sqlite_uses_staging_when_no_active_session(
 
 def _patch_rclone_db_mocks(monkeypatch, db_mod, order, overrides=None):
     """Patch both db_mod and the split modules the rclone manager imports from."""
-    import packages.python.javdb_platform.db_migrations as _mig
-    import packages.python.javdb_platform.db_reports as _rep
-    import packages.python.javdb_platform.db_operations as _ops
-    import packages.python.javdb_platform.db_session as _sess
+    import javdb.storage.db.db_migrations as _mig
+    import javdb.storage.db.db_reports as _rep
+    import javdb.storage.db.db_operations as _ops
+    import javdb.storage.db.db_session as _sess
 
     defaults = {
         "init_db": lambda *_a, **_kw: order.append("init_db"),
@@ -490,7 +490,7 @@ def test_scan_succeeds_when_post_swap_commit_marking_fails(
         "db_drop_rclone_staging",
         lambda sid: order.append(("drop_staging", sid)),
     )
-    import packages.python.javdb_platform.db_operations as _ops
+    import javdb.storage.db.db_operations as _ops
     monkeypatch.setattr(_ops, "db_drop_rclone_staging", lambda sid: order.append(("drop_staging", sid)))
     monkeypatch.setattr(
         sys,
@@ -1039,12 +1039,12 @@ class TestPrependDriveName:
 
 class TestGetConfiguredDriveName:
     def test_from_rclone_folder_path(self):
-        with patch('packages.python.javdb_platform.config_helper.cfg') as mock_cfg:
+        with patch('javdb.infra.config.cfg') as mock_cfg:
             mock_cfg.side_effect = lambda name, default: 'gdrive:/path' if name == 'RCLONE_FOLDER_PATH' else default
             assert get_configured_drive_name() == 'gdrive'
 
     def test_from_rclone_drive_name(self):
-        with patch('packages.python.javdb_platform.config_helper.cfg') as mock_cfg:
+        with patch('javdb.infra.config.cfg') as mock_cfg:
             def fake_cfg(name, default):
                 if name == 'RCLONE_FOLDER_PATH':
                     return None
@@ -1055,7 +1055,7 @@ class TestGetConfiguredDriveName:
             assert get_configured_drive_name() == 'paula'
 
     def test_returns_empty_when_not_configured(self):
-        with patch('packages.python.javdb_platform.config_helper.cfg') as mock_cfg:
+        with patch('javdb.infra.config.cfg') as mock_cfg:
             mock_cfg.return_value = None
             assert get_configured_drive_name() == ''
 

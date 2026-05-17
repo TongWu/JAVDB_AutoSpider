@@ -35,11 +35,11 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
-from packages.python.javdb_platform.logging_config import (
+from javdb.infra.logging import (
     get_logger,
     setup_logging,
 )
-from packages.python.javdb_platform.movie_claim_client import (
+from javdb.proxy.coordinator.movie_claim_client import (
     MovieClaimUnavailable,
     create_movie_claim_client_from_env,
 )

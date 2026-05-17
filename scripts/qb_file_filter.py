@@ -11,7 +11,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from compat import alias_module
 
-_module = alias_module(__name__, "packages.python.javdb_integrations.qb_file_filter")
+_module = alias_module(__name__, "javdb.integrations.qb.file_filter")
 
 if __name__ == "__main__":
     _module.main()

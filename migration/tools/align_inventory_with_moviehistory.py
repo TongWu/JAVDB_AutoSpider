@@ -13,7 +13,7 @@ from compat import alias_module
 
 _module = alias_module(
     __name__,
-    "packages.python.javdb_migrations.tools.align_inventory_with_moviehistory",
+    "javdb.migrations.tools.align_inventory_with_moviehistory",
 )
 
 if __name__ == "__main__":
