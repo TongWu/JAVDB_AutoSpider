@@ -50,7 +50,7 @@ RUN pip install /tmp/*.whl && rm -f /tmp/*.whl
 
 # Copy application files
 COPY apps/ ./apps/
-COPY packages/ ./packages/
+COPY javdb/ ./javdb/
 COPY api/ ./api/
 COPY legacy/ ./legacy/
 COPY migration/ ./migration/
