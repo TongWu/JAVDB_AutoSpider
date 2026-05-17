@@ -114,7 +114,7 @@ candidate = f"{ts}-{tag_hex}-{counter:04x}"
 
 ### Rollback CLI 查找优先级
 
-CLI（[`apps/cli/rollback.py`](../../../apps/cli/rollback.py)）按顺序遍历三个来源，合并结果：
+CLI（[`apps/cli/db/rollback.py`](../../../apps/cli/db/rollback.py)）按顺序遍历三个来源，合并结果：
 
 1. **`--session-id`**（最精确）。仅针对该 session，除非设置了 `--include-orphaned`，否则**不会扩展**为窗口扫描。
 2. **`--run-id` + `--attempt`**（运行感知查找的首选路径）。调用 `db_find_sessions_by_run`，同时查询 `ReportSessions` 和 audit 表（因此即使之前的失败 rollback 已删除了 `ReportSessions` 行，该运行仍可恢复）。
@@ -319,7 +319,7 @@ python3 -m scripts.audit_archive --apply --target sqlite --older-than-days 60
 
 以上三个脚本默认均为干运行，并在 `reports/` 下写入 JSON 报告。使用 `--target` 限制为单侧；对于 `cleanup_stale_session_audits` 使用 `--session-ids 332,346` 限制为特定 id，`--cross-day-hours 12` 调整幻影检测阈值。
 
-`sync_d1_to_sqlite` + `cleanup_stale_session_audits` 是手动事故响应工具（不要接入定时任务）。`audit_archive` **是**定时任务，通过 [`.github/workflows/AuditArchive.yml`](../../../.github/workflows/AuditArchive.yml) 每周运行。定期的过期 session 清理存在于 [`StaleSessionCleanup.yml`](../../../.github/workflows/StaleSessionCleanup.yml)，使用 [`apps.cli.cleanup_stale_in_progress`](../../../apps/cli/cleanup_stale_in_progress.py)。
+`sync_d1_to_sqlite` + `cleanup_stale_session_audits` 是手动事故响应工具（不要接入定时任务）。`audit_archive` **是**定时任务，通过 [`.github/workflows/AuditArchive.yml`](../../../.github/workflows/AuditArchive.yml) 每周运行。定期的过期 session 清理存在于 [`StaleSessionCleanup.yml`](../../../.github/workflows/StaleSessionCleanup.yml)，使用 [`apps.cli.cleanup_stale_in_progress`](../../../apps/cli/db/cleanup_stale_in_progress.py)。
 
 ### 手动标记 session 为已提交
 
@@ -529,7 +529,7 @@ pipeline_paused_reason: 'DailyIngestion run 12345: pending_residual_count=2 sess
 
 ## 文件索引
 
-- CLI：[`apps/cli/rollback.py`](../../../apps/cli/rollback.py)、[`apps/cli/commit_session.py`](../../../apps/cli/commit_session.py)、[`apps/cli/cleanup_stale_in_progress.py`](../../../apps/cli/cleanup_stale_in_progress.py)
+- CLI：[`apps/cli/db/rollback.py`](../../../apps/cli/db/rollback.py)、[`apps/cli/db/commit_session.py`](../../../apps/cli/db/commit_session.py)、[`apps/cli/db/cleanup_stale_in_progress.py`](../../../apps/cli/db/cleanup_stale_in_progress.py)
 - 核心辅助函数：[`javdb/storage/db/db.py`](../../../javdb/storage/db/db.py)（`db_stage_history_write`、`db_commit_session_history`、`db_resume_finalizing_session`、`db_rollback_session`、`db_mark_session_committed`、`db_find_in_progress_sessions`、`db_find_stale_pending_sessions`、`db_pending_session_stats`、`_audit_record_movie_change`、`_rollback_history` 等）
 - Phase 3 脚本：[`scripts/aggregate_pending_health.py`](../../../scripts/aggregate_pending_health.py)、[`scripts/pending_mode_alert_and_pause.py`](../../../scripts/pending_mode_alert_and_pause.py) *（ADR-006 PR-D 替代了已退役的 `pending_mode_auto_fallback.py`）*
 - Phase 4 脚本：[`scripts/audit_archive.py`](../../../scripts/audit_archive.py)、[`scripts/cleanup_stale_session_audits.py`](../../../scripts/cleanup_stale_session_audits.py)（自 2026-05-13 起只读）
