@@ -9,8 +9,8 @@ sys.path.insert(0, project_root)
 
 import pytest
 
-from api.parsers.tag_parser import parse_tag_page
-from api.models import TagOption, TagCategory, TagPageResult
+from apps.api.parsers.tag_parser import parse_tag_page
+from apps.api.models import TagOption, TagCategory, TagPageResult
 
 HTML_DIR = os.path.join(project_root, 'html')
 

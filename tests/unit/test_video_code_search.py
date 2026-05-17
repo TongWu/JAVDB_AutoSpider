@@ -11,8 +11,8 @@ sys.path.insert(0, project_root)
 
 import pytest
 
-from api.parsers.index_parser import parse_index_page
-from api.parsers.search_exact import find_exact_entry_first_search_page
+from apps.api.parsers.index_parser import parse_index_page
+from apps.api.parsers.search_exact import find_exact_entry_first_search_page
 
 HTML_DIR = os.path.join(project_root, 'html')
 

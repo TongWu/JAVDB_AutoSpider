@@ -13,7 +13,7 @@ from unittest.mock import patch, MagicMock
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from utils.infra.logging_config import setup_logging, get_logger
+from javdb.infra.logging import setup_logging, get_logger
 from javdb.infra.logging import (
     _CompactConsoleFormatter,
     _LegacyVerboseFormatter,

@@ -13,7 +13,7 @@ from typing import List
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from utils.rclone_helper import (
+from javdb.integrations.rclone.helper import (
     SensorCategory,
     SubtitleCategory,
     FolderInfo,
