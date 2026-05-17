@@ -9,15 +9,15 @@ sys.path.insert(0, project_root)
 
 import pytest
 
-from api.parsers.index_parser import (
+from apps.api.parsers.index_parser import (
     parse_index_page,
     parse_category_page,
     parse_top_page,
     find_exact_video_code_match,
     derive_letter_suffix_fallback_video_code,
 )
-from api.parsers.detail_parser import parse_detail_page
-from api.parsers.common import (
+from apps.api.parsers.detail_parser import parse_detail_page
+from apps.api.parsers.common import (
     extract_rate_and_comments,
     extract_video_code,
     detect_page_type,
@@ -326,7 +326,7 @@ class TestParseDetailPageInline:
         assert detail.magnets == []
 
     def test_actors_panel_na_placeholder(self):
-        from api.models import NO_ACTOR_LISTING_ACTOR_NAME, NO_ACTOR_LISTING_ACTOR_GENDER
+        from apps.api.models import NO_ACTOR_LISTING_ACTOR_NAME, NO_ACTOR_LISTING_ACTOR_GENDER
 
         html = '''
         <html><body>

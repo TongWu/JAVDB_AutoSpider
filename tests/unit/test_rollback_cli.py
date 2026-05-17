@@ -19,7 +19,7 @@ from typing import List
 import pytest
 
 import apps.cli.db.rollback as rollback_cli
-import utils.infra.db as db_mod
+import javdb.storage.db.db as db_mod
 
 
 # ── helpers ──────────────────────────────────────────────────────────────

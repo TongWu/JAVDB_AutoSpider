@@ -932,7 +932,7 @@ def test_current_backend_reflects_env(monkeypatch):
 
 
 def test_use_db_storage_includes_d1_backends(monkeypatch):
-    from javdb.infra import config as config_helper
+    import javdb.infra.config as config_helper
 
     monkeypatch.setattr(config_helper, "storage_mode", lambda: "csv")
     monkeypatch.delenv("_STORAGE_BACKEND_INIT_OVERRIDE", raising=False)

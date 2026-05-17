@@ -1,8 +1,8 @@
 """Deprecated legacy spider entry.
 
 This module is kept for rollback compatibility only.
-All new spider features should be implemented in `scripts/spider/`.
-See `docs/SPIDER_BASELINE_MAPPING.md` for capability mapping.
+All new spider features should be implemented in :mod:`javdb.spider`.
+Moved to ``javdb/legacy/`` by ADR-007 Phase 3 (was ``legacy/_spider_legacy.py``).
 """
 
 import requests
@@ -22,25 +22,29 @@ from bs4.element import Tag
 from urllib.parse import urljoin, urlparse, quote
 from datetime import datetime
 
-# Change to project root directory (parent of scripts folder)
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Change to project root directory.
+# Walk three levels up from this file: javdb/legacy/_spider_legacy.py → javdb/legacy/ → javdb/ → <repo-root>/
+# (Pre-ADR-007 the file lived at <repo-root>/legacy/, hence the original two-level walk.)
+project_root = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
 os.chdir(project_root)
 sys.path.insert(0, project_root)
 
 # Import utility functions
-from utils.history_manager import load_parsed_movies_history, save_parsed_movie_to_history, should_process_movie, \
+from javdb.storage.history_manager import load_parsed_movies_history, save_parsed_movie_to_history, should_process_movie, \
     determine_torrent_types, get_missing_torrent_types, validate_history_file, has_complete_subtitles
-from utils.infra.config_helper import use_sqlite
-from utils.infra.db import db_batch_update_movie_actors
-from utils.parser import parse_index, parse_detail
-from utils.domain.magnet_extractor import extract_magnets
+from javdb.infra.config import use_sqlite
+from javdb.storage.db.db import db_batch_update_movie_actors
+from javdb.spider.parser import parse_index, parse_detail
+from javdb.spider.magnet_extractor import extract_magnets
 
-from api.parsers import parse_index_page as api_parse_index_page
-from api.parsers import parse_detail_page as api_parse_detail_page
-from api.parsers import parse_category_page as api_parse_category_page
-from api.parsers import parse_top_page as api_parse_top_page
-from utils.infra.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
-from utils.infra.path_helper import get_dated_report_path, ensure_dated_dir, get_dated_subdir
+from apps.api.parsers import parse_index_page as api_parse_index_page
+from apps.api.parsers import parse_detail_page as api_parse_detail_page
+from apps.api.parsers import parse_category_page as api_parse_category_page
+from apps.api.parsers import parse_top_page as api_parse_top_page
+from javdb.infra.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
+from javdb.infra.paths import get_dated_report_path, ensure_dated_dir, get_dated_subdir
 
 # Import unified configuration
 try:
@@ -119,13 +123,13 @@ except ImportError:
     INCLUDE_DOWNLOADED_IN_REPORT = False
 
 # Configure logging
-from utils.infra.logging_config import setup_logging, get_logger
+from javdb.infra.logging import setup_logging, get_logger
 setup_logging(SPIDER_LOG_FILE, LOG_LEVEL)
 logger = get_logger(__name__)
 
 # Check Rust components availability and log status
 try:
-    from api.parsers import RUST_PARSERS_AVAILABLE
+    from apps.api.parsers import RUST_PARSERS_AVAILABLE
     if RUST_PARSERS_AVAILABLE:
         logger.debug("✅ Spider using Rust parsers - high-performance HTML parsing enabled")
     else:
@@ -134,7 +138,7 @@ except Exception:
     logger.debug("⚠️  Could not determine parser implementation status")
 
 try:
-    from utils.history_manager import RUST_HISTORY_AVAILABLE
+    from javdb.storage.history_manager import RUST_HISTORY_AVAILABLE
     if RUST_HISTORY_AVAILABLE:
         logger.debug("✅ Spider using Rust history manager - high-performance CSV I/O enabled")
     else:
@@ -143,23 +147,23 @@ except Exception:
     logger.info("⚠️  Could not determine history manager implementation status")
 
 # Import masking utilities
-from utils.domain.masking import mask_ip_address, mask_username, mask_full, mask_proxy_url
-from utils.domain.url_helper import (
+from javdb.infra.masking import mask_ip_address, mask_username, mask_full, mask_proxy_url
+from javdb.spider.url_helper import (
     detect_url_type, extract_url_identifier, has_magnet_filter,
     add_magnet_filter_to_url, sanitize_filename_part,
     extract_url_part_after_javdb,
     get_page_url as _url_helper_get_page_url,
 )
-from utils.infra.csv_writer import merge_row_data, write_csv
-from utils.domain.filename_helper import (
+from javdb.infra.csv_writer import merge_row_data, write_csv
+from javdb.spider.filename_helper import (
     generate_output_csv_name, generate_output_csv_name_from_html,
 )
 
 # Import proxy pool
-from utils.infra.proxy_pool import ProxyPool, create_proxy_pool_from_config
+from javdb.proxy.pool import ProxyPool, create_proxy_pool_from_config
 
 # Import unified request handler
-from utils.infra.request_handler import RequestHandler, RequestConfig, create_request_handler_from_config
+from javdb.infra.request import RequestHandler, RequestConfig, create_request_handler_from_config
 
 class MovieSleepManager:
     """Randomised movie sleep with adaptive throttling.

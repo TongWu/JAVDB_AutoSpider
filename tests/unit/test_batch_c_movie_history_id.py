@@ -22,7 +22,7 @@ project_root = os.path.dirname(
 )
 sys.path.insert(0, project_root)
 
-import utils.infra.db as db_mod
+import javdb.storage.db.db as db_mod
 from javdb.storage.db.db import (
     _generate_integer_id,
     _INT_ID_EPOCH_BASE_MS,

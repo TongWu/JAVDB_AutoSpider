@@ -13,7 +13,7 @@ from unittest.mock import patch
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from utils.infra.path_helper import (
+from javdb.infra.paths import (
     atomic_write,
     get_dated_subdir,
     get_dated_report_path,

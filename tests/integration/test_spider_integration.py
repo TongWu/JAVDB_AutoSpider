@@ -23,19 +23,19 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from scripts.spider.fetch.fetch_engine import (
+from javdb.spider.fetch.fetch_engine import (
     _EngineWorker, EngineTask, EngineResult, WorkerContext, LoginRequired,
     FetchEngine,
 )
-from scripts.spider.fetch.login_coordinator import (
+from javdb.spider.fetch.login_coordinator import (
     LoginCoordinator, requeue_front, use_login_queue_priority,
     should_delegate_login_task,
 )
-from scripts.spider.runtime.sleep import (
+from javdb.spider.runtime.sleep import (
     MovieSleepManager, PenaltyTracker, DualWindowThrottle,
     COMPOSITE_MULTIPLIER_CAP, ABSOLUTE_MAX_SLEEP,
 )
-import scripts.spider.runtime.state as state
+import javdb.spider.runtime.state as state
 
 
 # ---------------------------------------------------------------------------
@@ -126,9 +126,9 @@ def create_workers(
         def process_fn(ctx, task):
             return {'parsed': True}
 
-    with patch('scripts.spider.fetch.fetch_engine.RequestHandler', side_effect=_make_handler_stub), \
-         patch('scripts.spider.fetch.fetch_engine.create_proxy_pool_from_config', return_value=MagicMock()), \
-         patch('scripts.spider.fetch.fetch_engine.LOGIN_PROXY_NAME', None):
+    with patch('javdb.spider.fetch.fetch_engine.RequestHandler', side_effect=_make_handler_stub), \
+         patch('javdb.spider.fetch.fetch_engine.create_proxy_pool_from_config', return_value=MagicMock()), \
+         patch('javdb.spider.fetch.fetch_engine.LOGIN_PROXY_NAME', None):
         for idx, name in enumerate(proxy_names):
             cfg = {"name": name, "http": f"http://10.0.0.{idx + 1}:8080"}
             w = _EngineWorker(
@@ -168,7 +168,7 @@ class TestIndexRequiresLogin:
     def test_index_login_detection_triggers_attempt(self):
         """When the index page is a login page, is_login_page returns True
         and the spider can trigger attempt_login_refresh."""
-        from scripts.spider.fetch.session import is_login_page
+        from javdb.spider.fetch.session import is_login_page
 
         assert is_login_page(LOGIN_PAGE_HTML) is True
 
@@ -200,7 +200,7 @@ class TestIndexRequiresLogin:
             new_cookie = "freshly_baked_session_cookie"
 
             with patch(
-                "scripts.spider.fetch.login_coordinator.attempt_login_refresh",
+                "javdb.spider.fetch.login_coordinator.attempt_login_refresh",
                 return_value=(True, new_cookie, "ARM-1"),
             ):
                 success, cookie, _ = coord._do_login_for_proxy(
@@ -408,10 +408,10 @@ class TestCookieRevocationAndFailover:
             )
 
             with patch(
-                "scripts.spider.fetch.login_coordinator.attempt_login_refresh",
+                "javdb.spider.fetch.login_coordinator.attempt_login_refresh",
                 return_value=(True, new_cookie, "ARM-1"),
             ) as mock_login, patch(
-                "scripts.spider.fetch.login_coordinator.verify_login_via_fixed_pages",
+                "javdb.spider.fetch.login_coordinator.verify_login_via_fixed_pages",
                 return_value=True,
             ) as mock_verify:
                 coord.handle_login_required(
@@ -450,10 +450,10 @@ class TestCookieRevocationAndFailover:
             )
 
             with patch(
-                "scripts.spider.fetch.login_coordinator.attempt_login_refresh",
+                "javdb.spider.fetch.login_coordinator.attempt_login_refresh",
                 return_value=(True, new_cookie, "ARM-2"),
             ), patch(
-                "scripts.spider.fetch.login_coordinator.verify_login_via_fixed_pages",
+                "javdb.spider.fetch.login_coordinator.verify_login_via_fixed_pages",
                 return_value=True,
             ) as mock_verify:
                 coord.handle_login_required(
@@ -523,10 +523,10 @@ class TestCookieRevocationAndFailover:
             ])
 
             with patch(
-                "scripts.spider.fetch.login_coordinator.attempt_login_refresh",
+                "javdb.spider.fetch.login_coordinator.attempt_login_refresh",
                 side_effect=lambda *a, **kw: next(login_responses),
             ), patch(
-                "scripts.spider.fetch.login_coordinator.verify_login_via_fixed_pages",
+                "javdb.spider.fetch.login_coordinator.verify_login_via_fixed_pages",
                 return_value=True,
             ) as mock_verify:
                 for stale_round in range(3):
@@ -567,10 +567,10 @@ class TestCookieRevocationAndFailover:
             )
 
             with patch(
-                "scripts.spider.fetch.login_coordinator.attempt_login_refresh",
+                "javdb.spider.fetch.login_coordinator.attempt_login_refresh",
                 return_value=(True, new_cookie, "ARM-1"),
             ), patch(
-                "scripts.spider.fetch.login_coordinator.verify_login_via_fixed_pages",
+                "javdb.spider.fetch.login_coordinator.verify_login_via_fixed_pages",
                 return_value=True,
             ) as mock_verify:
                 coord.handle_login_required(

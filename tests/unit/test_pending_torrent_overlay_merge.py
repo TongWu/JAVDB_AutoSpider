@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import pytest
 
-import utils.infra.db as db_mod
+import javdb.storage.db.db as db_mod
 
 
 @pytest.fixture

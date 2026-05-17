@@ -190,7 +190,7 @@ class TestDryRunNoOp:
     ):
         # Build a real local sqlite mirror with one MovieHistory row that
         # we'll verify is preserved across the dry-run.
-        import utils.infra.db as db_mod
+        import javdb.storage.db.db as db_mod
         sid = db_mod.db_create_report_session(
             report_type="DailyReport",
             report_date="2026-05-08",

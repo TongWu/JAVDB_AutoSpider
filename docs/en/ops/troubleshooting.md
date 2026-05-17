@@ -157,7 +157,7 @@ For detailed login troubleshooting and manual cookie extraction, see the [JavDB 
 **History format issues**
 - The system automatically migrates old formats. If issues persist, run:
   ```bash
-  python3 packages/python/javdb_migrations/tools/update_history_format.py
+  python3 javdb/migrations/tools/update_history_format.py
   ```
 - See [migration-scripts.md](migration-scripts.md) for all available migration tools.
 

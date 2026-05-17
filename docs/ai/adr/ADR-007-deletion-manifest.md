@@ -8,42 +8,42 @@ This manifest is the contract for Phase 3. Every item listed here MUST be remove
 
 ## Directories to delete (recursive)
 
-- [ ] `utils/`
-- [ ] `api/`
-- [ ] `migration/`
-- [ ] `legacy/`
-- [ ] `scripts/spider/`
-- [ ] `scripts/ingestion/`
+- [x] `utils/`
+- [x] `api/`
+- [x] `migration/`
+- [x] `legacy/`
+- [x] `scripts/spider/`
+- [x] `scripts/ingestion/`
 
 ## Root files to delete
 
-- [ ] `compat.py`
-- [ ] `pipeline.py`
+- [x] `compat.py`
+- [x] `pipeline.py`
 
 ## scripts/ shell files to delete (canonical lives under apps/cli/)
 
-- [ ] `scripts/_spider_legacy.py`
-- [ ] `scripts/login.py`
-- [ ] `scripts/pikpak_bridge.py`
-- [ ] `scripts/qb_uploader.py`
-- [ ] `scripts/qb_file_filter.py`
-- [ ] `scripts/rclone_manager.py`
-- [ ] `scripts/email_notification.py`
-- [ ] `scripts/health_check.py`
-- [ ] `scripts/fetch_page.py`
+- [x] `scripts/_spider_legacy.py`
+- [x] `scripts/login.py`
+- [x] `scripts/pikpak_bridge.py`
+- [x] `scripts/qb_uploader.py`
+- [x] `scripts/qb_file_filter.py`
+- [x] `scripts/rclone_manager.py`
+- [x] `scripts/email_notification.py`
+- [x] `scripts/health_check.py`
+- [x] `scripts/fetch_page.py`
 
 > Note: `scripts/audit_archive.py`, `scripts/aggregate_pending_health.py`, `scripts/pending_mode_alert_and_pause.py`, `scripts/sync_d1_to_sqlite.py`, `scripts/cleanup_stale_session_audits.py`, `scripts/dump_openapi.py`, `scripts/check_bake_metrics.py`, `scripts/profile_hot_paths.py`, `scripts/rclone_{cleanup_empty_dirs,flatten_by_size,group_jav,rename_jav,update_nfo_titles}.py` are MOVED to `apps/cli/` in Phase 2, not deleted here.
 
 ## Dockerfile lines to delete
 
-- [ ] `docker/Dockerfile:54` — `COPY api/ ./api/`
-- [ ] `docker/Dockerfile:55` — `COPY legacy/ ./legacy/`
-- [ ] `docker/Dockerfile:56` — `COPY migration/ ./migration/`
-- [ ] `docker/Dockerfile:57` — `COPY utils/ ./utils/`
-- [ ] `docker/Dockerfile.api:45` — `COPY api/ ./api/`
-- [ ] `docker/Dockerfile.api:46` — `COPY legacy/ ./legacy/`
-- [ ] `docker/Dockerfile.api:47` — `COPY migration/ ./migration/`
-- [ ] `docker/Dockerfile.api:48` — `COPY utils/ ./utils/`
+- [x] `docker/Dockerfile:54` — `COPY api/ ./api/`
+- [x] `docker/Dockerfile:55` — `COPY legacy/ ./legacy/`
+- [x] `docker/Dockerfile:56` — `COPY migration/ ./migration/`
+- [x] `docker/Dockerfile:57` — `COPY utils/ ./utils/`
+- [x] `docker/Dockerfile.api:45` — `COPY api/ ./api/`
+- [x] `docker/Dockerfile.api:46` — `COPY legacy/ ./legacy/`
+- [x] `docker/Dockerfile.api:47` — `COPY migration/ ./migration/`
+- [x] `docker/Dockerfile.api:48` — `COPY utils/ ./utils/`
 
 ## Test imports to rewrite
 
@@ -121,20 +121,20 @@ This manifest is the contract for Phase 3. Every item listed here MUST be remove
 
 ## Self-references to rewrite in `javdb/migrations/migrate_to_current.py`
 
-- [ ] Line 166: `from migration.tools.migrate_v6_to_v7_split import _normalize_three_dbs` → `from javdb.migrations.tools.migrate_v6_to_v7_split import _normalize_three_dbs`
-- [ ] Line 167: `from migration.tools.align_inventory_with_moviehistory import run_alignment` → `from javdb.migrations.tools.align_inventory_with_moviehistory import run_alignment`
-- [ ] Line 168: `from migration.tools.migrate_v7_to_v8 import (...)` → `from javdb.migrations.tools.migrate_v7_to_v8 import (...)`
+- [x] Line 166: `from migration.tools.migrate_v6_to_v7_split import _normalize_three_dbs` → `from javdb.migrations.tools.migrate_v6_to_v7_split import _normalize_three_dbs`
+- [x] Line 167: `from migration.tools.align_inventory_with_moviehistory import run_alignment` → `from javdb.migrations.tools.align_inventory_with_moviehistory import run_alignment`
+- [x] Line 168: `from migration.tools.migrate_v7_to_v8 import (...)` → `from javdb.migrations.tools.migrate_v7_to_v8 import (...)`
 
 ## Verification grep commands (Phase 3 must produce empty output)
 
-- [ ] `grep -rE "from (utils|api|migration|legacy)\." . --include='*.py' | grep -v __pycache__ | grep -v "docs/ai/architecture/audit-report-"` returns empty
-- [ ] `grep -rE "from scripts\.(spider|ingestion|_spider_legacy)" . --include='*.py' | grep -v __pycache__` returns empty
-- [ ] `grep -rE "packages\.python\.javdb_" . --include='*.py' | grep -v __pycache__` returns empty
-- [ ] `grep -rEn '"utils\.|"scripts\.(spider|ingestion)\.' . --include='*.py' | grep -v __pycache__` returns empty (string-form module paths for dynamic loading)
-- [ ] `ls utils/ api/ migration/ legacy/ scripts/spider/ scripts/ingestion/ 2>&1 | grep -c "No such"` returns `6`
-- [ ] `python3 -c "import compat"` raises `ModuleNotFoundError`
-- [ ] `python3 -c "import pipeline"` raises `ModuleNotFoundError`
-- [ ] `docker build -f docker/Dockerfile .` (dry build) succeeds
+- [x] `grep -rE "from (utils|api|migration|legacy)\." . --include='*.py' | grep -v __pycache__ | grep -v "docs/ai/architecture/audit-report-"` returns empty
+- [x] `grep -rE "from scripts\.(spider|ingestion|_spider_legacy)" . --include='*.py' | grep -v __pycache__` returns empty
+- [x] `grep -rE "packages\.python\.javdb_" . --include='*.py' | grep -v __pycache__` returns empty
+- [x] `grep -rEn '"utils\.|"scripts\.(spider|ingestion)\.' . --include='*.py' | grep -v __pycache__` returns empty (string-form module paths for dynamic loading)
+- [x] `ls utils/ api/ migration/ legacy/ scripts/spider/ scripts/ingestion/ 2>&1 | grep -c "No such"` returns `6`
+- [x] `python3 -c "import compat"` raises `ModuleNotFoundError`
+- [x] `python3 -c "import pipeline"` raises `ModuleNotFoundError`
+- [x] `docker build -f docker/Dockerfile .` (dry build) succeeds
 
 ---
 
