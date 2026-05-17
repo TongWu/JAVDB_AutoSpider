@@ -13,7 +13,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 sys.path.insert(0, project_root)
 
 # Import functions from email_notification script
-import scripts.email_notification as email_notification
+import apps.cli.notify.email as email_notification
 from scripts.email_notification import (
     analyze_spider_log,
     analyze_uploader_log,
@@ -592,7 +592,7 @@ class TestExtractDedupStatistics:
 
     def test_extract_dedup_statistics_filters_items_to_executor_window(self, temp_dir, monkeypatch):
         import javdb.infra.config as config_helper
-        import scripts.email_notification as email_notification
+        import apps.cli.notify.email as email_notification
 
         monkeypatch.setattr(config_helper, 'use_sqlite', lambda: False)
 

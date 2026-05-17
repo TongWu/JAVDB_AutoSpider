@@ -1,4 +1,4 @@
-from apps.cli import commit_session, rollback
+from apps.cli.db import commit_session, rollback
 
 
 class _Args:

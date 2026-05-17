@@ -127,7 +127,7 @@ class TestFindInProgressSessions:
 
 class TestRollbackCliTargetResolution:
     def test_session_id_only_skips_in_progress_lookup(self, monkeypatch):
-        from apps.cli import rollback as rollback_cli
+        from apps.cli.db import rollback as rollback_cli
 
         def fail_lookup(*_args, **_kwargs):
             raise AssertionError("lookup should not run for --session-id alone")
@@ -146,7 +146,7 @@ class TestRollbackCliTargetResolution:
         assert rollback_cli._resolve_target_sessions(args, None) == [42]
 
     def test_window_scan_requires_include_orphaned(self, monkeypatch):
-        from apps.cli import rollback as rollback_cli
+        from apps.cli.db import rollback as rollback_cli
 
         def fail_lookup(*_args, **_kwargs):
             raise AssertionError(
@@ -170,7 +170,7 @@ class TestRollbackCliTargetResolution:
         ) == [42]
 
     def test_include_orphaned_unions_window_sessions(self, monkeypatch):
-        from apps.cli import rollback as rollback_cli
+        from apps.cli.db import rollback as rollback_cli
 
         captured = {}
 
@@ -195,7 +195,7 @@ class TestRollbackCliTargetResolution:
         assert captured["since"] == "2026-05-04 19:30:00"
 
     def test_run_id_resolution_unions_with_session_id(self, monkeypatch):
-        from apps.cli import rollback as rollback_cli
+        from apps.cli.db import rollback as rollback_cli
 
         monkeypatch.setattr(
             rollback_cli,
@@ -235,7 +235,7 @@ class TestRollbackCliTargetResolution:
         ``raise_on_error=True`` so its main() try/except still catches
         the failure and returns 3.
         """
-        from apps.cli import rollback as rollback_cli
+        from apps.cli.db import rollback as rollback_cli
 
         monkeypatch.setattr(rollback_cli, "init_db", lambda: None)
         monkeypatch.setattr(rollback_cli, "close_db", lambda: None)
@@ -256,7 +256,7 @@ class TestRollbackCliTargetResolution:
         )
 
     def test_main_continues_after_refused_session(self, monkeypatch):
-        from apps.cli import rollback as rollback_cli
+        from apps.cli.db import rollback as rollback_cli
 
         calls = []
         closed = []

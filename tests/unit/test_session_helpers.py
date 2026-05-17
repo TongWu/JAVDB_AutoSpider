@@ -23,7 +23,7 @@ from typing import Any, Dict
 
 import pytest
 
-from apps.cli import _session_helpers as helpers
+from apps.cli.db import _session_helpers as helpers
 
 
 # ── normalize_run_started_at ───────────────────────────────────────────

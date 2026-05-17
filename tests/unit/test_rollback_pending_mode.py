@@ -959,7 +959,7 @@ class TestCommitSessionCLIDrainsPending:
         # the test's pending_session_verify record into the tmp dir
         # rather than the git-tracked reports/D1/d1_drift.jsonl.
         monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
-        from apps.cli import commit_session as cs_mod
+        from apps.cli.db import commit_session as cs_mod
 
         sid = db_mod.db_create_report_session(
             report_type="DailyReport",

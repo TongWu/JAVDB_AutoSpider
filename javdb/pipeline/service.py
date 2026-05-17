@@ -247,10 +247,10 @@ def extract_session_id_from_output(output):
 
 def main():
     spider_cmd = ['python3', '-u', '-m', 'apps.cli.spider']
-    uploader_cmd = ['python3', '-u', '-m', 'apps.cli.qb_uploader']
-    pikpak_cmd = ['python3', '-u', '-m', 'apps.cli.pikpak_bridge']
-    rclone_cmd = ['python3', '-u', '-m', 'apps.cli.rclone_manager']
-    email_cmd = ['python3', '-u', '-m', 'apps.cli.email_notification']
+    uploader_cmd = ['python3', '-u', '-m', 'apps.cli.qb.uploader']
+    pikpak_cmd = ['python3', '-u', '-m', 'apps.cli.pikpak.bridge']
+    rclone_cmd = ['python3', '-u', '-m', 'apps.cli.rclone.manager']
+    email_cmd = ['python3', '-u', '-m', 'apps.cli.notify.email']
 
     args = parse_arguments()
     proxy_override = resolve_proxy_override(args.use_proxy, args.no_proxy)
