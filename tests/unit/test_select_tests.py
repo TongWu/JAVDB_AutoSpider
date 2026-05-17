@@ -35,12 +35,16 @@ def test_api_service_change_selects_api_and_gateway_tests():
     assert "tests/integration/test_spider_gateway.py" in result.pytest_targets
 
 
-def test_legacy_wrapper_change_uses_import_graph():
-    result = select("scripts/rclone_manager.py")
+def test_canonical_cli_change_uses_import_graph():
+    """A change to one of the canonical apps/cli/ entrypoints should walk the
+    import graph and surface the corresponding tests via reverse-deps, not
+    just through IMPACT_RULES. ``apps/cli/rclone/manager.py`` (post-ADR-007
+    canonical path) replaces the legacy ``scripts/rclone_manager.py`` probe."""
+    result = select("apps/cli/rclone/manager.py")
 
     assert result.run_full_python is False
     assert "tests/unit/test_rclone_manager.py" in result.pytest_targets
-    assert any("scripts.rclone_manager impacts" in reason for reason in result.reason)
+    assert any("apps.cli.rclone.manager impacts" in reason for reason in result.reason)
 
 
 def test_rust_scraper_change_runs_rust_wheel_fallback_and_parser_tests():
