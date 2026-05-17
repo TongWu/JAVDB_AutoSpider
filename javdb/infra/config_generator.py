@@ -430,6 +430,25 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         ('DEDUP_CSV', 'DEDUP_CSV', get_env, 'dedup.csv', 'DEDUP CONFIGURATION'),
         ('DEDUP_DIR', 'DEDUP_DIR', get_env, 'reports/Dedup', 'DEDUP CONFIGURATION'),
         ('DEDUP_LOG_FILE', 'DEDUP_LOG_FILE', get_env, 'logs/rclone_dedup.log', 'DEDUP CONFIGURATION'),
+        # API Console / Backend Service Configuration
+        # These fields are registered here so /api/config/meta knows their types
+        # and load_runtime_config() can surface them in GET /api/config responses.
+        # Adding them to CONFIG_MAP is now SAFE because run_config_generator() is
+        # no longer called from the API write paths (update_config_payload /
+        # set_javdb_session_cookie) — config.py is never auto-rewritten by API
+        # calls, so these entries cannot cascade-delete user fields.
+        ('INGESTION_MODE', 'INGESTION_MODE', get_env, 'local', 'API CONSOLE / BACKEND'),
+        ('API_SECRET_KEY', 'API_SECRET_KEY', get_env, '', 'API CONSOLE / BACKEND'),
+        ('ADMIN_USERNAME', 'ADMIN_USERNAME', get_env, 'admin', 'API CONSOLE / BACKEND'),
+        ('ADMIN_PASSWORD', 'ADMIN_PASSWORD', get_env, 'changeme', 'API CONSOLE / BACKEND'),
+        ('ADMIN_PASSWORD_HASH', 'ADMIN_PASSWORD_HASH', get_env, '', 'API CONSOLE / BACKEND'),
+        ('READONLY_USERNAME', 'READONLY_USERNAME', get_env, 'readonly', 'API CONSOLE / BACKEND'),
+        ('READONLY_PASSWORD', 'READONLY_PASSWORD', get_env, '', 'API CONSOLE / BACKEND'),
+        ('READONLY_PASSWORD_HASH', 'READONLY_PASSWORD_HASH', get_env, '', 'API CONSOLE / BACKEND'),
+        ('GH_ACTIONS_TIER', 'GH_ACTIONS_TIER', get_env, 'none', 'API CONSOLE / BACKEND'),
+        ('GH_ACTIONS_REPO', 'GH_ACTIONS_REPO', get_env, '', 'API CONSOLE / BACKEND'),
+        ('GH_ACTIONS_TOKEN', 'GH_ACTIONS_TOKEN', get_env, '', 'API CONSOLE / BACKEND'),
+        ('COOKIE_SECURE', 'COOKIE_SECURE', get_env_bool, True, 'API CONSOLE / BACKEND'),
     ]
 
 
