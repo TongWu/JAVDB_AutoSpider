@@ -15,7 +15,7 @@
 > spider). All `cd JAVDB_AutoSpider_Proxycoordinator` steps in this document
 > assume you have already `git clone`d that repo to any local directory. The
 > Python client
-> ([`packages/python/javdb_platform/proxy_coordinator_client.py`](../../packages/python/javdb_platform/proxy_coordinator_client.py))
+> ([`javdb/proxy/coordinator/proxy_coordinator_client.py`](../../javdb/proxy/coordinator/proxy_coordinator_client.py))
 > remains in this repository; the two sides are decoupled via HTTP + token.
 
 ---
@@ -100,7 +100,7 @@
 
 Currently, inside each GH Actions runner process, every worker has its own
 human-like sleep + three-window throttling
-(`packages/python/javdb_spider/runtime/sleep.py`). But this is **process-local**:
+(`javdb/spider/runtime/sleep.py`). But this is **process-local**:
 when two GH Actions runs execute concurrently (sharing the same
 `PROXY_POOL_JSON`), they unknowingly send requests through the same physical
 proxy at the same time, breaking the human-like interval.
@@ -406,7 +406,7 @@ string**, otherwise the same physical proxy will be routed to different DO
 instances, completely defeating mutual exclusion (and **with no error**).
 
 The Python client's normalization rules (see `_normalize_proxy_id()` in
-[`packages/python/javdb_platform/proxy_coordinator_client.py`](../../packages/python/javdb_platform/proxy_coordinator_client.py)):
+[`javdb/proxy/coordinator/proxy_coordinator_client.py`](../../javdb/proxy/coordinator/proxy_coordinator_client.py)):
 
 1. Prefer the `name` field from `PROXY_POOL_JSON` (trimmed, truncated to 256 characters)
 2. Without a `name`, fall back to `proxy-<sha1(host:port)[:16]>`
@@ -574,7 +574,7 @@ re-logs in).
 ### 13.4 Python-Side Configuration
 
 No new environment variables are needed.
-`packages/python/javdb_platform/login_state_client.py` reuses
+`javdb/storage/login_state_client.py` reuses
 `PROXY_COORDINATOR_URL` / `PROXY_COORDINATOR_TOKEN`; `setup_proxy_pool` also
 calls `setup_login_state_client`, and when unconfigured or `/health` fails, it
 silently fails open, degrading to the old "per-runner independent login"
