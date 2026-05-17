@@ -25,6 +25,22 @@
 
   Path rename only — Repo class semantics, D1–D10 gate logic, and the 30-day bake dependency on ADR-006 are unchanged. ADR-007's deletion manifest ensures no unfinished work references the legacy paths.
 
+- **2026-05-17 amendment 2**: **Repo signature pattern + naming alignment with code already shipped.** When PR-1 was about to start, an inspection of `javdb/storage/repos/` revealed two legitimate Repo patterns already coexisting in the codebase, each appropriate for its access shape:
+
+  | Class | File | Signature | Why this shape |
+  |---|---|---|---|
+  | `SessionsRepo` | `javdb/storage/repos/sessions_repo.py` | `__init__(conn)`; methods take `session_id` per call | API-layer **read** surface — the FastAPI request context already holds an open conn; reads are short, no transaction boundary |
+  | `SystemStateRepo` | `javdb/storage/repos/system_state_repo.py` | `__init__(conn)`; methods take `key` per call | Same as above — KV reads/writes in a single API call |
+
+  PR-1's three new Repos (`HistoryRepo`, `OperationsRepo`, `StatsRepo`) wrap the **write-mostly function family** in `javdb/storage/db/*.py` (`db_load_history`, `db_stage_history_write`, `db_save_spider_stats`, etc.) — those functions all take a `db_path: Optional[str] = None` and open their own conn for transactional safety, *not* a caller-supplied conn. Forcing them onto the SessionsRepo pattern would require either (a) inlining their SQL into the Repo body (no longer "thin delegate", real risk of bake interference) or (b) breaking each function family's `with get_db(...) as conn:` transaction boundary (correctness risk).
+
+  Decisions:
+
+  1. **Write-Repo signature**: `HistoryRepo`, `OperationsRepo`, `StatsRepo` use `__init__(*, db_path: Optional[str] = None)`; methods take `session_id` per call. The Repo carries no per-call state — it's a typed surface over the existing function family. The original D5 "(conn, session_id=None) constructor" wording is superseded for these three classes; D5's actual goal (eliminate the `db_session._active` thread-local global) is satisfied either way, because `session_id` still flows explicitly through every method that needs it.
+  2. **`ReportsRepo` is subsumed by the already-shipped `SessionsRepo`** — D6's planned name was a draft; the implementation correctly named it after its single table (`ReportSessions`). Adding a second class for the same concern would create duplicate test surface and confuse callers. No rename is needed; `SessionsRepo` *is* the "ReportsRepo" of D6.
+
+  D6's four-class plan becomes three new write-Repo classes + reuse of `SessionsRepo`. All other D-level decisions are unchanged.
+
 ---
 
 ## D10 Gate Check Results (2026-05-16)

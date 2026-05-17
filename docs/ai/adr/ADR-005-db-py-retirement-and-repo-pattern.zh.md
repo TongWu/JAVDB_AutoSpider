@@ -25,6 +25,22 @@
 
   纯路径重命名——Repo class 语义、D1–D10 gate 逻辑、对 ADR-006 的 30 天 bake 依赖都不变。ADR-007 的 deletion manifest 保证未完成的工作不再引用 legacy 路径。
 
+- **2026-05-17 amendment 2**：**Repo 签名模式 + 命名对齐已落地代码。** PR-1 启动前核查 `javdb/storage/repos/`，发现两套合法的 Repo 模式已共存，各自匹配自己的访问形态：
+
+  | 类 | 文件 | 签名 | 为什么是这个形态 |
+  |---|---|---|---|
+  | `SessionsRepo` | `javdb/storage/repos/sessions_repo.py` | `__init__(conn)`；方法层接 `session_id` | API 层**读** surface——FastAPI 请求上下文持有 open conn；读操作短、无事务边界 |
+  | `SystemStateRepo` | `javdb/storage/repos/system_state_repo.py` | `__init__(conn)`；方法层接 `key` | 同上——单次 API 调用内的 KV 读写 |
+
+  PR-1 三个新 Repo（`HistoryRepo` / `OperationsRepo` / `StatsRepo`）要包的是 `javdb/storage/db/*.py` 下的**写域函数族**（`db_load_history` / `db_stage_history_write` / `db_save_spider_stats` 等）——这些函数都接 `db_path: Optional[str] = None`，自己 open conn 以保证事务安全，**不**接 caller 提供的 conn。强行套用 SessionsRepo 模式会要么 (a) 把 SQL inline 进 Repo 体（不再是"thin delegate"，bake 干扰风险升高），要么 (b) 打破每个函数族内部的 `with get_db(...) as conn:` 事务边界（正确性风险）。
+
+  决策：
+
+  1. **写域 Repo 签名**：`HistoryRepo` / `OperationsRepo` / `StatsRepo` 用 `__init__(*, db_path: Optional[str] = None)`；方法层接 `session_id`。Repo 不持有 per-call 状态——它是已有函数族的类型化 surface。D5 原"(conn, session_id=None) 构造"措辞对这三个类失效；D5 的真实目标（消灭 `db_session._active` 线程本地全局态）仍然满足，因为每个需要 session 的方法都显式接 `session_id`。
+  2. **`ReportsRepo` 由已落地的 `SessionsRepo` 覆盖**——D6 的命名是草稿，实现按其唯一一张表（`ReportSessions`）命名更准确。为同一职责再加一个类会造成测试面重叠 + caller 困惑。**无需重命名**：`SessionsRepo` 就是 D6 里的 ReportsRepo。
+
+  D6 的"四类"计划变为"三个新写域 Repo 类 + 复用 SessionsRepo"。其余 D 级决策不变。
+
 ---
 
 ## D10 Gate 核查结果（2026-05-16）
