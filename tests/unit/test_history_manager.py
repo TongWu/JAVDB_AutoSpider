@@ -24,7 +24,7 @@ from javdb.storage.history_manager import (
     check_torrent_in_history,
     is_downloaded_torrent,
 )
-import utils.infra.db as db_mod
+import javdb.storage.db.db as db_mod
 
 
 def _seed_history_sqlite(records):

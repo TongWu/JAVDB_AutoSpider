@@ -617,7 +617,7 @@ _REPORTS_DDL = _SCHEMA_VERSION_DDL + """
 -- application via :func:`_generate_session_id`.  TEXT (rather than INTEGER)
 -- so the id round-trips losslessly through Cloudflare D1's JSON layer,
 -- whose IEEE-754 Number representation truncates integers > 2**53 - 1
--- (2026-05-13 — see migration/d1/2026_05_13_session_id_to_text.sql).
+-- (2026-05-13 — see javdb/migrations/d1/2026_05_13_session_id_to_text.sql).
 -- AUTOINCREMENT was retired on 2026-05-08 to fix sqlite-vs-D1 lastrowid
 -- drift under STORAGE_BACKEND=dual.
 --

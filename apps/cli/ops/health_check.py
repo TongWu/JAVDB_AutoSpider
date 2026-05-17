@@ -13,9 +13,10 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from compat import alias_module
+import importlib
 
-_module = alias_module(__name__, "javdb.infra.health_check")
+_module = importlib.import_module("javdb.infra.health_check")
+sys.modules[__name__] = _module
 
 if __name__ == "__main__":
     raise SystemExit(_module.main())

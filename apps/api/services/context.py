@@ -4,13 +4,18 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 from pathlib import Path
 from typing import Any, Callable, Dict
 
 from dotenv import load_dotenv
 
-from compat import activate_repo_root
-from javdb.infra.config_generator import (
+REPO_ROOT = Path(__file__).resolve().parents[3]
+os.chdir(REPO_ROOT)
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from javdb.infra.config_generator import (  # noqa: E402
     get_config_map,
     get_env_bool,
     get_env_float,
@@ -19,8 +24,6 @@ from javdb.infra.config_generator import (
     get_env_range_max,
     get_env_range_min,
 )
-
-REPO_ROOT = Path(activate_repo_root())
 logger = logging.getLogger("apps.api")
 
 load_dotenv(REPO_ROOT / ".env")

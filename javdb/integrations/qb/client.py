@@ -41,7 +41,7 @@ logger = get_logger(__name__)
 # itself, qb_uploader and qb_file_filter) all share the same URL-fallback
 # state machine. The helpers take ``requester``/``get``/``post`` callables
 # as dependencies, which keeps consumers' mocking surface (e.g. patching
-# ``scripts.qb_uploader.requests.get``) intact and avoids forcing every
+# ``apps.cli.qb.uploader.requests.get``) intact and avoids forcing every
 # caller into the class API.
 # ---------------------------------------------------------------------------
 

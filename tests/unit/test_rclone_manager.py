@@ -9,7 +9,7 @@ from unittest.mock import patch, MagicMock
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from scripts.rclone_manager import (
+from apps.cli.rclone.manager import (
     parse_arguments,
     parse_root_path,
     resolve_rclone_root,
@@ -144,7 +144,7 @@ def test_scan_inventory_counts_process_year_none_as_error(monkeypatch):
 
 def test_scan_csv_temp_removed_on_scan_failure(monkeypatch, tmp_path):
     import apps.cli.rclone.manager as rm
-    from javdb.infra import config as config_helper
+    import javdb.infra.config as config_helper
 
     output = tmp_path / "inventory.csv"
     row = {field: "" for field in INVENTORY_FIELDNAMES}
@@ -187,7 +187,7 @@ def test_scan_sqlite_uses_staging_when_no_active_session(
     monkeypatch, tmp_path, storage_mode_db
 ):
     import apps.cli.rclone.manager as rm
-    from javdb.infra import db as db_mod
+    import javdb.storage.db.db as db_mod
 
     output = tmp_path / "inventory.csv"
     seed = {
@@ -293,7 +293,7 @@ def test_scan_marks_local_session_committed_after_inventory_swap(
     monkeypatch, tmp_path, storage_mode_db
 ):
     import apps.cli.rclone.manager as rm
-    from javdb.infra import db as db_mod
+    import javdb.storage.db.db as db_mod
 
     output = tmp_path / "inventory.csv"
     incoming = {field: "" for field in INVENTORY_FIELDNAMES}
@@ -338,7 +338,7 @@ def test_scan_year_filter_merges_staging_instead_of_full_swap(
     monkeypatch, tmp_path, storage_mode_db
 ):
     import apps.cli.rclone.manager as rm
-    from javdb.infra import db as db_mod
+    import javdb.storage.db.db as db_mod
 
     output = tmp_path / "inventory.csv"
     incoming = {field: "" for field in INVENTORY_FIELDNAMES}
@@ -392,7 +392,7 @@ def test_scan_does_not_mark_local_session_committed_when_swap_fails(
     monkeypatch, tmp_path, storage_mode_db, caplog
 ):
     import apps.cli.rclone.manager as rm
-    from javdb.infra import db as db_mod
+    import javdb.storage.db.db as db_mod
 
     caplog.set_level("ERROR", logger=rm.logger.name)
     output = tmp_path / "inventory.csv"
@@ -456,7 +456,7 @@ def test_scan_succeeds_when_post_swap_commit_marking_fails(
     monkeypatch, tmp_path, storage_mode_db
 ):
     import apps.cli.rclone.manager as rm
-    from javdb.infra import db as db_mod
+    import javdb.storage.db.db as db_mod
 
     output = tmp_path / "inventory.csv"
     incoming = {field: "" for field in INVENTORY_FIELDNAMES}
@@ -514,7 +514,7 @@ def test_scan_aborts_when_sqlite_staging_init_fails(
     monkeypatch, tmp_path, storage_mode_duo, caplog
 ):
     import apps.cli.rclone.manager as rm
-    from javdb.infra import db as db_mod
+    import javdb.storage.db.db as db_mod
 
     caplog.set_level("ERROR", logger=rm.logger.name)
     output = tmp_path / "inventory.csv"
@@ -622,7 +622,7 @@ class TestResolveRcloneRoot:
 # ============================================================================
 
 class TestLoadInventoryAsFolderStructure:
-    @patch('scripts.rclone_manager.get_configured_drive_name', return_value='gdrive')
+    @patch('apps.cli.rclone.manager.get_configured_drive_name', return_value='gdrive')
     def test_loads_from_csv(self, _mock_dn, tmp_path, storage_mode_csv):
         csv_path = str(tmp_path / 'inventory.csv')
         with open(csv_path, 'w', newline='', encoding='utf-8') as f:
@@ -661,8 +661,8 @@ class TestLoadInventoryAsFolderStructure:
         assert 'DEF-456' in codes
         assert all_folders[0].full_path.startswith('gdrive:')
 
-    @patch('scripts.rclone_manager.get_configured_drive_name', return_value='gdrive')
-    @patch('scripts.rclone_manager.get_configured_root_folder', return_value='root')
+    @patch('apps.cli.rclone.manager.get_configured_drive_name', return_value='gdrive')
+    @patch('apps.cli.rclone.manager.get_configured_root_folder', return_value='root')
     def test_loads_from_db(self, _mock_root, _mock_dn, storage_mode_db):
         from javdb.storage.db.db import db_replace_rclone_inventory
         db_replace_rclone_inventory([
@@ -686,7 +686,7 @@ class TestLoadInventoryAsFolderStructure:
         assert all_folders[0].movie_code == 'DB-001'
         assert all_folders[0].full_path == 'gdrive:root/2025/Actor/DB-001 [有码-中字]'
 
-    @patch('scripts.rclone_manager.get_configured_drive_name', return_value='gdrive')
+    @patch('apps.cli.rclone.manager.get_configured_drive_name', return_value='gdrive')
     def test_db_priority_over_csv(self, _mock_dn, tmp_path, storage_mode_db):
         """When DB has data, CSV should not be loaded even if it exists."""
         from javdb.storage.db.db import db_replace_rclone_inventory
@@ -730,8 +730,8 @@ class TestLoadInventoryAsFolderStructure:
         structure = load_inventory_as_folder_structure(csv_path)
         assert structure == {}
 
-    @patch('scripts.rclone_manager.get_configured_drive_name', return_value='gdrive')
-    @patch('scripts.rclone_manager.get_configured_root_folder', return_value='root')
+    @patch('apps.cli.rclone.manager.get_configured_drive_name', return_value='gdrive')
+    @patch('apps.cli.rclone.manager.get_configured_root_folder', return_value='root')
     def test_loads_new_layout_with_code_dir(self, _mock_root, _mock_dn, tmp_path, storage_mode_csv):
         """New layout: <root>/<year>/<actor>/<movie_code>/<sensor-subtitle>."""
         csv_path = str(tmp_path / 'inventory.csv')
@@ -771,8 +771,8 @@ class TestLoadInventoryAsFolderStructure:
         assert by_code['DEF-456'].actor == 'ActorB'
         assert by_code['DEF-456'].folder_name == '无码流出-无字'
 
-    @patch('scripts.rclone_manager.get_configured_drive_name', return_value='gdrive')
-    @patch('scripts.rclone_manager.get_configured_root_folder', return_value='root')
+    @patch('apps.cli.rclone.manager.get_configured_drive_name', return_value='gdrive')
+    @patch('apps.cli.rclone.manager.get_configured_root_folder', return_value='root')
     def test_folder_info_fields(self, _mock_root, _mock_dn, tmp_path, storage_mode_csv):
         csv_path = str(tmp_path / 'inventory.csv')
         with open(csv_path, 'w', newline='', encoding='utf-8') as f:
@@ -802,8 +802,8 @@ class TestLoadInventoryAsFolderStructure:
         assert fi.file_count == 10
         assert fi.full_path == 'gdrive:root/2024/SomeActor/XYZ-789 [无码流出-无字]'
 
-    @patch('scripts.rclone_manager.get_configured_drive_name', return_value='gdrive')
-    @patch('scripts.rclone_manager.get_configured_root_folder', return_value='root')
+    @patch('apps.cli.rclone.manager.get_configured_drive_name', return_value='gdrive')
+    @patch('apps.cli.rclone.manager.get_configured_root_folder', return_value='root')
     def test_skips_paths_without_4digit_year_segment(
         self, _mock_root, _mock_dn, tmp_path, storage_mode_csv, caplog,
     ):
@@ -902,8 +902,8 @@ class TestIsDeletedUpdate:
 # ============================================================================
 
 class TestExecuteMode:
-    @patch('scripts.rclone_manager.get_configured_drive_name', return_value='gdrive')
-    @patch('utils.rclone_helper.subprocess.run')
+    @patch('apps.cli.rclone.manager.get_configured_drive_name', return_value='gdrive')
+    @patch('javdb.integrations.rclone.helper.subprocess.run')
     def test_dry_run_does_not_update_csv(self, mock_run, _mock_dn, tmp_path):
         mock_run.return_value = MagicMock(returncode=0)
         path = str(tmp_path / 'dedup.csv')
@@ -921,9 +921,9 @@ class TestExecuteMode:
         result = run_execute_from_csv(path)
         assert result == 0
 
-    @patch('scripts.rclone_manager.get_configured_drive_name', return_value='gdrive')
-    @patch('scripts.rclone_manager.export_dedup_history')
-    @patch('utils.rclone_helper.subprocess.run')
+    @patch('apps.cli.rclone.manager.get_configured_drive_name', return_value='gdrive')
+    @patch('apps.cli.rclone.manager.export_dedup_history')
+    @patch('javdb.integrations.rclone.helper.subprocess.run')
     def test_run_execute_live(self, mock_run, mock_export, _mock_dn, tmp_path):
         mock_run.return_value = MagicMock(returncode=0)
         path = str(tmp_path / 'dedup.csv')
@@ -945,8 +945,8 @@ class TestExecuteMode:
         result = run_execute_from_csv(path)
         assert result == 0
 
-    @patch('scripts.rclone_manager.get_configured_drive_name', return_value='')
-    @patch('utils.rclone_helper.subprocess.run')
+    @patch('apps.cli.rclone.manager.get_configured_drive_name', return_value='')
+    @patch('javdb.integrations.rclone.helper.subprocess.run')
     def test_run_execute_refuses_when_no_drive_name(self, mock_run, _mock_dn, tmp_path):
         """Without a remote prefix and without a configured drive name, the
         executor must refuse rather than letting rclone treat the relative
@@ -967,9 +967,9 @@ class TestExecuteMode:
         reloaded = load_dedup_csv(path)
         assert reloaded[0]['is_deleted'] == 'False'
 
-    @patch('scripts.rclone_manager.get_configured_drive_name', return_value='')
-    @patch('scripts.rclone_manager.export_dedup_history')
-    @patch('utils.rclone_helper.subprocess.run')
+    @patch('apps.cli.rclone.manager.get_configured_drive_name', return_value='')
+    @patch('apps.cli.rclone.manager.export_dedup_history')
+    @patch('javdb.integrations.rclone.helper.subprocess.run')
     def test_run_execute_allows_explicit_remote_prefix_without_drive_name(
         self, mock_run, _mock_export, _mock_dn, tmp_path,
     ):
@@ -1026,11 +1026,11 @@ class TestPrependDriveName:
         assert prepend_drive_name('root/folder:name', 'gdrive') == 'gdrive:root/folder:name'
 
     def test_no_drive_name_given(self):
-        with patch('utils.rclone_helper.get_configured_drive_name', return_value='auto'):
+        with patch('javdb.integrations.rclone.helper.get_configured_drive_name', return_value='auto'):
             assert prepend_drive_name('path') == 'auto:path'
 
     def test_no_drive_configured(self):
-        with patch('utils.rclone_helper.get_configured_drive_name', return_value=''):
+        with patch('javdb.integrations.rclone.helper.get_configured_drive_name', return_value=''):
             assert prepend_drive_name('path') == 'path'
 
     def test_empty_path(self):
@@ -1130,7 +1130,7 @@ class TestMigrateStripDriveNames:
 # Path validation & self-healing
 # ============================================================================
 
-from scripts.rclone_manager import (
+from apps.cli.rclone.manager import (
     validate_dedup_records_against_inventory,
     run_validate_inventory,
     ORPHAN_REASON_SUFFIX,

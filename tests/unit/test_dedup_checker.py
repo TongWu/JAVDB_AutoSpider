@@ -25,7 +25,7 @@ from javdb.spider.services.dedup import (
     cleanup_deleted_records,
     _raw_csv_read,
 )
-import utils.infra.db as db_mod
+import javdb.storage.db.db as db_mod
 
 
 # ============================================================================

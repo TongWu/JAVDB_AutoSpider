@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
-from compat import alias_module
+import importlib
+import sys
 
-alias_module(__name__, "apps.api.services.runtime")
+sys.modules[__name__] = importlib.import_module("apps.api.services.runtime")

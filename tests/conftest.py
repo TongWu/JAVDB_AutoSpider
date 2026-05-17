@@ -20,9 +20,9 @@ sys.modules['pikpakapi'] = mock_pikpakapi
 import pytest
 import tempfile
 import shutil
-import utils.infra.db as _db_mod
-import utils.infra.config_helper as _cfg_mod
-import scripts.spider.services.dedup as _dedup_mod
+import javdb.storage.db.db as _db_mod
+import javdb.infra.config as _cfg_mod
+import javdb.spider.services.dedup as _dedup_mod
 import javdb.storage.db.db_connection as _db_conn_mod
 import javdb.storage.db.db_history_read as _db_history_read_mod
 import javdb.storage.db.db_history_write as _db_history_write_mod
