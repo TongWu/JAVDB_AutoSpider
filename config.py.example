@@ -435,18 +435,29 @@ INGESTION_MODE = 'local'
 # (ENVIRONMENT=production) startup fails when this is empty.
 API_SECRET_KEY = ''
 
-# Admin login. Username defaults to 'admin' if blank. Password is
-# REQUIRED in production; in non-production a random ephemeral password
-# is generated and printed to the log when left blank. Alternatively,
-# pre-hash the password with bcrypt and set ADMIN_PASSWORD_HASH directly.
+# Admin login.
+#   ADMIN_USERNAME defaults to 'admin' if blank.
+#   ADMIN_PASSWORD is plaintext — the BE bcrypt-hashes it in memory at
+#   startup and verifies submitted passwords against that hash. You do
+#   NOT need to compute the hash yourself.
+#   In production (ENVIRONMENT=production) startup fails if both are
+#   blank. In non-production, leaving ADMIN_PASSWORD blank generates a
+#   random ephemeral password printed to the BE log.
+# Advanced — pre-hashed alternative: if you'd rather not store the
+# plaintext password in this file (e.g. checked into a private repo),
+# pre-compute a bcrypt hash and set ADMIN_PASSWORD_HASH instead of
+# ADMIN_PASSWORD. The hash wins over the plaintext when both are set:
+#   python3 -c "from passlib.context import CryptContext; \
+#               print(CryptContext(schemes=['bcrypt']).hash('your-password'))"
+# ADMIN_PASSWORD_HASH = '$2b$12$...'
 ADMIN_USERNAME = 'admin'
 ADMIN_PASSWORD = 'changeme'
-ADMIN_PASSWORD_HASH = ''
 
 # Optional readonly login. Leave both blank to disable readonly access.
+# Same plaintext-vs-hash rules as ADMIN_PASSWORD above.
 READONLY_USERNAME = 'readonly'
 READONLY_PASSWORD = ''
-READONLY_PASSWORD_HASH = ''
+# READONLY_PASSWORD_HASH = '$2b$12$...'
 
 # GitHub Actions integration tier:
 #   'none'    - disabled
