@@ -3,11 +3,19 @@
 
 Usage::
 
-    python -m scripts.sync_d1_to_sqlite              # dry-run report
-    python -m scripts.sync_d1_to_sqlite --apply      # upsert D1 into sqlite
-    python -m scripts.sync_d1_to_sqlite --apply --prune-local-only
+    python -m apps.cli.db.sync_d1_to_sqlite              # dry-run report
+    python -m apps.cli.db.sync_d1_to_sqlite --apply      # upsert D1 into sqlite
+    python -m apps.cli.db.sync_d1_to_sqlite --apply --prune-local-only
                                                       # additionally remove
                                                       # local rows not on D1
+    python -m apps.cli.db.sync_d1_to_sqlite --apply --force-overwrite-all
+                                                      # DESTRUCTIVE: drop every
+                                                      # local table, rebuild from
+                                                      # D1's CREATE TABLE DDL,
+                                                      # reload all rows. Aligns
+                                                      # schema (column order, FK
+                                                      # refs, partial indexes)
+                                                      # exactly to D1.
 
 Why this exists
 ---------------
@@ -180,6 +188,22 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         ),
     )
     p.add_argument(
+        "--force-overwrite-all",
+        dest="force_overwrite_all",
+        action="store_true",
+        default=False,
+        help=(
+            "DESTRUCTIVE FULL REBUILD: drop every user table on the "
+            "local sqlite mirror, re-create them from D1's verbatim "
+            "CREATE TABLE / CREATE INDEX DDL, and reload every row. "
+            "Aligns the local mirror's schema (column order, FK "
+            "declarations, partial-index WHERE clauses) and data "
+            "exactly to D1. Requires --apply. Incompatible with "
+            "--prune-local-only. Use this to bring SQLite onto D1's "
+            "schema after a D1-only migration landed."
+        ),
+    )
+    p.add_argument(
         "--logical-names",
         type=str,
         default=None,
@@ -199,7 +223,17 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         default="INFO",
     )
-    return p.parse_args(argv)
+    args = p.parse_args(argv)
+    if args.force_overwrite_all:
+        if args.dry_run:
+            p.error("--force-overwrite-all requires --apply (no dry-run mode)")
+        if args.prune_local_only:
+            p.error(
+                "--force-overwrite-all cannot be combined with "
+                "--prune-local-only (the rebuild already discards "
+                "local-only rows)"
+            )
+    return args
 
 
 def _refuse_when_dual_or_d1() -> None:
@@ -523,6 +557,158 @@ def _sync_one_table(
     }
 
 
+def _list_d1_user_objects(
+    d1: D1Connection,
+) -> Tuple[List[Tuple[str, str]], List[Tuple[str, str]]]:
+    """Return ``(tables, indexes)`` as ``(name, sql)`` from D1 sqlite_master.
+
+    Excludes ``sqlite_*`` / ``d1_*`` / ``_cf_*`` system objects but keeps
+    ``SchemaVersion`` (deliberately — the force-overwrite path aligns the
+    declared schema version too, unlike the upsert path that ignores it
+    via ``_SKIP_TABLES``).
+    """
+    cur = d1.execute(
+        "SELECT type, name, sql FROM sqlite_master "
+        "WHERE type IN ('table', 'index') "
+        "AND name NOT LIKE 'sqlite_%' "
+        "AND name NOT LIKE 'd1_%' "
+        "AND name NOT LIKE '_cf_%' "
+        "AND sql IS NOT NULL "
+        "ORDER BY type, name"
+    )
+    rows = cur.fetchall() or []
+    tables: List[Tuple[str, str]] = []
+    indexes: List[Tuple[str, str]] = []
+    for r in rows:
+        if isinstance(r, dict):
+            typ = r.get("type")
+            name = r.get("name")
+            sql = r.get("sql")
+        else:
+            typ, name, sql = r[0], r[1], r[2]
+        if not name or not sql:
+            continue
+        if typ == "table":
+            tables.append((name, sql))
+        elif typ == "index":
+            indexes.append((name, sql))
+    return tables, indexes
+
+
+def _drop_all_sqlite_user_objects(conn: sqlite3.Connection) -> None:
+    """Drop every user table on the local mirror; clear ``sqlite_sequence``.
+
+    Indexes attached to a table go automatically when the host table is
+    dropped, so we don't enumerate them. ``sqlite_sequence`` is a shadow
+    table managed by SQLite for AUTOINCREMENT bookkeeping — we keep it
+    but empty it so AUTOINCREMENT counters from the prior schema don't
+    leak into the rebuild.
+    """
+    cur = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' "
+        "AND name NOT LIKE 'sqlite_%'"
+    )
+    table_names = [row[0] for row in cur.fetchall() if row and row[0]]
+    for tname in table_names:
+        conn.execute(f"DROP TABLE IF EXISTS {_quote(tname)}")
+    try:
+        conn.execute("DELETE FROM sqlite_sequence")
+    except sqlite3.OperationalError:
+        # Only exists once an AUTOINCREMENT table has ever been created.
+        pass
+
+
+def _force_overwrite_one_logical(
+    logical_name: str,
+    sqlite_path: str,
+    *,
+    page_size: int,
+) -> Dict[str, Any]:
+    """Drop and rebuild one logical DB from D1's verbatim DDL.
+
+    Drives the ``--apply --force-overwrite-all`` path. Unlike the upsert
+    flow, this discards whatever schema the local file happens to have
+    and re-creates everything from D1's ``CREATE TABLE`` / ``CREATE
+    INDEX`` statements — so column order, FK declarations, and partial-
+    index WHERE clauses match D1 byte-for-byte. Data is then reloaded via
+    the same per-table pager used by the upsert path.
+    """
+    logger.info(
+        "Force-overwriting logical=%s sqlite=%s from D1 (DROP + rebuild)",
+        logical_name, sqlite_path,
+    )
+    d1 = D1Connection(
+        account_id=get_d1_account_id(),
+        database_id=get_d1_database_id(logical_name),
+        api_token=get_d1_api_token(),
+    )
+    os.makedirs(os.path.dirname(sqlite_path) or ".", exist_ok=True)
+    sqlite_conn = sqlite3.connect(sqlite_path)
+    sqlite_conn.row_factory = sqlite3.Row
+    sqlite_conn.execute("PRAGMA foreign_keys=OFF")
+
+    summary: Dict[str, Any] = {
+        "logical_name": logical_name,
+        "sqlite_path": sqlite_path,
+        "mode": "force-overwrite-all",
+        "tables": [],
+    }
+    try:
+        tables_ddl, indexes_ddl = _list_d1_user_objects(d1)
+        if not tables_ddl:
+            logger.warning(
+                "No user tables on logical=%s; nothing to rebuild",
+                logical_name,
+            )
+            return summary
+
+        sqlite_conn.execute("BEGIN")
+        try:
+            _drop_all_sqlite_user_objects(sqlite_conn)
+            for _, ddl in tables_ddl:
+                sqlite_conn.execute(ddl)
+            for _, ddl in indexes_ddl:
+                sqlite_conn.execute(ddl)
+
+            for tname, _ in tables_ddl:
+                tbl_summary = _sync_one_table(
+                    d1, sqlite_conn, tname,
+                    page_size=page_size,
+                    dry_run=False,
+                    prune_local_only=False,
+                )
+                tbl_summary["mode"] = "force-overwrite"
+                tbl_summary["consistent_after"] = (
+                    tbl_summary.get("d1_count")
+                    == tbl_summary.get("sqlite_count_after")
+                )
+                summary["tables"].append(tbl_summary)
+                logger.info(
+                    "  %s: D1=%s rows_streamed=%s sqlite_after=%s",
+                    tname,
+                    tbl_summary.get("d1_count"),
+                    tbl_summary.get("rows_streamed"),
+                    tbl_summary.get("sqlite_count_after"),
+                )
+            try:
+                sqlite_conn.execute("COMMIT")
+            except sqlite3.OperationalError:
+                # DDL inside the loop (CREATE TABLE / DROP TABLE) may
+                # auto-commit on some Python sqlite3 drivers, ending the
+                # outer BEGIN early — same race the upsert path handles.
+                pass
+        except Exception:
+            try:
+                sqlite_conn.execute("ROLLBACK")
+            except sqlite3.OperationalError:
+                pass
+            raise
+    finally:
+        sqlite_conn.close()
+        d1.close()
+    return summary
+
+
 def _sync_one_logical(
     logical_name: str,
     sqlite_path: str,
@@ -649,14 +835,21 @@ def main(argv: Optional[List[str]] = None) -> int:
     }
     overall["prune_local_only"] = args.prune_local_only
     overall["allow_local_prune_on_drift"] = args.allow_local_prune_on_drift
+    overall["force_overwrite_all"] = args.force_overwrite_all
     for (logical_name, _key, _default), sqlite_path in zip(targets, sqlite_paths):
         try:
-            result = _sync_one_logical(
-                logical_name, sqlite_path,
-                page_size=args.page_size, dry_run=args.dry_run,
-                prune_local_only=args.prune_local_only,
-                allow_local_prune_on_drift=args.allow_local_prune_on_drift,
-            )
+            if args.force_overwrite_all:
+                result = _force_overwrite_one_logical(
+                    logical_name, sqlite_path,
+                    page_size=args.page_size,
+                )
+            else:
+                result = _sync_one_logical(
+                    logical_name, sqlite_path,
+                    page_size=args.page_size, dry_run=args.dry_run,
+                    prune_local_only=args.prune_local_only,
+                    allow_local_prune_on_drift=args.allow_local_prune_on_drift,
+                )
         except Exception as exc:
             logger.exception(
                 "Sync failed for logical=%s: %s", logical_name, exc,
