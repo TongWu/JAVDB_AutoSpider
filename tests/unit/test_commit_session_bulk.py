@@ -15,7 +15,7 @@ from typing import Dict, List, Tuple
 
 import pytest
 
-import utils.infra.db as db_mod
+import javdb.storage.db.db as db_mod
 
 
 # ──────────────────────────────────────────────────────────────────────

@@ -18,10 +18,12 @@ import sys
 import argparse
 import time
 from datetime import datetime
+from pathlib import Path
 
-from compat import activate_repo_root
-
-activate_repo_root()
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+os.chdir(_REPO_ROOT)
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 # Import unified configuration
 from javdb.infra.config import cfg

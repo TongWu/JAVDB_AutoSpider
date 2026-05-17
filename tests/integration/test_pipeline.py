@@ -14,7 +14,7 @@ sys.path.insert(0, project_root)
 
 # Import functions from email_notification script
 import apps.cli.notify.email as email_notification
-from scripts.email_notification import (
+from apps.cli.notify.email import (
     analyze_spider_log,
     analyze_uploader_log,
     analyze_pikpak_log,
@@ -29,7 +29,7 @@ from scripts.email_notification import (
 )
 
 # Import mask_sensitive_info from git_helper (it's now the canonical location)
-from utils.infra.git_helper import mask_sensitive_info
+from javdb.infra.git_helper import mask_sensitive_info
 
 
 def get_log_summary(log_path, lines=200):

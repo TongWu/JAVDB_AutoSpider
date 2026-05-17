@@ -101,7 +101,7 @@ def _params_for_d1_json(params: Iterable[Any]) -> List[Any]:
 # as transient and wastes five retries × ~15s back-off per failure (observed
 # 2026-05-12 on a SpiderStats upsert when the D1 side lacked the
 # uq_spiderstats_session UNIQUE index — see
-# migration/d1/2026_05_12_add_unique_stats_session_indexes.sql).
+# javdb/migrations/d1/2026_05_12_add_unique_stats_session_indexes.sql).
 _TRANSIENT_ERROR_KEYWORDS = (
     "D1_RESET_DO",
     "busy",

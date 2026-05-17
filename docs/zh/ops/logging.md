@@ -112,7 +112,7 @@ export LOG_GITHUB_GROUPS=off
 
 ```python
 import logging
-from packages.python.javdb_platform.logging_config import log_section, log_summary_block
+from javdb.infra.logging import log_section, log_summary_block
 
 logger = logging.getLogger(__name__)
 
