@@ -117,6 +117,10 @@ javdb/rust_core/target/sdist/
 *.p12
 *.pfx
 
+# API override store — runtime state, contains secrets (passwords, cookies,
+# API tokens). Lives next to the SQLite DBs because both are runtime state.
+reports/api_config_store.json
+
 # SQLite temporary files
 *.db-wal
 *.db-shm
