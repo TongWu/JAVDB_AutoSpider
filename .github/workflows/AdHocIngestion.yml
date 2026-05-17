@@ -1095,7 +1095,7 @@ jobs:
         run: |
           set -e
           mkdir -p reports/D1
-          python3 -m scripts.aggregate_pending_health \
+          python3 -m apps.cli.db.pending_health \
             --window-hours 24 || true
 
       - name: Run Email Notification
@@ -1180,7 +1180,7 @@ jobs:
           fi
           echo "::warning::Critical pending alert detected: $DECISION"
           echo "Engaging ADR-006 pipeline pause (24h)."
-          python3 -m scripts.pending_mode_alert_and_pause \
+          python3 -m apps.cli.db.pending_alert \
             --hours 24 \
             --reason "AdHocIngestion run ${{ github.run_id }}: $DECISION"
           if [ -n "${GH_TOKEN:-}" ] || [ -n "${GITHUB_TOKEN:-}" ]; then
