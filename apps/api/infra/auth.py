@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import hmac
+import json
 import os
 import secrets
 import threading
 import time
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 import jwt
@@ -22,18 +24,61 @@ PASSWORD_CTX = CryptContext(schemes=["bcrypt"], deprecated="auto")
 _RUNTIME_ENV = os.getenv("ENVIRONMENT", os.getenv("FLASK_ENV", "")).strip().lower()
 _IS_PRODUCTION_ENV = _RUNTIME_ENV == "production"
 
+# Path to the API config override store (reports/api_config_store.json).
+# This is the same file written by config_service.save_store() — kept as a
+# module-level constant so tests can monkeypatch it.
+_STORE_PATH = Path(__file__).resolve().parents[3] / "reports" / "api_config_store.json"
+
+
+def _read_store_value(name: str) -> str | None:
+    """Read a single key from the API config override store, if it exists.
+
+    Returns ``None`` when the store is absent, unreadable, or lacks *name*.
+    The store may contain encrypted blobs for sensitive keys — those are
+    returned as-is (a raw ``{"enc": "..."}`` dict), which the caller treats
+    as absent since they cannot be decrypted without the Fernet key.  In
+    practice this only matters for SENSITIVE_KEYS like QB_PASSWORD; the auth
+    fields (ADMIN_PASSWORD, API_SECRET_KEY, …) are stored as plaintext in the
+    store by config_service.save_store() when no encryption key is configured.
+    """
+    try:
+        if not _STORE_PATH.exists():
+            return None
+        data = json.loads(_STORE_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(data, dict):
+        return None
+    val = data.get(name)
+    if val is None:
+        return None
+    # Encrypted blobs are dicts with an "enc" key; we cannot decrypt them here
+    # (no Fernet instance), so treat them as absent.
+    if isinstance(val, dict):
+        return None
+    return str(val)
+
 
 def _resolve(name: str, default: str = "") -> str:
-    """Return *name* from env if set and non-empty, else from config.py via cfg(), else default.
+    """Return *name* using precedence: env > config.py > override store > default.
 
-    Empty env values fall through to config.py too — so an unset env and an
-    empty env are treated the same.
+    - Empty env values fall through (unset and empty are treated the same).
+    - config.py is the operator-owned authoritative source for local deploys.
+    - The override store (reports/api_config_store.json) captures values set
+      via PUT /api/config or POST /api/explore/sync-cookie so that wizard
+      changes are picked up after a BE restart without touching config.py.
     """
     env_val = os.getenv(name)
     if env_val is not None and env_val.strip():
         return env_val.strip()
-    cfg_val = cfg(name, default)
-    return str(cfg_val).strip() if cfg_val is not None else default
+    cfg_val = cfg(name, "")
+    cfg_str = str(cfg_val).strip() if cfg_val is not None else ""
+    if cfg_str:
+        return cfg_str
+    store_val = _read_store_value(name)
+    if store_val is not None and store_val.strip():
+        return store_val.strip()
+    return default
 
 
 API_SECRET_KEY = _resolve("API_SECRET_KEY", "")
