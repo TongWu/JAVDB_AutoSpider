@@ -30,9 +30,9 @@ exit 1 otherwise.
 
 Usage::
 
-    python3 -m scripts.check_bake_metrics
-    python3 -m scripts.check_bake_metrics --window-days 30 --json
-    python3 -m scripts.check_bake_metrics --since 2026-05-16
+    python3 -m apps.cli.ops.check_bake_metrics
+    python3 -m apps.cli.ops.check_bake_metrics --window-days 30 --json
+    python3 -m apps.cli.ops.check_bake_metrics --since 2026-05-16
 
 Local SQLite is the only backend supported here — D1 is queried via
 HTTP in production but the bake-monitoring use case is reproducible
@@ -318,7 +318,7 @@ def check_pause_trigger_count(
 
 def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        prog="scripts.check_bake_metrics",
+        prog="apps.cli.ops.check_bake_metrics",
         description=(
             "Check ADR-006 30-day bake metrics against the ADR-005 D10 "
             "gate. Returns exit 0 if all three checks pass."
