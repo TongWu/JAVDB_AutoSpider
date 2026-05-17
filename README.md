@@ -10,7 +10,7 @@ English | [简体中文](README_CN.md)
 
 ## Features
 
-- **Modular Spider** — 14 specialized modules in `packages/python/javdb_spider/`, fetches and filters entries with subtitle/today tags, extracts magnet links with priority ordering
+- **Modular Spider** — 14 specialized modules in `javdb/spider/`, fetches and filters entries with subtitle/today tags, extracts magnet links with priority ordering
 - **Rust Acceleration** (optional) — PyO3 + maturin extension for 5-10x faster HTML parsing; falls back to pure Python automatically
 - **Parallel Processing** — Multi-threaded detail page fetching with one worker per proxy; auto-activates in pool mode with 2+ proxies
 - **Torrent Classification** — Priority-based categories: 字幕 (subtitle), hacked (UC无码破解 > UC > U无码破解 > U), no_subtitle
