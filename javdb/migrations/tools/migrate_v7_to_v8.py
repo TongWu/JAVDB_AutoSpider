@@ -21,7 +21,7 @@ Usage:
 
     python3 packages/python/javdb_migrations/tools/migrate_v7_to_v8.py [--backup] [--verify] [--dry-run]
     python3 packages/python/javdb_migrations/tools/migrate_v7_to_v8.py --backfill-actors [--limit N] [--no-proxy] [--dry-run]
-    python3 -m apps.cli.migration [--normalize-datetimes]   # unified entry
+    python3 -m apps.cli.db.migration [--normalize-datetimes]   # unified entry
 """
 
 from __future__ import annotations

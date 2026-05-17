@@ -3,7 +3,7 @@
 Called by the ``mark-sessions-as-committed`` step at the end of
 ``run-pipeline`` once Spider + Uploader + PikPak Bridge all succeed. A
 session in ``Status='committed'`` is permanently shielded from any
-future ``apps.cli.rollback`` cleanup pass — even the manual workflow
+future ``apps.cli.db.rollback`` cleanup pass — even the manual workflow
 will refuse to touch it without the explicit ``--force`` flag.
 
 Two lookup modes:
@@ -34,7 +34,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set
 
-from apps.cli._session_helpers import (
+from apps.cli.db._session_helpers import (
     append_jsonl_record,
     attach_run_identity,
     fanout_movie_claim,
@@ -61,7 +61,7 @@ logger = get_logger(__name__)
 
 def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        prog="apps.cli.commit_session",
+        prog="apps.cli.db.commit_session",
         description=(
             "Flip Status='in_progress' → 'committed' for the given session "
             "and/or every in-progress session created on or after "
@@ -246,7 +246,7 @@ def _emit_pending_verify(
 
     The verify line is consumed by:
 
-    * :mod:`packages.python.javdb_integrations.email_notification` — to
+    * :mod:`javdb.integrations.notify.email` — to
       render the "Pending Mode Verification" section and decide if the
       subject prefix needs a ``[PENDING-ALERT]`` / ``[PENDING-ROLLBACK-
       AUTO]`` annotation.

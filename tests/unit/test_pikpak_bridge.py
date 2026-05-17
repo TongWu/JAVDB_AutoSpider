@@ -186,7 +186,7 @@ class TestPikpakBridgeLogic:
     """Test cases for pikpak_bridge function logic."""
 
     def test_clears_active_session_id_after_impl_returns(self, monkeypatch):
-        import scripts.pikpak_bridge as pikpak_mod
+        import apps.cli.pikpak.bridge as pikpak_mod
         from utils.infra import db as db_mod
 
         def fake_impl(*_args, **_kwargs):

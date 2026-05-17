@@ -49,7 +49,7 @@ from scripts.qb_uploader import (
     get_existing_torrents,
     test_qbittorrent_connection as uploader_test_qbittorrent_connection,
 )
-import scripts.qb_uploader as qb_uploader_module
+import apps.cli.qb.uploader as qb_uploader_module
 
 
 class TestExtractHashFromMagnet:

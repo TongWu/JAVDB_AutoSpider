@@ -144,7 +144,7 @@ jobs:
           # — flip the GitHub Variable RUNNER_REGISTRY_ENABLED to 'true' to
           # let QB filter runs participate in cohort signalling.
           VAR_RUNNER_REGISTRY_ENABLED: ${{ vars.RUNNER_REGISTRY_ENABLED || 'false' }}
-        run: python3 -m apps.cli.config_generator --github-actions
+        run: python3 -m apps.cli.ops.config_generator --github-actions
 
       - name: Encrypt config for artifact
         env:
@@ -253,7 +253,7 @@ jobs:
           # — flip the GitHub Variable RUNNER_REGISTRY_ENABLED to 'true' to
           # let QB filter runs participate in cohort signalling.
           VAR_RUNNER_REGISTRY_ENABLED: ${{ vars.RUNNER_REGISTRY_ENABLED || 'false' }}
-        run: python3 -m apps.cli.config_generator --github-actions
+        run: python3 -m apps.cli.ops.config_generator --github-actions
 
       - name: Encrypt adhoc config for artifact
         if: steps.detect_adhoc.outputs.has_adhoc_qb == 'true'
@@ -330,8 +330,8 @@ jobs:
             ARGS+=(--delete-local-files)
           fi
           
-          echo "Running: python3 -m apps.cli.qb_file_filter ${ARGS[*]}"
-          python3 -m apps.cli.qb_file_filter "${ARGS[@]}"
+          echo "Running: python3 -m apps.cli.qb.file_filter ${ARGS[*]}"
+          python3 -m apps.cli.qb.file_filter "${ARGS[@]}"
 
   # =============================================================================
   # Job 3: Run File Filter on Adhoc qBittorrent (only when QB_URL_ADHOC is set)
@@ -403,5 +403,5 @@ jobs:
             ARGS+=(--delete-local-files)
           fi
 
-          echo "Running (adhoc): python3 -m apps.cli.qb_file_filter ${ARGS[*]}"
-          python3 -m apps.cli.qb_file_filter "${ARGS[@]}"
+          echo "Running (adhoc): python3 -m apps.cli.qb.file_filter ${ARGS[*]}"
+          python3 -m apps.cli.qb.file_filter "${ARGS[@]}"

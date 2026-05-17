@@ -1,5 +1,5 @@
 """Tests for the cross-runtime ``GlobalLoginState`` integration in
-:class:`packages.python.javdb_spider.fetch.login_coordinator.LoginCoordinator`.
+:class:`javdb.spider.fetch.login_coordinator.LoginCoordinator`.
 
 Focus areas (mirrors plan §B4):
 

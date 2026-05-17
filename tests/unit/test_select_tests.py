@@ -100,3 +100,80 @@ def test_main_push_forces_full_python_guard():
     assert result.run_full_python is True
     assert result.build_rust_wheel is True
     assert any("push to main" in reason for reason in result.reason)
+
+
+def test_ast_signature_ignores_string_literal_differences():
+    """Docstring, prog= name, error message, SQL — all string Constants are
+    collapsed to the same sentinel so the AST signature is stable across
+    string-only edits."""
+    a = '''
+"""Old docstring."""
+
+def f(x):
+    """Old body docstring."""
+    raise ValueError("old message")
+'''
+    b = '''
+"""New docstring."""
+
+def f(x):
+    """New body docstring."""
+    raise ValueError("new message")
+'''
+    assert select_tests._ast_signature(a) == select_tests._ast_signature(b)
+
+
+def test_ast_signature_detects_real_code_change():
+    """Adding a statement, changing an operator, or renaming an identifier
+    must surface as different signatures."""
+    a = "x = 1\n"
+    b = "x = 2\n"
+    assert select_tests._ast_signature(a) != select_tests._ast_signature(b)
+
+    c = "def f(x):\n    return x + 1\n"
+    d = "def f(x):\n    return x - 1\n"
+    assert select_tests._ast_signature(c) != select_tests._ast_signature(d)
+
+
+def test_docstring_only_changes_skip_impact_analysis(monkeypatch):
+    """When a Python source change is classified as docstring-only, it must
+    not contribute to source_change_count, not trigger import-graph reverse
+    tracking, and not be matched against IMPACT_RULES. The file still shows
+    up in `changed_files` and `docstring_only_files` for reporting."""
+
+    docstring_only_paths = {
+        f"javdb/storage/file_{i}.py" for i in range(select_tests.SOURCE_CHANGE_LIMIT + 5)
+    }
+
+    def fake_filter(path, base, repo_root):  # noqa: ARG001
+        return path in docstring_only_paths
+
+    monkeypatch.setattr(select_tests, "is_docstring_only_change", fake_filter)
+
+    result = select_tests.select_for_changed_files(
+        sorted(docstring_only_paths),
+        repo_root=REPO_ROOT,
+        base="fake-base-sha",
+    )
+
+    assert result.run_full_python is False, (
+        "docstring-only files must not trip SOURCE_CHANGE_LIMIT"
+    )
+    assert set(result.docstring_only_files) == docstring_only_paths
+    assert set(result.changed_files) == docstring_only_paths, (
+        "filtered files still surface in changed_files for visibility"
+    )
+    assert any(
+        "docstring/string-literal-only" in reason for reason in result.reason
+    )
+
+
+def test_docstring_only_filter_disabled_without_base():
+    """No `base` arg (e.g. CLI explicit `--changed-file` mode) leaves the
+    classification step a no-op so behaviour matches pre-feature."""
+    result = select_tests.select_for_changed_files(
+        ["javdb/storage/file.py"],
+        repo_root=REPO_ROOT,
+        # no base= arg
+    )
+    assert result.docstring_only_files == []

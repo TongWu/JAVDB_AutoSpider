@@ -10,7 +10,7 @@
   banner at the **top** of the email body.
 
 These tests exercise the real helpers in
-``packages.python.javdb_integrations.email_notification`` rather than
+``javdb.integrations.notify.email`` rather than
 local re-implementations so changes to the production code path are
 caught here.
 """

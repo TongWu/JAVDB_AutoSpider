@@ -33,7 +33,7 @@ jobs:
         env:
           STORAGE_BACKEND: sqlite
           API_SECRET_KEY: dump-only-secret
-        run: python scripts/dump_openapi.py
+        run: python -m apps.cli.ops.dump_openapi
 
       - name: Commit if changed
         run: |

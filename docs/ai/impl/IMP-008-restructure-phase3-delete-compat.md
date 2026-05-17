@@ -12,6 +12,17 @@
 
 **Prerequisites:** Phase 1 and Phase 2 PRs are merged. The deletion manifest exists. All in-repo non-test callers already use `javdb.*` or `apps.cli.*` paths.
 
+**Plan A integration (landed on `main` before this phase starts):** A separate initiative — "Plan A" Phase 1 backend prerequisites for the new frontend repo `javdb-autospider-web` — merged in SHAs `33065718` + `014a1e34` (spec: `docs/superpowers/specs/2026-05-16-frontend-rewrite-design.md`). It added:
+
+- 10 new HTTP endpoints exposed at `/api/{capabilities,onboarding/*,system/state,sessions,sessions/{id},sessions/{id}/rollback,sessions/{id}/commit}` (consumed by the FE repo via GHCR + `openapi.json`).
+- 6 new integration tests + 2 new unit tests (`tests/integration/test_{capabilities,test_mode_reset,onboarding,system_state,sessions,openapi_response_shapes}_endpoints.py`, `tests/unit/test_{system_state_repo,rollback_core_library}.py`).
+- A second Dockerfile at `docker/Dockerfile.api` for the FastAPI-only image consumed by `javdb-autospider-web`'s docker-compose.
+- Two new GH workflows (`publish-api-image.yml`, `publish-openapi.yml`) — both already point at `javdb/**` paths filters after Phase 1's smoke fixes.
+- Two new packages: `javdb/storage/rollback/core.py` (rollback library; thin adapter that imports `apps.cli.db.rollback`) and `javdb/storage/sessions/commit.py` (sessions library; calls DB functions directly).
+- One migration file `javdb/migrations/0042_system_state_table.sql` (already swept by Phase 1 sed).
+
+IMP-006 and IMP-007 already swept Plan A's static imports during their bulk passes. This phase must still **verify the integration end-to-end** at the deletion + Dockerfile-cleanup + docs-rewrite boundaries — see the call-outs inside Task 1, Task 5, and the new **Gate 13** below.
+
 ---
 
 ## Pre-flight: branch, baseline, manifest sync
@@ -48,6 +59,8 @@ wc -l /tmp/phase3-test-imports.txt
 ```
 
 Expected: ~200 occurrences (the count Phase 1 saw was 202). The exact hits will drive Task 1's sed.
+
+> **Plan A note:** Plan A added ~10 new test files (`tests/integration/test_{capabilities,test_mode_reset,onboarding,system_state,sessions,openapi_response_shapes}_endpoints.py`, `tests/integration/conftest.py`, `tests/unit/test_{system_state_repo,rollback_core_library}.py`). Their imports were rewritten by IMP-006's bulk sed; the count above should still land near ~200 because those files use canonical `javdb.*` / `apps.api.*` paths already. If you see a much higher count (~220+) the extras are Plan A files the IMP-006 sweep missed — fold them into Task 1's sed batch.
 
 - [ ] **Step 4: Capture pre-deletion state of dirs we are about to delete**
 
@@ -339,11 +352,27 @@ Expected: empty.
 
 ```bash
 docker build -f docker/Dockerfile -t javdb-test:dry --no-cache . 2>&1 | tail -10
+docker build -f docker/Dockerfile.api -t javdb-api-test:dry --no-cache . 2>&1 | tail -10
 ```
 
-Expected: build succeeds (or fails on a network step, but the COPY step itself must not fail). If the COPY fails because `javdb/` is missing, your local checkout is incomplete; sync and retry. Save the output to confirm at PR time.
+Expected: both builds succeed (or fail on a network step, but the COPY step itself must not fail). If COPY fails because `javdb/` is missing, your local checkout is incomplete; sync and retry. Save the output to confirm at PR time.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Plan A API smoke — confirm the `Dockerfile.api` image still serves traffic**
+
+`Dockerfile.api` is consumed by the external `javdb-autospider-web` repo via GHCR (`publish-api-image.yml`). A broken COPY here propagates to that repo's docker-compose, so prove the runtime imports work end-to-end before merge:
+
+```bash
+docker run --rm -d --name imp008-smoke -p 18108:8100 \
+  -e STORAGE_BACKEND=sqlite -e API_SECRET_KEY=imp008-test \
+  javdb-api-test:dry
+sleep 5
+curl -sf http://127.0.0.1:18108/api/health && echo
+docker rm -f imp008-smoke
+```
+
+Expected: health JSON prints. A `ModuleNotFoundError` on startup means a Plan A runtime import path was broken by your COPY cleanup — investigate the named module before merging.
+
+- [ ] **Step 6: Commit**
 
 ```bash
 git add docker/Dockerfile docker/Dockerfile.api
@@ -766,6 +795,47 @@ grep -rEn '"utils\.|"scripts\.(spider|ingestion)\.' . --include='*.py' | grep -v
 ```
 
 Expected: empty. Any hit is a dynamic-import string that the static rewrites in Phase 1 missed.
+
+- [ ] **Gate 13: Plan A integration canary — OpenAPI dump + endpoints + test suite**
+
+The `apps.cli.ops.dump_openapi` module is the smallest end-to-end probe of the API import tree — if any module Plan A's routers depend on was broken by Phase 3 deletions, this script fails at import time and the message names the offending module. (Note: this script was at `scripts/dump_openapi.py` when Plan A merged; IMP-007 moved it to `apps/cli/ops/dump_openapi.py` and fixed the latent `parents[1]` output-path bug. Use the new entry point.)
+
+```bash
+STORAGE_BACKEND=sqlite API_SECRET_KEY=dump-only-secret python3 -m apps.cli.ops.dump_openapi
+```
+
+Expected: writes `docs/api/openapi.json` (~85 KB, ~41 paths) without `ModuleNotFoundError`.
+
+Confirm all 10 Plan A endpoints survive:
+
+```bash
+python3 -c "
+import json
+s = json.load(open('docs/api/openapi.json'))
+need = ['/api/capabilities','/api/onboarding/status','/api/onboarding/test','/api/onboarding/complete','/api/onboarding/dismiss-hint','/api/system/state','/api/sessions','/api/sessions/{session_id}','/api/sessions/{session_id}/rollback','/api/sessions/{session_id}/commit']
+missing = [p for p in need if p not in s['paths']]
+print('missing:', missing if missing else 'none')
+"
+```
+
+Expected: `missing: none`.
+
+Run the Plan A test surface explicitly (subset of Gate 1, but isolates breakage to Plan A files):
+
+```bash
+STORAGE_BACKEND=sqlite API_SECRET_KEY=test-secret-key pytest \
+  tests/unit/test_system_state_repo.py \
+  tests/unit/test_rollback_core_library.py \
+  tests/integration/test_capabilities_endpoint.py \
+  tests/integration/test_test_mode_reset.py \
+  tests/integration/test_onboarding_endpoints.py \
+  tests/integration/test_system_state_endpoints.py \
+  tests/integration/test_sessions_endpoints.py \
+  tests/integration/test_openapi_response_shapes.py \
+  -v
+```
+
+Expected: all green. Any failure isolates to a Plan A import that this phase's sweep broke.
 
 If any gate fails, fix and re-run all gates.
 

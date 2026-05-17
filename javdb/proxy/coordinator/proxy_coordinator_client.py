@@ -173,7 +173,7 @@ class ReportResult:
 
 
 #: Backwards-compatible alias for the previously-private helper. The
-#: canonical home is :func:`packages.python.javdb_platform.proxy_policy.normalize_proxy_id`;
+#: canonical home is :func:`javdb.proxy.policy.normalize_proxy_id`;
 #: this re-export keeps existing imports
 #: (``from proxy_coordinator_client import _normalize_proxy_id``) working
 #: without churn while internal call-sites migrate.

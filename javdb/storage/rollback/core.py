@@ -16,7 +16,7 @@ Public surface:
     returns a :class:`RollbackResult`.  Same :class:`LookupError`
     semantics.
 
-The pipeline itself lives in :mod:`apps.cli.rollback._drive_rollback`
+The pipeline itself lives in :mod:`apps.cli.db.rollback._drive_rollback`
 — the library is a thin adapter that builds an :class:`argparse.Namespace`
 from a :class:`RollbackRequest` and invokes the driver.  This guarantees
 HTTP callers and the CLI use literally the same code path, so a
@@ -103,7 +103,7 @@ def _build_namespace(
 ) -> argparse.Namespace:
     """Translate a :class:`RollbackRequest` into the
     :class:`argparse.Namespace` shape that
-    :func:`apps.cli.rollback._drive_rollback` consumes."""
+    :func:`apps.cli.db.rollback._drive_rollback` consumes."""
     return argparse.Namespace(
         session_id=req.session_id,
         run_id=req.run_id,
@@ -147,14 +147,14 @@ def _run(req: RollbackRequest, *, dry_run: bool) -> Dict[str, Any]:
     """Call into the CLI's rollback driver.
 
     The CLI module owns the canonical pipeline so that existing tests
-    (which monkeypatch ``apps.cli.rollback._resolve_target_sessions``,
+    (which monkeypatch ``apps.cli.db.rollback._resolve_target_sessions``,
     ``db_rollback_session``, ``_emit_metrics`` etc.) still see their
     patches when the library is invoked.  This also guarantees the
     library and CLI never drift in behaviour.
     """
     # Late import to avoid pulling argparse / logging setup at module
     # import time (the FastAPI app imports this module on boot).
-    from apps.cli import rollback as _rollback_cli
+    from apps.cli.db import rollback as _rollback_cli
 
     # Validate an explicit session_id before resolving — gives HTTP
     # callers a clean 404 instead of an empty summary.

@@ -1,11 +1,15 @@
-"""Compatibility wrapper for the canonical health check implementation."""
+"""Canonical health check CLI entrypoint.
+
+Aliases :mod:`javdb.infra.health_check` so tests can patch module-level
+attributes via this import path.
+"""
 
 from __future__ import annotations
 
 from pathlib import Path
 import sys
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 

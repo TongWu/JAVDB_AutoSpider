@@ -2,7 +2,7 @@ import subprocess
 
 import pytest
 
-from scripts import rclone_cleanup_empty_dirs as cleaner
+from apps.cli.rclone import cleanup_empty_dirs as cleaner
 
 
 def test_select_year_dirs_keeps_four_digit_years_and_unknown():
