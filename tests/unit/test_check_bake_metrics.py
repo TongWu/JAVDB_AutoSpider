@@ -1,4 +1,4 @@
-"""Unit coverage for `scripts.check_bake_metrics`.
+"""Unit coverage for `apps.cli.ops.check_bake_metrics`.
 
 Focus is on the bits that have non-trivial logic and would silently
 regress: window/since resolution, the critical-fields predicate +
