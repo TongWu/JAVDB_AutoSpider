@@ -1,8 +1,13 @@
 """Entry point for running the spider package."""
 import atexit
-from compat import activate_repo_root
+import os
+import sys
+from pathlib import Path
 
-activate_repo_root()
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+os.chdir(_REPO_ROOT)
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 from javdb.storage.db.db_connection import close_db  # noqa: E402
 
