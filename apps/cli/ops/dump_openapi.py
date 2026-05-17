@@ -5,14 +5,14 @@ import json
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 # Use the production app exactly as it runs.
 from apps.api.services.runtime import app  # noqa: E402
 
-OUT = Path(__file__).resolve().parents[1] / "docs" / "api" / "openapi.json"
+OUT = REPO_ROOT / "docs" / "api" / "openapi.json"
 
 
 def main() -> int:
