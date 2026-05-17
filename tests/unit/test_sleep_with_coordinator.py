@@ -26,12 +26,12 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from packages.python.javdb_platform.proxy_coordinator_client import (
+from javdb.proxy.coordinator.proxy_coordinator_client import (
     CoordinatorUnavailable,
     LeaseResult,
     ReportResult,
 )
-from packages.python.javdb_spider.runtime.sleep import (
+from javdb.spider.runtime.sleep import (
     MovieSleepManager,
     PenaltyTracker,
     TripleWindowThrottle,
@@ -166,7 +166,7 @@ class TestSleepFailOpen:
             proxy_id="p",
         )
 
-        with caplog.at_level("ERROR", logger="packages.python.javdb_spider.runtime.sleep"):
+        with caplog.at_level("ERROR", logger="javdb.spider.runtime.sleep"):
             elapsed = mgr.sleep()
 
         assert elapsed > 0
@@ -187,7 +187,7 @@ class TestSleepFailOpen:
             proxy_id="p",
         )
 
-        with caplog.at_level("ERROR", logger="packages.python.javdb_spider.runtime.sleep"):
+        with caplog.at_level("ERROR", logger="javdb.spider.runtime.sleep"):
             for _ in range(5):
                 mgr.sleep()
 
@@ -210,7 +210,7 @@ class TestSleepFailOpen:
             proxy_id="p",
         )
 
-        with caplog.at_level("ERROR", logger="packages.python.javdb_spider.runtime.sleep"):
+        with caplog.at_level("ERROR", logger="javdb.spider.runtime.sleep"):
             mgr.sleep()
             mgr.sleep()
             mgr.sleep()
@@ -323,7 +323,7 @@ def _mk_lease_with_p1a(
 class TestSleepMirrorsRemoteBan:
 
     def test_lease_with_banned_true_calls_pool_ban_proxy(self):
-        from packages.python.javdb_spider.runtime import state as _state
+        from javdb.spider.runtime import state as _state
         coord = MagicMock()
         coord.lease.return_value = _mk_lease_with_p1a(
             banned=True, banned_until=999, reason="banned",
@@ -339,7 +339,7 @@ class TestSleepMirrorsRemoteBan:
             _state.global_proxy_pool = original_pool
 
     def test_lease_with_banned_false_does_not_touch_pool(self):
-        from packages.python.javdb_spider.runtime import state as _state
+        from javdb.spider.runtime import state as _state
         coord = MagicMock()
         coord.lease.return_value = _mk_lease_with_p1a(banned=False)
         pool = MagicMock()
@@ -353,8 +353,8 @@ class TestSleepMirrorsRemoteBan:
             _state.global_proxy_pool = original_pool
 
     def test_lease_with_banned_true_falls_back_to_ban_manager_when_pool_is_none(self):
-        from packages.python.javdb_spider.runtime import state as _state
-        from packages.python.javdb_platform.proxy_ban_manager import (
+        from javdb.spider.runtime import state as _state
+        from javdb.proxy.ban_manager import (
             ProxyBanManager,
             set_remote_ban_hook,
         )
@@ -366,7 +366,7 @@ class TestSleepMirrorsRemoteBan:
         _state.global_proxy_pool = None
         # Pin the global ban manager to our local instance for the duration
         # of this test.
-        import packages.python.javdb_platform.proxy_ban_manager as pbm
+        import javdb.proxy.ban_manager as pbm
         original_global = pbm._global_ban_manager
         original_hook = pbm._remote_ban_hook
         pbm._global_ban_manager = manager
@@ -384,7 +384,7 @@ class TestSleepMirrorsRemoteBan:
             set_remote_ban_hook(original_hook)
 
     def test_lease_with_pool_ban_exception_does_not_break_sleep(self):
-        from packages.python.javdb_spider.runtime import state as _state
+        from javdb.spider.runtime import state as _state
         coord = MagicMock()
         coord.lease.return_value = _mk_lease_with_p1a(banned=True)
         pool = MagicMock()
@@ -404,7 +404,7 @@ class TestSleepMirrorsRemoteBan:
 class TestSleepMirrorsRemoteCfBypass:
 
     def test_lease_with_requires_cf_bypass_marks_local_dict(self):
-        from packages.python.javdb_spider.runtime import state as _state
+        from javdb.spider.runtime import state as _state
         coord = MagicMock()
         coord.lease.return_value = _mk_lease_with_p1a(
             requires_cf_bypass=True, cf_bypass_until=0,
@@ -425,7 +425,7 @@ class TestSleepMirrorsRemoteCfBypass:
     def test_lease_with_requires_cf_bypass_skipped_when_locally_disabled(self):
         """``always_bypass_time is None`` means CF bypass is operator-disabled;
         we must not silently re-enable it from a stale DO marker."""
-        from packages.python.javdb_spider.runtime import state as _state
+        from javdb.spider.runtime import state as _state
         coord = MagicMock()
         coord.lease.return_value = _mk_lease_with_p1a(
             requires_cf_bypass=True, cf_bypass_until=0,
@@ -458,7 +458,7 @@ class TestCircuitBreaker:
             0.01, 0.02, coordinator=coord, proxy_id="p", throttle=None,
         )
 
-        with caplog.at_level("DEBUG", logger="packages.python.javdb_spider.runtime.sleep"):
+        with caplog.at_level("DEBUG", logger="javdb.spider.runtime.sleep"):
             for _ in range(_DEGRADE_THRESHOLD + 1):
                 mgr.plan_sleep()
 
@@ -550,7 +550,7 @@ class TestCircuitBreaker:
         )
         mgr._recovery_probe_sec = 0.01
 
-        with caplog.at_level("DEBUG", logger="packages.python.javdb_spider.runtime.sleep"):
+        with caplog.at_level("DEBUG", logger="javdb.spider.runtime.sleep"):
             for _ in range(_DEGRADE_THRESHOLD + 1):
                 mgr.plan_sleep()
             assert mgr._degraded is True

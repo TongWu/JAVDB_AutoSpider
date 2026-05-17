@@ -1,6 +1,6 @@
 """Canonical login CLI entrypoint."""
 
-from packages.python.javdb_integrations.login import main
+from javdb.spider.auth.login import main
 
 
 if __name__ == "__main__":

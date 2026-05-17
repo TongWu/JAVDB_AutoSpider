@@ -1,1 +1,0 @@
-"""Canonical Python package container."""

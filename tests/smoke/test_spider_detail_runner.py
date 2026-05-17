@@ -463,7 +463,7 @@ class _FakeClaimClient:
     """Minimal stand-in for ``MovieClaimClient`` in the spider tests."""
 
     def __init__(self, *, claim_result=None, stage_result=True, complete_result=True):
-        from packages.python.javdb_platform.movie_claim_client import (
+        from javdb.proxy.coordinator.movie_claim_client import (
             ClaimResult,
             CompleteResult,
             StageCompleteResult,

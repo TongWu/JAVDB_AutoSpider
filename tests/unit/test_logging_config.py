@@ -14,7 +14,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 sys.path.insert(0, project_root)
 
 from utils.infra.logging_config import setup_logging, get_logger
-from packages.python.javdb_platform.logging_config import (
+from javdb.infra.logging import (
     _CompactConsoleFormatter,
     _LegacyVerboseFormatter,
     _PlainConsoleFormatter,
@@ -291,14 +291,14 @@ class TestLoggingFormat:
 
         try:
             setup_logging(log_file=log_file)
-            logger = get_logger('packages.python.javdb_platform.request_handler')
+            logger = get_logger('javdb.infra.request')
             logger.info("Short name test")
 
             with open(log_file, 'r') as f:
                 content = f.read()
 
             assert 'RequestHandler' in content
-            assert 'packages.python.javdb_platform.request_handler' not in content
+            assert 'javdb.infra.request' not in content
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -307,7 +307,7 @@ class TestLoggerNameMapping:
     """Test cases for logger short-name mapping."""
 
     def test_shorten_mapped_module(self):
-        assert _shorten_logger_name('packages.python.javdb_spider.fetch.fetch_engine') == 'FetchEngine'
+        assert _shorten_logger_name('javdb.spider.fetch.fetch_engine') == 'FetchEngine'
 
     def test_shorten_unmapped_module_strips_prefix(self):
         result = _shorten_logger_name('packages.python.javdb_new.new_module')
@@ -320,7 +320,7 @@ class TestLoggerNameMapping:
         mapping = get_logger_name_mapping()
         assert isinstance(mapping, dict)
         assert 'RequestHandler' in mapping
-        assert mapping['RequestHandler'] == 'packages.python.javdb_platform.request_handler'
+        assert mapping['RequestHandler'] == 'javdb.infra.request'
 
     def test_get_logger_name_mapping_is_copy(self):
         m1 = get_logger_name_mapping()
@@ -393,7 +393,7 @@ def _our_console_formatters(root):
     pick that up.  We restrict to formatters whose class lives in our
     canonical logging module.
     """
-    from packages.python.javdb_platform import logging_config as _mod
+    from javdb.infra import logging as _mod
     out = []
     for h in root.handlers:
         if isinstance(h, logging.FileHandler):
@@ -489,7 +489,7 @@ class TestSectionAndSummaryHelpers:
         what our formatters render.
         """
         from io import StringIO
-        from packages.python.javdb_platform import logging_config as _mod
+        from javdb.infra import logging as _mod
         _reset_logging_state()
         setup_logging(log_style=log_style)
         root = logging.getLogger()
@@ -595,12 +595,12 @@ class TestRustBridgeShortNames:
     both so the compact console field stays at 12 chars wide."""
 
     def test_rust_dot_separator_maps_to_short_name(self):
-        assert _shorten_logger_name('javdb_rust_core.proxy.pool') == 'ProxyPool'
-        assert _shorten_logger_name('javdb_rust_core.proxy.ban_manager') == 'BanManager'
+        assert _shorten_logger_name('rust_core.proxy.pool') == 'ProxyPool'
+        assert _shorten_logger_name('rust_core.proxy.ban_manager') == 'BanManager'
 
     def test_rust_double_colon_separator_maps_to_short_name(self):
-        assert _shorten_logger_name('javdb_rust_core::proxy::pool') == 'ProxyPool'
-        assert _shorten_logger_name('javdb_rust_core::proxy::ban_manager') == 'BanManager'
+        assert _shorten_logger_name('rust_core::proxy::pool') == 'ProxyPool'
+        assert _shorten_logger_name('rust_core::proxy::ban_manager') == 'BanManager'
 
     def test_new_javdb_platform_clients_have_short_names(self):
         # These were unmapped before the log redesign and showed up as

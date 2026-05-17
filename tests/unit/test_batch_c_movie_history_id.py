@@ -23,11 +23,11 @@ project_root = os.path.dirname(
 sys.path.insert(0, project_root)
 
 import utils.infra.db as db_mod
-from packages.python.javdb_platform.db import (
+from javdb.storage.db.db import (
     _generate_integer_id,
     _INT_ID_EPOCH_BASE_MS,
 )
-from packages.python.javdb_platform.dual_connection import (
+from javdb.storage.dual_connection import (
     APPLICATION_GENERATED_ID_TABLES,
     DualConnection,
     DualWriteIdMismatchError,
@@ -289,7 +289,7 @@ def test_movie_history_without_explicit_id_raises_on_lastrowid_mismatch(
     The dual guard must catch it for MovieHistory now that the table is
     guarded.
     """
-    from packages.python.javdb_platform import dual_connection as _dual_module
+    from javdb.storage import dual_connection as _dual_module
 
     sqlite_conn = _make_movie_history_sqlite(tmp_path)
     fake_d1 = _FakeD1Connection(d1_lastrowid=999)
@@ -367,7 +367,7 @@ def test_torrent_history_without_explicit_id_raises_on_mismatch(
     monkeypatch, tmp_path
 ):
     """TorrentHistory also raises on lastrowid mismatch when Id absent."""
-    from packages.python.javdb_platform import dual_connection as _dual_module
+    from javdb.storage import dual_connection as _dual_module
 
     sqlite_conn = _make_movie_history_sqlite(tmp_path)
 

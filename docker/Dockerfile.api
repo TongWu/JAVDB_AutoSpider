@@ -1,0 +1,66 @@
+# ============================================================
+# Stage 1: Build Rust extension wheel (shared with main Dockerfile)
+# ============================================================
+FROM python:3.11-slim AS rust-builder
+
+RUN apt-get update && apt-get install -y \
+    curl build-essential pkg-config libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+RUN pip install --no-cache-dir maturin[patchelf]
+
+COPY javdb/rust_core/ /build/rust_core/
+RUN cd /build/rust_core && maturin build --release --out /wheels
+
+# ============================================================
+# Stage 2: Runtime — uvicorn-based FastAPI server
+# ============================================================
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y \
+    git tzdata curl \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV TZ=Asia/Shanghai
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir "uvicorn[standard]>=0.30"
+
+COPY --from=rust-builder /wheels/*.whl /tmp/
+RUN pip install /tmp/*.whl && rm -f /tmp/*.whl
+
+# Application source — same as main Dockerfile but no cron config.
+COPY apps/ ./apps/
+COPY javdb/ ./javdb/
+COPY api/ ./api/
+COPY legacy/ ./legacy/
+COPY migration/ ./migration/
+COPY utils/ ./utils/
+COPY scripts/ ./scripts/
+COPY compat.py .
+COPY config.py.example .
+COPY pipeline.py .
+
+RUN useradd -m -u 10001 -s /bin/bash spider \
+    && mkdir -p /app/logs /app/reports \
+    && chown -R spider:spider /app
+
+USER spider
+
+EXPOSE 8100
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD curl -fsS http://127.0.0.1:8100/api/health || exit 1
+
+ENV WEB_CONCURRENCY=2
+CMD ["sh", "-c", "uvicorn apps.api.server:app --host 0.0.0.0 --port 8100 --workers ${WEB_CONCURRENCY}"]

@@ -1,0 +1,182 @@
+use pyo3::prelude::*;
+
+pub mod csv_writer;
+pub mod dedup_ops;
+pub mod history;
+pub mod magnet_extractor;
+pub mod models;
+pub mod proxy;
+pub mod rclone_ops;
+pub mod requester;
+pub mod scraper;
+pub mod url_helper;
+
+use models::{
+    ActorCredit, CategoryPageResult, IndexPageResult, MagnetInfo, MovieDetail, MovieIndexEntry,
+    MovieLink, TagCategory, TagOption, TagPageResult, TopPageResult,
+};
+use proxy::ban_manager::{get_global_ban_manager, ProxyBanManager};
+use proxy::masking::{
+    mask_email, mask_error, mask_full, mask_ip_address, mask_partial, mask_proxy_url, mask_server,
+    mask_username,
+};
+use proxy::pool::{create_proxy_pool_from_config, ProxyInfo, ProxyPool};
+use requester::config::RequestConfig;
+use requester::handler::{create_request_handler_from_config, RequestHandler};
+use requester::helper::{create_proxy_helper_from_config, ProxyHelper};
+use history::manager::{
+    load_parsed_movies_history, cleanup_history_file, maintain_history_limit,
+    save_parsed_movie_to_history, validate_history_file, determine_torrent_types,
+    determine_torrent_type, get_missing_torrent_types, has_complete_subtitles,
+    should_skip_recent_yesterday_release, should_skip_recent_today_release,
+    batch_update_last_visited,
+    should_process_movie, check_torrent_in_history, add_downloaded_indicator_to_csv,
+    is_downloaded_torrent, mark_torrent_as_downloaded,
+};
+
+// Python-facing wrapper functions for parsers
+#[pyfunction]
+#[pyo3(signature = (html_content, page_num=1))]
+fn parse_index_page(html_content: &str, page_num: i32) -> IndexPageResult {
+    scraper::index_parser::parse_index_page(html_content, page_num)
+}
+
+#[pyfunction]
+fn parse_detail_page(html_content: &str) -> MovieDetail {
+    scraper::detail_parser::parse_detail_page(html_content)
+}
+
+#[pyfunction]
+#[pyo3(signature = (html_content, page_num=1))]
+fn parse_category_page(html_content: &str, page_num: i32) -> CategoryPageResult {
+    scraper::index_parser::parse_category_page(html_content, page_num)
+}
+
+#[pyfunction]
+#[pyo3(signature = (html_content, page_num=1))]
+fn parse_top_page(html_content: &str, page_num: i32) -> TopPageResult {
+    scraper::index_parser::parse_top_page(html_content, page_num)
+}
+
+#[pyfunction]
+#[pyo3(signature = (html_content, page_num=1))]
+fn parse_tag_page(html_content: &str, page_num: i32) -> TagPageResult {
+    scraper::tag_parser::parse_tag_page(html_content, page_num)
+}
+
+#[pyfunction]
+fn detect_page_type(html_content: &str) -> String {
+    scraper::common::detect_page_type(html_content)
+}
+
+#[pyfunction]
+fn is_login_page(html_content: &str) -> bool {
+    scraper::common::is_login_page(html_content)
+}
+
+#[pyfunction]
+fn validate_index_html(html_content: &str) -> (bool, bool) {
+    scraper::common::validate_index_html(html_content)
+}
+
+#[pymodule]
+fn rust_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // Initialize logging bridge
+    pyo3_log::init();
+
+    // --- Models ---
+    m.add_class::<MovieLink>()?;
+    m.add_class::<ActorCredit>()?;
+    m.add_class::<MagnetInfo>()?;
+    m.add_class::<MovieIndexEntry>()?;
+    m.add_class::<MovieDetail>()?;
+    m.add_class::<IndexPageResult>()?;
+    m.add_class::<CategoryPageResult>()?;
+    m.add_class::<TopPageResult>()?;
+    m.add_class::<TagOption>()?;
+    m.add_class::<TagCategory>()?;
+    m.add_class::<TagPageResult>()?;
+
+    // --- Proxy ---
+    m.add_class::<ProxyInfo>()?;
+    m.add_class::<ProxyPool>()?;
+    m.add_class::<ProxyBanManager>()?;
+    m.add_function(wrap_pyfunction!(create_proxy_pool_from_config, m)?)?;
+    m.add_function(wrap_pyfunction!(get_global_ban_manager, m)?)?;
+
+    // --- Masking ---
+    m.add_function(wrap_pyfunction!(mask_full, m)?)?;
+    m.add_function(wrap_pyfunction!(mask_partial, m)?)?;
+    m.add_function(wrap_pyfunction!(mask_email, m)?)?;
+    m.add_function(wrap_pyfunction!(mask_ip_address, m)?)?;
+    m.add_function(wrap_pyfunction!(mask_proxy_url, m)?)?;
+    m.add_function(wrap_pyfunction!(mask_username, m)?)?;
+    m.add_function(wrap_pyfunction!(mask_server, m)?)?;
+    m.add_function(wrap_pyfunction!(mask_error, m)?)?;
+
+    // --- Request Handler ---
+    m.add_class::<RequestConfig>()?;
+    m.add_class::<RequestHandler>()?;
+    m.add_class::<ProxyHelper>()?;
+    m.add_function(wrap_pyfunction!(create_request_handler_from_config, m)?)?;
+    m.add_function(wrap_pyfunction!(create_proxy_helper_from_config, m)?)?;
+
+    // --- Parsers ---
+    m.add_function(wrap_pyfunction!(parse_index_page, m)?)?;
+    m.add_function(wrap_pyfunction!(parse_detail_page, m)?)?;
+    m.add_function(wrap_pyfunction!(parse_category_page, m)?)?;
+    m.add_function(wrap_pyfunction!(parse_top_page, m)?)?;
+    m.add_function(wrap_pyfunction!(parse_tag_page, m)?)?;
+    m.add_function(wrap_pyfunction!(detect_page_type, m)?)?;
+    m.add_function(wrap_pyfunction!(is_login_page, m)?)?;
+    m.add_function(wrap_pyfunction!(validate_index_html, m)?)?;
+
+    // --- History Manager ---
+    m.add_function(wrap_pyfunction!(load_parsed_movies_history, m)?)?;
+    m.add_function(wrap_pyfunction!(cleanup_history_file, m)?)?;
+    m.add_function(wrap_pyfunction!(maintain_history_limit, m)?)?;
+    m.add_function(wrap_pyfunction!(save_parsed_movie_to_history, m)?)?;
+    m.add_function(wrap_pyfunction!(validate_history_file, m)?)?;
+    m.add_function(wrap_pyfunction!(determine_torrent_types, m)?)?;
+    m.add_function(wrap_pyfunction!(determine_torrent_type, m)?)?;
+    m.add_function(wrap_pyfunction!(get_missing_torrent_types, m)?)?;
+    m.add_function(wrap_pyfunction!(has_complete_subtitles, m)?)?;
+    m.add_function(wrap_pyfunction!(should_skip_recent_yesterday_release, m)?)?;
+    m.add_function(wrap_pyfunction!(should_skip_recent_today_release, m)?)?;
+    m.add_function(wrap_pyfunction!(batch_update_last_visited, m)?)?;
+    m.add_function(wrap_pyfunction!(should_process_movie, m)?)?;
+    m.add_function(wrap_pyfunction!(check_torrent_in_history, m)?)?;
+    m.add_function(wrap_pyfunction!(add_downloaded_indicator_to_csv, m)?)?;
+    m.add_function(wrap_pyfunction!(is_downloaded_torrent, m)?)?;
+    m.add_function(wrap_pyfunction!(mark_torrent_as_downloaded, m)?)?;
+
+    // --- CSV Writer ---
+    m.add_function(wrap_pyfunction!(csv_writer::merge_row_data, m)?)?;
+    m.add_function(wrap_pyfunction!(csv_writer::create_csv_row, m)?)?;
+    m.add_function(wrap_pyfunction!(csv_writer::check_torrent_status, m)?)?;
+    m.add_function(wrap_pyfunction!(csv_writer::collect_new_magnet_links, m)?)?;
+
+    // --- URL Helper ---
+    m.add_function(wrap_pyfunction!(url_helper::detect_url_type, m)?)?;
+    m.add_function(wrap_pyfunction!(url_helper::extract_url_identifier, m)?)?;
+    m.add_function(wrap_pyfunction!(url_helper::has_magnet_filter, m)?)?;
+    m.add_function(wrap_pyfunction!(url_helper::add_magnet_filter_to_url, m)?)?;
+    m.add_function(wrap_pyfunction!(url_helper::get_page_url, m)?)?;
+    m.add_function(wrap_pyfunction!(url_helper::sanitize_filename_part, m)?)?;
+    m.add_function(wrap_pyfunction!(url_helper::extract_url_part_after_javdb, m)?)?;
+
+    // --- Magnet Extractor ---
+    m.add_function(wrap_pyfunction!(magnet_extractor::extract_magnets, m)?)?;
+
+    // --- RClone Ops ---
+    m.add_function(wrap_pyfunction!(rclone_ops::parse_folder_name, m)?)?;
+    m.add_function(wrap_pyfunction!(rclone_ops::parse_lsjson_for_year, m)?)?;
+    m.add_function(wrap_pyfunction!(rclone_ops::group_by_movie_code, m)?)?;
+    m.add_function(wrap_pyfunction!(rclone_ops::parse_lsd_output, m)?)?;
+
+    // --- Dedup Ops ---
+    m.add_function(wrap_pyfunction!(dedup_ops::should_skip_from_rclone, m)?)?;
+    m.add_function(wrap_pyfunction!(dedup_ops::check_dedup_upgrade, m)?)?;
+
+    Ok(())
+}

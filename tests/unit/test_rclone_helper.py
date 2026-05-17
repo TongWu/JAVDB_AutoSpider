@@ -163,7 +163,7 @@ class TestParseLeafName:
 # ============================================================================
 
 class TestRootFolderHelpers:
-    @patch('packages.python.javdb_platform.config_helper.cfg', autospec=True)
+    @patch('javdb.infra.config.cfg', autospec=True)
     def test_get_configured_root_folder_prefers_folder_path(self, mock_cfg):
         mock_cfg.side_effect = lambda k, d=None: {
             'RCLONE_FOLDER_PATH': 'gdrive:/剧集/不可以色色/JAV-Sync',
@@ -171,7 +171,7 @@ class TestRootFolderHelpers:
         }.get(k, d)
         assert get_configured_root_folder() == '剧集/不可以色色/JAV-Sync'
 
-    @patch('packages.python.javdb_platform.config_helper.cfg', autospec=True)
+    @patch('javdb.infra.config.cfg', autospec=True)
     def test_get_configured_root_folder_falls_back_to_root_folder(self, mock_cfg):
         mock_cfg.side_effect = lambda k, d=None: {
             'RCLONE_FOLDER_PATH': None,

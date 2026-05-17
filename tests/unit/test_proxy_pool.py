@@ -662,7 +662,7 @@ class TestProxyPoolUnbanProxy:
         pool.unban_proxy("un-rot-1")
 
         # is_proxy_usable should now hold again on un-rot-1.
-        from packages.python.javdb_platform.proxy_policy import is_proxy_usable
+        from javdb.proxy.policy import is_proxy_usable
         assert is_proxy_usable(pool.proxies[0])
 
     def test_get_current_proxy_skips_banned(self):

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -38,6 +40,10 @@ from apps.api.infra.security import (
 )
 from apps.api.parsers import RUST_PARSERS_AVAILABLE
 from apps.api.routers.auth import login, logout, refresh_token, router as auth_router
+from apps.api.routers.capabilities import router as capabilities_router
+from apps.api.routers.onboarding import router as onboarding_router
+from apps.api.routers.sessions import router as sessions_router
+from apps.api.routers.system_state import router as system_state_router
 from apps.api.routers.config import (
     get_config,
     get_config_meta,
@@ -97,7 +103,7 @@ from apps.api.schemas.payloads import (
     VideoCodeSearchPayload,
 )
 from apps.api.services import config_service, context, explore_service, spider_jobs, task_service
-from packages.python.javdb_platform.spider_gateway import create_gateway
+from javdb.spider.spider_gateway import create_gateway
 
 RUST_CORE_AVAILABLE = RUST_PARSERS_AVAILABLE
 _payload_to_cli_args = spider_jobs._payload_to_cli_args
@@ -139,7 +145,9 @@ async def auth_csrf_middleware(request: Request, call_next):
             # /api/explore/* endpoints are read-only HTML proxies consumed
             # by the SPA via fetch(); they carry no side-effects, so CSRF
             # protection is intentionally skipped for navigation requests.
-            if not request.url.path.startswith("/api/explore/"):
+            # /api/test/* endpoints only exist in TEST_MODE and are called
+            # by the E2E harness directly — no CSRF token available.
+            if not request.url.path.startswith("/api/explore/") and not request.url.path.startswith("/api/test/"):
                 _verify_csrf(request)
         except Exception as exc:
             if hasattr(exc, "status_code") and hasattr(exc, "detail"):
@@ -157,8 +165,16 @@ for router in (
     config_router,
     tasks_router,
     explore_router,
+    capabilities_router,
+    system_state_router,
+    onboarding_router,
+    sessions_router,
 ):
     app.include_router(router)
+
+if os.getenv("TEST_MODE") == "1":
+    from apps.api.routers.test_mode import router as test_mode_router
+    app.include_router(test_mode_router)
 
 
 __all__ = [

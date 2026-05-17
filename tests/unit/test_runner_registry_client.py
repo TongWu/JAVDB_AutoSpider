@@ -28,7 +28,7 @@ import requests
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from packages.python.javdb_platform.runner_registry_client import (  # noqa: E402
+from javdb.proxy.coordinator.runner_registry_client import (  # noqa: E402
     ActiveRunnersResult,
     HeartbeatResult,
     PoolHashBucket,
@@ -750,7 +750,7 @@ def test_heartbeat_defaults_active_runners_count_when_missing():
 
 def test_heartbeat_parses_embedded_config_snapshot():
     """The W5.3 config block in a heartbeat is exposed as HeartbeatResult.config."""
-    from packages.python.javdb_platform.runner_registry_client import (
+    from javdb.proxy.coordinator.runner_registry_client import (
         ConfigSnapshot,
     )
     c = _make_client()
@@ -825,7 +825,7 @@ def test_heartbeat_config_coerces_non_string_values_to_strings():
 
 def test_register_parses_embedded_config_snapshot():
     """Same parsing on RegisterResult for completeness."""
-    from packages.python.javdb_platform.runner_registry_client import (
+    from javdb.proxy.coordinator.runner_registry_client import (
         ConfigSnapshot,
     )
     c = _make_client()
@@ -854,7 +854,7 @@ def test_register_parses_embedded_config_snapshot():
 
 def test_heartbeat_parses_active_signals_list():
     """Heartbeat returns operator-pushed signals via HeartbeatResult.active_signals."""
-    from packages.python.javdb_platform.runner_registry_client import Signal
+    from javdb.proxy.coordinator.runner_registry_client import Signal
     c = _make_client()
     body = {
         "alive": True,
@@ -919,7 +919,7 @@ def test_heartbeat_drops_malformed_signal_entries():
 
 def test_register_parses_active_signals():
     """Register response also surfaces signals."""
-    from packages.python.javdb_platform.runner_registry_client import Signal
+    from javdb.proxy.coordinator.runner_registry_client import Signal
     c = _make_client()
     body = {
         "registered": True,

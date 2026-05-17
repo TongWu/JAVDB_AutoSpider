@@ -23,7 +23,7 @@ import requests
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from packages.python.javdb_platform.runner_registry_client import (  # noqa: E402
+from javdb.proxy.coordinator.runner_registry_client import (  # noqa: E402
     RunnerRegistryClient,
     SessionPayload,
 )
