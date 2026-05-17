@@ -14,7 +14,7 @@ sys.path.insert(0, project_root)
 
 # Import functions from email_notification script
 import apps.cli.notify.email as email_notification
-from scripts.email_notification import (
+from apps.cli.notify.email import (
     analyze_spider_log,
     analyze_uploader_log,
     analyze_pikpak_log,

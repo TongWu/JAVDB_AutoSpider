@@ -6,9 +6,9 @@ are covered by tests/integration/test_spider_integration.py::TestLoginQueueHelpe
 
 from unittest.mock import patch, MagicMock, ANY
 
-import scripts.spider.fetch.session as session_mod
-import scripts.spider.fetch.fallback as fallback_mod
-import scripts.spider.runtime.state as state_mod
+import javdb.spider.fetch.session as session_mod
+import javdb.spider.fetch.fallback as fallback_mod
+import javdb.spider.runtime.state as state_mod
 from javdb.proxy.policy import (
     is_proxy_mode_disabled,
     normalize_proxy_mode,
@@ -350,8 +350,8 @@ class TestProxyModeDisabled:
         try:
             import scripts.spider.runtime.config as cfg_mod
             with patch.object(cfg_mod, 'PROXY_MODE', 'none'), \
-                 patch('scripts.spider.runtime.state.PROXY_MODE', 'none'), \
-                 patch('scripts.spider.runtime.state.PROXY_POOL', [{'name': 'X', 'http': 'http://x:1'}]):
+                 patch('javdb.spider.runtime.state.PROXY_MODE', 'none'), \
+                 patch('javdb.spider.runtime.state.PROXY_POOL', [{'name': 'X', 'http': 'http://x:1'}]):
                 state_mod.setup_proxy_pool(True)
                 assert state_mod.global_proxy_pool is None
         finally:

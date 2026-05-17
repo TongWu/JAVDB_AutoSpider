@@ -35,7 +35,7 @@ from javdb.spider.runtime.sleep import (
     MovieSleepManager, PenaltyTracker, DualWindowThrottle,
     COMPOSITE_MULTIPLIER_CAP, ABSOLUTE_MAX_SLEEP,
 )
-import scripts.spider.runtime.state as state
+import javdb.spider.runtime.state as state
 
 
 # ---------------------------------------------------------------------------
@@ -126,9 +126,9 @@ def create_workers(
         def process_fn(ctx, task):
             return {'parsed': True}
 
-    with patch('scripts.spider.fetch.fetch_engine.RequestHandler', side_effect=_make_handler_stub), \
-         patch('scripts.spider.fetch.fetch_engine.create_proxy_pool_from_config', return_value=MagicMock()), \
-         patch('scripts.spider.fetch.fetch_engine.LOGIN_PROXY_NAME', None):
+    with patch('javdb.spider.fetch.fetch_engine.RequestHandler', side_effect=_make_handler_stub), \
+         patch('javdb.spider.fetch.fetch_engine.create_proxy_pool_from_config', return_value=MagicMock()), \
+         patch('javdb.spider.fetch.fetch_engine.LOGIN_PROXY_NAME', None):
         for idx, name in enumerate(proxy_names):
             cfg = {"name": name, "http": f"http://10.0.0.{idx + 1}:8080"}
             w = _EngineWorker(
@@ -200,7 +200,7 @@ class TestIndexRequiresLogin:
             new_cookie = "freshly_baked_session_cookie"
 
             with patch(
-                "scripts.spider.fetch.login_coordinator.attempt_login_refresh",
+                "javdb.spider.fetch.login_coordinator.attempt_login_refresh",
                 return_value=(True, new_cookie, "ARM-1"),
             ):
                 success, cookie, _ = coord._do_login_for_proxy(
@@ -408,10 +408,10 @@ class TestCookieRevocationAndFailover:
             )
 
             with patch(
-                "scripts.spider.fetch.login_coordinator.attempt_login_refresh",
+                "javdb.spider.fetch.login_coordinator.attempt_login_refresh",
                 return_value=(True, new_cookie, "ARM-1"),
             ) as mock_login, patch(
-                "scripts.spider.fetch.login_coordinator.verify_login_via_fixed_pages",
+                "javdb.spider.fetch.login_coordinator.verify_login_via_fixed_pages",
                 return_value=True,
             ) as mock_verify:
                 coord.handle_login_required(
@@ -450,10 +450,10 @@ class TestCookieRevocationAndFailover:
             )
 
             with patch(
-                "scripts.spider.fetch.login_coordinator.attempt_login_refresh",
+                "javdb.spider.fetch.login_coordinator.attempt_login_refresh",
                 return_value=(True, new_cookie, "ARM-2"),
             ), patch(
-                "scripts.spider.fetch.login_coordinator.verify_login_via_fixed_pages",
+                "javdb.spider.fetch.login_coordinator.verify_login_via_fixed_pages",
                 return_value=True,
             ) as mock_verify:
                 coord.handle_login_required(
@@ -523,10 +523,10 @@ class TestCookieRevocationAndFailover:
             ])
 
             with patch(
-                "scripts.spider.fetch.login_coordinator.attempt_login_refresh",
+                "javdb.spider.fetch.login_coordinator.attempt_login_refresh",
                 side_effect=lambda *a, **kw: next(login_responses),
             ), patch(
-                "scripts.spider.fetch.login_coordinator.verify_login_via_fixed_pages",
+                "javdb.spider.fetch.login_coordinator.verify_login_via_fixed_pages",
                 return_value=True,
             ) as mock_verify:
                 for stale_round in range(3):
@@ -567,10 +567,10 @@ class TestCookieRevocationAndFailover:
             )
 
             with patch(
-                "scripts.spider.fetch.login_coordinator.attempt_login_refresh",
+                "javdb.spider.fetch.login_coordinator.attempt_login_refresh",
                 return_value=(True, new_cookie, "ARM-1"),
             ), patch(
-                "scripts.spider.fetch.login_coordinator.verify_login_via_fixed_pages",
+                "javdb.spider.fetch.login_coordinator.verify_login_via_fixed_pages",
                 return_value=True,
             ) as mock_verify:
                 coord.handle_login_required(

@@ -11,7 +11,7 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-import scripts.spider.runtime.state as state
+import javdb.spider.runtime.state as state
 from javdb.pipeline.models import SpiderIngestionPlan
 from javdb.spider.detail.runner import (
     DetailPersistOutcome,
@@ -310,11 +310,11 @@ def test_process_detail_entries_handles_backend_results(monkeypatch):
     ]
 
     monkeypatch.setattr(
-        'scripts.spider.detail.runner.extract_magnets',
+        'javdb.spider.detail.runner.extract_magnets',
         lambda magnets, _idx: {'subtitle': magnets[0]},
     )
     monkeypatch.setattr(
-        'scripts.spider.detail.runner.persist_parsed_detail_result',
+        'javdb.spider.detail.runner.persist_parsed_detail_result',
         lambda **kwargs: DetailPersistOutcome(
             status='reported',
             row={'href': kwargs['entry']['href'], 'video_code': kwargs['entry']['video_code']},
@@ -417,11 +417,11 @@ def test_process_detail_entries_acknowledges_runtime_state_changes(monkeypatch):
     )
 
     monkeypatch.setattr(
-        'scripts.spider.detail.runner.extract_magnets',
+        'javdb.spider.detail.runner.extract_magnets',
         lambda magnets, _idx: {'subtitle': magnets[0]},
     )
     monkeypatch.setattr(
-        'scripts.spider.detail.runner.persist_parsed_detail_result',
+        'javdb.spider.detail.runner.persist_parsed_detail_result',
         lambda **_kwargs: next(outcomes),
     )
 

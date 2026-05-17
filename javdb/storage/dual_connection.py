@@ -38,7 +38,7 @@ Application-generated PRIMARY KEY tables
 Tables listed in :data:`APPLICATION_GENERATED_ID_TABLES`
 (``ReportSessions`` and the ``Pending*HistoryWrites`` pair) MUST be
 inserted with an explicit PK column (``Id`` / ``Seq``) on both backends
-— see ``migration/d1/2026_05_08_sessionid_decouple.md``. When the
+— see ``javdb/migrations/d1/2026_05_08_sessionid_decouple.md``. When the
 INSERT supplies that column in its column list, the application has
 already chosen the canonical value and both backends write the same id;
 the row is consistent regardless of either side's AUTOINCREMENT
@@ -285,7 +285,7 @@ _ID_DELTA_BY_TABLE: "dict[str, int]" = {}
 # whichever backend the cursor wraps — corrupting any ``SessionId`` that
 # downstream rows are tagged with.
 #
-# The 2026-05-08 incident report (``migration/d1/2026_05_08_sessionid_
+# The 2026-05-08 incident report (``javdb/migrations/d1/2026_05_08_sessionid_
 # decouple.md``) walks through one concrete failure caused by trusting
 # the SQLite-side AUTOINCREMENT.
 #
@@ -491,7 +491,7 @@ class DualCursor:
         logger.error(
             "DualConnection: application-generated id "
             "mismatch on %s; aborting transaction. Caller must "
-            "INSERT with explicit Id (see migration/d1/"
+            "INSERT with explicit Id (see javdb/migrations/d1/"
             "2026_05_08_sessionid_decouple.md); details in %s",
             table, _DRIFT_LOG_PATH,
         )

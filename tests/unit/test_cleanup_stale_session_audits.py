@@ -22,7 +22,7 @@ import sys
 import pytest
 
 import apps.cli.db.cleanup_stale_session_audits as cleanup
-import utils.infra.db as db_mod
+import javdb.storage.db.db as db_mod
 
 
 def _stamp_audit(session_id: int, target_id: int, *, when: str) -> None:

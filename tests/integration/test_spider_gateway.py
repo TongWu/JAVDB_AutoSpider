@@ -284,7 +284,7 @@ class TestApiParseUrl:
             "X-CSRF-Token": csrf,
         }
 
-        with patch('api.server.create_gateway') as mock_create:
+        with patch('apps.api.server.create_gateway') as mock_create:
             mock_gw = MagicMock()
             mock_gw.fetch_and_parse.return_value = GatewayResult(
                 ok=True, page_type='index', url='u', html_len=10, result={},

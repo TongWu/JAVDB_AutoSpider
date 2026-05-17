@@ -60,7 +60,7 @@ def _reset_globals(monkeypatch):
 
 def _patch_cfg(monkeypatch, **values):
     """Patch ``config_helper.cfg`` to return values from *values* dict."""
-    from javdb.infra import config as config_helper
+    import javdb.infra.config as config_helper
 
     def fake_cfg(name, default=""):
         return values.get(name, default)
