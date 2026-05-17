@@ -154,7 +154,7 @@ def _run(req: RollbackRequest, *, dry_run: bool) -> Dict[str, Any]:
     """
     # Late import to avoid pulling argparse / logging setup at module
     # import time (the FastAPI app imports this module on boot).
-    from apps.cli import rollback as _rollback_cli
+    from apps.cli.db import rollback as _rollback_cli
 
     # Validate an explicit session_id before resolving — gives HTTP
     # callers a clean 404 instead of an empty summary.

@@ -127,7 +127,7 @@ class TestParseArguments:
 
 
 def test_scan_inventory_counts_process_year_none_as_error(monkeypatch):
-    import scripts.rclone_manager as rm
+    import apps.cli.rclone.manager as rm
 
     callbacks = []
     monkeypatch.setattr(rm, "get_year_folders", lambda *_args: ["2026"])
@@ -143,7 +143,7 @@ def test_scan_inventory_counts_process_year_none_as_error(monkeypatch):
 
 
 def test_scan_csv_temp_removed_on_scan_failure(monkeypatch, tmp_path):
-    import scripts.rclone_manager as rm
+    import apps.cli.rclone.manager as rm
     from javdb.infra import config as config_helper
 
     output = tmp_path / "inventory.csv"
@@ -186,7 +186,7 @@ def test_scan_csv_temp_removed_on_scan_failure(monkeypatch, tmp_path):
 def test_scan_sqlite_uses_staging_when_no_active_session(
     monkeypatch, tmp_path, storage_mode_db
 ):
-    import scripts.rclone_manager as rm
+    import apps.cli.rclone.manager as rm
     from utils.infra import db as db_mod
 
     output = tmp_path / "inventory.csv"
@@ -292,7 +292,7 @@ def _patch_rclone_db_mocks(monkeypatch, db_mod, order, overrides=None):
 def test_scan_marks_local_session_committed_after_inventory_swap(
     monkeypatch, tmp_path, storage_mode_db
 ):
-    import scripts.rclone_manager as rm
+    import apps.cli.rclone.manager as rm
     from utils.infra import db as db_mod
 
     output = tmp_path / "inventory.csv"
@@ -337,7 +337,7 @@ def test_scan_marks_local_session_committed_after_inventory_swap(
 def test_scan_year_filter_merges_staging_instead_of_full_swap(
     monkeypatch, tmp_path, storage_mode_db
 ):
-    import scripts.rclone_manager as rm
+    import apps.cli.rclone.manager as rm
     from utils.infra import db as db_mod
 
     output = tmp_path / "inventory.csv"
@@ -391,7 +391,7 @@ def test_scan_year_filter_merges_staging_instead_of_full_swap(
 def test_scan_does_not_mark_local_session_committed_when_swap_fails(
     monkeypatch, tmp_path, storage_mode_db, caplog
 ):
-    import scripts.rclone_manager as rm
+    import apps.cli.rclone.manager as rm
     from utils.infra import db as db_mod
 
     caplog.set_level("ERROR", logger=rm.logger.name)
@@ -455,7 +455,7 @@ def test_scan_does_not_mark_local_session_committed_when_swap_fails(
 def test_scan_succeeds_when_post_swap_commit_marking_fails(
     monkeypatch, tmp_path, storage_mode_db
 ):
-    import scripts.rclone_manager as rm
+    import apps.cli.rclone.manager as rm
     from utils.infra import db as db_mod
 
     output = tmp_path / "inventory.csv"
@@ -513,7 +513,7 @@ def test_scan_succeeds_when_post_swap_commit_marking_fails(
 def test_scan_aborts_when_sqlite_staging_init_fails(
     monkeypatch, tmp_path, storage_mode_duo, caplog
 ):
-    import scripts.rclone_manager as rm
+    import apps.cli.rclone.manager as rm
     from utils.infra import db as db_mod
 
     caplog.set_level("ERROR", logger=rm.logger.name)
@@ -590,19 +590,19 @@ class TestResolveRcloneRoot:
         assert resolve_rclone_root('remote:/a/b') == ('remote', 'a/b')
 
     def test_cli_empty_falls_through_to_config(self):
-        import scripts.rclone_manager as rm
+        import apps.cli.rclone.manager as rm
 
         with patch.object(rm, 'RCLONE_FOLDER_PATH', 'gdrive:/x'):
             assert resolve_rclone_root('  ') == ('gdrive', 'x')
 
     def test_from_rclone_folder_path(self):
-        import scripts.rclone_manager as rm
+        import apps.cli.rclone.manager as rm
 
         with patch.object(rm, 'RCLONE_FOLDER_PATH', 'gdrive:/shows/jav'):
             assert resolve_rclone_root(None) == ('gdrive', 'shows/jav')
 
     def test_legacy_drive_and_root(self):
-        import scripts.rclone_manager as rm
+        import apps.cli.rclone.manager as rm
 
         with patch.object(rm, 'RCLONE_FOLDER_PATH', None):
 
@@ -1163,7 +1163,7 @@ def _add_dedup_pending(code, path, reason='Subtitle upgrade'):
 
 class TestValidateDedupRecords:
     def test_marks_only_orphan_pendings(self, storage_mode_db, tmp_path, monkeypatch):
-        import scripts.rclone_manager as rm
+        import apps.cli.rclone.manager as rm
         monkeypatch.setattr(rm, 'REPORTS_DIR', str(tmp_path))
         monkeypatch.setattr(rm, 'DEDUP_DIR', str(tmp_path / 'Dedup'))
 
@@ -1191,7 +1191,7 @@ class TestValidateDedupRecords:
         assert c_row['DateTimeDeleted']
 
     def test_no_orphans_returns_zero(self, storage_mode_db, tmp_path, monkeypatch):
-        import scripts.rclone_manager as rm
+        import apps.cli.rclone.manager as rm
         monkeypatch.setattr(rm, 'REPORTS_DIR', str(tmp_path))
         monkeypatch.setattr(rm, 'DEDUP_DIR', str(tmp_path / 'Dedup'))
         _add_inventory([('A', '2025/Actor/A/有码-中字')])
@@ -1200,7 +1200,7 @@ class TestValidateDedupRecords:
         assert count == 0 and orphans == []
 
     def test_empty_inventory_skips(self, storage_mode_db, tmp_path, monkeypatch):
-        import scripts.rclone_manager as rm
+        import apps.cli.rclone.manager as rm
         monkeypatch.setattr(rm, 'REPORTS_DIR', str(tmp_path))
         monkeypatch.setattr(rm, 'DEDUP_DIR', str(tmp_path / 'Dedup'))
         _add_dedup_pending('X', '2025/Actor/X/有码-中字')
@@ -1211,7 +1211,7 @@ class TestValidateDedupRecords:
         assert int(rows[0].get('IsDeleted') or 0) == 0
 
     def test_writes_orphan_csv(self, storage_mode_db, tmp_path, monkeypatch):
-        import scripts.rclone_manager as rm
+        import apps.cli.rclone.manager as rm
         monkeypatch.setattr(rm, 'REPORTS_DIR', str(tmp_path))
         monkeypatch.setattr(rm, 'DEDUP_DIR', str(tmp_path / 'Dedup'))
         _add_inventory([('A', 'p/A')])
@@ -1230,7 +1230,7 @@ class TestRunValidateInventory:
     def test_prunes_inventory_and_chains_dedup_self_heal(
         self, storage_mode_db, tmp_path, monkeypatch,
     ):
-        import scripts.rclone_manager as rm
+        import apps.cli.rclone.manager as rm
         monkeypatch.setattr(rm, 'REPORTS_DIR', str(tmp_path))
         monkeypatch.setattr(rm, 'DEDUP_DIR', str(tmp_path / 'Dedup'))
         monkeypatch.setattr(
@@ -1279,7 +1279,7 @@ class TestRunValidateInventory:
         assert '2025/Actor/X/有码-中字' in orphans_csv.read_text(encoding='utf-8')
 
     def test_no_prune_keeps_inventory(self, storage_mode_db, tmp_path, monkeypatch):
-        import scripts.rclone_manager as rm
+        import apps.cli.rclone.manager as rm
         monkeypatch.setattr(rm, 'REPORTS_DIR', str(tmp_path))
         monkeypatch.setattr(rm, 'DEDUP_DIR', str(tmp_path / 'Dedup'))
 
@@ -1303,7 +1303,7 @@ class TestRunValidateInventory:
         assert 'A' in inv and 'X' in inv  # not pruned
 
     def test_aborts_when_remote_returns_zero(self, storage_mode_db, tmp_path, monkeypatch):
-        import scripts.rclone_manager as rm
+        import apps.cli.rclone.manager as rm
         monkeypatch.setattr(rm, 'REPORTS_DIR', str(tmp_path))
         monkeypatch.setattr(rm, 'DEDUP_DIR', str(tmp_path / 'Dedup'))
 
