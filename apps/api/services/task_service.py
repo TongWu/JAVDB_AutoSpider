@@ -242,6 +242,48 @@ def _append_proxy_override_flags(command: list[str], payload: Any) -> None:
         command.append("--no-proxy")
 
 
+def _compute_duration(created_at: str, completed_at: str) -> int | None:
+    if not created_at or not completed_at:
+        return None
+    try:
+        start = datetime.fromisoformat(created_at)
+        end = datetime.fromisoformat(completed_at)
+        return max(0, round((end - start).total_seconds()))
+    except (ValueError, TypeError):
+        return None
+
+
+def _extract_params_from_command(command: list[str]) -> Dict[str, Any]:
+    params: Dict[str, Any] = {}
+    flags = {
+        "--dry-run", "--ignore-release-date", "--ignore-history",
+        "--use-proxy", "--no-proxy", "--all", "--pikpak-individual",
+        "--use-history", "--from-pipeline",
+    }
+    valued = {
+        "--start-page", "--end-page", "--phase", "--url",
+        "--output-file", "--max-movies-phase1", "--max-movies-phase2",
+    }
+    idx = 0
+    while idx < len(command):
+        token = command[idx]
+        if token in flags:
+            key = token.lstrip("-").replace("-", "_")
+            params[key] = True
+            idx += 1
+        elif token in valued and idx + 1 < len(command):
+            key = token.lstrip("-").replace("-", "_")
+            raw = command[idx + 1]
+            try:
+                params[key] = int(raw)
+            except ValueError:
+                params[key] = raw
+            idx += 2
+        else:
+            idx += 1
+    return params
+
+
 def _normalize_job_kind(job_id: str) -> str:
     if job_id.startswith("daily-"):
         return "daily"
@@ -294,7 +336,11 @@ def _job_summary(job_id: str, job: Optional[Dict[str, Any]] = None) -> Dict[str,
         "status": status,
         "created_at": created_at,
         "completed_at": completed_at,
+        "started_at": created_at,
+        "ended_at": completed_at,
+        "duration_seconds": _compute_duration(created_at, completed_at),
         "command": command,
+        "params": _extract_params_from_command(command),
         "source": source,
     }
 
@@ -562,11 +608,13 @@ def get_task_stream_payload(job_id: str, offset: int, username: str) -> Dict[str
         job_id,
         offset,
     )
+    lines = [l for l in chunk.split("\n") if l] if chunk else []
     return {
         "job_id": job_id,
         "status": job.get("status", ""),
-        "offset": max(0, offset),
+        "offset": next_offset,
         "next_offset": next_offset,
+        "lines": lines,
         "chunk": chunk,
         "done": job.get("status") in {"success", "failed"},
     }
