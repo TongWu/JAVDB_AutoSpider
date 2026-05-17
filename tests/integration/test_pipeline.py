@@ -29,7 +29,7 @@ from scripts.email_notification import (
 )
 
 # Import mask_sensitive_info from git_helper (it's now the canonical location)
-from utils.infra.git_helper import mask_sensitive_info
+from javdb.infra.git_helper import mask_sensitive_info
 
 
 def get_log_summary(log_path, lines=200):

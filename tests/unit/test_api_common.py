@@ -9,7 +9,7 @@ import json
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from api.parsers.common import (  # noqa: E402
+from apps.api.parsers.common import (  # noqa: E402
     javdb_absolute_url,
     movie_href_lookup_values,
     absolutize_supporting_actors_json,

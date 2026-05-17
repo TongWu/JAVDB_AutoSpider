@@ -11,7 +11,7 @@ import requests
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from utils.infra.request_handler import (
+from javdb.infra.request import (
     RequestConfig,
     RequestHandler,
     ProxyHelper,

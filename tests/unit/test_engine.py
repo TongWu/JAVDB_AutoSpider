@@ -102,7 +102,7 @@ class TestEngineSimpleMode:
 
     @_engine_patches
     def test_submit_and_get_results(self, *_mocks):
-        from scripts.spider.fetch.fetch_engine import FetchEngine, EngineTask
+        from javdb.spider.fetch.fetch_engine import FetchEngine, EngineTask
 
         html_pages = {'https://javdb.com/v/a': '<html>A</html>'}
 
@@ -129,7 +129,7 @@ class TestEngineSimpleMode:
 
     @_engine_patches
     def test_parse_failure_retries_on_other_proxy(self, *_mocks):
-        from scripts.spider.fetch.fetch_engine import FetchEngine, EngineTask
+        from javdb.spider.fetch.fetch_engine import FetchEngine, EngineTask
 
         engine = FetchEngine.simple(
             parse_fn=lambda html, task: None,
@@ -151,7 +151,7 @@ class TestEngineSimpleMode:
 
     @_engine_patches
     def test_multiple_tasks(self, *_mocks):
-        from scripts.spider.fetch.fetch_engine import FetchEngine, EngineTask
+        from javdb.spider.fetch.fetch_engine import FetchEngine, EngineTask
 
         engine = FetchEngine.simple(
             parse_fn=lambda html, task: {'code': task.meta.get('code')},
@@ -177,7 +177,7 @@ class TestEngineAdvancedMode:
 
     @_engine_patches
     def test_ctx_fetch_returns_html(self, *_mocks):
-        from scripts.spider.fetch.fetch_engine import FetchEngine, WorkerContext, EngineTask
+        from javdb.spider.fetch.fetch_engine import FetchEngine, WorkerContext, EngineTask
 
         def process(ctx, task):
             html = ctx.fetch(task.url)
@@ -218,8 +218,8 @@ class TestEngineLoginDetection:
     @patch('scripts.spider.fetch.fetch_engine.is_login_page', return_value=True)
     @_engine_patches
     def test_login_page_triggers_coordinator(self, *_mocks):
-        from scripts.spider.fetch.fetch_engine import FetchEngine
-        from scripts.spider.fetch.login_coordinator import requeue_front
+        from javdb.spider.fetch.fetch_engine import FetchEngine
+        from javdb.spider.fetch.login_coordinator import requeue_front
 
         engine = FetchEngine.simple(
             parse_fn=lambda html, task: {'ok': True},
@@ -256,7 +256,7 @@ class TestEngineCFBypassFallback:
     @patch('scripts.spider.fetch.fetch_engine.is_login_page', return_value=False)
     @_engine_patches
     def test_cf_fallback_on_direct_failure(self, *_mocks):
-        from scripts.spider.fetch.fetch_engine import FetchEngine
+        from javdb.spider.fetch.fetch_engine import FetchEngine
 
         call_log = []
 
@@ -289,7 +289,7 @@ class TestEngineShutdown:
 
     @_engine_patches
     def test_shutdown_returns_orphans(self, *_mocks):
-        from scripts.spider.fetch.fetch_engine import FetchEngine
+        from javdb.spider.fetch.fetch_engine import FetchEngine
 
         engine = FetchEngine(
             process_fn=lambda ctx, task: time.sleep(10) or {'ok': True},
@@ -307,7 +307,7 @@ class TestEngineShutdown:
 
     @_engine_patches
     def test_pending_counter(self, *_mocks):
-        from scripts.spider.fetch.fetch_engine import FetchEngine
+        from javdb.spider.fetch.fetch_engine import FetchEngine
 
         engine = FetchEngine(
             process_fn=lambda ctx, task: {'ok': True},
@@ -332,7 +332,7 @@ class TestEngineSubmitTask:
 
     @_engine_patches
     def test_submit_task(self, *_mocks):
-        from scripts.spider.fetch.fetch_engine import FetchEngine, EngineTask
+        from javdb.spider.fetch.fetch_engine import FetchEngine, EngineTask
 
         engine = FetchEngine(
             process_fn=lambda ctx, task: task.meta,
@@ -357,14 +357,14 @@ class TestEngineNoProxyPool:
 
     @patch('scripts.spider.fetch.fetch_engine.PROXY_POOL', [])
     def test_start_raises_without_proxies(self):
-        from scripts.spider.fetch.fetch_engine import FetchEngine
+        from javdb.spider.fetch.fetch_engine import FetchEngine
         engine = FetchEngine(process_fn=lambda ctx, t: None, use_cookie=False)
         with pytest.raises(RuntimeError, match="PROXY_POOL"):
             engine.start()
 
     @patch('scripts.spider.fetch.fetch_engine.PROXY_POOL', [])
     def test_parallel_backend_start_raises_without_proxies(self):
-        from scripts.spider.fetch.fetch_engine import ParallelFetchBackend
+        from javdb.spider.fetch.fetch_engine import ParallelFetchBackend
 
         backend = ParallelFetchBackend(
             process_fn=lambda ctx, t: None,
@@ -378,7 +378,7 @@ class TestEngineMarkDoneGuard:
 
     @patch('scripts.spider.fetch.fetch_engine.PROXY_POOL', _PROXY_POOL)
     def test_submit_after_done_raises(self):
-        from scripts.spider.fetch.fetch_engine import FetchEngine
+        from javdb.spider.fetch.fetch_engine import FetchEngine
         engine = FetchEngine(process_fn=lambda ctx, t: None, use_cookie=False)
         engine.mark_done()
         with pytest.raises(RuntimeError, match="mark_done"):
@@ -390,7 +390,7 @@ class TestEngineProxyBanned:
     @_engine_patches
     def test_proxy_banned_stops_worker(self, *_mocks):
         """ProxyBannedError should stop the worker and produce a failure result."""
-        from scripts.spider.fetch.fetch_engine import FetchEngine, EngineTask
+        from javdb.spider.fetch.fetch_engine import FetchEngine, EngineTask
         from javdb.infra.request import ProxyBannedError
 
         engine = FetchEngine.simple(
@@ -420,7 +420,7 @@ class TestParallelBackendCompatibility:
 
     @_engine_patches
     def test_parallel_backend_matches_fetch_engine_results(self, *_mocks):
-        from scripts.spider.fetch.fetch_engine import (
+        from javdb.spider.fetch.fetch_engine import (
             EngineTask,
             FetchEngine,
             ParallelFetchBackend,
@@ -495,7 +495,7 @@ class TestQueuePressure:
         is 'low'.  The first proxies should skip CF fallback and re-queue;
         the task should still complete via CF on the tail attempt once
         enough proxies have failed via direct path."""
-        from scripts.spider.fetch.fetch_engine import FetchEngine
+        from javdb.spider.fetch.fetch_engine import FetchEngine
 
         cf_calls = []
 
@@ -565,7 +565,7 @@ class TestTaskTimeBudget:
     def test_task_timeout_triggers_requeue(self, *_mocks):
         """A task that exceeds its time budget should be detected as
         expired and re-queued; a subsequent attempt should succeed."""
-        from scripts.spider.fetch.fetch_engine import FetchEngine
+        from javdb.spider.fetch.fetch_engine import FetchEngine
 
         call_count = {'n': 0}
         observed_expired = {'v': False}
@@ -600,7 +600,7 @@ class TestTaskTimeBudget:
     @_engine_patches
     def test_zero_timeout_means_no_limit(self, *_mocks):
         """task_timeout=0 should not set any deadline."""
-        from scripts.spider.fetch.fetch_engine import FetchEngine
+        from javdb.spider.fetch.fetch_engine import FetchEngine
 
         engine = FetchEngine(
             process_fn=lambda ctx, task: {'ok': True},
@@ -691,7 +691,7 @@ class TestSpeculativeExecution:
         ``_try_speculative_task()`` fires before the task is completed
         or re-queued.
         """
-        from scripts.spider.fetch.fetch_engine import FetchEngine
+        from javdb.spider.fetch.fetch_engine import FetchEngine
 
         attempt_count = {'n': 0}
 
@@ -889,7 +889,7 @@ class TestLoginBudgetReduction:
         """``_handle_proxy_banned`` invokes ``deduct_proxy_login_budget``."""
         import javdb.spider.runtime.state as st
         from javdb.infra.request import ProxyBannedError
-        from scripts.spider.fetch.fetch_engine import FetchEngine
+        from javdb.spider.fetch.fetch_engine import FetchEngine
         from javdb.spider.runtime.config import (
             LOGIN_ATTEMPTS_PER_PROXY_LIMIT,
         )

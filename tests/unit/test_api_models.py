@@ -9,7 +9,7 @@ sys.path.insert(0, project_root)
 
 from dataclasses import asdict
 
-from api.models import (
+from apps.api.models import (
     ActorCredit,
     MovieLink,
     MagnetInfo,

@@ -9,7 +9,7 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from utils.parser import extract_video_code, parse_index, parse_detail
+from javdb.spider.parser import extract_video_code, parse_index, parse_detail
 from bs4 import BeautifulSoup
 
 

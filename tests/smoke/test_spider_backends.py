@@ -10,9 +10,9 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from scripts.spider.fetch.backend import FetchRuntimeState
-from scripts.spider.fetch.fetch_engine import EngineTask
-from scripts.spider.fetch.sequential_backend import SequentialFetchBackend
+from javdb.spider.fetch.backend import FetchRuntimeState
+from javdb.spider.fetch.fetch_engine import EngineTask
+from javdb.spider.fetch.sequential_backend import SequentialFetchBackend
 
 
 def make_task(index: str) -> EngineTask:

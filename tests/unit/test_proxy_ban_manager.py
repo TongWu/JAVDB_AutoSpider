@@ -14,7 +14,7 @@ from unittest.mock import patch, MagicMock
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from utils.proxy_ban_manager import (
+from javdb.proxy.ban_manager import (
     ProxyBanRecord,
     ProxyBanManager,
     get_ban_manager,
