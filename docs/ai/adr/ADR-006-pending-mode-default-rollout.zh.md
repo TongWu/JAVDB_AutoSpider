@@ -19,6 +19,18 @@
 
   纯路径重命名——D1–D5 决策、30 天 bake gate、与 ADR-005 的关系都不变。
 
+- **2026-05-17 amendment 3**：**D5 对 ADR-005 PR-1 的豁免**。D5 当初写的是"bake 期间禁止 ADR-005 任何 PR"，复审认为这条覆盖太宽。bake gate 存在的目的是保护 D10 监控的三项指标（`audit_session_count` / `orphan_audit_rows` / `pause_trigger_count`）；一个 PR 只有触及 write path、WriteMode 解析、pause 机制或 schema 时才可能污染这些指标。**ADR-005 PR-1 这四项都不动**——它只是在现有函数族旁边添加 `HistoryRepo` / `OperationsRepo` / `ReportsRepo` / `StatsRepo` 类，零 caller 迁移。监控足迹可证明为零。豁免范围：
+
+  | ADR-005 PR | bake 期阻塞？ | 原因 |
+  |---|---|---|
+  | **PR-1**（在函数族旁加 Repo 类，零 caller 改动） | **否**——本 amendment 豁免 | 纯添加；不触 write/schema/workflow |
+  | PR-2（`db.py` 内部转调 Repo——双写阶段） | **是** | 触实际 write path；监控会受混淆 |
+  | PR-3（迁移 caller） | **是** | 同上 |
+  | PR-4（drop audit 表，删 audit 代码） | **是** | 触 schema + write path |
+  | PR-5（删 `db.py`） | **是** | 退役后的最终清理 |
+
+  D5 的整体禁令由此 per-PR 矩阵取代。本 amendment 落地后 PR-1 可启动；PR-2 之后仍需 30 天 bake + D10 sign-off。
+
 ---
 
 ## 背景 (Context)
@@ -86,6 +98,8 @@ D1-D3 部署后，**bake 至少 30 天**，期间运维监控：
 - bake 结束后查询 D10 三项重新通过，作为 ADR-005 启动的前置 sign-off
 
 ### D5：bake 期间禁止 ADR-005 任何 PR
+
+> **见上方 amendment 3（2026-05-17）。** 此决策已被收窄：PR-1 现在豁免（纯添加 → 零监控影响），PR-2 之后仍受 bake 期 + D10 sign-off 约束。
 
 ADR-005 的 PR-1（建 Repo 类与函数族并存）虽然不动 audit 路径，但**仍受 bake 期约束**——避免重构与运行模式切换两件事在同一窗口内交叉影响监控数据。bake 完成 + D10 三项 sign-off 后才能启动 PR-1。
 
