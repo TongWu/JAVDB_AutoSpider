@@ -5,6 +5,11 @@ test_history_integrity.py
 logs/
 html/
 
+# Sibling repos checked out next to this one (wiki + frontend + Worker)
+/JAVDB_AutoSpider.wiki/
+/JAVDB_AutoSpider_Proxycoordinator/
+/JAVDB_AutoSpider_Web/
+
 # Local captcha image
 javdb_captcha.png
 
