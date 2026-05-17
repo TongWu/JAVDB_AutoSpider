@@ -24,6 +24,11 @@ from javdb.spider.parser import (
     result_to_dict,
 )
 from javdb.proxy.pool import create_proxy_pool_from_config
+from javdb.integrations.qb.client import (
+    LOGIN_REJECTED,
+    LOGIN_SUCCESS,
+    try_login_base_urls,
+)
 from javdb.integrations.qb.config import qb_base_url_candidates, qb_verify_tls
 from javdb.infra.request import (
     create_request_handler_from_config,
@@ -297,18 +302,21 @@ def _qb_login_session(cfg: Dict[str, Any]) -> tuple[requests.Session, str]:
     session = requests.Session()
     session.verify = verify_tls
     timeout = int(cfg.get("REQUEST_TIMEOUT", 30) or 30)
-    for base_url in base_urls:
-        try:
-            resp = session.post(
-                f"{base_url}/api/v2/auth/login",
-                data={"username": username, "password": password},
-                timeout=timeout,
-                verify=verify_tls,
-            )
-        except requests.RequestException:
-            continue
-        if resp.status_code == 200 and resp.text == "Ok.":
-            return session, base_url
+    outcome, login_url, _ = try_login_base_urls(
+        base_urls,
+        username,
+        password,
+        post_fn=session.post,
+        timeout=timeout,
+        verify=verify_tls,
+    )
+    if outcome == LOGIN_SUCCESS and login_url:
+        return session, login_url
+    if outcome == LOGIN_REJECTED:
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to login qBittorrent: credentials rejected",
+        )
     raise HTTPException(status_code=502, detail="Failed to login qBittorrent")
 
 
