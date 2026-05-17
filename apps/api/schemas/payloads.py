@@ -77,6 +77,11 @@ class LoginPayload(BaseModel):
     password: str = Field(..., min_length=1, max_length=256)
 
 
+class ChangePasswordPayload(BaseModel):
+    current_password: str = Field(..., min_length=1, max_length=256)
+    new_password: str = Field(..., min_length=8, max_length=256)
+
+
 class DailyTaskPayload(CliProxyOverridePayload):
     start_page: int = Field(1, ge=1, le=200)
     end_page: int = Field(10, ge=1, le=200)
@@ -408,6 +413,7 @@ class VideoCodeSearchResponse(_AllowExtra):
 
 __all__ = [
     "AdhocTaskPayload",
+    "ChangePasswordPayload",
     "ConfigResponse",
     "CrawlIndexPayload",
     "DailyTaskPayload",

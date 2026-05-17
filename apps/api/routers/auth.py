@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Request, Response
 
 from apps.api.infra.auth import _require_auth
 from apps.api.schemas.payloads import (
+    ChangePasswordPayload,
     LoginPayload,
     LoginResponse,
     RefreshTokenResponse,
@@ -31,4 +32,13 @@ async def logout(response: Response, current=Depends(_require_auth)):
     return await auth_service.logout_payload(response, current)
 
 
-__all__ = ["login", "logout", "refresh_token", "router"]
+@router.post("/change-password", response_model=StatusOkResponse)
+async def change_password(
+    payload: ChangePasswordPayload,
+    request: Request,
+    current=Depends(_require_auth),
+):
+    return await auth_service.change_password_payload(payload, request, current)
+
+
+__all__ = ["change_password", "login", "logout", "refresh_token", "router"]
