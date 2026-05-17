@@ -6,7 +6,7 @@ import pytest
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = PROJECT_ROOT / "migration" / "tools" / "migrate_to_d1.sh"
+SCRIPT = PROJECT_ROOT / "javdb" / "migrations" / "tools" / "migrate_to_d1.sh"
 
 
 def test_prepare_routes_post_data_ddl_after_data_chunks(tmp_path):
