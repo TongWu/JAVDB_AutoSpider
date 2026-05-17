@@ -43,7 +43,7 @@ _engine_patches = lambda fn: (
 @pytest.fixture(autouse=True)
 def _reset_state():
     """Reset mutable state between tests."""
-    import scripts.spider.runtime.state as st
+    import javdb.spider.runtime.state as st
     st.login_attempted = False
     st.refreshed_session_cookie = None
     st.logged_in_proxy_name = None
@@ -203,7 +203,7 @@ class TestEngineAdvancedMode:
 def _mock_attempt_login(explicit_proxies=None, explicit_proxy_name=None,
                         *, spider_uses_proxy=True):
     """Mock login that always fails but correctly increments state counters."""
-    import scripts.spider.runtime.state as st
+    import javdb.spider.runtime.state as st
     st.login_total_attempts += 1
     if explicit_proxy_name:
         st.login_attempts_per_proxy[explicit_proxy_name] = (

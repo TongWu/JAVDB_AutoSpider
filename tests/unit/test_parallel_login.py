@@ -348,7 +348,7 @@ class TestProxyModeDisabled:
         orig_pool = state_mod.global_proxy_pool
         orig_mode = getattr(session_mod, 'PROXY_MODE', None)
         try:
-            import scripts.spider.runtime.config as cfg_mod
+            import javdb.spider.runtime.config as cfg_mod
             with patch.object(cfg_mod, 'PROXY_MODE', 'none'), \
                  patch('javdb.spider.runtime.state.PROXY_MODE', 'none'), \
                  patch('javdb.spider.runtime.state.PROXY_POOL', [{'name': 'X', 'http': 'http://x:1'}]):
