@@ -64,29 +64,61 @@ jobs:
         with:
           python-version: '3.11'
 
-      # Fetch the latest successful DailyIngestion artifact. `gh run
-      # list` is filtered to `--status=success` so we don't read a
-      # partial bundle from a run that died after upload but before
-      # commit-results (which would leave the DB in an inconsistent
-      # post-rollback state). 7-day retention on the artifact gives us
-      # headroom if Daily is paused via ADR-006's pause gate.
+      # Walk recent successful DailyIngestion runs until one that
+      # *actually has* the encrypted reports artifact is found.
+      #
+      # We cannot just take the most recent ``--status=success`` run:
+      # the DailyIngestion upload step uses
+      # ``if-no-files-found: ignore`` and the encrypt step skips when
+      # there are no files to archive, so a run can legitimately
+      # succeed without producing the artifact (e.g. a no-op-mode
+      # smoke run). Picking that one and calling ``gh run download``
+      # would fail with "no artifact named pipeline-reports-encrypted"
+      # even though older runs in the 7-day retention window have a
+      # perfectly valid bundle.
+      #
+      # ``actions:read`` scope (declared at the workflow level) is
+      # what lets ``gh api .../artifacts`` see the artifact list.
+      # ``.expired`` filters out artifacts whose 7-day retention has
+      # passed (the row still exists in the API, but the bytes are
+      # gone, so a download would 410).
       - name: Download latest reports artifact from DailyIngestion
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          LATEST_RUN=$(gh run list \
+
+          mapfile -t CANDIDATE_RUNS < <(gh run list \
             --workflow=DailyIngestion.yml \
             --status=success \
-            --limit=1 \
+            --limit=10 \
             --json databaseId \
-            --jq '.[0].databaseId')
-          if [ -z "$LATEST_RUN" ] || [ "$LATEST_RUN" = "null" ]; then
-            echo "::error::No successful DailyIngestion run found in the artifact retention window (7 days). Either the pipeline is paused (check .publish-config.yml for pipeline_paused_until) or has been failing — investigate before trusting bake metrics."
+            --jq '.[].databaseId')
+
+          if [ ${#CANDIDATE_RUNS[@]} -eq 0 ]; then
+            echo "::error::No successful DailyIngestion run in the last 10 attempts. Pipeline may be paused (check .publish-config.yml for pipeline_paused_until) or repeatedly failing — investigate before trusting bake metrics."
             exit 1
           fi
-          echo "Downloading reports artifact from DailyIngestion run #$LATEST_RUN"
-          gh run download "$LATEST_RUN" \
+
+          SELECTED_RUN=""
+          for RUN_ID in "${CANDIDATE_RUNS[@]}"; do
+            HAS=$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/artifacts" \
+              --jq '[.artifacts[] | select(.name == "pipeline-reports-encrypted" and .expired == false)] | length')
+            if [ "${HAS:-0}" -gt 0 ]; then
+              SELECTED_RUN="$RUN_ID"
+              echo "Selected DailyIngestion run #${RUN_ID} (has live pipeline-reports-encrypted artifact)"
+              break
+            fi
+            echo "Skipping DailyIngestion run #${RUN_ID}: no live artifact"
+          done
+
+          if [ -z "$SELECTED_RUN" ]; then
+            echo "::error::Scanned the last ${#CANDIDATE_RUNS[@]} successful DailyIngestion runs; none has a non-expired pipeline-reports-encrypted artifact. Either all recent runs were no-op smoke runs, or the artifact retention (7d) elapsed without a viable run — investigate manually."
+            exit 1
+          fi
+
+          gh run download "$SELECTED_RUN" \
             --name pipeline-reports-encrypted \
             --dir encrypted_artifacts
 
