@@ -214,11 +214,14 @@ def run_config_generator(config_values: Dict[str, Any]) -> None:
     os.chmod(context.REPO_ROOT / "config.py", 0o600)
 
 
-def get_config_payload(username: str) -> Dict[str, Any]:
+def get_config_payload(username: str, *, include_secrets: bool = False) -> Dict[str, Any]:
     payload = load_runtime_config()
-    masked = mask_config(payload)
-    context.audit_logger.info("config_read username=%s", username)
-    return masked
+    context.audit_logger.info(
+        "config_read username=%s include_secrets=%s", username, include_secrets
+    )
+    if include_secrets:
+        return payload
+    return mask_config(payload)
 
 
 def get_config_meta_payload() -> Dict[str, Any]:
