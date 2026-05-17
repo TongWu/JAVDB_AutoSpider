@@ -878,7 +878,7 @@ class TestEnvIntFallback:
 def test_module_imports_with_unparsable_d1_batch_limit(monkeypatch):
     """Regression: ``import reconcile_d1_drift`` must succeed even when
     ``D1_BATCH_LIMIT`` is set to something unparsable, mirroring the
-    behaviour of :mod:`packages.python.javdb_platform.d1_client`.
+    behaviour of :mod:`javdb.storage.d1_client`.
 
     Re-imports the module under a poisoned env var to exercise the
     module-level ``_BATCH_SIZE = _env_int(...)`` line specifically.

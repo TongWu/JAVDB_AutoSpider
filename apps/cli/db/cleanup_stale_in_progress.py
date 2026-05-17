@@ -54,7 +54,7 @@ logger = get_logger(__name__)
 
 def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        prog="apps.cli.cleanup_stale_in_progress",
+        prog="apps.cli.db.cleanup_stale_in_progress",
         description=(
             "Roll back ReportSessions whose Status='in_progress' for "
             "longer than --max-age-hours. Default dry-run."

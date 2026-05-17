@@ -2,14 +2,14 @@
 
 Phase 3 (Ingestion Perfect Rollback) email pipeline pre-step.  Reads
 ``reports/D1/d1_drift.jsonl``, isolates the records emitted by
-:mod:`apps.cli.commit_session` and :mod:`apps.cli.rollback` over the
+:mod:`apps.cli.db.commit_session` and :mod:`apps.cli.db.rollback` over the
 last ``--window-hours`` (default 24), and writes a small JSON file at
 ``reports/D1/pending_health_24h.json`` for
-:mod:`packages.python.javdb_integrations.email_notification` to render
+:mod:`javdb.integrations.notify.email` to render
 the Health Snapshot section.
 
 Stale-session cron resume signals (``stale_session_cleanup`` records
-emitted by :mod:`apps.cli.cleanup_stale_in_progress`) are folded in
+emitted by :mod:`apps.cli.db.cleanup_stale_in_progress`) are folded in
 when present so the Snapshot can also report
 ``stale_resume_successes`` / ``stale_resume_failures``.
 

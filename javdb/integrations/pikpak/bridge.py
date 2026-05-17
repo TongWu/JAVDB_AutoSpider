@@ -180,7 +180,7 @@ class QBittorrentClient(_SharedQBittorrentClient):
     """Backwards-compatible alias of the shared ``QBittorrentClient``.
 
     The pikpak_bridge historically owned this class; it now lives in
-    ``packages.python.javdb_integrations.qb_client``. This subclass keeps
+    ``javdb.integrations.qb.client``. This subclass keeps
     the module-level import path working and wires the proxy helper that
     pikpak_bridge uses ('pikpak' module)."""
 
@@ -214,7 +214,7 @@ def remove_completed_torrents_keep_files(
     """Thin wrapper around the shared cleanup implementation, kept here so
     existing callers and tests that import it from ``pikpak_bridge``
     continue to work. See
-    ``packages.python.javdb_integrations.qb_client.remove_completed_torrents_keep_files``
+    ``javdb.integrations.qb.client.remove_completed_torrents_keep_files``
     for the canonical implementation."""
     return _shared_remove_completed(
         qb_client, categories, dry_run=dry_run, qb_label=qb_label

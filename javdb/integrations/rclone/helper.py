@@ -2,7 +2,7 @@
 Shared rclone helper functions and data structures.
 
 Centralises all rclone-related data models, parsing logic, health-check
-routines, and dedup analysis used by ``apps.cli.rclone_manager``.
+routines, and dedup analysis used by ``apps.cli.rclone.manager``.
 """
 
 import os

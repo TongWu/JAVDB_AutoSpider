@@ -1,8 +1,8 @@
 """HTTP client for the Cloudflare Worker + Durable Object runner registry.
 
-Sister to :mod:`packages.python.javdb_platform.proxy_coordinator_client`,
-:mod:`packages.python.javdb_platform.login_state_client`, and
-:mod:`packages.python.javdb_platform.movie_claim_client`; targets the
+Sister to :mod:`javdb.proxy.coordinator.proxy_coordinator_client`,
+:mod:`javdb.proxy.coordinator.login_state_client`, and
+:mod:`javdb.proxy.coordinator.movie_claim_client`; targets the
 ``RunnerRegistry`` singleton DO (P2-E).
 
 Two purposes (intentionally folded into one DO so we don't pay for a

@@ -1,7 +1,7 @@
 """HTTP client for the Cloudflare Worker + Durable Object movie claim coordinator.
 
-Sister to :mod:`packages.python.javdb_platform.login_state_client` and
-:mod:`packages.python.javdb_platform.proxy_coordinator_client`; targets the
+Sister to :mod:`javdb.proxy.coordinator.login_state_client` and
+:mod:`javdb.proxy.coordinator.proxy_coordinator_client`; targets the
 ``MovieClaimState`` per-day-sharded Durable Object.
 
 P1-B mutex: when two GH Actions runners would otherwise race to fetch the
@@ -546,7 +546,7 @@ class MovieClaimClient(BaseDOClient):
     ) -> CommitCompletedMoviesResult:
         """Promote all stages for *session_id* to committed (Phase-1).
 
-        Called by ``apps.cli.commit_session`` immediately after the
+        Called by ``apps.cli.db.commit_session`` immediately after the
         ReportSessions row flips to ``committed``.  Idempotent: a re-run
         returns ``promoted=0``.  Failures must NOT block the DB commit
         (the staged entries will still match an orphan-sweep cutoff so
@@ -578,7 +578,7 @@ class MovieClaimClient(BaseDOClient):
     ) -> RollbackStagedMoviesResult:
         """Drop every stage for *session_id* (Phase-1).
 
-        Called by ``apps.cli.rollback`` after (or alongside) the DB-side
+        Called by ``apps.cli.db.rollback`` after (or alongside) the DB-side
         rollback completes.  Idempotent: a re-run returns ``removed=0``.
         Other sessions' stages are NEVER touched — the per-session scope
         is the whole point of the rollback-safety split.
@@ -741,7 +741,7 @@ def create_movie_claim_client_with_mode_from_env(
     """Build a client + resolve the activation mode.
 
     ``PROXY_COORDINATOR_URL`` and ``PROXY_COORDINATOR_TOKEN`` are read
-    **only** from :func:`packages.python.javdb_platform.config_helper.cfg`
+    **only** from :func:`javdb.infra.config.cfg`
     (i.e. ``config.py``).  ``os.environ`` is ignored for those two so CI
     jobs that render credentials exclusively into ``config.py`` behave the
     same as CLIs.  Missing or blank values disable movie-claim for this call.
@@ -818,7 +818,7 @@ def create_movie_claim_client_from_env(
     """Backward-compatible thin wrapper over the with-mode factory.
 
     URL and token are taken from ``config.py`` via
-    :func:`packages.python.javdb_platform.config_helper.cfg` only; see
+    :func:`javdb.infra.config.cfg` only; see
     :func:`create_movie_claim_client_with_mode_from_env`.
     """
     client, _mode = create_movie_claim_client_with_mode_from_env(

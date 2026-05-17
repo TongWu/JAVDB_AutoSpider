@@ -31,12 +31,12 @@ Invalid: ``--scan --execute`` without ``--report``.
 
 Usage
 -----
-    python3 -m apps.cli.rclone_manager --scan
-    python3 -m apps.cli.rclone_manager --report
-    python3 -m apps.cli.rclone_manager --scan --report
-    python3 -m apps.cli.rclone_manager --execute
-    python3 -m apps.cli.rclone_manager --report --execute --dry-run
-    python3 -m apps.cli.rclone_manager --scan --report --execute
+    python3 -m apps.cli.rclone.manager --scan
+    python3 -m apps.cli.rclone.manager --report
+    python3 -m apps.cli.rclone.manager --scan --report
+    python3 -m apps.cli.rclone.manager --execute
+    python3 -m apps.cli.rclone.manager --report --execute --dry-run
+    python3 -m apps.cli.rclone.manager --scan --report --execute
 """
 
 import os

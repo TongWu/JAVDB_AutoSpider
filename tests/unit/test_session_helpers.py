@@ -1,5 +1,5 @@
-"""Pin down the shared scaffolding extracted from ``apps.cli.rollback``
-and ``apps.cli.commit_session`` into ``apps.cli._session_helpers``.
+"""Pin down the shared scaffolding extracted from ``apps.cli.db.rollback``
+and ``apps.cli.db.commit_session`` into ``apps.cli.db._session_helpers``.
 
 The headline regression these tests guard against is the
 ``normalize_run_started_at`` divergence — see the module's history

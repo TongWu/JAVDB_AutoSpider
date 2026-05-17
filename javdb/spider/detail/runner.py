@@ -175,9 +175,9 @@ def _stage_complete_movie_claim(
     (``session_id``).  The downstream session-end CLI then either
     promotes the stage to committed
     (:meth:`MovieClaimClient.commit_completed_movies` from
-    ``apps.cli.commit_session``) or drops it
+    ``apps.cli.db.commit_session``) or drops it
     (:meth:`MovieClaimClient.rollback_staged_movies` from
-    ``apps.cli.rollback``).
+    ``apps.cli.db.rollback``).
 
     Returns ``True`` only when the coordinator explicitly confirmed the
     stage (``StageCompleteResult.staged=True``); ``False`` on any error

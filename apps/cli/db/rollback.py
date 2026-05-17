@@ -50,7 +50,7 @@ Implementation note
 The argparse / printing / exit-code-mapping bits live here.  Other
 callers (notably the Sessions HTTP endpoints) reuse the same planning
 and apply pipeline through
-:mod:`packages.python.javdb_platform.rollback`, which dispatches into
+:mod:`javdb.storage.rollback`, which dispatches into
 this module's helpers so behaviour stays in lock-step with the CLI.
 """
 
@@ -96,7 +96,7 @@ _CROSS_DAY_REJECT_HOURS = 1
 
 def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        prog="apps.cli.rollback",
+        prog="apps.cli.db.rollback",
         description=(
             "Undo D1 writes from an in-progress workflow run by replaying "
             "audit logs and deleting session-tagged rows. Supports both "
@@ -107,16 +107,16 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         epilog=(
             "Typical usage:\n"
             "  # Cleanup-on-failure (no specific session known):\n"
-            "  python -m apps.cli.rollback \\\n"
+            "  python -m apps.cli.db.rollback \\\n"
             "    --run-id 12345 --attempt 1 \\\n"
             "    --run-started-at 2026-05-04T19:30:00Z\n\n"
             "  # Manual targeted rollback (preferred when you know the id):\n"
-            "  python -m apps.cli.rollback --session-id 42\n"
-            "  python -m apps.cli.rollback --session-id 42 --apply\n\n"
+            "  python -m apps.cli.db.rollback --session-id 42\n"
+            "  python -m apps.cli.db.rollback --session-id 42 --apply\n\n"
             "  # Partial scope:\n"
-            "  python -m apps.cli.rollback --session-id 42 --scope history\n\n"
+            "  python -m apps.cli.db.rollback --session-id 42 --scope history\n\n"
             "  # Legacy 'sweep this window' behaviour (opt-in):\n"
-            "  python -m apps.cli.rollback --session-id 42 \\\n"
+            "  python -m apps.cli.db.rollback --session-id 42 \\\n"
             "    --run-started-at 2026-05-04T19:30:00Z --include-orphaned\n"
         ),
     )
@@ -368,7 +368,7 @@ def _emit_pending_verify_for_session(
     email pipeline regardless of whether it landed in ``committed``
     (resume_commit branch) or ``failed`` (rollback_pending branch).
     The rollback CLI is the second emit point alongside
-    :mod:`apps.cli.commit_session`; the email helper consumes the union
+    :mod:`apps.cli.db.commit_session`; the email helper consumes the union
     of every ``pending_session_verify`` record produced during a run.
 
     *cleanup_path_mismatch* — set to True when a finalizing session was
@@ -479,7 +479,7 @@ def _drive_rollback(args: argparse.Namespace) -> tuple[dict, int]:
     """Run the planning + apply pipeline, return (summary, exit_code).
 
     Extracted from ``main()`` so the rollback library
-    (:mod:`packages.python.javdb_platform.rollback`) can reuse the same
+    (:mod:`javdb.storage.rollback`) can reuse the same
     pipeline without going through argparse.  Every name it references
     is looked up through this module's namespace so existing tests can
     monkeypatch any helper (``_resolve_target_sessions``,

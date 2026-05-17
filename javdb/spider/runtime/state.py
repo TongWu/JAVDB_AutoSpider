@@ -472,7 +472,7 @@ def setup_movie_claim_client() -> Optional[MovieClaimClient]:
 
     Behaviour now branches on the resolved
     ``MOVIE_CLAIM_ENABLED`` mode (see
-    :func:`packages.python.javdb_platform.movie_claim_client.parse_movie_claim_mode`):
+    :func:`javdb.proxy.coordinator.movie_claim_client.parse_movie_claim_mode`):
 
     - :data:`MOVIE_CLAIM_MODE_OFF` — return ``None`` and leave
       :data:`global_movie_claim_client` un-mounted, identical to the

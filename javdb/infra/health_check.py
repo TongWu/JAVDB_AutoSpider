@@ -13,7 +13,7 @@ Non-critical checks (warnings only, pipeline continues):
 - SMTP server (optional, email notification may fail)
 
 Usage:
-    python3 -m apps.cli.health_check [--check-smtp] [--use-proxy]
+    python3 -m apps.cli.ops.health_check [--check-smtp] [--use-proxy]
 
 Exit codes:
     0: All critical checks passed
