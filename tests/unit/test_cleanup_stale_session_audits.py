@@ -21,7 +21,7 @@ import sys
 
 import pytest
 
-import scripts.cleanup_stale_session_audits as cleanup
+import apps.cli.db.cleanup_stale_session_audits as cleanup
 import utils.infra.db as db_mod
 
 

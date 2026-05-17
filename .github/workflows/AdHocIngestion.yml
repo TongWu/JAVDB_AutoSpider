@@ -306,7 +306,7 @@ jobs:
           # drift detection and cohort summaries see this run.  Default
           # 'false' preserves single-runner behaviour.
           VAR_RUNNER_REGISTRY_ENABLED: ${{ vars.RUNNER_REGISTRY_ENABLED || 'false' }}
-        run: python3 -m apps.cli.config_generator --github-actions
+        run: python3 -m apps.cli.ops.config_generator --github-actions
 
       - name: Pull latest changes from remote
         run: |
@@ -402,7 +402,7 @@ jobs:
         run: |
           set -e
           set -o pipefail
-          python3 -m apps.cli.health_check
+          python3 -m apps.cli.ops.health_check
 
       - name: Pull latest changes
         run: |
@@ -603,7 +603,7 @@ jobs:
           set -e  # Exit on error
           set -o pipefail  # Exit on error in pipeline
           
-          CMD_ARGS=(python3 -m apps.cli.qb_uploader --mode adhoc)
+          CMD_ARGS=(python3 -m apps.cli.qb.uploader --mode adhoc)
           
           # Pass the CSV full path captured from spider
           if [ -n "$CSV_PATH" ]; then
@@ -658,7 +658,7 @@ jobs:
           CATEGORIES_JSON=$(CATEGORY="$CATEGORY" python3 -c 'import json, os; cats=[os.environ["CATEGORY"], "顶级"]; print(json.dumps(list(dict.fromkeys(cats))))')
 
           CMD_ARGS=(
-            python3 -m apps.cli.qb_file_filter
+            python3 -m apps.cli.qb.file_filter
             --min-size "$MIN_SIZE_MB"
             --days 2
             --categories "$CATEGORIES_JSON"
@@ -678,7 +678,7 @@ jobs:
           set -e  # Exit on error
           set -o pipefail  # Exit on error in pipeline
           
-          CMD_ARGS=(python3 -m apps.cli.pikpak_bridge --days 3)
+          CMD_ARGS=(python3 -m apps.cli.pikpak.bridge --days 3)
           SESSION_ID="$SPIDER_SESSION_ID"
           if [ -n "$SESSION_ID" ]; then
             if ! echo "$SESSION_ID" | grep -qE '^[a-zA-Z0-9._-]+$'; then
@@ -697,7 +697,7 @@ jobs:
           set -e
           set -o pipefail
           bash .github/scripts/install_rclone.sh
-          python3 -m apps.cli.rclone_manager --execute
+          python3 -m apps.cli.rclone.manager --execute
         continue-on-error: true
 
       - name: Mark sessions as committed
@@ -711,7 +711,7 @@ jobs:
         run: |
           set -e
           set -o pipefail
-          CMD_ARGS=(python3 -m apps.cli.commit_session
+          CMD_ARGS=(python3 -m apps.cli.db.commit_session
                     --run-started-at "$RUN_STARTED_AT")
           if [ -n "$SPIDER_SESSION_ID" ]; then
             if echo "$SPIDER_SESSION_ID" | grep -qE '^[a-zA-Z0-9._-]+$'; then
@@ -901,13 +901,13 @@ jobs:
           # passed when known so the CLI can short-circuit the lookups.
           #
           # Ingestion Perfect Rollback (Phase 3): the dispatcher inside
-          # `apps.cli.rollback` reads each session's WriteMode + Status
+          # `apps.cli.db.rollback` reads each session's WriteMode + Status
           # before deciding what to do, so a single CMD covers the
           # mixed audit / pending / finalizing cases this run produced.
           # `--auto-resume-finalizing` is the default but stated
           # explicitly so the YAML doubles as docs for the operator
           # SOP.
-          CMD_ARGS=(python3 -m apps.cli.rollback
+          CMD_ARGS=(python3 -m apps.cli.db.rollback
                     --run-id "${{ github.run_id }}"
                     --attempt "${{ github.run_attempt }}"
                     --run-started-at "$RUN_STARTED_AT"
@@ -1095,7 +1095,7 @@ jobs:
         run: |
           set -e
           mkdir -p reports/D1
-          python3 -m scripts.aggregate_pending_health \
+          python3 -m apps.cli.db.pending_health \
             --window-hours 24 || true
 
       - name: Run Email Notification
@@ -1107,7 +1107,7 @@ jobs:
           set -e  # Exit on error
           set -o pipefail  # Exit on error in pipeline
           
-          CMD_ARGS=(python3 -m apps.cli.email_notification --mode adhoc)
+          CMD_ARGS=(python3 -m apps.cli.notify.email --mode adhoc)
           
           # Pass the CSV path if available
           if [ -n "$CSV_PATH" ] && [ -f "$CSV_PATH" ]; then
@@ -1180,7 +1180,7 @@ jobs:
           fi
           echo "::warning::Critical pending alert detected: $DECISION"
           echo "Engaging ADR-006 pipeline pause (24h)."
-          python3 -m scripts.pending_mode_alert_and_pause \
+          python3 -m apps.cli.db.pending_alert \
             --hours 24 \
             --reason "AdHocIngestion run ${{ github.run_id }}: $DECISION"
           if [ -n "${GH_TOKEN:-}" ] || [ -n "${GITHUB_TOKEN:-}" ]; then

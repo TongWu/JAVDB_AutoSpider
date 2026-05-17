@@ -1,4 +1,4 @@
-"""Shared scaffolding for ``apps.cli.rollback`` and ``apps.cli.commit_session``.
+"""Shared scaffolding for ``apps.cli.db.rollback`` and ``apps.cli.db.commit_session``.
 
 Both CLIs mutate ``ReportSessions`` lifecycle state. They share these
 mechanics:

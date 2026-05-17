@@ -205,7 +205,7 @@ def run_config_generator(config_values: Dict[str, Any]) -> None:
     cmd = [
         "python3",
         "-m",
-        "apps.cli.config_generator",
+        "apps.cli.ops.config_generator",
         "--output",
         "config.py",
         "--quiet",

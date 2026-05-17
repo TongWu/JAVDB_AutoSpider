@@ -125,7 +125,7 @@ def batch_update_movie_actors(
     When *session_id* is set, each affected MovieHistory row also gets
     ``SessionId=?`` and a companion ``MovieHistoryAudit`` row capturing
     the prior state. The audit callbacks are injected from
-    :mod:`packages.python.javdb_platform.db` to avoid an import cycle.
+    :mod:`javdb.storage.db.db` to avoid an import cycle.
     """
     if not updates:
         return 0

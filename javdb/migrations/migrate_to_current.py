@@ -12,10 +12,10 @@ Optional steps (same flags as legacy migration scripts):
 
 Usage::
 
-    python3 -m apps.cli.migration [--backup] [--verify] [--dry-run]
-    python3 -m apps.cli.migration --normalize-datetimes
-    python3 -m apps.cli.migration --backfill-actors [--limit N] [--no-proxy]
-    python3 -m apps.cli.migration --align-inventory-history [--align-limit-per-worker N] [--align-no-proxy] [--align-execute-delete]
+    python3 -m apps.cli.db.migration [--backup] [--verify] [--dry-run]
+    python3 -m apps.cli.db.migration --normalize-datetimes
+    python3 -m apps.cli.db.migration --backfill-actors [--limit N] [--no-proxy]
+    python3 -m apps.cli.db.migration --align-inventory-history [--align-limit-per-worker N] [--align-no-proxy] [--align-execute-delete]
 """
 
 from __future__ import annotations

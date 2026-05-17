@@ -13,7 +13,7 @@ import types
 
 import pytest
 
-import scripts.sync_d1_to_sqlite as sync_mod
+import apps.cli.db.sync_d1_to_sqlite as sync_mod
 
 
 # ── Argument parsing ────────────────────────────────────────────────────

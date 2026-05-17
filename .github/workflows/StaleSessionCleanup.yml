@@ -180,14 +180,14 @@ jobs:
           # — flip the GitHub Variable RUNNER_REGISTRY_ENABLED to 'true' to
           # let cleanup runners participate in cohort signalling.
           VAR_RUNNER_REGISTRY_ENABLED: ${{ vars.RUNNER_REGISTRY_ENABLED || 'false' }}
-        run: python3 -m apps.cli.config_generator --github-actions
+        run: python3 -m apps.cli.ops.config_generator --github-actions
 
       - name: Run stale-session cleanup
         run: |
           set -e
           set -o pipefail
 
-          CMD=(python3 -m apps.cli.cleanup_stale_in_progress
+          CMD=(python3 -m apps.cli.db.cleanup_stale_in_progress
                --max-age-hours "$INPUT_MAX_AGE_HOURS"
                --scope "$INPUT_SCOPE"
                --log-level "$INPUT_LOG_LEVEL")
@@ -214,7 +214,7 @@ jobs:
           set -o pipefail
 
           mkdir -p logs reports
-          python3 -m apps.cli.sweep_movie_claim_stages \
+          python3 -m apps.cli.db.sweep_claim_stages \
             --log-level "$INPUT_LOG_LEVEL" \
             2>&1 | tee logs/movie_claim_sweep.log
         continue-on-error: true

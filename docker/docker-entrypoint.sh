@@ -89,7 +89,7 @@ if [ "$IS_CRON_CMD" = true ]; then
     # ── qBittorrent Uploader ──────────────────────────────────
     if [ "$ENABLE_QBTORRENT" = "true" ] && [ -n "$CRON_QBTORRENT" ]; then
         echo "Adding qBittorrent Uploader cron job: $CRON_QBTORRENT"
-        echo "$CRON_QBTORRENT spider cd /app && /usr/local/bin/python -m apps.cli.qb_uploader >> /var/log/cron.log 2>&1" \
+        echo "$CRON_QBTORRENT spider cd /app && /usr/local/bin/python -m apps.cli.qb.uploader >> /var/log/cron.log 2>&1" \
             >> "$CRONTAB_FILE"
     else
         echo "qBittorrent Uploader cron job disabled or not configured"
@@ -98,7 +98,7 @@ if [ "$IS_CRON_CMD" = true ]; then
     # ── PikPak Bridge ─────────────────────────────────────────
     if [ "$ENABLE_PIKPAK" = "true" ] && [ -n "$CRON_PIKPAK" ]; then
         echo "Adding PikPak Bridge cron job: $CRON_PIKPAK"
-        echo "$CRON_PIKPAK spider cd /app && /usr/local/bin/python -m apps.cli.pikpak_bridge >> /var/log/cron.log 2>&1" \
+        echo "$CRON_PIKPAK spider cd /app && /usr/local/bin/python -m apps.cli.pikpak.bridge >> /var/log/cron.log 2>&1" \
             >> "$CRONTAB_FILE"
     else
         echo "PikPak Bridge cron job disabled or not configured"

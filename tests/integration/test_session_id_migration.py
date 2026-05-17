@@ -1,6 +1,6 @@
 """v11 -> v12 -> v13: rewrite INTEGER session_id / Seq columns to TEXT.
 
-These tests exercise :func:`packages.python.javdb_platform.db._migrate_session_id_to_text`
+These tests exercise :func:`javdb.storage.db.db._migrate_session_id_to_text`
 end-to-end: build a fixture DB with the pre-migration schema, seed a
 handful of rows whose ``Id`` / ``SessionId`` / ``Seq`` are large
 snowflake-shaped integers, run the migration, and assert:
