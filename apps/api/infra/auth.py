@@ -108,6 +108,7 @@ _AUTH_LOCK = threading.Lock()
 
 METHOD_LIMITS = {
     "/api/auth/login": (5, 60, "ip"),
+    "/api/auth/change-password": (5, 60, "user"),
     "/api/tasks/daily": (10, 60, "user"),
     "/api/tasks/adhoc": (10, 60, "user"),
     "/api/config": (20, 60, "user"),
