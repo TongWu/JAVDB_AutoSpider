@@ -13,11 +13,10 @@ def _ensure_operations_schema():
 
 
 def test_status_default_returns_required_missing(admin_client, monkeypatch):
-    monkeypatch.delenv("JAVDB_USERNAME", raising=False)
-    monkeypatch.delenv("JAVDB_SESSION_COOKIE", raising=False)
-    monkeypatch.delenv("QB_URL", raising=False)
-    monkeypatch.delenv("SMTP_HOST", raising=False)
-    monkeypatch.delenv("SMTP_SERVER", raising=False)
+    monkeypatch.setattr(
+        "apps.api.services.config_service.load_runtime_config",
+        lambda: {},
+    )
     r = admin_client.get("/api/onboarding/status")
     assert r.status_code == 200
     body = r.json()
@@ -28,13 +27,28 @@ def test_status_default_returns_required_missing(admin_client, monkeypatch):
 
 
 def test_test_javdb_returns_result(admin_client, monkeypatch):
-    monkeypatch.setenv("JAVDB_SESSION_COOKIE", "stub-cookie-value")
+    monkeypatch.setattr(
+        "apps.api.services.config_service.load_runtime_config",
+        lambda: {"JAVDB_SESSION_COOKIE": "stub-cookie-value"},
+    )
     r = admin_client.post("/api/onboarding/test", json={"component": "javdb"})
     assert r.status_code == 200
     body = r.json()
     assert body["component"] == "javdb"
-    assert isinstance(body["ok"], bool)
+    assert body["ok"] is True
     assert isinstance(body["message"], str)
+
+
+def test_test_javdb_not_configured(admin_client, monkeypatch):
+    monkeypatch.setattr(
+        "apps.api.services.config_service.load_runtime_config",
+        lambda: {},
+    )
+    r = admin_client.post("/api/onboarding/test", json={"component": "javdb"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is False
+    assert "not set" in body["message"]
 
 
 def test_test_unknown_component_422(admin_client):
@@ -67,3 +81,26 @@ def test_dismiss_hint_idempotent(admin_client):
     import json
     hints = json.loads(state.json()["value"])
     assert hints.count("pikpak") == 1
+
+
+def test_test_qb_reads_from_persisted_store(admin_client, monkeypatch):
+    """Regression: ensure /api/onboarding/test reads from the same source as
+    GET /api/config (the merged config including the override store),
+    not os.getenv. Without this, the wizard reports 'QB_URL not set'
+    after the user just saved it via PUT /api/config."""
+    fake_cfg = {
+        "QB_URL": "http://unreachable.invalid:9999",
+        "QB_USERNAME": "tedwu",
+        "QB_PASSWORD": "secret",
+        "QB_VERIFY_TLS": False,
+    }
+    monkeypatch.setattr(
+        "apps.api.services.config_service.load_runtime_config",
+        lambda: fake_cfg,
+    )
+    r = admin_client.post("/api/onboarding/test", json={"component": "qb"})
+    assert r.status_code == 200
+    body = r.json()
+    # Should fail because URL is unreachable, NOT because QB_URL is not set
+    assert body["ok"] is False
+    assert "not set" not in (body["message"] or "")
