@@ -19,6 +19,18 @@
 
   Path rename only — the D1–D5 decision, the 30-day bake gate, and the relationship to ADR-005 are unchanged.
 
+- **2026-05-17 amendment 3**: **D5 carve-out for ADR-005 PR-1.** When D5 was written it blanket-blocked all ADR-005 PRs during bake. On review, this is over-broad. The bake gate exists to protect the three D10 monitoring metrics (`audit_session_count`, `orphan_audit_rows`, `pause_trigger_count`); a PR can only contaminate those metrics if it touches the write path, the WriteMode resolution, the pause mechanism, or the schema. **ADR-005 PR-1 touches none of these** — it adds new `HistoryRepo` / `OperationsRepo` / `ReportsRepo` / `StatsRepo` classes alongside the existing function family with zero caller migration. Its monitoring footprint is provably nil. Carve-out:
+
+  | ADR-005 PR | Blocked during bake? | Reason |
+  |---|---|---|
+  | **PR-1** (introduce Repo classes alongside function family, zero caller change) | **No** — bake-safe per this amendment | Purely additive; no write/schema/workflow effect |
+  | PR-2 (`db.py` internally forwards to Repos — dual-write phase) | **Yes** | Touches the actual write path; monitoring could be confounded |
+  | PR-3 (migrate callers) | **Yes** | Same |
+  | PR-4 (drop audit tables, remove audit code) | **Yes** | Touches schema + write path |
+  | PR-5 (delete `db.py`) | **Yes** | Final cleanup post-retirement |
+
+  The blanket ban in D5 is replaced by this per-PR matrix. PR-1 may start once this amendment is recorded; PR-2 onward still requires the 30-day bake + D10 sign-off.
+
 ---
 
 ## Context
@@ -86,6 +98,8 @@ After D1-D3 ship, **bake for at least 30 days**. During the bake, operations mon
 - After the bake, re-run the D10 trio; passing all three is the sign-off prerequisite to start ADR-005
 
 ### D5: Block all ADR-005 PRs during the bake
+
+> **See amendment 3 (2026-05-17) above.** This decision has been narrowed: PR-1 is now carved out as bake-safe because it is purely additive (zero caller change → no possible monitoring impact); PR-2 onward stay blocked until bake completion + D10 sign-off.
 
 ADR-005's PR-1 (introducing the Repo class alongside the function family) does not touch the audit path, but it is **still subject to the bake period** — to avoid restructuring and runtime-mode switching colliding within the same monitoring window. ADR-005 PR-1 may only start after the bake completes and all three D10 items sign off.
 
