@@ -329,6 +329,49 @@ class JavdbLoginRefreshResponse(_AllowExtra):
     output: str
 
 
+class JavdbLoginRefreshPayload(BaseModel):
+    """Optional request body for POST /api/login/refresh.
+
+    Empty body (or omitted body) defaults to proxy_mode='auto', which preserves
+    the original behavior. Existing callers that POST without a body still work.
+    """
+
+    proxy_mode: Literal["auto", "none", "single", "pool"] = "auto"
+    # When proxy_mode == "single", use this URL directly. Falls back to
+    # PROXY_HTTP from config when omitted.
+    proxy_url: Optional[str] = None
+    # When proxy_mode == "pool", try entries in order. If a 'pool_names'
+    # subset is given, only try those names; else try every entry in
+    # PROXY_POOL until one succeeds.
+    pool_names: Optional[List[str]] = None
+    # How many proxies to try before giving up (default = all).
+    max_attempts: Optional[int] = None
+
+
+class JavdbLoginRefreshResponseV2(BaseModel):
+    """Structured response for POST /api/login/refresh with categorized errors."""
+
+    status: Literal["ok", "failed"]
+    # Categorized error code when status == "failed"
+    error_category: Optional[Literal[
+        "invalid_credentials",
+        "ip_banned",
+        "captcha_failed",
+        "cloudflare_blocked",
+        "connection_error",
+        "no_credentials",
+        "no_proxy_succeeded",
+        "unknown",
+    ]] = None
+    # Friendly summary message for the user (single line)
+    message: str
+    # Which proxy succeeded, or which were tried before failing
+    proxy_used: Optional[str] = None
+    attempts: List[Dict[str, Any]] = []
+    # Raw output of the last attempt — for the user's "Show details" collapsible
+    output: str = ""
+
+
 class ConfigResponse(RootModel[Dict[str, Any]]):
     """GET /api/config returns the masked runtime config dict verbatim."""
 
@@ -379,7 +422,9 @@ __all__ = [
     "HealthCheckPayload",
     "HealthResponse",
     "HtmlPayload",
+    "JavdbLoginRefreshPayload",
     "JavdbLoginRefreshResponse",
+    "JavdbLoginRefreshResponseV2",
     "JobSummaryResponse",
     "ListTasksResponse",
     "LoginPayload",
