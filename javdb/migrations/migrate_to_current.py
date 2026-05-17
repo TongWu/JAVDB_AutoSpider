@@ -163,9 +163,9 @@ def main() -> int:
     import javdb.storage.db.db as db_mod
     from javdb.infra.config import use_sqlite, cfg
 
-    from migration.tools.migrate_v6_to_v7_split import _normalize_three_dbs
-    from migration.tools.align_inventory_with_moviehistory import run_alignment
-    from migration.tools.migrate_v7_to_v8 import (
+    from javdb.migrations.tools.migrate_v6_to_v7_split import _normalize_three_dbs
+    from javdb.migrations.tools.align_inventory_with_moviehistory import run_alignment
+    from javdb.migrations.tools.migrate_v7_to_v8 import (
         backup_db_file,
         run_actor_backfill,
         run_schema_migration,
