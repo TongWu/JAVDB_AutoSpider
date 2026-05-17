@@ -23,15 +23,15 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from scripts.spider.fetch.fetch_engine import (
+from javdb.spider.fetch.fetch_engine import (
     _EngineWorker, EngineTask, EngineResult, WorkerContext, LoginRequired,
     FetchEngine,
 )
-from scripts.spider.fetch.login_coordinator import (
+from javdb.spider.fetch.login_coordinator import (
     LoginCoordinator, requeue_front, use_login_queue_priority,
     should_delegate_login_task,
 )
-from scripts.spider.runtime.sleep import (
+from javdb.spider.runtime.sleep import (
     MovieSleepManager, PenaltyTracker, DualWindowThrottle,
     COMPOSITE_MULTIPLIER_CAP, ABSOLUTE_MAX_SLEEP,
 )
@@ -168,7 +168,7 @@ class TestIndexRequiresLogin:
     def test_index_login_detection_triggers_attempt(self):
         """When the index page is a login page, is_login_page returns True
         and the spider can trigger attempt_login_refresh."""
-        from scripts.spider.fetch.session import is_login_page
+        from javdb.spider.fetch.session import is_login_page
 
         assert is_login_page(LOGIN_PAGE_HTML) is True
 

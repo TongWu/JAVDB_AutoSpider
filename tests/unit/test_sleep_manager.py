@@ -14,7 +14,7 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from scripts.spider.runtime.sleep import (
+from javdb.spider.runtime.sleep import (
     MovieSleepManager,
     PenaltyTracker,
     DualWindowThrottle,

@@ -13,7 +13,7 @@ from unittest.mock import patch, MagicMock
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from utils.infra.proxy_pool import (
+from javdb.proxy.pool import (
     mask_proxy_url,
     ProxyInfo,
     ProxyPool,

@@ -12,8 +12,8 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 sys.path.insert(0, project_root)
 
 import scripts.spider.runtime.state as state
-from scripts.ingestion.models import SpiderIngestionPlan
-from scripts.spider.detail.runner import (
+from javdb.pipeline.models import SpiderIngestionPlan
+from javdb.spider.detail.runner import (
     DetailPersistOutcome,
     persist_parsed_detail_result,
     process_detail_entries,
@@ -255,8 +255,8 @@ def test_persist_parsed_detail_result_keeps_visited_metadata_on_skip(monkeypatch
 
 
 def test_process_detail_entries_handles_backend_results(monkeypatch):
-    from scripts.spider.fetch.backend import FetchRuntimeState
-    from scripts.spider.fetch.fetch_engine import EngineResult
+    from javdb.spider.fetch.backend import FetchRuntimeState
+    from javdb.spider.fetch.fetch_engine import EngineResult
 
     class FakeBackend:
         def __init__(self):
@@ -348,8 +348,8 @@ def test_process_detail_entries_handles_backend_results(monkeypatch):
 
 
 def test_process_detail_entries_acknowledges_runtime_state_changes(monkeypatch):
-    from scripts.spider.fetch.backend import FetchRuntimeState
-    from scripts.spider.fetch.fetch_engine import EngineResult
+    from javdb.spider.fetch.backend import FetchRuntimeState
+    from javdb.spider.fetch.fetch_engine import EngineResult
 
     class FakeBackend:
         def __init__(self):
