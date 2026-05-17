@@ -7,16 +7,16 @@ This module can be used by GitHub Actions workflow or run locally.
 
 Usage:
     # In GitHub Actions (reads from VAR_* environment variables)
-    python3 -m apps.cli.config_generator
+    python3 -m apps.cli.ops.config_generator
 
     # With custom output path
-    python3 -m apps.cli.config_generator --output /path/to/config.py
+    python3 -m apps.cli.ops.config_generator --output /path/to/config.py
 
     # Dry run (print config without writing)
-    python3 -m apps.cli.config_generator --dry-run
+    python3 -m apps.cli.ops.config_generator --dry-run
 
     # For GitHub Actions mode (empty GIT_PASSWORD, hardcoded values)
-    python3 -m apps.cli.config_generator --github-actions
+    python3 -m apps.cli.ops.config_generator --github-actions
 """
 
 import os
@@ -564,19 +564,19 @@ def parse_arguments():
         epilog="""
 Examples:
     # Generate config.py from environment variables
-    python3 -m apps.cli.config_generator
+    python3 -m apps.cli.ops.config_generator
     
     # Generate config.py for GitHub Actions (empty GIT_PASSWORD)
-    python3 -m apps.cli.config_generator --github-actions
+    python3 -m apps.cli.ops.config_generator --github-actions
     
     # Dry run - show what would be generated
-    python3 -m apps.cli.config_generator --dry-run
+    python3 -m apps.cli.ops.config_generator --dry-run
     
     # Generate to custom path
-    python3 -m apps.cli.config_generator --output /path/to/config.py
+    python3 -m apps.cli.ops.config_generator --output /path/to/config.py
     
     # Hide masked output
-    python3 -m apps.cli.config_generator --quiet
+    python3 -m apps.cli.ops.config_generator --quiet
         """
     )
     

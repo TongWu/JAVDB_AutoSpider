@@ -1176,7 +1176,7 @@ def extract_dedup_statistics(dedup_csv_path, session_start_time=None):
 # =============================================================================
 #
 # `pending_session_verify` records are emitted by both
-# `apps.cli.commit_session` and `apps.cli.rollback` whenever a pending-
+# `apps.cli.db.commit_session` and `apps.cli.db.rollback` whenever a pending-
 # mode session ends.  They live in `reports/D1/d1_drift.jsonl` (one
 # JSON object per line, mixed with other `kind` records).  The email
 # pipeline reads the file at the end of the run, isolates the verify

@@ -3,7 +3,7 @@
 This is the *client* counterpart of the ``GlobalLoginState`` Durable Object
 maintained in the sibling repo
 [`TongWu/JAVDB_AutoSpider_Proxycoordinator`](https://github.com/TongWu/JAVDB_AutoSpider_Proxycoordinator).
-Sister to :mod:`packages.python.javdb_platform.proxy_coordinator_client`
+Sister to :mod:`javdb.proxy.coordinator.proxy_coordinator_client`
 (which targets the per-proxy ``ProxyCoordinator`` DO); both reuse the same
 ``PROXY_COORDINATOR_URL`` / ``PROXY_COORDINATOR_TOKEN`` env vars and the
 same Worker — only the URL paths differ.

@@ -2,7 +2,7 @@
 """Standalone migration: upgrade SQLite database from schema v5 (or earlier) to v6.
 
 This script wraps the ``_migrate_v5_to_v6`` logic already embedded in
-``packages.python.javdb_platform.db.init_db`` but adds:
+``javdb.storage.db.db.init_db`` but adds:
   - Optional ``--backup`` to snapshot the DB file before mutating it.
   - Optional ``--verify`` to run basic integrity checks after migration.
   - Dry-run mode.

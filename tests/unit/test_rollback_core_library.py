@@ -1,9 +1,9 @@
-"""Library-shape tests for ``packages.python.javdb_platform.rollback``.
+"""Library-shape tests for ``javdb.storage.rollback``.
 
 This is the public contract the new Sessions HTTP endpoints (and any other
 non-CLI caller) will rely on. Behavioural parity with the CLI is covered
 by the pre-existing ``tests/unit/test_rollback*.py`` suites, which call
-``apps.cli.rollback.main`` end-to-end and continue to pass after the
+``apps.cli.db.rollback.main`` end-to-end and continue to pass after the
 extraction.
 """
 
@@ -36,7 +36,7 @@ def test_request_dataclass_has_expected_fields():
 def test_request_defaults_match_cli_defaults():
     """The library defaults must mirror argparse defaults exactly so HTTP
     callers that send an empty body get the same safe behaviour as
-    ``python -m apps.cli.rollback --session-id <id>``.
+    ``python -m apps.cli.db.rollback --session-id <id>``.
     """
     req = RollbackRequest(session_id="some-id")
     # Safe defaults — dry-run on, scope=all, no force, no orphan sweep.

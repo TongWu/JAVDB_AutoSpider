@@ -1,8 +1,8 @@
 """Cron-friendly CLI for the MovieClaim ``sweep_orphan_stages`` route.
 
 Phase-1 rollback safety relies on every staged completion being either
-promoted (``apps.cli.commit_session``) or dropped
-(``apps.cli.rollback``) by a session-end CLI.  Runners that crash
+promoted (``apps.cli.db.commit_session``) or dropped
+(``apps.cli.db.rollback``) by a session-end CLI.  Runners that crash
 between the stage call and the session-end CLI leave behind
 "orphan" stages that would otherwise block adhoc retries on the same
 href forever.
@@ -24,7 +24,7 @@ Exit codes
 Best-effort by design: a single shard failure does not abort the
 remaining shards.  All failures are recorded to
 ``reports/D1/d1_drift.jsonl`` so the commit-results audit trail keeps
-the same shape as :mod:`apps.cli.rollback`.
+the same shape as :mod:`apps.cli.db.rollback`.
 """
 
 from __future__ import annotations
@@ -70,7 +70,7 @@ _DEFAULT_OLDER_THAN_MS = 6 * 60 * 60 * 1000
 
 def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        prog="apps.cli.sweep_movie_claim_stages",
+        prog="apps.cli.db.sweep_claim_stages",
         description=(
             "Reap orphaned MovieClaim staged completions across one or more "
             "per-day shards.  Designed for the StaleSessionCleanup cron; "
