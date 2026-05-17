@@ -22,9 +22,9 @@ migrated data is a safe no-op.
 
 Examples::
 
-    python -m packages.python.javdb_migrations.tools.migrate_rclone_paths_to_code_dir
-    python -m packages.python.javdb_migrations.tools.migrate_rclone_paths_to_code_dir --dry-run
-    python -m packages.python.javdb_migrations.tools.migrate_rclone_paths_to_code_dir \
+    python -m javdb.migrations.tools.migrate_rclone_paths_to_code_dir
+    python -m javdb.migrations.tools.migrate_rclone_paths_to_code_dir --dry-run
+    python -m javdb.migrations.tools.migrate_rclone_paths_to_code_dir \
         --csv reports/rclone_inventory.csv --db reports/operations.db
 """
 

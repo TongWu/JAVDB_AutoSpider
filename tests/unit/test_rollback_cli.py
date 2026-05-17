@@ -1,4 +1,4 @@
-"""Unit tests for ``apps.cli.rollback`` command-line behaviour.
+"""Unit tests for ``apps.cli.db.rollback`` command-line behaviour.
 
 Focused on the changes introduced in 2026-05-08:
 
@@ -18,7 +18,7 @@ from typing import List
 
 import pytest
 
-import apps.cli.rollback as rollback_cli
+import apps.cli.db.rollback as rollback_cli
 import utils.infra.db as db_mod
 
 

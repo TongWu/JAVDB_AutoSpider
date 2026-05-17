@@ -24,6 +24,7 @@ from typing import Iterable
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 PYTHON_SOURCE_ROOTS = (
+    "javdb",
     "packages",
     "apps",
     "api",
@@ -321,6 +322,7 @@ class Selection:
     reason: list[str]
     selected_count: int
     total_test_files: int
+    docstring_only_files: list[str] = field(default_factory=list)
 
     @property
     def run_selected_python(self) -> bool:
@@ -342,7 +344,84 @@ class Selection:
             "reason": self.reason,
             "selected_count": self.selected_count,
             "total_test_files": self.total_test_files,
+            "docstring_only_files": self.docstring_only_files,
         }
+
+
+class _StringConstantStripper(ast.NodeTransformer):
+    """Replace every string Constant in an AST with a stable sentinel.
+
+    Used by :func:`is_docstring_only_change` so two ASTs that differ only
+    in their string literals (docstrings, ``prog=`` names, usage examples,
+    error messages, SQL/URL constants, …) hash to the same signature.
+    """
+
+    SENTINEL = "__STRIPPED_STR__"
+
+    def visit_Constant(self, node: ast.Constant) -> ast.AST:
+        if isinstance(node.value, str):
+            return ast.Constant(value=self.SENTINEL)
+        return node
+
+
+def _ast_signature(source: str) -> str | None:
+    """Return ``ast.dump`` of *source* with all string literals normalised.
+
+    Returns ``None`` on parse failure; callers treat that as a real change.
+    """
+
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, ValueError):
+        return None
+    stripped = _StringConstantStripper().visit(tree)
+    ast.fix_missing_locations(stripped)
+    return ast.dump(stripped, include_attributes=False)
+
+
+def is_docstring_only_change(path: str, base: str, repo_root: Path) -> bool:
+    """Return True if the diff of *path* between *base* and the working tree
+    only touches string literals (docstrings, ``prog=`` strings, usage
+    examples, error messages, SQL/URL constants).
+
+    Conservatively returns False when:
+
+    * *path* is not a Python source file outside ``tests/``;
+    * *path* was newly added or deleted in this diff;
+    * either side fails to parse;
+    * the AST differs anywhere outside string Constant values.
+
+    The intent is to keep "rename in docstrings", "fix --help text", or
+    "translate error message" commits below :data:`SOURCE_CHANGE_LIMIT`
+    so they don't trigger a full test run.
+    """
+
+    if not path.endswith(".py") or path.startswith("tests/"):
+        return False
+
+    try:
+        old_src = subprocess.check_output(
+            ["git", "show", f"{base}:{path}"],
+            cwd=repo_root,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+    except subprocess.CalledProcessError:
+        return False  # file added (or moved into this path) in the diff
+
+    abs_path = repo_root / path
+    if not abs_path.exists():
+        return False  # deleted in the working tree
+    try:
+        new_src = abs_path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+
+    old_sig = _ast_signature(old_src)
+    new_sig = _ast_signature(new_src)
+    if old_sig is None or new_sig is None:
+        return False
+    return old_sig == new_sig
 
 
 def relpath(path: Path, repo_root: Path = REPO_ROOT) -> str:
@@ -538,13 +617,34 @@ def select_for_changed_files(
     repo_root: Path = REPO_ROOT,
     event_name: str = "",
     ref_name: str = "",
+    base: str = "",
 ) -> Selection:
-    changed = sorted({normalize_changed_file(path) for path in changed_files if normalize_changed_file(path)})
+    changed_all = sorted({normalize_changed_file(path) for path in changed_files if normalize_changed_file(path)})
+
+    # When a git base is available, classify "docstring/string-literal-only"
+    # Python source changes and exclude them from the impact analysis. They
+    # still surface in `changed_files` for reporting.
+    docstring_only: list[str] = []
+    if base:
+        for path in changed_all:
+            if is_python_source_change(path) and is_docstring_only_change(path, base, repo_root):
+                docstring_only.append(path)
+    docstring_only_set = set(docstring_only)
+    changed = [path for path in changed_all if path not in docstring_only_set]
+
     test_files = iter_test_files(repo_root)
     total_test_files = len(test_files)
     selected_tests: set[str] = set()
     reason: list[str] = []
     run_full_python = False
+
+    if docstring_only:
+        sample = ", ".join(docstring_only[:3])
+        suffix = f" (+{len(docstring_only) - 3} more)" if len(docstring_only) > 3 else ""
+        reason.append(
+            f"{len(docstring_only)} file(s) classified as docstring/string-literal-only "
+            f"and excluded from impact analysis: {sample}{suffix}"
+        )
 
     if event_name in {"schedule", "workflow_dispatch"}:
         run_full_python = True
@@ -554,7 +654,7 @@ def select_for_changed_files(
         run_full_python = True
         reason.append(f"push to {ref_name} uses full Python tests")
 
-    if not changed and not run_full_python:
+    if not changed_all and not run_full_python:
         run_full_python = True
         reason.append("no changed files were detected")
 
@@ -644,7 +744,7 @@ def select_for_changed_files(
         selected_targets = []
 
     return Selection(
-        changed_files=changed,
+        changed_files=changed_all,
         pytest_targets=selected_targets,
         run_full_python=run_full_python,
         run_rust=run_rust,
@@ -655,6 +755,7 @@ def select_for_changed_files(
         reason=reason or ["no impacted tests matched"],
         selected_count=len(selected_tests),
         total_test_files=total_test_files,
+        docstring_only_files=docstring_only,
     )
 
 
@@ -694,7 +795,13 @@ def selection_from_git(
         selection.reason.append(f"git diff failed, using full Python tests: {exc}")
         return selection
 
-    return select_for_changed_files(changed_files, repo_root=repo_root, event_name=event_name, ref_name=ref_name)
+    return select_for_changed_files(
+        changed_files,
+        repo_root=repo_root,
+        event_name=event_name,
+        ref_name=ref_name,
+        base=base,
+    )
 
 
 def write_github_outputs(path: str, selection: Selection) -> None:
@@ -716,6 +823,9 @@ def write_github_outputs(path: str, selection: Selection) -> None:
         "reason": "; ".join(selection.reason),
         "selected_count": str(values["selected_count"]),
         "total_test_files": str(values["total_test_files"]),
+        "docstring_only_files": " ".join(values["docstring_only_files"]),
+        "docstring_only_files_json": json.dumps(values["docstring_only_files"], sort_keys=True),
+        "docstring_only_count": str(len(values["docstring_only_files"])),
     }
 
     with open(path, "a", encoding="utf-8") as handle:

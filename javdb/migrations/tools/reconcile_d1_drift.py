@@ -2,7 +2,7 @@
 
 Background
 ----------
-The dual-write path in :mod:`packages.python.javdb_platform.dual_connection`
+The dual-write path in :mod:`javdb.storage.dual_connection`
 applies every write to the local SQLite file as the canonical source of truth
 and mirrors it to D1 best-effort. When D1 misses a write (timeout, transient
 error, long-running export lock, etc.) it appends a structured record to
@@ -81,7 +81,7 @@ _LOGICAL_TO_DB_PATH = {
 def _env_int(name: str, default: int) -> int:
     """Read an int env var, returning *default* on missing or unparsable values.
 
-    Mirrors :func:`packages.python.javdb_platform.d1_client._env_int` so a
+    Mirrors :func:`javdb.storage.d1_client._env_int` so a
     typo in ``D1_BATCH_LIMIT`` doesn't crash module import (which previously
     happened with a bare ``int(os.environ.get(...))`` here while
     ``d1_client.py`` quietly fell back to its default).

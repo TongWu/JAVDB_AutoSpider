@@ -289,7 +289,7 @@ jobs:
           # drift detection and cohort summaries see this run.  Default
           # 'false' preserves single-runner behaviour.
           VAR_RUNNER_REGISTRY_ENABLED: ${{ vars.RUNNER_REGISTRY_ENABLED || 'false' }}
-        run: python3 -m apps.cli.config_generator --github-actions
+        run: python3 -m apps.cli.ops.config_generator --github-actions
 
       - name: Pull latest changes from remote
         run: |
@@ -398,7 +398,7 @@ jobs:
         run: |
           set -e
           set -o pipefail
-          python3 -m apps.cli.health_check
+          python3 -m apps.cli.ops.health_check
 
       - name: Pull latest changes
         run: |
@@ -530,7 +530,7 @@ jobs:
           set -e  # Exit on error
           set -o pipefail  # Exit on error in pipeline
           
-          CMD_ARGS=(python3 -m apps.cli.qb_uploader --mode daily)
+          CMD_ARGS=(python3 -m apps.cli.qb.uploader --mode daily)
           
           # Pass the CSV full path captured from spider
           if [ -n "$CSV_PATH" ]; then
@@ -568,7 +568,7 @@ jobs:
           CATEGORIES_JSON=$(TORRENT_CATEGORY="$TORRENT_CATEGORY" python3 -c 'import json, os; print(json.dumps([os.environ["TORRENT_CATEGORY"], "顶级"]))')
 
           CMD_ARGS=(
-            python3 -m apps.cli.qb_file_filter
+            python3 -m apps.cli.qb.file_filter
             --min-size "$MIN_SIZE_MB"
             --days 2
             --categories "$CATEGORIES_JSON"
@@ -587,7 +587,7 @@ jobs:
         run: |
           set -e  # Exit on error
           set -o pipefail  # Exit on error in pipeline
-          CMD_ARGS=(python3 -m apps.cli.pikpak_bridge --days 3)
+          CMD_ARGS=(python3 -m apps.cli.pikpak.bridge --days 3)
           SESSION_ID="$SPIDER_SESSION_ID"
           if [ -n "$SESSION_ID" ]; then
             if ! echo "$SESSION_ID" | grep -qE '^[a-zA-Z0-9._-]+$'; then
@@ -609,9 +609,9 @@ jobs:
           set -o pipefail
           bash .github/scripts/install_rclone.sh
           if [ -n "$DEDUP_CSV" ] && [ -f "$DEDUP_CSV" ]; then
-            python3 -m apps.cli.rclone_manager --execute --dedup-csv "$DEDUP_CSV"
+            python3 -m apps.cli.rclone.manager --execute --dedup-csv "$DEDUP_CSV"
           else
-            python3 -m apps.cli.rclone_manager --execute
+            python3 -m apps.cli.rclone.manager --execute
           fi
         continue-on-error: true
 
@@ -626,7 +626,7 @@ jobs:
         run: |
           set -e
           set -o pipefail
-          CMD_ARGS=(python3 -m apps.cli.commit_session
+          CMD_ARGS=(python3 -m apps.cli.db.commit_session
                     --run-started-at "$RUN_STARTED_AT")
           if [ -n "$SPIDER_SESSION_ID" ]; then
             if echo "$SPIDER_SESSION_ID" | grep -qE '^[a-zA-Z0-9._-]+$'; then
@@ -811,7 +811,7 @@ jobs:
           # snowflake. The shell validation below accepts both old
           # numeric ids and the new text format.
           SPIDER_SESSION_ID: ${{ needs.run-pipeline.outputs.session_id }}
-          # ROLLBACK_REASON is consumed by apps.cli.rollback to populate
+          # ROLLBACK_REASON is consumed by apps.cli.db.rollback to populate
           # ReportSessions.FailureReason. cleanup-on-failure runs because
           # the prior job either failed or was cancelled.
           ROLLBACK_REASON: cleanup_on_failure
@@ -826,13 +826,13 @@ jobs:
           # died before the spider printed SPIDER_SESSION_ID).
           #
           # Ingestion Perfect Rollback (Phase 3): the dispatcher inside
-          # `apps.cli.rollback` reads each session's WriteMode + Status
+          # `apps.cli.db.rollback` reads each session's WriteMode + Status
           # before deciding what to do, so a single CMD covers the
           # mixed audit / pending / finalizing cases this run produced.
           # `--auto-resume-finalizing` is the default but stated
           # explicitly so the YAML doubles as documentation for the
           # operator-facing failure SOP in docs/D1_ROLLBACK.md.
-          CMD_ARGS=(python3 -m apps.cli.rollback
+          CMD_ARGS=(python3 -m apps.cli.db.rollback
                     --run-id "${{ github.run_id }}"
                     --attempt "${{ github.run_attempt }}"
                     --run-started-at "$RUN_STARTED_AT"
@@ -1015,7 +1015,7 @@ jobs:
         run: |
           set -e
           mkdir -p reports/D1
-          python3 -m scripts.aggregate_pending_health \
+          python3 -m apps.cli.db.pending_health \
             --window-hours 24 || true
 
       - name: Run Email Notification
@@ -1025,7 +1025,7 @@ jobs:
           set -e  # Exit on error
           set -o pipefail  # Exit on error in pipeline
           
-          CMD_ARGS=(python3 -m apps.cli.email_notification --mode daily)
+          CMD_ARGS=(python3 -m apps.cli.notify.email --mode daily)
           
           # Pass the CSV path if available
           CSV_PATH="${{ steps.status.outputs.csv_path }}"
@@ -1105,7 +1105,7 @@ jobs:
           fi
           echo "::warning::Critical pending alert detected: $DECISION"
           echo "Engaging ADR-006 pipeline pause (24h)."
-          python3 -m scripts.pending_mode_alert_and_pause \
+          python3 -m apps.cli.db.pending_alert \
             --hours 24 \
             --reason "DailyIngestion run ${{ github.run_id }}: $DECISION"
           # Best-effort commit + push so the next scheduled run sees the

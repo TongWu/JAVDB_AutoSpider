@@ -178,7 +178,7 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code,
         # running under WriteMode='pending' the writes go to the staging
         # tables instead of the live MovieHistory / TorrentHistory
         # tables.  ``db_commit_session_history`` (called by
-        # ``apps.cli.commit_session`` once the run succeeds) drains the
+        # ``apps.cli.db.commit_session`` once the run succeeds) drains the
         # staged rows into live; on failure the rollback CLI deletes
         # them with no audit-replay drift.  Audit mode (default) keeps
         # the legacy in-place upsert with X3 audit logging.

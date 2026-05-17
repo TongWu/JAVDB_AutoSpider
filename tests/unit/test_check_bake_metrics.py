@@ -17,7 +17,7 @@ from typing import Any
 
 import pytest
 
-from scripts import check_bake_metrics as mod
+from apps.cli.ops import check_bake_metrics as mod
 
 
 # ── _resolve_window ────────────────────────────────────────────────────

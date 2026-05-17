@@ -9,7 +9,7 @@ Use case: force-committing a session that is stuck in in_progress or
 finalizing state (e.g. via the API's POST /api/sessions/{id}/commit).
 
 This library calls the DB functions directly rather than delegating to
-apps.cli.commit_session because the CLI is orchestration-heavy (GitHub
+apps.cli.db.commit_session because the CLI is orchestration-heavy (GitHub
 outputs, claim fanouts, JSONL records).  The API only needs the core
 DB mutations: drain pending writes + flip the status row.
 """
