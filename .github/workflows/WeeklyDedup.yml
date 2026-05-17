@@ -137,7 +137,7 @@ jobs:
           VAR_DEDUP_CSV: ${{ vars.DEDUP_CSV || 'dedup.csv' }}
           VAR_DEDUP_LOG_FILE: ${{ vars.DEDUP_LOG_FILE || 'logs/rclone_dedup.log' }}
           VAR_LOG_LEVEL: ${{ vars.LOG_LEVEL || 'INFO' }}
-        run: python3 -m apps.cli.config_generator --github-actions
+        run: python3 -m apps.cli.ops.config_generator --github-actions
 
       - name: Set report paths
         run: |
@@ -206,7 +206,7 @@ jobs:
           set -e
           set -o pipefail
 
-          CMD=(python3 -m apps.cli.rclone_manager --scan --report --execute)
+          CMD=(python3 -m apps.cli.rclone.manager --scan --report --execute)
 
           if [ -n "$INPUT_ROOT_PATH" ]; then
             CMD+=(--root-path "$INPUT_ROOT_PATH")
