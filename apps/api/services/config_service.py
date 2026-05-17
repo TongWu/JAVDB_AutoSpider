@@ -238,7 +238,14 @@ def update_config_payload(config_updates: Dict[str, Any], username: str) -> Dict
         config_data[key] = coerced
         changed_keys.append(key)
     save_store(config_data)
-    run_config_generator(config_data)
+    # NOTE: do NOT call run_config_generator() here. It rewrites config.py
+    # from CONFIG_MAP only, dropping every field not registered there —
+    # including ADMIN_*, API_SECRET_KEY, READONLY_*, QB_URL_ADHOC, and any
+    # user-added custom field. The override store + load_runtime_config()
+    # merge is sufficient — config.py stays as the user wrote it.
+    # If a future need arises (e.g. operator wants config.py regenerated
+    # for some deploy workflow), expose a separate endpoint for it; do
+    # not mix it with the read-write API path.
     context.audit_logger.info(
         "config_update username=%s changed=%s",
         username,
@@ -251,7 +258,9 @@ def set_javdb_session_cookie(cookie: str, username: str) -> Dict[str, str]:
     config_data = load_runtime_config()
     config_data["JAVDB_SESSION_COOKIE"] = cookie.strip()
     save_store(config_data)
-    run_config_generator(config_data)
+    # NOTE: do NOT call run_config_generator() here — same data-loss reason
+    # as update_config_payload above. The session cookie is stored in the
+    # override store and picked up by load_runtime_config() on the next read.
     context.audit_logger.info("explore_sync_cookie username=%s", username)
     return {"status": "ok"}
 
