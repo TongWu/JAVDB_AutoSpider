@@ -8,8 +8,6 @@ import sys
 from pathlib import Path
 from typing import Any, Callable, Dict
 
-from dotenv import load_dotenv
-
 REPO_ROOT = Path(__file__).resolve().parents[3]
 os.chdir(REPO_ROOT)
 if str(REPO_ROOT) not in sys.path:
@@ -25,8 +23,6 @@ from javdb.infra.config_generator import (  # noqa: E402
     get_env_range_min,
 )
 logger = logging.getLogger("apps.api")
-
-load_dotenv(REPO_ROOT / ".env")
 
 LOG_DIR = REPO_ROOT / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
