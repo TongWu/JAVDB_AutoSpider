@@ -258,7 +258,7 @@ def test_qbittorrent_connection(use_proxy=False):
 
     Thin wrapper around ``qb_client.try_ping_base_urls``. ``requests.get``
     is passed in as the HTTP callable so tests that patch
-    ``scripts.qb_uploader.requests.get`` continue to work. On success the
+    ``apps.cli.qb.uploader.requests.get`` continue to work. On success the
     resolved base URL is persisted via ``_set_active_qb_base_url`` (which
     also flips ``QB_ALLOW_INSECURE_HTTP`` when an HTTP fallback succeeds)."""
     from javdb.integrations.qb.client import try_ping_base_urls

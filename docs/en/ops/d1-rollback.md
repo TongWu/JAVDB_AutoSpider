@@ -94,7 +94,7 @@ Phase 4 obsoletes this approach for new sessions: the Pending write path recompu
 
 ### SessionId generation (2026-05-08+)
 
-`ReportSessions.Id` is **no longer** allocated by the per-backend AUTOINCREMENT counter. The application generates the id itself via `_generate_session_id()` in [`packages/python/javdb_platform/db.py`](../../../packages/python/javdb_platform/db.py):
+`ReportSessions.Id` is **no longer** allocated by the per-backend AUTOINCREMENT counter. The application generates the id itself via `_generate_session_id()` in [`javdb/storage/db/db.py`](../../../javdb/storage/db/db.py):
 
 ```python
 # Format: YYYYMMDDTHHMMSS.ffffffZ-TTTT-SSSS
@@ -110,11 +110,11 @@ The same TEXT id is INSERTed explicitly on both backends. Why:
 - `DualCursor.lastrowid` returns whichever backend the cursor wraps. Trusting it as `SessionId` for downstream tables is what caused the 2026-05-08 incident: the SQLite-side allocated `Id=332`, but on D1 `Id=332` was a stale row from a 2026-05-07 workflow, and the spider tagged its history writes with `SessionId=332`. The rollback CLI later saw 145 audit rows spanning 35 hours and refused to roll most of them back as drift.
 - See [`migration/d1/2026_05_08_sessionid_decouple.md`](../../../migration/d1/2026_05_08_sessionid_decouple.md) for the migration writeup.
 
-A guard in [`packages/python/javdb_platform/dual_connection.py`](../../../packages/python/javdb_platform/dual_connection.py) (`DualCursor.for_write`) raises `DualWriteIdMismatchError` if any future code path attempts to INSERT into a guarded table (`APPLICATION_GENERATED_ID_TABLES`) without supplying an explicit Id and the two backends disagree on `lastrowid`.
+A guard in [`javdb/storage/dual_connection.py`](../../../javdb/storage/dual_connection.py) (`DualCursor.for_write`) raises `DualWriteIdMismatchError` if any future code path attempts to INSERT into a guarded table (`APPLICATION_GENERATED_ID_TABLES`) without supplying an explicit Id and the two backends disagree on `lastrowid`.
 
 ### Rollback CLI lookup precedence
 
-The CLI ([`apps/cli/rollback.py`](../../../apps/cli/rollback.py)) walks three sources in order, unioning the results:
+The CLI ([`apps/cli/db/rollback.py`](../../../apps/cli/db/rollback.py)) walks three sources in order, unioning the results:
 
 1. **`--session-id`** (most specific). Targets that one session and **does not expand** into a window scan unless `--include-orphaned` is set.
 2. **`--run-id` + `--attempt`** (primary path for run-aware lookups). Calls `db_find_sessions_by_run` which queries both `ReportSessions` and the audit tables (so a run whose `ReportSessions` row was already deleted by a previous failed rollback is still recoverable).
@@ -319,7 +319,7 @@ python3 -m scripts.audit_archive --apply --target sqlite --older-than-days 60
 
 All three scripts default to dry-run and write a JSON report under `reports/`. Use `--target` to restrict to one side; for `cleanup_stale_session_audits` use `--session-ids 332,346` to restrict to specific ids and `--cross-day-hours 12` to tune the phantom-detection threshold.
 
-`sync_d1_to_sqlite` + `cleanup_stale_session_audits` are manual incident-response tools (don't wire into cron). `audit_archive` **is** a cron job and runs weekly via [`.github/workflows/AuditArchive.yml`](../../../.github/workflows/AuditArchive.yml). The recurring stale-session cleanup lives in [`StaleSessionCleanup.yml`](../../../.github/workflows/StaleSessionCleanup.yml) and uses [`apps.cli.cleanup_stale_in_progress`](../../../apps/cli/cleanup_stale_in_progress.py).
+`sync_d1_to_sqlite` + `cleanup_stale_session_audits` are manual incident-response tools (don't wire into cron). `audit_archive` **is** a cron job and runs weekly via [`.github/workflows/AuditArchive.yml`](../../../.github/workflows/AuditArchive.yml). The recurring stale-session cleanup lives in [`StaleSessionCleanup.yml`](../../../.github/workflows/StaleSessionCleanup.yml) and uses [`apps.cli.cleanup_stale_in_progress`](../../../apps/cli/db/cleanup_stale_in_progress.py).
 
 ### Marking a session committed manually
 
@@ -451,7 +451,7 @@ The same file also receives `stale_session_cleanup` and `rollback_summary` recor
 
 ### Email Pending Mode Verification + Health Snapshot
 
-The email step ([`packages/python/javdb_integrations/email_notification.py`](../../../packages/python/javdb_integrations/email_notification.py)) now reads `reports/D1/d1_drift.jsonl`, restricts to `pending_session_verify` records owned by `$GITHUB_RUN_ID` / `$GITHUB_RUN_ATTEMPT`, and renders a **Pending Mode Verification** body block listing every pending session's counts. Any threshold violation flags the row inline (`[CRITICAL]` / `[ALERT]`) and prefixes the email subject:
+The email step ([`javdb/integrations/notify/email.py`](../../../javdb/integrations/notify/email.py)) now reads `reports/D1/d1_drift.jsonl`, restricts to `pending_session_verify` records owned by `$GITHUB_RUN_ID` / `$GITHUB_RUN_ATTEMPT`, and renders a **Pending Mode Verification** body block listing every pending session's counts. Any threshold violation flags the row inline (`[CRITICAL]` / `[ALERT]`) and prefixes the email subject:
 
 - **Soft alert** (subject `[PENDING-ALERT] (...)`) — `commit_attempts > Phase3_max`, `worker_stage_rollback_failed > 0`, `staged_claim_orphan_count > 0`, `d1_request_count_audit_baseline_ratio > 1.8`, or `final_status='finalizing'`.
 - **Critical alert** (subject `[PENDING-PAUSE] (...)`, was `[PENDING-ROLLBACK-AUTO]` pre-ADR-006) — `pending_residual_count > 0`, `derived_recompute_drift > 0`, or `cleanup_path_mismatch_count > 0`. Also engages the [alert + pause](#alert--pause-publish-configyml--adr-006-pr-d) below.
@@ -491,7 +491,7 @@ If left untouched, the marker auto-expires after 24h and the pipeline resumes �
 | Email subject `[PENDING-PAUSE]` (was `[PENDING-ROLLBACK-AUTO]` pre-ADR-006) | `pending_residual_count`, `derived_recompute_drift`, `cleanup_path_mismatch_count` | Pipeline paused for 24h via `pipeline_paused_until` in `.publish-config.yml`. Investigate the root cause in `reports/D1/d1_drift.jsonl`, fix it, then delete the pause marker (or `git revert` the auto-commit). Letting the marker expire without fixing the bug just queues the same alert for the next run. |
 | `final_status='finalizing'` two cron cycles in a row | StaleSessionCleanup unable to drive session to `committed` | `python3 -m apps.cli.commit_session --session-id <id> --shadow-audit --log-level DEBUG`; if 3 attempts still fail, `python3 -m apps.cli.rollback --session-id <id> --no-auto-resume-finalizing --apply` to mark `failed`. |
 | `worker_stage_rollback_failed > 0` | Rollback CLI couldn't reach MovieClaim coordinator | Check coordinator health; orphan sweep cron will reconcile within 4h. |
-| `pending_residual_count > 0` on a `committed` session | Half-applied commit, residual `ApplyState='pending'` rows | Live tables are already correct (the `committed` flip is the source of truth); the residual rows just need clearing. Safe options, in order of preference: (1) manual `DELETE FROM PendingMovieHistoryWrites WHERE SessionId=? AND ApplyState='pending'` plus the same on `PendingTorrentHistoryWrites` after asserting `SELECT Status FROM ReportSessions WHERE Id=?` returns `'committed'` — these tables never feed live reads, so the DELETE is non-destructive; (2) one-shot Python: `python3 -c "from packages.python.javdb_platform.db import db_commit_session_history; print(db_commit_session_history(<id>))"` — drains then deletes via the same applied-cleanup path used at commit time. (`apps.cli.commit_session` skips the drain when the session row is already `committed`, so the CLI route does **not** clear the residual.) |
+| `pending_residual_count > 0` on a `committed` session | Half-applied commit, residual `ApplyState='pending'` rows | Live tables are already correct (the `committed` flip is the source of truth); the residual rows just need clearing. Safe options, in order of preference: (1) manual `DELETE FROM PendingMovieHistoryWrites WHERE SessionId=? AND ApplyState='pending'` plus the same on `PendingTorrentHistoryWrites` after asserting `SELECT Status FROM ReportSessions WHERE Id=?` returns `'committed'` — these tables never feed live reads, so the DELETE is non-destructive; (2) one-shot Python: `python3 -c "from javdb.storage.db import db_commit_session_history; print(db_commit_session_history(<id>))"` — drains then deletes via the same applied-cleanup path used at commit time. (`apps.cli.commit_session` skips the drain when the session row is already `committed`, so the CLI route does **not** clear the residual.) |
 
 ---
 
@@ -529,11 +529,11 @@ If any of these six steps deviates from the expected outcome, **do not** promote
 
 ## File pointers
 
-- CLI: [`apps/cli/rollback.py`](../../../apps/cli/rollback.py), [`apps/cli/commit_session.py`](../../../apps/cli/commit_session.py), [`apps/cli/cleanup_stale_in_progress.py`](../../../apps/cli/cleanup_stale_in_progress.py)
-- Core helpers: [`packages/python/javdb_platform/db.py`](../../../packages/python/javdb_platform/db.py) (`db_stage_history_write`, `db_commit_session_history`, `db_resume_finalizing_session`, `db_rollback_session`, `db_mark_session_committed`, `db_find_in_progress_sessions`, `db_find_stale_pending_sessions`, `db_pending_session_stats`, `_audit_record_movie_change`, `_rollback_history`, etc.)
+- CLI: [`apps/cli/db/rollback.py`](../../../apps/cli/db/rollback.py), [`apps/cli/db/commit_session.py`](../../../apps/cli/db/commit_session.py), [`apps/cli/db/cleanup_stale_in_progress.py`](../../../apps/cli/db/cleanup_stale_in_progress.py)
+- Core helpers: [`javdb/storage/db/db.py`](../../../javdb/storage/db/db.py) (`db_stage_history_write`, `db_commit_session_history`, `db_resume_finalizing_session`, `db_rollback_session`, `db_mark_session_committed`, `db_find_in_progress_sessions`, `db_find_stale_pending_sessions`, `db_pending_session_stats`, `_audit_record_movie_change`, `_rollback_history`, etc.)
 - Phase 3 scripts: [`scripts/aggregate_pending_health.py`](../../../scripts/aggregate_pending_health.py), [`scripts/pending_mode_alert_and_pause.py`](../../../scripts/pending_mode_alert_and_pause.py) *(replaced the retired `pending_mode_auto_fallback.py` in ADR-006 PR-D)*
 - Phase 4 scripts: [`scripts/audit_archive.py`](../../../scripts/audit_archive.py), [`scripts/cleanup_stale_session_audits.py`](../../../scripts/cleanup_stale_session_audits.py) (read-only since 2026-05-13)
-- Email integration: [`packages/python/javdb_integrations/email_notification.py`](../../../packages/python/javdb_integrations/email_notification.py) (`_format_pending_verify_section`, `_evaluate_pending_alerts`, `_format_health_snapshot_section`)
+- Email integration: [`javdb/integrations/notify/email.py`](../../../javdb/integrations/notify/email.py) (`_format_pending_verify_section`, `_evaluate_pending_alerts`, `_format_health_snapshot_section`)
 - Workflows: [`.github/workflows/DailyIngestion.yml`](../../../.github/workflows/DailyIngestion.yml), [`.github/workflows/AdHocIngestion.yml`](../../../.github/workflows/AdHocIngestion.yml), [`.github/workflows/RollbackD1.yml`](../../../.github/workflows/RollbackD1.yml), [`.github/workflows/StaleSessionCleanup.yml`](../../../.github/workflows/StaleSessionCleanup.yml), [`.github/workflows/AuditArchive.yml`](../../../.github/workflows/AuditArchive.yml)
 - Migrations: [`migration/d1/2026_05_04_add_rollback_columns_*.sql`](../../../migration/d1/), [`migration/d1/2026_05_09_add_pending_history_tables.sql`](../../../migration/d1/)
 - Plan reference: [`.cursor/plans/ingestion_perfect_rollback_2152bae2.plan.md`](../../../.cursor/plans/ingestion_perfect_rollback_2152bae2.plan.md)
@@ -560,7 +560,7 @@ If any of these six steps deviates from the expected outcome, **do not** promote
 ### A.2 What "deprecated" means in practice
 
 - `db_upsert_history()` emits `DeprecationWarning` on every call. The function still works (audit-fallback rollback depends on it for legacy sessions) — direct callers must migrate to `save_parsed_movie_to_history` (which auto-stages under `WriteMode='pending'` and only reaches `db_upsert_history` for explicit audit fallbacks).
-- The `JAVDB_AUDIT_WRITES_DISABLED=1` env var (added 2026-05-13, [`packages/python/javdb_platform/db.py`](../../../packages/python/javdb_platform/db.py)) turns every audit-row INSERT into a no-op while still letting `MovieHistory` / `TorrentHistory` UPSERTs land. Default is `0` because the audit fallback still needs audit rows during the deprecation window; flip to `1` once every workflow has been verified to run pending-only.
+- The `JAVDB_AUDIT_WRITES_DISABLED=1` env var (added 2026-05-13, [`javdb/storage/db/db.py`](../../../javdb/storage/db/db.py)) turns every audit-row INSERT into a no-op while still letting `MovieHistory` / `TorrentHistory` UPSERTs land. Default is `0` because the audit fallback still needs audit rows during the deprecation window; flip to `1` once every workflow has been verified to run pending-only.
 - `MovieHistoryAudit` / `TorrentHistoryAudit` rows remain queryable for forensics — manual rollback via `apps.cli.rollback --scope history --session-id <id>` still works for any legacy session that has audit rows. The expectation is that no *new* sessions land in this branch.
 - The destructive cleanup helper `scripts/cleanup_stale_session_audits.py` is now strictly read-only — passing `--apply` logs a deprecation warning and silently degrades to dry-run.
 

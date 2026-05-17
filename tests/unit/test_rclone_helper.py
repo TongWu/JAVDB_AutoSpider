@@ -13,7 +13,7 @@ from typing import List
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from utils.rclone_helper import (
+from javdb.integrations.rclone.helper import (
     SensorCategory,
     SubtitleCategory,
     FolderInfo,
@@ -522,7 +522,7 @@ class TestGroupFoldersByMovieCode:
 # ============================================================================
 
 class TestHealthChecks:
-    @patch('utils.rclone_helper.subprocess.run')
+    @patch('javdb.integrations.rclone.helper.subprocess.run')
     def test_check_rclone_installed_success(self, mock_run):
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -532,21 +532,21 @@ class TestHealthChecks:
         assert success is True
         assert "rclone installed" in message
 
-    @patch('utils.rclone_helper.subprocess.run')
+    @patch('javdb.integrations.rclone.helper.subprocess.run')
     def test_check_rclone_installed_not_found(self, mock_run):
         mock_run.side_effect = FileNotFoundError()
         success, message = check_rclone_installed()
         assert success is False
         assert "not installed" in message
 
-    @patch('utils.rclone_helper.subprocess.run')
+    @patch('javdb.integrations.rclone.helper.subprocess.run')
     def test_check_remote_exists_success(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0, stdout="gdrive:\nmydrive:\n")
         success, message = check_remote_exists("gdrive")
         assert success is True
         assert "found" in message
 
-    @patch('utils.rclone_helper.subprocess.run')
+    @patch('javdb.integrations.rclone.helper.subprocess.run')
     def test_check_remote_exists_not_found(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0, stdout="otherdrive:\n")
         success, message = check_remote_exists("gdrive")
@@ -559,7 +559,7 @@ class TestHealthChecks:
 # ============================================================================
 
 class TestFolderStructureParsing:
-    @patch('utils.rclone_helper.subprocess.run')
+    @patch('javdb.integrations.rclone.helper.subprocess.run')
     def test_get_year_folders(self, mock_run):
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -571,7 +571,7 @@ class TestFolderStructureParsing:
         assert "未知" in years
         assert len(years) == 3
 
-    @patch('utils.rclone_helper.subprocess.run')
+    @patch('javdb.integrations.rclone.helper.subprocess.run')
     def test_get_actor_folders(self, mock_run):
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -582,7 +582,7 @@ class TestFolderStructureParsing:
         assert "Actor Two" in actors
         assert len(actors) == 2
 
-    @patch('utils.rclone_helper.subprocess.run')
+    @patch('javdb.integrations.rclone.helper.subprocess.run')
     def test_get_movie_folders(self, mock_run):
         # New layout (post rclone_group_jav.py):
         #   <root>/<year>/<actor>/<movie_code>/<sensor-subtitle>
@@ -621,7 +621,7 @@ class TestSetupRcloneConfigFromBase64:
         config_content = b'[gdrive]\ntype = drive\n'
         b64 = base64.b64encode(config_content).decode()
         monkeypatch.setattr(
-            'utils.rclone_helper.os.path.expanduser',
+            'javdb.integrations.rclone.helper.os.path.expanduser',
             lambda path: path.replace('~', str(tmp_path)),
         )
         result = setup_rclone_config_from_base64(b64)
@@ -643,7 +643,7 @@ class TestRclonePurge:
     def test_dry_run_always_succeeds(self):
         assert rclone_purge('gdrive:/some/path', dry_run=True) is True
 
-    @patch('utils.rclone_helper.subprocess.run')
+    @patch('javdb.integrations.rclone.helper.subprocess.run')
     def test_success(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0)
         assert rclone_purge('gdrive:/path') is True
@@ -652,18 +652,18 @@ class TestRclonePurge:
             capture_output=True, text=True, timeout=120,
         )
 
-    @patch('utils.rclone_helper.subprocess.run')
+    @patch('javdb.integrations.rclone.helper.subprocess.run')
     def test_failure(self, mock_run):
         mock_run.return_value = MagicMock(returncode=1, stderr='permission denied')
         assert rclone_purge('gdrive:/path') is False
 
-    @patch('utils.rclone_helper.subprocess.run')
+    @patch('javdb.integrations.rclone.helper.subprocess.run')
     def test_timeout(self, mock_run):
         import subprocess
         mock_run.side_effect = subprocess.TimeoutExpired(cmd='rclone', timeout=120)
         assert rclone_purge('gdrive:/path') is False
 
-    @patch('utils.rclone_helper.subprocess.run')
+    @patch('javdb.integrations.rclone.helper.subprocess.run')
     def test_exception(self, mock_run):
         mock_run.side_effect = OSError('rclone not found')
         assert rclone_purge('gdrive:/path') is False

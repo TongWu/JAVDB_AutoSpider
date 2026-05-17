@@ -13,7 +13,7 @@ from unittest.mock import patch, MagicMock
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from utils.infra.proxy_pool import (
+from javdb.proxy.pool import (
     mask_proxy_url,
     ProxyInfo,
     ProxyPool,
@@ -486,7 +486,7 @@ class TestCreateProxyPoolFromConfig:
         ]
         
         # Mock the ban manager to avoid shared state
-        with patch('utils.infra.proxy_pool.get_ban_manager') as mock_ban_manager:
+        with patch('javdb.proxy.pool.get_ban_manager') as mock_ban_manager:
             mock_ban_manager.return_value = MagicMock()
             mock_ban_manager.return_value.is_proxy_banned.return_value = False
             

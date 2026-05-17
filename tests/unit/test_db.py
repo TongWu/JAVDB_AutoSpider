@@ -8,7 +8,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 sys.path.insert(0, project_root)
 
 import pytest
-import utils.infra.db as db_mod
+import javdb.storage.db.db as db_mod
 
 
 # ── init / schema ─────────────────────────────────────────────────────────
@@ -112,7 +112,7 @@ class TestInitDb:
 
     def test_split_db_init(self, tmp_path):
         """init_db() without db_path should create three separate DB files."""
-        import utils.infra.config_helper as _cfg_mod
+        import javdb.infra.config as _cfg_mod
         orig_override = _cfg_mod._storage_mode_override
         _cfg_mod._storage_mode_override = 'db'
 
@@ -174,7 +174,7 @@ class TestInitDb:
         fix, ``_ensure_rollback_columns`` runs both before AND after the
         DDL, so the columns exist when the index DDL is evaluated.
         """
-        import utils.infra.config_helper as _cfg_mod
+        import javdb.infra.config as _cfg_mod
         orig_override = _cfg_mod._storage_mode_override
         _cfg_mod._storage_mode_override = 'db'
 
@@ -195,7 +195,7 @@ class TestInitDb:
         try:
             # Hand-craft pre-rollback schema (no SessionId / Status columns,
             # no SessionId-indexed indexes). Mirrors a real legacy file
-            # produced before migration/d1/2026_05_04_add_rollback_columns_*.sql.
+            # produced before javdb/migrations/d1/2026_05_04_add_rollback_columns_*.sql.
             legacy_history_ddl = """
             CREATE TABLE SchemaVersion (Version INTEGER NOT NULL);
             CREATE TABLE MovieHistory (
@@ -467,7 +467,7 @@ class TestInitDb:
 
     def test_split_migration_from_single_db(self, tmp_path):
         """Placing a v6 single DB at DB_PATH triggers automatic split."""
-        import utils.infra.config_helper as _cfg_mod
+        import javdb.infra.config as _cfg_mod
         orig_override = _cfg_mod._storage_mode_override
         _cfg_mod._storage_mode_override = 'db'
 
@@ -1060,13 +1060,13 @@ class TestSessionIdExtraction:
 
 class TestReportMigration:
     def test_parse_daily_filename(self):
-        from migration.tools.csv_to_sqlite import parse_csv_filename
+        from javdb.migrations.tools.csv_to_sqlite import parse_csv_filename
         result = parse_csv_filename('Javdb_TodayTitle_20240101.csv', is_adhoc_dir=False)
         assert result['report_type'] == 'daily'
         assert result['report_date'] == '20240101'
 
     def test_parse_adhoc_filename(self):
-        from migration.tools.csv_to_sqlite import parse_csv_filename
+        from javdb.migrations.tools.csv_to_sqlite import parse_csv_filename
         result = parse_csv_filename(
             'Javdb_AdHoc_actors_TestActor_20240201.csv', is_adhoc_dir=True)
         assert result['report_type'] == 'adhoc'
@@ -1075,19 +1075,19 @@ class TestReportMigration:
         assert result['report_date'] == '20240201'
 
     def test_parse_adhoc_rankings(self):
-        from migration.tools.csv_to_sqlite import parse_csv_filename
+        from javdb.migrations.tools.csv_to_sqlite import parse_csv_filename
         result = parse_csv_filename(
             'Javdb_AdHoc_rankings_top_20241231.csv', is_adhoc_dir=True)
         assert result['url_type'] == 'rankings'
         assert result['display_name'] == 'top'
 
     def test_parse_today_title_in_adhoc_dir(self):
-        from migration.tools.csv_to_sqlite import parse_csv_filename
+        from javdb.migrations.tools.csv_to_sqlite import parse_csv_filename
         result = parse_csv_filename('Javdb_TodayTitle_20250629.csv', is_adhoc_dir=True)
         assert result['report_type'] == 'adhoc'
 
     def test_migrate_single_csv(self, _isolate_sqlite, tmp_path):
-        from migration.tools.csv_to_sqlite import migrate_single_csv
+        from javdb.migrations.tools.csv_to_sqlite import migrate_single_csv
         csv_path = str(tmp_path / "test_report.csv")
         with open(csv_path, 'w', encoding='utf-8-sig') as f:
             f.write('href,video_code,page,actor,rate,comment_number,'
@@ -1107,7 +1107,7 @@ class TestReportMigration:
         assert rows[0]['video_code'] == 'A-001'
 
     def test_skip_already_migrated(self, _isolate_sqlite, tmp_path):
-        from migration.tools.csv_to_sqlite import migrate_single_csv
+        from javdb.migrations.tools.csv_to_sqlite import migrate_single_csv
         csv_path = str(tmp_path / "dup.csv")
         with open(csv_path, 'w', encoding='utf-8-sig') as f:
             f.write('href,video_code,page,actor,rate,comment_number,'

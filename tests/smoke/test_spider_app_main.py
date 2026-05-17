@@ -10,7 +10,7 @@ sys.path.insert(0, project_root)
 
 
 def test_create_detail_backend_selects_parallel(monkeypatch):
-    import scripts.spider.app.main as spider_main
+    import javdb.spider.app.main as spider_main
     import javdb.spider.app.run_service as run_service
 
     sentinel = object()
@@ -52,7 +52,7 @@ def test_create_detail_backend_selects_parallel(monkeypatch):
 
 
 def test_create_detail_backend_selects_sequential(monkeypatch):
-    import scripts.spider.app.main as spider_main
+    import javdb.spider.app.main as spider_main
     import javdb.spider.app.run_service as run_service
 
     sentinel = object()

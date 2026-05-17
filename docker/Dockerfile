@@ -51,14 +51,8 @@ RUN pip install /tmp/*.whl && rm -f /tmp/*.whl
 # Copy application files
 COPY apps/ ./apps/
 COPY javdb/ ./javdb/
-COPY api/ ./api/
-COPY legacy/ ./legacy/
-COPY migration/ ./migration/
-COPY utils/ ./utils/
 COPY scripts/ ./scripts/
-COPY compat.py .
 COPY config.py.example .
-COPY pipeline.py .
 
 # Copy docker entrypoint script
 COPY docker/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh

@@ -9,7 +9,7 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from utils.domain.magnet_extractor import extract_magnets
+from javdb.spider.magnet_extractor import extract_magnets
 
 
 class TestExtractMagnets:

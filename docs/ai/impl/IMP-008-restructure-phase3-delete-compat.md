@@ -883,3 +883,57 @@ python3 -c "import javdb.spider, javdb.pipeline, javdb.storage, javdb.proxy, jav
 Expected: all green, `4` (4 deleted dirs), `post-merge OK`.
 
 ADR-007 is now complete. Coordinate with ADR-005 and ADR-006 owners (per the amendments added to those ADRs) so their remaining PRs operate on the new `javdb/*` paths.
+
+---
+
+## Phase 3 Lessons Learned (post-execution)
+
+These gaps surfaced during the Phase 3 execution and were fixed in follow-up commits. Recording them so the next sed-driven monorepo refactor avoids the same pitfalls.
+
+### 1. Non-Python assets get silently swept by directory deletion
+
+Task 3's `git rm -r migration/` deleted **13 D1 SQL migration files** (`migration/d1/*.sql`), **2 shell scripts** (`migration/tools/migrate_to_d1.sh`, `migration/tools/verify_d1.sh`), and **1 incident report** (`migration/d1/2026_05_08_sessionid_decouple.md`) — none of which had a Phase-1-defined home in the new `javdb/` tree. They had to be restored from `f3fa7a1e~1` into `javdb/migrations/{d1,tools}/`. **Lesson:** before deleting any legacy directory, run `git ls-files <dir> | grep -vE '\.py$'` and confirm every non-Python asset has a target in the new layout.
+
+### 2. sed coverage is narrower than it looks
+
+The Task 1 sed file only matched `from X import Y` (with a trailing space). It missed three forms found in the working tree:
+
+- **Bare `import X.Y as Z`** (21 files in tests/). The original sed had no rule for `^import`-prefixed statements.
+- **String-form patch targets** like `@patch('utils.X.Y')` or `monkeypatch.setitem(sys.modules, 'utils.X', …)` (23 files). Required a separate perl pass that handles both `"..."` and `'...'` quoting.
+- **`from utils.infra import db` → `import javdb.storage.db.db as db`**: the original tries `from javdb.infra import db`, but `db` is not a submodule of `javdb.infra` — the canonical path is `javdb.storage.db.db`. Different *surface* (a submodule-rooted form), not just a different prefix.
+
+**Lesson:** dry-run the sed against the actual diff before committing — `git diff --name-only base...HEAD` then count expected vs. matched occurrences per pattern.
+
+### 3. Word boundaries (sed BRE doesn't support `\b`)
+
+Patterns like `s|from scripts\.spider\.fetch |...|` require *literal* `fetch ` with trailing space. This silently fails on `from scripts.spider.fetch.backend import X` — the sub-path doesn't have a space after `fetch`. Switch to `perl -i -pe` with `\b` word boundaries to catch arbitrary sub-paths. Validate with `grep -rE "from scripts\." tests/` returning zero before considering Task 1 done.
+
+### 4. `scripts/` had 5 more compat shells than IMP-008 anticipated
+
+The deletion-manifest "scripts/ shell files to delete" list named 9 files but Phase 2 deleted only 4 of them. The remaining 5 (`scripts/{qb_uploader,qb_file_filter,rclone_manager,email_notification,_spider_legacy}.py`) survived because tests still imported through them. Phase 3 must (a) rewrite those test imports to canonical `apps.cli.<subdir>.X` paths, then (b) delete the shells. Doing them in the other order leaves dangling imports.
+
+### 5. `apps/cli/<subdir>/*.py` + `apps/api/{server,services/context}.py` still depended on `compat.py`
+
+IMP-008 Task 4 only enumerated `compat.py` + `pipeline.py` for deletion, but **10 production files** (`apps/cli/{notify,pikpak,rclone,ops,qb}/*.py` plus `apps/api/server.py` + `apps/api/services/context.py`) all imported `from compat import alias_module` or `from compat import activate_repo_root`. They blocked Task 4. The fix: convert each to inline the logic — `_module = importlib.import_module(...); sys.modules[__name__] = _module` and `os.chdir(REPO_ROOT); sys.path.insert(0, str(REPO_ROOT))` respectively. **Lesson:** Task 4's paranoia grep needs to be a *prerequisite*, not a verification — run it before Task 1 even starts, and either delete-or-convert every hit as a Task 0 sub-step.
+
+### 6. Tests asserting deleted state remain compiled and break Gate 1
+
+Two tests existed solely to verify pre-Phase-3 state:
+
+- `tests/unit/test_docker_legacy_copy.py` — asserted `COPY legacy/ ./legacy/` IS in the Dockerfile (Task 5 removed it).
+- `tests/unit/test_legacy_spider_wrapper.py` — exercised `scripts/_spider_legacy.py` + `compat.alias_module` (both deleted).
+
+Both need explicit deletion in Phase 3. **Lesson:** any test whose assertion would *flip sign* under Phase 3 must be deleted in the same task that produces the flip.
+
+### 7. `scripts/ci/select_tests.py::PYTHON_SOURCE_ROOTS` was missing `"javdb"`
+
+IMP-006 moved all the canonical packages into `javdb/` but didn't update this constant. Result: every `javdb/**/*.py` change was treated as "non-Python source" by the CI test selector, bypassing both the `SOURCE_CHANGE_LIMIT` guard and the new docstring-only filter. **Lesson:** any new top-level package added during a restructure must be added to `PYTHON_SOURCE_ROOTS`. Better: define the roots as "any directory at depth-1 that contains `*.py`" instead of a hard-coded tuple.
+
+### Post-merge follow-ups (not Phase 3 scope)
+
+These items are noted by Phase 3 but deferred:
+
+- **Rollback library layering inversion** (Plan A `§12.3`): `javdb/storage/rollback/core.py:157` still does `from apps.cli.db import rollback as _rollback_cli`. Option B (extract pipeline into library + rewrite ~10 monkeypatch tests) is the long-term fix; tackle during FE Phase 2.
+- **`IMPACT_RULES` in `scripts/ci/select_tests.py`**: still references many deleted legacy paths. Rules don't match anything so no harm, but should be cleaned up for clarity.
+- **Test pollution of `reports/`**: multiple unit/integration tests write directly to `reports/operations.db` and `reports/D1/d1_drift.jsonl` instead of `tmp_path`. Each run dirties the working tree. File a separate `chore(tests)` task to relocate the writes.
+- **ADR-005 / ADR-006 progress notes**: both ADRs were frozen during ADR-007. Their amendments already map old paths to new; once Phase 3 lands, add a one-line "as of `<sha>`, paths are final" note to each.

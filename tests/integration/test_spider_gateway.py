@@ -9,7 +9,7 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from utils.spider_gateway import (
+from javdb.spider.spider_gateway import (
     SpiderGateway,
     GatewayResult,
     CrawlResult,
@@ -259,12 +259,12 @@ class TestRustFallback:
 
 class TestApiParseUrl:
     def test_endpoint_exists(self):
-        from api.server import app
+        from apps.api.server import app
         routes = [r.path for r in app.routes]
         assert '/api/parse/url' in routes
 
     def test_endpoint_schema(self):
-        from api.server import UrlPayload
+        from apps.api.server import UrlPayload
         p = UrlPayload(url='https://javdb.com/')
         assert p.page_num == 1
         assert p.use_proxy is True
@@ -274,7 +274,7 @@ class TestApiParseUrl:
     def test_parse_url_respects_payload_params(self):
         """Verify that /api/parse/url creates a gateway with request params
         instead of using a hardcoded singleton."""
-        from api.server import app, _jwt_encode
+        from apps.api.server import app, _jwt_encode
         from fastapi.testclient import TestClient
 
         token = _jwt_encode({"sub": "admin", "role": "admin", "typ": "access"}, 3600)
@@ -284,7 +284,7 @@ class TestApiParseUrl:
             "X-CSRF-Token": csrf,
         }
 
-        with patch('api.server.create_gateway') as mock_create:
+        with patch('apps.api.server.create_gateway') as mock_create:
             mock_gw = MagicMock()
             mock_gw.fetch_and_parse.return_value = GatewayResult(
                 ok=True, page_type='index', url='u', html_len=10, result={},
@@ -306,7 +306,7 @@ class TestApiParseUrl:
             )
 
     def test_compatibility_exports_still_available(self):
-        from api.server import (
+        from apps.api.server import (
             CrawlIndexPayload,
             SpiderJobPayload,
             UrlPayload,
@@ -325,7 +325,7 @@ class TestApiParseUrl:
 
 class TestApiRouteRegistry:
     def test_expected_paths_present(self):
-        from api.server import app
+        from apps.api.server import app
 
         expected = {
             '/api/health',
@@ -364,7 +364,7 @@ class TestApiRouteRegistry:
         assert expected.issubset(routes)
 
     def test_no_duplicate_path_method_pairs(self):
-        from api.server import app
+        from apps.api.server import app
         from fastapi.routing import APIRoute
 
         seen = {}
@@ -448,12 +448,12 @@ class TestCrawlPages:
 
 class TestApiCrawlIndex:
     def test_endpoint_exists(self):
-        from api.server import app
+        from apps.api.server import app
         routes = [r.path for r in app.routes]
         assert '/api/crawl/index' in routes
 
     def test_crawl_index_schema(self):
-        from api.server import CrawlIndexPayload
+        from apps.api.server import CrawlIndexPayload
         p = CrawlIndexPayload(url='https://javdb.com/')
         assert p.start_page == 1
         assert p.end_page is None
@@ -467,13 +467,13 @@ class TestApiCrawlIndex:
 
 class TestApiSpiderJob:
     def test_endpoints_exist(self):
-        from api.server import app
+        from apps.api.server import app
         routes = [r.path for r in app.routes]
         assert '/api/jobs/spider' in routes
         assert '/api/jobs/{job_id}/status' in routes
 
     def test_spider_job_payload_defaults(self):
-        from api.server import SpiderJobPayload
+        from apps.api.server import SpiderJobPayload
         p = SpiderJobPayload()
         assert p.url is None
         assert p.start_page == 1
@@ -483,7 +483,7 @@ class TestApiSpiderJob:
         assert p.disable_all_filters is False
 
     def test_spider_job_payload_custom(self):
-        from api.server import SpiderJobPayload
+        from apps.api.server import SpiderJobPayload
         p = SpiderJobPayload(
             url='https://javdb.com/tags?c6=1',
             start_page=2,
@@ -499,7 +499,7 @@ class TestApiSpiderJob:
         assert p.redownload_threshold == 0.50
 
     def test_payload_to_cli_args_minimal(self):
-        from api.server import SpiderJobPayload, _payload_to_cli_args
+        from apps.api.server import SpiderJobPayload, _payload_to_cli_args
         p = SpiderJobPayload()
         args = _payload_to_cli_args(p)
         assert '--use-proxy' not in args
@@ -507,7 +507,7 @@ class TestApiSpiderJob:
         assert '--dry-run' not in args
 
     def test_payload_to_cli_args_full(self):
-        from api.server import SpiderJobPayload, _payload_to_cli_args
+        from apps.api.server import SpiderJobPayload, _payload_to_cli_args
         p = SpiderJobPayload(
             url='https://javdb.com/tags?c6=1',
             start_page=3,
@@ -549,14 +549,14 @@ class TestApiSpiderJob:
         assert args[args.index('--max-movies-phase2') + 1] == '10'
 
     def test_payload_to_cli_args_crawl_all(self):
-        from api.server import SpiderJobPayload, _payload_to_cli_args
+        from apps.api.server import SpiderJobPayload, _payload_to_cli_args
         p = SpiderJobPayload(crawl_all=True, use_proxy=False)
         args = _payload_to_cli_args(p)
         assert '--all' in args
         assert '--use-proxy' not in args
 
     def test_job_not_found_returns_404(self):
-        from api.server import app, _jwt_encode
+        from apps.api.server import app, _jwt_encode
         from fastapi.testclient import TestClient
 
         token = _jwt_encode({"sub": "admin", "role": "admin", "typ": "access"}, 3600)

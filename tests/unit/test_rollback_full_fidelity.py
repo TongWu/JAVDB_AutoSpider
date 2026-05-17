@@ -39,7 +39,7 @@ from typing import Any, Dict, List, Set, Tuple
 
 import pytest
 
-import utils.infra.db as db_mod
+import javdb.storage.db.db as db_mod
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -871,7 +871,7 @@ class TestD1MigrationsAreCoveredByLocalSchema:
         migration_dir = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(
                 os.path.abspath(__file__)))),
-            "migration", "d1",
+            "javdb", "migrations", "d1",
         )
         files = sorted(
             f for f in os.listdir(migration_dir) if f.endswith(".sql")
@@ -921,7 +921,7 @@ class TestD1MigrationsAreCoveredByLocalSchema:
         migration_dir = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(
                 os.path.abspath(__file__)))),
-            "migration", "d1",
+            "javdb", "migrations", "d1",
         )
         for fname in os.listdir(migration_dir):
             if not fname.endswith(".sql") or "history" not in fname:

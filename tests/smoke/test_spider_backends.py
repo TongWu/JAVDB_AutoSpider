@@ -10,9 +10,9 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from scripts.spider.fetch.backend import FetchRuntimeState
-from scripts.spider.fetch.fetch_engine import EngineTask
-from scripts.spider.fetch.sequential_backend import SequentialFetchBackend
+from javdb.spider.fetch.backend import FetchRuntimeState
+from javdb.spider.fetch.fetch_engine import EngineTask
+from javdb.spider.fetch.sequential_backend import SequentialFetchBackend
 
 
 def make_task(index: str) -> EngineTask:
@@ -24,7 +24,7 @@ def make_task(index: str) -> EngineTask:
 
 
 def test_sequential_backend_success_updates_runtime_state_and_payload(monkeypatch):
-    import scripts.spider.fetch.sequential_backend as sb
+    import javdb.spider.fetch.sequential_backend as sb
 
     monkeypatch.setattr(
         sb,
@@ -69,7 +69,7 @@ def test_sequential_backend_success_updates_runtime_state_and_payload(monkeypatc
 
 
 def test_sequential_backend_failure_triggers_next_movie_sleep(monkeypatch):
-    import scripts.spider.fetch.sequential_backend as sb
+    import javdb.spider.fetch.sequential_backend as sb
 
     responses = iter(
         [
@@ -113,7 +113,7 @@ def test_sequential_backend_failure_triggers_next_movie_sleep(monkeypatch):
 
 
 def test_sequential_backend_skip_and_cf_fallback_keep_original_pacing(monkeypatch):
-    import scripts.spider.fetch.sequential_backend as sb
+    import javdb.spider.fetch.sequential_backend as sb
 
     responses = iter(
         [

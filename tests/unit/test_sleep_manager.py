@@ -14,7 +14,7 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from scripts.spider.runtime.sleep import (
+from javdb.spider.runtime.sleep import (
     MovieSleepManager,
     PenaltyTracker,
     DualWindowThrottle,
@@ -107,7 +107,7 @@ class TestDualWindowThrottle:
         dwt = DualWindowThrottle(short_window_sec=600.0, short_max=1,
                                   long_window_sec=600.0, long_max=1)
         dwt.wait_if_needed()  # fills both windows
-        import scripts.spider.runtime.sleep as sm
+        import javdb.spider.runtime.sleep as sm
         original = sm.THROTTLE_MAX_WAIT
         sm.THROTTLE_MAX_WAIT = 2.0  # override to 2s for fast test
         try:
