@@ -78,6 +78,7 @@ from javdb.storage.db.db import (
     db_load_rclone_inventory,
     db_upsert_align_no_exact_match,
     db_upsert_history,
+    db_upsert_history_batch,
     init_db,
 )
 from javdb.infra.logging import get_logger, setup_logging
@@ -198,6 +199,51 @@ def _history_video_code_for_moviehistory(exact_entry, inventory_video_code: str)
     """Video code stored in MovieHistory: JavDB list/detail code, not the inventory alias."""
     listed = (getattr(exact_entry, 'video_code', None) or '').strip().upper()
     return listed or (inventory_video_code or '').strip().upper()
+
+
+_DEFAULT_HISTORY_BATCH_SIZE = 50
+
+
+class _BatchedHistoryWriter:
+    """Buffer ``db_upsert_history`` calls and flush them via the batched
+    upsert helper so a long alignment run pays one DualConnection
+    transaction per *batch_size* movies instead of one per movie.
+
+    Use from a single thread (alignment's result consumer runs in the
+    main thread; workers do not call ``add`` directly).
+    """
+
+    def __init__(self, batch_size: int = _DEFAULT_HISTORY_BATCH_SIZE):
+        self._batch_size = max(1, int(batch_size))
+        self._upsert_rows: List[dict] = []
+        self._delete_codes: List[str] = []
+        self.flushed_rows = 0
+        self.flushed_batches = 0
+
+    def add(self, upsert_kwargs: dict, delete_code: Optional[str] = None) -> None:
+        self._upsert_rows.append(upsert_kwargs)
+        if delete_code:
+            self._delete_codes.append(delete_code)
+        if len(self._upsert_rows) >= self._batch_size:
+            self.flush()
+
+    def flush(self) -> None:
+        if not self._upsert_rows and not self._delete_codes:
+            return
+        n_up = len(self._upsert_rows)
+        if self._upsert_rows:
+            db_upsert_history_batch(self._upsert_rows)
+            self._upsert_rows = []
+        for code in self._delete_codes:
+            db_delete_align_no_exact_match(code)
+        self._delete_codes = []
+        if n_up:
+            self.flushed_rows += n_up
+            self.flushed_batches += 1
+            logger.info(
+                "Flushed history batch: %d row(s) (cumulative %d in %d batch(es))",
+                n_up, self.flushed_rows, self.flushed_batches,
+            )
 
 
 def _build_db_upsert_kwargs(detail_href: str, video_code: str, magnet_links: dict,
@@ -614,6 +660,12 @@ def run_alignment(args: argparse.Namespace) -> int:
     qb_rows: List[dict] = []
     purge_plan_rows: List[dict] = []
     rc = 0
+    # Per-row db_upsert_history opens a fresh connection and runs ~5 D1
+    # batch_execute round-trips. For an N-movie alignment that becomes
+    # 5N. The batched writer holds one connection / DualConnection
+    # transaction across `batch_size` rows so SQLite WAL fsync and D1
+    # drift accounting amortise across the batch.
+    history_writer = _BatchedHistoryWriter()
 
     from javdb.spider.runtime.config import PROXY_POOL
 
@@ -761,8 +813,9 @@ def run_alignment(args: argparse.Namespace) -> int:
                 return
 
             if data.get('db_upsert_kwargs') and not args.dry_run:
-                db_upsert_history(**data['db_upsert_kwargs'])
-                db_delete_align_no_exact_match(video_code)
+                history_writer.add(
+                    data['db_upsert_kwargs'], delete_code=video_code,
+                )
             qb_rows.extend(data.get('qb_rows', []))
             purge_plan_rows.extend(data.get('purge_plan_rows', []))
 
@@ -931,11 +984,13 @@ def run_alignment(args: argparse.Namespace) -> int:
 
             history_code = _history_video_code_for_moviehistory(exact_entry, code)
             if not args.dry_run:
-                db_upsert_history(**_build_db_upsert_kwargs(
-                    detail_href, history_code, magnet_links,
-                    actor_name, actor_gender, actor_link, supporting_actors,
-                ))
-                db_delete_align_no_exact_match(code)
+                history_writer.add(
+                    _build_db_upsert_kwargs(
+                        detail_href, history_code, magnet_links,
+                        actor_name, actor_gender, actor_link, supporting_actors,
+                    ),
+                    delete_code=code,
+                )
 
             inventory_entries = inventory.get(code, [])
             upgrade_plan = build_alignment_upgrade_plan(
@@ -958,6 +1013,12 @@ def run_alignment(args: argparse.Namespace) -> int:
                 )
             )
             movie_sleep_mgr.record_parsed_movie()
+
+    # Flush any pending history rows that did not fill a full batch.
+    # In dual mode under STRICT_DUAL_WRITE this is where a D1 failure
+    # for the tail batch surfaces.
+    if not args.dry_run:
+        history_writer.flush()
 
     # ------------------------------------------------------------------
     # Write outputs (common for both paths)
