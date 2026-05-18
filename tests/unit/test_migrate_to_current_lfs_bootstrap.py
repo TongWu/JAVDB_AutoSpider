@@ -130,6 +130,15 @@ class TestBootstrapStorageBackend:
         assert m2c._bootstrap_storage_backend_for_align(paths) == "d1"
         assert called["n"] == 0
 
+    def test_explicit_sqlite_with_failed_lfs_raises(
+        self, tmp_path, monkeypatch,
+    ):
+        paths = self._make_pointers(tmp_path)
+        monkeypatch.setenv("STORAGE_BACKEND", "sqlite")
+        monkeypatch.setattr(m2c, "_try_lfs_pull", lambda _paths: False)
+        with pytest.raises(RuntimeError, match="unrecoverable"):
+            m2c._bootstrap_storage_backend_for_align(paths)
+
     def test_explicit_sqlite_with_intact_files_kept(
         self, tmp_path, monkeypatch,
     ):

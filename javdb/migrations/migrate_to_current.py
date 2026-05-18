@@ -156,6 +156,10 @@ def _bootstrap_storage_backend_for_align(paths: list[str]) -> str:
                         "`python3 -m apps.cli.db.sync_d1_to_sqlite --apply "
                         "--force-overwrite-all` first, or set STORAGE_BACKEND=d1.",
                     )
+                    raise RuntimeError(
+                        "explicit STORAGE_BACKEND=sqlite but local SQLite files "
+                        "are unrecoverable (LFS pull failed or git-lfs unavailable)"
+                    )
                 else:
                     logger.warning(
                         "Downgrading STORAGE_BACKEND from dual → d1 since local "
@@ -341,7 +345,11 @@ def main() -> int:
     # against a real local SQLite file, so we skip them in d1-only mode.
     align_backend: str | None = None
     if args.align_inventory_history:
-        align_backend = _bootstrap_storage_backend_for_align([h, r, o])
+        try:
+            align_backend = _bootstrap_storage_backend_for_align([h, r, o])
+        except RuntimeError as exc:
+            logger.error("Cannot start alignment: %s", exc)
+            return 1
         if align_backend == "d1":
             if not args.skip_schema:
                 logger.info(
