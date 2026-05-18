@@ -1,9 +1,9 @@
 # ADR-008: Frontend Rewrite — Standalone `javdb-autospider-web` Repository
 
-**Status**: Accepted
-**Date**: 2026-05-17
+**Status**: Accepted (Phase 1 complete, Phase 2 decisions added 2026-05-18)
+**Date**: 2026-05-17 (amended 2026-05-18)
 **Deciders**: Brainstorming session (design spec: `docs/superpowers/specs/2026-05-16-frontend-rewrite-design.md`)
-**Related**: [IMP-009](../impl/IMP-009-frontend-rewrite-execution.md) (phased execution plan)
+**Related**: [IMP-009](../impl/IMP-009-frontend-phase1-completion.md) (Phase 1 completion), [IMP-010](../impl/IMP-010-frontend-phase2-full-cli-coverage.md) (Phase 2), [IMP-011](../impl/IMP-011-frontend-phase3-power-user.md) (Phase 3)
 
 ---
 
@@ -174,6 +174,36 @@ Re-entry from Settings always available. Post-onboarding hint cards for unconfig
 
 Operator-oriented UI prefers "wrote it → saw BE confirm" over fast-then-rollback. Exceptions only for low-risk UI prefs: sidebar collapse, theme, dismiss-hint.
 
+### D18: GitHub Actions integration via direct httpx (Phase 2)
+
+GH Actions endpoints (`list workflows`, `list runs`, `dispatch`, `stream logs`, plus Phase 3 `edit YAML` and `secrets CRUD`) use direct `httpx` calls to the GitHub REST API v3. No third-party library (PyGithub, ghapi).
+
+Token reuses the existing `GIT_PASSWORD` PAT from `config.py`. A separate `GH_ACTIONS_TOKEN` config key is not added unless operators report permission scope conflicts.
+
+**Rationale**: Only 6–7 API calls needed across all three phases. A library adds dependency weight without proportional value. The PAT is already configured and typically carries the `workflow` scope.
+
+### D19: Email notification history table (Phase 2)
+
+New `EmailNotificationHistory` table in `operations.db` (D1 migration `0018`) records every email send attempt: recipient, subject, status (`sent`/`failed`/`resent`), error, timestamps, session ID. The email sending code in `javdb/integrations/notify/email.py` appends a row after each `smtp.send_message()`.
+
+Enables `GET /api/ops/email/history` (list with status filter) and `POST /api/ops/email/{id}/resend` (replay a failed notification).
+
+**Rationale**: Spec Journey 12 requires "resend a failed notification." Without persistent history, resend is impossible and operators have no visibility into send failures.
+
+### D20: History search via SQL LIKE, not FTS (Phase 2)
+
+`GET /api/history/movies` and `GET /api/history/torrents` use SQL `LIKE` / `INSTR` for text search on VideoCode, ActorName, SupportingActors. Cursor-based pagination via keyset on `Id`.
+
+No Full-Text Search (FTS5). SQLite supports it but Cloudflare D1 does not. Maintaining two search code paths is not justified for the expected data scale (~10K movies, ~50K torrents).
+
+**Rationale**: `LIKE` search on indexed columns at 10K–50K scale completes in <50ms. FTS would add complexity without measurable user benefit.
+
+### D21: Data CSV export via BE-side streaming (Phase 2)
+
+`GET /api/history/movies/export` and `GET /api/history/torrents/export` return `StreamingResponse` with `text/csv` content type. The BE generates CSV rows from the full filtered dataset (no pagination limit). The FE triggers a browser download via blob URL.
+
+**Rationale**: Operators export CSV for external analysis and expect the full dataset, not just the current page. Server-side generation ensures data consistency and handles datasets too large for client-side assembly.
+
 ---
 
 ## Consequences
@@ -214,13 +244,17 @@ Operator-oriented UI prefers "wrote it → saw BE confirm" over fast-then-rollba
 
 - **Backend version skew**: FE refuses to boot when `capabilities.build.backend_version` < minimum. Boot gate renders "please upgrade" page.
 - **i18n for BE errors**: BE error codes mapped to FE translations. Log strings stay English.
+- **Rollback library layering inversion**: `javdb/storage/rollback/core.py` imports from `apps.cli.db._session_helpers` — a cross-layer import. Fix: move helpers into `javdb/storage/rollback/session_helpers.py`. Tracked in [IMP-009](../impl/IMP-009-frontend-phase1-completion.md) Task 4.
+- **Commit endpoint side-effect parity**: `javdb/storage/sessions/commit.py` already has `fanout_claims` and `emit_metrics` flags; HTTP endpoint defaults them to `False`. Fix: default to `True` in the API request body for CLI parity. Tracked in [IMP-009](../impl/IMP-009-frontend-phase1-completion.md) Task 5.
+- **PikPak endpoint granularity**: Batch mode only (`POST /api/ops/pikpak/transfer { days, dry_run }`). Single-torrent transfer deferred.
+- **Rclone endpoint granularity**: Single endpoint with flags (`POST /api/ops/rclone/run { scan, report, execute, dry_run }`). FE presets "Quick Dedup" and "Advanced" mode.
 
 ## Open Questions
 
-- **Multi-tab behavior**: Two tabs double request volume. BroadcastChannel-shared polling recommended but deferred to Phase 2.
+- **Multi-tab behavior**: Two tabs double request volume. BroadcastChannel-shared polling recommended but deferred to Phase 3. See [IMP-011](../impl/IMP-011-frontend-phase3-power-user.md) Task 6.
 - **D1 status caching TTL**: ~10 s server / session client proposed. Needs validation under realistic Browse-Lists usage post-Phase 2.
-- **Rollback library layering inversion**: `packages/python/javdb_platform/rollback/core.py` imports from `apps.cli.rollback.py` — the only such cross-layer import. Recommended cleanup in Phase 2 BE work.
-- **Commit endpoint side-effect parity**: HTTP endpoint is "DB-only" commit — does not replicate coordinator fanout or JSONL drift records from CLI. Recommended cleanup in Phase 2 BE work.
+- **Global log search storage**: Log persistence strategy (DB table vs. filesystem vs. structured rows) not decided. Depends on Phase 2 log volume observations. Deferred to Phase 3 design session → ADR-009. See [IMP-011](../impl/IMP-011-frontend-phase3-power-user.md) Task 4.
+- **Statistics dashboard scope**: Candidate metrics identified (run success rate, history growth, dedup freed bytes) but scope and chart library not finalized. Deferred to Phase 3 design session → ADR-010. See [IMP-011](../impl/IMP-011-frontend-phase3-power-user.md) Task 5.
 
 ---
 

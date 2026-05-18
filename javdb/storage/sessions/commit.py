@@ -8,15 +8,17 @@ Public surface:
 Use case: force-committing a session that is stuck in in_progress or
 finalizing state (e.g. via the API's POST /api/sessions/{id}/commit).
 
-This library calls the DB functions directly rather than delegating to
-apps.cli.db.commit_session because the CLI is orchestration-heavy (GitHub
-outputs, claim fanouts, JSONL records).  The API only needs the core
-DB mutations: drain pending writes + flip the status row.
+The core operation is always the DB mutation (drain pending writes +
+flip the status row).  Optional side-effects — MovieClaim coordinator
+fanout and ``pending_session_verify`` JSONL emission — are gated behind
+``fanout_claims`` and ``emit_metrics`` flags on :class:`CommitRequest`.
+The CLI sets both to True; the HTTP endpoint leaves them off by default.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Optional
+import time
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -43,6 +45,9 @@ class CommitRequest:
     session_id: str
     force: bool = False
     drop_pending: bool = False
+    emit_metrics: bool = False
+    fanout_claims: bool = False
+    shard_date: Optional[str] = None
 
 
 @dataclass
@@ -53,6 +58,67 @@ class CommitResult:
     new_state: str
     pending_dropped: int = 0
     error: Optional[str] = None
+    claim_results: List[Dict[str, Any]] = field(default_factory=list)
+
+
+def _emit_commit_metrics(
+    session_id: str,
+    *,
+    drain: Optional[Dict[str, Any]],
+    final_status: str,
+    write_mode: str,
+    commit_duration_ms: Optional[int],
+) -> Dict[str, Any]:
+    """Emit a ``pending_session_verify`` JSONL record after commit.
+
+    Simplified version of the CLI's ``_emit_pending_verify``: skips
+    shadow-audit comparison and GITHUB_OUTPUT (both CI-specific).
+    """
+    from datetime import datetime, timezone
+
+    from apps.cli.db._session_helpers import (
+        append_jsonl_record,
+        attach_run_identity,
+    )
+    from javdb.storage.db.db_reports import db_pending_session_stats
+
+    try:
+        stats = db_pending_session_stats(session_id)
+    except Exception:
+        stats = {}
+
+    drain = drain or {}
+    pending_applied = int(drain.get("pending_marked_applied", 0) or 0)
+    pending_staged = (
+        pending_applied
+        + int(stats.get("pending_residual_count", 0) or 0)
+    )
+    record: Dict[str, Any] = {
+        "kind": "pending_session_verify",
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "source": "commit_session_lib",
+        "session_id": session_id,
+        "write_mode": write_mode,
+        "final_status": final_status,
+        "pending_staged_count": pending_staged,
+        "pending_applied_count": pending_applied,
+        "pending_residual_count": int(
+            stats.get("pending_residual_count", 0) or 0,
+        ),
+        "commit_attempts": 1,
+        "commit_duration_ms": commit_duration_ms,
+        "hrefs_processed": int(drain.get("hrefs_processed", 0) or 0),
+        "torrents_upserted": int(drain.get("torrents_upserted", 0) or 0),
+        "torrents_deleted": int(drain.get("torrents_deleted", 0) or 0),
+        "movies_upserted": int(drain.get("movies_upserted", 0) or 0),
+        "worker_stage_rollback_failed": 0,
+        "shadow_audit_enabled": False,
+        "derived_recompute_drift": 0,
+        "derived_drift_samples": [],
+    }
+    attach_run_identity(record, session_id)
+    append_jsonl_record(record)
+    return record
 
 
 def commit_session(req: CommitRequest) -> CommitResult:
@@ -70,7 +136,6 @@ def commit_session(req: CommitRequest) -> CommitResult:
         db_commit_session_history,
     )
     from javdb.storage.db.db_reports import (
-        db_find_in_progress_sessions,
         db_mark_session_committed,
     )
     from javdb.infra.logging import get_logger
@@ -100,6 +165,8 @@ def commit_session(req: CommitRequest) -> CommitResult:
         )
 
     pending_dropped = 0
+    drain: Optional[Dict[str, Any]] = None
+    commit_duration_ms: Optional[int] = None
 
     # For pending-mode sessions, drain staged writes (or drop them).
     if write_mode == "pending" and current_status != "committed":
@@ -123,7 +190,9 @@ def commit_session(req: CommitRequest) -> CommitResult:
         else:
             # Promote pending writes to live tables.
             try:
+                t0 = time.monotonic()
                 drain = db_commit_session_history(req.session_id)
+                commit_duration_ms = int((time.monotonic() - t0) * 1000)
                 logger.info(
                     "Pending session drained: id=%s drain=%s",
                     req.session_id, drain,
@@ -142,11 +211,29 @@ def commit_session(req: CommitRequest) -> CommitResult:
         ) from exc
 
     if n == 0:
-        # Idempotent — was already committed by another call.
         logger.info("Session %s already committed (idempotent)", req.session_id)
+
+    claim_results: List[Dict[str, Any]] = []
+    if req.fanout_claims:
+        from apps.cli.db._session_helpers import fanout_movie_claim
+        claim_results = fanout_movie_claim(
+            [req.session_id],
+            operation="commit",
+            shard_date=req.shard_date,
+        )
+
+    if req.emit_metrics and write_mode == "pending":
+        _emit_commit_metrics(
+            req.session_id,
+            drain=drain,
+            final_status="committed",
+            write_mode=write_mode,
+            commit_duration_ms=commit_duration_ms,
+        )
 
     return CommitResult(
         session_id=req.session_id,
         new_state="committed",
         pending_dropped=pending_dropped,
+        claim_results=claim_results,
     )

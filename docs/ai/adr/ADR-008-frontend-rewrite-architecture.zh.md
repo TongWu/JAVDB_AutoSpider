@@ -1,9 +1,9 @@
 # ADR-008: 前端重写 — 独立 `javdb-autospider-web` 仓库
 
-**状态**: 已接受
-**日期**: 2026-05-17
+**状态**: 已接受（Phase 1 完成，2026-05-18 新增 Phase 2 决策）
+**日期**: 2026-05-17（2026-05-18 修订）
 **决策者**: 头脑风暴会议（设计规范：`docs/superpowers/specs/2026-05-16-frontend-rewrite-design.md`）
-**相关文档**: [IMP-009](../impl/IMP-009-frontend-rewrite-execution.md)（分阶段执行计划）
+**相关文档**: [IMP-009](../impl/IMP-009-frontend-phase1-completion.md)（Phase 1 收尾）、[IMP-010](../impl/IMP-010-frontend-phase2-full-cli-coverage.md)（Phase 2）、[IMP-011](../impl/IMP-011-frontend-phase3-power-user.md)（Phase 3）
 
 ---
 
@@ -174,6 +174,36 @@ Settings 中始终可重新进入。引导后对未配置的可选功能（PikPa
 
 面向操作者的 UI 偏好"写入 → 看到后端确认"而非"快速然后回滚"。仅对低风险 UI 偏好例外：侧边栏折叠、主题、关闭提示。
 
+### D18: GitHub Actions 集成通过 httpx 直调（Phase 2）
+
+GH Actions 端点（`list workflows`、`list runs`、`dispatch`、`stream logs`，加 Phase 3 的 `edit YAML` 和 `secrets CRUD`）使用 `httpx` 直接调用 GitHub REST API v3。不引入第三方库（PyGithub、ghapi）。
+
+Token 复用 `config.py` 中已有的 `GIT_PASSWORD` PAT。除非操作者反馈权限范围冲突，否则不新增 `GH_ACTIONS_TOKEN` 配置项。
+
+**理由**: 三个阶段总共仅需 6-7 个 API 调用。引入库的依赖成本与收益不成比例。PAT 已配置且通常自带 `workflow` scope。
+
+### D19: 邮件通知历史表（Phase 2）
+
+在 `operations.db` 中新建 `EmailNotificationHistory` 表（D1 迁移 `0018`），记录每次邮件发送尝试：收件人、主题、状态（`sent`/`failed`/`resent`）、错误信息、时间戳、SessionId。`javdb/integrations/notify/email.py` 中的邮件发送代码在每次 `smtp.send_message()` 后追加一行。
+
+支持 `GET /api/ops/email/history`（带状态过滤的列表）和 `POST /api/ops/email/{id}/resend`（重发失败通知）。
+
+**理由**: Spec Journey 12 要求"重发失败通知"。没有持久化历史，重发不可能实现，操作者也无法了解发送失败情况。
+
+### D20: 历史搜索使用 SQL LIKE，非 FTS（Phase 2）
+
+`GET /api/history/movies` 和 `GET /api/history/torrents` 使用 SQL `LIKE` / `INSTR` 对 VideoCode、ActorName、SupportingActors 进行文本搜索。基于 `Id` 的 keyset cursor 分页。
+
+不使用全文搜索（FTS5）。SQLite 支持但 Cloudflare D1 不支持。为预期数据规模（约 1 万部影片、5 万条种子）维护两套搜索代码路径不合理。
+
+**理由**: 在 1 万–5 万行规模的索引列上 `LIKE` 搜索 <50ms 完成。FTS 增加复杂度但无可衡量的用户收益。
+
+### D21: 数据 CSV 导出通过后端流式返回（Phase 2）
+
+`GET /api/history/movies/export` 和 `GET /api/history/torrents/export` 返回 `StreamingResponse`，content type 为 `text/csv`。后端从完整的过滤数据集生成 CSV 行（无分页限制）。前端通过 blob URL 触发浏览器下载。
+
+**理由**: 操作者导出 CSV 用于外部分析，期望完整数据集而非仅当前页。服务端生成保证数据一致性，并能处理客户端无法组装的大数据集。
+
 ---
 
 ## 后果
@@ -214,13 +244,17 @@ Settings 中始终可重新进入。引导后对未配置的可选功能（PikPa
 
 - **后端版本偏差**: 当 `capabilities.build.backend_version` < 最低版本时前端拒绝启动。启动门渲染"请升级"页面。
 - **后端错误的 i18n**: 后端错误码映射到前端翻译。日志字符串保持英文。
+- **回滚库分层反转**: `javdb/storage/rollback/core.py` 从 `apps.cli.db._session_helpers` 导入——跨层导入。修复方案：将 helpers 移入 `javdb/storage/rollback/session_helpers.py`。跟踪于 [IMP-009](../impl/IMP-009-frontend-phase1-completion.md) Task 4。
+- **Commit 端点副作用一致性**: `javdb/storage/sessions/commit.py` 已有 `fanout_claims` 和 `emit_metrics` 标志；HTTP 端点默认为 `False`。修复方案：API 请求体默认为 `True` 以保持 CLI 一致性。跟踪于 [IMP-009](../impl/IMP-009-frontend-phase1-completion.md) Task 5。
+- **PikPak 端点粒度**: 仅暴露批量模式（`POST /api/ops/pikpak/transfer { days, dry_run }`）。单种子转移推迟。
+- **Rclone 端点粒度**: 单端点 + 标志（`POST /api/ops/rclone/run { scan, report, execute, dry_run }`）。前端提供"快速去重"和"高级"模式预设。
 
 ## 开放问题
 
-- **多标签页行为**: 两个标签页会双倍请求量。建议 BroadcastChannel 共享轮询，推迟到 Phase 2。
+- **多标签页行为**: 两个标签页会双倍请求量。建议 BroadcastChannel 共享轮询，推迟到 Phase 3。见 [IMP-011](../impl/IMP-011-frontend-phase3-power-user.md) Task 6。
 - **D1 状态缓存 TTL**: 建议服务端约 10 秒 / 客户端会话级。需在 Phase 2 后的实际 Browse-Lists 使用中验证。
-- **回滚库分层反转**: `packages/python/javdb_platform/rollback/core.py` 从 `apps.cli.rollback.py` 导入——唯一的跨层导入。建议在 Phase 2 后端工作中清理。
-- **Commit 端点副作用一致性**: HTTP 端点是"仅 DB"commit——不复制 CLI 的协调器 fanout 或 JSONL 漂移记录。建议在 Phase 2 后端工作中清理。
+- **全局日志搜索存储**: 日志持久化策略（DB 表 vs 文件系统 vs 结构化行）未决定。取决于 Phase 2 日志量观察。推迟到 Phase 3 设计会议 → ADR-009。见 [IMP-011](../impl/IMP-011-frontend-phase3-power-user.md) Task 4。
+- **统计仪表盘范围**: 已确定候选指标（运行成功率、历史增长、去重释放量），但范围和图表库未最终确定。推迟到 Phase 3 设计会议 → ADR-010。见 [IMP-011](../impl/IMP-011-frontend-phase3-power-user.md) Task 5。
 
 ---
 
