@@ -26,10 +26,10 @@
 
 ## 2. 前端本地检查
 
-- 已验证构建通过：
-  - `cd web && npm install && npm run build`
+前端已迁移到独立仓库：[`javdb-autospider-web`](https://github.com/tedwu/javdb-autospider-web)。
+
 - 开发运行：
-  - `cd web && npm run dev`
+  - `cd javdb-autospider-web && npm install && npm run dev`
 - 浏览器验证：
   - 访问 `http://localhost:5173`
   - 登录后可进入 Dashboard / Config / Daily / Adhoc / Tasks
@@ -70,20 +70,6 @@
 - 除 `/api/health` 与 `/api/auth/login` 外，匿名请求均不可访问。
 - `GET /api/config` 敏感值必须为脱敏结果。
 - 审计日志存在 `logs/audit.log`，且包含登录/配置修改/任务触发记录。
-
-## 6.5 Electron MVP 检查
-
-- 依赖安装：
-  - 根目录执行 `npm install`
-  - 前端目录执行 `cd web && npm install`
-- 开发启动：
-  - 根目录执行 `npm run electron:dev`
-  - 预期：自动拉起 Vite、自动拉起 FastAPI（8100），并打开 Electron 窗口
-- 健康检查：
-  - Electron 打开后可正常登录；Dashboard / Config / Daily / Adhoc / Explore 可访问
-  - 在 Electron 内触发 API 请求时应访问 `http://127.0.0.1:8100`（非浏览器跨域错误）
-- 进程回收：
-  - 关闭 Electron 后，不应残留由 Electron 启动的 uvicorn 子进程
 
 ## 7. R2 探索能力专项检查
 
