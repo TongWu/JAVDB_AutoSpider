@@ -25,6 +25,7 @@ import argparse
 import pytest
 
 import javdb.storage.db.db as db_mod
+import javdb.storage.rollback.core as rollback_core
 
 
 # ── helpers ──────────────────────────────────────────────────────────────
@@ -127,13 +128,11 @@ class TestFindInProgressSessions:
 
 class TestRollbackCliTargetResolution:
     def test_session_id_only_skips_in_progress_lookup(self, monkeypatch):
-        from apps.cli.db import rollback as rollback_cli
-
         def fail_lookup(*_args, **_kwargs):
             raise AssertionError("lookup should not run for --session-id alone")
 
         monkeypatch.setattr(
-            rollback_cli, "find_window_sessions", fail_lookup,
+            rollback_core, "find_window_sessions", fail_lookup,
         )
         args = argparse.Namespace(
             session_id=42,
@@ -143,18 +142,16 @@ class TestRollbackCliTargetResolution:
             include_orphaned=False,
         )
 
-        assert rollback_cli._resolve_target_sessions(args, None) == [42]
+        assert rollback_core._resolve_target_sessions(args, None) == [42]
 
     def test_window_scan_requires_include_orphaned(self, monkeypatch):
-        from apps.cli.db import rollback as rollback_cli
-
         def fail_lookup(*_args, **_kwargs):
             raise AssertionError(
                 "window scan must NOT run by default; only with --include-orphaned"
             )
 
         monkeypatch.setattr(
-            rollback_cli, "find_window_sessions", fail_lookup,
+            rollback_core, "find_window_sessions", fail_lookup,
         )
         args = argparse.Namespace(
             session_id=42,
@@ -165,13 +162,11 @@ class TestRollbackCliTargetResolution:
         )
 
         # Default: only the explicit session id, no expansion.
-        assert rollback_cli._resolve_target_sessions(
+        assert rollback_core._resolve_target_sessions(
             args, "2026-05-04 19:30:00",
         ) == [42]
 
     def test_include_orphaned_unions_window_sessions(self, monkeypatch):
-        from apps.cli.db import rollback as rollback_cli
-
         captured = {}
 
         def fake_lookup(since, *, raise_on_error=False):
@@ -179,7 +174,7 @@ class TestRollbackCliTargetResolution:
             return [7, 42]
 
         monkeypatch.setattr(
-            rollback_cli, "find_window_sessions", fake_lookup,
+            rollback_core, "find_window_sessions", fake_lookup,
         )
         args = argparse.Namespace(
             session_id=42,
@@ -189,23 +184,19 @@ class TestRollbackCliTargetResolution:
             include_orphaned=True,
         )
 
-        assert rollback_cli._resolve_target_sessions(
+        assert rollback_core._resolve_target_sessions(
             args, "2026-05-04 19:30:00",
         ) == [7, 42]
         assert captured["since"] == "2026-05-04 19:30:00"
 
     def test_run_id_resolution_unions_with_session_id(self, monkeypatch):
-        from apps.cli.db import rollback as rollback_cli
-
         monkeypatch.setattr(
-            rollback_cli,
+            rollback_core,
             "find_run_sessions",
             lambda run_id, attempt: [101, 102],
         )
-        # Also assert that window scan does NOT run when targets came
-        # from the run-id path.
         monkeypatch.setattr(
-            rollback_cli,
+            rollback_core,
             "find_window_sessions",
             lambda *args, **kwargs: pytest.fail(
                 "window scan must not run when run-id yielded targets"
@@ -220,7 +211,7 @@ class TestRollbackCliTargetResolution:
             include_orphaned=False,
         )
 
-        assert rollback_cli._resolve_target_sessions(args, None) == [
+        assert rollback_core._resolve_target_sessions(args, None) == [
             42, 101, 102,
         ]
 
@@ -239,12 +230,10 @@ class TestRollbackCliTargetResolution:
 
         monkeypatch.setattr(rollback_cli, "init_db", lambda: None)
         monkeypatch.setattr(rollback_cli, "close_db", lambda: None)
-        # No --session-id, no --run-id → only the window scan path is
-        # consulted, and it raises.
         def boom(*_a, **_kw):
             raise RuntimeError("DB hiccup")
 
-        monkeypatch.setattr(rollback_cli, "find_window_sessions", boom)
+        monkeypatch.setattr(rollback_core, "find_window_sessions", boom)
 
         rc = rollback_cli.main([
             "--run-started-at", "2026-05-04T19:30:00Z",
@@ -264,14 +253,12 @@ class TestRollbackCliTargetResolution:
         monkeypatch.setattr(rollback_cli, "init_db", lambda: None)
         monkeypatch.setattr(rollback_cli, "close_db", lambda: closed.append(True))
         monkeypatch.setattr(
-            rollback_cli,
+            rollback_core,
             "_resolve_target_sessions",
             lambda _args, _normalized: [1, 2],
         )
-        # Default _detect_cross_day reads from the live DB; short-circuit
-        # to keep this test focused on the refusal path.
         monkeypatch.setattr(
-            rollback_cli,
+            rollback_core,
             "_detect_cross_day",
             lambda *args, **kwargs: False,
         )
@@ -282,7 +269,7 @@ class TestRollbackCliTargetResolution:
                 raise ValueError("committed")
             return {"history": {"drift_skipped": 0}}
 
-        monkeypatch.setattr(rollback_cli, "db_rollback_session", fake_rollback)
+        monkeypatch.setattr(rollback_core, "db_rollback_session", fake_rollback)
 
         assert rollback_cli.main(["--apply"]) == 2
         assert calls == [1, 2]
