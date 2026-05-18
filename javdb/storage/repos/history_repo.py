@@ -247,3 +247,102 @@ def batch_update_movie_actors(
         payload,
     )
     return conn.total_changes - before
+
+
+# ── HistoryRepo (ADR-005 PR-1) ────────────────────────────────────────
+#
+# A typed surface over the write-domain function family in
+# ``javdb/storage/db/db_history_read.py`` and
+# ``db_history_write.py``. PR-1 is purely additive: every method is a
+# thin delegate to the existing ``db_*`` function. Callers can adopt
+# ``HistoryRepo`` at their own pace; the function family stays the
+# source of truth until ADR-005 PR-2 inlines the SQL here and retires
+# the functions.
+#
+# Pattern: ``HistoryRepo(*, db_path=None)`` per ADR-005 amendment 2 —
+# the underlying function family already opens its own conn from
+# ``db_path``; the Repo carries no per-call state. ``session_id`` flows
+# explicitly through every method that needs it (D5 goal preserved).
+
+
+class HistoryRepo:
+    """Thin typed wrapper over the History domain (`history.db`).
+
+    Method-for-method delegation to the ``db_*`` function family in
+    ``javdb/storage/db/db_history_*.py``. Establishes the interface
+    surface so callers can migrate incrementally; PR-2 will inline the
+    SQL here and retire the underlying functions.
+
+    Construction takes only an optional ``db_path`` override (used in
+    tests / smoke runs against a fresh DB). Methods that mutate state
+    take ``session_id`` per call so a single Repo instance can service
+    multiple sessions (e.g. a sweep over stale runs) without rebuild.
+    """
+
+    def __init__(self, *, db_path: Optional[str] = None) -> None:
+        self._db_path = db_path
+
+    # ── Reads (no session_id required) ────────────────────────────
+
+    def load_history(
+        self, *, phase: Optional[int] = None,
+    ) -> Dict[str, dict]:
+        """Load full MovieHistory + TorrentHistory state, keyed by Href."""
+        from javdb.storage.db.db_history_read import db_load_history
+        return db_load_history(db_path=self._db_path, phase=phase)
+
+    def load_history_snapshot(self, session_id: str) -> Dict[str, dict]:
+        """Load history + this session's Pending overlay (for spider reads)."""
+        from javdb.storage.db.db_history_read import db_load_history_snapshot
+        return db_load_history_snapshot(
+            session_id=session_id, db_path=self._db_path,
+        )
+
+    def check_torrent_in_history(
+        self, href: str, torrent_type: str,
+    ) -> bool:
+        """True iff ``(href, torrent_type)`` already lives in TorrentHistory."""
+        from javdb.storage.db.db_history_read import db_check_torrent_in_history
+        return db_check_torrent_in_history(
+            href=href, torrent_type=torrent_type, db_path=self._db_path,
+        )
+
+    def get_all_history_records(self) -> list:
+        """All MovieHistory rows as plain dicts (forensic / export use)."""
+        from javdb.storage.db.db_history_read import db_get_all_history_records
+        return db_get_all_history_records(db_path=self._db_path)
+
+    # ── Writes (session_id required) ──────────────────────────────
+
+    def stage_movie(self, session_id: str, payload: Dict) -> str:
+        """Append a row to PendingMovieHistoryWrites. Returns Seq."""
+        from javdb.storage.db.db_history_write import db_stage_history_write
+        return db_stage_history_write(
+            session_id=session_id, kind="movie", payload=payload,
+            db_path=self._db_path,
+        )
+
+    def stage_torrent(self, session_id: str, payload: Dict) -> str:
+        """Append a row to PendingTorrentHistoryWrites. Returns Seq."""
+        from javdb.storage.db.db_history_write import db_stage_history_write
+        return db_stage_history_write(
+            session_id=session_id, kind="torrent", payload=payload,
+            db_path=self._db_path,
+        )
+
+    def commit_session(self, session_id: str, **kwargs) -> dict:
+        """Drain Pending* tables into live MovieHistory / TorrentHistory."""
+        from javdb.storage.db.db_history_write import db_commit_session_history
+        return db_commit_session_history(session_id, **kwargs)
+
+    def batch_update_last_visited(self, hrefs: List[str]) -> int:
+        """Bump LastVisited on each href; staging-aware under pending mode."""
+        from javdb.storage.db.db_history_read import db_batch_update_last_visited
+        return db_batch_update_last_visited(hrefs, db_path=self._db_path)
+
+    def batch_update_movie_actors(
+        self, updates: List[Tuple[str, str, str, str]],
+    ) -> int:
+        """Bulk overwrite (ActorName, Gender, Link, SupportingActorsJson)."""
+        from javdb.storage.db.db_history_read import db_batch_update_movie_actors
+        return db_batch_update_movie_actors(updates, db_path=self._db_path)
