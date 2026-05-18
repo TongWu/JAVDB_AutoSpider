@@ -50,12 +50,15 @@ def _isolate_sqlite(tmp_path):
     orig_reports = _db_mod.REPORTS_DB_PATH
     orig_operations = _db_mod.OPERATIONS_DB_PATH
     orig_override = _cfg_mod._storage_mode_override
+    orig_storage_backend = os.environ.get("STORAGE_BACKEND")
 
     _db_mod.DB_PATH = test_db
     _db_mod.HISTORY_DB_PATH = test_db
     _db_mod.REPORTS_DB_PATH = test_db
     _db_mod.OPERATIONS_DB_PATH = test_db
     _cfg_mod._storage_mode_override = 'db'
+    # The local config may default to D1/dual, but this fixture promises SQLite.
+    os.environ["STORAGE_BACKEND"] = "sqlite"
 
     # Patch db_connection module paths (used by split db_* modules)
     orig_conn_history = _db_conn_mod.HISTORY_DB_PATH
@@ -90,6 +93,10 @@ def _isolate_sqlite(tmp_path):
     _db_conn_mod.REPORTS_DB_PATH = orig_conn_reports
     _db_conn_mod.OPERATIONS_DB_PATH = orig_conn_operations
     _cfg_mod._storage_mode_override = orig_override
+    if orig_storage_backend is None:
+        os.environ.pop("STORAGE_BACKEND", None)
+    else:
+        os.environ["STORAGE_BACKEND"] = orig_storage_backend
 
 
 @pytest.fixture
@@ -344,4 +351,3 @@ def sample_magnets():
             'timestamp': '2024-01-11'
         }
     ]
-

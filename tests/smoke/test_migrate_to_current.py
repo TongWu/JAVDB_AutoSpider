@@ -10,6 +10,20 @@ sys.path.insert(0, project_root)
 import javdb.migrations.migrate_to_current as migrate_to_current
 
 
+@pytest.fixture(autouse=True)
+def _clean_align_bootstrap_env():
+    """``migrate_to_current.main()`` calls ``_bootstrap_storage_backend_for_align``
+    under ``--align-inventory-history``, which writes STORAGE_BACKEND /
+    STRICT_DUAL_WRITE directly into ``os.environ`` (bypassing monkeypatch).
+    Without explicit cleanup those leak into every subsequent test in the
+    session and break ~250 unrelated tests with
+    ``ValueError: No D1 logical-name mapping``.
+    """
+    yield
+    os.environ.pop("STORAGE_BACKEND", None)
+    os.environ.pop("STRICT_DUAL_WRITE", None)
+
+
 def _install_main_stubs(monkeypatch):
     calls = {}
 
