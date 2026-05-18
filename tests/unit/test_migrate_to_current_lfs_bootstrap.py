@@ -62,6 +62,12 @@ class TestBootstrapStorageBackend:
     def _clean_env(self, monkeypatch):
         monkeypatch.delenv("STORAGE_BACKEND", raising=False)
         monkeypatch.delenv("STRICT_DUAL_WRITE", raising=False)
+        yield
+        # _bootstrap_storage_backend_for_align writes os.environ directly
+        # (not through monkeypatch), so monkeypatch teardown won't undo
+        # those writes. Explicit cleanup prevents leaking into other tests.
+        os.environ.pop("STORAGE_BACKEND", None)
+        os.environ.pop("STRICT_DUAL_WRITE", None)
 
     def _make_pointers(self, tmp_path):
         paths = []
