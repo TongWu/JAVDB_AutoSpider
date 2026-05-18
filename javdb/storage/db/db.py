@@ -2437,6 +2437,45 @@ def db_upsert_history(
 
     sid = _resolve_session_id(session_id)
 
+    with get_db(db_path or HISTORY_DB_PATH) as conn:
+        _upsert_one_history_on_conn(
+            conn,
+            href=href,
+            video_code=video_code,
+            magnet_links=magnet_links,
+            size_links=size_links,
+            file_count_links=file_count_links,
+            resolution_links=resolution_links,
+            actor_name=actor_name,
+            actor_gender=actor_gender,
+            actor_link=actor_link,
+            supporting_actors=supporting_actors,
+            session_id=sid,
+        )
+
+
+def _upsert_one_history_on_conn(
+    conn,
+    *,
+    href: str,
+    video_code: str,
+    magnet_links: Dict[str, str],
+    size_links: Dict[str, str],
+    file_count_links: Dict[str, int],
+    resolution_links: Dict[str, Optional[int]],
+    actor_name: Optional[str],
+    actor_gender: Optional[str],
+    actor_link: Optional[str],
+    supporting_actors: Optional[str],
+    session_id: Optional[str],
+) -> None:
+    """Per-row upsert body, factored out so a batch caller can reuse one
+    connection across many rows without re-opening / re-committing per row.
+
+    ``session_id`` here is the already-resolved value (not the sentinel) —
+    callers must run it through :func:`_resolve_session_id` first so the
+    batch wrapper does not pay that resolution cost N times.
+    """
     base_url = cfg('BASE_URL', 'https://javdb.com')
     path_href, absolute_href = movie_href_lookup_values(href, base_url)
     lookup_hrefs = [h for h in (path_href, absolute_href) if h]
@@ -2451,39 +2490,137 @@ def db_upsert_history(
     )
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    sid = session_id
     _TORRENT_CATS = ('hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle')
 
-    with get_db(db_path or HISTORY_DB_PATH) as conn:
-        if len(lookup_hrefs) == 2:
-            existing = conn.execute(
-                "SELECT Id FROM MovieHistory WHERE Href IN (?, ?)",
-                (lookup_hrefs[0], lookup_hrefs[1]),
-            ).fetchone()
-        elif len(lookup_hrefs) == 1:
-            existing = conn.execute(
-                "SELECT Id FROM MovieHistory WHERE Href = ?",
-                (lookup_hrefs[0],),
-            ).fetchone()
-        else:
-            existing = conn.execute(
-                "SELECT Id FROM MovieHistory WHERE Href = ?",
-                (href,),
-            ).fetchone()
+    if len(lookup_hrefs) == 2:
+        existing = conn.execute(
+            "SELECT Id FROM MovieHistory WHERE Href IN (?, ?)",
+            (lookup_hrefs[0], lookup_hrefs[1]),
+        ).fetchone()
+    elif len(lookup_hrefs) == 1:
+        existing = conn.execute(
+            "SELECT Id FROM MovieHistory WHERE Href = ?",
+            (lookup_hrefs[0],),
+        ).fetchone()
+    else:
+        existing = conn.execute(
+            "SELECT Id FROM MovieHistory WHERE Href = ?",
+            (href,),
+        ).fetchone()
 
-        if existing is None:
-            movie_id = _generate_integer_id()
-            insert_movie = (
-                """INSERT INTO MovieHistory
-                   (Id, VideoCode, Href, DateTimeCreated, DateTimeUpdated, DateTimeVisited,
-                    ActorName, ActorGender, ActorLink, SupportingActors, SessionId)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (movie_id, video_code, normalized_href, now, now, now,
-                 actor_name, actor_gender, prepared_actor_link,
-                 prepared_supporting_actors, sid),
+    if existing is None:
+        movie_id = _generate_integer_id()
+        insert_movie = (
+            """INSERT INTO MovieHistory
+               (Id, VideoCode, Href, DateTimeCreated, DateTimeUpdated, DateTimeVisited,
+                ActorName, ActorGender, ActorLink, SupportingActors, SessionId)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (movie_id, video_code, normalized_href, now, now, now,
+             actor_name, actor_gender, prepared_actor_link,
+             prepared_supporting_actors, sid),
+        )
+        statements = [insert_movie]
+        audit_stmt = _movie_insert_audit_statement_for_href(
+            normalized_href,
+            session_id=sid,
+            when=now,
+        )
+        if audit_stmt is not None:
+            statements.append(audit_stmt)
+        _execute_backend_batch(conn, statements)
+    else:
+        movie_id = existing['Id']
+        old_full = conn.execute(
+            "SELECT * FROM MovieHistory WHERE Id=?", (movie_id,),
+        ).fetchone()
+        if (
+            actor_name is not None
+            or actor_gender is not None
+            or actor_link is not None
+            or supporting_actors is not None
+        ):
+            row_m = old_full  # contains the actor columns we need
+            new_an = (
+                actor_name if actor_name is not None else row_m['ActorName']
             )
-            statements = [insert_movie]
-            audit_stmt = _movie_insert_audit_statement_for_href(
-                normalized_href,
+            new_ag = (
+                actor_gender if actor_gender is not None else row_m['ActorGender']
+            )
+            new_al = (
+                prepared_actor_link if actor_link is not None else row_m['ActorLink']
+            )
+            new_sup = (
+                prepared_supporting_actors if supporting_actors is not None
+                else row_m['SupportingActors']
+            )
+            existing_an = (row_m['ActorName'] or '').strip()
+            if existing_an and not _has_meaningful_actor_data(
+                new_an or '', new_al or '', new_sup or '',
+            ):
+                new_an = row_m['ActorName']
+                new_ag = row_m['ActorGender']
+                new_al = row_m['ActorLink']
+                new_sup = row_m['SupportingActors']
+            update_movie = (
+                """UPDATE MovieHistory SET DateTimeUpdated=?, DateTimeVisited=?,
+                   Href=?, ActorName=?, ActorGender=?, ActorLink=?,
+                   SupportingActors=?, SessionId=? WHERE Id=?""",
+                (now, now, normalized_href, new_an, new_ag, new_al, new_sup,
+                 sid, movie_id),
+            )
+        else:
+            update_movie = (
+                """UPDATE MovieHistory SET DateTimeUpdated=?, DateTimeVisited=?,
+                   Href=?, SessionId=? WHERE Id=?""",
+                (now, now, normalized_href, sid, movie_id),
+            )
+        statements = [update_movie]
+        audit_stmt = _movie_audit_statement(
+            movie_id,
+            action='UPDATE',
+            session_id=sid,
+            old_row=old_full,
+            when=now,
+        )
+        if audit_stmt is not None:
+            statements.append(audit_stmt)
+        _execute_backend_batch(conn, statements)
+
+    # Upsert torrents
+    has_hacked_subtitle = False
+    has_subtitle = False
+
+    for tt, magnet in magnet_links.items():
+        if tt not in _TORRENT_CATS or not magnet:
+            continue
+        sub_ind, cen_ind = category_to_indicators(tt)
+        size = size_links.get(tt, '')
+        fc = file_count_links.get(tt, 0)
+        res = resolution_links.get(tt)
+
+        existing_t = conn.execute(
+            """SELECT * FROM TorrentHistory
+               WHERE MovieHistoryId=? AND SubtitleIndicator=? AND CensorIndicator=?""",
+            (movie_id, sub_ind, cen_ind),
+        ).fetchone()
+
+        if existing_t is None:
+            torrent_id = _generate_integer_id()
+            insert_torrent = (
+                """INSERT INTO TorrentHistory
+                   (Id, MovieHistoryId, MagnetUri, SubtitleIndicator, CensorIndicator,
+                    ResolutionType, Size, FileCount, DateTimeCreated,
+                    DateTimeUpdated, SessionId)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (torrent_id, movie_id, magnet, sub_ind, cen_ind, res, size, fc,
+                 now, now, sid),
+            )
+            statements = [insert_torrent]
+            audit_stmt = _torrent_insert_audit_statement_for_type(
+                movie_id,
+                sub_ind,
+                cen_ind,
                 session_id=sid,
                 when=now,
             )
@@ -2491,143 +2628,107 @@ def db_upsert_history(
                 statements.append(audit_stmt)
             _execute_backend_batch(conn, statements)
         else:
-            movie_id = existing['Id']
-            old_full = conn.execute(
-                "SELECT * FROM MovieHistory WHERE Id=?", (movie_id,),
-            ).fetchone()
-            if (
-                actor_name is not None
-                or actor_gender is not None
-                or actor_link is not None
-                or supporting_actors is not None
-            ):
-                row_m = old_full  # contains the actor columns we need
-                new_an = (
-                    actor_name if actor_name is not None else row_m['ActorName']
-                )
-                new_ag = (
-                    actor_gender if actor_gender is not None else row_m['ActorGender']
-                )
-                new_al = (
-                    prepared_actor_link if actor_link is not None else row_m['ActorLink']
-                )
-                new_sup = (
-                    prepared_supporting_actors if supporting_actors is not None
-                    else row_m['SupportingActors']
-                )
-                existing_an = (row_m['ActorName'] or '').strip()
-                if existing_an and not _has_meaningful_actor_data(
-                    new_an or '', new_al or '', new_sup or '',
-                ):
-                    new_an = row_m['ActorName']
-                    new_ag = row_m['ActorGender']
-                    new_al = row_m['ActorLink']
-                    new_sup = row_m['SupportingActors']
-                update_movie = (
-                    """UPDATE MovieHistory SET DateTimeUpdated=?, DateTimeVisited=?,
-                       Href=?, ActorName=?, ActorGender=?, ActorLink=?,
-                       SupportingActors=?, SessionId=? WHERE Id=?""",
-                    (now, now, normalized_href, new_an, new_ag, new_al, new_sup,
-                     sid, movie_id),
-                )
-            else:
-                update_movie = (
-                    """UPDATE MovieHistory SET DateTimeUpdated=?, DateTimeVisited=?,
-                       Href=?, SessionId=? WHERE Id=?""",
-                    (now, now, normalized_href, sid, movie_id),
-                )
-            statements = [update_movie]
-            audit_stmt = _movie_audit_statement(
-                movie_id,
+            update_torrent = (
+                """UPDATE TorrentHistory
+                   SET MagnetUri=?, Size=?, FileCount=?, ResolutionType=?,
+                       DateTimeUpdated=?, SessionId=?
+                   WHERE Id=?""",
+                (magnet, size, fc, res, now, sid, existing_t['Id']),
+            )
+            statements = [update_torrent]
+            audit_stmt = _torrent_audit_statement(
+                existing_t['Id'],
                 action='UPDATE',
                 session_id=sid,
-                old_row=old_full,
+                old_row=existing_t,
                 when=now,
             )
             if audit_stmt is not None:
                 statements.append(audit_stmt)
             _execute_backend_batch(conn, statements)
 
-        # Upsert torrents
-        has_hacked_subtitle = False
-        has_subtitle = False
+        if tt == 'hacked_subtitle':
+            has_hacked_subtitle = True
+        elif tt == 'subtitle':
+            has_subtitle = True
 
-        for tt, magnet in magnet_links.items():
-            if tt not in _TORRENT_CATS or not magnet:
-                continue
-            sub_ind, cen_ind = category_to_indicators(tt)
-            size = size_links.get(tt, '')
-            fc = file_count_links.get(tt, 0)
-            res = resolution_links.get(tt)
+    # If hacked_subtitle exists, remove hacked_no_subtitle
+    if has_hacked_subtitle:
+        _delete_torrents_with_audit(
+            conn, movie_id, sub_ind=0, cen_ind=0,
+            session_id=sid, when=now,
+        )
+    # If subtitle exists, remove no_subtitle
+    if has_subtitle:
+        _delete_torrents_with_audit(
+            conn, movie_id, sub_ind=0, cen_ind=1,
+            session_id=sid, when=now,
+        )
 
-            existing_t = conn.execute(
-                """SELECT * FROM TorrentHistory
-                   WHERE MovieHistoryId=? AND SubtitleIndicator=? AND CensorIndicator=?""",
-                (movie_id, sub_ind, cen_ind),
-            ).fetchone()
+    # Update indicators
+    _update_movie_indicators(conn, movie_id, session_id=sid, when=now)
 
-            if existing_t is None:
-                torrent_id = _generate_integer_id()
-                insert_torrent = (
-                    """INSERT INTO TorrentHistory
-                       (Id, MovieHistoryId, MagnetUri, SubtitleIndicator, CensorIndicator,
-                        ResolutionType, Size, FileCount, DateTimeCreated,
-                        DateTimeUpdated, SessionId)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (torrent_id, movie_id, magnet, sub_ind, cen_ind, res, size, fc,
-                     now, now, sid),
-                )
-                statements = [insert_torrent]
-                audit_stmt = _torrent_insert_audit_statement_for_type(
-                    movie_id,
-                    sub_ind,
-                    cen_ind,
-                    session_id=sid,
-                    when=now,
-                )
-                if audit_stmt is not None:
-                    statements.append(audit_stmt)
-                _execute_backend_batch(conn, statements)
-            else:
-                update_torrent = (
-                    """UPDATE TorrentHistory
-                       SET MagnetUri=?, Size=?, FileCount=?, ResolutionType=?,
-                           DateTimeUpdated=?, SessionId=?
-                       WHERE Id=?""",
-                    (magnet, size, fc, res, now, sid, existing_t['Id']),
-                )
-                statements = [update_torrent]
-                audit_stmt = _torrent_audit_statement(
-                    existing_t['Id'],
-                    action='UPDATE',
-                    session_id=sid,
-                    old_row=existing_t,
-                    when=now,
-                )
-                if audit_stmt is not None:
-                    statements.append(audit_stmt)
-                _execute_backend_batch(conn, statements)
 
-            if tt == 'hacked_subtitle':
-                has_hacked_subtitle = True
-            elif tt == 'subtitle':
-                has_subtitle = True
+def db_upsert_history_batch(
+    rows: List[Dict[str, Any]],
+    *,
+    db_path: Optional[str] = None,
+    session_id: Any = _SESSION_ID_SENTINEL,
+) -> None:
+    """Upsert ``MovieHistory`` / ``TorrentHistory`` for a batch of movies.
 
-        # If hacked_subtitle exists, remove hacked_no_subtitle
-        if has_hacked_subtitle:
-            _delete_torrents_with_audit(
-                conn, movie_id, sub_ind=0, cen_ind=0,
-                session_id=sid, when=now,
+    Each ``rows`` entry is a dict with the same keys
+    :func:`db_upsert_history` takes (``href``, ``video_code``,
+    ``magnet_links``, ``size_links``, ``file_count_links``,
+    ``resolution_links``, ``actor_name``, ``actor_gender``, ``actor_link``,
+    ``supporting_actors``). All rows write through a single connection so
+    that:
+
+    * Under ``STORAGE_BACKEND=dual``, the whole batch lands in one
+      :class:`~javdb.storage.dual_connection.DualConnection` transaction —
+      drift accounting consolidates to a single commit decision, and
+      ``STRICT_DUAL_WRITE=1`` callers see a single all-or-nothing failure
+      surface instead of N independent ones.
+    * SQLite WAL fsync amortises across the batch instead of per row.
+    * Statements that ``_execute_backend_batch`` already groups (movie +
+      audit, torrent + audit) keep their per-row D1 ``batch_execute``
+      grouping; the larger win — true cross-row ``executemany`` on the
+      INSERT-only fast path — is deliberately out of scope here, see the
+      "Future work" comment below.
+
+    ``session_id`` is resolved once for the whole batch (default: active
+    session). Pass an explicit id to override.
+
+    Future work: an INSERT-only fast-path that bulk-fetches existing rows
+    in one SELECT and emits per-table ``executemany`` calls would cut D1
+    round-trips from ~5 per movie to ~5 per batch on the alignment
+    workload (where most rows are new). It is non-trivial because the
+    audit + indicator + torrent-dedup logic needs separate fast variants;
+    the per-row path through this wrapper is the safe baseline.
+    """
+    if not rows:
+        return
+    sid = _resolve_session_id(session_id)
+    with get_db(db_path or HISTORY_DB_PATH) as conn:
+        for row in rows:
+            magnet_links = row.get('magnet_links') or {}
+            size_links = row.get('size_links') or {}
+            file_count_links = row.get('file_count_links') or {}
+            resolution_links = row.get('resolution_links') or {}
+            _upsert_one_history_on_conn(
+                conn,
+                href=row['href'],
+                video_code=row['video_code'],
+                magnet_links=magnet_links,
+                size_links=size_links,
+                file_count_links=file_count_links,
+                resolution_links=resolution_links,
+                actor_name=row.get('actor_name'),
+                actor_gender=row.get('actor_gender'),
+                actor_link=row.get('actor_link'),
+                supporting_actors=row.get('supporting_actors'),
+                session_id=sid,
             )
-        # If subtitle exists, remove no_subtitle
-        if has_subtitle:
-            _delete_torrents_with_audit(
-                conn, movie_id, sub_ind=0, cen_ind=1,
-                session_id=sid, when=now,
-            )
-
-        # Update indicators
-        _update_movie_indicators(conn, movie_id, session_id=sid, when=now)
 
 
 def _delete_torrents_with_audit(
