@@ -1,34 +1,76 @@
-# WEB UI 部署说明
+# Web UI 部署说明
+
+Web UI 已迁移到独立仓库：[`javdb-autospider-web`](https://github.com/tedwu/javdb-autospider-web)。基于 Vue 3 + Naive UI 构建的 SPA，通过 REST API 与后端通信。
+
+## 前提条件
+
+- 后端 API 已运行（默认 `http://localhost:8100`）
+- Node.js 20+（本地开发需要）
 
 ## 本地开发
 
-- 在项目根目录复制环境模板：`cp .env.example .env`。同一文件包含 **Web API** 变量（如 `API_SECRET_KEY`、`ADMIN_USERNAME`、`ADMIN_PASSWORD`）以及 **Docker/cron** 段落；`apps/api/server.py` 启动时会**自动加载根目录 `.env`**（不会覆盖已在 shell 里 `export` 的变量）。
-- 后端 API：`uvicorn apps.api.server:app --reload --port 8100`
-- 前端目录：`apps/web/`
-- 前端环境变量：`VITE_API_BASE=http://localhost:8100`
+```bash
+# 克隆前端仓库
+git clone https://github.com/tedwu/javdb-autospider-web.git
+cd javdb-autospider-web
 
-## Docker 一体化启动
+# 安装依赖
+npm install
 
-- 编排文件：`docker/docker-compose.fullstack.yml`
-- 启动命令：`docker compose -f docker/docker-compose.fullstack.yml up -d --build`
-- 访问地址：
-  - Web: `http://localhost:8088`
-  - API: `http://localhost:8100`
+# 设置 API 地址
+cp .env.example .env
+# 编辑 .env: VITE_API_BASE=http://localhost:8100
+
+# 启动开发服务器
+npm run dev
+```
+
+后端 API（另开终端）：
+
+```bash
+# 在主仓库目录下
+uvicorn apps.api.server:app --reload --port 8100
+```
+
+## Docker Compose（分离部署）
+
+```yaml
+services:
+  api:
+    build: .
+    ports:
+      - "8100:8100"
+    env_file: .env
+
+  web:
+    image: ghcr.io/tedwu/javdb-autospider-web:latest
+    ports:
+      - "8088:80"
+    environment:
+      - VITE_API_BASE=http://api:8100
+    depends_on:
+      - api
+```
+
+## Docker Compose（一体化启动）
+
+主仓库包含一体化编排文件：
+
+```bash
+docker compose -f docker/docker-compose.fullstack.yml up -d --build
+```
+
+- Web: `http://localhost:8088`
+- API: `http://localhost:8100`
 
 ## 安全相关变量
 
-- `API_SECRET_KEY`: JWT 签名密钥（建议 32+ 长度随机值）
-- `SECRETS_ENCRYPTION_KEY`: 敏感配置加密密钥（Fernet key）
-- `ADMIN_USERNAME` / `ADMIN_PASSWORD`: 管理员初始账号
+| 变量 | 用途 |
+| ---- | ---- |
+| `API_SECRET_KEY` | JWT 签名密钥（建议 32+ 长度随机值） |
+| `SECRETS_ENCRYPTION_KEY` | 敏感配置加密密钥（Fernet key） |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | 管理员初始账号 |
 
-## 界面风格
+## 架构设计
 
-- 颜色与排版对齐仓库内 **`frontend_mdc_ng`**（Next + Tailwind：zinc 中性色、indigo 强调、Inter 字体），令牌定义见 `apps/web/src/styles.css` 顶部注释。
-
-## 响应式支持
-
-- 前端默认支持三档布局：
-  - Desktop: `>1024px`
-  - Tablet: `<=1024px`
-  - Phone: `<=640px`
-- 在平板与手机端中导航自动折叠为顶部横向区块，表单自动变为单列。
+详见 [ADR-008](../../ai/adr/ADR-008-frontend-rewrite-architecture.zh.md)（Vue 3 + Naive UI、Pinia 状态管理、i18n 国际化、E2E 测试策略）。
