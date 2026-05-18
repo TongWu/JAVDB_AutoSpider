@@ -595,6 +595,73 @@ class TestHistory:
         assert len(all_recs) == 1
 
 
+class TestUpsertHistoryBatch:
+    """db_upsert_history_batch must be observationally equivalent to N
+    sequential db_upsert_history calls — the win is connection / WAL /
+    DualConnection-transaction reuse, not different semantics.
+    """
+
+    def test_empty_input_noop(self, _isolate_sqlite):
+        db_mod.db_upsert_history_batch([])
+        assert db_mod.db_load_history() == {}
+
+    def test_batch_inserts_match_serial(self, _isolate_sqlite):
+        rows = [
+            {
+                'href': f'/v/CODE-{i}', 'video_code': f'CODE-{i}',
+                'magnet_links': {'subtitle': f'magnet:test-{i}'},
+                'actor_name': f'Actor {i}',
+            }
+            for i in range(5)
+        ]
+        db_mod.db_upsert_history_batch(rows)
+        history = db_mod.db_load_history()
+        assert len(history) == 5
+        for i in range(5):
+            href = f'/v/CODE-{i}'
+            assert href in history
+            assert history[href]['VideoCode'] == f'CODE-{i}'
+            assert history[href]['ActorName'] == f'Actor {i}'
+
+    def test_batch_updates_existing(self, _isolate_sqlite):
+        db_mod.db_upsert_history(
+            '/v/EXISTING', 'EXISTING',
+            magnet_links={'subtitle': 'magnet:old'},
+        )
+        db_mod.db_upsert_history_batch([
+            {
+                'href': '/v/EXISTING', 'video_code': 'EXISTING',
+                'magnet_links': {'subtitle': 'magnet:new'},
+            },
+            {
+                'href': '/v/NEW', 'video_code': 'NEW',
+                'magnet_links': {'subtitle': 'magnet:new2'},
+            },
+        ])
+        history = db_mod.db_load_history()
+        assert len(history) == 2
+        torrents = history['/v/EXISTING'].get('torrents', {})
+        assert any('magnet:new' in t.get('MagnetUri', '') for t in torrents.values())
+
+    def test_batch_uses_single_connection(self, _isolate_sqlite, monkeypatch):
+        """A 3-row batch should open ``get_db`` exactly once."""
+        call_count = {'n': 0}
+        real_get_db = db_mod.get_db
+
+        def counting_get_db(*args, **kwargs):
+            call_count['n'] += 1
+            return real_get_db(*args, **kwargs)
+
+        monkeypatch.setattr(db_mod, 'get_db', counting_get_db)
+        db_mod.db_upsert_history_batch([
+            {'href': f'/v/X{i}', 'video_code': f'X{i}'} for i in range(3)
+        ])
+        assert call_count['n'] == 1, (
+            "Expected one get_db() call for the batch; got "
+            f"{call_count['n']} — connection reuse regressed."
+        )
+
+
 # ── rclone_inventory ──────────────────────────────────────────────────────
 
 class TestRcloneInventory:
