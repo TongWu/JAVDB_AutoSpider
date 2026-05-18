@@ -27,8 +27,9 @@
 
 ## 2. Frontend (Local)
 
-- Build: `cd apps/web && npm install && npm run build`
-- Dev server: `cd apps/web && npm run dev`
+The frontend lives in a separate repo: [`javdb-autospider-web`](https://github.com/tedwu/javdb-autospider-web).
+
+- Dev server: `cd javdb-autospider-web && npm install && npm run dev`
 - Browser:
   - Visit `http://localhost:5173`
   - After login, verify Dashboard / Config / Daily / Adhoc / Tasks are accessible
@@ -60,14 +61,6 @@
 - Anonymous requests to any endpoint except `/api/health` and `/api/auth/login` are rejected.
 - `GET /api/config` returns redacted values for sensitive fields.
 - Audit log at `logs/audit.log` records login, config changes, and task triggers.
-
-## 6.5. Electron MVP
-
-- Install deps: `npm install` (root) + `cd apps/web && npm install`
-- Start: `npm run electron:dev` from root
-  - Expect: Vite dev server, FastAPI (8100), and Electron window all launch
-- Verify: Login works; Dashboard / Config / Daily / Adhoc / Explore accessible inside Electron
-- Process cleanup: After closing Electron, no orphaned uvicorn processes remain
 
 ## 7. Explore Feature
 
