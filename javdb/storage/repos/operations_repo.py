@@ -250,3 +250,96 @@ def replace_rclone_inventory(
         [_normalize_inventory_entry(entry) for entry in entries],
     )
     return len(entries)
+
+
+# ── OperationsRepo (ADR-005 PR-1) ─────────────────────────────────────
+#
+# Typed surface over the write-domain function family in
+# ``javdb/storage/db/db_operations.py``. See ADR-005 amendment 2 for
+# the ``__init__(*, db_path=None)`` rationale.
+
+
+class OperationsRepo:
+    """Thin typed wrapper over the Operations domain (`operations.db`).
+
+    Wraps RcloneInventory, DedupRecords, and PikpakHistory operations
+    by delegating to the ``db_*`` functions in
+    ``javdb/storage/db/db_operations.py``. PR-2 will inline the SQL
+    here and retire the underlying functions.
+
+    The conn-taking helpers earlier in this file (``open_rclone_staging``
+    et al.) are pre-existing internal utilities used by the function
+    family itself; they intentionally remain at module level rather
+    than becoming Repo methods, because their callers already manage
+    their own conn.
+    """
+
+    def __init__(self, *, db_path: Optional[str] = None) -> None:
+        self._db_path = db_path
+
+    # ── Rclone inventory ──────────────────────────────────────────
+
+    def load_rclone_inventory(self) -> List[dict]:
+        """Return every row in RcloneInventory as a list of dicts."""
+        from javdb.storage.db.db_operations import db_load_rclone_inventory
+        return db_load_rclone_inventory(db_path=self._db_path)
+
+    def replace_rclone_inventory(self, entries: List[dict]) -> int:
+        """Replace the full RcloneInventory atomically. Returns row count."""
+        from javdb.storage.db.db_operations import db_replace_rclone_inventory
+        return db_replace_rclone_inventory(
+            entries=entries, db_path=self._db_path,
+        )
+
+    def swap_rclone_inventory(self, session_id: str) -> int:
+        """Promote this session's staging table into RcloneInventory."""
+        from javdb.storage.db.db_operations import db_swap_rclone_inventory
+        return db_swap_rclone_inventory(
+            session_id=session_id, db_path=self._db_path,
+        )
+
+    def clear_rclone_inventory(self) -> None:
+        """Truncate RcloneInventory. Forensic / reset use only."""
+        from javdb.storage.db.db_operations import db_clear_rclone_inventory
+        db_clear_rclone_inventory(db_path=self._db_path)
+
+    def append_rclone_inventory(
+        self, entries: List[dict], *, session_id: str,
+    ) -> int:
+        """Append rows directly to RcloneInventory (rare; prefer swap)."""
+        from javdb.storage.db.db_operations import db_append_rclone_inventory
+        return db_append_rclone_inventory(
+            entries=entries, session_id=session_id, db_path=self._db_path,
+        )
+
+    # ── Dedup records ─────────────────────────────────────────────
+
+    def load_dedup_records(self) -> List[dict]:
+        """Return every DedupRecords row as a list of dicts."""
+        from javdb.storage.db.db_operations import db_load_dedup_records
+        return db_load_dedup_records(db_path=self._db_path)
+
+    def save_dedup_records(self, rows: List[dict]) -> None:
+        """Bulk-replace DedupRecords with ``rows`` (post-dedup commit)."""
+        from javdb.storage.db.db_operations import db_save_dedup_records
+        db_save_dedup_records(rows=rows, db_path=self._db_path)
+
+    def append_dedup_record(
+        self, *, session_id: str, payload: dict,
+    ) -> None:
+        """Append a single DedupRecords row tagged with ``session_id``."""
+        from javdb.storage.db.db_operations import db_append_dedup_record
+        db_append_dedup_record(
+            session_id=session_id, payload=payload, db_path=self._db_path,
+        )
+
+    # ── PikpakHistory ─────────────────────────────────────────────
+
+    def append_pikpak_history(
+        self, *, session_id: str, payload: dict,
+    ) -> None:
+        """Append one PikpakHistory row tagged with ``session_id``."""
+        from javdb.storage.db.db_operations import db_append_pikpak_history
+        db_append_pikpak_history(
+            session_id=session_id, payload=payload, db_path=self._db_path,
+        )
