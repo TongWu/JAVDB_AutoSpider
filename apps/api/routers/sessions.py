@@ -71,6 +71,8 @@ def post_commit(
             session_id=session_id,
             force=payload.force,
             drop_pending=payload.drop_pending,
+            fanout_claims=payload.fanout_claims,
+            emit_metrics=payload.emit_metrics,
         ))
         return SessionCommitResponse(
             session_id=result.session_id,
