@@ -1,8 +1,9 @@
 # ADR-004: Proxy Discovery — Runners Upload the Full PROXY_POOL
 
-**Status**: Accepted
+**Status**: Completed 2026-05-16 — runner `/register` payload now uploads `proxy_pool`; worker-side `proxies_seen` table + handlers (`/do/proxies_seen`, `/proxies_seen`) shipped in RunnerRegistry DO.
 **Date**: 2026-05-16
 **Deciders**: Proxy Coordinator Dashboard rework
+**Related Implementation Plans**: [IMP-002](../../impl/IMP-002-dashboard-phase1-proxy-pool-upload.md) (Phase 1 — runner-side upload, completed 2026-05-16), [IMP-003](../../impl/IMP-003-dashboard-phase2-worker-backend.md) (worker backend persistence — schema shipped)
 
 ---
 
@@ -183,7 +184,7 @@ Dashboard UI:
 
 ## References
 
-- [CONTEXT.md](../../../CONTEXT.md) — Runner / RunnerRegistry DO definitions.
+- [CONTEXT.md](../../../../CONTEXT.md) — Runner / RunnerRegistry DO definitions.
 - Existing register implementation: `JAVDB_AutoSpider_Proxycoordinator/src/runner_registry.ts:160-219`.
 - Python proxy_id normalisation: `packages/python/javdb_platform/proxy_policy.py:150-190`.
 - Existing PROXY_POOL config example: `config.py.example:114-141`.

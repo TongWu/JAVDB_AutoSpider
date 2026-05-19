@@ -1,9 +1,15 @@
 # ADR-008: 前端重写 — 独立 `javdb-autospider-web` 仓库
 
-**状态**: 已接受（Phase 1 完成，2026-05-18 新增 Phase 2 决策）
+**状态**: 已接受 —— Phase 1 已交付；Phase 2 计划中、Phase 3 推迟（截至 2026-05-19）
 **日期**: 2026-05-17（2026-05-18 修订）
 **决策者**: 头脑风暴会议（设计规范：`docs/superpowers/specs/2026-05-16-frontend-rewrite-design.md`）
-**相关文档**: [IMP-009](../impl/IMP-009-frontend-phase1-completion.md)（Phase 1 收尾）、[IMP-010](../impl/IMP-010-frontend-phase2-full-cli-coverage.md)（Phase 2）、[IMP-011](../impl/IMP-011-frontend-phase3-power-user.md)（Phase 3）
+**关联实现计划 (Related Implementation Plans)**: [IMP-001](../impl/IMP-001-frontend-phase1-backend-prerequisites.md)（BE 前置——2026-05-16 完成）、[IMP-009](../impl/IMP-009-frontend-phase1-completion.md)（Phase 1 收尾——功能完整，cutover 待落地）、[IMP-010](../impl/IMP-010-frontend-phase2-full-cli-coverage.md)（Phase 2——计划中，未启动）、[IMP-011](../impl/IMP-011-frontend-phase3-power-user.md)（Phase 3——推迟，待 Phase 2 dogfooding 后定）
+
+## 待办 (Outstanding Work)
+
+- IMP-009 cutover 残留：E2E fixtures、2 条剩余用户旅程、BE 清理、从已删除的 `apps/web/` 切换至独立 `javdb-autospider-web` 仓库。
+- IMP-010（Phase 2 —— 全 CLI 表面覆盖）：未启动。
+- IMP-011（Phase 3 —— 高级用户特性与分析）：推迟；具体范围待 Phase 2 dogfooding 累积数据后定。
 
 ---
 

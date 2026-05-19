@@ -1,9 +1,19 @@
 # ADR-010: Unified Python D1 Access Port
 
-**Status**: Accepted
+**Status**: Accepted — implementation pending (all four phases unexecuted as of 2026-05-19)
 **Date**: 2026-05-19
 **Deciders**: D1 access-port brainstorming and grill session
 **Prerequisites**: [ADR-006](ADR-006-pending-mode-default-rollout.md) keeps pending mode as the default write path; [ADR-009](ADR-009-d1-drift-classifier-and-diagnose.md) documents the recent D1 transient-failure and drift response.
+**Related Implementation Plans**: [IMP-012](../impl/IMP-012-d1-access-port-phase1-core.md) (Phase 1 — port core), [IMP-013](../impl/IMP-013-d1-access-port-phase2-recovery-outbox.md) (Phase 2 — recovery outbox), [IMP-014](../impl/IMP-014-d1-access-port-phase3-safe-batching.md) (Phase 3 — safe batching), [IMP-015](../impl/IMP-015-d1-access-port-phase4-startup-replay.md) (Phase 4 — startup replay)
+
+## Outstanding Work
+
+- Phase 1 — `D1AccessPort` core class + `D1Connection`/`DualConnection` delegation. No `D1AccessPort` symbol exists in `javdb/storage/` yet.
+- Phase 2 — recovery outbox + replay queue (per D5).
+- Phase 3 — safe micro-batching + `flush()` boundaries (per D4).
+- Phase 4 — startup replay of any persisted outbox entries.
+
+The four phases are independently gated; nothing in this ADR has shipped as of the date above.
 
 ---
 
@@ -168,15 +178,14 @@ Do not flood `d1_drift.jsonl` with normal metrics. Drift remains an anomaly and 
 
 ### D10. Gradual Enablement
 
-The rollout is staged by code defaults and environment overrides. The ADR requires the gradual model; exact default flips happen in later PRs.
+The rollout is staged by code defaults and environment overrides. The ADR requires the gradual model; exact default flips happen in later PRs. Each phase has its own implementation plan (IMP), and those IMPs are the canonical execution plans for this ADR.
 
-| Phase | Default behavior | Opt-in / candidate behavior |
-|---|---|---|
-| Phase 1 | `D1Connection` uses `D1AccessPort`; retry/metrics/schema-cache live; `COMMIT_SESSION_BULK` defaults on; `d1_port_summary.json` emitted | Outbox and general micro-batching exist but are disabled |
-| Phase 1 tooling | Recovery inspect/replay CLI is available | CLI mostly exercises tests/runbooks until outbox is enabled |
-| Phase 2 | Outbox code still gated | `D1_RECOVERY_OUTBOX_ENABLED=1` allows safe operations to queue and replay |
-| Phase 3 | Ordinary SQL still synchronous | `D1_BATCHING_ENABLED=1` and `D1_FLUSH_INTERVAL_MS=250` allow safe-path micro-batching |
-| Phase 4 | Startup replay off | `D1_STARTUP_REPLAY_ENABLED=1` drains non-dead-lettered work on process startup |
+| Phase | Implementation plan | Default behavior | Opt-in / candidate behavior |
+|---|---|---|---|
+| Phase 1 | [IMP-012](../impl/IMP-012-d1-access-port-phase1-core.md) | `D1Connection` uses `D1AccessPort`; retry/metrics/schema-cache live; `COMMIT_SESSION_BULK` defaults on; `d1_port_summary.json` emitted; recovery inspect/replay CLI is available for tests/runbooks | Outbox and general micro-batching exist but are disabled |
+| Phase 2 | [IMP-013](../impl/IMP-013-d1-access-port-phase2-recovery-outbox.md) | Outbox code still gated | `D1_RECOVERY_OUTBOX_ENABLED=1` allows safe operations to queue and replay |
+| Phase 3 | [IMP-014](../impl/IMP-014-d1-access-port-phase3-safe-batching.md) | Ordinary SQL still synchronous | `D1_BATCHING_ENABLED=1` and `D1_FLUSH_INTERVAL_MS=250` allow safe-path micro-batching |
+| Phase 4 | [IMP-015](../impl/IMP-015-d1-access-port-phase4-startup-replay.md) | Startup replay off | `D1_STARTUP_REPLAY_ENABLED=1` drains non-dead-lettered work on process startup |
 
 Promotion gates should use `d1_port_summary.json`, pending verification records, and drift/dead-letter absence. A phase should not become default while it creates new pending residuals, new dead letters, or unexplained drift.
 

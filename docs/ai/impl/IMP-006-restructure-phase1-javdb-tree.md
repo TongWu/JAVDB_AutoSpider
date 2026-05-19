@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.11+, pytest, maturin 1.x (Rust extension build), `git mv` for renames, sed for bulk import rewrites, ripgrep for verification, Markdown for READMEs and manifest.
 
-**Source spec:** [ADR-007](../adr/ADR-007-monorepo-restructure-2026-05.md) (English version is canonical).
+**Source spec:** [ADR-007](../adr/archive/ADR-007-monorepo-restructure-2026-05.md) (English version is canonical).
 
 ---
 

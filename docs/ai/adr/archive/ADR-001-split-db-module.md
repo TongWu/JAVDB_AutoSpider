@@ -1,8 +1,9 @@
 # ADR-001: Split the Monolithic db.py Module
 
-**Status**: Accepted
+**Status**: Completed — Phases 1+2 shipped (the 9 modules listed below all exist under `javdb/storage/db/`). Phase 3 ("delete `db.py` façade") was never started; superseded by [ADR-005](../ADR-005-db-py-retirement-and-repo-pattern.md), which is now the canonical retirement path.
 **Date**: 2026-05-15
 **Deciders**: Architecture restructure team
+**Related Implementation Plans**: None — this ADR predates the IMP file convention. Execution was tracked through PR descriptions only.
 
 ---
 
@@ -256,9 +257,9 @@ Forcing updates on 42 import sites is a breaking change, but phased migration re
 
 ## References
 
-- [CONTEXT.md](../../../CONTEXT.md) — domain terminology glossary
-- [CLAUDE.md](../../../CLAUDE.md) — project overview
-- [docs/en/ops/d1-rollback.md](../../en/ops/d1-rollback.md) — storage backend architecture
+- [CONTEXT.md](../../../../CONTEXT.md) — domain terminology glossary
+- [CLAUDE.md](../../../../CLAUDE.md) — project overview
+- [docs/en/ops/d1-rollback.md](../../../en/ops/d1-rollback.md) — storage backend architecture
 - [A Philosophy of Software Design](https://web.stanford.edu/~ouster/cgi-bin/book.php) — deep-module theory
 
 ---

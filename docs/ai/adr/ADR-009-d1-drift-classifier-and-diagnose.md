@@ -1,7 +1,15 @@
 # ADR-009: D1 Transient-Error Classifier Fix + Drift Diagnostic Tool
 
-**Status**: Accepted
+**Status**: Accepted — implementation pending (no PRs yet as of 2026-05-19)
 **Date**: 2026-05-17
+
+## Outstanding Work
+
+- **D1 (Layer 0)** — add `"connection lost"` to `_TRANSIENT_ERROR_KEYWORDS` in [`javdb/storage/d1_client.py`](../../../javdb/storage/d1_client.py) + regression test. **Not yet applied** — current keyword tuple lacks the substring.
+- **D2 (Layer 1)** — `drift_diagnose` CLI at `apps/cli/db/drift_diagnose.py`. **Not yet created** — `apps/cli/db/` does not contain the module.
+- **D6** — email job subprocess integration. Depends on D2.
+
+This ADR has no paired IMP file (the work fits inside a small PR sequence per D7).
 **Deciders**: Bake-period drift response (succeeds the manual forensic fix recorded as `kind: drift_resolution` in `reports/D1/d1_drift.jsonl` at 2026-05-17T14:00 UTC)
 **Prerequisites**: None — bake-safe per [ADR-006](ADR-006-pending-mode-default-rollout.md) amendment 3. The "bake-safe" claim is precise: **no effect on the D10 gate inputs** (no writes to D1/SQLite, no schema change, no `WriteMode` resolution change, no `.publish-config.yml` pause-mechanism change, no `pending_session_verify` emission). Layer 1 D6 *does* modify the `email-notification` job, but the modification is a read-only subprocess call with a 60-second timeout to a tool that itself only touches D10-monitored state via the operator-gated `--apply` path (which is **never** invoked from the workflow).
 
