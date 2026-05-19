@@ -22,11 +22,14 @@ services:
       - ../.env:/app/.env
 
   web:
+    # The published image's nginx proxies /api to the api service on its
+    # internal network, so the browser only ever talks to localhost:8088
+    # (same-origin) — no VITE_API_BASE override or CORS_ORIGINS expansion
+    # needed. Setting VITE_API_BASE=http://api:8100 would 404 in-browser
+    # because Docker's internal DNS isn't reachable from the host.
     image: ghcr.io/tedwu/javdb-autospider-web:latest
     container_name: javdb-web
     ports:
       - "8088:80"
-    environment:
-      - VITE_API_BASE=http://api:8100
     depends_on:
       - api

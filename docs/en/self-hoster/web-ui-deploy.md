@@ -46,11 +46,15 @@ services:
     image: ghcr.io/tedwu/javdb-autospider-web:latest
     ports:
       - "8088:80"
-    environment:
-      - VITE_API_BASE=http://api:8100
     depends_on:
       - api
 ```
+
+The published web image's nginx proxies `/api` to the `api` service on the
+Docker network, so the browser only talks to `http://localhost:8088`
+(same-origin). Do **not** set `VITE_API_BASE=http://api:8100` — Docker's
+internal DNS isn't reachable from a host-side browser, and `http://api:8100`
+would 404 in-browser.
 
 ## Docker Compose (Fullstack)
 
