@@ -349,11 +349,25 @@ Google Drive 库存扫描和重复文件清理的设置。
 
 这些变量在 `.env` 文件中设置，而非 `config.py`。
 
-### 14.1 根目录 `.env`（Web API + Docker）
+### 14.1 根目录 `.env`（Docker / cron 入口脚本）
 
-在仓库根目录的 `.env.example` 中定义。供 FastAPI 服务器（`apps/api/`）和 Docker Compose 使用。
+在仓库根目录的 `.env.example` 中定义。**裸 uvicorn 不会自动加载此文件** ——
+`apps/api/services/context.py` 故意去掉了 `load_dotenv`，以避免陈旧的 `.env`
+条目静默覆盖新写入的 `config.py` 值（见 `apps/api/infra/auth.py::_resolve`，
+优先级为 `env > config.py > override store > default`）。
 
-#### Web API / 管理控制台
+此文件的消费者：
+
+- **Docker Compose**（`docker/docker-compose*.yml`）—— `env_file: ../.env`
+  和 `environment:` 块会把变量展开到容器环境，FastAPI 进程再通过
+  `os.environ` 读取。
+- **Cron 入口脚本**（`docker-entrypoint.sh`）—— 直接 source 此文件。
+
+如果不使用 Docker 自托管，请把 Web API / 管理控制台相关变量放在 `config.py`
+中（参见 `config.py.example` § "API CONSOLE / BACKEND SERVICE"），或者在启动
+uvicorn 之前 `export VAR=...`。
+
+#### Web API / 管理控制台（Docker / shell export）
 
 | 变量 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
