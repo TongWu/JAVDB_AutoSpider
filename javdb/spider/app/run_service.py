@@ -322,12 +322,14 @@ def _main():
     if db_storage_enabled:
         try:
             from javdb.storage.db.db_migrations import init_db
+            from javdb.storage.db.db_connection import verify_d1_schema_versions
             from javdb.storage.db.db_reports import (
                 db_create_report_session,
                 db_find_in_progress_session_ids_for_run_csv,
             )
             from javdb.spider.url_helper import detect_url_type, extract_url_identifier
             init_db(force=True)
+            verify_d1_schema_versions()
             report_type = 'adhoc' if custom_url else 'daily'
             report_date = datetime.now().strftime('%Y%m%d')
             url_type = None

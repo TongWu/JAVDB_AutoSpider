@@ -274,6 +274,57 @@ def get_local_sqlite_db(db_path: Optional[str] = None):
             pass
 
 
+def verify_d1_schema_versions() -> None:
+    """Fail fast if any D1 database is behind the expected schema version.
+
+    Only meaningful when STORAGE_BACKEND is 'd1' or 'dual'. Under 'sqlite'
+    this is a no-op (local init_db handles migrations directly).
+
+    Raises:
+        SystemExit: If any D1 DB reports a SchemaVersion < SCHEMA_VERSION.
+    """
+    backend = _backend_mode()
+    if backend not in ('d1', 'dual'):
+        return
+
+    from javdb.storage.d1_client import make_d1_connection
+
+    failed: list[tuple[str, int]] = []
+    for logical_name in ('history', 'reports', 'operations'):
+        d1 = None
+        try:
+            d1 = make_d1_connection(logical_name)
+            cur = d1.execute(
+                "SELECT Version FROM SchemaVersion LIMIT 1"
+            )
+            row = cur.fetchone()
+            ver = 0
+            if row is not None:
+                ver = int(row[0] if not isinstance(row, dict) else row.get('Version', 0))
+            if ver < SCHEMA_VERSION:
+                failed.append((logical_name, ver))
+        except Exception as exc:
+            logger.warning(
+                "Could not check D1 schema version for %s: %s",
+                logical_name, exc,
+            )
+        finally:
+            if d1 is not None:
+                try:
+                    d1.close()
+                except Exception:
+                    pass
+
+    if failed:
+        for name, ver in failed:
+            logger.error(
+                "D1 %s schema version %d < required %d. "
+                "Apply pending migrations before running the pipeline.",
+                name, ver, SCHEMA_VERSION,
+            )
+        raise SystemExit(1)
+
+
 def close_db():
     """Close all thread-local connections (call before process exit).
 
