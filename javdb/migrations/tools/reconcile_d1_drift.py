@@ -591,6 +591,37 @@ _REPORT_TORRENTS_PAYLOAD = (
 )
 
 
+_SPIDER_STATS_KEY = ("SessionId",)
+_SPIDER_STATS_PAYLOAD = (
+    "Phase1Discovered", "Phase1Processed", "Phase1Skipped",
+    "Phase1NoNew", "Phase1Failed",
+    "Phase2Discovered", "Phase2Processed", "Phase2Skipped",
+    "Phase2NoNew", "Phase2Failed",
+    "TotalDiscovered", "TotalProcessed", "TotalSkipped",
+    "TotalNoNew", "TotalFailed",
+    "FailedMovies",
+    "DateTimeCreated",
+)
+
+_UPLOADER_STATS_KEY = ("SessionId",)
+_UPLOADER_STATS_PAYLOAD = (
+    "TotalTorrents", "DuplicateCount", "Attempted",
+    "SuccessfullyAdded", "FailedCount",
+    "HackedSub", "HackedNosub",
+    "SubtitleCount", "NoSubtitleCount",
+    "SuccessRate",
+    "DateTimeCreated",
+)
+
+_PIKPAK_STATS_KEY = ("SessionId",)
+_PIKPAK_STATS_PAYLOAD = (
+    "ThresholdDays", "TotalTorrents", "FilteredOld",
+    "SuccessfulCount", "FailedCount",
+    "UploadedCount", "DeleteFailedCount",
+    "DateTimeCreated",
+)
+
+
 def _payload_cols_present(
     rows: Sequence[Dict[str, Any]],
     payload_cols: Sequence[str],
@@ -882,7 +913,43 @@ def _reconcile_reports(
         stats=torrents_stats,
     )
 
-    return [sessions_stats, movies_stats, torrents_stats]
+    # ── 4. Stats tables (SpiderStats, UploaderStats, PikpakStats) ────
+    all_stats = [sessions_stats, movies_stats, torrents_stats]
+    for stats_table, key_cols, payload_tuple in (
+        ("SpiderStats", _SPIDER_STATS_KEY, _SPIDER_STATS_PAYLOAD),
+        ("UploaderStats", _UPLOADER_STATS_KEY, _UPLOADER_STATS_PAYLOAD),
+        ("PikpakStats", _PIKPAK_STATS_KEY, _PIKPAK_STATS_PAYLOAD),
+    ):
+        tbl_stats = TableStats(stats_table)
+        try:
+            stats_rows = [
+                _row_to_dict(r)
+                for r in sqlite_conn.execute(
+                    f"SELECT * FROM {stats_table} "
+                    f"WHERE SessionId IN ("
+                    f"  SELECT Id FROM ReportSessions "
+                    f"  {'WHERE DateTimeCreated >= ?' if since_text else ''}"
+                    f") ORDER BY Id",
+                    ([since_text] if since_text else []),
+                ).fetchall()
+            ]
+        except sqlite3.OperationalError:
+            logger.info("reports: %s table not present, skipping", stats_table)
+            continue
+        logger.info("reports: scanning %d %s rows", len(stats_rows), stats_table)
+        payload_cols = _payload_cols_present(stats_rows, payload_tuple)
+        _process_table(
+            d1=d1,
+            table=stats_table,
+            key_cols=key_cols,
+            payload_cols=payload_cols,
+            rows=stats_rows,
+            dry_run=dry_run,
+            stats=tbl_stats,
+        )
+        all_stats.append(tbl_stats)
+
+    return all_stats
 
 
 def _reconcile_operations(

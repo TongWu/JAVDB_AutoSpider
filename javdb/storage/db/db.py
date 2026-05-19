@@ -4293,6 +4293,49 @@ def _pending_distinct_hrefs(conn, session_id: str) -> List[str]:
     return [r["Href"] for r in rows]
 
 
+def _d1_retry_pending_cleanup(session_id: str) -> None:
+    """Best-effort D1-direct retry for pending-row cleanup.
+
+    After the normal DualConnection commit flow, any D1-side failures on
+    the ApplyState UPDATE or the final DELETE leave orphaned 'pending'
+    rows in D1. Since the session is already committed and the live
+    tables are consistent, we can safely mark remaining pending rows as
+    applied and delete them directly on D1.
+    """
+    from javdb.storage.db.db_connection import current_backend
+    if current_backend() not in ('d1', 'dual'):
+        return
+    try:
+        from javdb.storage.d1_client import make_d1_connection
+    except Exception:
+        return
+    d1 = None
+    try:
+        d1 = make_d1_connection('history')
+        for table in ('PendingMovieHistoryWrites', 'PendingTorrentHistoryWrites'):
+            d1.execute(
+                f"UPDATE {table} SET ApplyState='applied' "
+                f"WHERE SessionId=? AND ApplyState='pending'",
+                (session_id,),
+            )
+            d1.execute(
+                f"DELETE FROM {table} "
+                f"WHERE SessionId=? AND ApplyState='applied'",
+                (session_id,),
+            )
+    except Exception as exc:
+        logger.warning(
+            "D1 retry pending cleanup failed for session %s: %s",
+            session_id, exc,
+        )
+    finally:
+        if d1 is not None:
+            try:
+                d1.close()
+            except Exception:
+                pass
+
+
 def db_commit_session_history(
     session_id: str,
     *,
@@ -4455,6 +4498,8 @@ def db_commit_session_history(
             (session_id,),
         )
         counts["pending_deleted"] = (cur_m.rowcount or 0) + (cur_t.rowcount or 0)
+
+    _d1_retry_pending_cleanup(session_id)
 
     return counts
 
