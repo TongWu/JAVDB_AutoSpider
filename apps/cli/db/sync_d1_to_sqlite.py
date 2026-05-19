@@ -204,6 +204,18 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         ),
     )
     p.add_argument(
+        "--i-know-what-im-doing",
+        dest="i_know_what_im_doing",
+        action="store_true",
+        default=False,
+        help=(
+            "Override the safety pre-check that blocks "
+            "--force-overwrite-all when SQLite has more rows than D1 "
+            "in any table (delta < 0). Only pass this after verifying "
+            "the drift log has been reconciled."
+        ),
+    )
+    p.add_argument(
         "--logical-names",
         type=str,
         default=None,
@@ -257,6 +269,40 @@ def _refuse_when_dual_or_d1() -> None:
             backend,
         )
         sys.exit(1)
+
+
+def _pre_check_force_overwrite(
+    targets: List[Tuple[str, str, str]],
+    sqlite_paths: List[str],
+) -> List[Tuple[str, str, int, int]]:
+    """Compare row counts before force-overwrite; return tables where SQLite > D1.
+
+    Returns a list of (logical_name, table, sqlite_count, d1_count) tuples
+    for every table where the local SQLite has more rows than D1 — those rows
+    would be permanently destroyed by force-overwrite.
+    """
+    at_risk: List[Tuple[str, str, int, int]] = []
+    for (logical_name, _key, _default), sqlite_path in zip(targets, sqlite_paths):
+        if not os.path.exists(sqlite_path):
+            continue
+        d1 = D1Connection(
+            account_id=get_d1_account_id(),
+            database_id=get_d1_database_id(logical_name),
+            api_token=get_d1_api_token(),
+        )
+        sqlite_conn = sqlite3.connect(sqlite_path)
+        sqlite_conn.row_factory = sqlite3.Row
+        try:
+            tables = _list_business_tables(d1)
+            for tname in tables:
+                d1_n = _table_count(d1, tname)
+                sq_n = _sqlite_table_count(sqlite_conn, tname)
+                if sq_n > d1_n:
+                    at_risk.append((logical_name, tname, sq_n, d1_n))
+        finally:
+            sqlite_conn.close()
+            d1.close()
+    return at_risk
 
 
 def _list_business_tables(d1: D1Connection) -> List[str]:
@@ -820,6 +866,25 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 2
 
     sqlite_paths = [cfg(key, default) for _, key, default in targets]
+
+    if args.force_overwrite_all and not args.i_know_what_im_doing:
+        logger.info("Running pre-check: comparing SQLite vs D1 row counts …")
+        at_risk = _pre_check_force_overwrite(targets, sqlite_paths)
+        if at_risk:
+            logger.error(
+                "BLOCKED: --force-overwrite-all would destroy SQLite-only "
+                "rows in %d table(s):", len(at_risk),
+            )
+            for ln, tname, sq_n, d1_n in at_risk:
+                logger.error(
+                    "  %s.%s: SQLite=%d  D1=%d  (delta=%d, %d rows at risk)",
+                    ln, tname, sq_n, d1_n, d1_n - sq_n, sq_n - d1_n,
+                )
+            logger.error(
+                "Reconcile the drift first, or re-run with "
+                "--i-know-what-im-doing to proceed anyway."
+            )
+            return 1
 
     if not args.dry_run:
         backup_dir = _backup_sqlite(sqlite_paths)
