@@ -555,6 +555,42 @@ def test_400_code_7500_constraint_mismatch_is_permanent(monkeypatch, d1_conn, no
     assert no_sleep == []
 
 
+def test_400_network_connection_lost_treated_as_transient(monkeypatch, d1_conn, no_sleep):
+    """CF returns HTTP 400 + code 7500 + "Network connection lost." for a
+    transient TCP/edge failure. Per ADR-009 the classifier must treat this
+    as transient so ``_post_with_retry`` exercises its exponential-backoff
+    loop instead of letting ``dual_connection`` write a spurious drift
+    advisory (which is what caused the 2026-05-17 PendingTorrentHistoryWrites
+    drift).
+    """
+    calls = []
+
+    def fake_post(url, headers, json, timeout):
+        calls.append(json)
+        if len(calls) == 1:
+            return _FakeResponse(
+                status_code=400,
+                json_body={
+                    "messages": [],
+                    "result": [],
+                    "success": False,
+                    "errors": [
+                        {"code": 7500, "message": "Network connection lost."}
+                    ],
+                },
+            )
+        return _FakeResponse(
+            status_code=200,
+            json_body={"success": True, "result": [{"meta": {"changes": 1}, "results": []}]},
+        )
+
+    monkeypatch.setattr(d1_conn, "_post_request", fake_post)
+    cur = d1_conn.execute("INSERT INTO x VALUES (1)")
+    assert cur.rowcount == 1
+    assert len(calls) == 2
+    assert len(no_sleep) == 1
+
+
 def test_export_lock_backoff_capped_by_max_sleep(monkeypatch, d1_conn, no_sleep):
     """Even with the export floor, backoff is bounded by D1_RETRY_MAX_SLEEP_SEC."""
     monkeypatch.setattr(_d1_client_module, "_RETRY_MAX_SLEEP_SEC", 5.0)
