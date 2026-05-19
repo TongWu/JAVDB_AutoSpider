@@ -1,14 +1,20 @@
 # repos
 
-Repository-pattern wrappers over the raw `javdb.storage.db` modules — provide higher-level, query-shaped APIs for application and API layers.
+Repository-pattern wrappers over the raw `javdb.storage.db` modules — provide higher-level, typed APIs for application and API layers.
+
+Two Repo shapes coexist (ADR-005 amendment 2):
+
+- **Read-Repos** (`SessionsRepo`, `SystemStateRepo`): `__init__(conn)` — caller owns the connection; used for short API reads.
+- **Write-Repos** (`HistoryRepo`, `OperationsRepo`, `StatsRepo`): `__init__(*, db_path=None)` — the underlying function family manages its own transactions; `session_id` flows per method call.
 
 ## Files
 
 | File | Purpose |
 |---|---|
-| `history_repo.py` | History-related SQLite helpers used by `utils.infra.db`; movie/torrent lookups and aggregations. |
-| `operations_repo.py` | Operations DB helpers including the X3 staging-then-swap inventory replacement pattern. |
-| `sessions_repo.py` | Cursor-paginated listing and per-session detail queries over `ReportSessions`; exposes Python-friendly field names. |
+| `history_repo.py` | Module-level history helpers + `HistoryRepo` class wrapping `db_history_read` / `db_history_write`. |
+| `operations_repo.py` | Module-level rclone staging helpers + `OperationsRepo` class wrapping `db_operations`. |
+| `stats_repo.py` | `StatsRepo` class wrapping `db_stats` (SpiderStats / UploaderStats / PikpakStats). |
+| `sessions_repo.py` | Cursor-paginated listing and per-session detail queries over `ReportSessions`. |
 | `system_state_repo.py` | Generic key-value store against the `system_state` table in `operations.db`. |
 
 ## Subdirectories

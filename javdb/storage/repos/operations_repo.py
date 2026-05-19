@@ -11,7 +11,7 @@ just drops the staging table.
 from __future__ import annotations
 
 import re
-from typing import Iterable, List, Optional, Tuple
+from typing import Iterable, List, Optional, Tuple, Union
 from javdb.spider.contracts import (
     get_video_code,
     get_sensor_category,
@@ -343,3 +343,115 @@ class OperationsRepo:
         db_append_pikpak_history(
             session_id=session_id, payload=payload, db_path=self._db_path,
         )
+
+    # ── Dedup lifecycle ──────────────────────────────────────────
+
+    def mark_records_deleted(
+        self,
+        path_datetime_pairs: List[Tuple[str, str]],
+        *,
+        session_id: Optional[str] = None,
+    ) -> int:
+        """Mark dedup records as deleted by gdrive path."""
+        from javdb.storage.db.db_operations import db_mark_records_deleted
+        return db_mark_records_deleted(
+            path_datetime_pairs,
+            db_path=self._db_path,
+            session_id=session_id,
+        )
+
+    def cleanup_deleted_records(self, older_than_days: int = 30) -> int:
+        """Remove dedup records deleted more than *older_than_days* ago."""
+        from javdb.storage.db.db_operations import db_cleanup_deleted_records
+        return db_cleanup_deleted_records(
+            older_than_days=older_than_days, db_path=self._db_path,
+        )
+
+    def mark_orphan_records(
+        self,
+        paths: Iterable[str],
+        reason_suffix: str,
+        when: str,
+        *,
+        session_id: Optional[str] = None,
+    ) -> int:
+        """Mark dedup pending rows as deleted with custom reason suffix."""
+        from javdb.storage.db.db_operations import db_mark_orphan_records
+        return db_mark_orphan_records(
+            paths,
+            reason_suffix=reason_suffix,
+            when=when,
+            db_path=self._db_path,
+            session_id=session_id,
+        )
+
+    # ── Rclone staging ───────────────────────────────────────────
+
+    def open_rclone_staging(self, session_id: str) -> Optional[str]:
+        """Initialise this session's staging table. Returns table name."""
+        from javdb.storage.db.db_operations import db_open_rclone_staging
+        return db_open_rclone_staging(
+            session_id=session_id, db_path=self._db_path,
+        )
+
+    def append_rclone_staging(
+        self, entries: List[dict], session_id: str,
+    ) -> int:
+        """Append rows to this session's staging table."""
+        from javdb.storage.db.db_operations import db_append_rclone_staging
+        return db_append_rclone_staging(
+            entries, session_id=session_id, db_path=self._db_path,
+        )
+
+    def merge_rclone_inventory_from_stage(
+        self, session_id: str, years: Iterable[str],
+    ) -> int:
+        """Merge staging rows into selected RcloneInventory year prefixes."""
+        from javdb.storage.db.db_operations import (
+            db_merge_rclone_inventory_from_stage,
+        )
+        return db_merge_rclone_inventory_from_stage(
+            session_id=session_id, years=years, db_path=self._db_path,
+        )
+
+    def drop_rclone_staging(self, session_id: str) -> None:
+        """Drop this session's staging table (idempotent)."""
+        from javdb.storage.db.db_operations import db_drop_rclone_staging
+        db_drop_rclone_staging(session_id=session_id, db_path=self._db_path)
+
+    def delete_rclone_inventory_paths(self, paths: Iterable[str]) -> int:
+        """Bulk delete RcloneInventory rows by FolderPath."""
+        from javdb.storage.db.db_operations import db_delete_rclone_inventory_paths
+        return db_delete_rclone_inventory_paths(
+            paths, db_path=self._db_path,
+        )
+
+    # ── InventoryAlignNoExactMatch ───────────────────────────────
+
+    def upsert_align_no_exact_match(
+        self,
+        video_code: str,
+        reason: str = 'exact_video_code_not_found',
+        *,
+        session_id: Optional[str] = None,
+    ) -> None:
+        """Record a video code that had no exact match on JavDB search."""
+        from javdb.storage.db.db_operations import db_upsert_align_no_exact_match
+        db_upsert_align_no_exact_match(
+            video_code,
+            reason=reason,
+            db_path=self._db_path,
+            session_id=session_id,
+        )
+
+    def load_align_no_exact_match_codes(self) -> set:
+        """Return normalised video codes previously marked as no-exact-match."""
+        from javdb.storage.db.db_operations import (
+            db_load_align_no_exact_match_codes,
+        )
+        return db_load_align_no_exact_match_codes(db_path=self._db_path)
+
+    def delete_align_no_exact_match(self, video_code: str) -> None:
+        """Remove a video code from the no-exact-match table."""
+        from javdb.storage.db.db_operations import db_delete_align_no_exact_match
+        db_delete_align_no_exact_match(video_code, db_path=self._db_path)
