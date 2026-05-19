@@ -1506,6 +1506,7 @@ def _build_dual_drift_advisory(reports_dir: str) -> str:
     sample_db = None
     rollback_drift_rows = 0
     failure_count_total = 0
+    pending_residual_total = 0
     try:
         with open(jsonl_path, 'r', encoding='utf-8') as f:
             for line in f:
@@ -1522,13 +1523,15 @@ def _build_dual_drift_advisory(reports_dir: str) -> str:
                 todays_records += 1
                 failure_count_total += int(rec.get('failure_count') or 0)
                 rollback_drift_rows += int(rec.get('uncommitted_d1_writes') or 0)
+                pending_residual_total += int(rec.get('pending_residual_count') or 0)
                 if sample_first_sql is None and rec.get('first_failed_sql'):
                     sample_first_sql = rec.get('first_failed_sql')
                     sample_db = rec.get('db')
     except OSError:
         return ''
 
-    if todays_records == 0:
+    has_drift = failure_count_total > 0 or rollback_drift_rows > 0 or pending_residual_total > 0
+    if todays_records == 0 or not has_drift:
         return ''
 
     lines = [
