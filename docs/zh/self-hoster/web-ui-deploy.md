@@ -46,11 +46,14 @@ services:
     image: ghcr.io/tedwu/javdb-autospider-web:latest
     ports:
       - "8088:80"
-    environment:
-      - VITE_API_BASE=http://api:8100
     depends_on:
       - api
 ```
+
+已发布的 web 镜像内部 nginx 会把 `/api` 反向代理到 Docker 网络上的 `api`
+服务,浏览器只会访问 `http://localhost:8088`(同源)。**不要**设置
+`VITE_API_BASE=http://api:8100` —— 宿主机浏览器无法解析 Docker 内部 DNS,
+`http://api:8100` 在浏览器里会 404。
 
 ## Docker Compose（一体化启动）
 
