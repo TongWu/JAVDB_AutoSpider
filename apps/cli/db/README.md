@@ -30,5 +30,5 @@ Session-lifecycle and database-maintenance CLIs — rollback, commit, audit clea
 ## Related
 
 - [ADR-006 — Pending mode default rollout](../../../docs/ai/adr/ADR-006-pending-mode-default-rollout.md)
-- [ADR-007 — Monorepo restructure](../../../docs/ai/adr/ADR-007-monorepo-restructure-2026-05.md)
+- [ADR-007 — Monorepo restructure](../../../docs/ai/adr/archive/ADR-007-monorepo-restructure-2026-05.md)
 - [docs/en/ops/d1-rollback.md](../../../docs/en/ops/d1-rollback.md)

@@ -1,9 +1,19 @@
 # ADR-010：统一 Python D1 读写端口
 
-**状态**：已接受
+**状态**：已接受 —— 实现待启动（截至 2026-05-19，四个阶段均未执行）
 **日期**：2026-05-19
 **决策者**：D1 统一读写端口 brainstorming + grill 会话
 **前置**：[ADR-006](ADR-006-pending-mode-default-rollout.md) 已将 Pending Mode 作为默认写入路径；[ADR-009](ADR-009-d1-drift-classifier-and-diagnose.md) 记录了近期 D1 瞬时失败和 drift 响应。
+**关联实现计划 (Related Implementation Plans)**：[IMP-012](../impl/IMP-012-d1-access-port-phase1-core.md)（Phase 1 — 端口核心）、[IMP-013](../impl/IMP-013-d1-access-port-phase2-recovery-outbox.md)（Phase 2 — 恢复 outbox）、[IMP-014](../impl/IMP-014-d1-access-port-phase3-safe-batching.md)（Phase 3 — 安全批处理）、[IMP-015](../impl/IMP-015-d1-access-port-phase4-startup-replay.md)（Phase 4 — 启动重放）
+
+## 待办 (Outstanding Work)
+
+- Phase 1 —— `D1AccessPort` 核心类 + `D1Connection`/`DualConnection` 代理。`javdb/storage/` 下尚未出现 `D1AccessPort` 符号。
+- Phase 2 —— 恢复 outbox + replay 队列（对应 D5）。
+- Phase 3 —— 安全 micro-batching + `flush()` 边界（对应 D4）。
+- Phase 4 —— 启动期 outbox 重放。
+
+四阶段独立闸门；截至该日期，本 ADR 中尚无任何决策上线。
 
 ---
 
@@ -168,15 +178,14 @@ summary 至少包含：
 
 ### D10. 分阶段启用
 
-rollout 通过代码默认值和环境变量 override 分阶段推进。ADR 要求渐进模型；具体默认值翻转由后续 PR 完成。
+rollout 通过代码默认值和环境变量 override 分阶段推进。ADR 要求渐进模型；具体默认值翻转由后续 PR 完成。每个 phase 都有独立 implementation plan（IMP），这些 IMP 是本 ADR 的标准执行计划。
 
-| 阶段 | 默认行为 | Opt-in / 候选行为 |
-|---|---|---|
-| Phase 1 | `D1Connection` 使用 `D1AccessPort`；retry/metrics/schema-cache 生效；`COMMIT_SESSION_BULK` 默认开启；生成 `d1_port_summary.json` | outbox 和通用 micro-batching 存在但禁用 |
-| Phase 1 tooling | recovery inspect/replay CLI 可用 | CLI 主要服务测试和 runbook，等待 outbox 启用 |
-| Phase 2 | outbox 代码仍由 gate 控制 | `D1_RECOVERY_OUTBOX_ENABLED=1` 允许 safe operation queue 和 replay |
-| Phase 3 | 普通 SQL 仍同步 | `D1_BATCHING_ENABLED=1` 和 `D1_FLUSH_INTERVAL_MS=250` 允许 safe-path micro-batching |
-| Phase 4 | startup replay 关闭 | `D1_STARTUP_REPLAY_ENABLED=1` 在进程启动时 drain 非 dead-lettered work |
+| 阶段 | Implementation plan | 默认行为 | Opt-in / 候选行为 |
+|---|---|---|---|
+| Phase 1 | [IMP-012](../impl/IMP-012-d1-access-port-phase1-core.md) | `D1Connection` 使用 `D1AccessPort`；retry/metrics/schema-cache 生效；`COMMIT_SESSION_BULK` 默认开启；生成 `d1_port_summary.json`；recovery inspect/replay CLI 可用于测试和 runbook | outbox 和通用 micro-batching 存在但禁用 |
+| Phase 2 | [IMP-013](../impl/IMP-013-d1-access-port-phase2-recovery-outbox.md) | outbox 代码仍由 gate 控制 | `D1_RECOVERY_OUTBOX_ENABLED=1` 允许 safe operation queue 和 replay |
+| Phase 3 | [IMP-014](../impl/IMP-014-d1-access-port-phase3-safe-batching.md) | 普通 SQL 仍同步 | `D1_BATCHING_ENABLED=1` 和 `D1_FLUSH_INTERVAL_MS=250` 允许 safe-path micro-batching |
+| Phase 4 | [IMP-015](../impl/IMP-015-d1-access-port-phase4-startup-replay.md) | startup replay 关闭 | `D1_STARTUP_REPLAY_ENABLED=1` 在进程启动时 drain 非 dead-lettered work |
 
 默认值晋级 gate 应使用 `d1_port_summary.json`、pending verify 记录以及 drift/dead-letter 缺失情况。只要某阶段造成新的 pending residual、新 dead letter 或无法解释的 drift，就不得把它改为默认。
 

@@ -3,7 +3,7 @@
 **Status**: Accepted — Completed 2026-05-16 (merged via #f4c5d23c + #e224c374 + #60797d16)
 **Date**: 2026-05-16
 **Deciders**: Proxy Coordinator Dashboard rewrite working stream
-**Related**: implements [ADR-004](../adr/ADR-004-proxy-discovery-via-runner-pool-upload.md); prerequisite for [IMP-003](IMP-003-dashboard-phase2-worker-backend.md)
+**Related**: implements [ADR-004](../adr/archive/ADR-004-proxy-discovery-via-runner-pool-upload.md); prerequisite for [IMP-003](IMP-003-dashboard-phase2-worker-backend.md)
 
 > **Note on format:** This file is an **implementation plan** — written by the writing-plans workflow, not a design document. It records HOW to execute the related design decisions (see **Related** above). The preamble (Goal / Architecture / Tech Stack) frames the work; the body is the step-by-step execution checklist. English-only by repo convention.
 >
@@ -15,7 +15,7 @@
 
 **Tech Stack:** Python 3.11+, pytest, existing `packages/python/javdb_platform/runner_registry_client.py` patterns.
 
-**Reference docs:** [CONTEXT.md](../../../CONTEXT.md), [ADR-004](../../ai/adr/ADR-004-proxy-discovery-via-runner-pool-upload.md)
+**Reference docs:** [CONTEXT.md](../../../CONTEXT.md), [ADR-004](../adr/archive/ADR-004-proxy-discovery-via-runner-pool-upload.md)
 
 ---
 

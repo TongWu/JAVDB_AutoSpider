@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.11+, pytest, sed for bulk import rewrites, ripgrep + standard `grep` for verification, Markdown for docs updates, Docker for the dry build check.
 
-**Source spec:** [ADR-007](../adr/ADR-007-monorepo-restructure-2026-05.md) §"Phase 3" + [ADR-007-deletion-manifest.md](../adr/ADR-007-deletion-manifest.md) (the canonical checklist).
+**Source spec:** [ADR-007](../adr/archive/ADR-007-monorepo-restructure-2026-05.md) §"Phase 3" + [ADR-007-deletion-manifest.md](../adr/archive/ADR-007-deletion-manifest.md) (the canonical checklist).
 
 **Prerequisites:** Phase 1 and Phase 2 PRs are merged. The deletion manifest exists. All in-repo non-test callers already use `javdb.*` or `apps.cli.*` paths.
 
@@ -518,9 +518,9 @@ Open the file and replace its entire content with:
 ```markdown
 # Python Core Old-To-New Mapping (SUPERSEDED)
 
-> **SUPERSEDED by [ADR-007](../adr/ADR-007-monorepo-restructure-2026-05.md) on 2026-05-17.**
+> **SUPERSEDED by [ADR-007](../adr/archive/ADR-007-monorepo-restructure-2026-05.md) on 2026-05-17.**
 >
-> The mapping recorded here represents the partial reorganisation that landed before ADR-007. The canonical layout is now described in [`python-tree-2026-05.md`](python-tree-2026-05.md). ADR-007 also generated [`ADR-007-deletion-manifest.md`](../adr/ADR-007-deletion-manifest.md) which enumerates everything that has since been removed.
+> The mapping recorded here represents the partial reorganisation that landed before ADR-007. The canonical layout is now described in [`python-tree-2026-05.md`](python-tree-2026-05.md). ADR-007 also generated [`ADR-007-deletion-manifest.md`](../adr/archive/ADR-007-deletion-manifest.md) which enumerates everything that has since been removed.
 >
 > This document is retained for historical context only. Do NOT use the path mappings here for new work.
 ```
@@ -532,7 +532,7 @@ Replace its entire content with:
 ```markdown
 # Spider Module Reorganization Status (SUPERSEDED)
 
-> **SUPERSEDED by [ADR-007](../adr/ADR-007-monorepo-restructure-2026-05.md) on 2026-05-17.**
+> **SUPERSEDED by [ADR-007](../adr/archive/ADR-007-monorepo-restructure-2026-05.md) on 2026-05-17.**
 >
 > The spider reorg described here was the first wave (spider package internals only). ADR-007 completed the project-wide restructure into the top-level `javdb/` namespace. The current spider layout is recorded in [`python-tree-2026-05.md`](python-tree-2026-05.md).
 >
@@ -546,7 +546,7 @@ Use the Write tool to create the file. Content:
 ```markdown
 # Python Tree (post-2026-05 restructure)
 
-This is the current canonical layout, established by [ADR-007](../adr/ADR-007-monorepo-restructure-2026-05.md).
+This is the current canonical layout, established by [ADR-007](../adr/archive/ADR-007-monorepo-restructure-2026-05.md).
 
 ## Top-level
 

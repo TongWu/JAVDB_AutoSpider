@@ -1,15 +1,20 @@
 # ADR-006: Pending Mode 默认推全 + Audit auto-fallback 退役
 
-**状态**: 已接受 (Accepted)
+**状态**: 已接受 —— PR-A/C/D/E 已合入；**30 天 bake 期进行中**（启动 2026-05-16，PR-F sign-off 目标 ~2026-06-15）
 **日期**: 2026-05-16
 **决策者**: 架构深化第二轮（[ADR-005](ADR-005-db-py-retirement-and-repo-pattern.md) 的前置依赖）
 **后继触发**: ADR-006 完成后才能启动 ADR-005 的 PR-1
+
+## 待办 (Outstanding Work)
+
+- **PR-F（sign-off）** —— 30 天 bake 期通过 D10 三项重核（`WriteMode='audit'` 数 = 0、无孤儿 audit 行、每月 ≤ 1 次 pause-trigger）后，在 ADR-005 顶部追加 "ADR-006 sign-off completed on YYYY-MM-DD"，解除 ADR-005 PR-1 启动。
+- bake 完成前，`BakeCheck.yml`（`cron: 0 4 * * *`、`since: 2026-05-16`）作为每日闸门。
 
 ## 修订记录 (Amendments)
 
 - **2026-05-16 amendment 1**：**PR-B 取消**。原计划"把 SQLite schema `WriteMode TEXT DEFAULT 'audit'` 改为 `DEFAULT 'pending'`"被否决——核查发现该 DEFAULT 仅在 v5→v6 migration 与 csv_to_sqlite backfill 两条**历史数据导入路径**上触发，那些路径处理的就是真正的 Audit Mode 历史 session，`'audit'` 是**正确**的标签而非"愿景默认"。普通写入路径（[`db_reports.py:128`](../../../packages/python/javdb_platform/db_reports.py)）始终显式传 `WriteMode`，DEFAULT 永不触发。改 DEFAULT 反而会错标历史数据。Schema DEFAULT 保留为 `'audit'`，作为"未知 WriteMode 时假定为遗留 audit session"的防御性标签。PR 序列从 6 个变 5 个。
 
-- **2026-05-17 amendment 2**：ADR-006 接受后，[ADR-007](ADR-007-monorepo-restructure-2026-05.md) 对 Python namespace 做了重组（`packages/python/javdb_*` → 顶层 `javdb/`）。本 ADR 实施顺序里**尚未合并的 PR**，在 ADR-007 Phase 1 落地后必须按新路径操作：
+- **2026-05-17 amendment 2**：ADR-006 接受后，[ADR-007](archive/ADR-007-monorepo-restructure-2026-05.md) 对 Python namespace 做了重组（`packages/python/javdb_*` → 顶层 `javdb/`）。本 ADR 实施顺序里**尚未合并的 PR**，在 ADR-007 Phase 1 落地后必须按新路径操作：
 
   - `packages/python/javdb_platform/db_session.py:188` → `javdb/storage/db/db_session.py:188`
   - `packages/python/javdb_platform/db_reports.py:128` → `javdb/storage/db/db_reports.py:128`
@@ -177,7 +182,7 @@ PR-F  30 天 bake 后的 sign-off PR：在 ADR-005 顶部插入 "ADR-006 sign-of
 ## 相关决策 (Related Decisions)
 
 - **后继**：[ADR-005](ADR-005-db-py-retirement-and-repo-pattern.md) — bake 完成后启动
-- **修正历史承诺**：[ADR-001](ADR-001-split-db-module.md) Phase 3 中"Pending Mode 默认"的承诺由本 ADR 真正兑现
+- **修正历史承诺**：[ADR-001](archive/ADR-001-split-db-module.md) Phase 3 中"Pending Mode 默认"的承诺由本 ADR 真正兑现
 
 ---
 

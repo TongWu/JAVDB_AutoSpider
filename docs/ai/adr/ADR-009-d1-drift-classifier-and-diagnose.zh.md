@@ -1,9 +1,17 @@
 # ADR-009：D1 瞬时错误分类器修复 + Drift 诊断工具
 
-**状态**：已接受
+**状态**：已接受 —— 实现待启动（截至 2026-05-19 尚无 PR）
 **日期**：2026-05-17
 **决策者**：bake 期 drift 响应（承接 2026-05-17T14:00 UTC 记录在 `reports/D1/d1_drift.jsonl` 中 `kind: drift_resolution` 的手动 forensic 修复）
 **前置**：无——按 [ADR-006](ADR-006-pending-mode-default-rollout.md) amendment 3 属 bake 安全。"bake 安全"准确含义是：**对 D10 gate 输入无影响**（不写 D1/SQLite、不改 schema、不改 `WriteMode` 解析、不动 `.publish-config.yml` pause 机制、不发 `pending_session_verify` 行）。Layer 1 的 D6 *确实*修改 `email-notification` job，但修改内容是带 60 秒 timeout 的只读 subprocess 调用，被调工具自身只在操作员手动 `--apply` 路径才会触碰 D10 监控状态（workflow 内**绝不**触发 `--apply`）。
+
+## 待办 (Outstanding Work)
+
+- **D1 (Layer 0)** —— 在 [`javdb/storage/d1_client.py`](../../../javdb/storage/d1_client.py) 的 `_TRANSIENT_ERROR_KEYWORDS` 中加入 `"connection lost"` + 回归用例。**尚未应用** —— 当前关键字元组不含该子串。
+- **D2 (Layer 1)** —— `drift_diagnose` CLI（位于 `apps/cli/db/drift_diagnose.py`）。**尚未创建** —— `apps/cli/db/` 目录下没有该模块。
+- **D6** —— email job subprocess 集成，依赖 D2。
+
+本 ADR 没有配套 IMP（按 D7 划分，工作量适合小型 PR 序列直接落地）。
 
 ---
 

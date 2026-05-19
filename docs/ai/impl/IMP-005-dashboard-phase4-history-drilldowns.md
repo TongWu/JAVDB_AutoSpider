@@ -3,7 +3,7 @@
 **Status**: Accepted — Planned
 **Date**: 2026-05-16
 **Deciders**: Proxy Coordinator Dashboard rewrite working stream
-**Related**: implements [ADR-002](../adr/ADR-002-observability-data-storage-topology.md); requires [IMP-004](IMP-004-dashboard-phase3-ui.md) deployed; final phase of the dashboard rewrite
+**Related**: implements [ADR-002](../adr/archive/ADR-002-observability-data-storage-topology.md); requires [IMP-004](IMP-004-dashboard-phase3-ui.md) deployed; final phase of the dashboard rewrite
 
 > **Note on format:** This file is an **implementation plan** — written by the writing-plans workflow, not a design document. It records HOW to execute the related design decisions (see **Related** above). The preamble (Goal / Architecture / Tech Stack) frames the work; the body is the step-by-step execution checklist. English-only by repo convention.
 >
@@ -15,7 +15,7 @@
 
 **Tech Stack:** Same as Phase 3 — vanilla JS, vendored uPlot, inline SVG. No new dependencies.
 
-**Reference docs:** [ADR-002](../../ai/adr/ADR-002-observability-data-storage-topology.md), [CONTEXT.md](../../../CONTEXT.md). User-facing decisions: grill-me Q5a (γ drawer mode), Q5d (chart locations), Q6a (drawer shell).
+**Reference docs:** [ADR-002](../adr/archive/ADR-002-observability-data-storage-topology.md), [CONTEXT.md](../../../CONTEXT.md). User-facing decisions: grill-me Q5a (γ drawer mode), Q5d (chart locations), Q6a (drawer shell).
 
 **Prerequisite:** Phase 3 deployed; main dashboard renders the new chart row; 5 history endpoints from Phase 2 are populated and reachable.
 

@@ -1,8 +1,9 @@
 # ADR-002: Storage Topology for Observability Data
 
-**Status**: Accepted
+**Status**: Completed 2026-05-17 — all five history tables shipped (`metrics_snapshots` in MetricsState DO, `signals_event_log` + `runners_event_log` + `proxies_seen` in RunnerRegistry DO, `login_event_log` in GlobalLoginState DO, `config_audit_log` in ConfigState DO).
 **Date**: 2026-05-16
 **Deciders**: Proxy Coordinator Dashboard rework
+**Related Implementation Plans**: [IMP-003](../../impl/IMP-003-dashboard-phase2-worker-backend.md) (worker backend infrastructure — schema landed), [IMP-005](../../impl/IMP-005-dashboard-phase4-history-drilldowns.md) (downstream drill-down UI; consumer, planned)
 
 ---
 
@@ -174,5 +175,5 @@ The dashboard drawer fetches the corresponding endpoint when opened.
 
 ## References
 
-- [CONTEXT.md](../../../CONTEXT.md) — observability data chapter, terminology definitions
+- [CONTEXT.md](../../../../CONTEXT.md) — observability data chapter, terminology definitions
 - Existing DO implementations: `JAVDB_AutoSpider_Proxycoordinator/src/runner_registry.ts`, `config_state.ts`, `global_login_state.ts`

@@ -3,7 +3,7 @@
 **Status**: Accepted — Planned
 **Date**: 2026-05-16
 **Deciders**: Proxy Coordinator Dashboard rewrite working stream
-**Related**: implements [ADR-002](../adr/ADR-002-observability-data-storage-topology.md), [ADR-003](../adr/ADR-003-metrics-pipeline.md), [ADR-004](../adr/ADR-004-proxy-discovery-via-runner-pool-upload.md); requires [IMP-002](IMP-002-dashboard-phase1-proxy-pool-upload.md) deployed; prerequisite for [IMP-004](IMP-004-dashboard-phase3-ui.md)
+**Related**: implements [ADR-002](../adr/archive/ADR-002-observability-data-storage-topology.md), [ADR-003](../adr/archive/ADR-003-metrics-pipeline.md), [ADR-004](../adr/archive/ADR-004-proxy-discovery-via-runner-pool-upload.md); requires [IMP-002](IMP-002-dashboard-phase1-proxy-pool-upload.md) deployed; prerequisite for [IMP-004](IMP-004-dashboard-phase3-ui.md)
 
 > **Note on format:** This file is an **implementation plan** — written by the writing-plans workflow, not a design document. It records HOW to execute the related design decisions (see **Related** above). The preamble (Goal / Architecture / Tech Stack) frames the work; the body is the step-by-step execution checklist. English-only by repo convention.
 >
@@ -15,7 +15,7 @@
 
 **Tech Stack:** TypeScript (Cloudflare Workers + Durable Objects), `vitest-pool-workers`, SQLite (DO-backed), `wrangler.toml` migrations.
 
-**Reference docs:** [ADR-002](../../ai/adr/ADR-002-observability-data-storage-topology.md), [ADR-003](../../ai/adr/ADR-003-metrics-pipeline.md), [ADR-004](../../ai/adr/ADR-004-proxy-discovery-via-runner-pool-upload.md), [CONTEXT.md](../../../CONTEXT.md)
+**Reference docs:** [ADR-002](../adr/archive/ADR-002-observability-data-storage-topology.md), [ADR-003](../adr/archive/ADR-003-metrics-pipeline.md), [ADR-004](../adr/archive/ADR-004-proxy-discovery-via-runner-pool-upload.md), [CONTEXT.md](../../../CONTEXT.md)
 
 **Prerequisite:** Phase 1 deployed to autospider (runner sends `proxy_pool` on register). Old runners that don't send the field still work — Phase 2 will simply not populate `proxies_seen` from them.
 

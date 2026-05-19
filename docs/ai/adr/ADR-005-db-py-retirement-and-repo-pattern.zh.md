@@ -1,14 +1,23 @@
 # ADR-005: db.py 彻底退役 + Repo 类抽象 + Audit Mode 退役
 
-**状态**: 已接受，但**启动前置阻塞于 [ADR-006](ADR-006-pending-mode-default-rollout.md)**
+**状态**: 已接受 —— **PR-1 已交付**（在 `db.py` 旁新增 Repo 类）；**PR-2 → PR-5 待 [ADR-006](ADR-006-pending-mode-default-rollout.md) bake 期结束**（~2026-06-15）
 **日期**: 2026-05-16
 **决策者**: 架构深化第二轮
 **前置**: [ADR-006](ADR-006-pending-mode-default-rollout.md) — 必须先把 Pending Mode 默认推到 100% + 重设计 auto-fallback，本 ADR 才能执行 D10 gate
-**后继关系**: [ADR-001](ADR-001-split-db-module.md) — 完成其未交付的 Phase 3，并修正其"按读/写拆分"的过细决策
+**后继关系**: [ADR-001](archive/ADR-001-split-db-module.md) — 完成其未交付的 Phase 3，并修正其"按读/写拆分"的过细决策
+
+## 待办 (Outstanding Work)
+
+PR-1（Repo 类）✅ 已交付：`HistoryRepo`、`OperationsRepo`、`StatsRepo`、`SessionsRepo`、`SystemStateRepo` 全部在 `javdb/storage/repos/` 中。其余：
+
+- **PR-2** —— `db.py` 内部转发到 Repo（双写阶段）。bake 期间封锁。
+- **PR-3** —— 把调用方（`history_manager.py`、CLI 工具、`db_rollback.py`）迁移出函数族。bake 期间封锁。
+- **PR-4** —— 删除 Audit Mode 表（`MovieHistoryAudit`、`TorrentHistoryAudit`）+ 移除 audit 代码分支。bake 期间封锁，且需 ADR-006 PR-F sign-off。
+- **PR-5** —— 删除 `db.py`（当前 5,454 行）和 ADR-001 留下的九个壳模块。退役后的最终清理。
 
 ## 修订记录 (Amendments)
 
-- **2026-05-17 amendment 1**：本 ADR 接受后，[ADR-007](ADR-007-monorepo-restructure-2026-05.md) 对 Python namespace 做了重组（`packages/python/javdb_*` → 顶层 `javdb/`）。本 ADR 实施顺序里**尚未合并的 PR**，在 ADR-007 Phase 1 落地后必须按新路径操作：
+- **2026-05-17 amendment 1**：本 ADR 接受后，[ADR-007](archive/ADR-007-monorepo-restructure-2026-05.md) 对 Python namespace 做了重组（`packages/python/javdb_*` → 顶层 `javdb/`）。本 ADR 实施顺序里**尚未合并的 PR**，在 ADR-007 Phase 1 落地后必须按新路径操作：
 
   | 本 ADR 引用的路径 | ADR-007 Phase 1 后 |
   |---|---|

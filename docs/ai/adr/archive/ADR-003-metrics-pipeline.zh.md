@@ -1,8 +1,9 @@
 # ADR-003: Metrics Pipeline（混合写入 + 空闲抑制）
 
-**状态**: 已接受 (Accepted)
+**状态**: 已完成 2026-05-17 —— `MetricsState` DO + 每分钟 scheduled cron（`* * * * *`）+ 空闲抑制（`is_transition_marker` / `is_heartbeat_anchor` 列）+ 5 秒 bucket JSON 快照按决策矩阵全部落地。
 **日期**: 2026-05-16
 **决策者**: Proxy Coordinator Dashboard 改造
+**关联实现计划 (Related Implementation Plans)**: [IMP-003](../../impl/IMP-003-dashboard-phase2-worker-backend.md)（worker backend——pipeline 已交付）、[IMP-004](../../impl/IMP-004-dashboard-phase3-ui.md)（主仪表盘 UI 消费方——计划中）
 
 ---
 
@@ -178,6 +179,6 @@ Runner 每次 heartbeat（约 15 秒）推送自己视角的指标到 MetricsSta
 
 ## 参考资料 (References)
 
-- [CONTEXT.md](../../../CONTEXT.md) — Snapshots / Idle Suppression / Transition Marker 定义
+- [CONTEXT.md](../../../../CONTEXT.md) — Snapshots / Idle Suppression / Transition Marker 定义
 - Cloudflare Cron Triggers minimum interval: <https://developers.cloudflare.com/workers/configuration/cron-triggers/>
 - Cloudflare DO SQLite pricing model: <https://developers.cloudflare.com/durable-objects/platform/pricing/>

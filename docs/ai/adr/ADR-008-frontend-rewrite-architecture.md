@@ -1,9 +1,15 @@
 # ADR-008: Frontend Rewrite — Standalone `javdb-autospider-web` Repository
 
-**Status**: Accepted (Phase 1 complete, Phase 2 decisions added 2026-05-18)
+**Status**: Accepted — Phase 1 shipped; Phase 2 planned, Phase 3 deferred (as of 2026-05-19)
 **Date**: 2026-05-17 (amended 2026-05-18)
 **Deciders**: Brainstorming session (design spec: `docs/superpowers/specs/2026-05-16-frontend-rewrite-design.md`)
-**Related**: [IMP-009](../impl/IMP-009-frontend-phase1-completion.md) (Phase 1 completion), [IMP-010](../impl/IMP-010-frontend-phase2-full-cli-coverage.md) (Phase 2), [IMP-011](../impl/IMP-011-frontend-phase3-power-user.md) (Phase 3)
+**Related Implementation Plans**: [IMP-001](../impl/IMP-001-frontend-phase1-backend-prerequisites.md) (BE prerequisites — completed 2026-05-16), [IMP-009](../impl/IMP-009-frontend-phase1-completion.md) (Phase 1 completion — feature-complete; cutover pending), [IMP-010](../impl/IMP-010-frontend-phase2-full-cli-coverage.md) (Phase 2 — planned, not started), [IMP-011](../impl/IMP-011-frontend-phase3-power-user.md) (Phase 3 — deferred, depends on Phase 2 dogfooding)
+
+## Outstanding Work
+
+- IMP-009 cutover items: E2E fixtures, 2 remaining user journeys, BE cleanups, production cutover from `apps/web/` (deleted) to standalone `javdb-autospider-web` repo.
+- IMP-010 (Phase 2 — full CLI surface coverage): not yet started.
+- IMP-011 (Phase 3 — power-user features and analytics): deferred; scope to be decided after Phase 2 dogfooding.
 
 ---
 

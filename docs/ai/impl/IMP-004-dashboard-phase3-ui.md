@@ -3,7 +3,7 @@
 **Status**: Accepted — Planned
 **Date**: 2026-05-16
 **Deciders**: Proxy Coordinator Dashboard rewrite working stream
-**Related**: implements [ADR-003](../adr/ADR-003-metrics-pipeline.md); requires [IMP-003](IMP-003-dashboard-phase2-worker-backend.md) deployed; prerequisite for [IMP-005](IMP-005-dashboard-phase4-history-drilldowns.md)
+**Related**: implements [ADR-003](../adr/archive/ADR-003-metrics-pipeline.md); requires [IMP-003](IMP-003-dashboard-phase2-worker-backend.md) deployed; prerequisite for [IMP-005](IMP-005-dashboard-phase4-history-drilldowns.md)
 
 > **Note on format:** This file is an **implementation plan** — written by the writing-plans workflow, not a design document. It records HOW to execute the related design decisions (see **Related** above). The preamble (Goal / Architecture / Tech Stack) frames the work; the body is the step-by-step execution checklist. English-only by repo convention.
 >
@@ -15,7 +15,7 @@
 
 **Tech Stack:** Vanilla JavaScript (no build step), uPlot v1.6+ (vendored as a TS string constant), inline SVG for donut chart.
 
-**Reference docs:** [ADR-003](../../ai/adr/ADR-003-metrics-pipeline.md), [CONTEXT.md](../../../CONTEXT.md). User-facing visual decisions captured in `grill-me` Q1-Q6 (5 Apr 2026 conversation).
+**Reference docs:** [ADR-003](../adr/archive/ADR-003-metrics-pipeline.md), [CONTEXT.md](../../../CONTEXT.md). User-facing visual decisions captured in `grill-me` Q1-Q6 (5 Apr 2026 conversation).
 
 **Prerequisite:** Phase 2 deployed; `/ops/snapshot` auto-discovers proxies; `/metrics/range` and history endpoints are live.
 

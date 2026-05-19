@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.11+ entry points (each file remains an `argparse`-driven module callable via `python -m apps.cli.<subdir>.<name>`), GitHub Actions YAML, pytest, ripgrep for verification.
 
-**Source spec:** [ADR-007](../adr/ADR-007-monorepo-restructure-2026-05.md) §"Phase 2 — Migrate scripts/ to apps/cli/" (English version is canonical).
+**Source spec:** [ADR-007](../adr/archive/ADR-007-monorepo-restructure-2026-05.md) §"Phase 2 — Migrate scripts/ to apps/cli/" (English version is canonical).
 
 **Prerequisite:** Phase 1 PR is merged. `javdb/` namespace exists and every internal import inside `apps/cli/` already uses `from javdb.*`.
 
@@ -558,7 +558,7 @@ This directory hosts ONLY:
 
 User-facing Python CLI entries live in **[apps/cli/](../apps/cli/)**. If you are looking for `spider`, `pipeline`, `qb_uploader`, `audit_archive`, `rclone_*`, or any other command-line tool, see `apps/cli/`.
 
-This separation was established by [ADR-007](../docs/ai/adr/ADR-007-monorepo-restructure-2026-05.md) (Phase 2).
+This separation was established by [ADR-007](../docs/ai/adr/archive/ADR-007-monorepo-restructure-2026-05.md) (Phase 2).
 ```
 
 - [ ] **Step 5: Commit**

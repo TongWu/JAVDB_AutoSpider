@@ -1,15 +1,20 @@
 # ADR-006: Pending Mode Default Rollout + Retirement of Audit Auto-Fallback
 
-**Status**: Accepted
+**Status**: Accepted — PR-A/C/D/E merged; **in 30-day bake** (started 2026-05-16, sign-off PR-F target ~2026-06-15)
 **Date**: 2026-05-16
 **Deciders**: Architecture depth-pass round 2 (prerequisite for [ADR-005](ADR-005-db-py-retirement-and-repo-pattern.md))
 **Successor Trigger**: ADR-005 PR-1 may only start after ADR-006 completes
+
+## Outstanding Work
+
+- **PR-F (sign-off)** — after the 30-day bake passes the D10 trio re-check (`WriteMode='audit'` count = 0, no orphan audit rows, ≤ 1 pause-trigger/month), insert "ADR-006 sign-off completed on YYYY-MM-DD" at the top of ADR-005, unblocking ADR-005 PR-1.
+- Until bake completes, `BakeCheck.yml` (`cron: 0 4 * * *`, `since: 2026-05-16`) is the daily gate.
 
 ## Amendments
 
 - **2026-05-16 amendment 1**: **PR-B cancelled**. The original plan to "change the SQLite schema `WriteMode TEXT DEFAULT 'audit'` to `DEFAULT 'pending'`" was rejected — investigation found that this DEFAULT only fires on two **historical data import paths**: the v5→v6 migration and the csv_to_sqlite backfill. Those paths handle genuinely Audit Mode historical sessions, where `'audit'` is the **correct** label, not a "target default". The normal write path ([`db_reports.py:128`](../../../packages/python/javdb_platform/db_reports.py)) always passes `WriteMode` explicitly, so the DEFAULT never fires. Changing the DEFAULT would instead mislabel historical data. The schema DEFAULT stays as `'audit'`, serving as a defensive label meaning "assume legacy audit session when WriteMode is unknown". The PR sequence shrinks from 6 to 5.
 
-- **2026-05-17 amendment 2**: After ADR-006 was accepted, [ADR-007](ADR-007-monorepo-restructure-2026-05.md) reorganised the Python namespace (`packages/python/javdb_*` → top-level `javdb/`). Any PRs from this ADR's implementation order that have not yet merged when ADR-007 Phase 1 lands must operate on the new paths:
+- **2026-05-17 amendment 2**: After ADR-006 was accepted, [ADR-007](archive/ADR-007-monorepo-restructure-2026-05.md) reorganised the Python namespace (`packages/python/javdb_*` → top-level `javdb/`). Any PRs from this ADR's implementation order that have not yet merged when ADR-007 Phase 1 lands must operate on the new paths:
 
   - `packages/python/javdb_platform/db_session.py:188` → `javdb/storage/db/db_session.py:188`
   - `packages/python/javdb_platform/db_reports.py:128` → `javdb/storage/db/db_reports.py:128`
@@ -178,7 +183,7 @@ Each PR is independently revertable. PR-A / PR-C / PR-D are the core; PR-E went 
 ## Related ADRs
 
 - **Successor**: [ADR-005](ADR-005-db-py-retirement-and-repo-pattern.md) — starts after the bake completes
-- **Corrects past commitment**: [ADR-001](ADR-001-split-db-module.md) Phase 3's "Pending Mode default" commitment is genuinely delivered by this ADR
+- **Corrects past commitment**: [ADR-001](archive/ADR-001-split-db-module.md) Phase 3's "Pending Mode default" commitment is genuinely delivered by this ADR
 
 ---
 
