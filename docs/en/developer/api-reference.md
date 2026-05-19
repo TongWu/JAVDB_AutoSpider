@@ -29,8 +29,9 @@ These endpoints were added in 2026-05 to support the new web console (`javdb-aut
 - `GET /api/sessions?state=&cursor=&limit=` — cursor-paginated list of ReportSessions.
 - `GET /api/sessions/{session_id}` — full session detail incl. writes.
 - `POST /api/sessions/{session_id}/rollback` — admin-only; body `{dry_run, include_pending, restore_from_audit}`.
-- `POST /api/sessions/{session_id}/commit` — admin-only; body `{force, drop_pending}`.
+- `POST /api/sessions/{session_id}/commit` — admin-only; body `{force, drop_pending, fanout_claims, emit_metrics}`. `fanout_claims` and `emit_metrics` default to `true` so the HTTP path matches the CLI's full-parity commit (MovieClaim coordinator fanout + `pending_session_verify` JSONL emission); pass `false` to opt into a DB-only commit.
 
 ### Test mode (E2E only)
 
 - `POST /api/test/reset` — present only when the server is started with `TEST_MODE=1`. Truncates ops/history tables. **Must never be enabled in production.**
+- `POST /api/test/seed-sessions` — present only when the server is started with `TEST_MODE=1`. Idempotently seeds three deterministic sessions (`test-committed-001`, `test-finalizing-002`, `test-inprogress-003`) covering committed/audit, finalizing/pending, and in_progress/audit lifecycles so real-data E2E rollback specs have predictable fixtures. Response: `{seeded, session_ids}`.
