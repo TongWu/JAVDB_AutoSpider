@@ -29,8 +29,9 @@
 - `GET /api/sessions?state=&cursor=&limit=` — ReportSessions 的游标分页列表。
 - `GET /api/sessions/{session_id}` — 会话完整详情,包含写入记录。
 - `POST /api/sessions/{session_id}/rollback` — 仅 admin;请求体 `{dry_run, include_pending, restore_from_audit}`。
-- `POST /api/sessions/{session_id}/commit` — 仅 admin;请求体 `{force, drop_pending}`。
+- `POST /api/sessions/{session_id}/commit` — 仅 admin;请求体 `{force, drop_pending, fanout_claims, emit_metrics}`。`fanout_claims` 与 `emit_metrics` 默认为 `true`,让 HTTP 路径与 CLI 的完整 commit 行为对齐(MovieClaim 协调器 fanout + `pending_session_verify` JSONL 写入);如需仅修改 DB,显式传 `false`。
 
 ### 测试模式(仅供 E2E)
 
 - `POST /api/test/reset` — 仅当服务以 `TEST_MODE=1` 启动时存在。会清空 ops/history 表。**绝不可在生产环境启用。**
+- `POST /api/test/seed-sessions` — 仅当服务以 `TEST_MODE=1` 启动时存在。幂等地写入三条确定性会话(`test-committed-001`、`test-finalizing-002`、`test-inprogress-003`),分别覆盖 committed/audit、finalizing/pending、in_progress/audit 三种生命周期,供真实数据 E2E rollback 测试使用。响应:`{seeded, session_ids}`。
