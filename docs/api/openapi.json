@@ -188,6 +188,28 @@
         "title": "CapabilitiesResponse",
         "type": "object"
       },
+      "ChangePasswordPayload": {
+        "properties": {
+          "current_password": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Current Password",
+            "type": "string"
+          },
+          "new_password": {
+            "maxLength": 256,
+            "minLength": 8,
+            "title": "New Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "current_password",
+          "new_password"
+        ],
+        "title": "ChangePasswordPayload",
+        "type": "object"
+      },
       "ConfigResponse": {
         "additionalProperties": true,
         "description": "GET /api/config returns the masked runtime config dict verbatim.",
@@ -774,24 +796,127 @@
         "title": "HtmlPayload",
         "type": "object"
       },
-      "JavdbLoginRefreshResponse": {
-        "additionalProperties": true,
-        "description": "Returned by POST /api/login/refresh \u2014 wraps the JavDB login CLI run.",
+      "JavdbLoginRefreshPayload": {
+        "description": "Optional request body for POST /api/login/refresh.\n\nEmpty body (or omitted body) defaults to proxy_mode='auto', which preserves\nthe original behavior. Existing callers that POST without a body still work.",
         "properties": {
+          "max_attempts": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Attempts"
+          },
+          "pool_names": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pool Names"
+          },
+          "proxy_mode": {
+            "default": "auto",
+            "enum": [
+              "auto",
+              "none",
+              "single",
+              "pool"
+            ],
+            "title": "Proxy Mode",
+            "type": "string"
+          },
+          "proxy_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proxy Url"
+          }
+        },
+        "title": "JavdbLoginRefreshPayload",
+        "type": "object"
+      },
+      "JavdbLoginRefreshResponseV2": {
+        "description": "Structured response for POST /api/login/refresh with categorized errors.",
+        "properties": {
+          "attempts": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Attempts",
+            "type": "array"
+          },
+          "error_category": {
+            "anyOf": [
+              {
+                "enum": [
+                  "invalid_credentials",
+                  "ip_banned",
+                  "captcha_failed",
+                  "cloudflare_blocked",
+                  "connection_error",
+                  "no_credentials",
+                  "no_proxy_succeeded",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Category"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
           "output": {
+            "default": "",
             "title": "Output",
             "type": "string"
           },
+          "proxy_used": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proxy Used"
+          },
           "status": {
+            "enum": [
+              "ok",
+              "failed"
+            ],
             "title": "Status",
             "type": "string"
           }
         },
         "required": [
           "status",
-          "output"
+          "message"
         ],
-        "title": "JavdbLoginRefreshResponse",
+        "title": "JavdbLoginRefreshResponseV2",
         "type": "object"
       },
       "JobSummaryResponse": {
@@ -1894,6 +2019,44 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/auth/change-password": {
+      "post": {
+        "operationId": "change_password_api_auth_change_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOkResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Change Password"
+      }
+    },
     "/api/auth/login": {
       "post": {
         "operationId": "login_api_auth_login_post",
@@ -1992,6 +2155,20 @@
     "/api/config": {
       "get": {
         "operationId": "get_config_api_config_get",
+        "parameters": [
+          {
+            "description": "Admin-only: return unmasked secrets",
+            "in": "query",
+            "name": "include_secrets",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Admin-only: return unmasked secrets",
+              "title": "Include Secrets",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -2002,6 +2179,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Get Config"
@@ -2534,16 +2721,35 @@
     "/api/login/refresh": {
       "post": {
         "operationId": "refresh_javdb_session_api_login_refresh_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JavdbLoginRefreshPayload"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/JavdbLoginRefreshResponse"
+                  "$ref": "#/components/schemas/JavdbLoginRefreshResponseV2"
                 }
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Refresh Javdb Session"
