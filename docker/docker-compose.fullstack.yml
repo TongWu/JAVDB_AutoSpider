@@ -22,11 +22,11 @@ services:
       - ../.env:/app/.env
 
   web:
-    build:
-      context: ../apps/web
-      dockerfile: Dockerfile
+    image: ghcr.io/tedwu/javdb-autospider-web:latest
     container_name: javdb-web
     ports:
       - "8088:80"
+    environment:
+      - VITE_API_BASE=http://api:8100
     depends_on:
       - api
