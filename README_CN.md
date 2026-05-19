@@ -64,7 +64,7 @@ javdb/            Python 命名空间（PEP 420，顶层无 __init__.py）
 └── rust_core/    Rust crate 源码（PyO3 + maturin；安装为 javdb.rust_core）
 ```
 
-规范布局由 [ADR-007](docs/ai/adr/ADR-007-monorepo-restructure-2026-05.zh.md) 确立；所有旧路径（`utils/`、`api/`、`migration/`、`legacy/`、`scripts/spider/`、`scripts/ingestion/`、根目录 `compat.py`/`pipeline.py`）已在 Phase 3 移除。
+规范布局由 [ADR-007](docs/ai/adr/archive/ADR-007-monorepo-restructure-2026-05.zh.md) 确立；所有旧路径（`utils/`、`api/`、`migration/`、`legacy/`、`scripts/spider/`、`scripts/ingestion/`、根目录 `compat.py`/`pipeline.py`）已在 Phase 3 移除。
 
 ## 配置
 

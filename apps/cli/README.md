@@ -29,5 +29,5 @@ Canonical command-line entry points for JAVDB AutoSpider — all user-facing CLI
 
 ## Related
 
-- [ADR-007 — Monorepo restructure](../../docs/ai/adr/ADR-007-monorepo-restructure-2026-05.md)
+- [ADR-007 — Monorepo restructure](../../docs/ai/adr/archive/ADR-007-monorepo-restructure-2026-05.md)
 - [scripts/README.md](../../scripts/README.md) — what remains in `scripts/` after Phase 2

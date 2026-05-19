@@ -1,8 +1,9 @@
 # ADR-004: 代理发现机制——Runner 上报完整 PROXY_POOL
 
-**状态**: 已接受 (Accepted)
+**状态**: 已完成 2026-05-16 —— runner `/register` payload 已上传 `proxy_pool`；worker 侧 RunnerRegistry DO 已上线 `proxies_seen` 表 + 处理器（`/do/proxies_seen`、`/proxies_seen`）。
 **日期**: 2026-05-16
 **决策者**: Proxy Coordinator Dashboard 改造
+**关联实现计划 (Related Implementation Plans)**: [IMP-002](../../impl/IMP-002-dashboard-phase1-proxy-pool-upload.md)（Phase 1 —— runner 端上传，2026-05-16 完成）、[IMP-003](../../impl/IMP-003-dashboard-phase2-worker-backend.md)（worker 后端持久化——schema 已上线）
 
 ---
 
@@ -183,7 +184,7 @@ Dashboard UI：
 
 ## 参考资料 (References)
 
-- [CONTEXT.md](../../../CONTEXT.md) — Runner / RunnerRegistry DO 定义
+- [CONTEXT.md](../../../../CONTEXT.md) — Runner / RunnerRegistry DO 定义
 - 现有 register 实现：`JAVDB_AutoSpider_Proxycoordinator/src/runner_registry.ts:160-219`
 - Python 端 proxy_id 规范化：`packages/python/javdb_platform/proxy_policy.py:150-190`
 - 现有 PROXY_POOL 配置示例：`config.py.example:114-141`

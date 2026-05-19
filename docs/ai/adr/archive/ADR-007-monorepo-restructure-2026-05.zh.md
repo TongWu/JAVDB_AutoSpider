@@ -1,9 +1,10 @@
 # ADR-007: Monorepo 重构 —— 顶层 `javdb/` 命名空间与分阶段推进
 
-**状态**: 已接受 (Accepted)
+**状态**: 已完成 2026-05-17 —— Phase 1+2+3 全部退役遗留路径（`api/`、`migration/`、`legacy/`、`packages/`、`compat.py`、`pipeline.py`、扁平的 `apps/cli/<name>.py` shim）。顶层 `javdb/` 命名空间与 `apps/cli/<subdir>/` 布局成为正式形态（详见 CLAUDE.md）。残留的 `utils/__pycache__/` 与 `scripts/spider/__pycache__/` 仅含过期字节码——已无源代码。
 **日期**: 2026-05-17
-**决策者**: 架构深化第三轮（承接 [docs/ai/architecture/python-core-mapping.md](../architecture/python-core-mapping.md) 与 [spider-module-reorg.md](../architecture/spider-module-reorg.md) 未完成的 Python core 重构）
+**决策者**: 架构深化第三轮（承接 [docs/ai/architecture/python-core-mapping.md](../../architecture/python-core-mapping.md) 与 [spider-module-reorg.md](../../architecture/spider-module-reorg.md) 未完成的 Python core 重构）
 **取代 (Supersedes)**: `docs/ai/architecture/python-core-mapping.md`、`docs/ai/architecture/spider-module-reorg.md`（Phase 3 时标记为 superseded）
+**关联实现计划 (Related Implementation Plans)**: [IMP-006](../../impl/IMP-006-restructure-phase1-javdb-tree.md)（Phase 1 —— 构建 `javdb/` 树，已完成）、[IMP-007](../../impl/IMP-007-restructure-phase2-scripts-to-cli.md)（Phase 2 —— `scripts/` 迁入 `apps/cli/`，已完成）、[IMP-008](../../impl/IMP-008-restructure-phase3-delete-compat.md)（Phase 3 —— 执行 deletion manifest，已完成）；另见 [ADR-007 deletion manifest](ADR-007-deletion-manifest.md)（Phase 1 交付物，Phase 3 据其执行）。
 
 ---
 
@@ -263,7 +264,7 @@ PR-3  Phase 3: 改写 test imports，删 compat 壳，清 Dockerfile COPY 行，
 
 ## 相关 ADR 与文档
 
-- 取代 (Supersedes)：[`docs/ai/architecture/python-core-mapping.md`](../architecture/python-core-mapping.md)、[`docs/ai/architecture/spider-module-reorg.md`](../architecture/spider-module-reorg.md)
-- 协调 (Coordinates with)：[ADR-005](ADR-005-db-py-retirement-and-repo-pattern.md)（`db.py` 退役；storage 内部布局由本 ADR 重排；ADR-005 D2 PR-1 将在新的 `javdb/storage/` 树内操作）
-- 协调：[ADR-006](ADR-006-pending-mode-default-rollout.md)（pending-mode 推全；`pending_mode_alert_and_pause.py` 是 Phase 2 迁移的脚本之一；改名为 `apps/cli/db/pending_alert.py` 不变行为，但 workflow YAML 必须同 PR 更新）
+- 取代 (Supersedes)：[`docs/ai/architecture/python-core-mapping.md`](../../architecture/python-core-mapping.md)、[`docs/ai/architecture/spider-module-reorg.md`](../../architecture/spider-module-reorg.md)
+- 协调 (Coordinates with)：[ADR-005](../ADR-005-db-py-retirement-and-repo-pattern.md)（`db.py` 退役；storage 内部布局由本 ADR 重排；ADR-005 D2 PR-1 将在新的 `javdb/storage/` 树内操作）
+- 协调：[ADR-006](../ADR-006-pending-mode-default-rollout.md)（pending-mode 推全；`pending_mode_alert_and_pause.py` 是 Phase 2 迁移的脚本之一；改名为 `apps/cli/db/pending_alert.py` 不变行为，但 workflow YAML 必须同 PR 更新）
 - 新地图（重构后）：`docs/ai/architecture/python-tree-2026-05.md`（Phase 3 内新建）

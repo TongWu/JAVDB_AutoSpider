@@ -1,8 +1,9 @@
 # ADR-001: 拆分巨型 db.py 模块
 
-**状态**: 已接受 (Accepted)  
-**日期**: 2026-05-15  
-**决策者**: 架构重构团队  
+**状态**: 已完成 —— Phase 1+2 已交付（下列 9 个模块均存在于 `javdb/storage/db/`）。Phase 3（"删除 `db.py` 门面"）从未启动；由 [ADR-005](../ADR-005-db-py-retirement-and-repo-pattern.md) 接管为正式退役路径。
+**日期**: 2026-05-15
+**决策者**: 架构重构团队
+**关联实现计划 (Related Implementation Plans)**：无 —— 本 ADR 早于 IMP 文件约定，执行过程仅通过 PR 描述追踪。
 
 ---
 
@@ -256,9 +257,9 @@ def _ensure_imports():
 
 ## 参考资料 (References)
 
-- [CONTEXT.md](../../../CONTEXT.md) — 领域术语词汇表
-- [CLAUDE.md](../../../CLAUDE.md) — 项目概览
-- [docs/en/ops/d1-rollback.md](../../en/ops/d1-rollback.md) — 存储后端架构
+- [CONTEXT.md](../../../../CONTEXT.md) — 领域术语词汇表
+- [CLAUDE.md](../../../../CLAUDE.md) — 项目概览
+- [docs/en/ops/d1-rollback.md](../../../en/ops/d1-rollback.md) — 存储后端架构
 - [A Philosophy of Software Design](https://web.stanford.edu/~ouster/cgi-bin/book.php) — 深度模块理论
 
 ---

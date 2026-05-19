@@ -1,14 +1,23 @@
 # ADR-005: Full Retirement of db.py + Repo Class Abstraction + Audit Mode Retirement
 
-**Status**: Accepted, but **start is blocked behind [ADR-006](ADR-006-pending-mode-default-rollout.md)**
+**Status**: Accepted — **PR-1 shipped** (Repo classes added alongside `db.py`); **PR-2 → PR-5 blocked on [ADR-006](ADR-006-pending-mode-default-rollout.md) bake completion** (~2026-06-15)
 **Date**: 2026-05-16
 **Deciders**: Architecture depth-pass round 2
 **Prerequisites**: [ADR-006](ADR-006-pending-mode-default-rollout.md) — Pending Mode default must first be rolled out to 100% and the auto-fallback redesigned before this ADR can execute its D10 gate
-**Successor**: [ADR-001](ADR-001-split-db-module.md) — delivers the Phase 3 that ADR-001 never finished, and corrects its over-fine "split by read/write" decision
+**Successor**: [ADR-001](archive/ADR-001-split-db-module.md) — delivers the Phase 3 that ADR-001 never finished, and corrects its over-fine "split by read/write" decision
+
+## Outstanding Work
+
+PR-1 (Repo classes) ✅ shipped: `HistoryRepo`, `OperationsRepo`, `StatsRepo`, `SessionsRepo`, `SystemStateRepo` are present in `javdb/storage/repos/`. Remaining:
+
+- **PR-2** — `db.py` internally forwards to Repos (dual-write phase). Blocked on bake.
+- **PR-3** — migrate callers (`history_manager.py`, CLI tools, `db_rollback.py`) off the function family. Blocked on bake.
+- **PR-4** — drop Audit Mode tables (`MovieHistoryAudit`, `TorrentHistoryAudit`) + remove audit code branches. Blocked on bake **and** ADR-006 PR-F sign-off.
+- **PR-5** — delete `db.py` (currently 5,454 lines) and the nine ADR-001 shell modules. Final cleanup post-retirement.
 
 ## Amendments
 
-- **2026-05-17 amendment 1**: After this ADR was accepted, [ADR-007](ADR-007-monorepo-restructure-2026-05.md) reorganised the Python namespace (`packages/python/javdb_*` → top-level `javdb/`). Any PRs from this ADR's implementation order that have not yet merged when ADR-007 Phase 1 lands must operate on the new paths:
+- **2026-05-17 amendment 1**: After this ADR was accepted, [ADR-007](archive/ADR-007-monorepo-restructure-2026-05.md) reorganised the Python namespace (`packages/python/javdb_*` → top-level `javdb/`). Any PRs from this ADR's implementation order that have not yet merged when ADR-007 Phase 1 lands must operate on the new paths:
 
   | This ADR refers to | After ADR-007 Phase 1 |
   |---|---|

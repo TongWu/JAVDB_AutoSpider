@@ -1,8 +1,9 @@
 # ADR-003: Metrics Pipeline (Hybrid Write + Idle Suppression)
 
-**Status**: Accepted
+**Status**: Completed 2026-05-17 — `MetricsState` DO + 1-minute scheduled cron (`* * * * *`) + idle suppression (`is_transition_marker` / `is_heartbeat_anchor` columns) + 5-second bucketed JSON snapshot all shipped per the decision matrix.
 **Date**: 2026-05-16
 **Deciders**: Proxy Coordinator Dashboard redesign
+**Related Implementation Plans**: [IMP-003](../../impl/IMP-003-dashboard-phase2-worker-backend.md) (worker backend — pipeline shipped), [IMP-004](../../impl/IMP-004-dashboard-phase3-ui.md) (main dashboard UI consumer — planned)
 
 ---
 
@@ -178,6 +179,6 @@ Add the endpoint `GET /metrics/range?from=...&to=...`; the dashboard JS pulls it
 
 ## References
 
-- [CONTEXT.md](../../../CONTEXT.md) — definitions of Snapshots / Idle Suppression / Transition Marker.
+- [CONTEXT.md](../../../../CONTEXT.md) — definitions of Snapshots / Idle Suppression / Transition Marker.
 - Cloudflare Cron Triggers minimum interval: <https://developers.cloudflare.com/workers/configuration/cron-triggers/>
 - Cloudflare DO SQLite pricing model: <https://developers.cloudflare.com/durable-objects/platform/pricing/>
