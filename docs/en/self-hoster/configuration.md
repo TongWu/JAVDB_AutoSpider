@@ -369,12 +369,26 @@ download" priority inside torrents.
 
 These variables are set in `.env` files rather than `config.py`.
 
-### 14.1 Root `.env` (Web API + Docker)
+### 14.1 Root `.env` (Docker / cron entrypoint)
 
-Defined in `.env.example` at the repository root. Used by the FastAPI server
-(`apps/api/`) and Docker Compose.
+Defined in `.env.example` at the repository root. **Bare-metal uvicorn does
+not auto-load this file** — `apps/api/services/context.py` deliberately omits
+`load_dotenv` so stale `.env` entries cannot silently override fresh
+`config.py` values (see `apps/api/infra/auth.py::_resolve`, precedence
+`env > config.py > override store > default`).
 
-#### Web API / Admin Console
+Consumers of this file:
+
+- **Docker Compose** (`docker/docker-compose*.yml`) — `env_file: ../.env` plus
+  `environment:` blocks expand these into the container's environment, where
+  the FastAPI process reads them via `os.environ`.
+- **Cron entrypoint** (`docker-entrypoint.sh`) — sources the file directly.
+
+For self-hosting **without Docker**, put the Web API / Admin Console values in
+`config.py` (see `config.py.example` § "API CONSOLE / BACKEND SERVICE"), or
+`export VAR=...` in the shell before launching uvicorn.
+
+#### Web API / Admin Console (Docker / shell-export)
 
 | Variable | Type | Default | Description |
 |---|---|---|---|
