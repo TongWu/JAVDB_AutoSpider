@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any, Dict
 
 import jwt
 from fastapi import HTTPException, Request, Response
 
 from apps.api.infra import auth as auth_infra
-from apps.api.schemas.payloads import LoginPayload
-from apps.api.services import context
+from apps.api.schemas.payloads import ChangePasswordPayload, LoginPayload
+from apps.api.services import config_service, context
 
 
 def _access_claims(token: str) -> dict:
@@ -125,6 +126,42 @@ async def refresh_token_payload(request: Request, response: Response) -> dict:
     }
 
 
+_PASSWORD_HASH_STORE_KEY: Dict[str, str] = {
+    "admin": "ADMIN_PASSWORD_HASH",
+    "readonly": "READONLY_PASSWORD_HASH",
+}
+
+
+async def change_password_payload(
+    payload: ChangePasswordPayload,
+    request: Request,
+    current: Dict[str, Any],
+) -> dict:
+    auth_infra._rate_limit("preauth", request)
+    username = current.get("sub", "")
+    user = auth_infra.USERS.get(username)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unknown user")
+    if not auth_infra.PASSWORD_CTX.verify(
+        payload.current_password, user["password_hash"]
+    ):
+        context.audit_logger.warning(
+            "change_password_invalid_current username=%s", username
+        )
+        raise HTTPException(status_code=401, detail="Current password incorrect")
+    role = user.get("role", "")
+    store_key = _PASSWORD_HASH_STORE_KEY.get(role)
+    if not store_key:
+        raise HTTPException(
+            status_code=403, detail="Role cannot change password"
+        )
+    new_hash = auth_infra.PASSWORD_CTX.hash(payload.new_password)
+    user["password_hash"] = new_hash
+    config_service.update_config_payload({store_key: new_hash}, username)
+    context.audit_logger.info("change_password_success username=%s", username)
+    return {"status": "ok"}
+
+
 async def logout_payload(response: Response, current: dict) -> dict:
     jti = current.get("jti")
     if jti:
@@ -146,6 +183,7 @@ async def logout_payload(response: Response, current: dict) -> dict:
 
 
 __all__ = [
+    "change_password_payload",
     "login_payload",
     "logout_payload",
     "refresh_token_payload",

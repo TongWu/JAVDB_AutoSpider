@@ -578,7 +578,7 @@ class TestAdhocLoginFailedOnIndexPage:
         Returns:
             str: 'proxy_fallback' if control continues to the proxy pool phase.
         """
-        from scripts.spider.fetch.fallback import AdhocLoginFailedError
+        from javdb.spider.fetch.fallback import AdhocLoginFailedError
 
         if login_success:
             if still_login_page_after_refresh:
@@ -595,7 +595,7 @@ class TestAdhocLoginFailedOnIndexPage:
 
     def test_adhoc_login_failure_raises(self):
         """Adhoc mode: login fails on index page → AdhocLoginFailedError."""
-        from scripts.spider.fetch.fallback import AdhocLoginFailedError
+        from javdb.spider.fetch.fallback import AdhocLoginFailedError
 
         with pytest.raises(AdhocLoginFailedError, match="Login refresh failed"):
             self._simulate_index_login_fallback(
@@ -603,7 +603,7 @@ class TestAdhocLoginFailedOnIndexPage:
 
     def test_adhoc_login_success_but_still_login_page_raises(self):
         """Adhoc mode: login succeeds but page is still a login page → AdhocLoginFailedError."""
-        from scripts.spider.fetch.fallback import AdhocLoginFailedError
+        from javdb.spider.fetch.fallback import AdhocLoginFailedError
 
         with pytest.raises(AdhocLoginFailedError, match="still requires authentication"):
             self._simulate_index_login_fallback(
@@ -642,14 +642,14 @@ class TestPerProxyLoginRouting:
 
     def test_attempt_login_refresh_returns_three_tuple(self, monkeypatch):
         """attempt_login_refresh returns (success, cookie, proxy_name)."""
-        import scripts.spider.runtime.state as st
-        import packages.python.javdb_spider.fetch.session as sess_mod
+        import javdb.spider.runtime.state as st
+        import javdb.spider.fetch.session as sess_mod
 
         monkeypatch.setattr(sess_mod, "LOGIN_FEATURE_AVAILABLE", False)
         original = st.login_attempted
         st.login_attempted = True
         try:
-            from scripts.spider.fetch.session import attempt_login_refresh
+            from javdb.spider.fetch.session import attempt_login_refresh
             result = attempt_login_refresh()
             assert len(result) == 3
             success, cookie, proxy_name = result
@@ -661,14 +661,14 @@ class TestPerProxyLoginRouting:
 
     def test_attempt_login_refresh_accepts_explicit_proxies(self, monkeypatch):
         """attempt_login_refresh accepts explicit_proxies / explicit_proxy_name."""
-        import scripts.spider.runtime.state as st
-        import packages.python.javdb_spider.fetch.session as sess_mod
+        import javdb.spider.runtime.state as st
+        import javdb.spider.fetch.session as sess_mod
 
         monkeypatch.setattr(sess_mod, "LOGIN_FEATURE_AVAILABLE", False)
         original = st.login_attempted
         st.login_attempted = True
         try:
-            from scripts.spider.fetch.session import attempt_login_refresh
+            from javdb.spider.fetch.session import attempt_login_refresh
             result = attempt_login_refresh(
                 explicit_proxies={'http': 'http://1.2.3.4:8080'},
                 explicit_proxy_name='TestProxy',

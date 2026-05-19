@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Body, Depends
 
 from apps.api.infra.auth import _require_auth, require_role
 from apps.api.schemas.payloads import (
@@ -12,6 +12,8 @@ from apps.api.schemas.payloads import (
     HealthCheckPayload,
     HealthResponse,
     HtmlPayload,
+    JavdbLoginRefreshPayload,
+    JavdbLoginRefreshResponseV2,
     UrlPayload,
 )
 from apps.api.services import system_service
@@ -32,9 +34,12 @@ async def run_health_check(
     return await system_service.run_health_check_payload(payload, current["sub"])
 
 
-@router.post("/login/refresh")
-async def refresh_javdb_session(current=Depends(require_role("admin"))):
-    return await system_service.refresh_javdb_session_payload(current["sub"])
+@router.post("/login/refresh", response_model=JavdbLoginRefreshResponseV2)
+async def refresh_javdb_session(
+    payload: JavdbLoginRefreshPayload = Body(default_factory=JavdbLoginRefreshPayload),
+    current=Depends(require_role("admin")),
+):
+    return await system_service.refresh_javdb_session_with_options(payload, current["sub"])
 
 
 @router.post("/parse/index")

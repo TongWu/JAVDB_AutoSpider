@@ -144,7 +144,7 @@ jobs:
           # — flip the GitHub Variable RUNNER_REGISTRY_ENABLED to 'true' to
           # let QB filter runs participate in cohort signalling.
           VAR_RUNNER_REGISTRY_ENABLED: ${{ vars.RUNNER_REGISTRY_ENABLED || 'false' }}
-        run: python3 -m apps.cli.config_generator --github-actions
+        run: python3 -m apps.cli.ops.config_generator --github-actions
 
       - name: Encrypt config for artifact
         env:
@@ -253,7 +253,7 @@ jobs:
           # — flip the GitHub Variable RUNNER_REGISTRY_ENABLED to 'true' to
           # let QB filter runs participate in cohort signalling.
           VAR_RUNNER_REGISTRY_ENABLED: ${{ vars.RUNNER_REGISTRY_ENABLED || 'false' }}
-        run: python3 -m apps.cli.config_generator --github-actions
+        run: python3 -m apps.cli.ops.config_generator --github-actions
 
       - name: Encrypt adhoc config for artifact
         if: steps.detect_adhoc.outputs.has_adhoc_qb == 'true'
@@ -307,7 +307,7 @@ jobs:
           MIN_SIZE_MB: ${{ github.event.inputs.min_size_mb || '100' }}
           DAYS: ${{ github.event.inputs.days || '2' }}
           # Pass categories via env var to avoid command injection from eval
-          QB_FILTER_CATEGORIES: ${{ github.event.inputs.categories || '["Ad Hoc", "Daily Ingestion"]' }}
+          QB_FILTER_CATEGORIES: ${{ github.event.inputs.categories || '["Ad Hoc", "Daily Ingestion", "顶级"]' }}
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
           DELETE_LOCAL_FILES: ${{ github.event.inputs.delete_local_files || 'false' }}
         run: |
@@ -330,8 +330,8 @@ jobs:
             ARGS+=(--delete-local-files)
           fi
           
-          echo "Running: python3 -m apps.cli.qb_file_filter ${ARGS[*]}"
-          python3 -m apps.cli.qb_file_filter "${ARGS[@]}"
+          echo "Running: python3 -m apps.cli.qb.file_filter ${ARGS[*]}"
+          python3 -m apps.cli.qb.file_filter "${ARGS[@]}"
 
   # =============================================================================
   # Job 3: Run File Filter on Adhoc qBittorrent (only when QB_URL_ADHOC is set)
@@ -371,7 +371,7 @@ jobs:
           # default mirrors the ``categories`` input default and only kicks
           # in when this job was started outside of workflow_dispatch
           # (e.g. on schedule).
-          QB_FILTER_CATEGORIES: ${{ github.event.inputs.categories || '["Ad Hoc", "Daily Ingestion"]' }}
+          QB_FILTER_CATEGORIES: ${{ github.event.inputs.categories || '["Ad Hoc", "Daily Ingestion", "顶级"]' }}
           # Fallback category name used when the dispatch input does not
           # mention an adhoc-style entry — matches the config default.
           ADHOC_CATEGORY: ${{ vars.TORRENT_CATEGORY_ADHOC || 'Ad Hoc' }}
@@ -403,5 +403,5 @@ jobs:
             ARGS+=(--delete-local-files)
           fi
 
-          echo "Running (adhoc): python3 -m apps.cli.qb_file_filter ${ARGS[*]}"
-          python3 -m apps.cli.qb_file_filter "${ARGS[@]}"
+          echo "Running (adhoc): python3 -m apps.cli.qb.file_filter ${ARGS[*]}"
+          python3 -m apps.cli.qb.file_filter "${ARGS[@]}"

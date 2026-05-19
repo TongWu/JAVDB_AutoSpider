@@ -6,7 +6,7 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from packages.python.javdb_platform.qb_config import (  # noqa: E402
+from javdb.integrations.qb.config import (  # noqa: E402
     build_qb_base_url,
     masked_qb_base_url,
     qb_base_url_candidates,

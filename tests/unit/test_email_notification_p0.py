@@ -10,7 +10,7 @@
   banner at the **top** of the email body.
 
 These tests exercise the real helpers in
-``packages.python.javdb_integrations.email_notification`` rather than
+``javdb.integrations.notify.email`` rather than
 local re-implementations so changes to the production code path are
 caught here.
 """
@@ -37,7 +37,7 @@ if project_root not in sys.path:
 
 
 def test_drift_advisory_returns_empty_when_jsonl_missing(tmp_path):
-    from packages.python.javdb_integrations.email_notification import (
+    from javdb.integrations.notify.email import (
         _build_dual_drift_advisory,
     )
 
@@ -47,7 +47,7 @@ def test_drift_advisory_returns_empty_when_jsonl_missing(tmp_path):
 
 
 def test_drift_advisory_returns_empty_when_jsonl_has_no_today_records(tmp_path):
-    from packages.python.javdb_integrations.email_notification import (
+    from javdb.integrations.notify.email import (
         _build_dual_drift_advisory,
     )
 
@@ -70,7 +70,7 @@ def test_drift_advisory_returns_empty_when_jsonl_has_no_today_records(tmp_path):
 
 
 def test_drift_advisory_surfaces_todays_records(tmp_path):
-    from packages.python.javdb_integrations.email_notification import (
+    from javdb.integrations.notify.email import (
         _build_dual_drift_advisory,
     )
 
@@ -115,7 +115,7 @@ def test_local_stats_getter_uses_sqlite_regardless_of_backend(monkeypatch, tmp_p
     import sqlite3
 
     monkeypatch.setenv("STORAGE_BACKEND", "sqlite")
-    from packages.python.javdb_platform import db as db_mod
+    from javdb.storage.db import db as db_mod
 
     test_db = tmp_path / "reports.db"
     # Lay down just enough schema for the read path under test. Using
@@ -154,7 +154,7 @@ def test_main_exits_nonzero_on_smtp_failure(monkeypatch, tmp_path):
     down. The rest of the function is exercised by
     ``test_email_notification_extended.py``.
     """
-    from packages.python.javdb_integrations import email_notification as en
+    from javdb.integrations.notify import email as en
 
     # Stub send_email to return False so the new exit path triggers.
     monkeypatch.setattr(en, "send_email", lambda *a, **kw: False)
@@ -197,7 +197,7 @@ def test_main_exits_nonzero_on_smtp_failure(monkeypatch, tmp_path):
 
 def test_main_exits_zero_when_email_succeeds(monkeypatch):
     """Mirror of the test above: ``True`` return → exit 0."""
-    from packages.python.javdb_integrations import email_notification as en
+    from javdb.integrations.notify import email as en
 
     monkeypatch.setattr(en, "send_email", lambda *a, **kw: True)
     monkeypatch.setattr(en, "_resolve_default_verify_jsonl", lambda x: None)
@@ -224,3 +224,104 @@ def test_main_exits_zero_when_email_succeeds(monkeypatch):
     with pytest.raises(SystemExit) as exc_info:
         en.main()
     assert exc_info.value.code == 0
+
+
+# ── Drift advisory backend gating ────────────────────────────────────────
+
+
+def _install_main_stubs(monkeypatch, en, captured_body):
+    """Stub the heavy collaborators main() touches and capture the body.
+
+    Returns nothing; ``captured_body`` (a list) gets the email body
+    string appended to it when ``send_email`` is invoked, so tests can
+    assert against the final rendered body.
+    """
+    def _capture_send(subject, body, attachments, dry_run):
+        captured_body.append(body)
+        return True
+
+    monkeypatch.setattr(en, "send_email", _capture_send)
+    monkeypatch.setattr(en, "_resolve_default_verify_jsonl", lambda x: None)
+    monkeypatch.setattr(en, "_resolve_default_health_snapshot", lambda x: None)
+    monkeypatch.setattr(en, "find_proxy_ban_html_files", lambda d=None: [])
+    monkeypatch.setattr(en, "extract_proxy_ban_summary", lambda *a, **k: {})
+    monkeypatch.setattr(en, "analyze_spider_log", lambda p: (False, None, False))
+    monkeypatch.setattr(en, "analyze_uploader_log", lambda p: (False, None, False))
+    monkeypatch.setattr(en, "analyze_pikpak_log", lambda p: (False, None, False))
+    monkeypatch.setattr(en, "analyze_pipeline_log", lambda p: (False, None, False))
+    monkeypatch.setattr(en, "check_workflow_job_status", lambda: (False, []))
+    monkeypatch.setattr(en, "extract_spider_statistics", lambda p: None)
+    monkeypatch.setattr(en, "extract_uploader_statistics", lambda p: None)
+    monkeypatch.setattr(en, "extract_pikpak_statistics", lambda p: None)
+    monkeypatch.setattr(en, "extract_dedup_statistics", lambda *a, **k: None)
+    monkeypatch.setattr(en, "find_latest_adhoc_csv", lambda d: None)
+    monkeypatch.setattr(en, "find_latest_daily_csv", lambda d: None)
+    monkeypatch.setattr(en, "_load_pending_verify_records", lambda *a, **k: [])
+
+
+def _seed_drift_jsonl(tmp_path):
+    """Drop a single 'real drift' record for today into reports/D1/d1_drift.jsonl."""
+    drift_dir = tmp_path / "D1"
+    drift_dir.mkdir()
+    jsonl = drift_dir / "d1_drift.jsonl"
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%dT12:00:00Z")
+    jsonl.write_text(
+        json.dumps({
+            "ts": today,
+            "db": "history",
+            "committed": True,
+            "failure_count": 2,
+            "uncommitted_d1_writes": 3,
+            "first_failed_sql": "INSERT INTO ReportSessions ...",
+            "first_error": "RuntimeError: simulated",
+        }) + "\n",
+        encoding="utf-8",
+    )
+
+
+def test_drift_advisory_not_prepended_in_d1_only_mode(monkeypatch, tmp_path):
+    """STORAGE_BACKEND=d1: no SQLite write path exists, so drift is impossible.
+
+    Even if ``d1_drift.jsonl`` carries today's records (operational audit
+    tooling like ``commit_session._emit_pending_verify`` writes to the
+    same file), the email body must NOT prepend the DRIFT ADVISORY banner.
+    """
+    from javdb.integrations.notify import email as en
+
+    _seed_drift_jsonl(tmp_path)
+    monkeypatch.setenv("STORAGE_BACKEND", "d1")
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+
+    captured = []
+    _install_main_stubs(monkeypatch, en, captured)
+    monkeypatch.setattr(sys, "argv", ["email_notification", "--mode", "daily"])
+
+    with pytest.raises(SystemExit) as exc_info:
+        en.main()
+    assert exc_info.value.code == 0
+    assert captured, "send_email was not invoked"
+    assert "D1 DRIFT ADVISORY" not in captured[0], (
+        "d1-only mode must not surface SQLite-vs-D1 drift banner; "
+        "drift is a dual-mode-only concept."
+    )
+
+
+def test_drift_advisory_prepended_in_dual_mode(monkeypatch, tmp_path):
+    """STORAGE_BACKEND=dual: drift banner must still surface (mirror test)."""
+    from javdb.integrations.notify import email as en
+
+    _seed_drift_jsonl(tmp_path)
+    monkeypatch.setenv("STORAGE_BACKEND", "dual")
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+
+    captured = []
+    _install_main_stubs(monkeypatch, en, captured)
+    monkeypatch.setattr(sys, "argv", ["email_notification", "--mode", "daily"])
+
+    with pytest.raises(SystemExit) as exc_info:
+        en.main()
+    assert exc_info.value.code == 0
+    assert captured, "send_email was not invoked"
+    assert "D1 DRIFT ADVISORY" in captured[0], (
+        "dual mode must continue to surface the drift advisory banner."
+    )

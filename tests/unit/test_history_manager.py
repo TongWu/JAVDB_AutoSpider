@@ -10,7 +10,7 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from utils.history_manager import (
+from javdb.storage.history_manager import (
     load_parsed_movies_history,
     save_parsed_movie_to_history,
     determine_torrent_types,
@@ -24,7 +24,7 @@ from utils.history_manager import (
     check_torrent_in_history,
     is_downloaded_torrent,
 )
-import utils.infra.db as db_mod
+import javdb.storage.db.db as db_mod
 
 
 def _seed_history_sqlite(records):
@@ -394,7 +394,7 @@ class TestCleanupHistoryFile:
     
     def test_cleanup_is_noop_in_sqlite(self, temp_dir):
         """In SQLite mode, cleanup is a no-op (dedup handled by UPSERT)."""
-        from utils.history_manager import cleanup_history_file
+        from javdb.storage.history_manager import cleanup_history_file
         
         history_file = os.path.join(temp_dir, 'history.csv')
         href_records = {'/v/ABC-123': {}, '/v/DEF-456': {}}
@@ -409,7 +409,7 @@ class TestMaintainHistoryLimit:
     
     def test_maintain_limit_is_noop_in_sqlite(self, temp_dir):
         """In SQLite mode, maintain_limit is a no-op (no record limit needed)."""
-        from utils.history_manager import maintain_history_limit
+        from javdb.storage.history_manager import maintain_history_limit
         
         history_file = os.path.join(temp_dir, 'history.csv')
         
@@ -425,7 +425,7 @@ class TestMaintainHistoryLimit:
     
     def test_maintain_limit_nonexistent_file(self, temp_dir):
         """Test that function handles non-existent file gracefully."""
-        from utils.history_manager import maintain_history_limit
+        from javdb.storage.history_manager import maintain_history_limit
         
         history_file = os.path.join(temp_dir, 'nonexistent.csv')
         
@@ -438,7 +438,7 @@ class TestAddDownloadedIndicatorToCsv:
     
     def test_add_indicator_to_downloaded_torrents(self, temp_dir):
         """Test adding downloaded indicator to CSV."""
-        from utils.history_manager import add_downloaded_indicator_to_csv
+        from javdb.storage.history_manager import add_downloaded_indicator_to_csv
         
         # Create sample CSV file
         csv_file = os.path.join(temp_dir, 'daily.csv')
@@ -461,7 +461,7 @@ class TestAddDownloadedIndicatorToCsv:
     
     def test_csv_file_not_found(self, temp_dir):
         """Test handling of non-existent CSV file."""
-        from utils.history_manager import add_downloaded_indicator_to_csv
+        from javdb.storage.history_manager import add_downloaded_indicator_to_csv
         
         csv_file = os.path.join(temp_dir, 'nonexistent.csv')
         history_file = os.path.join(temp_dir, 'history.csv')
@@ -476,7 +476,7 @@ class TestMarkTorrentAsDownloaded:
     
     def test_mark_torrent_as_downloaded(self, temp_dir):
         """Test marking a torrent as downloaded."""
-        from utils.history_manager import mark_torrent_as_downloaded, check_torrent_in_history
+        from javdb.storage.history_manager import mark_torrent_as_downloaded, check_torrent_in_history
         
         history_file = os.path.join(temp_dir, 'history.csv')
         
@@ -538,7 +538,7 @@ class TestShouldProcessMovieExtended:
     
     def test_phase2_upgrade_from_no_subtitle(self):
         """Test phase 2 can upgrade from no_subtitle to hacked_no_subtitle."""
-        from utils.history_manager import should_process_movie
+        from javdb.storage.history_manager import should_process_movie
         
         history_data = {
             '/v/ABC-123': {
@@ -553,7 +553,7 @@ class TestShouldProcessMovieExtended:
     
     def test_phase2_no_upgrade_possible(self):
         """Test phase 2 does not process when no upgrade is possible."""
-        from utils.history_manager import should_process_movie
+        from javdb.storage.history_manager import should_process_movie
         
         history_data = {
             '/v/ABC-123': {
@@ -572,7 +572,7 @@ class TestLoadHistoryEdgeCases:
     
     def test_load_corrupted_file(self, temp_dir):
         """Test loading corrupted CSV file."""
-        from utils.history_manager import load_parsed_movies_history
+        from javdb.storage.history_manager import load_parsed_movies_history
         
         history_file = os.path.join(temp_dir, 'corrupted.csv')
         
@@ -589,7 +589,7 @@ class TestLoadHistoryEdgeCases:
     
     def test_load_empty_file(self, temp_dir):
         """Test loading empty CSV file."""
-        from utils.history_manager import load_parsed_movies_history
+        from javdb.storage.history_manager import load_parsed_movies_history
         
         history_file = os.path.join(temp_dir, 'empty.csv')
         
@@ -603,7 +603,7 @@ class TestLoadHistoryEdgeCases:
     
     def test_load_header_only_file(self, temp_dir):
         """Test loading CSV file with only header."""
-        from utils.history_manager import load_parsed_movies_history
+        from javdb.storage.history_manager import load_parsed_movies_history
         
         history_file = os.path.join(temp_dir, 'header_only.csv')
         
@@ -620,7 +620,7 @@ class TestCheckTorrentExtended:
     
     def test_check_multiple_torrent_types(self, sample_history_csv):
         """Test checking for multiple torrent types."""
-        from utils.history_manager import check_torrent_in_history
+        from javdb.storage.history_manager import check_torrent_in_history
         
         _seed_history_sqlite([
             {'href': '/v/ABC-123', 'phase': 1, 'video_code': 'ABC-123',
@@ -634,7 +634,7 @@ class TestCheckTorrentExtended:
     
     def test_check_with_invalid_href(self, sample_history_csv):
         """Test checking with invalid href format."""
-        from utils.history_manager import check_torrent_in_history
+        from javdb.storage.history_manager import check_torrent_in_history
         
         # Invalid href should return False
         assert check_torrent_in_history(sample_history_csv, 'invalid', 'subtitle') is False
@@ -645,7 +645,7 @@ class TestDetermineTorrentTypesExtended:
     
     def test_all_types_populated(self):
         """Test when all torrent types are populated."""
-        from utils.history_manager import determine_torrent_types
+        from javdb.storage.history_manager import determine_torrent_types
         
         magnet_links = {
             'hacked_subtitle': 'magnet:?xt=urn:btih:hs',
@@ -667,7 +667,7 @@ class TestMaintainHistoryLimitExtended:
     
     def test_maintain_limit_noop_sqlite(self, temp_dir):
         """SQLite mode: maintain_limit is a no-op, all records are preserved."""
-        from utils.history_manager import maintain_history_limit
+        from javdb.storage.history_manager import maintain_history_limit
         
         for i in range(10):
             db_mod.db_upsert_history(f'/v/TEST-{i:03d}', f'TEST-{i:03d}')
@@ -684,7 +684,7 @@ class TestSaveAndLoadIntegration:
     
     def test_save_and_reload_preserves_data(self, temp_dir):
         """Test that saved data can be reloaded correctly."""
-        from utils.history_manager import save_parsed_movie_to_history, load_parsed_movies_history
+        from javdb.storage.history_manager import save_parsed_movie_to_history, load_parsed_movies_history
         
         history_file = os.path.join(temp_dir, 'integration.csv')
         

@@ -5,10 +5,10 @@ import logging
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from scripts.ingestion.engine import check_redownload_upgrade
-from scripts.ingestion.models import ParsedMovie
-from scripts.ingestion.planner import build_alignment_upgrade_plan, build_spider_ingestion_plan
-from scripts.spider.services.dedup import RcloneEntry
+from javdb.pipeline.engine import check_redownload_upgrade
+from javdb.pipeline.models import ParsedMovie
+from javdb.pipeline.planner import build_alignment_upgrade_plan, build_spider_ingestion_plan
+from javdb.spider.services.dedup import RcloneEntry
 
 
 def test_build_spider_ingestion_plan_skips_when_history_complete():
@@ -102,7 +102,7 @@ def test_check_redownload_upgrade_logs_video_code(caplog):
         'size_no_subtitle': '3.52GB',
     }
 
-    with caplog.at_level(logging.INFO, logger='packages.python.javdb_ingestion.policies'):
+    with caplog.at_level(logging.INFO, logger='javdb.pipeline.policies'):
         categories = check_redownload_upgrade('/v/z4bgy5', history_data, magnet_links, threshold=0.30)
 
     assert categories == ['no_subtitle']

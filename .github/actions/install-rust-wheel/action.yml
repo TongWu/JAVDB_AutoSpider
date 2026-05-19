@@ -42,7 +42,7 @@ runs:
       uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
       with:
         path: /tmp/rust-wheel
-        key: rust-wheel-${{ runner.os }}-${{ runner.arch }}-py${{ steps.pip.outputs.python_version }}-${{ hashFiles('packages/rust/javdb_rust_core/src/**', 'packages/rust/javdb_rust_core/Cargo.toml', 'packages/rust/javdb_rust_core/Cargo.lock') }}
+        key: rust-wheel-${{ runner.os }}-${{ runner.arch }}-py${{ steps.pip.outputs.python_version }}-${{ hashFiles('javdb/rust_core/src/**', 'javdb/rust_core/Cargo.toml', 'javdb/rust_core/Cargo.lock') }}
 
     - name: Install from cached wheel
       if: steps.wheel-cache.outputs.cache-hit == 'true'
@@ -62,8 +62,8 @@ runs:
         path: |
           ~/.cargo/registry
           ~/.cargo/git
-          packages/rust/javdb_rust_core/target
-        key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ hashFiles('packages/rust/javdb_rust_core/Cargo.lock') }}
+          javdb/rust_core/target
+        key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ hashFiles('javdb/rust_core/Cargo.lock') }}
         restore-keys: |
           ${{ runner.os }}-${{ runner.arch }}-cargo-
 
@@ -73,7 +73,7 @@ runs:
       run: |
         ${{ steps.pip.outputs.cmd }} install maturin[patchelf]
         mkdir -p /tmp/rust-wheel
-        cd packages/rust/javdb_rust_core
+        cd javdb/rust_core
         # User installs (common on self-hosted) put scripts in ~/.local/bin, which is often not on PATH.
         export PATH="${HOME}/.local/bin:${PATH}"
         ${{ steps.pip.outputs.python_cmd }} -m maturin build --release --out /tmp/rust-wheel

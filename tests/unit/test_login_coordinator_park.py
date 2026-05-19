@@ -1,5 +1,5 @@
 """Tests for the cross-runtime ``GlobalLoginState`` integration in
-:class:`packages.python.javdb_spider.fetch.login_coordinator.LoginCoordinator`.
+:class:`javdb.spider.fetch.login_coordinator.LoginCoordinator`.
 
 Focus areas (mirrors plan §B4):
 
@@ -36,8 +36,8 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-import packages.python.javdb_spider.runtime.state as state_mod  # noqa: E402
-from packages.python.javdb_platform.login_state_client import (  # noqa: E402
+import javdb.spider.runtime.state as state_mod  # noqa: E402
+from javdb.proxy.coordinator.login_state_client import (  # noqa: E402
     AcquireLeaseResult,
     InvalidateResult,
     LoginStateGetResult,
@@ -46,8 +46,8 @@ from packages.python.javdb_platform.login_state_client import (  # noqa: E402
     RecordAttemptResult,
     ReleaseLeaseResult,
 )
-from packages.python.javdb_spider.fetch import login_coordinator as lc_mod  # noqa: E402
-from packages.python.javdb_spider.fetch.login_coordinator import (  # noqa: E402
+from javdb.spider.fetch import login_coordinator as lc_mod  # noqa: E402
+from javdb.spider.fetch.login_coordinator import (  # noqa: E402
     LoginCoordinator,
 )
 
@@ -550,7 +550,7 @@ class TestHandleLoginRequiredFailOpenWithoutDO:
     def test_publish_helper_short_circuits_when_client_none(self, monkeypatch):
         """Companion check: ``_publish_login_state_to_do`` (called from
         ``attempt_login_refresh``) must early-return without exception."""
-        from packages.python.javdb_spider.fetch import session as session_mod
+        from javdb.spider.fetch import session as session_mod
         state_mod.global_login_state_client = None
         state_mod.current_login_state_version = None
         # No exception, no version bump.
@@ -563,7 +563,7 @@ class TestHandleLoginRequiredFailOpenWithoutDO:
         index-phase cookie inheritance path.  We verify the early-return by
         asserting that ``state.refreshed_session_cookie`` stays at its
         sentinel."""
-        from packages.python.javdb_spider.fetch import fetch_engine as fe_mod
+        from javdb.spider.fetch import fetch_engine as fe_mod
 
         state_mod.global_login_state_client = None
         state_mod.refreshed_session_cookie = None
@@ -583,7 +583,7 @@ class TestHandleLoginRequiredFailOpenWithoutDO:
         assert state_mod.current_login_state_version is None
 
     def test_inherit_login_state_swallows_unexpected_do_error(self):
-        from packages.python.javdb_spider.fetch import fetch_engine as fe_mod
+        from javdb.spider.fetch import fetch_engine as fe_mod
 
         client = MagicMock()
         client.get_state.side_effect = RuntimeError("boom")

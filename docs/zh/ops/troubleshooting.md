@@ -157,7 +157,7 @@ JAVDB AutoSpider 的常见问题及解决方案。
 **历史格式问题**
 - 系统会自动迁移旧格式。如果问题持续，运行：
   ```bash
-  python3 packages/python/javdb_migrations/tools/update_history_format.py
+  python3 javdb/migrations/tools/update_history_format.py
   ```
 - 有关所有可用迁移工具，请参阅 [migration-scripts.md](migration-scripts.md)。
 

@@ -16,8 +16,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-import scripts.audit_archive as audit_archive
-import utils.infra.db as db_mod
+import apps.cli.db.audit_archive as audit_archive
+import javdb.storage.db.db as db_mod
 
 
 # ── Fixtures ───────────────────────────────────────────────────────────

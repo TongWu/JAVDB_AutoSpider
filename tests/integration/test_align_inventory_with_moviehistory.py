@@ -10,7 +10,7 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from migration.tools.align_inventory_with_moviehistory import (
+from javdb.migrations.tools.align_inventory_with_moviehistory import (
     _RESULT_FIELDNAMES,
     _write_csv,
     _write_consolidated_result_csv,
@@ -223,7 +223,7 @@ def test_write_consolidated_result_csv_merges_legacy_files_and_dedupes(temp_dir)
 
 
 def test_run_alignment_skips_empty_auxiliary_reports(monkeypatch, temp_dir):
-    from migration.tools import align_inventory_with_moviehistory as mod
+    from javdb.migrations.tools import align_inventory_with_moviehistory as mod
 
     class FakeDetail:
         parse_success = True
@@ -346,7 +346,7 @@ def test_compute_missing_codes_skip_and_only_codes_combined():
 
 def test_db_align_no_exact_match_roundtrip(temp_dir):
     import sqlite3
-    from packages.python.javdb_platform.db import (
+    from javdb.storage.db.db import (
         db_upsert_align_no_exact_match,
         db_load_align_no_exact_match_codes,
         db_delete_align_no_exact_match,

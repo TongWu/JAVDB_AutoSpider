@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import hmac
+import json
 import os
 import secrets
 import threading
 import time
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 import jwt
@@ -15,13 +17,71 @@ from fastapi import HTTPException, Request
 from passlib.context import CryptContext
 
 from apps.api.services import context
+from javdb.infra.config import cfg
 
 PASSWORD_CTX = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 _RUNTIME_ENV = os.getenv("ENVIRONMENT", os.getenv("FLASK_ENV", "")).strip().lower()
 _IS_PRODUCTION_ENV = _RUNTIME_ENV == "production"
 
-API_SECRET_KEY = os.getenv("API_SECRET_KEY", "").strip()
+# Path to the API config override store (reports/api_config_store.json).
+# This is the same file written by config_service.save_store() — kept as a
+# module-level constant so tests can monkeypatch it.
+_STORE_PATH = Path(__file__).resolve().parents[3] / "reports" / "api_config_store.json"
+
+
+def _read_store_value(name: str) -> str | None:
+    """Read a single key from the API config override store, if it exists.
+
+    Returns ``None`` when the store is absent, unreadable, or lacks *name*.
+    The store may contain encrypted blobs for sensitive keys — those are
+    returned as-is (a raw ``{"enc": "..."}`` dict), which the caller treats
+    as absent since they cannot be decrypted without the Fernet key.  In
+    practice this only matters for SENSITIVE_KEYS like QB_PASSWORD; the auth
+    fields (ADMIN_PASSWORD, API_SECRET_KEY, …) are stored as plaintext in the
+    store by config_service.save_store() when no encryption key is configured.
+    """
+    try:
+        if not _STORE_PATH.exists():
+            return None
+        data = json.loads(_STORE_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(data, dict):
+        return None
+    val = data.get(name)
+    if val is None:
+        return None
+    # Encrypted blobs are dicts with an "enc" key; we cannot decrypt them here
+    # (no Fernet instance), so treat them as absent.
+    if isinstance(val, dict):
+        return None
+    return str(val)
+
+
+def _resolve(name: str, default: str = "") -> str:
+    """Return *name* using precedence: env > config.py > override store > default.
+
+    - Empty env values fall through (unset and empty are treated the same).
+    - config.py is the operator-owned authoritative source for local deploys.
+    - The override store (reports/api_config_store.json) captures values set
+      via PUT /api/config or POST /api/explore/sync-cookie so that wizard
+      changes are picked up after a BE restart without touching config.py.
+    """
+    env_val = os.getenv(name)
+    if env_val is not None and env_val.strip():
+        return env_val.strip()
+    cfg_val = cfg(name, "")
+    cfg_str = str(cfg_val).strip() if cfg_val is not None else ""
+    if cfg_str:
+        return cfg_str
+    store_val = _read_store_value(name)
+    if store_val is not None and store_val.strip():
+        return store_val.strip()
+    return default
+
+
+API_SECRET_KEY = _resolve("API_SECRET_KEY", "")
 if not API_SECRET_KEY:
     if _IS_PRODUCTION_ENV:
         raise RuntimeError("API_SECRET_KEY is required.")
@@ -35,11 +95,11 @@ if len(API_SECRET_KEY) < 32:
         raise RuntimeError(message)
     context.logger.warning("%s Running in non-production mode.", message)
 
-ACCESS_TOKEN_EXPIRE_SECONDS = int(os.getenv("ACCESS_TOKEN_EXPIRE_SECONDS", "1800"))
+ACCESS_TOKEN_EXPIRE_SECONDS = int(_resolve("ACCESS_TOKEN_EXPIRE_SECONDS", "1800") or "1800")
 REFRESH_TOKEN_EXPIRE_SECONDS = int(
-    os.getenv("REFRESH_TOKEN_EXPIRE_SECONDS", str(7 * 24 * 3600))
+    _resolve("REFRESH_TOKEN_EXPIRE_SECONDS", str(7 * 24 * 3600)) or str(7 * 24 * 3600)
 )
-MAX_SESSIONS_PER_USER = int(os.getenv("MAX_SESSIONS_PER_USER", "3"))
+MAX_SESSIONS_PER_USER = int(_resolve("MAX_SESSIONS_PER_USER", "3") or "3")
 
 ACTIVE_TOKENS: Dict[str, list[tuple[str, int]]] = {}
 REVOKED_JTI: Dict[str, int] = {}
@@ -48,6 +108,7 @@ _AUTH_LOCK = threading.Lock()
 
 METHOD_LIMITS = {
     "/api/auth/login": (5, 60, "ip"),
+    "/api/auth/change-password": (5, 60, "user"),
     "/api/tasks/daily": (10, 60, "user"),
     "/api/tasks/adhoc": (10, 60, "user"),
     "/api/config": (20, 60, "user"),
@@ -59,10 +120,10 @@ def _hash_password(plain: str) -> str:
     return PASSWORD_CTX.hash(plain)
 
 
-ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
-ADMIN_PASSWORD_HASH = os.getenv("ADMIN_PASSWORD_HASH")
+ADMIN_USERNAME = _resolve("ADMIN_USERNAME", "admin") or "admin"
+ADMIN_PASSWORD_HASH = _resolve("ADMIN_PASSWORD_HASH") or None
 if not ADMIN_PASSWORD_HASH:
-    admin_password = os.getenv("ADMIN_PASSWORD", "").strip()
+    admin_password = _resolve("ADMIN_PASSWORD")
     if not admin_password:
         if _IS_PRODUCTION_ENV:
             raise RuntimeError(
@@ -75,13 +136,13 @@ if not ADMIN_PASSWORD_HASH:
         )
     ADMIN_PASSWORD_HASH = _hash_password(admin_password)
 
-READONLY_USERNAME = os.getenv("READONLY_USERNAME", "readonly")
-READONLY_PASSWORD_HASH = os.getenv("READONLY_PASSWORD_HASH")
+READONLY_USERNAME = _resolve("READONLY_USERNAME", "readonly") or "readonly"
+READONLY_PASSWORD_HASH = _resolve("READONLY_PASSWORD_HASH") or None
 if not READONLY_PASSWORD_HASH:
-    readonly_password = os.getenv("READONLY_PASSWORD", "").strip()
+    readonly_password = _resolve("READONLY_PASSWORD")
     if readonly_password:
         context.logger.warning(
-            "READONLY_PASSWORD is provided in plaintext env and will be hashed at startup."
+            "READONLY_PASSWORD is provided in plaintext and will be hashed at startup."
         )
         READONLY_PASSWORD_HASH = _hash_password(readonly_password)
 

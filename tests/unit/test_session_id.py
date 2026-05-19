@@ -7,7 +7,7 @@ import sys
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-import utils.infra.db as db_mod
+import javdb.storage.db.db as db_mod
 
 
 _PATTERN = re.compile(r"^\d{8}T\d{6}\.\d{6}Z-[0-9a-f]{4}-[0-9a-f]{4}$")

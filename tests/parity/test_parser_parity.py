@@ -1,4 +1,4 @@
-"""Drift detection between javdb_rust_core parsers and the Python fallbacks.
+"""Drift detection between javdb.rust_core parsers and the Python fallbacks.
 
 The Python parsers in ``apps/api/parsers/{detail,index,tag}_parser.py`` are
 FROZEN (see the file headers). They exist only as fallbacks for environments
@@ -31,8 +31,8 @@ if REPO_ROOT not in sys.path:
 
 HTML_DIR = os.path.join(REPO_ROOT, "html")
 
-javdb_rust_core = pytest.importorskip(
-    "javdb_rust_core",
+rust_core = pytest.importorskip(
+    "javdb.rust_core",
     reason="Rust extension not installed — parity test requires both implementations.",
 )
 
@@ -40,9 +40,9 @@ from apps.api.parsers.detail_parser import parse_detail_page as py_parse_detail
 from apps.api.parsers.index_parser import parse_index_page as py_parse_index
 from apps.api.parsers.tag_parser import parse_tag_page as py_parse_tag
 
-rust_parse_index = javdb_rust_core.parse_index_page
-rust_parse_detail = javdb_rust_core.parse_detail_page
-rust_parse_tag = javdb_rust_core.parse_tag_page
+rust_parse_index = rust_core.parse_index_page
+rust_parse_detail = rust_core.parse_detail_page
+rust_parse_tag = rust_core.parse_tag_page
 
 
 def _load(filename: str) -> str:

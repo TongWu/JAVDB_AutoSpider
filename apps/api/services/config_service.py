@@ -12,14 +12,14 @@ from cryptography.fernet import Fernet, InvalidToken
 from fastapi import HTTPException
 
 from apps.api.services import context
-from packages.python.javdb_core.masking import mask_full, mask_proxy_url
-from packages.python.javdb_platform.config_generator import (
+from javdb.infra.masking import mask_full, mask_proxy_url
+from javdb.infra.config_generator import (
     get_env_bool,
     get_env_float,
     get_env_int,
     get_env_json,
 )
-from packages.python.javdb_platform.qb_config import build_qb_base_url
+from javdb.integrations.qb.config import build_qb_base_url
 
 
 def _build_fernet() -> Fernet | None:
@@ -205,7 +205,7 @@ def run_config_generator(config_values: Dict[str, Any]) -> None:
     cmd = [
         "python3",
         "-m",
-        "apps.cli.config_generator",
+        "apps.cli.ops.config_generator",
         "--output",
         "config.py",
         "--quiet",
@@ -214,11 +214,14 @@ def run_config_generator(config_values: Dict[str, Any]) -> None:
     os.chmod(context.REPO_ROOT / "config.py", 0o600)
 
 
-def get_config_payload(username: str) -> Dict[str, Any]:
+def get_config_payload(username: str, *, include_secrets: bool = False) -> Dict[str, Any]:
     payload = load_runtime_config()
-    masked = mask_config(payload)
-    context.audit_logger.info("config_read username=%s", username)
-    return masked
+    context.audit_logger.info(
+        "config_read username=%s include_secrets=%s", username, include_secrets
+    )
+    if include_secrets:
+        return payload
+    return mask_config(payload)
 
 
 def get_config_meta_payload() -> Dict[str, Any]:
@@ -226,16 +229,30 @@ def get_config_meta_payload() -> Dict[str, Any]:
 
 
 def update_config_payload(config_updates: Dict[str, Any], username: str) -> Dict[str, str]:
-    config_data = load_runtime_config()
+    # Sparse store-write: only the keys the caller asked to change land in
+    # the override store. Reading uses load_runtime_config() which merges
+    # config.py + store, so callers still see a complete config. Writing
+    # the full merged dict back (previous behaviour) made the store a
+    # config.py snapshot and amplified any single bad value into a
+    # permanent override — e.g. an accidental "QB_URL = <ADHOC_URL>"
+    # entered once in the wizard would then mask config.py forever.
+    store_data = load_store()
     changed_keys: list[str] = []
     for key, value in config_updates.items():
         coerced = coerce_value(key, value)
         if coerced == "__UNCHANGED__":
             continue
-        config_data[key] = coerced
+        store_data[key] = coerced
         changed_keys.append(key)
-    save_store(config_data)
-    run_config_generator(config_data)
+    save_store(store_data)
+    # NOTE: do NOT call run_config_generator() here. It rewrites config.py
+    # from CONFIG_MAP only, dropping every field not registered there —
+    # including ADMIN_*, API_SECRET_KEY, READONLY_*, QB_URL_ADHOC, and any
+    # user-added custom field. The override store + load_runtime_config()
+    # merge is sufficient — config.py stays as the user wrote it.
+    # If a future need arises (e.g. operator wants config.py regenerated
+    # for some deploy workflow), expose a separate endpoint for it; do
+    # not mix it with the read-write API path.
     context.audit_logger.info(
         "config_update username=%s changed=%s",
         username,
@@ -245,10 +262,15 @@ def update_config_payload(config_updates: Dict[str, Any], username: str) -> Dict
 
 
 def set_javdb_session_cookie(cookie: str, username: str) -> Dict[str, str]:
-    config_data = load_runtime_config()
-    config_data["JAVDB_SESSION_COOKIE"] = cookie.strip()
-    save_store(config_data)
-    run_config_generator(config_data)
+    # Sparse store-write: only the cookie key is persisted. See the note
+    # on update_config_payload above for why we don't write the full
+    # merged config back to the store.
+    store_data = load_store()
+    store_data["JAVDB_SESSION_COOKIE"] = cookie.strip()
+    save_store(store_data)
+    # NOTE: do NOT call run_config_generator() here — same data-loss reason
+    # as update_config_payload above. The session cookie is stored in the
+    # override store and picked up by load_runtime_config() on the next read.
     context.audit_logger.info("explore_sync_cookie username=%s", username)
     return {"status": "ok"}
 

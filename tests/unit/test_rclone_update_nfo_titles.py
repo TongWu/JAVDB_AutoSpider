@@ -1,6 +1,6 @@
 import pytest
 
-from scripts import rclone_update_nfo_titles as updater
+from apps.cli.rclone import update_nfo_titles as updater
 
 
 def test_run_rclone_uses_default_timeout(monkeypatch):

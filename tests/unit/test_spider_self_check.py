@@ -1,6 +1,6 @@
 """Unit tests for the spider self-check that prevents duplicate per-run sessions.
 
-The full spider entrypoint (``packages.python.javdb_spider.app.run_service``)
+The full spider entrypoint (``javdb.spider.app.run_service``)
 pulls in a lot of network / config infrastructure, so this file exercises
 the self-check helper directly and asserts the contract:
 
@@ -16,7 +16,7 @@ import sqlite3
 
 import pytest
 
-import utils.infra.db as db_mod
+import javdb.storage.db.db as db_mod
 
 
 class TestSelfCheckHelper:

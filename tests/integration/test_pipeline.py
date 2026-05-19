@@ -13,8 +13,8 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 sys.path.insert(0, project_root)
 
 # Import functions from email_notification script
-import scripts.email_notification as email_notification
-from scripts.email_notification import (
+import apps.cli.notify.email as email_notification
+from apps.cli.notify.email import (
     analyze_spider_log,
     analyze_uploader_log,
     analyze_pikpak_log,
@@ -29,7 +29,7 @@ from scripts.email_notification import (
 )
 
 # Import mask_sensitive_info from git_helper (it's now the canonical location)
-from utils.infra.git_helper import mask_sensitive_info
+from javdb.infra.git_helper import mask_sensitive_info
 
 
 def get_log_summary(log_path, lines=200):
@@ -591,8 +591,8 @@ class TestExtractDedupStatistics:
         }
 
     def test_extract_dedup_statistics_filters_items_to_executor_window(self, temp_dir, monkeypatch):
-        import packages.python.javdb_platform.config_helper as config_helper
-        import scripts.email_notification as email_notification
+        import javdb.infra.config as config_helper
+        import apps.cli.notify.email as email_notification
 
         monkeypatch.setattr(config_helper, 'use_sqlite', lambda: False)
 
@@ -640,7 +640,7 @@ class TestExtractDedupStatistics:
         assert 'IPZZ-414' in stats['deleted_items'][0]
 
     def test_extract_dedup_statistics_tracks_redownload_upgrades(self, temp_dir, monkeypatch):
-        import packages.python.javdb_platform.config_helper as config_helper
+        import javdb.infra.config as config_helper
 
         monkeypatch.setattr(config_helper, 'use_sqlite', lambda: False)
         monkeypatch.setattr(email_notification, 'DEDUP_LOG_FILE', '/nonexistent/path')

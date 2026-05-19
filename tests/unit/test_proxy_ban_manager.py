@@ -14,7 +14,7 @@ from unittest.mock import patch, MagicMock
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from utils.proxy_ban_manager import (
+from javdb.proxy.ban_manager import (
     ProxyBanRecord,
     ProxyBanManager,
     get_ban_manager,
@@ -194,7 +194,7 @@ class TestGetBanManager:
     
     def test_get_ban_manager_creates_singleton(self):
         """Test that get_ban_manager creates a singleton instance."""
-        import utils.proxy_ban_manager as pbm
+        import javdb.proxy.ban_manager as pbm
         pbm._global_ban_manager = None
         
         manager1 = get_ban_manager()
@@ -218,7 +218,7 @@ class TestRemoteBanHook:
     def setup_method(self):
         # Defensive: every test starts with the hook cleared so cross-test
         # leaks (a previous test forgetting to unregister) can't mask bugs.
-        from packages.python.javdb_platform.proxy_ban_manager import (
+        from javdb.proxy.ban_manager import (
             set_remote_ban_hook,
             set_remote_unban_hook,
         )
@@ -226,7 +226,7 @@ class TestRemoteBanHook:
         set_remote_unban_hook(None)
 
     def teardown_method(self):
-        from packages.python.javdb_platform.proxy_ban_manager import (
+        from javdb.proxy.ban_manager import (
             set_remote_ban_hook,
             set_remote_unban_hook,
         )
@@ -234,7 +234,7 @@ class TestRemoteBanHook:
         set_remote_unban_hook(None)
 
     def test_add_ban_fires_remote_hook_exactly_once(self):
-        from packages.python.javdb_platform.proxy_ban_manager import (
+        from javdb.proxy.ban_manager import (
             set_remote_ban_hook,
         )
         captured: list = []
@@ -245,7 +245,7 @@ class TestRemoteBanHook:
         assert captured == ["proxy-A"]
 
     def test_add_ban_does_not_fire_for_already_banned_proxy(self):
-        from packages.python.javdb_platform.proxy_ban_manager import (
+        from javdb.proxy.ban_manager import (
             set_remote_ban_hook,
         )
         captured: list = []
@@ -259,7 +259,7 @@ class TestRemoteBanHook:
         assert captured == ["proxy-A"]
 
     def test_add_ban_swallows_hook_exceptions(self):
-        from packages.python.javdb_platform.proxy_ban_manager import (
+        from javdb.proxy.ban_manager import (
             set_remote_ban_hook,
         )
 
@@ -273,7 +273,7 @@ class TestRemoteBanHook:
         assert manager.is_proxy_banned("proxy-A") is True
 
     def test_clearing_remote_hook_restores_local_only_behaviour(self):
-        from packages.python.javdb_platform.proxy_ban_manager import (
+        from javdb.proxy.ban_manager import (
             set_remote_ban_hook,
         )
         captured: list = []
@@ -287,7 +287,7 @@ class TestRemoteBanHook:
 
     def test_remote_hook_skips_empty_proxy_name(self):
         """Defensive: a falsy name must not reach the hook (which would 4xx)."""
-        from packages.python.javdb_platform.proxy_ban_manager import (
+        from javdb.proxy.ban_manager import (
             _dispatch_remote_ban,
             set_remote_ban_hook,
         )

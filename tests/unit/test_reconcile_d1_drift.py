@@ -15,7 +15,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from packages.python.javdb_migrations.tools import reconcile_d1_drift as recon  # noqa: E402
+from javdb.migrations.tools import reconcile_d1_drift as recon  # noqa: E402
 
 
 # ── Test doubles for D1 ───────────────────────────────────────────────────
@@ -601,7 +601,7 @@ def test_lookup_failure_does_not_trigger_spurious_insert(history_sqlite):
     consumer treated as "row missing → INSERT", producing duplicates the next
     time D1 came back online.
     """
-    from packages.python.javdb_platform.d1_client import D1Error
+    from javdb.storage.d1_client import D1Error
 
     sqlite_path, sqlite_conn = history_sqlite
     sqlite_conn.execute(
@@ -663,7 +663,7 @@ def test_flush_writes_falls_back_per_row_on_batch_failure():
     Locks in resilience against race-induced UNIQUE collisions: one bad row
     must not cause the whole batch's worth of work to be lost.
     """
-    from packages.python.javdb_platform.d1_client import D1Error
+    from javdb.storage.d1_client import D1Error
 
     class FlakyD1:
         def __init__(self):
@@ -878,7 +878,7 @@ class TestEnvIntFallback:
 def test_module_imports_with_unparsable_d1_batch_limit(monkeypatch):
     """Regression: ``import reconcile_d1_drift`` must succeed even when
     ``D1_BATCH_LIMIT`` is set to something unparsable, mirroring the
-    behaviour of :mod:`packages.python.javdb_platform.d1_client`.
+    behaviour of :mod:`javdb.storage.d1_client`.
 
     Re-imports the module under a poisoned env var to exercise the
     module-level ``_BATCH_SIZE = _env_int(...)`` line specifically.

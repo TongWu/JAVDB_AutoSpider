@@ -20,16 +20,16 @@ sys.modules['pikpakapi'] = mock_pikpakapi
 import pytest
 import tempfile
 import shutil
-import utils.infra.db as _db_mod
-import utils.infra.config_helper as _cfg_mod
-import scripts.spider.services.dedup as _dedup_mod
-import packages.python.javdb_platform.db_connection as _db_conn_mod
-import packages.python.javdb_platform.db_history_read as _db_history_read_mod
-import packages.python.javdb_platform.db_history_write as _db_history_write_mod
-import packages.python.javdb_platform.db_reports as _db_reports_mod
-import packages.python.javdb_platform.db_migrations as _db_migrations_mod
-import packages.python.javdb_platform.db_operations as _db_operations_mod
-import packages.python.javdb_platform.db_stats as _db_stats_mod
+import javdb.storage.db.db as _db_mod
+import javdb.infra.config as _cfg_mod
+import javdb.spider.services.dedup as _dedup_mod
+import javdb.storage.db.db_connection as _db_conn_mod
+import javdb.storage.db.db_history_read as _db_history_read_mod
+import javdb.storage.db.db_history_write as _db_history_write_mod
+import javdb.storage.db.db_reports as _db_reports_mod
+import javdb.storage.db.db_migrations as _db_migrations_mod
+import javdb.storage.db.db_operations as _db_operations_mod
+import javdb.storage.db.db_stats as _db_stats_mod
 
 
 @pytest.fixture(autouse=True)
@@ -50,12 +50,15 @@ def _isolate_sqlite(tmp_path):
     orig_reports = _db_mod.REPORTS_DB_PATH
     orig_operations = _db_mod.OPERATIONS_DB_PATH
     orig_override = _cfg_mod._storage_mode_override
+    orig_storage_backend = os.environ.get("STORAGE_BACKEND")
 
     _db_mod.DB_PATH = test_db
     _db_mod.HISTORY_DB_PATH = test_db
     _db_mod.REPORTS_DB_PATH = test_db
     _db_mod.OPERATIONS_DB_PATH = test_db
     _cfg_mod._storage_mode_override = 'db'
+    # The local config may default to D1/dual, but this fixture promises SQLite.
+    os.environ["STORAGE_BACKEND"] = "sqlite"
 
     # Patch db_connection module paths (used by split db_* modules)
     orig_conn_history = _db_conn_mod.HISTORY_DB_PATH
@@ -90,6 +93,10 @@ def _isolate_sqlite(tmp_path):
     _db_conn_mod.REPORTS_DB_PATH = orig_conn_reports
     _db_conn_mod.OPERATIONS_DB_PATH = orig_conn_operations
     _cfg_mod._storage_mode_override = orig_override
+    if orig_storage_backend is None:
+        os.environ.pop("STORAGE_BACKEND", None)
+    else:
+        os.environ["STORAGE_BACKEND"] = orig_storage_backend
 
 
 @pytest.fixture
@@ -344,4 +351,3 @@ def sample_magnets():
             'timestamp': '2024-01-11'
         }
     ]
-

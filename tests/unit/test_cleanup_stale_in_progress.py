@@ -1,11 +1,11 @@
-"""Unit tests for ``apps.cli.cleanup_stale_in_progress``."""
+"""Unit tests for ``apps.cli.db.cleanup_stale_in_progress``."""
 
 from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-import apps.cli.cleanup_stale_in_progress as cleanup_cli
-import utils.infra.db as db_mod
+import apps.cli.db.cleanup_stale_in_progress as cleanup_cli
+import javdb.storage.db.db as db_mod
 
 
 def _make_session(

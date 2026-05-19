@@ -6,7 +6,7 @@ Usage::
     from apps.api.parsers import parse_index_page, parse_detail_page
     from apps.api.parsers import parse_category_page, parse_top_page
 
-Prefers the Rust implementation (``javdb_rust_core``) when available,
+Prefers the Rust implementation (``javdb.rust_core``) when available,
 falling back to the pure-Python parsers otherwise.
 """
 
@@ -15,7 +15,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 try:
-    from javdb_rust_core import (
+    from javdb.rust_core import (
         parse_index_page,
         parse_detail_page,
         parse_category_page,

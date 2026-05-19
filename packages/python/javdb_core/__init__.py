@@ -1,1 +1,0 @@
-"""Shared domain-level helpers."""

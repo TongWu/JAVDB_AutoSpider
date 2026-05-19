@@ -5,6 +5,11 @@ test_history_integrity.py
 logs/
 html/
 
+# Sibling repos checked out next to this one (wiki + frontend + Worker)
+/JAVDB_AutoSpider.wiki/
+/JAVDB_AutoSpider_Proxycoordinator/
+/JAVDB_AutoSpider_Web/
+
 # Local captcha image
 javdb_captcha.png
 
@@ -77,6 +82,8 @@ coverage.xml
 # Compiled files
 rust_core/target/
 packages/rust/**/target/
+javdb/rust_core/target/
+javdb/rust_core/python/javdb/*.so
 **/*.rs.bk
 **/*.rs.bak
 
@@ -100,12 +107,19 @@ rust-analyzer/
 rust_core/target/wheels/
 rust_core/target/dist/
 rust_core/target/sdist/
+javdb/rust_core/target/wheels/
+javdb/rust_core/target/dist/
+javdb/rust_core/target/sdist/
 
 # Private keys / certificates
 *.pem
 *.key
 *.p12
 *.pfx
+
+# API override store — runtime state, contains secrets (passwords, cookies,
+# API tokens). Lives next to the SQLite DBs because both are runtime state.
+reports/api_config_store.json
 
 # SQLite temporary files
 *.db-wal
@@ -121,3 +135,6 @@ proxy_coordinator/
 
 # Cursor rules
 .cursor/
+
+# Superpowers brainstorm mockups
+.superpowers/

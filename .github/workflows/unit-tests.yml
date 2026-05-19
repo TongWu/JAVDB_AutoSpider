@@ -26,8 +26,8 @@ on:
       - '.github/workflows/unit-tests.yml'
       - 'config.py.example'
       - 'html/**'
-      - 'packages/rust/javdb_rust_core/Cargo.toml'
-      - 'packages/rust/javdb_rust_core/Cargo.lock'
+      - 'javdb/rust_core/Cargo.toml'
+      - 'javdb/rust_core/Cargo.lock'
       - 'pytest.ini'
       - 'requirements.txt'
       - 'docker/**'
@@ -42,8 +42,8 @@ on:
       - '.github/workflows/unit-tests.yml'
       - 'config.py.example'
       - 'html/**'
-      - 'packages/rust/javdb_rust_core/Cargo.toml'
-      - 'packages/rust/javdb_rust_core/Cargo.lock'
+      - 'javdb/rust_core/Cargo.toml'
+      - 'javdb/rust_core/Cargo.lock'
       - 'pytest.ini'
       - 'requirements.txt'
       - 'docker/**'
@@ -114,17 +114,17 @@ jobs:
         path: |
           ~/.cargo/registry
           ~/.cargo/git
-          packages/rust/javdb_rust_core/target
-        key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ hashFiles('packages/rust/javdb_rust_core/Cargo.lock') }}
+          javdb/rust_core/target
+        key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ hashFiles('javdb/rust_core/Cargo.lock') }}
         restore-keys: |
           ${{ runner.os }}-${{ runner.arch }}-cargo-
 
     - name: Run cargo check
-      working-directory: packages/rust/javdb_rust_core
+      working-directory: javdb/rust_core
       run: cargo check
 
     - name: Run cargo test
-      working-directory: packages/rust/javdb_rust_core
+      working-directory: javdb/rust_core
       env:
         RUST_FULL: ${{ needs.detect-impact.outputs.rust_full }}
         RUST_TEST_FILTERS: ${{ needs.detect-impact.outputs.rust_test_filters }}
@@ -146,6 +146,8 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      with:
+        lfs: true
 
     - name: Set up Python, venv, dependencies, optional Rust extension
       uses: ./.github/actions/setup-python-env
@@ -177,6 +179,8 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      with:
+        lfs: true
 
     - name: Set up Python, venv, dependencies, optional Rust extension
       uses: ./.github/actions/setup-python-env

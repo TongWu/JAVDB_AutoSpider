@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import atexit
 
-from packages.python.javdb_platform.db_connection import close_db
-from packages.python.javdb_spider.app.main import main
+from javdb.storage.db.db_connection import close_db
+from javdb.spider.app.main import main
 
 atexit.register(close_db)
 

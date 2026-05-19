@@ -20,8 +20,8 @@ import os
 
 import pytest
 
-import utils.infra.db as db_mod
-from packages.python.javdb_platform import config_helper
+import javdb.storage.db.db as db_mod
+import javdb.infra.config as config_helper
 
 
 @pytest.fixture

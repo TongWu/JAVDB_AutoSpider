@@ -27,8 +27,8 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-import packages.python.javdb_spider.runtime.state as state  # noqa: E402
-from packages.python.javdb_platform.runner_registry_client import (  # noqa: E402
+import javdb.spider.runtime.state as state  # noqa: E402
+from javdb.proxy.coordinator.runner_registry_client import (  # noqa: E402
     HeartbeatResult,
     PoolHashBucket,
     RegisterResult,
@@ -64,7 +64,7 @@ def _reset_globals(monkeypatch):
 
 def _patch_cfg(monkeypatch, **values):
     """Patch ``config_helper.cfg`` to return values from *values* dict."""
-    from packages.python.javdb_platform import config_helper
+    import javdb.infra.config as config_helper
 
     def fake_cfg(name, default=""):
         return values.get(name, default)
@@ -151,7 +151,7 @@ def test_setup_calls_register_and_starts_heartbeat_daemon(monkeypatch):
 
     fake_client = _make_client_mock()
     with patch(
-        "packages.python.javdb_spider.runtime.state.create_runner_registry_client_from_env",
+        "javdb.spider.runtime.state.create_runner_registry_client_from_env",
         return_value=fake_client,
     ):
         client = state.setup_runner_registry_client()
@@ -180,7 +180,7 @@ def test_setup_is_idempotent(monkeypatch):
     _enabled_cfg(monkeypatch)
     fake_client = _make_client_mock()
     with patch(
-        "packages.python.javdb_spider.runtime.state.create_runner_registry_client_from_env",
+        "javdb.spider.runtime.state.create_runner_registry_client_from_env",
         return_value=fake_client,
     ):
         first = state.setup_runner_registry_client()
@@ -196,7 +196,7 @@ def test_setup_continues_on_register_unavailable(monkeypatch):
     fake_client = _make_client_mock()
     fake_client.register.side_effect = RunnerRegistryUnavailable("upstream 5xx")
     with patch(
-        "packages.python.javdb_spider.runtime.state.create_runner_registry_client_from_env",
+        "javdb.spider.runtime.state.create_runner_registry_client_from_env",
         return_value=fake_client,
     ):
         result = state.setup_runner_registry_client()
@@ -212,7 +212,7 @@ def test_setup_continues_on_unexpected_register_exception(monkeypatch):
     fake_client = _make_client_mock()
     fake_client.register.side_effect = RuntimeError("unexpected")
     with patch(
-        "packages.python.javdb_spider.runtime.state.create_runner_registry_client_from_env",
+        "javdb.spider.runtime.state.create_runner_registry_client_from_env",
         return_value=fake_client,
     ):
         result = state.setup_runner_registry_client()
@@ -240,10 +240,10 @@ def test_drift_warning_emitted_when_self_is_minority(monkeypatch, caplog):
 
     # Force the self-hash to match the minority bucket so the warning fires.
     with patch(
-        "packages.python.javdb_spider.runtime.state.create_runner_registry_client_from_env",
+        "javdb.spider.runtime.state.create_runner_registry_client_from_env",
         return_value=fake_client,
     ), patch(
-        "packages.python.javdb_spider.runtime.state.proxy_pool_hash",
+        "javdb.spider.runtime.state.proxy_pool_hash",
         return_value="dummy_self",
     ), caplog.at_level(logging.WARNING, logger=state.logger.name):
         state.setup_runner_registry_client()
@@ -273,10 +273,10 @@ def test_drift_warning_quiet_when_in_majority(monkeypatch, caplog):
     )
 
     with patch(
-        "packages.python.javdb_spider.runtime.state.create_runner_registry_client_from_env",
+        "javdb.spider.runtime.state.create_runner_registry_client_from_env",
         return_value=fake_client,
     ), patch(
-        "packages.python.javdb_spider.runtime.state.proxy_pool_hash",
+        "javdb.spider.runtime.state.proxy_pool_hash",
         return_value="majority",
     ), caplog.at_level(logging.WARNING, logger=state.logger.name):
         state.setup_runner_registry_client()
@@ -303,10 +303,10 @@ def test_drift_warning_quiet_when_only_self_in_summary(monkeypatch, caplog):
     )
 
     with patch(
-        "packages.python.javdb_spider.runtime.state.create_runner_registry_client_from_env",
+        "javdb.spider.runtime.state.create_runner_registry_client_from_env",
         return_value=fake_client,
     ), patch(
-        "packages.python.javdb_spider.runtime.state.proxy_pool_hash",
+        "javdb.spider.runtime.state.proxy_pool_hash",
         return_value="solo",
     ), caplog.at_level(logging.WARNING, logger=state.logger.name):
         state.setup_runner_registry_client()
@@ -328,7 +328,11 @@ def test_unregister_at_exit_calls_unregister_and_close(monkeypatch):
 
     state._unregister_runner_at_exit()
 
-    fake_client.unregister.assert_called_once_with(state.runtime_holder_id)
+    # Phase-1 ADR-008 — unregister carries the optional `session` payload
+    # cached in module-level state (None when no session was reported).
+    fake_client.unregister.assert_called_once_with(
+        state.runtime_holder_id, session=None,
+    )
     fake_client.close.assert_called_once()
     assert state._runner_unregistered is True
     assert state.global_runner_registry_client is None

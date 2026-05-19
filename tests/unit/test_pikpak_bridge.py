@@ -186,8 +186,8 @@ class TestPikpakBridgeLogic:
     """Test cases for pikpak_bridge function logic."""
 
     def test_clears_active_session_id_after_impl_returns(self, monkeypatch):
-        import scripts.pikpak_bridge as pikpak_mod
-        from utils.infra import db as db_mod
+        import apps.cli.pikpak.bridge as pikpak_mod
+        import javdb.storage.db.db as db_mod
 
         def fake_impl(*_args, **_kwargs):
             assert db_mod.get_active_session_id() == 42
@@ -347,32 +347,32 @@ class TestPikpakTargetPath:
     """Tests for ``_build_pikpak_target_path`` and segment normalization."""
 
     def test_default_root_when_none(self):
-        from packages.python.javdb_integrations.pikpak_bridge import (
+        from javdb.integrations.pikpak.bridge import (
             _build_pikpak_target_path,
             PIKPAK_ROOT_FOLDER_DEFAULT,
         )
         assert _build_pikpak_target_path(None, 'Ad Hoc') == f"{PIKPAK_ROOT_FOLDER_DEFAULT}/Ad Hoc"
 
     def test_explicit_root_with_category(self):
-        from packages.python.javdb_integrations.pikpak_bridge import (
+        from javdb.integrations.pikpak.bridge import (
             _build_pikpak_target_path,
         )
         assert _build_pikpak_target_path('/Javdb_AutoSpider', 'Ad Hoc') == '/Javdb_AutoSpider/Ad Hoc'
 
     def test_root_without_leading_slash_is_normalized(self):
-        from packages.python.javdb_integrations.pikpak_bridge import (
+        from javdb.integrations.pikpak.bridge import (
             _build_pikpak_target_path,
         )
         assert _build_pikpak_target_path('Javdb_AutoSpider', 'JavDB') == '/Javdb_AutoSpider/JavDB'
 
     def test_root_with_trailing_slash_is_stripped(self):
-        from packages.python.javdb_integrations.pikpak_bridge import (
+        from javdb.integrations.pikpak.bridge import (
             _build_pikpak_target_path,
         )
         assert _build_pikpak_target_path('/Javdb_AutoSpider/', 'Ad Hoc') == '/Javdb_AutoSpider/Ad Hoc'
 
     def test_empty_category_falls_back_to_root(self):
-        from packages.python.javdb_integrations.pikpak_bridge import (
+        from javdb.integrations.pikpak.bridge import (
             _build_pikpak_target_path,
         )
         assert _build_pikpak_target_path('/Javdb_AutoSpider', '') == '/Javdb_AutoSpider'
@@ -380,7 +380,7 @@ class TestPikpakTargetPath:
 
     def test_slash_in_category_is_collapsed(self):
         """A category like ``foo/bar`` must not become two folders."""
-        from packages.python.javdb_integrations.pikpak_bridge import (
+        from javdb.integrations.pikpak.bridge import (
             _build_pikpak_target_path,
         )
         assert _build_pikpak_target_path('/Javdb_AutoSpider', 'foo/bar') == '/Javdb_AutoSpider/foo_bar'
@@ -392,7 +392,7 @@ class TestProcessPikpakBatchRouting:
     def test_batch_uploads_each_magnet_to_its_category_folder(self):
         import asyncio
         from unittest.mock import AsyncMock, patch
-        from packages.python.javdb_integrations.pikpak_bridge import (
+        from javdb.integrations.pikpak.bridge import (
             process_pikpak_batch,
         )
 
@@ -422,7 +422,7 @@ class TestProcessPikpakBatchRouting:
         fake_client.offline_download = AsyncMock(return_value={'task': {'id': 't1'}})
 
         with patch(
-            'packages.python.javdb_integrations.pikpak_bridge.PikPakApi',
+            'javdb.integrations.pikpak.bridge.PikPakApi',
             return_value=fake_client,
         ):
             success, failed = asyncio.run(
@@ -448,7 +448,7 @@ class TestProcessPikpakBatchRouting:
     def test_batch_falls_back_to_root_when_path_lookup_fails(self):
         import asyncio
         from unittest.mock import AsyncMock, patch
-        from packages.python.javdb_integrations.pikpak_bridge import (
+        from javdb.integrations.pikpak.bridge import (
             process_pikpak_batch,
         )
 
@@ -460,7 +460,7 @@ class TestProcessPikpakBatchRouting:
         fake_client.offline_download = AsyncMock(return_value={'task': {'id': 't1'}})
 
         with patch(
-            'packages.python.javdb_integrations.pikpak_bridge.PikPakApi',
+            'javdb.integrations.pikpak.bridge.PikPakApi',
             return_value=fake_client,
         ):
             success, failed = asyncio.run(
@@ -483,7 +483,7 @@ class TestProcessPikpakBatchRouting:
     def test_failed_path_lookup_is_not_cached(self):
         import asyncio
         from unittest.mock import AsyncMock, patch
-        from packages.python.javdb_integrations.pikpak_bridge import (
+        from javdb.integrations.pikpak.bridge import (
             process_pikpak_batch,
         )
 
@@ -498,7 +498,7 @@ class TestProcessPikpakBatchRouting:
         fake_client.offline_download = AsyncMock(return_value={'task': {'id': 't1'}})
 
         with patch(
-            'packages.python.javdb_integrations.pikpak_bridge.PikPakApi',
+            'javdb.integrations.pikpak.bridge.PikPakApi',
             return_value=fake_client,
         ):
             success, failed = asyncio.run(
@@ -527,7 +527,7 @@ class TestRemoveCompletedTorrentsKeepFiles:
 
     def test_calls_delete_with_keep_files_when_completed_present(self):
         from unittest.mock import MagicMock
-        from packages.python.javdb_integrations.pikpak_bridge import (
+        from javdb.integrations.pikpak.bridge import (
             remove_completed_torrents_keep_files,
         )
 
@@ -543,7 +543,7 @@ class TestRemoveCompletedTorrentsKeepFiles:
 
     def test_skips_delete_when_empty(self):
         from unittest.mock import MagicMock
-        from packages.python.javdb_integrations.pikpak_bridge import (
+        from javdb.integrations.pikpak.bridge import (
             remove_completed_torrents_keep_files,
         )
 
@@ -554,7 +554,7 @@ class TestRemoveCompletedTorrentsKeepFiles:
 
     def test_dry_run_does_not_delete(self):
         from unittest.mock import MagicMock
-        from packages.python.javdb_integrations.pikpak_bridge import (
+        from javdb.integrations.pikpak.bridge import (
             remove_completed_torrents_keep_files,
         )
 

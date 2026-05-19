@@ -11,7 +11,7 @@ import requests
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from utils.infra.request_handler import (
+from javdb.infra.request import (
     RequestConfig,
     RequestHandler,
     ProxyHelper,
@@ -1173,13 +1173,13 @@ class TestPauseBetweenAttempts:
         handler._pause_between_attempts(legacy_seconds=30)
         assert call_count == 1
 
-    @patch('packages.python.javdb_platform.request_handler.time.sleep')
+    @patch('javdb.infra.request.time.sleep')
     def test_legacy_fallback(self, mock_sleep):
         handler = RequestHandler(config=RequestConfig(between_attempt_sleep=None))
         handler._pause_between_attempts(legacy_seconds=5)
         mock_sleep.assert_called_once_with(5)
 
-    @patch('packages.python.javdb_platform.request_handler.time.sleep')
+    @patch('javdb.infra.request.time.sleep')
     def test_legacy_zero_skips_sleep(self, mock_sleep):
         handler = RequestHandler(config=RequestConfig(between_attempt_sleep=None))
         handler._pause_between_attempts(legacy_seconds=0)

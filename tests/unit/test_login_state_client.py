@@ -19,7 +19,7 @@ import requests
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from packages.python.javdb_platform.login_state_client import (  # noqa: E402
+from javdb.proxy.coordinator.login_state_client import (  # noqa: E402
     AcquireLeaseResult,
     InvalidateResult,
     LEASE_TTL_MAX_MS,

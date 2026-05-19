@@ -9,10 +9,12 @@ name: JavDB Daily Ingestion Pipeline
 #   - docs/D1_ROLLBACK.md       (architecture + validation playbook)
 #   - apps/cli/commit_session.py (Status='committed' transition)
 #   - apps/cli/rollback.py      (cleanup-on-failure dispatcher)
-#   - .publish-config.yml `pending_mode_disabled_until` (emergency
-#     audit fallback set by the auto-fallback step on critical alert)
+#   - .publish-config.yml `pipeline_paused_until` (ADR-006 pause
+#     marker written by the alert-and-pause step on critical alert;
+#     the setup-job's pause gate skips downstream jobs while the
+#     timestamp is in the future)
 # Override per run via the workflow_dispatch `write_mode_override`
-# input or globally by writing `pending_mode_disabled_until: <ISO>`
+# input. To globally pause future runs, write `pipeline_paused_until: <ISO>`
 # into .publish-config.yml.
 
 permissions:
@@ -287,7 +289,7 @@ jobs:
           # drift detection and cohort summaries see this run.  Default
           # 'false' preserves single-runner behaviour.
           VAR_RUNNER_REGISTRY_ENABLED: ${{ vars.RUNNER_REGISTRY_ENABLED || 'false' }}
-        run: python3 -m apps.cli.config_generator --github-actions
+        run: python3 -m apps.cli.ops.config_generator --github-actions
 
       - name: Pull latest changes from remote
         run: |
@@ -367,8 +369,10 @@ jobs:
       # Ingestion Perfect Rollback (Phase 3): default WriteMode='pending'.
       # Resolved by the setup job so downstream commit_session.py /
       # rollback.py see the same value. Override at workflow_dispatch
-      # via `write_mode_override` input or by writing
-      # `pending_mode_disabled_until: <ISO>` to .publish-config.yml.
+      # via `write_mode_override` input. (ADR-006 PR-D replaced the
+      # legacy `.publish-config.yml` pending_mode_disabled_until
+      # auto-fallback with a pipeline_paused_until pause gate; the
+      # pause skips the entire workflow rather than degrading WriteMode.)
       JAVDB_HISTORY_WRITE_MODE: ${{ needs.setup.outputs.effective_write_mode }}
     
     steps:
@@ -394,7 +398,7 @@ jobs:
         run: |
           set -e
           set -o pipefail
-          python3 -m apps.cli.health_check
+          python3 -m apps.cli.ops.health_check
 
       - name: Pull latest changes
         run: |
@@ -526,7 +530,7 @@ jobs:
           set -e  # Exit on error
           set -o pipefail  # Exit on error in pipeline
           
-          CMD_ARGS=(python3 -m apps.cli.qb_uploader --mode daily)
+          CMD_ARGS=(python3 -m apps.cli.qb.uploader --mode daily)
           
           # Pass the CSV full path captured from spider
           if [ -n "$CSV_PATH" ]; then
@@ -551,7 +555,8 @@ jobs:
         id: file_filter
         if: ${{ success() && steps.uploader.outcome == 'success' }}
         env:
-          # Filter/clean-up scope = the category the uploader just used for daily mode
+          # Filter/clean-up scope = the category the uploader just used for daily mode,
+          # plus the shared "顶级" category that lives on the same default qB instance.
           TORRENT_CATEGORY: ${{ vars.TORRENT_CATEGORY || 'JavDB' }}
           MIN_SIZE_MB: ${{ vars.QB_FILE_FILTER_MIN_SIZE_MB || '100' }}
         run: |
@@ -560,10 +565,10 @@ jobs:
 
           # Build JSON array of categories for --categories using Python's json
           # module so quotes, backslashes, and newlines in TORRENT_CATEGORY are escaped safely.
-          CATEGORIES_JSON=$(TORRENT_CATEGORY="$TORRENT_CATEGORY" python3 -c 'import json, os; print(json.dumps([os.environ["TORRENT_CATEGORY"]]))')
+          CATEGORIES_JSON=$(TORRENT_CATEGORY="$TORRENT_CATEGORY" python3 -c 'import json, os; print(json.dumps([os.environ["TORRENT_CATEGORY"], "顶级"]))')
 
           CMD_ARGS=(
-            python3 -m apps.cli.qb_file_filter
+            python3 -m apps.cli.qb.file_filter
             --min-size "$MIN_SIZE_MB"
             --days 2
             --categories "$CATEGORIES_JSON"
@@ -582,7 +587,7 @@ jobs:
         run: |
           set -e  # Exit on error
           set -o pipefail  # Exit on error in pipeline
-          CMD_ARGS=(python3 -m apps.cli.pikpak_bridge --days 3)
+          CMD_ARGS=(python3 -m apps.cli.pikpak.bridge --days 3)
           SESSION_ID="$SPIDER_SESSION_ID"
           if [ -n "$SESSION_ID" ]; then
             if ! echo "$SESSION_ID" | grep -qE '^[a-zA-Z0-9._-]+$'; then
@@ -604,9 +609,9 @@ jobs:
           set -o pipefail
           bash .github/scripts/install_rclone.sh
           if [ -n "$DEDUP_CSV" ] && [ -f "$DEDUP_CSV" ]; then
-            python3 -m apps.cli.rclone_manager --execute --dedup-csv "$DEDUP_CSV"
+            python3 -m apps.cli.rclone.manager --execute --dedup-csv "$DEDUP_CSV"
           else
-            python3 -m apps.cli.rclone_manager --execute
+            python3 -m apps.cli.rclone.manager --execute
           fi
         continue-on-error: true
 
@@ -621,7 +626,7 @@ jobs:
         run: |
           set -e
           set -o pipefail
-          CMD_ARGS=(python3 -m apps.cli.commit_session
+          CMD_ARGS=(python3 -m apps.cli.db.commit_session
                     --run-started-at "$RUN_STARTED_AT")
           if [ -n "$SPIDER_SESSION_ID" ]; then
             if echo "$SPIDER_SESSION_ID" | grep -qE '^[a-zA-Z0-9._-]+$'; then
@@ -806,7 +811,7 @@ jobs:
           # snowflake. The shell validation below accepts both old
           # numeric ids and the new text format.
           SPIDER_SESSION_ID: ${{ needs.run-pipeline.outputs.session_id }}
-          # ROLLBACK_REASON is consumed by apps.cli.rollback to populate
+          # ROLLBACK_REASON is consumed by apps.cli.db.rollback to populate
           # ReportSessions.FailureReason. cleanup-on-failure runs because
           # the prior job either failed or was cancelled.
           ROLLBACK_REASON: cleanup_on_failure
@@ -821,13 +826,13 @@ jobs:
           # died before the spider printed SPIDER_SESSION_ID).
           #
           # Ingestion Perfect Rollback (Phase 3): the dispatcher inside
-          # `apps.cli.rollback` reads each session's WriteMode + Status
+          # `apps.cli.db.rollback` reads each session's WriteMode + Status
           # before deciding what to do, so a single CMD covers the
           # mixed audit / pending / finalizing cases this run produced.
           # `--auto-resume-finalizing` is the default but stated
           # explicitly so the YAML doubles as documentation for the
           # operator-facing failure SOP in docs/D1_ROLLBACK.md.
-          CMD_ARGS=(python3 -m apps.cli.rollback
+          CMD_ARGS=(python3 -m apps.cli.db.rollback
                     --run-id "${{ github.run_id }}"
                     --attempt "${{ github.run_attempt }}"
                     --run-started-at "$RUN_STARTED_AT"
@@ -878,9 +883,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          # Phase 3: SSH key needed so the auto-fallback step can push
-          # pending_mode_disabled_until back to the branch when a
-          # critical pending alert fires.  No-op cost on healthy runs.
+          # ADR-006: SSH key needed so the alert-and-pause step can push
+          # pipeline_paused_until back to the branch when a critical
+          # pending alert fires.  No-op cost on healthy runs.
           ssh-key: ${{ secrets.DEPLOY_KEY }}
 
       - name: Set up Python, venv, dependencies, Rust extension
@@ -1010,7 +1015,7 @@ jobs:
         run: |
           set -e
           mkdir -p reports/D1
-          python3 -m scripts.aggregate_pending_health \
+          python3 -m apps.cli.db.pending_health \
             --window-hours 24 || true
 
       - name: Run Email Notification
@@ -1020,7 +1025,7 @@ jobs:
           set -e  # Exit on error
           set -o pipefail  # Exit on error in pipeline
           
-          CMD_ARGS=(python3 -m apps.cli.email_notification --mode daily)
+          CMD_ARGS=(python3 -m apps.cli.notify.email --mode daily)
           
           # Pass the CSV path if available
           CSV_PATH="${{ steps.status.outputs.csv_path }}"
@@ -1042,12 +1047,12 @@ jobs:
           echo "Executing: ${CMD_ARGS[*]}"
           "${CMD_ARGS[@]}"
 
-      # Phase 3 — auto-fallback on critical pending-mode alerts.  Reads
+      # ADR-006 — alert + pause on critical pending-mode alerts. Reads
       # this run's pending_session_verify records (filtered by
       # GITHUB_RUN_ID inside the script) and, if any critical metric is
-      # over threshold, writes pending_mode_disabled_until to
-      # .publish-config.yml so the next ingestion run downgrades to
-      # pause the pipeline. Soft alerts (commit_attempts, ratio,
+      # over threshold, writes pipeline_paused_until to .publish-config.yml
+      # so the next ingestion run is short-circuited by the setup-job
+      # pause gate. Soft alerts (commit_attempts, ratio,
       # worker_stage_rollback_failed) only annotate the email subject —
       # they do NOT trigger this block.
       - name: Alert + pause on critical pending alert (ADR-006)
@@ -1100,7 +1105,7 @@ jobs:
           fi
           echo "::warning::Critical pending alert detected: $DECISION"
           echo "Engaging ADR-006 pipeline pause (24h)."
-          python3 -m scripts.pending_mode_alert_and_pause \
+          python3 -m apps.cli.db.pending_alert \
             --hours 24 \
             --reason "DailyIngestion run ${{ github.run_id }}: $DECISION"
           # Best-effort commit + push so the next scheduled run sees the

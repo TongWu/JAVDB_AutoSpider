@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, RootModel, field_validator, model_validator
 
 from apps.api.infra.security import (
     _is_valid_javdb_host,
@@ -75,6 +75,11 @@ class HealthResponse(BaseModel):
 class LoginPayload(BaseModel):
     username: str = Field(..., min_length=1, max_length=64)
     password: str = Field(..., min_length=1, max_length=256)
+
+
+class ChangePasswordPayload(BaseModel):
+    current_password: str = Field(..., min_length=1, max_length=256)
+    new_password: str = Field(..., min_length=8, max_length=256)
 
 
 class DailyTaskPayload(CliProxyOverridePayload):
@@ -226,20 +231,219 @@ class VideoCodeSearchPayload(BaseModel):
         return v
 
 
+# ---------------------------------------------------------------------------
+# Response models — wrap existing dict-shaped returns so generated TS types
+# (via openapi-typescript) are useful for FE consumers. These intentionally
+# keep wire-format JSON identical to the prior ad-hoc dicts; `extra="allow"`
+# lets the backend evolve fields without immediately breaking the schema.
+# ---------------------------------------------------------------------------
+
+
+class _AllowExtra(BaseModel):
+    """Permissive base for response models whose underlying dicts may grow."""
+
+    model_config = ConfigDict(extra="allow")
+
+
+class JobSummaryResponse(_AllowExtra):
+    """Per-job summary returned by /api/tasks endpoints."""
+
+    job_id: str
+    kind: Optional[str] = None
+    mode: Optional[str] = None
+    url: Optional[str] = None
+    status: str
+    created_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    command: Optional[List[str]] = None
+    source: Optional[str] = None
+    log_size: Optional[int] = None
+    log: Optional[str] = None
+
+
+class TriggerTaskResponse(_AllowExtra):
+    """Returned by POST /api/tasks/daily and POST /api/tasks/adhoc."""
+
+    job_id: str
+    status: str
+    created_at: str
+
+
+class NextScheduleInfo(_AllowExtra):
+    source: str
+    cron_pipeline: str
+    cron_spider: str
+
+
+class ListTasksResponse(_AllowExtra):
+    tasks: List[JobSummaryResponse]
+    next_schedule: NextScheduleInfo
+
+
+class TaskStatsResponse(_AllowExtra):
+    daily_success: int
+    daily_failed: int
+    daily_running: int
+    adhoc_running: int
+
+
+class SpiderJobSubmitResponse(_AllowExtra):
+    job_id: str
+    status: str
+    cli_args: List[str]
+
+
+class SpiderJobStatusResponse(_AllowExtra):
+    job_id: str
+    status: str
+    pid: Optional[int] = None
+    cli_args: List[str]
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+    return_code: Optional[int] = None
+    output: Optional[List[str]] = None
+    csv_path: Optional[str] = None
+    session_id: Optional[str] = None
+    error: Optional[str] = None
+
+
+class LoginResponse(_AllowExtra):
+    access_token: str
+    refresh_token: str
+    token_type: str
+    expires_in: int
+    csrf_token: str
+    role: str
+    username: str
+
+
+class RefreshTokenResponse(_AllowExtra):
+    access_token: str
+    token_type: str
+    expires_in: int
+
+
+class StatusOkResponse(BaseModel):
+    status: str = "ok"
+
+
+class JavdbLoginRefreshResponse(_AllowExtra):
+    """Returned by POST /api/login/refresh — wraps the JavDB login CLI run."""
+
+    status: str
+    output: str
+
+
+class JavdbLoginRefreshPayload(BaseModel):
+    """Optional request body for POST /api/login/refresh.
+
+    Empty body (or omitted body) defaults to proxy_mode='auto', which preserves
+    the original behavior. Existing callers that POST without a body still work.
+    """
+
+    proxy_mode: Literal["auto", "none", "single", "pool"] = "auto"
+    # When proxy_mode == "single", use this URL directly. Falls back to
+    # PROXY_HTTP from config when omitted.
+    proxy_url: Optional[str] = None
+    # When proxy_mode == "pool", try entries in order. If a 'pool_names'
+    # subset is given, only try those names; else try every entry in
+    # PROXY_POOL until one succeeds.
+    pool_names: Optional[List[str]] = None
+    # How many proxies to try before giving up (default = all).
+    max_attempts: Optional[int] = None
+
+
+class JavdbLoginRefreshResponseV2(BaseModel):
+    """Structured response for POST /api/login/refresh with categorized errors."""
+
+    status: Literal["ok", "failed"]
+    # Categorized error code when status == "failed"
+    error_category: Optional[Literal[
+        "invalid_credentials",
+        "ip_banned",
+        "captcha_failed",
+        "cloudflare_blocked",
+        "connection_error",
+        "no_credentials",
+        "no_proxy_succeeded",
+        "unknown",
+    ]] = None
+    # Friendly summary message for the user (single line)
+    message: str
+    # Which proxy succeeded, or which were tried before failing
+    proxy_used: Optional[str] = None
+    attempts: List[Dict[str, Any]] = []
+    # Raw output of the last attempt — for the user's "Show details" collapsible
+    output: str = ""
+
+
+class ConfigResponse(RootModel[Dict[str, Any]]):
+    """GET /api/config returns the masked runtime config dict verbatim."""
+
+
+class ExploreResolveResponse(_AllowExtra):
+    url: str
+    page_type: str
+    detail: Optional[Dict[str, Any]] = None
+    index: Optional[Dict[str, Any]] = None
+
+
+class ExploreOneClickResponse(_AllowExtra):
+    status: str
+    selected: Optional[Dict[str, Any]] = None
+    video_code: Optional[str] = None
+
+
+class ExploreIndexStatusItem(_AllowExtra):
+    downloaded: bool
+    has_uncensored: bool
+
+
+class ExploreIndexStatusResponse(_AllowExtra):
+    items: Dict[str, ExploreIndexStatusItem]
+
+
+class VideoCodeSearchResponse(_AllowExtra):
+    video_code: str
+    search_url: str
+    movies: List[Dict[str, Any]]
+    exact_match_entry: Optional[Dict[str, str]] = None
+    letter_suffix_fallback_searched: bool
+
+
 __all__ = [
     "AdhocTaskPayload",
+    "ChangePasswordPayload",
+    "ConfigResponse",
     "CrawlIndexPayload",
     "DailyTaskPayload",
     "ExploreCookiePayload",
     "ExploreIndexStatusPayload",
+    "ExploreIndexStatusResponse",
     "ExploreMagnetPayload",
     "ExploreOneClickPayload",
+    "ExploreOneClickResponse",
     "ExploreResolvePayload",
+    "ExploreResolveResponse",
     "HealthCheckPayload",
     "HealthResponse",
     "HtmlPayload",
+    "JavdbLoginRefreshPayload",
+    "JavdbLoginRefreshResponse",
+    "JavdbLoginRefreshResponseV2",
+    "JobSummaryResponse",
+    "ListTasksResponse",
     "LoginPayload",
+    "LoginResponse",
+    "NextScheduleInfo",
+    "RefreshTokenResponse",
     "SpiderJobPayload",
+    "SpiderJobStatusResponse",
+    "SpiderJobSubmitResponse",
+    "StatusOkResponse",
+    "TaskStatsResponse",
+    "TriggerTaskResponse",
     "UrlPayload",
     "VideoCodeSearchPayload",
+    "VideoCodeSearchResponse",
 ]

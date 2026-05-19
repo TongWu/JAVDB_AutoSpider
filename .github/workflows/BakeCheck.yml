@@ -1,0 +1,204 @@
+name: ADR-006 Bake Metrics Check
+
+# Daily automated check of the ADR-006 30-day bake gate (the ADR-005
+# D10 prerequisites). Pulls the most recent successful DailyIngestion's
+# encrypted reports artifact, decrypts it, and runs
+# `apps.cli.ops.check_bake_metrics` against the resulting SQLite + jsonl.
+# A regression (any of the three checks failing) fails this workflow,
+# which surfaces the standard Actions "workflow failed" email and shows
+# red in the Actions UI.
+#
+# Schedule: 04:00 UTC = 12:00 SGT, two hours after StaleSessionCleanup
+# so the DB state is settled (no in-progress session windows still
+# being closed by the stale-cron's cleanup-of-failure path).
+#
+# The result JSON is uploaded as `bake-metrics-<run_id>` with 90-day
+# retention so trend analysis across the bake period is possible.
+#
+# See ADR-006 (Pending Mode default rollout) and ADR-005 D10 for the
+# gate semantics. See scripts/check_bake_metrics.py docstring for the
+# exact thresholds and predicate used here.
+
+permissions:
+  contents: read
+  actions: read  # for `gh run download` from prior DailyIngestion runs
+
+on:
+  schedule:
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+    inputs:
+      since:
+        description: 'Anchor bake window start (YYYY-MM-DD). Default 2026-05-16 (ADR-006 PR-A merge).'
+        required: false
+        default: '2026-05-16'
+        type: string
+      runner:
+        description: 'Runner type.'
+        required: false
+        default: 'ubuntu-latest'
+        type: choice
+        options:
+          - ubuntu-latest
+          - self-hosted
+
+concurrency:
+  group: bake-metrics-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    environment: Production
+    env:
+      TZ: Asia/Singapore
+      BAKE_SINCE: ${{ inputs.since || '2026-05-16' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Set up Python, venv, dependencies, Rust extension
+        uses: ./.github/actions/setup-python-env
+        with:
+          python-version: '3.11'
+
+      # Walk recent successful DailyIngestion runs until one that
+      # *actually has* the encrypted reports artifact is found.
+      #
+      # We cannot just take the most recent ``--status=success`` run:
+      # the DailyIngestion upload step uses
+      # ``if-no-files-found: ignore`` and the encrypt step skips when
+      # there are no files to archive, so a run can legitimately
+      # succeed without producing the artifact (e.g. a no-op-mode
+      # smoke run). Picking that one and calling ``gh run download``
+      # would fail with "no artifact named pipeline-reports-encrypted"
+      # even though older runs in the 7-day retention window have a
+      # perfectly valid bundle.
+      #
+      # ``actions:read`` scope (declared at the workflow level) is
+      # what lets ``gh api .../artifacts`` see the artifact list.
+      # ``.expired`` filters out artifacts whose 7-day retention has
+      # passed (the row still exists in the API, but the bytes are
+      # gone, so a download would 410).
+      - name: Download latest reports artifact from DailyIngestion
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          mapfile -t CANDIDATE_RUNS < <(gh run list \
+            --workflow=DailyIngestion.yml \
+            --status=success \
+            --limit=10 \
+            --json databaseId \
+            --jq '.[].databaseId')
+
+          if [ ${#CANDIDATE_RUNS[@]} -eq 0 ]; then
+            echo "::error::No successful DailyIngestion run in the last 10 attempts. Pipeline may be paused (check .publish-config.yml for pipeline_paused_until) or repeatedly failing — investigate before trusting bake metrics."
+            exit 1
+          fi
+
+          SELECTED_RUN=""
+          for RUN_ID in "${CANDIDATE_RUNS[@]}"; do
+            HAS=$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/artifacts" \
+              --jq '[.artifacts[] | select(.name == "pipeline-reports-encrypted" and .expired == false)] | length')
+            if [ "${HAS:-0}" -gt 0 ]; then
+              SELECTED_RUN="$RUN_ID"
+              echo "Selected DailyIngestion run #${RUN_ID} (has live pipeline-reports-encrypted artifact)"
+              break
+            fi
+            echo "Skipping DailyIngestion run #${RUN_ID}: no live artifact"
+          done
+
+          if [ -z "$SELECTED_RUN" ]; then
+            echo "::error::Scanned the last ${#CANDIDATE_RUNS[@]} successful DailyIngestion runs; none has a non-expired pipeline-reports-encrypted artifact. Either all recent runs were no-op smoke runs, or the artifact retention (7d) elapsed without a viable run — investigate manually."
+            exit 1
+          fi
+
+          gh run download "$SELECTED_RUN" \
+            --name pipeline-reports-encrypted \
+            --dir encrypted_artifacts
+
+      - name: Decrypt reports
+        env:
+          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$ARTIFACT_KEY" ]; then
+            echo "::error::ARTIFACT_KEY secret is not configured — cannot decrypt the reports artifact."
+            exit 1
+          fi
+          if [ ! -f encrypted_artifacts/reports.tar.gz.enc ]; then
+            echo "::error::Encrypted reports archive not found in the downloaded artifact."
+            exit 1
+          fi
+          openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
+            -in encrypted_artifacts/reports.tar.gz.enc \
+            -pass pass:"$ARTIFACT_KEY" | tar -xzf -
+          rm -rf encrypted_artifacts
+          # Sanity check: the three files the script reads must be
+          # present, else we'd silently emit a misleading "no data" pass.
+          for f in reports/reports.db reports/history.db reports/D1/d1_drift.jsonl; do
+            if [ ! -f "$f" ]; then
+              echo "::warning::Expected file missing after decrypt: $f"
+            fi
+          done
+
+      # Run twice: once with --json for the artifact, once as text for
+      # the action log. The script is read-only and ~50ms so the cost
+      # is negligible. `set +e` so a check failure (rc=1) doesn't abort
+      # the step before we capture the JSON for the summary.
+      - name: Run ADR-006 bake metrics check
+        id: check
+        run: |
+          set +e
+          python3 -m apps.cli.ops.check_bake_metrics \
+            --since "$BAKE_SINCE" \
+            --json > bake_result.json
+          RC=$?
+          set -e
+          echo "rc=$RC" >> "$GITHUB_OUTPUT"
+          echo "--- Human-readable output ---"
+          python3 -m apps.cli.ops.check_bake_metrics --since "$BAKE_SINCE" || true
+
+      - name: Emit step summary
+        run: |
+          {
+            echo "# ADR-006 Bake Metrics Check"
+            echo ""
+            echo "**Anchor**: \`--since $BAKE_SINCE\`"
+            echo ""
+            if [ "${{ steps.check.outputs.rc }}" = "0" ]; then
+              echo "**Result**: ✅ PASS — all three D10 checks within threshold."
+            else
+              echo "**Result**: ❌ FAIL — one or more checks regressed."
+              echo ""
+              echo "An operator must investigate before declaring the bake clean. See [\`docs/en/ops/d1-rollback.md\`](../blob/main/docs/en/ops/d1-rollback.md) Appendix A.1 for the ADR-005 D10 gate definition."
+            fi
+            echo ""
+            echo "## Detail"
+            echo ""
+            echo '```json'
+            cat bake_result.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload result for trend analysis
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: bake-metrics-${{ github.run_id }}
+          path: bake_result.json
+          retention-days: 90
+          if-no-files-found: error
+
+      # Surface the failure as a workflow failure so the standard
+      # Actions "run failed" notification fires. The step summary above
+      # gives the human-readable detail; the artifact gives the JSON.
+      - name: Fail workflow if check regressed
+        if: steps.check.outputs.rc != '0'
+        run: |
+          echo "::error::ADR-006 bake gate FAILED. See the step summary and the bake-metrics-${{ github.run_id }} artifact."
+          exit 1

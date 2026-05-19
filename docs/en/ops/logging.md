@@ -112,7 +112,7 @@ The project uses Python's standard `logging` module with shared formatting helpe
 
 ```python
 import logging
-from packages.python.javdb_platform.logging_config import log_section, log_summary_block
+from javdb.infra.logging import log_section, log_summary_block
 
 logger = logging.getLogger(__name__)
 

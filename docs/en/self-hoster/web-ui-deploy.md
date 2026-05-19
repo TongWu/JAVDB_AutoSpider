@@ -1,19 +1,67 @@
 # Web UI Deployment
 
+The Web UI lives in a standalone repository: [`javdb-autospider-web`](https://github.com/tedwu/javdb-autospider-web). It is a Vue 3 + Naive UI SPA that talks to the backend API.
+
+## Prerequisites
+
+- Backend API running at a known URL (default `http://localhost:8100`)
+- Node.js 20+ (for local development)
+
 ## Local Development
 
-- Copy the environment template at the project root: `cp .env.example .env`. The same file contains **Web API** variables (`API_SECRET_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`) and **Docker/cron** sections. `apps/api/server.py` auto-loads the root `.env` on startup (does not overwrite variables already exported in the shell).
-- Backend API: `uvicorn apps.api.server:app --reload --port 8100`
-- Frontend directory: `apps/web/`
-- Frontend env variable: `VITE_API_BASE=http://localhost:8100`
+```bash
+# Clone the frontend repo
+git clone https://github.com/tedwu/javdb-autospider-web.git
+cd javdb-autospider-web
 
-## Docker Fullstack
+# Install dependencies
+npm install
 
-- Compose file: `docker/docker-compose.fullstack.yml`
-- Start: `docker compose -f docker/docker-compose.fullstack.yml up -d --build`
-- Access:
-  - Web: `http://localhost:8088`
-  - API: `http://localhost:8100`
+# Set API base URL
+cp .env.example .env
+# Edit .env: VITE_API_BASE=http://localhost:8100
+
+# Start dev server
+npm run dev
+```
+
+Backend API (separate terminal):
+
+```bash
+# In the main repo
+uvicorn apps.api.server:app --reload --port 8100
+```
+
+## Docker Compose (Split Deploy)
+
+```yaml
+services:
+  api:
+    build: .
+    ports:
+      - "8100:8100"
+    env_file: .env
+
+  web:
+    image: ghcr.io/tedwu/javdb-autospider-web:latest
+    ports:
+      - "8088:80"
+    environment:
+      - VITE_API_BASE=http://api:8100
+    depends_on:
+      - api
+```
+
+## Docker Compose (Fullstack)
+
+The main repo includes a fullstack compose file:
+
+```bash
+docker compose -f docker/docker-compose.fullstack.yml up -d --build
+```
+
+- Web: `http://localhost:8088`
+- API: `http://localhost:8100`
 
 ## Security Variables
 
@@ -23,16 +71,6 @@
 | `SECRETS_ENCRYPTION_KEY` | Sensitive config encryption key (Fernet key) |
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Initial admin credentials |
 
-## UI Theme
+## Architecture
 
-Colors and typography align with the in-repo **`frontend_mdc_ng`** reference (Next + Tailwind: zinc neutrals, indigo accent, Inter font). Token definitions are in the top comments of `apps/web/src/styles.css`.
-
-## Responsive Layout
-
-The frontend supports three breakpoints:
-
-| Breakpoint | Width | Behavior |
-|-----------|-------|----------|
-| Desktop | > 1024px | Full sidebar navigation |
-| Tablet | ≤ 1024px | Navigation collapses to horizontal top bar |
-| Phone | ≤ 640px | Single-column forms, full-width buttons |
+See [ADR-008](../../ai/adr/ADR-008-frontend-rewrite-architecture.md) for the full design rationale (Vue 3 + Naive UI, Pinia stores, i18n, E2E test strategy).

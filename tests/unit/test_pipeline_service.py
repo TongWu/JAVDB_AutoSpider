@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from packages.python.javdb_platform import pipeline_service
+from javdb.pipeline import service as pipeline_service
 
 
 def _make_args(**overrides):
@@ -49,8 +49,8 @@ def test_pipeline_main_uses_auto_proxy_by_default(monkeypatch):
     assert exc.value.code == 0
 
     spider_call = next(call for call in recorded_calls if call[0][-1] == 'apps.cli.spider')
-    uploader_call = next(call for call in recorded_calls if call[0][-1] == 'apps.cli.qb_uploader')
-    pikpak_call = next(call for call in recorded_calls if call[0][-1] == 'apps.cli.pikpak_bridge')
+    uploader_call = next(call for call in recorded_calls if call[0][-1] == 'apps.cli.qb.uploader')
+    pikpak_call = next(call for call in recorded_calls if call[0][-1] == 'apps.cli.pikpak.bridge')
 
     assert '--use-proxy' not in spider_call[1]
     assert '--no-proxy' not in spider_call[1]
@@ -81,8 +81,8 @@ def test_pipeline_main_force_enables_proxy_for_all_steps(monkeypatch):
     assert exc.value.code == 0
 
     spider_call = next(call for call in recorded_calls if call[0][-1] == 'apps.cli.spider')
-    uploader_call = next(call for call in recorded_calls if call[0][-1] == 'apps.cli.qb_uploader')
-    pikpak_call = next(call for call in recorded_calls if call[0][-1] == 'apps.cli.pikpak_bridge')
+    uploader_call = next(call for call in recorded_calls if call[0][-1] == 'apps.cli.qb.uploader')
+    pikpak_call = next(call for call in recorded_calls if call[0][-1] == 'apps.cli.pikpak.bridge')
 
     assert '--use-proxy' in spider_call[1]
     assert '--use-proxy' in uploader_call[1]
@@ -109,8 +109,8 @@ def test_pipeline_main_force_disables_proxy_for_all_steps(monkeypatch):
     assert exc.value.code == 0
 
     spider_call = next(call for call in recorded_calls if call[0][-1] == 'apps.cli.spider')
-    uploader_call = next(call for call in recorded_calls if call[0][-1] == 'apps.cli.qb_uploader')
-    pikpak_call = next(call for call in recorded_calls if call[0][-1] == 'apps.cli.pikpak_bridge')
+    uploader_call = next(call for call in recorded_calls if call[0][-1] == 'apps.cli.qb.uploader')
+    pikpak_call = next(call for call in recorded_calls if call[0][-1] == 'apps.cli.pikpak.bridge')
 
     assert '--no-proxy' in spider_call[1]
     assert '--no-proxy' in uploader_call[1]

@@ -8,7 +8,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 sys.path.insert(0, project_root)
 
 import pytest
-import utils.infra.db as db_mod
+import javdb.storage.db.db as db_mod
 
 
 # ── init / schema ─────────────────────────────────────────────────────────
@@ -112,7 +112,7 @@ class TestInitDb:
 
     def test_split_db_init(self, tmp_path):
         """init_db() without db_path should create three separate DB files."""
-        import utils.infra.config_helper as _cfg_mod
+        import javdb.infra.config as _cfg_mod
         orig_override = _cfg_mod._storage_mode_override
         _cfg_mod._storage_mode_override = 'db'
 
@@ -174,7 +174,7 @@ class TestInitDb:
         fix, ``_ensure_rollback_columns`` runs both before AND after the
         DDL, so the columns exist when the index DDL is evaluated.
         """
-        import utils.infra.config_helper as _cfg_mod
+        import javdb.infra.config as _cfg_mod
         orig_override = _cfg_mod._storage_mode_override
         _cfg_mod._storage_mode_override = 'db'
 
@@ -195,7 +195,7 @@ class TestInitDb:
         try:
             # Hand-craft pre-rollback schema (no SessionId / Status columns,
             # no SessionId-indexed indexes). Mirrors a real legacy file
-            # produced before migration/d1/2026_05_04_add_rollback_columns_*.sql.
+            # produced before javdb/migrations/d1/2026_05_04_add_rollback_columns_*.sql.
             legacy_history_ddl = """
             CREATE TABLE SchemaVersion (Version INTEGER NOT NULL);
             CREATE TABLE MovieHistory (
@@ -467,7 +467,7 @@ class TestInitDb:
 
     def test_split_migration_from_single_db(self, tmp_path):
         """Placing a v6 single DB at DB_PATH triggers automatic split."""
-        import utils.infra.config_helper as _cfg_mod
+        import javdb.infra.config as _cfg_mod
         orig_override = _cfg_mod._storage_mode_override
         _cfg_mod._storage_mode_override = 'db'
 
@@ -593,6 +593,73 @@ class TestHistory:
         self._upsert(href='/v/A', code='A')
         all_recs = db_mod.db_get_all_history_records()
         assert len(all_recs) == 1
+
+
+class TestUpsertHistoryBatch:
+    """db_upsert_history_batch must be observationally equivalent to N
+    sequential db_upsert_history calls — the win is connection / WAL /
+    DualConnection-transaction reuse, not different semantics.
+    """
+
+    def test_empty_input_noop(self, _isolate_sqlite):
+        db_mod.db_upsert_history_batch([])
+        assert db_mod.db_load_history() == {}
+
+    def test_batch_inserts_match_serial(self, _isolate_sqlite):
+        rows = [
+            {
+                'href': f'/v/CODE-{i}', 'video_code': f'CODE-{i}',
+                'magnet_links': {'subtitle': f'magnet:test-{i}'},
+                'actor_name': f'Actor {i}',
+            }
+            for i in range(5)
+        ]
+        db_mod.db_upsert_history_batch(rows)
+        history = db_mod.db_load_history()
+        assert len(history) == 5
+        for i in range(5):
+            href = f'/v/CODE-{i}'
+            assert href in history
+            assert history[href]['VideoCode'] == f'CODE-{i}'
+            assert history[href]['ActorName'] == f'Actor {i}'
+
+    def test_batch_updates_existing(self, _isolate_sqlite):
+        db_mod.db_upsert_history(
+            '/v/EXISTING', 'EXISTING',
+            magnet_links={'subtitle': 'magnet:old'},
+        )
+        db_mod.db_upsert_history_batch([
+            {
+                'href': '/v/EXISTING', 'video_code': 'EXISTING',
+                'magnet_links': {'subtitle': 'magnet:new'},
+            },
+            {
+                'href': '/v/NEW', 'video_code': 'NEW',
+                'magnet_links': {'subtitle': 'magnet:new2'},
+            },
+        ])
+        history = db_mod.db_load_history()
+        assert len(history) == 2
+        torrents = history['/v/EXISTING'].get('torrents', {})
+        assert any('magnet:new' in t.get('MagnetUri', '') for t in torrents.values())
+
+    def test_batch_uses_single_connection(self, _isolate_sqlite, monkeypatch):
+        """A 3-row batch should open ``get_db`` exactly once."""
+        call_count = {'n': 0}
+        real_get_db = db_mod.get_db
+
+        def counting_get_db(*args, **kwargs):
+            call_count['n'] += 1
+            return real_get_db(*args, **kwargs)
+
+        monkeypatch.setattr(db_mod, 'get_db', counting_get_db)
+        db_mod.db_upsert_history_batch([
+            {'href': f'/v/X{i}', 'video_code': f'X{i}'} for i in range(3)
+        ])
+        assert call_count['n'] == 1, (
+            "Expected one get_db() call for the batch; got "
+            f"{call_count['n']} — connection reuse regressed."
+        )
 
 
 # ── rclone_inventory ──────────────────────────────────────────────────────
@@ -1060,13 +1127,13 @@ class TestSessionIdExtraction:
 
 class TestReportMigration:
     def test_parse_daily_filename(self):
-        from migration.tools.csv_to_sqlite import parse_csv_filename
+        from javdb.migrations.tools.csv_to_sqlite import parse_csv_filename
         result = parse_csv_filename('Javdb_TodayTitle_20240101.csv', is_adhoc_dir=False)
         assert result['report_type'] == 'daily'
         assert result['report_date'] == '20240101'
 
     def test_parse_adhoc_filename(self):
-        from migration.tools.csv_to_sqlite import parse_csv_filename
+        from javdb.migrations.tools.csv_to_sqlite import parse_csv_filename
         result = parse_csv_filename(
             'Javdb_AdHoc_actors_TestActor_20240201.csv', is_adhoc_dir=True)
         assert result['report_type'] == 'adhoc'
@@ -1075,19 +1142,19 @@ class TestReportMigration:
         assert result['report_date'] == '20240201'
 
     def test_parse_adhoc_rankings(self):
-        from migration.tools.csv_to_sqlite import parse_csv_filename
+        from javdb.migrations.tools.csv_to_sqlite import parse_csv_filename
         result = parse_csv_filename(
             'Javdb_AdHoc_rankings_top_20241231.csv', is_adhoc_dir=True)
         assert result['url_type'] == 'rankings'
         assert result['display_name'] == 'top'
 
     def test_parse_today_title_in_adhoc_dir(self):
-        from migration.tools.csv_to_sqlite import parse_csv_filename
+        from javdb.migrations.tools.csv_to_sqlite import parse_csv_filename
         result = parse_csv_filename('Javdb_TodayTitle_20250629.csv', is_adhoc_dir=True)
         assert result['report_type'] == 'adhoc'
 
     def test_migrate_single_csv(self, _isolate_sqlite, tmp_path):
-        from migration.tools.csv_to_sqlite import migrate_single_csv
+        from javdb.migrations.tools.csv_to_sqlite import migrate_single_csv
         csv_path = str(tmp_path / "test_report.csv")
         with open(csv_path, 'w', encoding='utf-8-sig') as f:
             f.write('href,video_code,page,actor,rate,comment_number,'
@@ -1107,7 +1174,7 @@ class TestReportMigration:
         assert rows[0]['video_code'] == 'A-001'
 
     def test_skip_already_migrated(self, _isolate_sqlite, tmp_path):
-        from migration.tools.csv_to_sqlite import migrate_single_csv
+        from javdb.migrations.tools.csv_to_sqlite import migrate_single_csv
         csv_path = str(tmp_path / "dup.csv")
         with open(csv_path, 'w', encoding='utf-8-sig') as f:
             f.write('href,video_code,page,actor,rate,comment_number,'
@@ -1133,12 +1200,12 @@ class TestBackendAgnosticErrorTuples:
     """
 
     def test_operational_errors_tuple_includes_d1_permanent(self):
-        from packages.python.javdb_platform.d1_client import D1PermanentError
+        from javdb.storage.d1_client import D1PermanentError
         assert sqlite3.OperationalError in db_mod._DB_OPERATIONAL_ERRORS
         assert D1PermanentError in db_mod._DB_OPERATIONAL_ERRORS
 
     def test_integrity_errors_tuple_includes_d1_permanent(self):
-        from packages.python.javdb_platform.d1_client import D1PermanentError
+        from javdb.storage.d1_client import D1PermanentError
         assert sqlite3.IntegrityError in db_mod._DB_INTEGRITY_ERRORS
         assert D1PermanentError in db_mod._DB_INTEGRITY_ERRORS
 
@@ -1147,7 +1214,7 @@ class TestBackendAgnosticErrorTuples:
         surfaces from execute() the retries are already exhausted, and
         silently treating it as 'legacy schema' / 'concurrent run' would
         lose data on a genuine network failure."""
-        from packages.python.javdb_platform.d1_client import D1TransientError
+        from javdb.storage.d1_client import D1TransientError
         assert D1TransientError not in db_mod._DB_OPERATIONAL_ERRORS
         assert D1TransientError not in db_mod._DB_INTEGRITY_ERRORS
 
@@ -1155,7 +1222,7 @@ class TestBackendAgnosticErrorTuples:
         """A raised D1PermanentError is actually caught by the tuple —
         guards against the tuple being assembled but the except clause
         somehow not matching (e.g. subclass mismatch)."""
-        from packages.python.javdb_platform.d1_client import D1PermanentError
+        from javdb.storage.d1_client import D1PermanentError
         caught = False
         try:
             raise D1PermanentError("D1 API returned HTTP 400: no such table: X")
@@ -1175,7 +1242,7 @@ class TestSnowflakeProcessTag:
     """
 
     def test_ids_within_one_process_are_monotonic(self):
-        from packages.python.javdb_platform.db import _generate_session_id
+        from javdb.storage.db.db import _generate_session_id
         ids = [_generate_session_id() for _ in range(50)]
         assert ids == sorted(ids), "snowflake Ids must be monotonic"
         assert len(set(ids)) == len(ids), "snowflake Ids must be unique"
@@ -1184,7 +1251,7 @@ class TestSnowflakeProcessTag:
         """Tag is fixed at import time, so every Id from one process
         shares the same hex tag segment (the second ``-``-delimited block).
         """
-        from packages.python.javdb_platform.db import _generate_session_id
+        from javdb.storage.db.db import _generate_session_id
         ids = [_generate_session_id() for _ in range(30)]
         tags = {sid.split("-")[1] for sid in ids}
         assert len(tags) == 1, (
@@ -1196,7 +1263,7 @@ class TestSnowflakeProcessTag:
         sibling Python process that drew a different ``secrets.randbits``)
         and confirm the two Id streams are disjoint.
         """
-        from packages.python.javdb_platform import db as dbmod
+        from javdb.storage.db import db as dbmod
 
         ids_a = [dbmod._generate_session_id() for _ in range(3)]
 

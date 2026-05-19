@@ -5,14 +5,14 @@
 ## 主要迁移入口
 
 ```bash
-python3 -m packages.python.javdb_migrations.migrate_to_current --help
+python3 -m javdb.migrations.migrate_to_current --help
 ```
 
 `migrate_to_current.py` 是 SQLite 架构升级的主要入口。支持可选的日期时间标准化和演员信息回填。使用 `--help` 查看所有可用选项。
 
 ## 一次性和旧版辅助脚本
 
-`packages/python/javdb_migrations/tools/` 目录包含用于特定升级任务的一次性迁移脚本。
+`javdb/migrations/tools/` 目录包含用于特定升级任务的一次性迁移脚本。
 
 ### cleanup_history_priorities.py
 
@@ -22,7 +22,7 @@ python3 -m packages.python.javdb_migrations.migrate_to_current --help
 - 可安全多次运行（幂等）
 
 ```bash
-python3 packages/python/javdb_migrations/tools/cleanup_history_priorities.py
+python3 javdb/migrations/tools/cleanup_history_priorities.py
 ```
 
 ### update_history_format.py
@@ -33,7 +33,7 @@ python3 packages/python/javdb_migrations/tools/cleanup_history_priorities.py
 - 自动向后兼容
 
 ```bash
-python3 packages/python/javdb_migrations/tools/update_history_format.py
+python3 javdb/migrations/tools/update_history_format.py
 ```
 
 ### rename_columns_add_last_visited.py
@@ -43,7 +43,7 @@ python3 packages/python/javdb_migrations/tools/update_history_format.py
 - 升级以支持新历史格式时必需
 
 ```bash
-python3 packages/python/javdb_migrations/tools/rename_columns_add_last_visited.py
+python3 javdb/migrations/tools/rename_columns_add_last_visited.py
 ```
 
 ### migrate_reports_to_dated_dirs.py
@@ -55,10 +55,10 @@ python3 packages/python/javdb_migrations/tools/rename_columns_add_last_visited.p
 
 ```bash
 # 先预览变更
-python3 packages/python/javdb_migrations/tools/migrate_reports_to_dated_dirs.py --dry-run
+python3 javdb/migrations/tools/migrate_reports_to_dated_dirs.py --dry-run
 
 # 应用变更
-python3 packages/python/javdb_migrations/tools/migrate_reports_to_dated_dirs.py
+python3 javdb/migrations/tools/migrate_reports_to_dated_dirs.py
 ```
 
 ### reclassify_c_hacked_torrents.py
@@ -69,7 +69,7 @@ python3 packages/python/javdb_migrations/tools/migrate_reports_to_dated_dirs.py
 - 在分类规则变更后使用
 
 ```bash
-python3 packages/python/javdb_migrations/tools/reclassify_c_hacked_torrents.py
+python3 javdb/migrations/tools/reclassify_c_hacked_torrents.py
 ```
 
 ## 何时运行迁移脚本

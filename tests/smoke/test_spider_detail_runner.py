@@ -11,9 +11,9 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-import scripts.spider.runtime.state as state
-from scripts.ingestion.models import SpiderIngestionPlan
-from scripts.spider.detail.runner import (
+import javdb.spider.runtime.state as state
+from javdb.pipeline.models import SpiderIngestionPlan
+from javdb.spider.detail.runner import (
     DetailPersistOutcome,
     persist_parsed_detail_result,
     process_detail_entries,
@@ -47,7 +47,7 @@ def _reset_state():
 
 
 def test_prepare_detail_entries_preserves_recent_release_toggle(monkeypatch):
-    import scripts.spider.detail.runner as dc
+    import javdb.spider.detail.runner as dc
 
     entry = make_entry('ABC-123', is_today_release=True)
 
@@ -86,7 +86,7 @@ def test_prepare_detail_entries_preserves_recent_release_toggle(monkeypatch):
 
 
 def test_prepare_detail_entries_counts_filter_skips_but_not_duplicates(monkeypatch):
-    import scripts.spider.detail.runner as dc
+    import javdb.spider.detail.runner as dc
 
     state.parsed_links.add('/v/already')
     entries = [
@@ -128,7 +128,7 @@ def test_prepare_detail_entries_counts_filter_skips_but_not_duplicates(monkeypat
 
 
 def test_persist_parsed_detail_result_writes_report_dedup_and_history(monkeypatch):
-    import scripts.spider.detail.runner as dc
+    import javdb.spider.detail.runner as dc
 
     entry = make_entry('ABC-123')
     dedup_record = SimpleNamespace(video_code='ABC-123', deletion_reason='upgrade')
@@ -209,7 +209,7 @@ def test_persist_parsed_detail_result_writes_report_dedup_and_history(monkeypatc
 
 
 def test_persist_parsed_detail_result_keeps_visited_metadata_on_skip(monkeypatch):
-    import scripts.spider.detail.runner as dc
+    import javdb.spider.detail.runner as dc
 
     entry = make_entry('ZZZ-999')
     plan = SpiderIngestionPlan(
@@ -255,8 +255,8 @@ def test_persist_parsed_detail_result_keeps_visited_metadata_on_skip(monkeypatch
 
 
 def test_process_detail_entries_handles_backend_results(monkeypatch):
-    from scripts.spider.fetch.backend import FetchRuntimeState
-    from scripts.spider.fetch.fetch_engine import EngineResult
+    from javdb.spider.fetch.backend import FetchRuntimeState
+    from javdb.spider.fetch.fetch_engine import EngineResult
 
     class FakeBackend:
         def __init__(self):
@@ -310,11 +310,11 @@ def test_process_detail_entries_handles_backend_results(monkeypatch):
     ]
 
     monkeypatch.setattr(
-        'scripts.spider.detail.runner.extract_magnets',
+        'javdb.spider.detail.runner.extract_magnets',
         lambda magnets, _idx: {'subtitle': magnets[0]},
     )
     monkeypatch.setattr(
-        'scripts.spider.detail.runner.persist_parsed_detail_result',
+        'javdb.spider.detail.runner.persist_parsed_detail_result',
         lambda **kwargs: DetailPersistOutcome(
             status='reported',
             row={'href': kwargs['entry']['href'], 'video_code': kwargs['entry']['video_code']},
@@ -348,8 +348,8 @@ def test_process_detail_entries_handles_backend_results(monkeypatch):
 
 
 def test_process_detail_entries_acknowledges_runtime_state_changes(monkeypatch):
-    from scripts.spider.fetch.backend import FetchRuntimeState
-    from scripts.spider.fetch.fetch_engine import EngineResult
+    from javdb.spider.fetch.backend import FetchRuntimeState
+    from javdb.spider.fetch.fetch_engine import EngineResult
 
     class FakeBackend:
         def __init__(self):
@@ -417,11 +417,11 @@ def test_process_detail_entries_acknowledges_runtime_state_changes(monkeypatch):
     )
 
     monkeypatch.setattr(
-        'scripts.spider.detail.runner.extract_magnets',
+        'javdb.spider.detail.runner.extract_magnets',
         lambda magnets, _idx: {'subtitle': magnets[0]},
     )
     monkeypatch.setattr(
-        'scripts.spider.detail.runner.persist_parsed_detail_result',
+        'javdb.spider.detail.runner.persist_parsed_detail_result',
         lambda **_kwargs: next(outcomes),
     )
 
@@ -463,7 +463,7 @@ class _FakeClaimClient:
     """Minimal stand-in for ``MovieClaimClient`` in the spider tests."""
 
     def __init__(self, *, claim_result=None, stage_result=True, complete_result=True):
-        from packages.python.javdb_platform.movie_claim_client import (
+        from javdb.proxy.coordinator.movie_claim_client import (
             ClaimResult,
             CompleteResult,
             StageCompleteResult,
@@ -520,7 +520,7 @@ class _FakeClaimClient:
 
 def test_claim_detail_candidates_threads_session_id_through_claim(monkeypatch):
     """``_claim_detail_candidates`` must pass the active session id to ``client.claim``."""
-    import scripts.spider.detail.runner as dc
+    import javdb.spider.detail.runner as dc
 
     fake = _FakeClaimClient()
     monkeypatch.setattr(dc.state, 'global_movie_claim_client', fake)
@@ -556,7 +556,7 @@ def test_claim_detail_candidates_threads_session_id_through_claim(monkeypatch):
 
 def test_claim_detail_candidates_passes_none_session_when_no_active_session(monkeypatch):
     """Empty-string session ids are normalised to ``None`` for the client API."""
-    import scripts.spider.detail.runner as dc
+    import javdb.spider.detail.runner as dc
 
     fake = _FakeClaimClient()
     monkeypatch.setattr(dc.state, 'global_movie_claim_client', fake)
@@ -579,7 +579,7 @@ def test_claim_detail_candidates_passes_none_session_when_no_active_session(monk
 
 def test_stage_complete_movie_claim_uses_stage_path_when_session_id_present(monkeypatch):
     """With an active session id the new ``stage_complete`` path is invoked."""
-    import scripts.spider.detail.runner as dc
+    import javdb.spider.detail.runner as dc
 
     fake = _FakeClaimClient(stage_result=True)
     monkeypatch.setattr(dc.state, 'global_movie_claim_client', fake)
@@ -599,7 +599,7 @@ def test_stage_complete_movie_claim_uses_stage_path_when_session_id_present(monk
 
 def test_stage_complete_movie_claim_falls_back_to_legacy_complete_without_session(monkeypatch):
     """Without a session id the helper falls back to ``client.complete`` for legacy callers."""
-    import scripts.spider.detail.runner as dc
+    import javdb.spider.detail.runner as dc
 
     fake = _FakeClaimClient(complete_result=True)
     monkeypatch.setattr(dc.state, 'global_movie_claim_client', fake)
@@ -619,7 +619,7 @@ def test_stage_complete_movie_claim_falls_back_to_legacy_complete_without_sessio
 def test_stage_complete_movie_claim_returns_false_when_worker_rejects_stage(monkeypatch):
     """``staged=False`` (e.g. stale-holder mismatch) propagates as ``False`` so
     the caller knows to issue an explicit release."""
-    import scripts.spider.detail.runner as dc
+    import javdb.spider.detail.runner as dc
 
     fake = _FakeClaimClient(stage_result=False)
     monkeypatch.setattr(dc.state, 'global_movie_claim_client', fake)

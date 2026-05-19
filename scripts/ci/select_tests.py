@@ -24,6 +24,7 @@ from typing import Iterable
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 PYTHON_SOURCE_ROOTS = (
+    "javdb",
     "packages",
     "apps",
     "api",
@@ -41,7 +42,7 @@ IGNORED_PARTS = {
     "node_modules",
     "target",
 }
-RUST_ROOT = "packages/rust/javdb_rust_core"
+RUST_ROOT = "javdb/rust_core"
 RUST_SRC_ROOT = f"{RUST_ROOT}/src"
 
 SOURCE_CHANGE_LIMIT = 20
@@ -61,8 +62,10 @@ FORCE_FULL_GLOBS = (
 )
 
 RUST_ADAPTER_GLOBS = (
-    "packages/python/javdb_platform/bridges/rust_adapters/**",
-    "utils/bridges/rust_adapters/**",
+    # Phase-1 (ADR-007) distributed the rust_adapter shims into their
+    # consumer modules under javdb/spider/, so any change to the Rust
+    # crate itself is the canonical trigger now.
+    f"{RUST_ROOT}/**",
 )
 FALLBACK_TESTS = (
     "tests/unit/test_rust_adapters_fallback.py",
@@ -82,7 +85,6 @@ IMPACT_RULES = (
         "api",
         (
             "apps/api/**",
-            "api/**",
         ),
         (
             "tests/unit/test_api_*.py",
@@ -94,15 +96,12 @@ IMPACT_RULES = (
     ImpactRule(
         "parser-domain",
         (
-            "api/parsers/**",
             "apps/api/parsers/**",
-            "packages/python/javdb_core/contracts.py",
-            "packages/python/javdb_core/filename_helper.py",
-            "packages/python/javdb_core/magnet_extractor.py",
-            "packages/python/javdb_core/parser.py",
-            "packages/python/javdb_core/url_helper.py",
-            "utils/domain/**",
-            "utils/parser.py",
+            "javdb/spider/contracts.py",
+            "javdb/spider/filename_helper.py",
+            "javdb/spider/magnet_extractor.py",
+            "javdb/spider/parser.py",
+            "javdb/spider/url_helper.py",
             f"{RUST_SRC_ROOT}/magnet_extractor.rs",
             f"{RUST_SRC_ROOT}/models.rs",
             f"{RUST_SRC_ROOT}/scraper/**",
@@ -121,17 +120,18 @@ IMPACT_RULES = (
     ImpactRule(
         "db-d1-rollback",
         (
-            "apps/cli/cleanup_stale_in_progress.py",
-            "apps/cli/commit_session.py",
-            "apps/cli/rollback.py",
-            "migration/d1/**",
-            "packages/python/javdb_platform/d1_client.py",
-            "packages/python/javdb_platform/db.py",
-            "packages/python/javdb_platform/db_layer/**",
-            "packages/python/javdb_platform/dual_connection.py",
-            "scripts/cleanup_stale_session_audits.py",
-            "scripts/sync_d1_to_sqlite.py",
-            "utils/infra/db.py",
+            "apps/cli/db/cleanup_stale_in_progress.py",
+            "apps/cli/db/cleanup_stale_session_audits.py",
+            "apps/cli/db/commit_session.py",
+            "apps/cli/db/rollback.py",
+            "apps/cli/db/sync_d1_to_sqlite.py",
+            "javdb/migrations/d1/**",
+            "javdb/storage/d1_client.py",
+            "javdb/storage/db/**",
+            "javdb/storage/dual_connection.py",
+            "javdb/storage/repos/**",
+            "javdb/storage/rollback/**",
+            "javdb/storage/sessions/**",
         ),
         (
             "tests/unit/test_cleanup_stale_in_progress.py",
@@ -149,22 +149,13 @@ IMPACT_RULES = (
     ImpactRule(
         "rclone-qb-pikpak-integrations",
         (
-            "apps/cli/pikpak_bridge.py",
-            "apps/cli/qb_file_filter.py",
-            "apps/cli/qb_uploader.py",
-            "apps/cli/rclone_manager.py",
-            "packages/python/javdb_integrations/pikpak_bridge.py",
-            "packages/python/javdb_integrations/qb_client.py",
-            "packages/python/javdb_integrations/qb_file_filter.py",
-            "packages/python/javdb_integrations/qb_uploader.py",
-            "packages/python/javdb_integrations/rclone_helper.py",
-            "packages/python/javdb_integrations/rclone_manager.py",
-            "scripts/pikpak_bridge.py",
-            "scripts/qb_file_filter.py",
-            "scripts/qb_uploader.py",
-            "scripts/rclone_*.py",
-            "scripts/rclone_manager.py",
-            "utils/rclone_helper.py",
+            "apps/cli/pikpak/bridge.py",
+            "apps/cli/qb/file_filter.py",
+            "apps/cli/qb/uploader.py",
+            "apps/cli/rclone/**",
+            "javdb/integrations/pikpak/**",
+            "javdb/integrations/qb/**",
+            "javdb/integrations/rclone/**",
             f"{RUST_SRC_ROOT}/dedup_ops.rs",
             f"{RUST_SRC_ROOT}/rclone_ops.rs",
         ),
@@ -174,7 +165,6 @@ IMPACT_RULES = (
             "tests/unit/test_pikpak_bridge.py",
             "tests/unit/test_qb_*.py",
             "tests/unit/test_rclone_*.py",
-            "tests/unit/test_rclone_manager.py",
             "tests/integration/test_align_inventory_with_moviehistory.py",
         ),
     ),
@@ -182,13 +172,11 @@ IMPACT_RULES = (
         "spider-runtime",
         (
             "apps/cli/spider.py",
-            "packages/python/javdb_spider/**",
-            "scripts/spider/**",
+            "javdb/spider/**",
         ),
         (
             "tests/unit/test_detail_runner_movie_claim.py",
             "tests/unit/test_index_parallel.py",
-            "tests/unit/test_legacy_spider_wrapper.py",
             "tests/unit/test_login.py",
             "tests/unit/test_login_coordinator_park.py",
             "tests/unit/test_movie_claim_auto_toggle.py",
@@ -204,8 +192,8 @@ IMPACT_RULES = (
     ImpactRule(
         "ingestion",
         (
-            "packages/python/javdb_ingestion/**",
-            "scripts/ingestion/**",
+            "apps/cli/pipeline.py",
+            "javdb/pipeline/**",
         ),
         (
             "tests/unit/test_ingestion_engine.py",
@@ -216,9 +204,8 @@ IMPACT_RULES = (
     ImpactRule(
         "migration",
         (
-            "apps/cli/migration.py",
-            "migration/**",
-            "packages/python/javdb_migrations/**",
+            "apps/cli/db/migration.py",
+            "javdb/migrations/**",
         ),
         (
             "tests/unit/test_migrate_*.py",
@@ -231,22 +218,9 @@ IMPACT_RULES = (
         "platform-config-and-clients",
         (
             "config.py.example",
-            "packages/python/javdb_platform/config_generator.py",
-            "packages/python/javdb_platform/config_helper.py",
-            "packages/python/javdb_platform/git_helper.py",
-            "packages/python/javdb_platform/logging_config.py",
-            "packages/python/javdb_platform/login_state_client.py",
-            "packages/python/javdb_platform/movie_claim_client.py",
-            "packages/python/javdb_platform/path_helper.py",
-            "packages/python/javdb_platform/pipeline_service.py",
-            "packages/python/javdb_platform/proxy_*.py",
-            "packages/python/javdb_platform/qb_config.py",
-            "packages/python/javdb_platform/request_handler.py",
-            "packages/python/javdb_platform/runner_registry_client.py",
-            "packages/python/javdb_platform/spider_gateway.py",
-            "utils/infra/**",
-            "utils/proxy_ban_manager.py",
-            "utils/spider_gateway.py",
+            "javdb/infra/**",
+            "javdb/pipeline/service.py",
+            "javdb/proxy/**",
             f"{RUST_SRC_ROOT}/proxy/**",
             f"{RUST_SRC_ROOT}/requester/**",
         ),
@@ -269,9 +243,10 @@ IMPACT_RULES = (
     ImpactRule(
         "rust-adapters",
         (
-            "packages/python/javdb_platform/bridges/rust_adapters/**",
-            "utils/bridges/**",
-            f"{RUST_SRC_ROOT}/**",
+            # Phase-1 (ADR-007) inlined the rust adapter shims into their
+            # consumers under javdb/spider/, so the only canonical trigger
+            # left is the Rust crate itself.
+            f"{RUST_ROOT}/**",
         ),
         (
             "tests/unit/test_dedup_checker_rust_adapter.py",
@@ -282,14 +257,10 @@ IMPACT_RULES = (
     ImpactRule(
         "docker-and-entrypoints",
         (
-            "docker/**",
-            "pipeline.py",
             "apps/cli/**",
-            "scripts/*.py",
+            "docker/**",
         ),
         (
-            "tests/unit/test_docker_legacy_copy.py",
-            "tests/unit/test_legacy_spider_wrapper.py",
             "tests/unit/test_pipeline_service.py",
             "tests/smoke/*.py",
             "tests/integration/test_pipeline.py",
@@ -320,6 +291,7 @@ class Selection:
     reason: list[str]
     selected_count: int
     total_test_files: int
+    docstring_only_files: list[str] = field(default_factory=list)
 
     @property
     def run_selected_python(self) -> bool:
@@ -341,7 +313,84 @@ class Selection:
             "reason": self.reason,
             "selected_count": self.selected_count,
             "total_test_files": self.total_test_files,
+            "docstring_only_files": self.docstring_only_files,
         }
+
+
+class _StringConstantStripper(ast.NodeTransformer):
+    """Replace every string Constant in an AST with a stable sentinel.
+
+    Used by :func:`is_docstring_only_change` so two ASTs that differ only
+    in their string literals (docstrings, ``prog=`` names, usage examples,
+    error messages, SQL/URL constants, …) hash to the same signature.
+    """
+
+    SENTINEL = "__STRIPPED_STR__"
+
+    def visit_Constant(self, node: ast.Constant) -> ast.AST:
+        if isinstance(node.value, str):
+            return ast.Constant(value=self.SENTINEL)
+        return node
+
+
+def _ast_signature(source: str) -> str | None:
+    """Return ``ast.dump`` of *source* with all string literals normalised.
+
+    Returns ``None`` on parse failure; callers treat that as a real change.
+    """
+
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, ValueError):
+        return None
+    stripped = _StringConstantStripper().visit(tree)
+    ast.fix_missing_locations(stripped)
+    return ast.dump(stripped, include_attributes=False)
+
+
+def is_docstring_only_change(path: str, base: str, repo_root: Path) -> bool:
+    """Return True if the diff of *path* between *base* and the working tree
+    only touches string literals (docstrings, ``prog=`` strings, usage
+    examples, error messages, SQL/URL constants).
+
+    Conservatively returns False when:
+
+    * *path* is not a Python source file outside ``tests/``;
+    * *path* was newly added or deleted in this diff;
+    * either side fails to parse;
+    * the AST differs anywhere outside string Constant values.
+
+    The intent is to keep "rename in docstrings", "fix --help text", or
+    "translate error message" commits below :data:`SOURCE_CHANGE_LIMIT`
+    so they don't trigger a full test run.
+    """
+
+    if not path.endswith(".py") or path.startswith("tests/"):
+        return False
+
+    try:
+        old_src = subprocess.check_output(
+            ["git", "show", f"{base}:{path}"],
+            cwd=repo_root,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+    except subprocess.CalledProcessError:
+        return False  # file added (or moved into this path) in the diff
+
+    abs_path = repo_root / path
+    if not abs_path.exists():
+        return False  # deleted in the working tree
+    try:
+        new_src = abs_path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+
+    old_sig = _ast_signature(old_src)
+    new_sig = _ast_signature(new_src)
+    if old_sig is None or new_sig is None:
+        return False
+    return old_sig == new_sig
 
 
 def relpath(path: Path, repo_root: Path = REPO_ROOT) -> str:
@@ -537,13 +586,34 @@ def select_for_changed_files(
     repo_root: Path = REPO_ROOT,
     event_name: str = "",
     ref_name: str = "",
+    base: str = "",
 ) -> Selection:
-    changed = sorted({normalize_changed_file(path) for path in changed_files if normalize_changed_file(path)})
+    changed_all = sorted({normalize_changed_file(path) for path in changed_files if normalize_changed_file(path)})
+
+    # When a git base is available, classify "docstring/string-literal-only"
+    # Python source changes and exclude them from the impact analysis. They
+    # still surface in `changed_files` for reporting.
+    docstring_only: list[str] = []
+    if base:
+        for path in changed_all:
+            if is_python_source_change(path) and is_docstring_only_change(path, base, repo_root):
+                docstring_only.append(path)
+    docstring_only_set = set(docstring_only)
+    changed = [path for path in changed_all if path not in docstring_only_set]
+
     test_files = iter_test_files(repo_root)
     total_test_files = len(test_files)
     selected_tests: set[str] = set()
     reason: list[str] = []
     run_full_python = False
+
+    if docstring_only:
+        sample = ", ".join(docstring_only[:3])
+        suffix = f" (+{len(docstring_only) - 3} more)" if len(docstring_only) > 3 else ""
+        reason.append(
+            f"{len(docstring_only)} file(s) classified as docstring/string-literal-only "
+            f"and excluded from impact analysis: {sample}{suffix}"
+        )
 
     if event_name in {"schedule", "workflow_dispatch"}:
         run_full_python = True
@@ -553,7 +623,7 @@ def select_for_changed_files(
         run_full_python = True
         reason.append(f"push to {ref_name} uses full Python tests")
 
-    if not changed and not run_full_python:
+    if not changed_all and not run_full_python:
         run_full_python = True
         reason.append("no changed files were detected")
 
@@ -643,7 +713,7 @@ def select_for_changed_files(
         selected_targets = []
 
     return Selection(
-        changed_files=changed,
+        changed_files=changed_all,
         pytest_targets=selected_targets,
         run_full_python=run_full_python,
         run_rust=run_rust,
@@ -654,6 +724,7 @@ def select_for_changed_files(
         reason=reason or ["no impacted tests matched"],
         selected_count=len(selected_tests),
         total_test_files=total_test_files,
+        docstring_only_files=docstring_only,
     )
 
 
@@ -693,7 +764,13 @@ def selection_from_git(
         selection.reason.append(f"git diff failed, using full Python tests: {exc}")
         return selection
 
-    return select_for_changed_files(changed_files, repo_root=repo_root, event_name=event_name, ref_name=ref_name)
+    return select_for_changed_files(
+        changed_files,
+        repo_root=repo_root,
+        event_name=event_name,
+        ref_name=ref_name,
+        base=base,
+    )
 
 
 def write_github_outputs(path: str, selection: Selection) -> None:
@@ -715,6 +792,9 @@ def write_github_outputs(path: str, selection: Selection) -> None:
         "reason": "; ".join(selection.reason),
         "selected_count": str(values["selected_count"]),
         "total_test_files": str(values["total_test_files"]),
+        "docstring_only_files": " ".join(values["docstring_only_files"]),
+        "docstring_only_files_json": json.dumps(values["docstring_only_files"], sort_keys=True),
+        "docstring_only_count": str(len(values["docstring_only_files"])),
     }
 
     with open(path, "a", encoding="utf-8") as handle:
