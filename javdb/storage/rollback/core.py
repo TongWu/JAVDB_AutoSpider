@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from apps.cli.db._session_helpers import (
+from javdb.storage.rollback.session_helpers import (
     append_jsonl_record,
     attach_run_identity,
     fanout_movie_claim,
