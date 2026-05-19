@@ -12,10 +12,14 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   dump-and-publish:
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TZ: Asia/Singapore
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,17 +39,23 @@ jobs:
           API_SECRET_KEY: dump-only-secret
         run: python -m apps.cli.ops.dump_openapi
 
-      - name: Commit if changed
+      - name: Commit and open PR if changed
         run: |
+          set -e
           if git diff --quiet docs/api/openapi.json; then
             echo "No schema changes; skipping commit"
             exit 0
           fi
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add docs/api/openapi.json
           git commit -m "docs(api): regenerate openapi.json [skip ci]"
-          git push
+          LOCAL_COMMIT=$(git rev-parse HEAD)
+
+          # main is protected and requires a PR — route through the shared
+          # fallback helper which forks an auto branch and opens a PR.
+          bash .github/scripts/fallback_push.sh "publish-openapi" "main" "$LOCAL_COMMIT"
 
       - name: Upload as artifact
         uses: actions/upload-artifact@v4
