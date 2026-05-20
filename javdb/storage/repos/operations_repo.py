@@ -10,7 +10,10 @@ just drops the staging table.
 
 from __future__ import annotations
 
+import base64
+import json
 import re
+from datetime import datetime, timezone
 from typing import Iterable, List, Optional, Tuple, Union
 from javdb.spider.contracts import (
     get_video_code,
@@ -455,3 +458,139 @@ class OperationsRepo:
         """Remove a video code from the no-exact-match table."""
         from javdb.storage.db.db_operations import db_delete_align_no_exact_match
         db_delete_align_no_exact_match(video_code, db_path=self._db_path)
+
+    # ── EmailNotificationHistory ──────────────────────────────────
+
+    def append_email_history(
+        self,
+        session_id: Optional[str],
+        recipient: str,
+        subject: str,
+        status: str,
+        *,
+        error: Optional[str] = None,
+        attachments: Optional[List[str]] = None,
+        created_by: str = 'pipeline',
+    ) -> None:
+        """Insert a record after a send attempt.
+
+        Args:
+            session_id: Active pipeline session id (may be None).
+            recipient: Destination email address.
+            subject: Email subject line.
+            status: 'sent' | 'failed' | 'resent'.
+            error: Error message when status='failed'.
+            attachments: List of attachment filenames (stored as JSON).
+            created_by: 'pipeline' | 'manual' | 'resend'.
+        """
+        from javdb.storage.db.db_connection import get_db, OPERATIONS_DB_PATH
+        now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
+        attachment_names = json.dumps(attachments) if attachments is not None else None
+        with get_db(self._db_path or OPERATIONS_DB_PATH) as conn:
+            conn.execute(
+                """
+                INSERT INTO EmailNotificationHistory
+                    (SessionId, Recipient, Subject, Status,
+                     ErrorMessage, AttachmentNames, SentAt, CreatedBy)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (session_id, recipient, subject, status,
+                 error, attachment_names, now, created_by),
+            )
+
+    def list_email_history(
+        self,
+        status: Optional[str] = None,
+        limit: int = 50,
+        cursor: Optional[str] = None,
+    ) -> Tuple[List[dict], Optional[str]]:
+        """List email notification history, newest first, with optional filtering.
+
+        Uses keyset pagination on Id (descending). ``cursor`` is a base64-encoded Id;
+        only rows with Id < cursor are returned.
+
+        Args:
+            status: Optional status filter ('sent', 'failed', 'resent').
+            limit: Maximum number of rows to return (default 50).
+            cursor: Opaque pagination token from a previous call.
+
+        Returns:
+            (items, next_cursor) — next_cursor is None when no more pages.
+        """
+        from javdb.storage.db.db_connection import get_db, OPERATIONS_DB_PATH
+
+        cursor_id: Optional[int] = None
+        if cursor is not None:
+            try:
+                cursor_id = int(base64.b64decode(cursor).decode())
+            except Exception:
+                raise ValueError("invalid cursor")
+
+        conditions: List[str] = []
+        params: List = []
+        if status is not None:
+            conditions.append("Status = ?")
+            params.append(status)
+        if cursor_id is not None:
+            conditions.append("Id < ?")
+            params.append(cursor_id)
+
+        where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+        sql = f"""
+            SELECT Id, SessionId, Recipient, Subject, Status,
+                   ErrorMessage, AttachmentNames, SentAt, ResentAt, CreatedBy
+            FROM EmailNotificationHistory
+            {where}
+            ORDER BY Id DESC
+            LIMIT ?
+        """
+        fetch_limit = limit + 1
+        with get_db(self._db_path or OPERATIONS_DB_PATH) as conn:
+            rows = conn.execute(sql, params + [fetch_limit]).fetchall()
+
+        items = [dict(r) for r in rows]
+        has_more = len(items) > limit
+        if has_more:
+            items = items[:limit]
+
+        next_cursor: Optional[str] = None
+        if has_more and items:
+            next_cursor = base64.b64encode(str(items[-1]["Id"]).encode()).decode()
+
+        return items, next_cursor
+
+    def get_email_history_by_id(self, record_id: int) -> Optional[dict]:
+        """Fetch a single EmailNotificationHistory row by Id.
+
+        Returns the row as a dict, or None if not found.
+        """
+        from javdb.storage.db.db_connection import get_db, OPERATIONS_DB_PATH
+        with get_db(self._db_path or OPERATIONS_DB_PATH) as conn:
+            row = conn.execute(
+                """
+                SELECT Id, SessionId, Recipient, Subject, Status,
+                       ErrorMessage, AttachmentNames, SentAt, ResentAt, CreatedBy
+                FROM EmailNotificationHistory
+                WHERE Id = ?
+                """,
+                (record_id,),
+            ).fetchone()
+        return dict(row) if row is not None else None
+
+    def mark_email_resent(self, record_id: int) -> None:
+        """Update Status='resent' and ResentAt=now() for a history row.
+
+        Args:
+            record_id: The Id of the EmailNotificationHistory row to update.
+        """
+        from javdb.storage.db.db_connection import get_db, OPERATIONS_DB_PATH
+        now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
+        with get_db(self._db_path or OPERATIONS_DB_PATH) as conn:
+            conn.execute(
+                """
+                UPDATE EmailNotificationHistory
+                SET Status = 'resent', ResentAt = ?
+                WHERE Id = ?
+                """,
+                (now, record_id),
+            )
