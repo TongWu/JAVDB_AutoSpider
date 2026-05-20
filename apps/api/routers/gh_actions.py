@@ -1,0 +1,236 @@
+"""GitHub Actions endpoints.
+
+GET  /api/gh-actions/workflows          — list workflows, each enriched with latest run
+GET  /api/gh-actions/runs               — list runs, optional ?workflow=<id> filter
+POST /api/gh-actions/runs               — dispatch a workflow run (admin only)
+GET  /api/gh-actions/runs/{run_id}/logs — return the run's logs download URL
+
+All four endpoints require:
+  1. A valid auth token (_require_auth / require_role)
+  2. capabilities.gh_actions.tier != "none" (monitor-tier gate)
+"""
+
+from __future__ import annotations
+
+from typing import Any, Dict, Optional
+
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from apps.api.infra.auth import _require_auth, require_role
+from apps.api.routers.capabilities import build_capabilities
+from apps.api.schemas.gh_actions import (
+    DispatchRequest,
+    DispatchResponse,
+    RunItem,
+    RunLogsResponse,
+    RunsResponse,
+    WorkflowItem,
+    WorkflowsResponse,
+)
+from javdb.integrations.gh_actions.client import (
+    GitHubActionsClient,
+    resolve_token_and_repo,
+)
+
+router = APIRouter(prefix="/api/gh-actions", tags=["gh-actions"])
+
+
+# ---------------------------------------------------------------------------
+# Monitor-tier gate
+# ---------------------------------------------------------------------------
+
+
+def _require_gh_monitor() -> None:
+    """Raise 403 if gh_actions.tier == 'none'."""
+    caps = build_capabilities()
+    if caps.gh_actions.tier == "none":
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": {
+                    "code": "gh_actions.not_configured",
+                    "message": "GitHub Actions integration not configured",
+                }
+            },
+        )
+
+
+# ---------------------------------------------------------------------------
+# Client factory
+# ---------------------------------------------------------------------------
+
+
+def _get_gh_client() -> GitHubActionsClient:
+    """Build a GitHubActionsClient from config (ADR-008 D18).
+
+    Raises 503 when token or repo cannot be resolved.
+    """
+    token, repo = resolve_token_and_repo()
+    if not token or not repo:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": {
+                    "code": "gh_actions.config_missing",
+                    "message": (
+                        "GitHub token (GIT_PASSWORD) or repo (GIT_REPO_URL / "
+                        "GH_ACTIONS_REPO) is not configured"
+                    ),
+                }
+            },
+        )
+    return GitHubActionsClient(token=token, repo=repo)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _run_to_item(run: dict) -> RunItem:
+    return RunItem(
+        id=run["id"],
+        name=run.get("name"),
+        display_title=run.get("display_title"),
+        status=run.get("status"),
+        conclusion=run.get("conclusion"),
+        event=run.get("event"),
+        created_at=run.get("created_at"),
+        updated_at=run.get("updated_at"),
+        head_sha=run.get("head_sha"),
+        run_number=run.get("run_number"),
+    )
+
+
+def _wrap_gh_error(exc: Exception) -> HTTPException:
+    """Convert httpx or other errors into a clean 502 response."""
+    msg = str(exc)
+    if isinstance(exc, httpx.HTTPStatusError):
+        msg = f"GitHub API returned {exc.response.status_code}: {exc.response.text[:200]}"
+    return HTTPException(
+        status_code=502,
+        detail={
+            "error": {
+                "code": "gh_actions.api_error",
+                "message": msg,
+            }
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/workflows",
+    response_model=WorkflowsResponse,
+    dependencies=[Depends(_require_gh_monitor)],
+)
+def list_workflows(
+    _user: Dict[str, Any] = Depends(_require_auth),
+) -> WorkflowsResponse:
+    """List workflows, each enriched with its latest run."""
+    client = _get_gh_client()
+    try:
+        raw_workflows = client.list_workflows()
+        result: list[WorkflowItem] = []
+        for wf in raw_workflows:
+            runs = client.list_runs(workflow_id=wf["id"], per_page=1)
+            last_run = _run_to_item(runs[0]) if runs else None
+            result.append(
+                WorkflowItem(
+                    id=wf["id"],
+                    name=wf.get("name", ""),
+                    state=wf.get("state"),
+                    last_run=last_run,
+                )
+            )
+        return WorkflowsResponse(workflows=result)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _wrap_gh_error(exc) from exc
+    finally:
+        client.close()
+
+
+@router.get(
+    "/runs",
+    response_model=RunsResponse,
+    dependencies=[Depends(_require_gh_monitor)],
+)
+def list_runs(
+    workflow: Optional[int] = Query(default=None, description="Workflow ID to filter by"),
+    _user: Dict[str, Any] = Depends(_require_auth),
+) -> RunsResponse:
+    """List workflow runs, optionally filtered by workflow ID."""
+    client = _get_gh_client()
+    try:
+        raw_runs = client.list_runs(workflow_id=workflow)
+        return RunsResponse(runs=[_run_to_item(r) for r in raw_runs])
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _wrap_gh_error(exc) from exc
+    finally:
+        client.close()
+
+
+@router.post(
+    "/runs",
+    response_model=DispatchResponse,
+    dependencies=[Depends(_require_gh_monitor)],
+)
+def dispatch_run(
+    body: DispatchRequest,
+    _user: Dict[str, Any] = Depends(require_role("admin")),
+) -> DispatchResponse:
+    """Dispatch a workflow run (admin only)."""
+    client = _get_gh_client()
+    try:
+        client.dispatch_workflow(
+            workflow_id=body.workflow_id,
+            ref=body.ref,
+            inputs=body.inputs,
+        )
+        return DispatchResponse(dispatched=True)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _wrap_gh_error(exc) from exc
+    finally:
+        client.close()
+
+
+@router.get(
+    "/runs/{run_id}/logs",
+    response_model=RunLogsResponse,
+    dependencies=[Depends(_require_gh_monitor)],
+)
+def get_run_logs(
+    run_id: int,
+    _user: Dict[str, Any] = Depends(_require_auth),
+) -> RunLogsResponse:
+    """Return the logs download URL for a run."""
+    client = _get_gh_client()
+    try:
+        logs_url = client.get_run_logs_url(run_id)
+        return RunLogsResponse(logs_url=logs_url)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _wrap_gh_error(exc) from exc
+    finally:
+        client.close()
+
+
+__all__ = [
+    "dispatch_run",
+    "get_run_logs",
+    "list_runs",
+    "list_workflows",
+    "router",
+]
