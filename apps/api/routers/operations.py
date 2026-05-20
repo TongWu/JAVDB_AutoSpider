@@ -59,15 +59,20 @@ def list_qb_torrents(
     qb_username = cfg("QB_USERNAME", "")
     qb_password = cfg("QB_PASSWORD", "")
 
+    qb = None
     try:
-        qb = QBittorrentClient(
-            qb_base_url_candidates(),
-            qb_username,
-            qb_password,
-        )
-        raw = qb.get_torrents(torrent_filter="all")
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=_ERR_QB_UNREACHABLE) from exc
+        try:
+            qb = QBittorrentClient(
+                qb_base_url_candidates(),
+                qb_username,
+                qb_password,
+            )
+            raw = qb.get_torrents(torrent_filter="all")
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=_ERR_QB_UNREACHABLE) from exc
+    finally:
+        if qb is not None:
+            qb.session.close()
 
     items = [
         QbTorrentItem(
@@ -174,15 +179,14 @@ def pikpak_transfer(
             detail={"error": {"code": "ops.pikpak.failed", "message": str(exc)}},
         ) from exc
 
-    # pikpak_bridge returns None — gather stats from PikpakHistory rows added
-    # during this run (rows whose DateTimeUploadedToPikpak is within the last
-    # few seconds) is unreliable without a session tag; instead we return a
-    # success indicator with unknown counts.  A future iteration can return
-    # structured data by refactoring pikpak_bridge to return a result dict.
+    # pikpak_bridge returns None — gathering per-torrent stats from PikpakHistory
+    # rows added during this run is unreliable without a session tag.  Return
+    # None for the three count fields; the frontend should render None as
+    # "unknown" rather than showing a misleading numeric value.
     return PikPakTransferResponse(
-        transferred=-1,
-        failed=-1,
-        skipped=-1,
+        transferred=None,
+        failed=None,
+        skipped=None,
         dry_run=body.dry_run,
         details=[{"note": "Transfer dispatched; see server logs for per-torrent results."}],
     )
