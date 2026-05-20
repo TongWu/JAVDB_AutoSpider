@@ -739,32 +739,35 @@ def run_file_filter(
         raise RuntimeError("Cannot connect to qBittorrent")
 
     session = requests.Session()
-    if not login_to_qbittorrent(session, use_proxy):
-        raise RuntimeError("Failed to login to qBittorrent")
+    try:
+        if not login_to_qbittorrent(session, use_proxy):
+            raise RuntimeError("Failed to login to qBittorrent")
 
-    torrents = get_recent_torrents(
-        session,
-        days=days,
-        categories=categories,
-        use_proxy=use_proxy,
-    )
+        torrents = get_recent_torrents(
+            session,
+            days=days,
+            categories=categories,
+            use_proxy=use_proxy,
+        )
 
-    if not torrents:
-        return {
-            "filtered_count": 0,
-            "torrents_scanned": 0,
-            "dry_run": dry_run,
-            "details": [],
-        }
+        if not torrents:
+            return {
+                "filtered_count": 0,
+                "torrents_scanned": 0,
+                "dry_run": dry_run,
+                "details": [],
+            }
 
-    stats = filter_small_files(
-        session,
-        torrents,
-        min_size_mb=min_size_mb,
-        dry_run=dry_run,
-        use_proxy=use_proxy,
-        delete_local_files_flag=delete_local_files,
-    )
+        stats = filter_small_files(
+            session,
+            torrents,
+            min_size_mb=min_size_mb,
+            dry_run=dry_run,
+            use_proxy=use_proxy,
+            delete_local_files_flag=delete_local_files,
+        )
+    finally:
+        session.close()
 
     details = []
     for entry in stats.get("details", []):
