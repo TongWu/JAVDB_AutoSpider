@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # ---------------------------------------------------------------------------
@@ -89,7 +89,12 @@ class RcloneLastResponse(BaseModel):
     last_scan_time: Optional[str]
     dedup_pending: int
     dedup_completed: int
-    total_freed_bytes: int
+    total_freed_bytes: int = Field(
+        description=(
+            "Estimated bytes reclaimed by dedup, summed from the pre-deletion "
+            "ExistingFolderSize of completed records. Approximate, not exact."
+        ),
+    )
 
 
 class RcloneRunRequest(BaseModel):
