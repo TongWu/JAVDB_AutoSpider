@@ -1,98 +1,98 @@
 {
-  "_comment": "Maps docs/en/ source files to GitHub Wiki page names. Wiki only shows English; Chinese docs linked from a dedicated page.",
+  "_comment": "Maps docs/handbook/en/ source files to GitHub Wiki page names. Wiki only shows English; Chinese docs linked from a dedicated page.",
   "mappings": [
     {
-      "source": "docs/en/self-hoster/local-setup.md",
+      "source": "docs/handbook/en/self-hoster/local-setup.md",
       "wiki_page": "Local-Setup",
       "category": "Self-Hoster Guides"
     },
     {
-      "source": "docs/en/self-hoster/github-actions-setup.md",
+      "source": "docs/handbook/en/self-hoster/github-actions-setup.md",
       "wiki_page": "GitHub-Actions-Setup",
       "category": "Self-Hoster Guides"
     },
     {
-      "source": "docs/en/self-hoster/docker-deploy.md",
+      "source": "docs/handbook/en/self-hoster/docker-deploy.md",
       "wiki_page": "Docker-Deploy",
       "category": "Self-Hoster Guides"
     },
     {
-      "source": "docs/en/self-hoster/proxy-coordinator.md",
+      "source": "docs/handbook/en/self-hoster/proxy-coordinator.md",
       "wiki_page": "Proxy-Coordinator",
       "category": "Self-Hoster Guides"
     },
     {
-      "source": "docs/en/self-hoster/proxy-setup.md",
+      "source": "docs/handbook/en/self-hoster/proxy-setup.md",
       "wiki_page": "Proxy-Setup",
       "category": "Self-Hoster Guides"
     },
     {
-      "source": "docs/en/self-hoster/cloudflare-bypass.md",
+      "source": "docs/handbook/en/self-hoster/cloudflare-bypass.md",
       "wiki_page": "CloudFlare-Bypass",
       "category": "Self-Hoster Guides"
     },
     {
-      "source": "docs/en/self-hoster/javdb-login.md",
+      "source": "docs/handbook/en/self-hoster/javdb-login.md",
       "wiki_page": "JavDB-Login",
       "category": "Self-Hoster Guides"
     },
     {
-      "source": "docs/en/self-hoster/rust-installation.md",
+      "source": "docs/handbook/en/self-hoster/rust-installation.md",
       "wiki_page": "Rust-Installation",
       "category": "Self-Hoster Guides"
     },
     {
-      "source": "docs/en/self-hoster/web-ui-deploy.md",
+      "source": "docs/handbook/en/self-hoster/web-ui-deploy.md",
       "wiki_page": "Web-UI-Deploy",
       "category": "Self-Hoster Guides"
     },
     {
-      "source": "docs/en/self-hoster/configuration.md",
+      "source": "docs/handbook/en/self-hoster/configuration.md",
       "wiki_page": "Configuration-Reference",
       "category": "Self-Hoster Guides"
     },
     {
-      "source": "docs/en/developer/cli-reference.md",
+      "source": "docs/handbook/en/developer/cli-reference.md",
       "wiki_page": "CLI-Reference",
       "category": "Developer Guides"
     },
     {
-      "source": "docs/en/developer/api-usage-guide.md",
+      "source": "docs/handbook/en/developer/api-usage-guide.md",
       "wiki_page": "API-Usage-Guide",
       "category": "Developer Guides"
     },
     {
-      "source": "docs/en/developer/history-system.md",
+      "source": "docs/handbook/en/developer/history-system.md",
       "wiki_page": "History-System",
       "category": "Developer Guides"
     },
     {
-      "source": "docs/en/developer/publish-to-public.md",
+      "source": "docs/handbook/en/developer/publish-to-public.md",
       "wiki_page": "Publish-to-Public",
       "category": "Developer Guides"
     },
     {
-      "source": "docs/en/developer/smoke-checklist.md",
+      "source": "docs/handbook/en/developer/smoke-checklist.md",
       "wiki_page": "Smoke-Checklist",
       "category": "Developer Guides"
     },
     {
-      "source": "docs/en/ops/d1-rollback.md",
+      "source": "docs/handbook/en/ops/d1-rollback.md",
       "wiki_page": "D1-Rollback",
       "category": "Operations"
     },
     {
-      "source": "docs/en/ops/troubleshooting.md",
+      "source": "docs/handbook/en/ops/troubleshooting.md",
       "wiki_page": "Troubleshooting",
       "category": "Operations"
     },
     {
-      "source": "docs/en/ops/logging.md",
+      "source": "docs/handbook/en/ops/logging.md",
       "wiki_page": "Logging",
       "category": "Operations"
     },
     {
-      "source": "docs/en/ops/migration-scripts.md",
+      "source": "docs/handbook/en/ops/migration-scripts.md",
       "wiki_page": "Migration-Scripts",
       "category": "Operations"
     }
