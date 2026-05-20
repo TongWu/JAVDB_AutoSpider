@@ -1,14 +1,16 @@
-"""Operations endpoints — qBittorrent, PikPak, Email (Phase 2, Task 3a).
+"""Operations endpoints — qBittorrent, PikPak, Email, Rclone, Cleanup.
 
-GET  /api/ops/qb/torrents          — list qB torrents (proxied)
-POST /api/ops/qb/filter-small      — trigger file filter
-GET  /api/ops/pikpak/queue         — PikPak queue from PikpakHistory
-POST /api/ops/pikpak/transfer      — batch PikPak transfer
-POST /api/ops/email/test           — send test email
-GET  /api/ops/email/history        — list EmailNotificationHistory
-POST /api/ops/email/{id}/resend    — resend a failed notification
-
-Rclone and Cleanup endpoints (Task 3b) will be added to this router file.
+GET  /api/ops/qb/torrents              — list qB torrents (proxied)
+POST /api/ops/qb/filter-small          — trigger file filter
+GET  /api/ops/pikpak/queue             — PikPak queue from PikpakHistory
+POST /api/ops/pikpak/transfer          — batch PikPak transfer
+POST /api/ops/email/test               — send test email
+GET  /api/ops/email/history            — list EmailNotificationHistory
+POST /api/ops/email/{id}/resend        — resend a failed notification
+GET  /api/ops/rclone/last              — last RcloneInventory + DedupRecords summary
+POST /api/ops/rclone/run               — run rclone manager (scan/report/execute)
+POST /api/ops/cleanup/stale-sessions   — cleanup stale in-progress sessions
+POST /api/ops/cleanup/claim-stages     — sweep orphaned MovieClaim stages
 """
 from __future__ import annotations
 
@@ -18,6 +20,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from apps.api.infra.auth import _require_auth, require_role
 from apps.api.schemas.operations import (
+    CleanupClaimStagesRequest,
+    CleanupClaimStagesResponse,
+    CleanupStaleRequest,
+    CleanupStaleResponse,
     EmailHistoryItem,
     EmailHistoryResponse,
     EmailTestRequest,
@@ -29,6 +35,9 @@ from apps.api.schemas.operations import (
     QbFilterSmallResponse,
     QbTorrentItem,
     QbTorrentsResponse,
+    RcloneLastResponse,
+    RcloneRunRequest,
+    RcloneRunResponse,
 )
 from javdb.storage.repos.operations_repo import OperationsRepo
 
@@ -298,3 +307,183 @@ def email_resend(
 
     repo.mark_email_resent(record_id)
     return {"status": "resent", "id": record_id}
+
+
+# ---------------------------------------------------------------------------
+# Rclone
+# ---------------------------------------------------------------------------
+
+
+@router.get("/rclone/last", response_model=RcloneLastResponse)
+def rclone_last(
+    _user=Depends(_require_auth),
+) -> RcloneLastResponse:
+    """Return last RcloneInventory scan stats and DedupRecords summary."""
+    repo = OperationsRepo()
+    # load_rclone_inventory returns Dict[VideoCode, list[row_dict]]
+    inventory_by_code = repo.load_rclone_inventory()
+    dedup = repo.load_dedup_records()
+
+    # Flatten all rows to count and find last scan time
+    last_scan_time: Optional[str] = None
+    total_inventory_count = 0
+    for rows in inventory_by_code.values():
+        for row in rows:
+            total_inventory_count += 1
+            ts = row.get("DateTimeScanned")
+            if ts:
+                if last_scan_time is None or ts > last_scan_time:
+                    last_scan_time = ts
+
+    dedup_pending = sum(1 for r in dedup if not r.get("IsDeleted"))
+    dedup_completed = sum(1 for r in dedup if r.get("IsDeleted"))
+    # Sum ExistingFolderSize for completed (deleted) records as the proxy
+    # for freed bytes — this is the closest per-row size column available.
+    total_freed_bytes = sum(
+        int(r.get("ExistingFolderSize") or 0)
+        for r in dedup
+        if r.get("IsDeleted")
+    )
+
+    return RcloneLastResponse(
+        inventory_count=total_inventory_count,
+        last_scan_time=last_scan_time,
+        dedup_pending=dedup_pending,
+        dedup_completed=dedup_completed,
+        total_freed_bytes=total_freed_bytes,
+    )
+
+
+@router.post("/rclone/run", response_model=RcloneRunResponse)
+def rclone_run(
+    body: RcloneRunRequest,
+    _user=Depends(require_role("admin")),
+) -> RcloneRunResponse:
+    """Run rclone manager with the given phase flags."""
+    from javdb.integrations.rclone.manager import run_rclone_manager
+
+    # Validate flag combinations
+    if not body.scan and not body.report and not body.execute:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": {
+                    "code": "ops.rclone.nothing_to_do",
+                    "message": "At least one of scan/report/execute must be true",
+                }
+            },
+        )
+    if body.execute and not body.report:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": {
+                    "code": "ops.rclone.invalid_flags",
+                    "message": "execute=true requires report=true",
+                }
+            },
+        )
+
+    try:
+        result = run_rclone_manager(
+            scan=body.scan,
+            report=body.report,
+            execute=body.execute,
+            dry_run=body.dry_run,
+        )
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": {
+                    "code": "ops.rclone.failed",
+                    "message": str(exc),
+                }
+            },
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": {
+                    "code": "ops.rclone.failed",
+                    "message": str(exc),
+                }
+            },
+        ) from exc
+
+    return RcloneRunResponse(
+        phase_results=result["phase_results"],
+        dry_run=result["dry_run"],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Cleanup
+# ---------------------------------------------------------------------------
+
+
+@router.post("/cleanup/stale-sessions", response_model=CleanupStaleResponse)
+def cleanup_stale_sessions(
+    body: CleanupStaleRequest,
+    _user=Depends(require_role("admin")),
+) -> CleanupStaleResponse:
+    """Roll back or resume stale in-progress/finalizing sessions."""
+    from apps.cli.db.cleanup_stale_in_progress import run_stale_cleanup
+
+    try:
+        result = run_stale_cleanup(
+            max_age_hours=body.older_than_hours,
+            scope=body.scope,
+            dry_run=body.dry_run,
+            include_legacy=body.include_legacy,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": {
+                    "code": "ops.cleanup.stale_failed",
+                    "message": str(exc),
+                }
+            },
+        ) from exc
+
+    return CleanupStaleResponse(
+        sessions_found=result["sessions_found"],
+        sessions_cleaned=result["sessions_cleaned"],
+        sessions_failed=result["sessions_failed"],
+        dry_run=result["dry_run"],
+        details=result["details"],
+    )
+
+
+@router.post("/cleanup/claim-stages", response_model=CleanupClaimStagesResponse)
+def cleanup_claim_stages(
+    body: CleanupClaimStagesRequest,
+    _user=Depends(require_role("admin")),
+) -> CleanupClaimStagesResponse:
+    """Sweep orphaned MovieClaim staged completions."""
+    from apps.cli.db.sweep_claim_stages import run_claim_stage_sweep
+
+    try:
+        result = run_claim_stage_sweep(
+            shard_dates=body.shard_dates,
+            older_than_hours=body.older_than_hours,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": {
+                    "code": "ops.cleanup.claim_stages_failed",
+                    "message": str(exc),
+                }
+            },
+        ) from exc
+
+    return CleanupClaimStagesResponse(
+        shards_processed=result["shards_processed"],
+        stages_reaped=result["stages_reaped"],
+        details=result["details"],
+    )
