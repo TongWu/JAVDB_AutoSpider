@@ -104,6 +104,77 @@ def test_commit_force_works_on_in_progress(admin_client):
             conn.execute("DELETE FROM ReportSessions WHERE Id = ?", (fin_sid,))
 
 
+def test_commit_endpoint_emits_metrics_by_default_on_pending(admin_client, tmp_path, monkeypatch):
+    """Defaults for fanout_claims/emit_metrics on the HTTP endpoint must be True.
+
+    Seeds a pending-mode finalizing session, calls commit with no flags,
+    and asserts the pending_session_verify JSONL line was appended — the
+    proof that emit_metrics defaulted to True (CLI parity).
+    """
+    import json
+    import sqlite3 as _sqlite3
+    from pathlib import Path
+    from javdb.storage.db.db_connection import REPORTS_DB_PATH
+
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    sid = "20260516T140000.000000Z-TEST-PEND"
+    with _sqlite3.connect(str(REPORTS_DB_PATH)) as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO ReportSessions "
+            "(Id, ReportType, ReportDate, CsvFilename, DateTimeCreated, Status, WriteMode, RunId, RunAttempt) "
+            "VALUES (?, ?, ?, ?, datetime('now'), ?, ?, ?, ?)",
+            (sid, "test", "2026-05-16", "test.csv", "finalizing", "pending", "test-run", 1),
+        )
+    try:
+        r = admin_client.post(
+            f"/api/sessions/{sid}/commit",
+            json={"force": True},  # omit fanout_claims/emit_metrics → must default to True
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["new_state"] == "committed"
+
+        # emit_metrics=True on a pending session writes one line to d1_drift.jsonl.
+        drift_path = Path(tmp_path) / "D1" / "d1_drift.jsonl"
+        assert drift_path.exists(), "d1_drift.jsonl missing — emit_metrics didn't default to True"
+        lines = [ln for ln in drift_path.read_text().splitlines() if ln.strip()]
+        assert len(lines) >= 1
+        record = json.loads(lines[-1])
+        assert record["kind"] == "pending_session_verify"
+        assert record["session_id"] == sid
+        assert record["write_mode"] == "pending"
+    finally:
+        with _sqlite3.connect(str(REPORTS_DB_PATH)) as conn:
+            conn.execute("DELETE FROM ReportSessions WHERE Id = ?", (sid,))
+
+
+def test_commit_endpoint_opts_out_of_metrics(admin_client, tmp_path, monkeypatch):
+    """Explicit emit_metrics=False suppresses the JSONL record."""
+    import sqlite3 as _sqlite3
+    from pathlib import Path
+    from javdb.storage.db.db_connection import REPORTS_DB_PATH
+
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    sid = "20260516T140500.000000Z-TEST-OPTOUT"
+    with _sqlite3.connect(str(REPORTS_DB_PATH)) as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO ReportSessions "
+            "(Id, ReportType, ReportDate, CsvFilename, DateTimeCreated, Status, WriteMode, RunId, RunAttempt) "
+            "VALUES (?, ?, ?, ?, datetime('now'), ?, ?, ?, ?)",
+            (sid, "test", "2026-05-16", "test.csv", "finalizing", "pending", "test-run", 1),
+        )
+    try:
+        r = admin_client.post(
+            f"/api/sessions/{sid}/commit",
+            json={"force": True, "fanout_claims": False, "emit_metrics": False},
+        )
+        assert r.status_code == 200, r.text
+        drift_path = Path(tmp_path) / "D1" / "d1_drift.jsonl"
+        assert not drift_path.exists(), "emit_metrics=False should suppress JSONL emission"
+    finally:
+        with _sqlite3.connect(str(REPORTS_DB_PATH)) as conn:
+            conn.execute("DELETE FROM ReportSessions WHERE Id = ?", (sid,))
+
+
 def test_commit_requires_admin(readonly_client):
     r = readonly_client.post(
         "/api/sessions/any-id/commit",
