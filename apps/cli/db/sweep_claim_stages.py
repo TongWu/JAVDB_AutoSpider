@@ -147,6 +147,13 @@ def run_claim_stage_sweep(
             shards_processed (int): Number of shards that succeeded.
             stages_reaped (int): Total orphan stages removed across all shards.
             details (list[dict]): Per-shard results (successes + failures).
+            successes (list[dict]): Per-shard success entries with shard_date,
+                removed, cutoff_ms.
+            failures (list[dict]): Per-shard failure entries with shard_date,
+                error, and unexpected (bool) flag.
+            older_than_ms (int): The sweep horizon in milliseconds.
+            coordinator_configured (bool): False when no coordinator is
+                available (no-op path).
     """
     dates = shard_dates or _default_shard_dates()
     older_than_ms = int(older_than_hours * 3600 * 1000)
@@ -157,6 +164,10 @@ def run_claim_stage_sweep(
             "shards_processed": 0,
             "stages_reaped": 0,
             "details": [],
+            "successes": [],
+            "failures": [],
+            "older_than_ms": older_than_ms,
+            "coordinator_configured": False,
         }
 
     successes: List[dict] = []
@@ -177,11 +188,13 @@ def run_claim_stage_sweep(
                 failures.append({
                     "shard_date": shard,
                     "error": str(exc),
+                    "unexpected": False,
                 })
             except Exception as exc:  # noqa: BLE001
                 failures.append({
                     "shard_date": shard,
                     "error": str(exc),
+                    "unexpected": True,
                 })
     finally:
         client.close()
@@ -190,6 +203,10 @@ def run_claim_stage_sweep(
         "shards_processed": len(successes),
         "stages_reaped": sum(s.get("removed", 0) for s in successes),
         "details": successes + failures,
+        "successes": successes,
+        "failures": failures,
+        "older_than_ms": older_than_ms,
+        "coordinator_configured": True,
     }
 
 
@@ -210,8 +227,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         shard_dates, older_than_ms,
     )
 
-    client = create_movie_claim_client_from_env()
-    if client is None:
+    result = run_claim_stage_sweep(
+        shard_dates=shard_dates,
+        older_than_hours=older_than_hours,
+    )
+
+    if not result["coordinator_configured"]:
         logger.info(
             "MovieClaim coordinator not configured — nothing to sweep "
             "(this is a no-op success path for clusters running with "
@@ -219,44 +240,25 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
         return 0
 
-    successes: List[dict] = []
-    failures: List[dict] = []
-    try:
-        for shard in shard_dates:
-            try:
-                result = client.sweep_orphan_stages(
-                    older_than_ms=older_than_ms,
-                    date=shard,
-                )
-                logger.info(
-                    "Movie-claim sweep: shard=%s removed=%s cutoff_ms=%s",
-                    shard, result.removed, result.cutoff_ms,
-                )
-                successes.append({
-                    "shard_date": shard,
-                    "removed": result.removed,
-                    "cutoff_ms": result.cutoff_ms,
-                })
-            except MovieClaimUnavailable as exc:
-                logger.warning(
-                    "Movie-claim sweep unavailable for shard=%s: %s",
-                    shard, exc,
-                )
-                failures.append({
-                    "shard_date": shard,
-                    "error": str(exc),
-                })
-            except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "Unexpected movie-claim sweep error for shard=%s",
-                    shard, exc_info=True,
-                )
-                failures.append({
-                    "shard_date": shard,
-                    "error": str(exc),
-                })
-    finally:
-        client.close()
+    successes = result["successes"]
+    failures = result["failures"]
+
+    for s in successes:
+        logger.info(
+            "Movie-claim sweep: shard=%s removed=%s cutoff_ms=%s",
+            s["shard_date"], s["removed"], s["cutoff_ms"],
+        )
+    for f in failures:
+        if f.get("unexpected"):
+            logger.warning(
+                "Unexpected movie-claim sweep error for shard=%s",
+                f["shard_date"], exc_info=False,
+            )
+        else:
+            logger.warning(
+                "Movie-claim sweep unavailable for shard=%s: %s",
+                f["shard_date"], f["error"],
+            )
 
     summary = {
         "shards": shard_dates,

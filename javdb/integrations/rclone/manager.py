@@ -1184,10 +1184,9 @@ def run_rclone_manager(
     """
     if not scan and not report and not execute:
         raise ValueError("At least one of scan/report/execute must be True")
-    if execute and not report and not scan:
-        # Execute-only without report requires existing dedup records — that
-        # is a valid CLI combo but we gate it here to match the constraint
-        # documented in the endpoint: execute=True requires report=True.
+    if execute and not report:
+        # execute=True requires report=True regardless of scan — the endpoint
+        # contract is that execute always needs a fresh report phase.
         raise ValueError(
             "execute=True requires report=True (or scan=True + report=True)"
         )
