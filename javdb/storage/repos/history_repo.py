@@ -18,6 +18,46 @@ from javdb.infra.config import cfg
 from javdb.spider.contracts import indicators_to_category as _indicators_to_category
 
 
+def _normalize_date_bound(value: str, *, is_end: bool) -> str:
+    """Normalize a date/datetime string to the DB format ``YYYY-MM-DD HH:MM:SS``.
+
+    Accepts:
+    - Full ISO 8601 datetime: ``2026-01-01T10:00:00Z``, ``2026-01-01T10:00:00``,
+      with optional timezone offset or fractional seconds.
+    - Space-separated datetime already in DB format: ``2026-01-01 10:00:00``.
+    - Date-only: ``2026-01-01``.  ``is_end=False`` → ``00:00:00``;
+      ``is_end=True`` → ``23:59:59`` (inclusive of the whole day).
+    """
+    v = value.strip()
+    # Date-only: exactly 10 chars matching YYYY-MM-DD, no time component
+    if len(v) == 10 and v[4] == "-" and v[7] == "-":
+        try:
+            dt = datetime.strptime(v, "%Y-%m-%d")
+            if is_end:
+                return dt.strftime("%Y-%m-%d 23:59:59")
+            return dt.strftime("%Y-%m-%d 00:00:00")
+        except ValueError:
+            pass
+    # Strip trailing Z before fromisoformat (Python <3.11 doesn't accept it)
+    if v.endswith("Z"):
+        v = v[:-1]
+    # Replace T separator so fromisoformat handles both styles
+    v = v.replace("T", " ")
+    # Drop timezone offset (e.g. +05:30) — keep only the datetime portion
+    # A '+' or '-' after position 10 indicates a timezone offset.
+    for sep in ("+", "-"):
+        pos = v.find(sep, 10)
+        if pos != -1:
+            v = v[:pos]
+            break
+    try:
+        dt = datetime.fromisoformat(v)
+        return dt.strftime("%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        # Last resort: return as-is and let SQLite handle it
+        return value
+
+
 def _execute_backend_batch(conn, statements):
     if not statements:
         return []
@@ -407,11 +447,11 @@ class HistoryRepo:
 
         if date_from is not None:
             wheres.append("m.DateTimeCreated >= ?")
-            params.append(date_from)
+            params.append(_normalize_date_bound(date_from, is_end=False))
 
         if date_to is not None:
             wheres.append("m.DateTimeCreated <= ?")
-            params.append(date_to)
+            params.append(_normalize_date_bound(date_to, is_end=True))
 
         where_clause = ("WHERE " + " AND ".join(wheres)) if wheres else ""
 
@@ -506,11 +546,11 @@ class HistoryRepo:
 
         if date_from is not None:
             wheres.append("t.DateTimeCreated >= ?")
-            params.append(date_from)
+            params.append(_normalize_date_bound(date_from, is_end=False))
 
         if date_to is not None:
             wheres.append("t.DateTimeCreated <= ?")
-            params.append(date_to)
+            params.append(_normalize_date_bound(date_to, is_end=True))
 
         where_clause = ("WHERE " + " AND ".join(wheres)) if wheres else ""
 
@@ -596,10 +636,10 @@ class HistoryRepo:
             params.append(session_id)
         if date_from is not None:
             wheres.append("m.DateTimeCreated >= ?")
-            params.append(date_from)
+            params.append(_normalize_date_bound(date_from, is_end=False))
         if date_to is not None:
             wheres.append("m.DateTimeCreated <= ?")
-            params.append(date_to)
+            params.append(_normalize_date_bound(date_to, is_end=True))
 
         where_clause = ("WHERE " + " AND ".join(wheres)) if wheres else ""
         sql = f"""
@@ -683,10 +723,10 @@ class HistoryRepo:
             params.append(session_id)
         if date_from is not None:
             wheres.append("t.DateTimeCreated >= ?")
-            params.append(date_from)
+            params.append(_normalize_date_bound(date_from, is_end=False))
         if date_to is not None:
             wheres.append("t.DateTimeCreated <= ?")
-            params.append(date_to)
+            params.append(_normalize_date_bound(date_to, is_end=True))
 
         where_clause = ("WHERE " + " AND ".join(wheres)) if wheres else ""
         sql = f"""
