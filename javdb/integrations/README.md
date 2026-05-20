@@ -2,6 +2,8 @@
 
 External-service integrations split by tool: qBittorrent (downloader), PikPak (cloud), Rclone (remote sync), and email notifications.
 
+> **ADR-015 migration note:** `javdb.integrations.*` is converging to service/client modules only. User-facing `argparse`, `main()`, `sys.exit()`, and `python -m` entrypoints belong under `apps.cli.*`.
+
 ## Files
 
 (none — this is a grouping namespace; consult each subdirectory.)
