@@ -7,21 +7,24 @@ GET /api/history/torrents/export — stream full-dataset CSV
 """
 from __future__ import annotations
 
-from typing import Optional
-
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from apps.api.infra.auth import _require_auth
 from apps.api.schemas.history import (
     MovieSearchItem,
+    MovieSearchParams,
     MovieSearchResponse,
     TorrentSearchItem,
+    TorrentSearchParams,
     TorrentSearchResponse,
 )
 from javdb.storage.repos.history_repo import HistoryRepo
 
 router = APIRouter(prefix="/api/history", tags=["history"])
+
+_INVALID_CURSOR = {"error": {"code": "history.invalid_cursor", "message": "cursor is malformed"}}
+_INVALID_DATE = {"error": {"code": "history.invalid_date", "message": "date_from or date_to could not be parsed"}}
 
 
 def _movie_row_to_item(row: dict) -> MovieSearchItem:
@@ -59,29 +62,27 @@ def _torrent_row_to_item(row: dict) -> TorrentSearchItem:
 
 @router.get("/movies", response_model=MovieSearchResponse)
 def search_movies(
-    q: Optional[str] = Query(default=None),
-    actor: Optional[str] = Query(default=None),
-    perfect_match: Optional[bool] = Query(default=None),
-    hi_res: Optional[bool] = Query(default=None),
-    session_id: Optional[str] = Query(default=None),
-    date_from: Optional[str] = Query(default=None),
-    date_to: Optional[str] = Query(default=None),
-    cursor: Optional[str] = Query(default=None),
-    limit: int = Query(default=50, ge=1, le=200),
+    params: MovieSearchParams = Depends(),
     _user=Depends(_require_auth),
 ) -> MovieSearchResponse:
     repo = HistoryRepo()
-    items, next_cursor, total = repo.search_movies(
-        q=q,
-        actor=actor,
-        perfect_match=perfect_match,
-        hi_res=hi_res,
-        session_id=session_id,
-        date_from=date_from,
-        date_to=date_to,
-        cursor=cursor,
-        limit=limit,
-    )
+    try:
+        items, next_cursor, total = repo.search_movies(
+            q=params.q,
+            actor=params.actor,
+            perfect_match=params.perfect_match,
+            hi_res=params.hi_res,
+            session_id=params.session_id,
+            date_from=params.date_from,
+            date_to=params.date_to,
+            cursor=params.cursor,
+            limit=params.limit,
+        )
+    except ValueError as exc:
+        msg = str(exc)
+        if "cursor" in msg:
+            raise HTTPException(status_code=400, detail=_INVALID_CURSOR)
+        raise HTTPException(status_code=400, detail=_INVALID_DATE)
     return MovieSearchResponse(
         items=[_movie_row_to_item(r) for r in items],
         next_cursor=next_cursor,
@@ -91,27 +92,32 @@ def search_movies(
 
 @router.get("/movies/export")
 def export_movies_csv(
-    q: Optional[str] = Query(default=None),
-    actor: Optional[str] = Query(default=None),
-    perfect_match: Optional[bool] = Query(default=None),
-    hi_res: Optional[bool] = Query(default=None),
-    session_id: Optional[str] = Query(default=None),
-    date_from: Optional[str] = Query(default=None),
-    date_to: Optional[str] = Query(default=None),
+    params: MovieSearchParams = Depends(),
     _user=Depends(_require_auth),
 ) -> StreamingResponse:
     repo = HistoryRepo()
-    rows = repo.export_movies_csv(
-        q=q,
-        actor=actor,
-        perfect_match=perfect_match,
-        hi_res=hi_res,
-        session_id=session_id,
-        date_from=date_from,
-        date_to=date_to,
-    )
+    try:
+        rows = repo.export_movies_csv(
+            q=params.q,
+            actor=params.actor,
+            perfect_match=params.perfect_match,
+            hi_res=params.hi_res,
+            session_id=params.session_id,
+            date_from=params.date_from,
+            date_to=params.date_to,
+        )
+        # Consume the header eagerly so date-parse errors raise before we return 200.
+        # The generator is then chained back for the data rows.
+        header_chunk = next(rows)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=_INVALID_DATE)
+
+    def _stream():
+        yield header_chunk
+        yield from rows
+
     return StreamingResponse(
-        rows,
+        _stream(),
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=movies.csv"},
     )
@@ -119,29 +125,27 @@ def export_movies_csv(
 
 @router.get("/torrents", response_model=TorrentSearchResponse)
 def search_torrents(
-    q: Optional[str] = Query(default=None),
-    resolution_type: Optional[int] = Query(default=None),
-    has_subtitle: Optional[bool] = Query(default=None),
-    uncensored: Optional[bool] = Query(default=None),
-    session_id: Optional[str] = Query(default=None),
-    date_from: Optional[str] = Query(default=None),
-    date_to: Optional[str] = Query(default=None),
-    cursor: Optional[str] = Query(default=None),
-    limit: int = Query(default=50, ge=1, le=200),
+    params: TorrentSearchParams = Depends(),
     _user=Depends(_require_auth),
 ) -> TorrentSearchResponse:
     repo = HistoryRepo()
-    items, next_cursor, total = repo.search_torrents(
-        q=q,
-        resolution_type=resolution_type,
-        has_subtitle=has_subtitle,
-        uncensored=uncensored,
-        session_id=session_id,
-        date_from=date_from,
-        date_to=date_to,
-        cursor=cursor,
-        limit=limit,
-    )
+    try:
+        items, next_cursor, total = repo.search_torrents(
+            q=params.q,
+            resolution_type=params.resolution_type,
+            has_subtitle=params.has_subtitle,
+            uncensored=params.uncensored,
+            session_id=params.session_id,
+            date_from=params.date_from,
+            date_to=params.date_to,
+            cursor=params.cursor,
+            limit=params.limit,
+        )
+    except ValueError as exc:
+        msg = str(exc)
+        if "cursor" in msg:
+            raise HTTPException(status_code=400, detail=_INVALID_CURSOR)
+        raise HTTPException(status_code=400, detail=_INVALID_DATE)
     return TorrentSearchResponse(
         items=[_torrent_row_to_item(r) for r in items],
         next_cursor=next_cursor,
@@ -151,27 +155,30 @@ def search_torrents(
 
 @router.get("/torrents/export")
 def export_torrents_csv(
-    q: Optional[str] = Query(default=None),
-    resolution_type: Optional[int] = Query(default=None),
-    has_subtitle: Optional[bool] = Query(default=None),
-    uncensored: Optional[bool] = Query(default=None),
-    session_id: Optional[str] = Query(default=None),
-    date_from: Optional[str] = Query(default=None),
-    date_to: Optional[str] = Query(default=None),
+    params: TorrentSearchParams = Depends(),
     _user=Depends(_require_auth),
 ) -> StreamingResponse:
     repo = HistoryRepo()
-    rows = repo.export_torrents_csv(
-        q=q,
-        resolution_type=resolution_type,
-        has_subtitle=has_subtitle,
-        uncensored=uncensored,
-        session_id=session_id,
-        date_from=date_from,
-        date_to=date_to,
-    )
+    try:
+        rows = repo.export_torrents_csv(
+            q=params.q,
+            resolution_type=params.resolution_type,
+            has_subtitle=params.has_subtitle,
+            uncensored=params.uncensored,
+            session_id=params.session_id,
+            date_from=params.date_from,
+            date_to=params.date_to,
+        )
+        header_chunk = next(rows)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=_INVALID_DATE)
+
+    def _stream():
+        yield header_chunk
+        yield from rows
+
     return StreamingResponse(
-        rows,
+        _stream(),
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=torrents.csv"},
     )

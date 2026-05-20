@@ -204,3 +204,34 @@ def test_torrents_export_contains_header(admin_client, seeded_history):
 def test_torrents_export_requires_auth(anon_client):
     r = anon_client.get("/api/history/torrents/export")
     assert r.status_code in (401, 403)
+
+
+# ── 400 bad-cursor / bad-date error paths ────────────────────────────────────
+
+
+def test_movies_bad_cursor_returns_400(admin_client):
+    r = admin_client.get("/api/history/movies", params={"cursor": "!!!not-base64!!!"})
+    assert r.status_code == 400
+    body = r.json()
+    assert body["detail"]["error"]["code"] == "history.invalid_cursor"
+
+
+def test_movies_bad_date_from_returns_400(admin_client):
+    r = admin_client.get("/api/history/movies", params={"date_from": "not-a-date"})
+    assert r.status_code == 400
+    body = r.json()
+    assert body["detail"]["error"]["code"] == "history.invalid_date"
+
+
+def test_torrents_bad_cursor_returns_400(admin_client):
+    r = admin_client.get("/api/history/torrents", params={"cursor": "garbage!!!"})
+    assert r.status_code == 400
+    body = r.json()
+    assert body["detail"]["error"]["code"] == "history.invalid_cursor"
+
+
+def test_torrents_bad_date_to_returns_400(admin_client):
+    r = admin_client.get("/api/history/torrents", params={"date_to": "2026/01/01"})
+    assert r.status_code == 400
+    body = r.json()
+    assert body["detail"]["error"]["code"] == "history.invalid_date"
