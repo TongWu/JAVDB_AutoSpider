@@ -2,7 +2,7 @@
 --
 -- Apply with:
 --   wrangler d1 execute javdb-operations --remote \
---     --file=migration/d1/2026_05_20_add_email_notification_history.sql
+--     --file=javdb/migrations/d1/2026_05_20_add_email_notification_history.sql
 --
 -- Mirror table used by:
 --   - javdb/integrations/notify/email.py (records every send attempt)
