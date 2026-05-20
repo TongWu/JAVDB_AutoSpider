@@ -176,7 +176,7 @@ jobs:
             else
               echo "**Result**: ❌ FAIL — one or more checks regressed."
               echo ""
-              echo "An operator must investigate before declaring the bake clean. See [\`docs/en/ops/d1-rollback.md\`](../blob/main/docs/en/ops/d1-rollback.md) Appendix A.1 for the ADR-005 D10 gate definition."
+              echo "An operator must investigate before declaring the bake clean. See [\`docs/handbook/en/ops/d1-rollback.md\`](../blob/main/docs/handbook/en/ops/d1-rollback.md) Appendix A.1 for the ADR-005 D10 gate definition."
             fi
             echo ""
             echo "## Detail"
