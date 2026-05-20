@@ -188,6 +188,16 @@ class TestRcloneRun:
         body = resp.json()
         assert body["detail"]["error"]["code"] == "ops.rclone.invalid_flags"
 
+    def test_execute_with_scan_but_no_report_returns_422(self, admin_client):
+        """execute=True, scan=True, report=False → 422 (scan doesn't excuse missing report)."""
+        resp = admin_client.post(
+            "/api/ops/rclone/run",
+            json={"scan": True, "report": False, "execute": True, "dry_run": True},
+        )
+        assert resp.status_code == 422
+        body = resp.json()
+        assert body["detail"]["error"]["code"] == "ops.rclone.invalid_flags"
+
     def test_nothing_to_do_returns_422(self, admin_client):
         """scan=False, report=False, execute=False → 422."""
         resp = admin_client.post(
@@ -427,3 +437,37 @@ class TestCleanupClaimStages:
             json={},
         )
         assert resp.status_code in (401, 403)
+
+
+# ---------------------------------------------------------------------------
+# Direct helper validation — run_rclone_manager guard
+# ---------------------------------------------------------------------------
+
+
+class TestRunRcloneManagerValidation:
+    """Verify run_rclone_manager raises ValueError for invalid flag combos.
+
+    These tests call the helper directly (no HTTP layer) to confirm the
+    stricter guard added for Violation 2 of the spec review.
+    """
+
+    def test_execute_with_scan_no_report_raises(self):
+        """execute=True, scan=True, report=False must raise ValueError."""
+        from javdb.integrations.rclone.manager import run_rclone_manager
+
+        with pytest.raises(ValueError, match="execute=True requires report=True"):
+            run_rclone_manager(scan=True, report=False, execute=True, dry_run=True)
+
+    def test_execute_no_scan_no_report_raises(self):
+        """execute=True, scan=False, report=False must raise ValueError."""
+        from javdb.integrations.rclone.manager import run_rclone_manager
+
+        with pytest.raises(ValueError, match="execute=True requires report=True"):
+            run_rclone_manager(scan=False, report=False, execute=True, dry_run=True)
+
+    def test_nothing_to_do_raises(self):
+        """scan=False, report=False, execute=False must raise ValueError."""
+        from javdb.integrations.rclone.manager import run_rclone_manager
+
+        with pytest.raises(ValueError, match="At least one of"):
+            run_rclone_manager(scan=False, report=False, execute=False, dry_run=True)
