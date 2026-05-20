@@ -250,7 +250,7 @@ Token 复用 `config.py` 中已有的 `GIT_PASSWORD` PAT。除非操作者反馈
 
 - **后端版本偏差**: 当 `capabilities.build.backend_version` < 最低版本时前端拒绝启动。启动门渲染"请升级"页面。
 - **后端错误的 i18n**: 后端错误码映射到前端翻译。日志字符串保持英文。
-- **回滚库分层反转**: `javdb/storage/rollback/core.py` 从 `apps.cli.db._session_helpers` 导入——跨层导入。修复方案：将 helpers 移入 `javdb/storage/rollback/session_helpers.py`。跟踪于 [IMP-009](../impl/IMP-009-frontend-phase1-completion.md) Task 4。
+- **回滚库分层反转（2026-05-20 更新）**: 原始的 `javdb/storage/rollback/core.py` -> `apps.cli.db._session_helpers` 导入已经移除。当前过渡 helper path 是 `javdb.storage.rollback.session_helpers`，而 `apps.cli.db._session_helpers` 仍是 shim。[ADR-014](ADR-014-storage-cli-layering.zh.md) 跟踪最终收敛到 `javdb.storage.sessions.lifecycle_helpers`，以及删除两个 legacy wrappers。
 - **Commit 端点副作用一致性**: `javdb/storage/sessions/commit.py` 已有 `fanout_claims` 和 `emit_metrics` 标志；HTTP 端点默认为 `False`。修复方案：API 请求体默认为 `True` 以保持 CLI 一致性。跟踪于 [IMP-009](../impl/IMP-009-frontend-phase1-completion.md) Task 5。
 - **PikPak 端点粒度**: 仅暴露批量模式（`POST /api/ops/pikpak/transfer { days, dry_run }`）。单种子转移推迟。
 - **Rclone 端点粒度**: 单端点 + 标志（`POST /api/ops/rclone/run { scan, report, execute, dry_run }`）。前端提供"快速去重"和"高级"模式预设。

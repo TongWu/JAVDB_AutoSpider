@@ -250,7 +250,7 @@ No Full-Text Search (FTS5). SQLite supports it but Cloudflare D1 does not. Maint
 
 - **Backend version skew**: FE refuses to boot when `capabilities.build.backend_version` < minimum. Boot gate renders "please upgrade" page.
 - **i18n for BE errors**: BE error codes mapped to FE translations. Log strings stay English.
-- **Rollback library layering inversion**: `javdb/storage/rollback/core.py` imports from `apps.cli.db._session_helpers` — a cross-layer import. Fix: move helpers into `javdb/storage/rollback/session_helpers.py`. Tracked in [IMP-009](../impl/IMP-009-frontend-phase1-completion.md) Task 4.
+- **Rollback library layering inversion (updated 2026-05-20)**: the original `javdb/storage/rollback/core.py` -> `apps.cli.db._session_helpers` import has been removed. The interim helper path is `javdb.storage.rollback.session_helpers`, while `apps.cli.db._session_helpers` remains a shim. [ADR-014](ADR-014-storage-cli-layering.md) tracks final convergence to `javdb.storage.sessions.lifecycle_helpers` and deletion of both legacy wrappers.
 - **Commit endpoint side-effect parity**: `javdb/storage/sessions/commit.py` already has `fanout_claims` and `emit_metrics` flags; HTTP endpoint defaults them to `False`. Fix: default to `True` in the API request body for CLI parity. Tracked in [IMP-009](../impl/IMP-009-frontend-phase1-completion.md) Task 5.
 - **PikPak endpoint granularity**: Batch mode only (`POST /api/ops/pikpak/transfer { days, dry_run }`). Single-torrent transfer deferred.
 - **Rclone endpoint granularity**: Single endpoint with flags (`POST /api/ops/rclone/run { scan, report, execute, dry_run }`). FE presets "Quick Dedup" and "Advanced" mode.

@@ -208,6 +208,8 @@
 - Modify: `apps/cli/db/commit_session.py`
 - Modify: tests that monkeypatch `apps.cli.db._session_helpers`
 
+**2026-05-20 update:** this task has been partially completed. The original storage-to-CLI import has moved to `javdb.storage.rollback.session_helpers`, while `apps.cli.db._session_helpers` remains a shim. [ADR-014](../adr/ADR-014-storage-cli-layering.md) and [IMP-027](IMP-027-storage-cli-layering-phase1-guard.md) through [IMP-029](IMP-029-storage-cli-layering-phase3-delete-legacy-wrappers.md) track the final canonical module and wrapper deletion.
+
 **Context:** `javdb/storage/rollback/core.py` imports from `apps.cli.db._session_helpers` — a cross-layer import (library → CLI). The helpers need to move into `javdb/storage/`.
 
 - [ ] **Step 1: Identify all helpers to move.**
