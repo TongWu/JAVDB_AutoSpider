@@ -48,9 +48,7 @@ For complete setup instructions, see the [Local Setup Guide](docs/handbook/en/se
 ```
 apps/
 ├── cli/          Canonical CLI entrypoints (spider, pipeline, db/, qb/, pikpak/, rclone/, notify/, ops/)
-├── api/          FastAPI REST API
-├── web/          Vite + Vue.js frontend
-└── desktop/      Electron shell (MVP)
+└── api/          FastAPI REST API
 
 javdb/            Python namespace (PEP 420 — no top-level __init__.py)
 ├── spider/       Scraping runtime + parser/contracts/url/filename/magnet + auth/login
