@@ -1266,6 +1266,16 @@
             "title": "Drop Pending",
             "type": "boolean"
           },
+          "emit_metrics": {
+            "default": true,
+            "title": "Emit Metrics",
+            "type": "boolean"
+          },
+          "fanout_claims": {
+            "default": true,
+            "title": "Fanout Claims",
+            "type": "boolean"
+          },
           "force": {
             "default": false,
             "title": "Force",
