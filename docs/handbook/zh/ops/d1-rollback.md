@@ -73,7 +73,7 @@
 |---|---|---|
 | `ReportMovies`, `ReportTorrents`, `ReportSessions`, `SpiderStats`, `UploaderStats`, `PikpakStats` | 按 `SessionId` 级联删除；拒绝删除 `Status='committed'` 的 `ReportSessions` 行 | `ReportSessions.Status TEXT DEFAULT 'in_progress'`；Phase 3 新增 `WriteMode` 和 `Status` 的 `finalizing` 值 |
 | `MovieHistory`, `TorrentHistory`（Pending 模式 — Phase 3 默认） | 所有写入先暂存到 `PendingMovie/TorrentHistoryWrites`；提交时一次性重算派生字段并 UPSERT 到正式表；回滚时对 `Status='in_progress'` 的行执行 `DELETE`，对 `Status='finalizing'` 的行执行 `db_resume_finalizing_session`。无需 audit 重放。 | `PendingMovieHistoryWrites` 和 `PendingTorrentHistoryWrites` 表（各含显式应用生成的雪花 `Seq`、`ApplyState`、`SessionId` / `RunId` / `RunAttempt`） |
-| `MovieHistory`, `TorrentHistory`（Audit 回退 — **已废弃，退役由 ADR-005 决定**） | 反向重放 `*_Audit` 表以撤销每个 `INSERT` / `UPDATE` / `DELETE`；跳过当前 `SessionId` 不再匹配的行（漂移）。仅可通过工作流 `write_mode_override=audit` 或 `JAVDB_HISTORY_WRITE_MODE=audit` 环境变量显式启用。ADR-006 PR-D（2026-05-16）已移除之前 `pending_mode_disabled_until` 自动切 audit 的机制。Audit 表为只读取证——参见[附录 A](#appendix-a-legacy-audit-fallback-sunset-2026-08)。 | 每个正式表上的 `SessionId INTEGER`；`MovieHistoryAudit` 和 `TorrentHistoryAudit` 表（自 2026-05-13 起只读，由 `scripts/audit_archive.py` 每周归档） |
+| `MovieHistory`, `TorrentHistory`（Audit 回退 — **已废弃，退役由 ADR-005 决定**） | 反向重放 `*_Audit` 表以撤销每个 `INSERT` / `UPDATE` / `DELETE`；跳过当前 `SessionId` 不再匹配的行（漂移）。仅可通过工作流 `write_mode_override=audit` 或 `JAVDB_HISTORY_WRITE_MODE=audit` 环境变量显式启用。ADR-006 PR-D（2026-05-16）已移除之前 `pending_mode_disabled_until` 自动切 audit 的机制。Audit 表为只读取证——参见[附录 A](#appendix-a-legacy-audit-fallback-sunset-2026-08)。 | 每个正式表上的 `SessionId INTEGER`；`MovieHistoryAudit` 和 `TorrentHistoryAudit` 表（自 2026-05-13 起只读，由 `apps/cli/db/audit_archive.py` 每周归档） |
 | `PikpakHistory`, `DedupRecords`, `InventoryAlignNoExactMatch` | 删除按 session 范围划定的行。`DedupRecords` 的软删除/孤立更新会先将其前像快照到 `DedupRecordsRollback_<session_id>`，因此回滚可恢复已有行并删除失败 session 创建的行 | 每个表上的 `SessionId INTEGER`；按 session 的 `DedupRecordsRollback_<session_id>` 备份表 |
 | `RcloneInventory` | 按 session 暂存表 → 原子 D1 批量交换。失败的扫描丢弃暂存表；正式表永远不会看到半写入的扫描 | `RcloneInventoryStaging_<session_id>`（每次运行创建/丢弃） |
 
@@ -108,7 +108,7 @@ candidate = f"{ts}-{tag_hex}-{counter:04x}"
 
 - 在 `STORAGE_BACKEND=dual` 模式下，SQLite 和 D1 各自维护自己的 AUTOINCREMENT 计数器；过去任何不对称的 INSERT（一侧提交，另一侧失败）会使它们永久失同步。
 - `DualCursor.lastrowid` 返回游标包装的那个后端的值。将其作为下游表的 `SessionId` 信任正是导致 2026-05-08 事件的原因：SQLite 侧分配了 `Id=332`，但在 D1 上 `Id=332` 是来自 2026-05-07 工作流的过期行，而 spider 将其 history 写入标记为 `SessionId=332`。Rollback CLI 随后看到跨越 35 小时的 145 条 audit 行，并拒绝回滚大部分，标记为漂移。
-- 参见 [`migration/d1/2026_05_08_sessionid_decouple.md`](../../../../migration/d1/2026_05_08_sessionid_decouple.md) 了解迁移详情。
+- 参见 [`javdb/migrations/d1/2026_05_08_sessionid_decouple.md`](../../../../javdb/migrations/d1/2026_05_08_sessionid_decouple.md) 了解迁移详情。
 
 [`javdb/storage/dual_connection.py`](../../../../javdb/storage/dual_connection.py) 中的守卫（`DualCursor.for_write`）在任何未来代码路径尝试 INSERT 到受保护表（`APPLICATION_GENERATED_ID_TABLES`）且未提供显式 Id 而两个后端对 `lastrowid` 存在分歧时，将抛出 `DualWriteIdMismatchError`。
 
@@ -335,7 +335,7 @@ python3 -m apps.cli.commit_session --session-id 123
 
 ## Audit 表取证 *（自 Phase 4 起只读，2026-05-13）*
 
-> Phase 4 契约：audit 表**仅用于历史 session 取证**。新 session 不会向其追加行——Pending 写入路径是默认方式。在[附录 A](#appendix-a-legacy-audit-fallback-sunset-2026-08) 的日落日期之前，已提交/失败 session 的行保留足够长的时间供操作员查询；[`scripts/audit_archive.py`](../../../../scripts/audit_archive.py) 定时任务每周一清理 > 30 天的数据。
+> Phase 4 契约：audit 表**仅用于历史 session 取证**。新 session 不会向其追加行——Pending 写入路径是默认方式。在[附录 A](#appendix-a-legacy-audit-fallback-sunset-2026-08) 的日落日期之前，已提交/失败 session 的行保留足够长的时间供操作员查询；[`apps/cli/db/audit_archive.py`](../../../../apps/cli/db/audit_archive.py) 定时任务每周一清理 > 30 天的数据。
 
 `MovieHistoryAudit` 和 `TorrentHistoryAudit` 表是临时存储——`db_rollback_session` 在成功重放后删除其行。在此之前，它们是有用的诊断线索。
 
@@ -390,15 +390,15 @@ CLI 以退出码 `4` 退出以暴露部分失败，让操作员注意到。
 python3 -m apps.cli.migration --backup
 
 # Cloudflare D1——应用 SQL 包：
-wrangler d1 execute history    --file=migration/d1/2026_05_04_add_rollback_columns_history.sql
-wrangler d1 execute reports    --file=migration/d1/2026_05_04_add_rollback_columns_reports.sql
-wrangler d1 execute operations --file=migration/d1/2026_05_04_add_rollback_columns_operations.sql
+wrangler d1 execute history    --file=javdb/migrations/d1/2026_05_04_add_rollback_columns_history.sql
+wrangler d1 execute reports    --file=javdb/migrations/d1/2026_05_04_add_rollback_columns_reports.sql
+wrangler d1 execute operations --file=javdb/migrations/d1/2026_05_04_add_rollback_columns_operations.sql
 
 # 2026-05-08 后续：添加 (RunId, RunAttempt, FailureReason) 列
 # 以便 rollback 可以按 GitHub 运行标识寻址 session。参见
-# migration/d1/2026_05_08_sessionid_decouple.md 了解原因。
-wrangler d1 execute reports --file=migration/d1/2026_05_08_add_run_identity_columns_reports.sql
-wrangler d1 execute history --file=migration/d1/2026_05_08_add_run_identity_columns_history.sql
+# javdb/migrations/d1/2026_05_08_sessionid_decouple.md 了解原因。
+wrangler d1 execute reports --file=javdb/migrations/d1/2026_05_08_add_run_identity_columns_reports.sql
+wrangler d1 execute history --file=javdb/migrations/d1/2026_05_08_add_run_identity_columns_history.sql
 ```
 
 迁移后，`db.SCHEMA_VERSION == 11`。`init_db` 内部的 `_ensure_rollback_columns` 辅助函数会在后续启动时添加列（如果之前的迁移不完整）。
@@ -407,7 +407,7 @@ wrangler d1 execute history --file=migration/d1/2026_05_08_add_run_identity_colu
 
 ## Pending 模式（当前默认）
 
-`ReportSessions.WriteMode`（2026-05-09 新增）选择 cleanup-on-failure 和过期 session 定时任务的调度路径。自 Phase 3 以来默认为 **`pending`**（DailyIngestion / AdHocIngestion / TestIngestion）；遗留 audit 路径仍可通过环境变量 `JAVDB_HISTORY_WRITE_MODE=audit` 或工作流 workflow_dispatch 输入 `write_mode_override` 选择。参见[架构方案](../../../../.cursor/plans/ingestion_perfect_rollback_2152bae2.plan.md)了解设计原理。
+`ReportSessions.WriteMode`（2026-05-09 新增）选择 cleanup-on-failure 和过期 session 定时任务的调度路径。自 Phase 3 以来默认为 **`pending`**（DailyIngestion / AdHocIngestion / TestIngestion）；遗留 audit 路径仍可通过环境变量 `JAVDB_HISTORY_WRITE_MODE=audit` 或工作流 workflow_dispatch 输入 `write_mode_override` 选择。参见[ADR-006](../../../design/adr/ADR-006-pending-mode-default-rollout.md)了解设计原理。
 
 ### Pending 状态机
 
@@ -456,16 +456,16 @@ in_progress ─(db_begin_finalize)─▶ finalizing ─(db_finish_commit)─▶ 
 - **软告警**（主题 `[PENDING-ALERT] (...)`）— `commit_attempts > Phase3_max`、`worker_stage_rollback_failed > 0`、`staged_claim_orphan_count > 0`、`d1_request_count_audit_baseline_ratio > 1.8`、或 `final_status='finalizing'`。
 - **严重告警**（主题 `[PENDING-PAUSE] (...)`，ADR-006 之前为 `[PENDING-ROLLBACK-AUTO]`）— `pending_residual_count > 0`、`derived_recompute_drift > 0`、或 `cleanup_path_mismatch_count > 0`。同时触发下方的[告警 + 暂停](#告警--暂停publish-configyml-adr-006-pr-d)。
 
-当 [`scripts/aggregate_pending_health.py`](../../../../scripts/aggregate_pending_health.py) 生成了 `reports/D1/pending_health_24h.json` 时，**健康快照**块跟随在每 session 表后面。DailyIngestion 和 AdHocIngestion 都在 `Run Email Notification` 之前调用此聚合器，使快照覆盖过去 24 小时的 pending session 以及过期定时任务的 resume 成功/失败。
+当 [`apps/cli/db/pending_health.py`](../../../../apps/cli/db/pending_health.py) 生成了 `reports/D1/pending_health_24h.json` 时，**健康快照**块跟随在每 session 表后面。DailyIngestion 和 AdHocIngestion 都在 `Run Email Notification` 之前调用此聚合器，使快照覆盖过去 24 小时的 pending session 以及过期定时任务的 resume 成功/失败。
 
 Phase 2 阈值仍可通过环境变量 `JAVDB_PENDING_ALERT_PHASE=2` 使用——在 TestIngestion canary 预热期间有用。
 
 ### 告警 + 暂停（`.publish-config.yml`）— ADR-006 PR-D
 
-DailyIngestion / AdHocIngestion 中的**严重** pending 告警会运行邮件任务中的 `Alert + pause on critical pending alert (ADR-006)` 步骤。它调用 [`scripts/pending_mode_alert_and_pause.py`](../../../../scripts/pending_mode_alert_and_pause.py)，写入（或延长）：
+DailyIngestion / AdHocIngestion 中的**严重** pending 告警会运行邮件任务中的 `Alert + pause on critical pending alert (ADR-006)` 步骤。它调用 [`apps/cli/db/pending_alert.py`](../../../../apps/cli/db/pending_alert.py)，写入（或延长）：
 
 ```yaml
-# ADR-006 pause marker — written by scripts/pending_mode_alert_and_pause.py.
+# ADR-006 pause marker — written by apps/cli/db/pending_alert.py.
 pipeline_paused_until: '2026-05-17T07:00:00+00:00'
 pipeline_paused_reason: 'DailyIngestion run 12345: pending_residual_count=2 session=67890'
 ```
@@ -531,12 +531,12 @@ pipeline_paused_reason: 'DailyIngestion run 12345: pending_residual_count=2 sess
 
 - CLI：[`apps/cli/db/rollback.py`](../../../../apps/cli/db/rollback.py)、[`apps/cli/db/commit_session.py`](../../../../apps/cli/db/commit_session.py)、[`apps/cli/db/cleanup_stale_in_progress.py`](../../../../apps/cli/db/cleanup_stale_in_progress.py)
 - 核心辅助函数：[`javdb/storage/db/db.py`](../../../../javdb/storage/db/db.py)（`db_stage_history_write`、`db_commit_session_history`、`db_resume_finalizing_session`、`db_rollback_session`、`db_mark_session_committed`、`db_find_in_progress_sessions`、`db_find_stale_pending_sessions`、`db_pending_session_stats`、`_audit_record_movie_change`、`_rollback_history` 等）
-- Phase 3 脚本：[`scripts/aggregate_pending_health.py`](../../../../scripts/aggregate_pending_health.py)、[`scripts/pending_mode_alert_and_pause.py`](../../../../scripts/pending_mode_alert_and_pause.py) *（ADR-006 PR-D 替代了已退役的 `pending_mode_auto_fallback.py`）*
-- Phase 4 脚本：[`scripts/audit_archive.py`](../../../../scripts/audit_archive.py)、[`scripts/cleanup_stale_session_audits.py`](../../../../scripts/cleanup_stale_session_audits.py)（自 2026-05-13 起只读）
+- Phase 3 脚本：[`apps/cli/db/pending_health.py`](../../../../apps/cli/db/pending_health.py)、[`apps/cli/db/pending_alert.py`](../../../../apps/cli/db/pending_alert.py) *（ADR-006 PR-D 替代了已退役的 `pending_mode_auto_fallback.py`）*
+- Phase 4 脚本：[`apps/cli/db/audit_archive.py`](../../../../apps/cli/db/audit_archive.py)、[`apps/cli/db/cleanup_stale_session_audits.py`](../../../../apps/cli/db/cleanup_stale_session_audits.py)（自 2026-05-13 起只读）
 - 邮件集成：[`javdb/integrations/notify/email.py`](../../../../javdb/integrations/notify/email.py)（`_format_pending_verify_section`、`_evaluate_pending_alerts`、`_format_health_snapshot_section`）
 - 工作流：[`.github/workflows/DailyIngestion.yml`](../../../../.github/workflows/DailyIngestion.yml)、[`.github/workflows/AdHocIngestion.yml`](../../../../.github/workflows/AdHocIngestion.yml)、[`.github/workflows/RollbackD1.yml`](../../../../.github/workflows/RollbackD1.yml)、[`.github/workflows/StaleSessionCleanup.yml`](../../../../.github/workflows/StaleSessionCleanup.yml)、[`.github/workflows/AuditArchive.yml`](../../../../.github/workflows/AuditArchive.yml)
-- 迁移：[`migration/d1/2026_05_04_add_rollback_columns_*.sql`](../../../../migration/d1/)、[`migration/d1/2026_05_09_add_pending_history_tables.sql`](../../../../migration/d1/)
-- 方案参考：[`.cursor/plans/ingestion_perfect_rollback_2152bae2.plan.md`](../../../../.cursor/plans/ingestion_perfect_rollback_2152bae2.plan.md)
+- 迁移：[`javdb/migrations/d1/2026_05_04_add_rollback_columns_*.sql`](../../../../javdb/migrations/d1/)、[`javdb/migrations/d1/2026_05_09_add_pending_history_tables.sql`](../../../../javdb/migrations/d1/)
+- 方案参考：`.cursor/plans/ingestion_perfect_rollback_2152bae2.plan.md`（历史文件，不在仓库中）
 
 ---
 
@@ -552,7 +552,7 @@ pipeline_paused_reason: 'DailyIngestion run 12345: pending_residual_count=2 sess
 | 2026-05-04 | X3 audit 混合方案作为默认 rollback 策略登陆 `main`。 |
 | 2026-05-09 | Phase 0 / 1 / 2 — `PendingMovie/TorrentHistoryWrites` schema + pending 模式写入路径在 `JAVDB_HISTORY_WRITE_MODE` 后交付。 |
 | 2026-05-11 | Phase 3 — Daily / AdHoc / TestIngestion 默认切换为 `WriteMode='pending'`；audit 回退保留用于紧急分发。 |
-| **2026-05-13** | **Phase 4 — 宣布 Audit 废弃。** `db_upsert_history` 发出 `DeprecationWarning`；`JAVDB_AUDIT_WRITES_DISABLED` 终止开关可用；`scripts/cleanup_stale_session_audits.py` 切换为只读；`scripts/audit_archive.py` 定时任务开始运行。 |
+| **2026-05-13** | **Phase 4 — 宣布 Audit 废弃。** `db_upsert_history` 发出 `DeprecationWarning`；`JAVDB_AUDIT_WRITES_DISABLED` 终止开关可用；`apps/cli/db/cleanup_stale_session_audits.py` 切换为只读；`apps/cli/db/audit_archive.py` 定时任务开始运行。 |
 | **2026-05-16** | **ADR-006 落地。** PR-A 把 Python `_resolve_write_mode` 默认从 `'audit'` 翻转为 `'pending'`。PR-C 把 Daily / AdHoc 上 `workflow_dispatch` 输入选项中的 `audit` 移除。PR-D 把 audit 自动回退替换为告警-暂停门（脚本重命名，`.publish-config.yml` 键从 `pending_mode_disabled_until` 切换为 `pipeline_paused_until`）。30 天 bake 期开始。 |
 | *bake + ~30 天* | **ADR-005 D10 sign-off。** 若 bake 指标稳定（audit session 计数 = 0、无孤儿 audit、暂停脚本触发 ≤ 1 次/月），ADR-005 PR-1 启动。 |
 | *ADR-005 PR-5 之后* | **硬退役。** `_resolve_write_mode('audit')` 抛出异常；rollback CLI 的 audit 重放分支被移除；audit 表从新的 SQLite + D1 schema 中删除（`MovieHistoryAudit` / `TorrentHistoryAudit` 通过 migration `v14` drop）。 |
@@ -562,7 +562,7 @@ pipeline_paused_reason: 'DailyIngestion run 12345: pending_residual_count=2 sess
 - `db_upsert_history()` 在每次调用时发出 `DeprecationWarning`。该函数仍然有效（audit 回退 rollback 对遗留 session 仍依赖它）——直接调用者必须迁移到 `save_parsed_movie_to_history`（在 `WriteMode='pending'` 下自动暂存，仅对显式 audit 回退才访问 `db_upsert_history`）。
 - `JAVDB_AUDIT_WRITES_DISABLED=1` 环境变量（2026-05-13 新增，[`javdb/storage/db/db.py`](../../../../javdb/storage/db/db.py)）将每次 audit 行 INSERT 变为空操作，同时仍允许 `MovieHistory` / `TorrentHistory` UPSERT 落地。默认为 `0`，因为 audit 回退在废弃窗口期间仍需要 audit 行；一旦所有工作流验证仅运行 pending 模式后翻转为 `1`。
 - `MovieHistoryAudit` / `TorrentHistoryAudit` 行仍可用于取证查询——通过 `apps.cli.rollback --scope history --session-id <id>` 进行的手动 rollback 对任何具有 audit 行的遗留 session 仍然有效。预期是没有*新* session 会进入此分支。
-- 破坏性清理辅助工具 `scripts/cleanup_stale_session_audits.py` 现为严格只读——传入 `--apply` 会记录废弃警告并静默降级为干运行。
+- 破坏性清理辅助工具 `apps/cli/db/cleanup_stale_session_audits.py` 现为严格只读——传入 `--apply` 会记录废弃警告并静默降级为干运行。
 
 ### A.3 Audit 归档定时任务（[`AuditArchive.yml`](../../../../.github/workflows/AuditArchive.yml)）
 

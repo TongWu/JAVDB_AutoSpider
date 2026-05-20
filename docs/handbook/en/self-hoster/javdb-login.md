@@ -147,5 +147,3 @@ If auto login fails, extract the cookie manually:
 - Verify cookie was updated in `config.py`
 - Use the same proxy/network for login and spider
 - Try logging in again
-
-For detailed troubleshooting, see [JavDB Login README](../../../../utils/login/JAVDB_LOGIN_README.md).

@@ -362,7 +362,7 @@
 
 - [ ] **Step 5: Update CLAUDE.md.**
 
-  Remove `apps/web/` and `apps/desktop/` from the Architecture section. Replace with a one-line pointer: `- **Frontend** — Standalone repo [`javdb-autospider-web`](https://github.com/<user>/javdb-autospider-web). See [ADR-008](docs/design/adr/ADR-008-frontend-rewrite-architecture.md).`
+  Remove `apps/web/` and `apps/desktop/` from the Architecture section. Replace with a one-line pointer: `- **Frontend** — Standalone repo [`javdb-autospider-web`](https://github.com/<user>/javdb-autospider-web). See [ADR-008](../adr/ADR-008-frontend-rewrite-architecture.md).`
 
 - [ ] **Step 6: Verify no stale references.**
 

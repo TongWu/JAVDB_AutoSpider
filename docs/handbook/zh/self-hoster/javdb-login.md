@@ -147,5 +147,3 @@ LOGIN_VERIFICATION_URLS = []  # 用于验证会话有效性的 URL
 - 确认 cookie 已在 `config.py` 中更新
 - 登录和爬虫使用相同的 proxy/网络
 - 尝试重新登录
-
-详细故障排查请参见 [JavDB Login README](../../../../utils/login/JAVDB_LOGIN_README.md)。
