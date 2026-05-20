@@ -34,11 +34,22 @@ class MovieSearchParams(BaseModel):
     )
     date_from: Optional[str] = Field(
         default=None,
-        description="ISO 8601 lower bound on DateTimeCreated (inclusive)",
+        description=(
+            "Lower bound on DateTimeCreated (inclusive). "
+            "Accepts ISO 8601 date (``2026-01-01``) or datetime "
+            "(``2026-01-01T10:00:00Z``). "
+            "A date-only value is treated as ``00:00:00`` of that day."
+        ),
     )
     date_to: Optional[str] = Field(
         default=None,
-        description="ISO 8601 upper bound on DateTimeCreated (inclusive)",
+        description=(
+            "Upper bound on DateTimeCreated (inclusive). "
+            "Accepts ISO 8601 date (``2026-01-01``) or datetime "
+            "(``2026-01-01T23:59:59Z``). "
+            "A date-only value is treated as ``23:59:59`` of that day "
+            "(inclusive of the whole day)."
+        ),
     )
     cursor: Optional[str] = Field(
         default=None,
@@ -77,11 +88,22 @@ class TorrentSearchParams(BaseModel):
     )
     date_from: Optional[str] = Field(
         default=None,
-        description="ISO 8601 lower bound on DateTimeCreated (inclusive)",
+        description=(
+            "Lower bound on DateTimeCreated (inclusive). "
+            "Accepts ISO 8601 date (``2026-01-01``) or datetime "
+            "(``2026-01-01T10:00:00Z``). "
+            "A date-only value is treated as ``00:00:00`` of that day."
+        ),
     )
     date_to: Optional[str] = Field(
         default=None,
-        description="ISO 8601 upper bound on DateTimeCreated (inclusive)",
+        description=(
+            "Upper bound on DateTimeCreated (inclusive). "
+            "Accepts ISO 8601 date (``2026-01-01``) or datetime "
+            "(``2026-01-01T23:59:59Z``). "
+            "A date-only value is treated as ``23:59:59`` of that day "
+            "(inclusive of the whole day)."
+        ),
     )
     cursor: Optional[str] = Field(
         default=None,
