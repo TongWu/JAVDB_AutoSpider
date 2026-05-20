@@ -5,6 +5,7 @@
 **Deciders**: Architecture depth-pass round 2
 **Prerequisites**: [ADR-006](ADR-006-pending-mode-default-rollout.md) — Pending Mode default must first be rolled out to 100% and the auto-fallback redesigned before this ADR can execute its D10 gate
 **Successor**: [ADR-001](archive/ADR-001-split-db-module.md) — delivers the Phase 3 that ADR-001 never finished, and corrects its over-fine "split by read/write" decision
+**Related**: [ADR-011](ADR-011-javdb-parsing-module.md) supersedes D4 / PR-6 parser-helper relocation
 
 ## Outstanding Work
 
@@ -14,6 +15,7 @@ PR-1 (Repo classes) ✅ shipped: `HistoryRepo`, `OperationsRepo`, `StatsRepo`, `
 - **PR-3** — migrate callers (`history_manager.py`, CLI tools, `db_rollback.py`) off the function family. Blocked on bake.
 - **PR-4** — drop Audit Mode tables (`MovieHistoryAudit`, `TorrentHistoryAudit`) + remove audit code branches. Blocked on bake **and** ADR-006 PR-F sign-off.
 - **PR-5** — delete `db.py` (currently 5,454 lines) and the nine ADR-001 shell modules. Final cleanup post-retirement.
+- **Parser-helper relocation** — extracted from this ADR and superseded by [ADR-011](ADR-011-javdb-parsing-module.md). ADR-005 Storage/Repo work should import parsing helpers from `javdb.parsing.common` after ADR-011 Phase 1 lands.
 
 ## Amendments
 
@@ -49,6 +51,8 @@ PR-1 (Repo classes) ✅ shipped: `HistoryRepo`, `OperationsRepo`, `StatsRepo`, `
   2. **`ReportsRepo` is subsumed by the already-shipped `SessionsRepo`** — D6's planned name was a draft; the implementation correctly named it after its single table (`ReportSessions`). Adding a second class for the same concern would create duplicate test surface and confuse callers. No rename is needed; `SessionsRepo` *is* the "ReportsRepo" of D6.
 
   D6's four-class plan becomes three new write-Repo classes + reuse of `SessionsRepo`. All other D-level decisions are unchanged.
+
+- **2026-05-20 amendment 3**: **Parser-helper relocation extracted to ADR-011.** D4 / PR-6 originally moved three helpers from `apps.api.parsers.common` into a lower module. That overlapped with a larger parsing-boundary correction. [ADR-011](ADR-011-javdb-parsing-module.md) now owns the full JavDB Parsing Interface move to `javdb.parsing`, including those helpers under `javdb.parsing.common`. ADR-005 remains responsible for Storage/Repo retirement only. Any remaining ADR-005 implementation that needs these helpers should import from `javdb.parsing.common` once ADR-011 Phase 1 has landed.
 
 ---
 
@@ -135,9 +139,9 @@ Write methods require a non-empty `session_id` at construction; read methods acc
 
 ### D4: Sink URL / parsing utilities
 
-The three functions in `apps.api.parsers.common` that `db.py` uses (`movie_href_lookup_values`, `javdb_absolute_url`, `absolutize_supporting_actors_json`) move down to `packages/python/javdb_core/url_utils.py`. `apps.api.parsers.common` becomes a re-export of these utilities; once callers are migrated, the re-export is deleted.
+Superseded by [ADR-011](ADR-011-javdb-parsing-module.md). The three functions in `apps.api.parsers.common` that `db.py` uses (`movie_href_lookup_values`, `javdb_absolute_url`, `absolutize_supporting_actors_json`) are now part of the full JavDB Parsing Interface migration. They move to `javdb.parsing.common`, not `packages/python/javdb_core/url_utils.py`.
 
-Establish a **layering invariant**: `packages/**` must not import `apps/**` (enforced by CI lint).
+The layering invariant remains: Storage/Repo code must not import parser helpers from `apps.api`. After ADR-011 Phase 1, it imports from `javdb.parsing.common`.
 
 ### D5: `Repo(conn, session_id)` constructor signature
 
@@ -197,9 +201,9 @@ PR-4  Confirm no in_progress sessions remain in ReportSessions → run v14 migra
 PR-5  Delete db.py; delete the ADR-001 shell modules db_history_read.py /
       db_history_write.py / db_stats.py; delete the db_session global;
       delete the JAVDB_HISTORY_WRITE_MODE environment variable
-PR-6  Sink the 3 utilities from apps.api.parsers.common to
-      packages/python/javdb_core/url_utils.py; enable the CI lint
-      enforcing "packages must not depend on apps"
+PR-6  Superseded by ADR-011. Parser/helper relocation is extracted from
+      ADR-005 and implemented through ADR-011 Phase 1-3. Remaining ADR-005
+      work should consume helpers from javdb.parsing.common after Phase 1.
 PR-7  Re-arrange migrations into per-version files per D7; delete db_migrations.py
 ```
 
@@ -273,8 +277,8 @@ If the check fails, first set `JAVDB_AUDIT_WRITES_DISABLED=1` org-wide and bake 
    - **Mitigation**: before PR-5, add `DeprecationWarning("use HistoryRepo")` at the top of `db.py` for one release cycle and watch the logs for hits.
 3. **The Repo class's `session_id=None` default lets "forgot to pass session" become an implicit bug again.**
    - **Mitigation**: every `stage` / `commit` / `rollback` method's first line is `self._require_session()`, which raises `RuntimeError`. The interface contract is executable.
-4. **`apps.api.parsers.common` re-exports may still be imported externally during the migration.**
-   - **Mitigation**: keep the re-export for one release cycle inside PR-6, with a `DeprecationWarning` attached.
+4. **Storage/Repo work may accidentally keep importing helpers from `apps.api.parsers.common`.**
+   - **Mitigation**: ADR-011 Phase 2 migrates internal callers to `javdb.parsing.common`; ADR-011 Phase 3 deletes the API parser compatibility Adapters.
 
 ---
 
@@ -282,6 +286,7 @@ If the check fails, first set `JAVDB_AUDIT_WRITES_DISABLED=1` org-wide and bake 
 
 - **ADR-001** (partially corrected + completed): this ADR is the real delivery of ADR-001 Phase 3, and corrects its "split History module by read/write" decision.
 - **ADR-002 / ADR-003 / ADR-004**: Worker-side refactors, no direct coupling with this ADR.
+- **ADR-011**: owns parser/helper relocation that D4 / PR-6 originally scoped too narrowly.
 
 ---
 

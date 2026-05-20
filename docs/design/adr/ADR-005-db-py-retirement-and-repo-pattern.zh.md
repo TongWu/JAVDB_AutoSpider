@@ -5,6 +5,7 @@
 **决策者**: 架构深化第二轮
 **前置**: [ADR-006](ADR-006-pending-mode-default-rollout.md) — 必须先把 Pending Mode 默认推到 100% + 重设计 auto-fallback，本 ADR 才能执行 D10 gate
 **后继关系**: [ADR-001](archive/ADR-001-split-db-module.md) — 完成其未交付的 Phase 3，并修正其"按读/写拆分"的过细决策
+**相关**: [ADR-011](ADR-011-javdb-parsing-module.md) 取代 D4 / PR-6 的 parser helper relocation
 
 ## 待办 (Outstanding Work)
 
@@ -14,6 +15,7 @@ PR-1（Repo 类）✅ 已交付：`HistoryRepo`、`OperationsRepo`、`StatsRepo`
 - **PR-3** —— 把调用方（`history_manager.py`、CLI 工具、`db_rollback.py`）迁移出函数族。bake 期间封锁。
 - **PR-4** —— 删除 Audit Mode 表（`MovieHistoryAudit`、`TorrentHistoryAudit`）+ 移除 audit 代码分支。bake 期间封锁，且需 ADR-006 PR-F sign-off。
 - **PR-5** —— 删除 `db.py`（当前 5,454 行）和 ADR-001 留下的九个壳模块。退役后的最终清理。
+- **Parser helper relocation** —— 已从本 ADR 抽出，由 [ADR-011](ADR-011-javdb-parsing-module.md) 接管。ADR-005 后续 Storage/Repo 工作在 ADR-011 Phase 1 落地后应从 `javdb.parsing.common` import helper。
 
 ## 修订记录 (Amendments)
 
@@ -49,6 +51,8 @@ PR-1（Repo 类）✅ 已交付：`HistoryRepo`、`OperationsRepo`、`StatsRepo`
   2. **`ReportsRepo` 由已落地的 `SessionsRepo` 覆盖**——D6 的命名是草稿，实现按其唯一一张表（`ReportSessions`）命名更准确。为同一职责再加一个类会造成测试面重叠 + caller 困惑。**无需重命名**：`SessionsRepo` 就是 D6 里的 ReportsRepo。
 
   D6 的"四类"计划变为"三个新写域 Repo 类 + 复用 SessionsRepo"。其余 D 级决策不变。
+
+- **2026-05-20 amendment 3**：**Parser helper relocation 抽出到 ADR-011。** D4 / PR-6 原本只迁移 `apps.api.parsers.common` 的三个 helper，但这与更完整的 parsing boundary 修正重叠。[ADR-011](ADR-011-javdb-parsing-module.md) 现在负责把完整 JavDB Parsing Interface 迁到 `javdb.parsing`，包括把这些 helper 放到 `javdb.parsing.common`。ADR-005 只继续负责 Storage/Repo 退役工作。后续 ADR-005 实施如需这些 helper，应在 ADR-011 Phase 1 落地后从 `javdb.parsing.common` import。
 
 ---
 
@@ -135,9 +139,9 @@ class HistoryRepo:
 
 ### D4：URL/解析工具下沉
 
-`apps.api.parsers.common` 中被 `db.py` 使用的 3 个函数（`movie_href_lookup_values`、`javdb_absolute_url`、`absolutize_supporting_actors_json`）下沉到 `packages/python/javdb_core/url_utils.py`。`apps.api.parsers.common` 改为 re-export 这些工具，逐步迁移 caller 后删除 re-export。
+由 [ADR-011](ADR-011-javdb-parsing-module.md) 取代。`apps.api.parsers.common` 中被 `db.py` 使用的 3 个函数（`movie_href_lookup_values`、`javdb_absolute_url`、`absolutize_supporting_actors_json`）现在属于完整 JavDB Parsing Interface 迁移的一部分。它们迁到 `javdb.parsing.common`，而不是 `packages/python/javdb_core/url_utils.py`。
 
-确立**分层不变量**：`packages/**` 不得 import `apps/**`（CI lint 强制）。
+分层不变量仍然成立：Storage/Repo 代码不得从 `apps.api` import parser helper。ADR-011 Phase 1 之后，应从 `javdb.parsing.common` import。
 
 ### D5：`Repo(conn, session_id)` 构造签名
 
@@ -193,8 +197,9 @@ PR-4  在 ReportSessions 中确认全部 in_progress session 退场 → 启用 v
       → 删除 db.py / db_history_read.py / db_history_write.py / db_session.py 中的 audit 代码
 PR-5  删除 db.py、删除 db_history_read.py / db_history_write.py / db_stats.py 等 ADR-001 抽出的
       空壳模块；删除 db_session 全局；删除 JAVDB_HISTORY_WRITE_MODE 环境变量
-PR-6  下沉 apps.api.parsers.common 的 3 个工具到 packages/python/javdb_core/url_utils.py，
-      启用 CI lint 强制"packages 不依赖 apps"
+PR-6  由 ADR-011 取代。Parser/helper relocation 从 ADR-005 抽出，
+      通过 ADR-011 Phase 1-3 实施。ADR-005 后续工作在 Phase 1 后
+      使用 javdb.parsing.common 中的 helper。
 PR-7  按 D7 重排 migrations 为版本文件，删 db_migrations.py
 ```
 
