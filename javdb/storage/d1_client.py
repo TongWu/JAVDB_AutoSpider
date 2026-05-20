@@ -113,6 +113,12 @@ _TRANSIENT_ERROR_KEYWORDS = (
     # Export-lock case: CF returns 400 + code 7500 + this exact phrase when
     # a manual or scheduled D1 export is holding a database-wide R/W lock.
     "long-running export",
+    # Network blip: CF returns HTTP 400 + code 7500 + "Network connection
+    # lost." for a transient TCP/edge failure. The next request on a fresh
+    # connection succeeds — without this keyword, dual_connection writes a
+    # spurious drift advisory and SQLite ↔ D1 diverge on Pending* rows.
+    # See ADR-009.
+    "connection lost",
 )
 
 # Substrings indicating the export-lock case specifically. Backoff for these is
