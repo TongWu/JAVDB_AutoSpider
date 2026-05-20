@@ -125,7 +125,7 @@ Example: `http://user:My@Pass!123@proxy:8080` becomes `http://user:My%40Pass%211
 - JavDB returns age verification or login errors
 - Before using `--url` for the first time
 
-For detailed login troubleshooting and manual cookie extraction, see the [JavDB Login Guide](../../../../utils/login/JAVDB_LOGIN_README.md).
+For detailed login troubleshooting and manual cookie extraction, see the [JavDB Login Guide](../self-hoster/javdb-login.md).
 
 ## CloudFlare Bypass Issues
 

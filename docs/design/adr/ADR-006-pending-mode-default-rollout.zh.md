@@ -12,7 +12,7 @@
 
 ## 修订记录 (Amendments)
 
-- **2026-05-16 amendment 1**：**PR-B 取消**。原计划"把 SQLite schema `WriteMode TEXT DEFAULT 'audit'` 改为 `DEFAULT 'pending'`"被否决——核查发现该 DEFAULT 仅在 v5→v6 migration 与 csv_to_sqlite backfill 两条**历史数据导入路径**上触发，那些路径处理的就是真正的 Audit Mode 历史 session，`'audit'` 是**正确**的标签而非"愿景默认"。普通写入路径（[`db_reports.py:128`](../../../packages/python/javdb_platform/db_reports.py)）始终显式传 `WriteMode`，DEFAULT 永不触发。改 DEFAULT 反而会错标历史数据。Schema DEFAULT 保留为 `'audit'`，作为"未知 WriteMode 时假定为遗留 audit session"的防御性标签。PR 序列从 6 个变 5 个。
+- **2026-05-16 amendment 1**：**PR-B 取消**。原计划"把 SQLite schema `WriteMode TEXT DEFAULT 'audit'` 改为 `DEFAULT 'pending'`"被否决——核查发现该 DEFAULT 仅在 v5→v6 migration 与 csv_to_sqlite backfill 两条**历史数据导入路径**上触发，那些路径处理的就是真正的 Audit Mode 历史 session，`'audit'` 是**正确**的标签而非"愿景默认"。普通写入路径（[`db_reports.py:128`](../../../javdb/storage/db/db_reports.py)）始终显式传 `WriteMode`，DEFAULT 永不触发。改 DEFAULT 反而会错标历史数据。Schema DEFAULT 保留为 `'audit'`，作为"未知 WriteMode 时假定为遗留 audit session"的防御性标签。PR 序列从 6 个变 5 个。
 
 - **2026-05-17 amendment 2**：ADR-006 接受后，[ADR-007](archive/ADR-007-monorepo-restructure-2026-05.md) 对 Python namespace 做了重组（`packages/python/javdb_*` → 顶层 `javdb/`）。本 ADR 实施顺序里**尚未合并的 PR**，在 ADR-007 Phase 1 落地后必须按新路径操作：
 
@@ -194,5 +194,5 @@ PR-F  30 天 bake 后的 sign-off PR：在 ADR-005 顶部插入 "ADR-006 sign-of
   SELECT WriteMode, COUNT(*) FROM ReportSessions
   WHERE DateTimeCreated > datetime('now','-30 days') GROUP BY WriteMode;
   ```
-- 现有 auto-fallback 实现：[`.github/workflows/DailyIngestion.yml:1075-1110`](../../../.github/workflows/DailyIngestion.yml)、[`scripts/pending_mode_auto_fallback.py`](../../../scripts/pending_mode_auto_fallback.py)
-- 现有默认实现：[`packages/python/javdb_platform/db_session.py:185-188`](../../../packages/python/javdb_platform/db_session.py)
+- 现有 auto-fallback 实现：[`.github/workflows/DailyIngestion.yml:1075-1110`](../../../.github/workflows/DailyIngestion.yml)、`scripts/pending_mode_auto_fallback.py`
+- 现有默认实现：[`packages/python/javdb_platform/db_session.py:185-188`](../../../javdb/storage/db/db_session.py)

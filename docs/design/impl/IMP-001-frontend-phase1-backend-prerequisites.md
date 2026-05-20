@@ -15,7 +15,7 @@
 
 **Tech Stack:** Python 3.11, FastAPI, Pydantic v2, pytest + `fastapi.testclient.TestClient`, SQLite (existing repo pattern), GitHub Actions workflows, GHCR for image publishing.
 
-**Spec:** [docs/superpowers/specs/2026-05-16-frontend-rewrite-design.md](../specs/2026-05-16-frontend-rewrite-design.md) — sections §4.2, §8.2, §8.4 (Phase 1 column), §11 steps 1-2.
+**Spec:** `docs/superpowers/specs/2026-05-16-frontend-rewrite-design.md` (historical, not in repo) — sections §4.2, §8.2, §8.4 (Phase 1 column), §11 steps 1-2.
 
 ---
 
@@ -2508,7 +2508,7 @@ These endpoints were added in 2026-05 to support the new web console (`javdb-aut
 
 #### Discovery
 
-- `GET /api/capabilities` — runtime feature flags + version info. Used by the FE to gate UI per deployment. See [openapi.json](../api/openapi.json) for the full shape.
+- `GET /api/capabilities` — runtime feature flags + version info. Used by the FE to gate UI per deployment. See [openapi.json](../../api/openapi.json) for the full shape.
 
 #### Onboarding
 

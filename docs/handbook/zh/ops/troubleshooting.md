@@ -125,7 +125,7 @@ JAVDB AutoSpider 的常见问题及解决方案。
 - JavDB 返回年龄验证或登录错误
 - 首次使用 `--url` 之前
 
-有关详细的登录故障排查和手动 cookie 提取，请参阅 [JavDB 登录指南](../../../../utils/login/JAVDB_LOGIN_README.md)。
+有关详细的登录故障排查和手动 cookie 提取，请参阅 [JavDB 登录指南](../self-hoster/javdb-login.md)。
 
 ## CloudFlare 绕过问题
 

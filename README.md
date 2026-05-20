@@ -177,7 +177,7 @@ For rollback procedures, see [D1 Rollback Guide](docs/handbook/en/ops/d1-rollbac
 
 ### Other Resources
 - [CONTEXT.md](CONTEXT.md) — Domain language glossary
-- [JavDB Login Guide](utils/login/JAVDB_LOGIN_README.md) — Login troubleshooting
+- [JavDB Login Guide](docs/handbook/en/self-hoster/javdb-login.md) — Login troubleshooting
 - [Proxy Coordinator Worker](https://github.com/TongWu/JAVDB_AutoSpider_Proxycoordinator) — Cloudflare Worker source
 - [DeepWiki](https://deepwiki.com/TongWu/JAVDB_AutoSpider) — AI-powered documentation explorer
 

@@ -556,9 +556,9 @@ This directory hosts ONLY:
 1. `ci/` — internal CI Python tools (`select_tests.py`, `sync_docs_to_wiki.py`, `wiki_mapping.json`). These are not user-facing and are not exposed as `apps/cli/` entries.
 2. `verify_*.sh` and other shell scripts used by deployment/verification flows.
 
-User-facing Python CLI entries live in **[apps/cli/](../apps/cli/)**. If you are looking for `spider`, `pipeline`, `qb_uploader`, `audit_archive`, `rclone_*`, or any other command-line tool, see `apps/cli/`.
+User-facing Python CLI entries live in **[apps/cli/](../../../apps/cli/)**. If you are looking for `spider`, `pipeline`, `qb_uploader`, `audit_archive`, `rclone_*`, or any other command-line tool, see `apps/cli/`.
 
-This separation was established by [ADR-007](../docs/design/adr/archive/ADR-007-monorepo-restructure-2026-05.md) (Phase 2).
+This separation was established by [ADR-007](../adr/archive/ADR-007-monorepo-restructure-2026-05.md) (Phase 2).
 ```
 
 - [ ] **Step 5: Commit**
