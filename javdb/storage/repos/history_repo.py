@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import base64
+import csv
+import io
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple
 
 from apps.api.parsers.common import (
     normalize_javdb_href_path,
@@ -346,3 +349,381 @@ class HistoryRepo:
         """Bulk overwrite (ActorName, Gender, Link, SupportingActorsJson)."""
         from javdb.storage.db.db_history_read import db_batch_update_movie_actors
         return db_batch_update_movie_actors(updates, db_path=self._db_path)
+
+    # ── Search / export (Phase 2, Task 1) ────────────────────────────
+
+    def search_movies(
+        self,
+        *,
+        q: Optional[str] = None,
+        actor: Optional[str] = None,
+        perfect_match: Optional[bool] = None,
+        hi_res: Optional[bool] = None,
+        session_id: Optional[str] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+        cursor: Optional[str] = None,
+        limit: int = 50,
+    ) -> Tuple[List[dict], Optional[str], int]:
+        """Search MovieHistory with optional filters and keyset pagination.
+
+        Returns (items, next_cursor, total_estimate).
+        - items: list of dicts with DB column names + torrent_count.
+        - next_cursor: base64-encoded Id of the last returned row, or None.
+        - total_estimate: COUNT(*) with same WHERE, capped at 10000.
+        """
+        from javdb.storage.db.db_connection import get_db, HISTORY_DB_PATH
+
+        wheres: List[str] = []
+        params: List = []
+
+        if cursor is not None:
+            cursor_id = int(base64.b64decode(cursor).decode())
+            wheres.append("m.Id > ?")
+            params.append(cursor_id)
+
+        if q is not None:
+            like = f"%{q}%"
+            wheres.append(
+                "(m.VideoCode LIKE ? OR m.ActorName LIKE ? OR m.SupportingActors LIKE ?)"
+            )
+            params.extend([like, like, like])
+
+        if actor is not None:
+            wheres.append("m.ActorName = ?")
+            params.append(actor)
+
+        if perfect_match is not None:
+            wheres.append("m.PerfectMatchIndicator = ?")
+            params.append(1 if perfect_match else 0)
+
+        if hi_res is not None:
+            wheres.append("m.HiResIndicator = ?")
+            params.append(1 if hi_res else 0)
+
+        if session_id is not None:
+            wheres.append("m.SessionId = ?")
+            params.append(session_id)
+
+        if date_from is not None:
+            wheres.append("m.DateTimeCreated >= ?")
+            params.append(date_from)
+
+        if date_to is not None:
+            wheres.append("m.DateTimeCreated <= ?")
+            params.append(date_to)
+
+        where_clause = ("WHERE " + " AND ".join(wheres)) if wheres else ""
+
+        count_sql = f"SELECT MIN(COUNT(*), 10000) FROM MovieHistory m {where_clause}"
+        data_sql = f"""
+            SELECT
+                m.Id,
+                m.VideoCode,
+                m.Href,
+                m.ActorName,
+                m.ActorGender,
+                m.SupportingActors,
+                m.PerfectMatchIndicator,
+                m.HiResIndicator,
+                m.DateTimeCreated,
+                m.DateTimeUpdated,
+                m.SessionId,
+                COUNT(t.Id) AS torrent_count
+            FROM MovieHistory m
+            LEFT JOIN TorrentHistory t ON t.MovieHistoryId = m.Id
+            {where_clause}
+            GROUP BY m.Id
+            ORDER BY m.Id
+            LIMIT ?
+        """
+
+        fetch_limit = limit + 1
+        with get_db(self._db_path or HISTORY_DB_PATH) as conn:
+            total = conn.execute(count_sql, params).fetchone()[0]
+            rows = conn.execute(data_sql, params + [fetch_limit]).fetchall()
+
+        items = [dict(r) for r in rows]
+        has_more = len(items) > limit
+        if has_more:
+            items = items[:limit]
+
+        next_cursor: Optional[str] = None
+        if has_more and items:
+            next_cursor = base64.b64encode(str(items[-1]["Id"]).encode()).decode()
+
+        return items, next_cursor, int(total)
+
+    def search_torrents(
+        self,
+        *,
+        q: Optional[str] = None,
+        resolution_type: Optional[int] = None,
+        has_subtitle: Optional[bool] = None,
+        uncensored: Optional[bool] = None,
+        session_id: Optional[str] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+        cursor: Optional[str] = None,
+        limit: int = 50,
+    ) -> Tuple[List[dict], Optional[str], int]:
+        """Search TorrentHistory (JOINed with MovieHistory) with keyset pagination.
+
+        Returns (items, next_cursor, total_estimate).
+        """
+        from javdb.storage.db.db_connection import get_db, HISTORY_DB_PATH
+
+        wheres: List[str] = []
+        params: List = []
+
+        if cursor is not None:
+            cursor_id = int(base64.b64decode(cursor).decode())
+            wheres.append("t.Id > ?")
+            params.append(cursor_id)
+
+        if q is not None:
+            like = f"%{q}%"
+            wheres.append("m.VideoCode LIKE ?")
+            params.append(like)
+
+        if resolution_type is not None:
+            wheres.append("t.ResolutionType = ?")
+            params.append(resolution_type)
+
+        if has_subtitle is not None:
+            wheres.append("t.SubtitleIndicator = ?")
+            params.append(1 if has_subtitle else 0)
+
+        if uncensored is not None:
+            if uncensored:
+                wheres.append("t.CensorIndicator = 0")
+            else:
+                wheres.append("t.CensorIndicator != 0")
+
+        if session_id is not None:
+            wheres.append("t.SessionId = ?")
+            params.append(session_id)
+
+        if date_from is not None:
+            wheres.append("t.DateTimeCreated >= ?")
+            params.append(date_from)
+
+        if date_to is not None:
+            wheres.append("t.DateTimeCreated <= ?")
+            params.append(date_to)
+
+        where_clause = ("WHERE " + " AND ".join(wheres)) if wheres else ""
+
+        count_sql = f"""
+            SELECT MIN(COUNT(*), 10000)
+            FROM TorrentHistory t
+            JOIN MovieHistory m ON m.Id = t.MovieHistoryId
+            {where_clause}
+        """
+        data_sql = f"""
+            SELECT
+                t.Id,
+                m.VideoCode AS movie_video_code,
+                m.Href AS movie_href,
+                t.MagnetUri,
+                t.Size,
+                t.SubtitleIndicator,
+                t.CensorIndicator,
+                t.ResolutionType,
+                t.FileCount,
+                t.DateTimeCreated,
+                t.SessionId
+            FROM TorrentHistory t
+            JOIN MovieHistory m ON m.Id = t.MovieHistoryId
+            {where_clause}
+            ORDER BY t.Id
+            LIMIT ?
+        """
+
+        fetch_limit = limit + 1
+        with get_db(self._db_path or HISTORY_DB_PATH) as conn:
+            total = conn.execute(count_sql, params).fetchone()[0]
+            rows = conn.execute(data_sql, params + [fetch_limit]).fetchall()
+
+        items = [dict(r) for r in rows]
+        has_more = len(items) > limit
+        if has_more:
+            items = items[:limit]
+
+        next_cursor: Optional[str] = None
+        if has_more and items:
+            next_cursor = base64.b64encode(str(items[-1]["Id"]).encode()).decode()
+
+        return items, next_cursor, int(total)
+
+    def export_movies_csv(
+        self,
+        *,
+        q: Optional[str] = None,
+        actor: Optional[str] = None,
+        perfect_match: Optional[bool] = None,
+        hi_res: Optional[bool] = None,
+        session_id: Optional[str] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+    ) -> Iterator[str]:
+        """Yield CSV rows for MovieHistory (header first, no pagination limit).
+
+        Each yielded string is one CSV line (newline included).
+        """
+        from javdb.storage.db.db_connection import get_db, HISTORY_DB_PATH
+
+        wheres: List[str] = []
+        params: List = []
+
+        if q is not None:
+            like = f"%{q}%"
+            wheres.append(
+                "(m.VideoCode LIKE ? OR m.ActorName LIKE ? OR m.SupportingActors LIKE ?)"
+            )
+            params.extend([like, like, like])
+        if actor is not None:
+            wheres.append("m.ActorName = ?")
+            params.append(actor)
+        if perfect_match is not None:
+            wheres.append("m.PerfectMatchIndicator = ?")
+            params.append(1 if perfect_match else 0)
+        if hi_res is not None:
+            wheres.append("m.HiResIndicator = ?")
+            params.append(1 if hi_res else 0)
+        if session_id is not None:
+            wheres.append("m.SessionId = ?")
+            params.append(session_id)
+        if date_from is not None:
+            wheres.append("m.DateTimeCreated >= ?")
+            params.append(date_from)
+        if date_to is not None:
+            wheres.append("m.DateTimeCreated <= ?")
+            params.append(date_to)
+
+        where_clause = ("WHERE " + " AND ".join(wheres)) if wheres else ""
+        sql = f"""
+            SELECT
+                m.Id,
+                m.VideoCode,
+                m.Href,
+                m.ActorName,
+                m.ActorGender,
+                m.SupportingActors,
+                m.PerfectMatchIndicator,
+                m.HiResIndicator,
+                m.DateTimeCreated,
+                m.DateTimeUpdated,
+                m.SessionId,
+                COUNT(t.Id) AS torrent_count
+            FROM MovieHistory m
+            LEFT JOIN TorrentHistory t ON t.MovieHistoryId = m.Id
+            {where_clause}
+            GROUP BY m.Id
+            ORDER BY m.Id
+        """
+
+        columns = [
+            "Id", "VideoCode", "Href", "ActorName", "ActorGender",
+            "SupportingActors", "PerfectMatchIndicator", "HiResIndicator",
+            "DateTimeCreated", "DateTimeUpdated", "SessionId", "torrent_count",
+        ]
+
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(columns)
+        yield buf.getvalue()
+
+        with get_db(self._db_path or HISTORY_DB_PATH) as conn:
+            rows = conn.execute(sql, params).fetchall()
+
+        for row in rows:
+            buf = io.StringIO()
+            writer = csv.writer(buf)
+            writer.writerow([dict(row).get(c) for c in columns])
+            yield buf.getvalue()
+
+    def export_torrents_csv(
+        self,
+        *,
+        q: Optional[str] = None,
+        resolution_type: Optional[int] = None,
+        has_subtitle: Optional[bool] = None,
+        uncensored: Optional[bool] = None,
+        session_id: Optional[str] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+    ) -> Iterator[str]:
+        """Yield CSV rows for TorrentHistory (header first, no pagination limit).
+
+        Each yielded string is one CSV line (newline included).
+        """
+        from javdb.storage.db.db_connection import get_db, HISTORY_DB_PATH
+
+        wheres: List[str] = []
+        params: List = []
+
+        if q is not None:
+            like = f"%{q}%"
+            wheres.append("m.VideoCode LIKE ?")
+            params.append(like)
+        if resolution_type is not None:
+            wheres.append("t.ResolutionType = ?")
+            params.append(resolution_type)
+        if has_subtitle is not None:
+            wheres.append("t.SubtitleIndicator = ?")
+            params.append(1 if has_subtitle else 0)
+        if uncensored is not None:
+            if uncensored:
+                wheres.append("t.CensorIndicator = 0")
+            else:
+                wheres.append("t.CensorIndicator != 0")
+        if session_id is not None:
+            wheres.append("t.SessionId = ?")
+            params.append(session_id)
+        if date_from is not None:
+            wheres.append("t.DateTimeCreated >= ?")
+            params.append(date_from)
+        if date_to is not None:
+            wheres.append("t.DateTimeCreated <= ?")
+            params.append(date_to)
+
+        where_clause = ("WHERE " + " AND ".join(wheres)) if wheres else ""
+        sql = f"""
+            SELECT
+                t.Id,
+                m.VideoCode AS movie_video_code,
+                m.Href AS movie_href,
+                t.MagnetUri,
+                t.Size,
+                t.SubtitleIndicator,
+                t.CensorIndicator,
+                t.ResolutionType,
+                t.FileCount,
+                t.DateTimeCreated,
+                t.SessionId
+            FROM TorrentHistory t
+            JOIN MovieHistory m ON m.Id = t.MovieHistoryId
+            {where_clause}
+            ORDER BY t.Id
+        """
+
+        columns = [
+            "Id", "movie_video_code", "movie_href", "MagnetUri", "Size",
+            "SubtitleIndicator", "CensorIndicator", "ResolutionType",
+            "FileCount", "DateTimeCreated", "SessionId",
+        ]
+
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(columns)
+        yield buf.getvalue()
+
+        with get_db(self._db_path or HISTORY_DB_PATH) as conn:
+            rows = conn.execute(sql, params).fetchall()
+
+        for row in rows:
+            buf = io.StringIO()
+            writer = csv.writer(buf)
+            writer.writerow([dict(row).get(c) for c in columns])
+            yield buf.getvalue()
