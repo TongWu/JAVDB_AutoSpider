@@ -175,7 +175,7 @@ Gate:
 ## ADR And IMP Requirements
 
 Create a new ADR, proposed as
-`docs/ai/adr/ADR-011-javdb-parsing-module.md`, that records:
+`docs/design/adr/ADR-011-javdb-parsing-module.md`, that records:
 
 - `javdb.parsing` as the canonical parsing Module.
 - The behavior-preserving invariant.
@@ -184,7 +184,7 @@ Create a new ADR, proposed as
 - ADR-005 D4/PR-6 is superseded by this ADR.
 
 Create a new IMP, proposed as
-`docs/ai/impl/IMP-016-javdb-parsing-module.md`, that records the concrete
+`docs/design/impl/IMP-016-javdb-parsing-module.md`, that records the concrete
 implementation tasks and checkboxes for all three phases. The IMP must include
 the grep gates and must not stop at the Phase 1 compatibility state.
 

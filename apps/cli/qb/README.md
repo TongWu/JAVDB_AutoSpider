@@ -17,4 +17,4 @@ qBittorrent integration CLIs — torrent upload and small-file filtering.
 
 ## Related
 
-- [ADR-007 — Monorepo restructure](../../../docs/ai/adr/archive/ADR-007-monorepo-restructure-2026-05.md)
+- [ADR-007 — Monorepo restructure](../../../docs/design/adr/archive/ADR-007-monorepo-restructure-2026-05.md)

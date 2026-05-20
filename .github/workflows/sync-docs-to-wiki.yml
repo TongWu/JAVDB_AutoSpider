@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'docs/en/**'
+      - 'docs/handbook/en/**'
       - 'scripts/ci/wiki_mapping.json'
       - 'scripts/ci/sync_docs_to_wiki.py'
   workflow_dispatch:
@@ -44,6 +44,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "No wiki changes to commit"
           else
-            git commit -m "docs: sync from docs/en/ ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
+            git commit -m "docs: sync from docs/handbook/en/ ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
             git push
           fi
