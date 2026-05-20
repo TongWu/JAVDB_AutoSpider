@@ -8,17 +8,21 @@
 --   - javdb/integrations/notify/email.py (records every send attempt)
 --   - apps/api/routers/ (email history listing + resend)
 
+-- Status values: sent | failed | resent
+-- AttachmentNames: JSON array of filenames
+-- SentAt: ISO 8601 timestamp
+-- CreatedBy values: pipeline | manual | resend
 CREATE TABLE IF NOT EXISTS EmailNotificationHistory (
     Id              INTEGER PRIMARY KEY AUTOINCREMENT,
     SessionId       TEXT,
     Recipient       TEXT NOT NULL,
     Subject         TEXT NOT NULL,
-    Status          TEXT NOT NULL DEFAULT 'sent',  -- sent | failed | resent
+    Status          TEXT NOT NULL DEFAULT 'sent',
     ErrorMessage    TEXT,
-    AttachmentNames TEXT,                           -- JSON array of filenames
-    SentAt          TEXT NOT NULL,                  -- ISO 8601
+    AttachmentNames TEXT,
+    SentAt          TEXT NOT NULL,
     ResentAt        TEXT,
-    CreatedBy       TEXT DEFAULT 'pipeline'         -- pipeline | manual | resend
+    CreatedBy       TEXT DEFAULT 'pipeline'
 );
 
 CREATE INDEX IF NOT EXISTS idx_email_history_session ON EmailNotificationHistory(SessionId);
