@@ -273,6 +273,20 @@ class TestSearchMovies:
         items, _, _ = repo.search_movies(date_to="2026-01-01")
         assert len(items) == 1  # only abc001 (abc002 is 2026-01-02)
 
+    def test_bad_cursor_raises_value_error(self, seeded_db):
+        """A malformed base64 cursor must raise ValueError, not crash silently."""
+        db_path, _, _ = seeded_db
+        repo = HistoryRepo(db_path=db_path)
+        with pytest.raises(ValueError, match="invalid cursor"):
+            repo.search_movies(cursor="!!!not-base64!!!")
+
+    def test_bad_date_from_raises_value_error(self, seeded_db):
+        """An unparseable date_from must raise ValueError."""
+        db_path, _, _ = seeded_db
+        repo = HistoryRepo(db_path=db_path)
+        with pytest.raises(ValueError, match="invalid date"):
+            repo.search_movies(date_from="not-a-date")
+
 
 # ── search_torrents ───────────────────────────────────────────────────────────
 
@@ -353,6 +367,20 @@ class TestSearchTorrents:
         assert len(items) == 2
         for item in items:
             assert "ABC" in item["movie_video_code"]
+
+    def test_bad_cursor_raises_value_error(self, seeded_db):
+        """A malformed cursor must raise ValueError, not crash silently."""
+        db_path, _, _ = seeded_db
+        repo = HistoryRepo(db_path=db_path)
+        with pytest.raises(ValueError, match="invalid cursor"):
+            repo.search_torrents(cursor="garbage!!!")
+
+    def test_bad_date_to_raises_value_error(self, seeded_db):
+        """An unparseable date_to must raise ValueError."""
+        db_path, _, _ = seeded_db
+        repo = HistoryRepo(db_path=db_path)
+        with pytest.raises(ValueError, match="invalid date"):
+            repo.search_torrents(date_to="2026/01/01")
 
 
 # ── export_movies_csv ─────────────────────────────────────────────────────────
