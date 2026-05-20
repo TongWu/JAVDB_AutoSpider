@@ -1160,6 +1160,93 @@ def run_execute_inventory_purge_from_csv(
 
 
 # ============================================================================
+# Programmatic API
+# ============================================================================
+
+def run_rclone_manager(
+    scan: bool = True,
+    report: bool = True,
+    execute: bool = False,
+    dry_run: bool = True,
+) -> dict:
+    """Programmatic entry point for the rclone manager pipeline.
+
+    Mirrors the ``main()`` orchestration without argparse: set up the rclone
+    config, resolve the remote, then run whichever phases are requested.
+
+    Only the phases that actually ran appear in ``phase_results``.  Each
+    phase's value is a dict with at least ``{"exit_code": int}``.
+
+    Raises:
+        ValueError: Invalid flag combination (e.g. execute without report).
+        RuntimeError: Setup failure (no remote configured, rclone not
+            installed, remote not reachable).
+    """
+    if not scan and not report and not execute:
+        raise ValueError("At least one of scan/report/execute must be True")
+    if execute and not report and not scan:
+        # Execute-only without report requires existing dedup records — that
+        # is a valid CLI combo but we gate it here to match the constraint
+        # documented in the endpoint: execute=True requires report=True.
+        raise ValueError(
+            "execute=True requires report=True (or scan=True + report=True)"
+        )
+
+    # Setup rclone config from base64 if available.
+    if RCLONE_CONFIG_BASE64:
+        ok = setup_rclone_config_from_base64(RCLONE_CONFIG_BASE64)
+        if not ok:
+            raise RuntimeError(
+                "Failed to write rclone config from RCLONE_CONFIG_BASE64"
+            )
+
+    phase_results: dict = {}
+
+    # ── Scan phase ────────────────────────────────────────────────────────
+    if scan:
+        resolved = resolve_rclone_root(None)
+        if not resolved:
+            raise RuntimeError(
+                "No remote configured — set RCLONE_FOLDER_PATH (e.g. "
+                "'gdrive:/folder') or RCLONE_DRIVE_NAME + RCLONE_ROOT_FOLDER"
+            )
+        remote_name, root_folder = resolved
+
+        ok, msg = check_rclone_installed()
+        if not ok:
+            raise RuntimeError(f"rclone not available: {msg}")
+        ok, msg = check_remote_exists(remote_name)
+        if not ok:
+            raise RuntimeError(f"Remote not reachable: {msg}")
+
+        os.makedirs(REPORTS_DIR, exist_ok=True)
+        output_path = os.path.join(REPORTS_DIR, RCLONE_INVENTORY_CSV)
+        total_rows, error_count = scan_inventory(remote_name, root_folder)
+        phase_results["scan"] = {
+            "exit_code": 0 if error_count == 0 else 1,
+            "total_rows": total_rows,
+            "error_count": error_count,
+        }
+
+    # ── Report phase ──────────────────────────────────────────────────────
+    if report:
+        if not scan:
+            # Report-only: resolve remote for CSV path but don't scan.
+            os.makedirs(REPORTS_DIR, exist_ok=True)
+        output_path = os.path.join(REPORTS_DIR, RCLONE_INVENTORY_CSV)
+        exit_code = run_report_from_inventory(output_path)
+        phase_results["report"] = {"exit_code": exit_code}
+
+    # ── Execute phase ─────────────────────────────────────────────────────
+    if execute:
+        dedup_csv = os.path.join(REPORTS_DIR, 'dedup_history.csv')
+        exit_code = run_execute_from_csv(dedup_csv, dry_run=dry_run)
+        phase_results["execute"] = {"exit_code": exit_code, "dry_run": dry_run}
+
+    return {"phase_results": phase_results, "dry_run": dry_run}
+
+
+# ============================================================================
 # CLI
 # ============================================================================
 
