@@ -50,6 +50,76 @@ def anon_client(_isolate_sqlite):
 
 
 # ---------------------------------------------------------------------------
+# qBittorrent — qb/torrents
+# ---------------------------------------------------------------------------
+
+
+class TestQbTorrents:
+    def test_returns_200_with_torrent_list(self, admin_client):
+        """GET /api/ops/qb/torrents → 200 with items and total."""
+        fake_torrents = [
+            {
+                "hash": "abc123",
+                "name": "Movie A",
+                "size": 1073741824,
+                "progress": 1.0,
+                "state": "seeding",
+                "category": "JavDB",
+                "added_on": 1700000000,
+                "completion_on": 1700001000,
+            },
+            {
+                "hash": "def456",
+                "name": "Movie B",
+                "size": 2147483648,
+                "progress": 0.5,
+                "state": "downloading",
+                "category": "JavDB",
+                "added_on": 1700002000,
+                "completion_on": 0,
+            },
+        ]
+        mock_qb = MagicMock()
+        mock_qb.get_torrents.return_value = fake_torrents
+
+        with patch("javdb.integrations.qb.client.QBittorrentClient", return_value=mock_qb):
+            resp = admin_client.get("/api/ops/qb/torrents")
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 2
+        assert len(body["items"]) == 2
+        assert body["items"][0]["hash"] == "abc123"
+        assert body["items"][0]["name"] == "Movie A"
+        assert body["items"][1]["hash"] == "def456"
+
+    def test_qb_unreachable_returns_502(self, admin_client):
+        """Connection failure in QBittorrentClient constructor → 502."""
+        with patch(
+            "javdb.integrations.qb.client.QBittorrentClient",
+            side_effect=Exception("Connection refused"),
+        ):
+            resp = admin_client.get("/api/ops/qb/torrents")
+
+        assert resp.status_code == 502
+        body = resp.json()
+        assert body["detail"]["error"]["code"] == "ops.qb.unreachable"
+
+    def test_readonly_user_can_read(self, readonly_client):
+        """Readonly users can access GET /api/ops/qb/torrents."""
+        mock_qb = MagicMock()
+        mock_qb.get_torrents.return_value = []
+
+        with patch("javdb.integrations.qb.client.QBittorrentClient", return_value=mock_qb):
+            resp = readonly_client.get("/api/ops/qb/torrents")
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 0
+        assert body["items"] == []
+
+
+# ---------------------------------------------------------------------------
 # qBittorrent — qb/filter-small
 # ---------------------------------------------------------------------------
 
@@ -122,7 +192,7 @@ class TestQbFilterSmall:
 
 class TestPikPakTransfer:
     def test_dry_run_returns_200(self, admin_client):
-        """POST /api/ops/pikpak/transfer dry_run=True → 200."""
+        """POST /api/ops/pikpak/transfer dry_run=True → 200 with unknown counts."""
         with patch(
             "javdb.integrations.pikpak.bridge.pikpak_bridge",
             return_value=None,
@@ -134,6 +204,10 @@ class TestPikPakTransfer:
         assert resp.status_code == 200
         body = resp.json()
         assert body["dry_run"] is True
+        # pikpak_bridge returns None; counts are unknown and must be None
+        assert body["transferred"] is None
+        assert body["failed"] is None
+        assert body["skipped"] is None
 
     def test_pikpak_error_returns_500(self, admin_client):
         """Exception from pikpak_bridge → 500."""

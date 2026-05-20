@@ -72,9 +72,9 @@ class PikPakTransferRequest(BaseModel):
 
 
 class PikPakTransferResponse(BaseModel):
-    transferred: int
-    failed: int
-    skipped: int
+    transferred: Optional[int]
+    failed: Optional[int]
+    skipped: Optional[int]
     dry_run: bool
     details: List[Dict[str, Any]]
 
