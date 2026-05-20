@@ -41,7 +41,7 @@ python3 -m apps.cli.spider --dry-run    # Preview without writing
 python3 -m apps.cli.pipeline            # Full pipeline (spider + upload + notify)
 ```
 
-For complete setup instructions, see the [Local Setup Guide](docs/en/self-hoster/local-setup.md).
+For complete setup instructions, see the [Local Setup Guide](docs/handbook/en/self-hoster/local-setup.md).
 
 ## Architecture
 
@@ -64,7 +64,7 @@ javdb/            Python namespace (PEP 420 — no top-level __init__.py)
 └── rust_core/    Rust crate source (PyO3 + maturin; installs as javdb.rust_core)
 ```
 
-Canonical layout established by [ADR-007](docs/ai/adr/archive/ADR-007-monorepo-restructure-2026-05.md); all legacy paths (`utils/`, `api/`, `migration/`, `legacy/`, `scripts/spider/`, `scripts/ingestion/`, root `compat.py`/`pipeline.py`) were retired in Phase 3.
+Canonical layout established by [ADR-007](docs/design/adr/archive/ADR-007-monorepo-restructure-2026-05.md); all legacy paths (`utils/`, `api/`, `migration/`, `legacy/`, `scripts/spider/`, `scripts/ingestion/`, root `compat.py`/`pipeline.py`) were retired in Phase 3.
 
 ## Configuration
 
@@ -79,7 +79,7 @@ QB_USERNAME = 'admin'
 QB_PASSWORD = 'password'
 ```
 
-For the full configuration reference (60+ options), see [Configuration Guide](docs/en/self-hoster/configuration.md).
+For the full configuration reference (60+ options), see [Configuration Guide](docs/handbook/en/self-hoster/configuration.md).
 
 ### Environment Variables
 
@@ -113,16 +113,16 @@ python3 -m apps.cli.rollback --session-id 332                  # Rollback a sess
 python3 -m apps.cli.login                                      # Refresh JavDB session cookie
 ```
 
-For the full CLI reference, see [CLI Reference](docs/en/developer/cli-reference.md).
+For the full CLI reference, see [CLI Reference](docs/handbook/en/developer/cli-reference.md).
 
 ## Deployment Options
 
 | Method | Guide | Best For |
 |--------|-------|----------|
-| **Local** | [Local Setup](docs/en/self-hoster/local-setup.md) | Development, manual runs |
-| **GitHub Actions** | [GH Actions Setup](docs/en/self-hoster/github-actions-setup.md) | Automated daily pipeline |
-| **Docker** | [Docker Deploy](docs/en/self-hoster/docker-deploy.md) | Self-hosted server |
-| **Proxy Coordinator** | [Proxy Coordinator](docs/en/self-hoster/proxy-coordinator.md) | Multi-runner coordination |
+| **Local** | [Local Setup](docs/handbook/en/self-hoster/local-setup.md) | Development, manual runs |
+| **GitHub Actions** | [GH Actions Setup](docs/handbook/en/self-hoster/github-actions-setup.md) | Automated daily pipeline |
+| **Docker** | [Docker Deploy](docs/handbook/en/self-hoster/docker-deploy.md) | Self-hosted server |
+| **Proxy Coordinator** | [Proxy Coordinator](docs/handbook/en/self-hoster/proxy-coordinator.md) | Multi-runner coordination |
 
 ## GitHub Actions Workflows
 
@@ -148,32 +148,32 @@ The system supports three storage modes via `STORAGE_BACKEND`:
 
 Every pipeline run is tagged with a session ID and follows the lifecycle: `in_progress → finalizing → committed / failed`. Pending-mode writes only land in history tables at commit time; failed runs delete pending rows cleanly.
 
-For rollback procedures, see [D1 Rollback Guide](docs/en/ops/d1-rollback.md).
+For rollback procedures, see [D1 Rollback Guide](docs/handbook/en/ops/d1-rollback.md).
 
 ## Documentation
 
 ### For Self-Hosters
-- [Local Setup](docs/en/self-hoster/local-setup.md) — From-scratch installation
-- [GitHub Actions Setup](docs/en/self-hoster/github-actions-setup.md) — CI/CD deployment
-- [Docker Deploy](docs/en/self-hoster/docker-deploy.md) — Container deployment
-- [Configuration Reference](docs/en/self-hoster/configuration.md) — All 60+ config options
-- [Proxy Coordinator](docs/en/self-hoster/proxy-coordinator.md) — Cross-runner coordination
-- [Proxy Setup](docs/en/self-hoster/proxy-setup.md) — Proxy pool configuration
-- [CloudFlare Bypass](docs/en/self-hoster/cloudflare-bypass.md) — CF challenge fallback
-- [JavDB Login](docs/en/self-hoster/javdb-login.md) — Session cookie refresh
-- [Web UI Deploy](docs/en/self-hoster/web-ui-deploy.md) — Web UI + API stack
-- [Rust Installation](docs/en/self-hoster/rust-installation.md) — Optional Rust extension
+- [Local Setup](docs/handbook/en/self-hoster/local-setup.md) — From-scratch installation
+- [GitHub Actions Setup](docs/handbook/en/self-hoster/github-actions-setup.md) — CI/CD deployment
+- [Docker Deploy](docs/handbook/en/self-hoster/docker-deploy.md) — Container deployment
+- [Configuration Reference](docs/handbook/en/self-hoster/configuration.md) — All 60+ config options
+- [Proxy Coordinator](docs/handbook/en/self-hoster/proxy-coordinator.md) — Cross-runner coordination
+- [Proxy Setup](docs/handbook/en/self-hoster/proxy-setup.md) — Proxy pool configuration
+- [CloudFlare Bypass](docs/handbook/en/self-hoster/cloudflare-bypass.md) — CF challenge fallback
+- [JavDB Login](docs/handbook/en/self-hoster/javdb-login.md) — Session cookie refresh
+- [Web UI Deploy](docs/handbook/en/self-hoster/web-ui-deploy.md) — Web UI + API stack
+- [Rust Installation](docs/handbook/en/self-hoster/rust-installation.md) — Optional Rust extension
 
 ### For Developers
-- [CLI Reference](docs/en/developer/cli-reference.md) — All CLI commands and arguments
-- [API Usage Guide](docs/en/developer/api-usage-guide.md) — Python module and REST API
-- [History System](docs/en/developer/history-system.md) — Duplicate prevention and tracking
+- [CLI Reference](docs/handbook/en/developer/cli-reference.md) — All CLI commands and arguments
+- [API Usage Guide](docs/handbook/en/developer/api-usage-guide.md) — Python module and REST API
+- [History System](docs/handbook/en/developer/history-system.md) — Duplicate prevention and tracking
 
 ### For Operators
-- [D1 Rollback](docs/en/ops/d1-rollback.md) — Rollback SOP and dispatch matrix
-- [Troubleshooting](docs/en/ops/troubleshooting.md) — Common issues and solutions
-- [Logging](docs/en/ops/logging.md) — Log configuration and formats
-- [Migration Scripts](docs/en/ops/migration-scripts.md) — Database migration tools
+- [D1 Rollback](docs/handbook/en/ops/d1-rollback.md) — Rollback SOP and dispatch matrix
+- [Troubleshooting](docs/handbook/en/ops/troubleshooting.md) — Common issues and solutions
+- [Logging](docs/handbook/en/ops/logging.md) — Log configuration and formats
+- [Migration Scripts](docs/handbook/en/ops/migration-scripts.md) — Database migration tools
 
 ### Other Resources
 - [CONTEXT.md](CONTEXT.md) — Domain language glossary
