@@ -712,6 +712,83 @@ def print_summary(stats, min_size_mb, days, dry_run=False, delete_local_files_fl
     logger.info("=" * 70)
 
 
+def run_file_filter(
+    min_size_mb: float = 100.0,
+    days: int = 2,
+    dry_run: bool = True,
+    categories=None,
+    delete_local_files: bool = False,
+    use_proxy=False,
+) -> dict:
+    """Programmatic entry point for the file-filter logic.
+
+    Orchestrates the same steps as ``main()`` but returns a structured dict
+    instead of calling ``sys.exit``. Designed to be called from the REST API
+    handler (``apps/api/routers/operations.py``) with its integration points
+    patchable via ``unittest.mock.patch``.
+
+    Returns a dict with keys:
+        filtered_count (int): number of files set to not-download
+        torrents_scanned (int): number of torrents processed (excl. pending metadata)
+        dry_run (bool): echoes the input flag
+        details (list[dict]): per-torrent detail rows
+    """
+    initialize_proxy_helper(use_proxy)
+
+    if not test_qbittorrent_connection(use_proxy):
+        raise RuntimeError("Cannot connect to qBittorrent")
+
+    session = requests.Session()
+    if not login_to_qbittorrent(session, use_proxy):
+        raise RuntimeError("Failed to login to qBittorrent")
+
+    torrents = get_recent_torrents(
+        session,
+        days=days,
+        categories=categories,
+        use_proxy=use_proxy,
+    )
+
+    if not torrents:
+        return {
+            "filtered_count": 0,
+            "torrents_scanned": 0,
+            "dry_run": dry_run,
+            "details": [],
+        }
+
+    stats = filter_small_files(
+        session,
+        torrents,
+        min_size_mb=min_size_mb,
+        dry_run=dry_run,
+        use_proxy=use_proxy,
+        delete_local_files_flag=delete_local_files,
+    )
+
+    details = []
+    for entry in stats.get("details", []):
+        if len(entry) == 5:
+            name, count, size, deleted_count, deleted_size = entry
+        else:
+            name, count, size = entry
+            deleted_count, deleted_size = 0, 0
+        details.append({
+            "torrent_name": name,
+            "files_filtered": count,
+            "size_saved_bytes": size,
+            "local_files_deleted": deleted_count,
+            "local_size_deleted_bytes": deleted_size,
+        })
+
+    return {
+        "filtered_count": stats.get("files_filtered", 0),
+        "torrents_scanned": stats.get("torrents_processed", 0),
+        "dry_run": dry_run,
+        "details": details,
+    }
+
+
 def main():
     args = parse_arguments()
     proxy_override = resolve_proxy_override(args.use_proxy, args.no_proxy)
