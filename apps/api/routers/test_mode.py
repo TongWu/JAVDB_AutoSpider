@@ -150,6 +150,24 @@ def _ensure_schema(history_conn: sqlite3.Connection, reports_conn: sqlite3.Conne
             CreatedAt TEXT NOT NULL,
             ApplyState TEXT NOT NULL DEFAULT 'pending'
         );
+        CREATE TABLE IF NOT EXISTS "PendingTorrentHistoryWrites" (
+            Seq TEXT PRIMARY KEY NOT NULL,
+            SessionId TEXT NOT NULL,
+            RunId TEXT,
+            RunAttempt INTEGER,
+            Href TEXT NOT NULL,
+            VideoCode TEXT,
+            Category TEXT NOT NULL,
+            SubtitleIndicator INTEGER NOT NULL,
+            CensorIndicator INTEGER NOT NULL,
+            MagnetUri TEXT,
+            Size TEXT,
+            FileCount INTEGER,
+            ResolutionType INTEGER,
+            DateTimeVisited TEXT NOT NULL,
+            CreatedAt TEXT NOT NULL,
+            ApplyState TEXT NOT NULL DEFAULT 'pending'
+        );
         """
     )
 

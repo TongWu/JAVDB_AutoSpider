@@ -85,6 +85,33 @@ def test_seed_sessions_writes_expected_rows(client: TestClient, tmp_path: Path) 
         history.close()
 
 
+def test_seed_sessions_creates_pending_torrent_table(client: TestClient, tmp_path: Path) -> None:
+    """A fresh REPORTS_DIR must get PendingTorrentHistoryWrites too.
+
+    commit/rollback flows unconditionally DELETE from this table
+    (e.g. db_commit_session_history), so omitting it leaves seeded
+    pending sessions crashing with "no such table".
+    """
+    resp = client.post("/api/test/seed-sessions")
+    assert resp.status_code == 200
+
+    history = _connect(tmp_path, "history.db")
+    try:
+        tables = {
+            row[0]
+            for row in history.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            ).fetchall()
+        }
+        assert "PendingTorrentHistoryWrites" in tables
+        # The table must be queryable, not just present in name.
+        assert history.execute(
+            "SELECT COUNT(*) FROM PendingTorrentHistoryWrites"
+        ).fetchone()[0] == 0
+    finally:
+        history.close()
+
+
 def test_seed_sessions_is_idempotent(client: TestClient, tmp_path: Path) -> None:
     first = client.post("/api/test/seed-sessions")
     second = client.post("/api/test/seed-sessions")
