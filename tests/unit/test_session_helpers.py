@@ -1,5 +1,5 @@
 """Pin down the shared scaffolding extracted from ``apps.cli.db.rollback``
-and ``apps.cli.db.commit_session`` into ``apps.cli.db._session_helpers``.
+and ``apps.cli.db.commit_session`` into ``javdb.storage.rollback.session_helpers``.
 
 The headline regression these tests guard against is the
 ``normalize_run_started_at`` divergence — see the module's history
@@ -23,7 +23,7 @@ from typing import Any, Dict
 
 import pytest
 
-from apps.cli.db import _session_helpers as helpers
+from javdb.storage.rollback import session_helpers as helpers
 
 
 # ── normalize_run_started_at ───────────────────────────────────────────
