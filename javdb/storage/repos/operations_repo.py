@@ -347,6 +347,57 @@ class OperationsRepo:
             session_id=session_id, payload=payload, db_path=self._db_path,
         )
 
+    def list_pikpak_history(
+        self,
+        limit: int = 50,
+        cursor: Optional[str] = None,
+    ) -> Tuple[List[dict], Optional[str]]:
+        """List PikpakHistory rows, newest first, with keyset pagination on Id.
+
+        ``cursor`` is a base64-encoded Id; only rows with Id < cursor are returned.
+
+        Returns:
+            (items, next_cursor) — next_cursor is None when no more pages.
+        """
+        from javdb.storage.db.db_connection import get_db, OPERATIONS_DB_PATH
+
+        cursor_id: Optional[int] = None
+        if cursor is not None:
+            try:
+                cursor_id = int(base64.b64decode(cursor).decode())
+            except Exception:
+                raise ValueError("invalid cursor")
+
+        conditions: List[str] = []
+        params: List = []
+        if cursor_id is not None:
+            conditions.append("Id < ?")
+            params.append(cursor_id)
+
+        where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+        sql = f"""
+            SELECT Id, TorrentHash, TorrentName, Category,
+                   TransferStatus, ErrorMessage, DateTimeAddedToQb
+            FROM PikpakHistory
+            {where}
+            ORDER BY Id DESC
+            LIMIT ?
+        """
+        fetch_limit = limit + 1
+        with get_db(self._db_path or OPERATIONS_DB_PATH) as conn:
+            rows = conn.execute(sql, params + [fetch_limit]).fetchall()
+
+        items = [dict(r) for r in rows]
+        has_more = len(items) > limit
+        if has_more:
+            items = items[:limit]
+
+        next_cursor: Optional[str] = None
+        if has_more and items:
+            next_cursor = base64.b64encode(str(items[-1]["Id"]).encode()).decode()
+
+        return items, next_cursor
+
     # ── Dedup lifecycle ──────────────────────────────────────────
 
     def mark_records_deleted(
