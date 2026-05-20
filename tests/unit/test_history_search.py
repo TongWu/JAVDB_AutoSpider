@@ -243,19 +243,35 @@ class TestSearchMovies:
         decoded = int(base64.b64decode(cursor1).decode())
         assert decoded == page1[-1]["Id"]
 
-    def test_date_from_filter(self, seeded_db):
+    def test_date_from_filter_iso_datetime(self, seeded_db):
+        """ISO 8601 datetime with T and Z is normalized and filters correctly."""
         db_path, movie_ids, _ = seeded_db
         repo = HistoryRepo(db_path=db_path)
-        # DB stores dates as "YYYY-MM-DD HH:MM:SS" (space-separated), so use
-        # the same format to get reliable string comparison in SQLite.
-        items, _, _ = repo.search_movies(date_from="2026-01-02 00:00:00")
+        # abc001 is 2026-01-01 10:00:00; abc002 and xyz001 are later
+        items, _, _ = repo.search_movies(date_from="2026-01-02T00:00:00Z")
         assert len(items) == 2  # abc002 and xyz001
 
-    def test_date_to_filter(self, seeded_db):
+    def test_date_to_filter_iso_datetime(self, seeded_db):
+        """ISO 8601 datetime with T and Z is normalized and filters correctly."""
         db_path, movie_ids, _ = seeded_db
         repo = HistoryRepo(db_path=db_path)
-        items, _, _ = repo.search_movies(date_to="2026-01-01 23:59:59")
+        items, _, _ = repo.search_movies(date_to="2026-01-01T23:59:59Z")
         assert len(items) == 1  # only abc001
+
+    def test_date_from_filter_date_only(self, seeded_db):
+        """Date-only date_from expands to 00:00:00 of that day."""
+        db_path, movie_ids, _ = seeded_db
+        repo = HistoryRepo(db_path=db_path)
+        items, _, _ = repo.search_movies(date_from="2026-01-02")
+        assert len(items) == 2  # abc002 (2026-01-02) and xyz001 (2026-01-03)
+
+    def test_date_to_filter_date_only_inclusive(self, seeded_db):
+        """Date-only date_to expands to 23:59:59, making that day inclusive."""
+        db_path, movie_ids, _ = seeded_db
+        repo = HistoryRepo(db_path=db_path)
+        # abc001 is 2026-01-01 10:00:00; date_to="2026-01-01" should include it
+        items, _, _ = repo.search_movies(date_to="2026-01-01")
+        assert len(items) == 1  # only abc001 (abc002 is 2026-01-02)
 
 
 # ── search_torrents ───────────────────────────────────────────────────────────
