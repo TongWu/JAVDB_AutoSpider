@@ -12,7 +12,7 @@
 
 ## Amendments
 
-- **2026-05-16 amendment 1**: **PR-B cancelled**. The original plan to "change the SQLite schema `WriteMode TEXT DEFAULT 'audit'` to `DEFAULT 'pending'`" was rejected — investigation found that this DEFAULT only fires on two **historical data import paths**: the v5→v6 migration and the csv_to_sqlite backfill. Those paths handle genuinely Audit Mode historical sessions, where `'audit'` is the **correct** label, not a "target default". The normal write path ([`db_reports.py:128`](../../../packages/python/javdb_platform/db_reports.py)) always passes `WriteMode` explicitly, so the DEFAULT never fires. Changing the DEFAULT would instead mislabel historical data. The schema DEFAULT stays as `'audit'`, serving as a defensive label meaning "assume legacy audit session when WriteMode is unknown". The PR sequence shrinks from 6 to 5.
+- **2026-05-16 amendment 1**: **PR-B cancelled**. The original plan to "change the SQLite schema `WriteMode TEXT DEFAULT 'audit'` to `DEFAULT 'pending'`" was rejected — investigation found that this DEFAULT only fires on two **historical data import paths**: the v5→v6 migration and the csv_to_sqlite backfill. Those paths handle genuinely Audit Mode historical sessions, where `'audit'` is the **correct** label, not a "target default". The normal write path ([`db_reports.py:128`](../../../javdb/storage/db/db_reports.py)) always passes `WriteMode` explicitly, so the DEFAULT never fires. Changing the DEFAULT would instead mislabel historical data. The schema DEFAULT stays as `'audit'`, serving as a defensive label meaning "assume legacy audit session when WriteMode is unknown". The PR sequence shrinks from 6 to 5.
 
 - **2026-05-17 amendment 2**: After ADR-006 was accepted, [ADR-007](archive/ADR-007-monorepo-restructure-2026-05.md) reorganised the Python namespace (`packages/python/javdb_*` → top-level `javdb/`). Any PRs from this ADR's implementation order that have not yet merged when ADR-007 Phase 1 lands must operate on the new paths:
 
@@ -195,5 +195,5 @@ Each PR is independently revertable. PR-A / PR-C / PR-D are the core; PR-E went 
   SELECT WriteMode, COUNT(*) FROM ReportSessions
   WHERE DateTimeCreated > datetime('now','-30 days') GROUP BY WriteMode;
   ```
-- Existing auto-fallback implementation: [`.github/workflows/DailyIngestion.yml:1075-1110`](../../../.github/workflows/DailyIngestion.yml), [`scripts/pending_mode_auto_fallback.py`](../../../scripts/pending_mode_auto_fallback.py)
-- Existing default implementation: [`packages/python/javdb_platform/db_session.py:185-188`](../../../packages/python/javdb_platform/db_session.py)
+- Existing auto-fallback implementation: [`.github/workflows/DailyIngestion.yml:1075-1110`](../../../.github/workflows/DailyIngestion.yml), `scripts/pending_mode_auto_fallback.py`
+- Existing default implementation: [`packages/python/javdb_platform/db_session.py:185-188`](../../../javdb/storage/db/db_session.py)
