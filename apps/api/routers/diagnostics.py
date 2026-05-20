@@ -53,8 +53,8 @@ def _is_refresh_recent(last_refresh_time: str | None, max_age_hours: int = 24) -
 
 
 def _cookie_preview(cookie: str) -> str:
-    """Return first 8 chars + '...' as a preview."""
-    return cookie[:8] + "..."
+    """Return first 8 chars + '...' as a preview (no ellipsis if not truncated)."""
+    return cookie[:8] + ("..." if len(cookie) > 8 else "")
 
 
 @router.get("/javdb-session", response_model=JavdbSessionStatus)
@@ -70,7 +70,9 @@ def get_javdb_session_status(
         cookie_value_preview=_cookie_preview(cookie) if cookie else None,
         last_refresh_time=last_refresh,
         estimated_expiry=None,  # cannot derive real expiry from the cookie string
-        is_likely_valid=_is_refresh_recent(last_refresh),
+        # A recent refresh is only meaningful if a cookie is actually present;
+        # avoid the contradictory (is_likely_valid=True, cookie_present=False) pair.
+        is_likely_valid=bool(cookie) and _is_refresh_recent(last_refresh),
     )
 
 
