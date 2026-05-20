@@ -391,17 +391,10 @@ def rclone_run(
             execute=body.execute,
             dry_run=body.dry_run,
         )
-    except (ValueError, RuntimeError) as exc:
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": {
-                    "code": "ops.rclone.failed",
-                    "message": str(exc),
-                }
-            },
-        ) from exc
     except Exception as exc:
+        # run_rclone_manager's own ValueError flag guard is defense-in-depth;
+        # the endpoint already validates flag combinations above (422), so any
+        # exception reaching here is an execution failure → 500.
         raise HTTPException(
             status_code=500,
             detail={

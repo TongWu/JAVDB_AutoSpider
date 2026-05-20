@@ -1219,7 +1219,6 @@ def run_rclone_manager(
             raise RuntimeError(f"Remote not reachable: {msg}")
 
         os.makedirs(REPORTS_DIR, exist_ok=True)
-        output_path = os.path.join(REPORTS_DIR, RCLONE_INVENTORY_CSV)
         total_rows, error_count = scan_inventory(remote_name, root_folder)
         phase_results["scan"] = {
             "exit_code": 0 if error_count == 0 else 1,
