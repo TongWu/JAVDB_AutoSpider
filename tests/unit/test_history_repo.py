@@ -135,7 +135,7 @@ class TestHistoryRepoWrites:
         mock_fn.assert_called_once_with(["/a", "/b"], db_path="/tmp/h.db")
 
     @patch(
-        "javdb.storage.db.db_history_read.db_batch_update_movie_actors",
+        "javdb.storage.db.db.db_batch_update_movie_actors",
         return_value=1,
     )
     def test_batch_update_movie_actors_delegates(self, mock_fn):
