@@ -1159,6 +1159,42 @@ class TestBatchUpdatesRouteToPending:
         assert n_audit == 0
         assert n_pending == 1
 
+    def test_history_repo_actor_batch_preserves_pending_staging(self):
+        """Repo caller migration must preserve db.py facade pending semantics."""
+        from javdb.storage.repos.history_repo import HistoryRepo
+
+        sid = self._setup_pending_session()
+        try:
+            n = HistoryRepo().batch_update_movie_actors([
+                ("/v/R-ACT-001", "Repo Actor", "female", "/actors/repo", None),
+            ])
+            assert n == 1
+        finally:
+            self._teardown()
+
+        from tests.unit.test_rollback_pending_mode import _href_variants
+        variants = _href_variants("/v/R-ACT-001")
+        placeholders = ",".join("?" for _ in variants)
+        with db_mod.get_db() as conn:
+            n_live = conn.execute(
+                f"SELECT COUNT(*) AS n FROM MovieHistory "
+                f"WHERE Href IN ({placeholders})",
+                variants,
+            ).fetchone()["n"]
+            n_audit = conn.execute(
+                "SELECT COUNT(*) AS n FROM MovieHistoryAudit "
+                "WHERE SessionId=?",
+                (sid,),
+            ).fetchone()["n"]
+            n_pending = conn.execute(
+                "SELECT COUNT(*) AS n FROM PendingMovieHistoryWrites "
+                "WHERE SessionId=?",
+                (sid,),
+            ).fetchone()["n"]
+        assert n_live == 0
+        assert n_audit == 0
+        assert n_pending == 1
+
     def test_audit_session_keeps_in_place_batch_update(self, monkeypatch):
         # ADR-006 made 'pending' the default; select audit explicitly
         # to keep exercising the legacy in-place UPDATE path.
