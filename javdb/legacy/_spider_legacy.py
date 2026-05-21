@@ -35,7 +35,7 @@ sys.path.insert(0, project_root)
 from javdb.storage.history_manager import load_parsed_movies_history, save_parsed_movie_to_history, should_process_movie, \
     determine_torrent_types, get_missing_torrent_types, validate_history_file, has_complete_subtitles
 from javdb.infra.config import use_sqlite
-from javdb.storage.db.db import db_batch_update_movie_actors
+from javdb.storage.repos.history_repo import HistoryRepo
 from javdb.spider.parser import parse_index, parse_detail
 from javdb.spider.magnet_extractor import extract_magnets
 
@@ -1502,7 +1502,7 @@ def process_detail_entries_parallel(
 
     if use_history_for_saving and not dry_run and visited_hrefs:
         if use_sqlite() and actor_updates:
-            db_batch_update_movie_actors(actor_updates)
+            HistoryRepo().batch_update_movie_actors(actor_updates)
 
     logger.info(
         f"Phase {phase} parallel completed: {total_entries} discovered, "
@@ -1678,7 +1678,7 @@ def process_phase_entries_sequential(
 
     if use_history_for_saving and not dry_run and visited_hrefs:
         if use_sqlite() and actor_updates:
-            db_batch_update_movie_actors(actor_updates)
+            HistoryRepo().batch_update_movie_actors(actor_updates)
 
     logger.info(
         f"Phase {phase} completed: {total_entries} movies discovered, "
