@@ -334,6 +334,23 @@ class HistoryRepo:
         """Append a row to PendingTorrentHistoryWrites. Returns Seq."""
         return self.stage_history_write(session_id, "torrent", payload)
 
+    def upsert_history(
+        self,
+        href: str,
+        video_code: str,
+        magnet_links: Optional[Dict[str, str]] = None,
+        **kwargs,
+    ):
+        """Audit-mode live upsert wrapper for remaining history callers."""
+        from javdb.storage.db.db_history_write import db_upsert_history
+        return db_upsert_history(
+            href,
+            video_code,
+            magnet_links,
+            db_path=self._db_path,
+            **kwargs,
+        )
+
     def commit_session(self, session_id: str, **kwargs) -> dict:
         """Drain Pending* tables into live MovieHistory / TorrentHistory."""
         from javdb.storage.db.db_history_write import db_commit_session_history
@@ -345,7 +362,7 @@ class HistoryRepo:
         return db_batch_update_last_visited(hrefs, db_path=self._db_path)
 
     def batch_update_movie_actors(
-        self, updates: List[Tuple[str, str, str, str]],
+        self, updates: List[Tuple[str, str, str, str, str]],
     ) -> int:
         """Bulk overwrite (ActorName, Gender, Link, SupportingActorsJson)."""
         from javdb.storage.db.db_history_read import db_batch_update_movie_actors

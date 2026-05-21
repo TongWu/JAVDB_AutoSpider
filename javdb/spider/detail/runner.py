@@ -8,12 +8,12 @@ from urllib.parse import urljoin
 
 from javdb.infra.logging import get_logger
 from javdb.infra.config import use_sqlite
-from javdb.storage.db.db_history_read import db_batch_update_movie_actors
 from javdb.storage.db.db_session import get_active_session_id
 from javdb.storage.history_manager import (
     save_parsed_movie_to_history,
     batch_update_last_visited,
 )
+from javdb.storage.repos.history_repo import HistoryRepo
 from javdb.infra.csv_writer import write_csv
 from javdb.proxy.coordinator.movie_claim_client import (
     DEFAULT_CLAIM_TTL_MS,
@@ -1005,5 +1005,5 @@ def finalize_detail_phase(
 
     if use_history_for_saving and not dry_run and visited_hrefs:
         if use_sqlite() and actor_updates:
-            db_batch_update_movie_actors(actor_updates)
+            HistoryRepo().batch_update_movie_actors(actor_updates)
         batch_update_last_visited(history_file, visited_hrefs)
