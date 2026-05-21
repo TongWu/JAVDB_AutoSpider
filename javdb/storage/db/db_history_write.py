@@ -15,6 +15,9 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from javdb.infra.config import cfg
 from javdb.infra.logging import get_logger
+from javdb.spider.contracts import (
+    category_to_indicators as _category_to_indicators,
+)
 
 logger = get_logger(__name__)
 
@@ -55,13 +58,7 @@ _KIND_TORRENT = 'torrent'
 
 def category_to_indicators(category: str) -> Tuple[int, int]:
     """Map category name to (SubtitleIndicator, CensorIndicator)."""
-    mapping = {
-        'hacked_subtitle': (1, 0),
-        'hacked_no_subtitle': (0, 0),
-        'subtitle': (1, 1),
-        'no_subtitle': (0, 1),
-    }
-    return mapping.get(category, (0, 0))
+    return _category_to_indicators(category)
 
 
 def indicators_to_category(sub_ind: int, cen_ind: int) -> str:

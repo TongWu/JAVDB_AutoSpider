@@ -47,10 +47,13 @@ from apps.api.parsers.common import (
 from javdb.infra.config import cfg
 from javdb.infra.logging import get_logger
 from javdb.storage.repos.history_repo import (
+    HistoryRepo,
     load_history_joined as _load_history_joined,
     batch_update_movie_actors as _batch_update_movie_actors,
     _has_meaningful_actor_data,
 )
+from javdb.storage.repos.operations_repo import OperationsRepo
+from javdb.storage.repos.stats_repo import StatsRepo
 logger = get_logger(__name__)
 
 # MR-3 (multi-runtime): backend-agnostic exception tuples.
@@ -2151,10 +2154,7 @@ def _init_single_legacy_db(db_path: str, *, force: bool = False):
 
 def db_load_history(db_path: Optional[str] = None, phase: Optional[int] = None) -> Dict[str, dict]:
     """Load history from MovieHistory + TorrentHistory into a dict keyed by Href."""
-    from javdb.storage.db.db_history_read import (
-        db_load_history as _f,
-    )
-    return _f(db_path=db_path or HISTORY_DB_PATH, phase=phase)
+    return HistoryRepo(db_path=db_path or HISTORY_DB_PATH).load_history(phase=phase)
 
 
 # ── Audit helpers (X3 rollback) ──────────────────────────────────────────
@@ -2996,18 +2996,14 @@ def db_batch_update_movie_actors(
 
 def db_check_torrent_in_history(href: str, torrent_type: str, db_path: Optional[str] = None) -> bool:
     """Check if a specific torrent type exists for href."""
-    from javdb.storage.db.db_history_read import (
-        db_check_torrent_in_history as _f,
+    return HistoryRepo(db_path=db_path).check_torrent_in_history(
+        href, torrent_type,
     )
-    return _f(href, torrent_type, db_path=db_path)
 
 
 def db_get_all_history_records(db_path: Optional[str] = None) -> List[dict]:
     """Return all MovieHistory records as dicts (for migration verification)."""
-    from javdb.storage.db.db_history_read import (
-        db_get_all_history_records as _f,
-    )
-    return _f(db_path=db_path)
+    return HistoryRepo(db_path=db_path).get_all_history_records()
 
 
 # ── RcloneInventory helpers ──────────────────────────────────────────────
@@ -3029,10 +3025,9 @@ def db_open_rclone_staging(
     db_path: Optional[str] = None,
 ) -> Optional[str]:
     """Initialise this session's RcloneInventory staging table."""
-    from javdb.storage.db.db_operations import (
-        db_open_rclone_staging as _f,
+    return OperationsRepo(db_path=db_path or OPERATIONS_DB_PATH).open_rclone_staging(
+        session_id,
     )
-    return _f(session_id=session_id, db_path=db_path or OPERATIONS_DB_PATH)
 
 
 def db_append_rclone_staging(
@@ -3041,10 +3036,9 @@ def db_append_rclone_staging(
     db_path: Optional[str] = None,
 ) -> int:
     """Append rows to this session's RcloneInventory staging table."""
-    from javdb.storage.db.db_operations import (
-        db_append_rclone_staging as _f,
+    return OperationsRepo(db_path=db_path or OPERATIONS_DB_PATH).append_rclone_staging(
+        entries, session_id,
     )
-    return _f(entries, session_id=session_id, db_path=db_path or OPERATIONS_DB_PATH)
 
 
 def db_swap_rclone_inventory(
@@ -3052,10 +3046,7 @@ def db_swap_rclone_inventory(
     db_path: Optional[str] = None,
 ) -> int:
     """Atomically swap this session's staging into the live RcloneInventory."""
-    from javdb.storage.db.db_operations import (
-        db_swap_rclone_inventory as _f,
-    )
-    return _f(session_id=session_id, db_path=db_path)
+    return OperationsRepo(db_path=db_path).swap_rclone_inventory(session_id)
 
 
 def db_merge_rclone_inventory_from_stage(
@@ -3064,10 +3055,9 @@ def db_merge_rclone_inventory_from_stage(
     db_path: Optional[str] = None,
 ) -> int:
     """Merge this session's staging rows into selected RcloneInventory years."""
-    from javdb.storage.db.db_operations import (
-        db_merge_rclone_inventory_from_stage as _f,
-    )
-    return _f(session_id=session_id, years=years, db_path=db_path or OPERATIONS_DB_PATH)
+    return OperationsRepo(
+        db_path=db_path or OPERATIONS_DB_PATH,
+    ).merge_rclone_inventory_from_stage(session_id, years)
 
 
 def db_drop_rclone_staging(
@@ -3075,18 +3065,14 @@ def db_drop_rclone_staging(
     db_path: Optional[str] = None,
 ) -> None:
     """DROP TABLE IF EXISTS RcloneInventoryStaging_<session_id> (idempotent)."""
-    from javdb.storage.db.db_operations import (
-        db_drop_rclone_staging as _f,
+    OperationsRepo(db_path=db_path or OPERATIONS_DB_PATH).drop_rclone_staging(
+        session_id,
     )
-    _f(session_id, db_path=db_path or OPERATIONS_DB_PATH)
 
 
 def db_clear_rclone_inventory(db_path: Optional[str] = None) -> None:
     """Delete all rows from RcloneInventory."""
-    from javdb.storage.db.db_operations import (
-        db_clear_rclone_inventory as _f,
-    )
-    _f(db_path=db_path)
+    OperationsRepo(db_path=db_path).clear_rclone_inventory()
 
 
 def db_append_rclone_inventory(entries: List[dict], db_path: Optional[str] = None) -> int:
@@ -3099,10 +3085,7 @@ def db_append_rclone_inventory(entries: List[dict], db_path: Optional[str] = Non
 
 def db_load_rclone_inventory(db_path: Optional[str] = None) -> Dict[str, list]:
     """Load inventory grouped by VideoCode."""
-    from javdb.storage.db.db_operations import (
-        db_load_rclone_inventory as _f,
-    )
-    return _f(db_path=db_path or OPERATIONS_DB_PATH)
+    return OperationsRepo(db_path=db_path or OPERATIONS_DB_PATH).load_rclone_inventory()
 
 
 def db_delete_rclone_inventory_paths(
@@ -3110,20 +3093,16 @@ def db_delete_rclone_inventory_paths(
     db_path: Optional[str] = None,
 ) -> int:
     """Bulk delete RcloneInventory rows by FolderPath."""
-    from javdb.storage.db.db_operations import (
-        db_delete_rclone_inventory_paths as _f,
-    )
-    return _f(paths, db_path=db_path or OPERATIONS_DB_PATH)
+    return OperationsRepo(
+        db_path=db_path or OPERATIONS_DB_PATH,
+    ).delete_rclone_inventory_paths(paths)
 
 
 # ── DedupRecords helpers ─────────────────────────────────────────────────
 
 def db_load_dedup_records(db_path: Optional[str] = None) -> List[dict]:
     """Load all dedup records."""
-    from javdb.storage.db.db_operations import (
-        db_load_dedup_records as _f,
-    )
-    return _f(db_path=db_path or OPERATIONS_DB_PATH)
+    return OperationsRepo(db_path=db_path or OPERATIONS_DB_PATH).load_dedup_records()
 
 
 _DEDUP_RECORD_COLUMNS = (
@@ -3249,10 +3228,9 @@ def db_append_dedup_record(
     session_id: Any = _SESSION_ID_SENTINEL,
 ) -> int:
     """Append a single dedup record. Returns the new row id, or -1 if duplicate."""
-    from javdb.storage.db.db_operations import (
-        db_append_dedup_record as _f,
-    )
-    return _f(record, db_path=db_path or OPERATIONS_DB_PATH, session_id=session_id)
+    return OperationsRepo(
+        db_path=db_path or OPERATIONS_DB_PATH,
+    ).append_dedup_record(record, session_id=session_id)
 
 
 def db_mark_records_deleted(
@@ -3261,10 +3239,9 @@ def db_mark_records_deleted(
     session_id: Any = _SESSION_ID_SENTINEL,
 ) -> int:
     """Mark specific dedup records as deleted by gdrive path."""
-    from javdb.storage.db.db_operations import (
-        db_mark_records_deleted as _f,
-    )
-    return _f(path_datetime_pairs, db_path=db_path or OPERATIONS_DB_PATH, session_id=session_id)
+    return OperationsRepo(
+        db_path=db_path or OPERATIONS_DB_PATH,
+    ).mark_records_deleted(path_datetime_pairs, session_id=session_id)
 
 
 def db_mark_orphan_records(
@@ -3275,10 +3252,11 @@ def db_mark_orphan_records(
     session_id: Any = _SESSION_ID_SENTINEL,
 ) -> int:
     """Mark dedup pending rows as deleted with custom reason suffix appended."""
-    from javdb.storage.db.db_operations import (
-        db_mark_orphan_records as _f,
+    return OperationsRepo(
+        db_path=db_path or OPERATIONS_DB_PATH,
+    ).mark_orphan_records(
+        paths, reason_suffix, when, session_id=session_id,
     )
-    return _f(paths, reason_suffix, when, db_path=db_path or OPERATIONS_DB_PATH, session_id=session_id)
 
 
 def db_cleanup_deleted_records(
@@ -3286,18 +3264,14 @@ def db_cleanup_deleted_records(
     db_path: Optional[str] = None,
 ) -> int:
     """Remove dedup records that were deleted more than *older_than_days* ago."""
-    from javdb.storage.db.db_operations import (
-        db_cleanup_deleted_records as _f,
-    )
-    return _f(older_than_days, db_path=db_path or OPERATIONS_DB_PATH)
+    return OperationsRepo(
+        db_path=db_path or OPERATIONS_DB_PATH,
+    ).cleanup_deleted_records(older_than_days=older_than_days)
 
 
 def db_save_dedup_records(rows: List[dict], db_path: Optional[str] = None) -> None:
     """Overwrite all dedup records (deprecated)."""
-    from javdb.storage.db.db_operations import (
-        db_save_dedup_records as _f,
-    )
-    return _f(rows, db_path=db_path)
+    return OperationsRepo(db_path=db_path).save_dedup_records(rows)
 
 
 # ── PikpakHistory helpers ────────────────────────────────────────────────
@@ -3308,10 +3282,9 @@ def db_append_pikpak_history(
     session_id: Any = _SESSION_ID_SENTINEL,
 ) -> int:
     """Append a PikPak transfer record."""
-    from javdb.storage.db.db_operations import (
-        db_append_pikpak_history as _f,
-    )
-    return _f(record, db_path=db_path or OPERATIONS_DB_PATH, session_id=session_id)
+    return OperationsRepo(
+        db_path=db_path or OPERATIONS_DB_PATH,
+    ).append_pikpak_history(record, session_id=session_id)
 
 
 # ── InventoryAlignNoExactMatch helpers ───────────────────────────────────
@@ -3323,18 +3296,14 @@ def db_upsert_align_no_exact_match(
     session_id: Any = _SESSION_ID_SENTINEL,
 ) -> None:
     """Record a video code that had no exact match on JavDB search."""
-    from javdb.storage.db.db_operations import (
-        db_upsert_align_no_exact_match as _f,
+    return OperationsRepo(db_path=db_path).upsert_align_no_exact_match(
+        video_code, reason=reason, session_id=session_id,
     )
-    return _f(video_code, reason=reason, db_path=db_path, session_id=session_id)
 
 
 def db_load_align_no_exact_match_codes(db_path: Optional[str] = None) -> set:
     """Return the set of normalised video codes previously marked as no-exact-match."""
-    from javdb.storage.db.db_operations import (
-        db_load_align_no_exact_match_codes as _f,
-    )
-    return _f(db_path=db_path)
+    return OperationsRepo(db_path=db_path).load_align_no_exact_match_codes()
 
 
 def db_delete_align_no_exact_match(
@@ -3342,10 +3311,9 @@ def db_delete_align_no_exact_match(
     db_path: Optional[str] = None,
 ) -> None:
     """Remove a video code from the no-exact-match table."""
-    from javdb.storage.db.db_operations import (
-        db_delete_align_no_exact_match as _f,
+    return OperationsRepo(db_path=db_path).delete_align_no_exact_match(
+        video_code,
     )
-    return _f(video_code, db_path=db_path)
 
 
 
@@ -3485,100 +3453,9 @@ def db_stage_history_write(
     silently leave residual pending rows after commit because
     ``_commit_one_movie`` marks ``applied`` by ``Seq IN (...)``.
     """
-    if kind not in _PENDING_KINDS:
-        raise ValueError(
-            f"db_stage_history_write: kind must be one of {_PENDING_KINDS}, "
-            f"got {kind!r}"
-        )
-    if not payload.get("Href") and not payload.get("href"):
-        raise ValueError("db_stage_history_write: payload requires 'Href'")
-    href = payload.get("Href") or payload.get("href")
-    video_code = payload.get("VideoCode") or payload.get("video_code")
-    visited = (
-        payload.get("DateTimeVisited")
-        or payload.get("date_time_visited")
-        or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return HistoryRepo(db_path=db_path or HISTORY_DB_PATH).stage_history_write(
+        session_id, kind, payload,
     )
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    run_id, run_attempt = get_active_run_identity()
-    seq = _generate_session_id()
-    # Defence in depth: catch any future code path that bypasses
-    # ``_generate_session_id`` (e.g. a forgotten AUTOINCREMENT that
-    # would emit a small int and diverge from D1 under STORAGE_BACKEND=
-    # dual). The canonical generator returns a fixed-shape TEXT id, so
-    # any value that doesn't match the regex came from somewhere else.
-    if not _SESSION_ID_PATTERN.match(seq):
-        raise ValueError(
-            f"db_stage_history_write: refusing to INSERT with Seq={seq!r} "
-            f"(expected a TEXT snowflake from _generate_session_id; a "
-            f"malformed value here means a caller bypassed the snowflake "
-            f"path and would diverge from D1 under STORAGE_BACKEND=dual)."
-        )
-    with get_db(db_path or HISTORY_DB_PATH) as conn:
-        if kind == _KIND_MOVIE:
-            conn.execute(
-                """INSERT INTO PendingMovieHistoryWrites
-                   (Seq, SessionId, RunId, RunAttempt, Href, VideoCode,
-                    ActorName, ActorGender, ActorLink, SupportingActors,
-                    DateTimeVisited, CreatedAt, ApplyState)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')""",
-                (
-                    seq,
-                    session_id,
-                    run_id,
-                    run_attempt,
-                    href,
-                    video_code,
-                    payload.get("ActorName") or payload.get("actor_name"),
-                    payload.get("ActorGender") or payload.get("actor_gender"),
-                    payload.get("ActorLink") or payload.get("actor_link"),
-                    (
-                        payload.get("SupportingActors")
-                        or payload.get("supporting_actors")
-                    ),
-                    visited,
-                    now,
-                ),
-            )
-        else:
-            sub_ind = payload.get("SubtitleIndicator")
-            cen_ind = payload.get("CensorIndicator")
-            category = payload.get("Category") or payload.get("category")
-            if sub_ind is None or cen_ind is None:
-                if not category:
-                    raise ValueError(
-                        "db_stage_history_write(torrent): payload needs "
-                        "either Category or (SubtitleIndicator, CensorIndicator)"
-                    )
-                sub_ind, cen_ind = category_to_indicators(category)
-            if not category:
-                category = indicators_to_category(int(sub_ind), int(cen_ind))
-            conn.execute(
-                """INSERT INTO PendingTorrentHistoryWrites
-                   (Seq, SessionId, RunId, RunAttempt, Href, VideoCode,
-                    Category, SubtitleIndicator, CensorIndicator,
-                    MagnetUri, Size, FileCount, ResolutionType,
-                    DateTimeVisited, CreatedAt, ApplyState)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')""",
-                (
-                    seq,
-                    session_id,
-                    run_id,
-                    run_attempt,
-                    href,
-                    video_code,
-                    category,
-                    int(sub_ind),
-                    int(cen_ind),
-                    payload.get("MagnetUri") or payload.get("magnet_uri"),
-                    payload.get("Size") or payload.get("size"),
-                    int(payload.get("FileCount") or payload.get("file_count") or 0),
-                    payload.get("ResolutionType") or payload.get("resolution_type"),
-                    visited,
-                    now,
-                ),
-            )
-        return seq
 
 
 def _href_lookup_variants(href: str) -> List[str]:
@@ -3677,10 +3554,7 @@ def db_load_history_snapshot(
     db_path: Optional[str] = None,
 ) -> Dict[str, dict]:
     """Return committed-live history with the *session_id* pending overlay."""
-    from javdb.storage.db.db_history_read import (
-        db_load_history_snapshot as _f,
-    )
-    return _f(session_id, db_path=db_path)
+    return HistoryRepo(db_path=db_path).load_history_snapshot(session_id)
 
 
 def _commit_one_movie(
@@ -5353,50 +5227,44 @@ def db_get_sessions_by_date(report_date: str, report_type: Optional[str] = None,
 
 def db_save_spider_stats(session_id: str, stats: dict, db_path: Optional[str] = None) -> int:
     """Save spider statistics for a session (idempotent via ON CONFLICT)."""
-    from javdb.storage.db.db_stats import (
-        db_save_spider_stats as _f,
+    return StatsRepo(db_path=db_path or REPORTS_DB_PATH).save_spider_stats(
+        session_id, stats,
     )
-    return _f(session_id, stats, db_path=db_path or REPORTS_DB_PATH)
 
 
 def db_save_uploader_stats(session_id: str, stats: dict, db_path: Optional[str] = None) -> int:
     """Save uploader statistics for a session (idempotent via ON CONFLICT)."""
-    from javdb.storage.db.db_stats import (
-        db_save_uploader_stats as _f,
+    return StatsRepo(db_path=db_path or REPORTS_DB_PATH).save_uploader_stats(
+        session_id, stats,
     )
-    return _f(session_id, stats, db_path=db_path or REPORTS_DB_PATH)
 
 
 def db_save_pikpak_stats(session_id: str, stats: dict, db_path: Optional[str] = None) -> int:
     """Save PikPak bridge statistics for a session (idempotent via ON CONFLICT)."""
-    from javdb.storage.db.db_stats import (
-        db_save_pikpak_stats as _f,
+    return StatsRepo(db_path=db_path or REPORTS_DB_PATH).save_pikpak_stats(
+        session_id, stats,
     )
-    return _f(session_id, stats, db_path=db_path or REPORTS_DB_PATH)
 
 
 def db_get_spider_stats(session_id: str, db_path: Optional[str] = None) -> Optional[dict]:
     """Get spider stats for a session."""
-    from javdb.storage.db.db_stats import (
-        db_get_spider_stats as _f,
+    return StatsRepo(db_path=db_path or REPORTS_DB_PATH).get_spider_stats(
+        session_id,
     )
-    return _f(session_id, db_path=db_path or REPORTS_DB_PATH)
 
 
 def db_get_uploader_stats(session_id: str, db_path: Optional[str] = None) -> Optional[dict]:
     """Get uploader stats for a session."""
-    from javdb.storage.db.db_stats import (
-        db_get_uploader_stats as _f,
+    return StatsRepo(db_path=db_path or REPORTS_DB_PATH).get_uploader_stats(
+        session_id,
     )
-    return _f(session_id, db_path=db_path or REPORTS_DB_PATH)
 
 
 def db_get_pikpak_stats(session_id: str, db_path: Optional[str] = None) -> Optional[dict]:
     """Get PikPak stats for a session."""
-    from javdb.storage.db.db_stats import (
-        db_get_pikpak_stats as _f,
+    return StatsRepo(db_path=db_path or REPORTS_DB_PATH).get_pikpak_stats(
+        session_id,
     )
-    return _f(session_id, db_path=db_path or REPORTS_DB_PATH)
 
 
 # ── P0-6 SQLite-canonical readers for observability tooling ─────────────
@@ -5418,30 +5286,27 @@ def db_get_spider_stats_local(
     session_id: str, db_path: Optional[str] = None,
 ) -> Optional[dict]:
     """SQLite-only counterpart to :func:`db_get_spider_stats`."""
-    from javdb.storage.db.db_stats import (
-        db_get_spider_stats_local as _f,
+    return StatsRepo(db_path=db_path or REPORTS_DB_PATH).get_spider_stats_local(
+        session_id,
     )
-    return _f(session_id, db_path=db_path or REPORTS_DB_PATH)
 
 
 def db_get_uploader_stats_local(
     session_id: str, db_path: Optional[str] = None,
 ) -> Optional[dict]:
     """SQLite-only counterpart to :func:`db_get_uploader_stats`."""
-    from javdb.storage.db.db_stats import (
-        db_get_uploader_stats_local as _f,
+    return StatsRepo(db_path=db_path or REPORTS_DB_PATH).get_uploader_stats_local(
+        session_id,
     )
-    return _f(session_id, db_path=db_path or REPORTS_DB_PATH)
 
 
 def db_get_pikpak_stats_local(
     session_id: str, db_path: Optional[str] = None,
 ) -> Optional[dict]:
     """SQLite-only counterpart to :func:`db_get_pikpak_stats`."""
-    from javdb.storage.db.db_stats import (
-        db_get_pikpak_stats_local as _f,
+    return StatsRepo(db_path=db_path or REPORTS_DB_PATH).get_pikpak_stats_local(
+        session_id,
     )
-    return _f(session_id, db_path=db_path or REPORTS_DB_PATH)
 
 
 def db_get_latest_session_local(

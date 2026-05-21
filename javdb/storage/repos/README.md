@@ -1,6 +1,6 @@
 # repos
 
-Repository-pattern wrappers over the raw `javdb.storage.db` modules — provide higher-level, typed APIs for application and API layers.
+Repository-pattern wrappers over the raw `javdb.storage.db` modules — provide higher-level, typed APIs for application, API, and legacy facade layers.
 
 Two Repo shapes coexist (ADR-005 amendment 2):
 
@@ -23,5 +23,5 @@ Two Repo shapes coexist (ADR-005 amendment 2):
 
 ## Depends on
 
-- Upstream callers: `apps.api.routers.*`, `apps.cli.rollback`, `apps.cli.migration`, `javdb.pipeline.service`.
+- Upstream callers: `apps.api.routers.*`, `apps.cli.rollback`, `apps.cli.migration`, `javdb.pipeline.service`, and selected legacy `javdb.storage.db.db` facade functions during ADR-005 PR-2 migration.
 - Downstream: `javdb.storage.db.*`, `apps.api.parsers.common`, `javdb.infra.logging`.
