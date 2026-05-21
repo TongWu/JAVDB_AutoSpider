@@ -1,14 +1,14 @@
 # ADR-006: Pending Mode Default Rollout + Retirement of Audit Auto-Fallback
 
-**Status**: Accepted — PR-A/C/D/E merged; **in 30-day bake** (started 2026-05-16, sign-off PR-F target ~2026-06-15)
+**Status**: Completed — PR-A/C/D/E merged; **PR-F sign-off completed on 2026-05-21** (operator-approved 7-day clean bake bypass)
 **Date**: 2026-05-16
 **Deciders**: Architecture depth-pass round 2 (prerequisite for [ADR-005](ADR-005-db-py-retirement-and-repo-pattern.md))
-**Successor Trigger**: ADR-005 PR-1 may only start after ADR-006 completes
+**Successor Trigger**: ADR-006 is complete; ADR-005 PR-2 is unblocked (PR-1 already shipped). The bypass does not authorize ADR-005 PR-4 audit-table deletion; the D10 trio must pass first.
 
 ## Outstanding Work
 
-- **PR-F (sign-off)** — after the 30-day bake passes the D10 trio re-check (`WriteMode='audit'` count = 0, no orphan audit rows, ≤ 1 pause-trigger/month), insert "ADR-006 sign-off completed on YYYY-MM-DD" at the top of ADR-005, unblocking ADR-005 PR-1.
-- Until bake completes, `BakeCheck.yml` (`cron: 0 4 * * *`, `since: 2026-05-16`) is the daily gate.
+- **PR-F (sign-off) ✅** — on 2026-05-21, the maintainer approved bypassing the remainder of the 30-day window after one clean week and inserted "ADR-006 sign-off completed on 2026-05-21" at the top of ADR-005.
+- `BakeCheck.yml` (`cron: 0 4 * * *`, `since: 2026-05-16`) remains as regression monitoring; the D10 trio must still be re-run before ADR-005 PR-4.
 
 ## Amendments
 
@@ -35,6 +35,8 @@
   | PR-5 (delete `db.py`) | **Yes** | Final cleanup post-retirement |
 
   The blanket ban in D5 is replaced by this per-PR matrix. PR-1 may start once this amendment is recorded; PR-2 onward still requires the 30-day bake + D10 sign-off.
+
+- **2026-05-21 amendment 4**: **PR-F sign-off uses an operator-approved 7-day clean bake bypass.** The maintainer explicitly bypassed the remainder of D4's 30-day window after one clean week and allowed ADR-005 PR-2 to proceed. This bypass only lifts the PR-2 start blocker; it does not authorize early audit-table deletion. ADR-005 PR-4 still requires the D10 trio to pass before execution.
 
 ---
 
@@ -97,16 +99,16 @@ Rename `scripts/pending_mode_auto_fallback.py` to `scripts/pending_mode_alert_an
 
 ### D4: 30-day bake period + exit verification
 
-After D1-D3 ship, **bake for at least 30 days**. During the bake, operations monitors:
+After D1-D3 ship, **bake for at least 30 days** unless an operator explicitly approves a shorter clean bake. During the bake, operations monitors:
 - Daily check: `SELECT COUNT(*) FROM ReportSessions WHERE WriteMode='audit' AND DateTimeCreated > date('now','-1 day')` should hold steady at 0
 - Check the trigger count of `scripts/pending_mode_alert_and_pause.py` — more than 1/month indicates an unfixed defect in Pending Mode
-- After the bake, re-run the D10 trio; passing all three is the sign-off prerequisite to start ADR-005
+- After the bake or operator-approved bypass, re-run the D10 trio before ADR-005 PR-4; passing all three is still required before audit-table deletion.
 
 ### D5: Block all ADR-005 PRs during the bake
 
-> **See amendment 3 (2026-05-17) above.** This decision has been narrowed: PR-1 is now carved out as bake-safe because it is purely additive (zero caller change → no possible monitoring impact); PR-2 onward stay blocked until bake completion + D10 sign-off.
+> **See amendments 3 and 4 above.** This decision was first narrowed so PR-1 was carved out as bake-safe, then PR-F sign-off on 2026-05-21 used an operator-approved 7-day clean bake bypass to unblock PR-2. PR-4 audit-table deletion still requires the D10 trio to pass first.
 
-ADR-005's PR-1 (introducing the Repo class alongside the function family) does not touch the audit path, but it is **still subject to the bake period** — to avoid restructuring and runtime-mode switching colliding within the same monitoring window. ADR-005 PR-1 may only start after the bake completes and all three D10 items sign off.
+ADR-005's PR-1 shipped as a bake-safe additive change. ADR-005 PR-2 may proceed after the 2026-05-21 sign-off bypass. ADR-005 PR-4 remains outside the bypass and may only start after all three D10 items sign off.
 
 ---
 
@@ -145,11 +147,12 @@ PR-D  Auto-fallback redesign: pending_mode_alert_and_pause.py replaces
 PR-E  Fix the "pending is default" inaccuracy in CONTEXT.md / CLAUDE.md / ADR-001 docstring   [merged #34]
       (independent small PR, may land in parallel with PR-A; no need to wait for the bake)
 
-PR-F  Sign-off PR after the 30-day bake: insert "ADR-006 sign-off completed on YYYY-MM-DD"
-      at the top of ADR-005, unblocking ADR-005 PR-1 start
+PR-F  Sign-off PR completed on 2026-05-21 via operator-approved 7-day clean bake bypass:
+      insert "ADR-006 sign-off completed on 2026-05-21" at the top of ADR-005,
+      unblocking ADR-005 PR-2 while preserving the D10 gate before PR-4
 ```
 
-Each PR is independently revertable. PR-A / PR-C / PR-D are the core; PR-E went ahead; PR-F is the ceremony at the end of the bake. PR-A and PR-E are merged; remaining work is PR-C → PR-D → bake → PR-F.
+Each PR is independently revertable. PR-A / PR-C / PR-D are the core; PR-E went ahead; PR-F is now complete via operator-approved bypass. `BakeCheck.yml` continues as regression monitoring, not as an active blocker.
 
 ---
 
@@ -164,7 +167,7 @@ Each PR is independently revertable. PR-A / PR-C / PR-D are the core; PR-E went 
 
 ### Negative
 
-1. **The 30-day bake postpones ADR-005 start** — if ADR-006 lands on 2026-05-16, the earliest start for ADR-005 PR-1 is 2026-06-15
+1. **The 30-day bake was bypassed for ADR-005 PR-2** — the 2026-05-21 operator sign-off trades the original wait for continued BakeCheck regression monitoring
 2. **Pending Mode defects surface more directly as ops incidents** — issues previously hidden by the fallback now become pipeline pauses
 3. **Manual pause/resume flow requires operator training** — the runbook needs an update
 
@@ -182,7 +185,7 @@ Each PR is independently revertable. PR-A / PR-C / PR-D are the core; PR-E went 
 
 ## Related ADRs
 
-- **Successor**: [ADR-005](ADR-005-db-py-retirement-and-repo-pattern.md) — starts after the bake completes
+- **Successor**: [ADR-005](ADR-005-db-py-retirement-and-repo-pattern.md) — PR-2 may proceed after the 2026-05-21 sign-off bypass; PR-4 still requires the D10 trio to pass
 - **Corrects past commitment**: [ADR-001](archive/ADR-001-split-db-module.md) Phase 3's "Pending Mode default" commitment is genuinely delivered by this ADR
 
 ---
