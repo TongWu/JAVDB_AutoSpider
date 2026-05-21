@@ -291,7 +291,9 @@ class HistoryRepo:
         from javdb.storage.db.db_history_read import db_load_history
         return db_load_history(db_path=self._db_path, phase=phase)
 
-    def load_history_snapshot(self, session_id: str) -> Dict[str, dict]:
+    def load_history_snapshot(
+        self, session_id: Optional[str],
+    ) -> Dict[str, dict]:
         """Load history + this session's Pending overlay (for spider reads)."""
         from javdb.storage.db.db_history_read import db_load_history_snapshot
         return db_load_history_snapshot(
@@ -314,21 +316,23 @@ class HistoryRepo:
 
     # ── Writes (session_id required) ──────────────────────────────
 
-    def stage_movie(self, session_id: str, payload: Dict) -> str:
-        """Append a row to PendingMovieHistoryWrites. Returns Seq."""
+    def stage_history_write(
+        self, session_id: str, kind: str, payload: Dict,
+    ) -> str:
+        """Append a pending movie/torrent history row. Returns Seq."""
         from javdb.storage.db.db_history_write import db_stage_history_write
         return db_stage_history_write(
-            session_id=session_id, kind="movie", payload=payload,
+            session_id=session_id, kind=kind, payload=payload,
             db_path=self._db_path,
         )
 
+    def stage_movie(self, session_id: str, payload: Dict) -> str:
+        """Append a row to PendingMovieHistoryWrites. Returns Seq."""
+        return self.stage_history_write(session_id, "movie", payload)
+
     def stage_torrent(self, session_id: str, payload: Dict) -> str:
         """Append a row to PendingTorrentHistoryWrites. Returns Seq."""
-        from javdb.storage.db.db_history_write import db_stage_history_write
-        return db_stage_history_write(
-            session_id=session_id, kind="torrent", payload=payload,
-            db_path=self._db_path,
-        )
+        return self.stage_history_write(session_id, "torrent", payload)
 
     def commit_session(self, session_id: str, **kwargs) -> dict:
         """Drain Pending* tables into live MovieHistory / TorrentHistory."""

@@ -74,6 +74,20 @@ class TestHistoryRepoWrites:
 
     @patch(
         "javdb.storage.db.db_history_write.db_stage_history_write",
+        return_value="SEQ-000",
+    )
+    def test_stage_history_write_delegates(self, mock_fn):
+        repo = HistoryRepo(db_path="/tmp/h.db")
+        payload = {"Href": "/movies/abc"}
+        result = repo.stage_history_write("sess-0", "movie", payload)
+        assert result == "SEQ-000"
+        mock_fn.assert_called_once_with(
+            session_id="sess-0", kind="movie", payload=payload,
+            db_path="/tmp/h.db",
+        )
+
+    @patch(
+        "javdb.storage.db.db_history_write.db_stage_history_write",
         return_value="SEQ-001",
     )
     def test_stage_movie_delegates(self, mock_fn):

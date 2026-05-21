@@ -1,6 +1,6 @@
 # ADR-005: Full Retirement of db.py + Repo Class Abstraction + Audit Mode Retirement
 
-**Status**: Accepted — **PR-1 shipped** (Repo classes added alongside `db.py`); **PR-2 → PR-5 blocked on [ADR-006](ADR-006-pending-mode-default-rollout.md) bake completion** (~2026-06-15)
+**Status**: Accepted — **PR-1 shipped** (Repo classes added alongside `db.py`); **ADR-006 sign-off completed on 2026-05-21** (operator-approved 7-day clean bake bypass); **PR-2 unblocked, PR-3 → PR-5 proceed in order**
 **Date**: 2026-05-16
 **Deciders**: Architecture depth-pass round 2
 **Prerequisites**: [ADR-006](ADR-006-pending-mode-default-rollout.md) — Pending Mode default must first be rolled out to 100% and the auto-fallback redesigned before this ADR can execute its D10 gate
@@ -11,9 +11,9 @@
 
 PR-1 (Repo classes) ✅ shipped: `HistoryRepo`, `OperationsRepo`, `StatsRepo`, `SessionsRepo`, `SystemStateRepo` are present in `javdb/storage/repos/`. Remaining:
 
-- **PR-2** — `db.py` internally forwards to Repos (dual-write phase). Blocked on bake.
-- **PR-3** — migrate callers (`history_manager.py`, CLI tools, `db_rollback.py`) off the function family. Blocked on bake.
-- **PR-4** — drop Audit Mode tables (`MovieHistoryAudit`, `TorrentHistoryAudit`) + remove audit code branches. Blocked on bake **and** ADR-006 PR-F sign-off.
+- **PR-2** — `db.py` internally forwards to Repos (dual-write phase). Unblocked by ADR-006 sign-off.
+- **PR-3** — migrate callers (`history_manager.py`, CLI tools, `db_rollback.py`) off the function family. Starts after PR-2 verification.
+- **PR-4** — drop Audit Mode tables (`MovieHistoryAudit`, `TorrentHistoryAudit`) + remove audit code branches. Starts after PR-3 and only after the D10 trio passes again.
 - **PR-5** — delete `db.py` (currently 5,454 lines) and the nine ADR-001 shell modules. Final cleanup post-retirement.
 - **Parser-helper relocation** — extracted from this ADR and superseded by [ADR-011](ADR-011-javdb-parsing-module.md). ADR-005 Storage/Repo work should import parsing helpers from `javdb.parsing.common` after ADR-011 Phase 1 lands.
 
@@ -54,6 +54,8 @@ PR-1 (Repo classes) ✅ shipped: `HistoryRepo`, `OperationsRepo`, `StatsRepo`, `
 
 - **2026-05-20 amendment 3**: **Parser-helper relocation extracted to ADR-011.** D4 / PR-6 originally moved three helpers from `apps.api.parsers.common` into a lower module. That overlapped with a larger parsing-boundary correction. [ADR-011](ADR-011-javdb-parsing-module.md) now owns the full JavDB Parsing Interface move to `javdb.parsing`, including those helpers under `javdb.parsing.common`. ADR-005 remains responsible for Storage/Repo retirement only. Any remaining ADR-005 implementation that needs these helpers should import from `javdb.parsing.common` once ADR-011 Phase 1 has landed.
 
+- **2026-05-21 amendment 4**: **ADR-006 sign-off completed via operator-approved 7-day clean bake bypass.** The original plan required a 30-day bake until approximately 2026-06-15; the maintainer confirmed one clean week with no pending-mode issues and explicitly approved bypassing the remaining wait to continue. This removes the ADR-005 PR-2 start blocker. Risk handling is unchanged: PR-2 must not delete audit schema, audit code, or caller compatibility; ADR-005 PR-4 still requires the D10 trio to pass before audit-table deletion.
+
 ---
 
 ## D10 Gate Check Results (2026-05-16)
@@ -68,7 +70,7 @@ Immediately after drafting ADR-005 we ran the D10 Audit Mode retirement safety c
 
 A **documentation discrepancy** also surfaced: CONTEXT.md / CLAUDE.md / the ADR-001 docstring claim "Pending Mode is default", but the code fallback at `db_session.py:188` and the SQLite schema's `WriteMode TEXT DEFAULT 'audit'` both show the **actual default is still audit**. This is aspirational, not factual.
 
-**Conclusion**: D2(c) "fully retire Audit Mode" is not executable today, because Audit Mode is the actual runtime mode for 80% of sessions and the live safety net for Pending Mode failures. Until ADR-006 lands, PR-1 of this ADR cannot start.
+**Conclusion**: D2(c) "fully retire Audit Mode" was not executable on 2026-05-16, because Audit Mode was the actual runtime mode for 80% of sessions and the live safety net for Pending Mode failures. Later amendments supersede the start blocker: PR-1 shipped, and the ADR-006 sign-off completed on 2026-05-21 via operator-approved 7-day clean bake bypass to unblock PR-2. Audit-table deletion remains gated by a fresh D10 pass before PR-4.
 
 ---
 
