@@ -135,12 +135,12 @@ class TestHistoryRepoWrites:
         mock_fn.assert_called_once_with(["/a", "/b"], db_path="/tmp/h.db")
 
     @patch(
-        "javdb.storage.db.db_history_read.db_batch_update_movie_actors",
+        "javdb.storage.db.db.db_batch_update_movie_actors",
         return_value=1,
     )
     def test_batch_update_movie_actors_delegates(self, mock_fn):
         repo = HistoryRepo()
-        updates = [("/m/1", "Actor", "M", "/actors/1")]
+        updates = [("/m/1", "Actor", "M", "/actors/1", "[]")]
         result = repo.batch_update_movie_actors(updates)
         assert result == 1
         mock_fn.assert_called_once_with(updates, db_path=None)
