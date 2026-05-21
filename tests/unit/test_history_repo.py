@@ -140,7 +140,7 @@ class TestHistoryRepoWrites:
     )
     def test_batch_update_movie_actors_delegates(self, mock_fn):
         repo = HistoryRepo()
-        updates = [("/m/1", "Actor", "M", "/actors/1")]
+        updates = [("/m/1", "Actor", "M", "/actors/1", "[]")]
         result = repo.batch_update_movie_actors(updates)
         assert result == 1
         mock_fn.assert_called_once_with(updates, db_path=None)
