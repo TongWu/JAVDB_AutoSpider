@@ -27,6 +27,8 @@ _TRUNCATE_TARGETS = {
 
 @router.post("/reset")
 def reset_state() -> dict[str, bool]:
+    from apps.api.infra import auth as auth_infra
+
     root = _reports_root()
     for db_name, tables in _TRUNCATE_TARGETS.items():
         db_path = root / db_name
@@ -41,6 +43,12 @@ def reset_state() -> dict[str, bool]:
                 except sqlite3.OperationalError:
                     pass
             conn.commit()
+
+    with auth_infra._AUTH_LOCK:
+        auth_infra.RATE_BUCKETS.clear()
+        auth_infra.ACTIVE_TOKENS.clear()
+        auth_infra.REVOKED_JTI.clear()
+
     return {"reset": True}
 
 
