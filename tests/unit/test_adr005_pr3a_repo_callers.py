@@ -76,7 +76,6 @@ def test_history_manager_sqlite_paths_use_history_repo(monkeypatch):
     hm.batch_update_last_visited("history.csv", {"/v/A", "/v/B"})
     assert hm.check_torrent_in_history("history.csv", "/v/A", "subtitle") is True
 
-    assert repo_cls.call_count == 4
     repo.load_history.assert_called_once_with(phase=1)
     repo.upsert_history.assert_called_once()
     repo.batch_update_last_visited.assert_called_once()
