@@ -11,7 +11,7 @@ just drops the staging table.
 from __future__ import annotations
 
 import re
-from typing import Iterable, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 from javdb.spider.contracts import (
     get_video_code,
     get_sensor_category,
@@ -279,8 +279,8 @@ class OperationsRepo:
 
     # ── Rclone inventory ──────────────────────────────────────────
 
-    def load_rclone_inventory(self) -> List[dict]:
-        """Return every row in RcloneInventory as a list of dicts."""
+    def load_rclone_inventory(self) -> Dict[str, list]:
+        """Return RcloneInventory rows grouped by video code."""
         from javdb.storage.db.db_operations import db_load_rclone_inventory
         return db_load_rclone_inventory(db_path=self._db_path)
 
@@ -325,23 +325,37 @@ class OperationsRepo:
         db_save_dedup_records(rows=rows, db_path=self._db_path)
 
     def append_dedup_record(
-        self, *, session_id: str, payload: dict,
-    ) -> None:
+        self,
+        record: Optional[dict] = None,
+        *,
+        session_id: Any = None,
+        payload: Optional[dict] = None,
+    ) -> int:
         """Append a single DedupRecords row tagged with ``session_id``."""
         from javdb.storage.db.db_operations import db_append_dedup_record
-        db_append_dedup_record(
-            session_id=session_id, payload=payload, db_path=self._db_path,
+        row = record if record is not None else payload
+        if row is None:
+            raise TypeError("append_dedup_record requires record or payload")
+        return db_append_dedup_record(
+            row, session_id=session_id, db_path=self._db_path,
         )
 
     # ── PikpakHistory ─────────────────────────────────────────────
 
     def append_pikpak_history(
-        self, *, session_id: str, payload: dict,
-    ) -> None:
+        self,
+        record: Optional[dict] = None,
+        *,
+        session_id: Any = None,
+        payload: Optional[dict] = None,
+    ) -> int:
         """Append one PikpakHistory row tagged with ``session_id``."""
         from javdb.storage.db.db_operations import db_append_pikpak_history
-        db_append_pikpak_history(
-            session_id=session_id, payload=payload, db_path=self._db_path,
+        row = record if record is not None else payload
+        if row is None:
+            raise TypeError("append_pikpak_history requires record or payload")
+        return db_append_pikpak_history(
+            row, session_id=session_id, db_path=self._db_path,
         )
 
     # ── Dedup lifecycle ──────────────────────────────────────────
