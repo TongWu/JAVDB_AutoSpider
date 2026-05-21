@@ -364,6 +364,7 @@ class HistoryRepo:
     def batch_update_movie_actors(
         self, updates: List[Tuple[str, str, str, str, str]],
     ) -> int:
-        """Bulk overwrite (ActorName, Gender, Link, SupportingActorsJson)."""
-        from javdb.storage.db.db_history_read import db_batch_update_movie_actors
+        """Bulk overwrite actor fields, preserving pending-mode staging."""
+        # The db.py facade owns pending-mode staging for actor-only writes.
+        from javdb.storage.db.db import db_batch_update_movie_actors
         return db_batch_update_movie_actors(updates, db_path=self._db_path)
