@@ -1248,8 +1248,10 @@ def run_rclone_manager(
                 report_date=datetime.now().strftime("%Y%m%d"),
                 csv_filename=RCLONE_INVENTORY_CSV,
             )
-        db_open_rclone_staging(staging_sid)
         try:
+            # db_open_rclone_staging is inside the try so a failure here also
+            # triggers the drop-staging / mark-failed finalization below.
+            db_open_rclone_staging(staging_sid)
             total_rows, error_count = scan_inventory(
                 remote_name,
                 root_folder,
@@ -1278,6 +1280,11 @@ def run_rclone_manager(
             "total_rows": total_rows,
             "error_count": error_count,
         }
+        if error_count != 0:
+            # A failed scan dropped staging and left the live inventory
+            # unchanged — stop here rather than run report/execute against
+            # stale data.
+            return {"phase_results": phase_results, "dry_run": dry_run}
 
     # ── Report phase ──────────────────────────────────────────────────────
     if report:
