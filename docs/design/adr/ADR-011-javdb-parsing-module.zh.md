@@ -4,7 +4,7 @@
 **日期**：2026-05-20
 **决策者**：Parsing module 架构评审
 **取代**：[ADR-005](ADR-005-db-py-retirement-and-repo-pattern.zh.md) D4 / PR-6 parser-helper relocation
-**关联实现计划 (Related Implementation Plans)**：[IMP-016](../impl/IMP-016-parsing-phase1-core-module.md)（Phase 1 — core module）、[IMP-017](../impl/IMP-017-parsing-phase2-caller-migration.md)（Phase 2 — caller migration）、[IMP-018](../impl/IMP-018-parsing-phase3-delete-compat.md)（Phase 3 — compatibility deletion）
+**关联实现计划 (Related Implementation Plans)**：[IMP-ADR011-01](../impl/IMP-ADR011-01-parsing-phase1-core-module.md)（Phase 1 — core module）、[IMP-ADR011-02](../impl/IMP-ADR011-02-parsing-phase2-caller-migration.md)（Phase 2 — caller migration）、[IMP-ADR011-03](../impl/IMP-ADR011-03-parsing-phase3-delete-compat.md)（Phase 3 — compatibility deletion）
 
 ## 背景
 
@@ -134,9 +134,9 @@ parser Interfaces，违背本 ADR。
 
 | Phase | Implementation plan | Outcome |
 |---|---|---|
-| Phase 1 | [IMP-016](../impl/IMP-016-parsing-phase1-core-module.md) | 建立 `javdb.parsing`；API parser/model modules 变为 compatibility Adapters。 |
-| Phase 2 | [IMP-017](../impl/IMP-017-parsing-phase2-caller-migration.md) | 内部 caller 迁移到 `javdb.parsing`；index selection 移到 Pipeline。 |
-| Phase 3 | [IMP-018](../impl/IMP-018-parsing-phase3-delete-compat.md) | 删除 API parser/model re-export Adapters 和 legacy Spider parser Adapter。 |
+| Phase 1 | [IMP-ADR011-01](../impl/IMP-ADR011-01-parsing-phase1-core-module.md) | 建立 `javdb.parsing`；API parser/model modules 变为 compatibility Adapters。 |
+| Phase 2 | [IMP-ADR011-02](../impl/IMP-ADR011-02-parsing-phase2-caller-migration.md) | 内部 caller 迁移到 `javdb.parsing`；index selection 移到 Pipeline。 |
+| Phase 3 | [IMP-ADR011-03](../impl/IMP-ADR011-03-parsing-phase3-delete-compat.md) | 删除 API parser/model re-export Adapters 和 legacy Spider parser Adapter。 |
 
 Phase 1 compatibility 不是最终架构。实现必须继续推进到 Phase 3，本 ADR 才算完整交付。
 
@@ -213,6 +213,6 @@ parser/helper relocation。Phase 1 落地后，ADR-005 Storage 工作应从
 ## References
 
 - [ADR-005](ADR-005-db-py-retirement-and-repo-pattern.zh.md)
-- [IMP-016](../impl/IMP-016-parsing-phase1-core-module.md)
-- [IMP-017](../impl/IMP-017-parsing-phase2-caller-migration.md)
-- [IMP-018](../impl/IMP-018-parsing-phase3-delete-compat.md)
+- [IMP-ADR011-01](../impl/IMP-ADR011-01-parsing-phase1-core-module.md)
+- [IMP-ADR011-02](../impl/IMP-ADR011-02-parsing-phase2-caller-migration.md)
+- [IMP-ADR011-03](../impl/IMP-ADR011-03-parsing-phase3-delete-compat.md)

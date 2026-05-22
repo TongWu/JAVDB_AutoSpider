@@ -3,7 +3,7 @@
 **状态**：已接受 - 实现待启动
 **日期**：2026-05-20
 **决策者**：Integrations interface boundary brainstorming + grill 会话
-**关联实现计划 (Related Implementation Plans)**：[IMP-030](../impl/IMP-030-integrations-phase1-guard-workflow-adapters.md)（Phase 1 - guard and workflow adapters）、[IMP-031](../impl/IMP-031-integrations-phase2-qb-command-packages.md)（Phase 2 - qB command packages）、[IMP-032](../impl/IMP-032-integrations-phase3-pikpak-bridge.md)（Phase 3 - PikPak bridge package）、[IMP-033](../impl/IMP-033-integrations-phase4-rclone-manager-split.md)（Phase 4 - rclone manager split）、[IMP-034](../impl/IMP-034-integrations-phase5-rclone-cleanup.md)（Phase 5 - rclone cleanup）、[IMP-035](../impl/IMP-035-integrations-phase6-notify-email-split.md)（Phase 6 - notify email split）、[IMP-036](../impl/IMP-036-integrations-phase7-notify-cleanup.md)（Phase 7 - notify cleanup）
+**关联实现计划 (Related Implementation Plans)**：[IMP-ADR015-01](../impl/IMP-ADR015-01-integrations-phase1-guard-workflow-adapters.md)（Phase 1 - guard and workflow adapters）、[IMP-ADR015-02](../impl/IMP-ADR015-02-integrations-phase2-qb-command-packages.md)（Phase 2 - qB command packages）、[IMP-ADR015-03](../impl/IMP-ADR015-03-integrations-phase3-pikpak-bridge.md)（Phase 3 - PikPak bridge package）、[IMP-ADR015-04](../impl/IMP-ADR015-04-integrations-phase4-rclone-manager-split.md)（Phase 4 - rclone manager split）、[IMP-ADR015-05](../impl/IMP-ADR015-05-integrations-phase5-rclone-cleanup.md)（Phase 5 - rclone cleanup）、[IMP-ADR015-06](../impl/IMP-ADR015-06-integrations-phase6-notify-email-split.md)（Phase 6 - notify email split）、[IMP-ADR015-07](../impl/IMP-ADR015-07-integrations-phase7-notify-cleanup.md)（Phase 7 - notify cleanup）
 
 ## 待办 (Outstanding Work)
 
@@ -174,13 +174,13 @@ delivery.py
 
 本 ADR 通过七个 implementation plans rollout：
 
-- [IMP-030](../impl/IMP-030-integrations-phase1-guard-workflow-adapters.md)
-- [IMP-031](../impl/IMP-031-integrations-phase2-qb-command-packages.md)
-- [IMP-032](../impl/IMP-032-integrations-phase3-pikpak-bridge.md)
-- [IMP-033](../impl/IMP-033-integrations-phase4-rclone-manager-split.md)
-- [IMP-034](../impl/IMP-034-integrations-phase5-rclone-cleanup.md)
-- [IMP-035](../impl/IMP-035-integrations-phase6-notify-email-split.md)
-- [IMP-036](../impl/IMP-036-integrations-phase7-notify-cleanup.md)
+- [IMP-ADR015-01](../impl/IMP-ADR015-01-integrations-phase1-guard-workflow-adapters.md)
+- [IMP-ADR015-02](../impl/IMP-ADR015-02-integrations-phase2-qb-command-packages.md)
+- [IMP-ADR015-03](../impl/IMP-ADR015-03-integrations-phase3-pikpak-bridge.md)
+- [IMP-ADR015-04](../impl/IMP-ADR015-04-integrations-phase4-rclone-manager-split.md)
+- [IMP-ADR015-05](../impl/IMP-ADR015-05-integrations-phase5-rclone-cleanup.md)
+- [IMP-ADR015-06](../impl/IMP-ADR015-06-integrations-phase6-notify-email-split.md)
+- [IMP-ADR015-07](../impl/IMP-ADR015-07-integrations-phase7-notify-cleanup.md)
 
 每个 phase 都有自己的测试门禁，并可独立 bake。
 

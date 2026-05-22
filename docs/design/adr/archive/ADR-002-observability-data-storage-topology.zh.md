@@ -3,7 +3,7 @@
 **状态**: 已完成 2026-05-17 —— 五张历史表全部上线（MetricsState DO 的 `metrics_snapshots`、RunnerRegistry DO 的 `signals_event_log` + `runners_event_log` + `proxies_seen`、GlobalLoginState DO 的 `login_event_log`、ConfigState DO 的 `config_audit_log`）。
 **日期**: 2026-05-16
 **决策者**: Proxy Coordinator Dashboard 改造
-**关联实现计划 (Related Implementation Plans)**: [IMP-003](../../impl/IMP-003-dashboard-phase2-worker-backend.md)（worker backend 基础设施——schema 已落地）、[IMP-005](../../impl/IMP-005-dashboard-phase4-history-drilldowns.md)（下游 drill-down UI；消费方，计划中）
+**关联实现计划 (Related Implementation Plans)**: [IMP-ADR003-01](../../impl/IMP-ADR003-01-dashboard-phase2-worker-backend.md)（worker backend 基础设施——schema 已落地）、[IMP-ADR002-01](../../impl/IMP-ADR002-01-dashboard-phase4-history-drilldowns.md)（下游 drill-down UI；消费方，计划中）
 
 ---
 

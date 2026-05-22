@@ -3,7 +3,7 @@
 **状态**：已接受 - 实现待启动
 **日期**：2026-05-20
 **决策者**：Storage CLI layering brainstorming + grill 会话
-**关联实现计划 (Related Implementation Plans)**：[IMP-027](../impl/IMP-027-storage-cli-layering-phase1-guard.md)（Phase 1 - guard and direct storage imports）、[IMP-028](../impl/IMP-028-storage-cli-layering-phase2-lifecycle-helpers.md)（Phase 2 - canonical lifecycle helpers）、[IMP-029](../impl/IMP-029-storage-cli-layering-phase3-delete-legacy-wrappers.md)（Phase 3 - delete legacy wrappers）
+**关联实现计划 (Related Implementation Plans)**：[IMP-ADR014-01](../impl/IMP-ADR014-01-storage-cli-layering-phase1-guard.md)（Phase 1 - guard and direct storage imports）、[IMP-ADR014-02](../impl/IMP-ADR014-02-storage-cli-layering-phase2-lifecycle-helpers.md)（Phase 2 - canonical lifecycle helpers）、[IMP-ADR014-03](../impl/IMP-ADR014-03-storage-cli-layering-phase3-delete-legacy-wrappers.md)（Phase 3 - delete legacy wrappers）
 
 ## 待办 (Outstanding Work)
 
@@ -136,16 +136,16 @@ ADR 范围。
 
 ### D9. 给历史文档添加 Supersession Notes
 
-ADR-008 和 IMP-009 在写下时是正确的，但代码之后已经发生迁移。它们需要增加简短更新
+ADR-008 和 IMP-ADR008-02 在写下时是正确的，但代码之后已经发生迁移。它们需要增加简短更新
 说明，指向本 ADR 作为最终收敛工作。
 
 ### D10. 一个 ADR，三个 Phase Plans
 
 本 ADR 通过三个独立实现计划 rollout：
 
-- [IMP-027](../impl/IMP-027-storage-cli-layering-phase1-guard.md)
-- [IMP-028](../impl/IMP-028-storage-cli-layering-phase2-lifecycle-helpers.md)
-- [IMP-029](../impl/IMP-029-storage-cli-layering-phase3-delete-legacy-wrappers.md)
+- [IMP-ADR014-01](../impl/IMP-ADR014-01-storage-cli-layering-phase1-guard.md)
+- [IMP-ADR014-02](../impl/IMP-ADR014-02-storage-cli-layering-phase2-lifecycle-helpers.md)
+- [IMP-ADR014-03](../impl/IMP-ADR014-03-storage-cli-layering-phase3-delete-legacy-wrappers.md)
 
 每个 phase 都有自己的测试门禁，可独立实施。
 
