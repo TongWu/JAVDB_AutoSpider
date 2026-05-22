@@ -1,6 +1,6 @@
 # ADR-005: db.py 彻底退役 + Repo 类抽象 + Audit Mode 退役
 
-**状态**: 已接受 —— **PR-1 至 PR-3 已交付**；**D10 gate sign-off completed on 2026-05-22**（连续 4 天全部通过）；**PR-4 与 PR-5 已解锁**
+**状态**: 已接受 —— **PR-1 至 PR-5 已于 2026-05-22 交付**；ADR-005 的 storage/audit/db.py 退役工作已完成
 **日期**: 2026-05-16
 **决策者**: 架构深化第二轮
 **前置**: [ADR-006](ADR-006-pending-mode-default-rollout.md) — 必须先把 Pending Mode 默认推到 100% + 重设计 auto-fallback，本 ADR 才能执行 D10 gate
@@ -9,13 +9,13 @@
 
 ## 待办 (Outstanding Work)
 
-PR-1（Repo 类）✅ 已交付：`HistoryRepo`、`OperationsRepo`、`StatsRepo`、`SessionsRepo`、`SystemStateRepo` 全部在 `javdb/storage/repos/` 中。其余：
+PR-1（Repo 类）✅ 已交付：`HistoryRepo`、`OperationsRepo`、`StatsRepo`、`SessionsRepo`、`SystemStateRepo` 全部在 `javdb/storage/repos/` 中。完成状态：
 
 - **PR-2** ✅ 已交付（#70, 2026-05-21）：`db.py` 内部转发到 Repo（双写阶段）。
 - **PR-3** ✅ 已交付（#71, 2026-05-21）：spider/history_manager 调用方迁移完成。
-- **PR-4** —— 删除 Audit Mode 表（`MovieHistoryAudit`、`TorrentHistoryAudit`）+ 移除 audit 代码分支。已由 2026-05-22 D10 sign-off 解锁。
-- **PR-5** —— 删除 `db.py`（当前约 5,300 行）和 ADR-001 留下的九个壳模块。随 PR-4 之后。
-- **Parser helper relocation** —— 已从本 ADR 抽出，由 [ADR-011](ADR-011-javdb-parsing-module.md) 接管。ADR-005 后续 Storage/Repo 工作在 ADR-011 Phase 1 落地后应从 `javdb.parsing.common` import helper。
+- **PR-4** ✅ 已交付（2026-05-22）：删除 Audit Mode 表并移除 audit 写入 / rollback 分支。
+- **PR-5** ✅ 已交付（2026-05-22）：删除 `javdb/storage/db/db.py`；ADR-001 拆出的模块已成为 canonical implementation modules，不再是空壳 facade。
+- **Parser helper relocation** 仍在 ADR-005 之外，由 [ADR-011](ADR-011-javdb-parsing-module.md) 追踪。ADR-005 已无剩余实施工作。
 
 ## 修订记录 (Amendments)
 
@@ -59,6 +59,8 @@ PR-1（Repo 类）✅ 已交付：`HistoryRepo`、`OperationsRepo`、`StatsRepo`
 - **2026-05-21 amendment 5**：**PR-2 与 PR-3 已交付。** PR-2（#70）将 `db.py` facade 通过 Repo 类转发（636 行新增、272 行删除、13 个文件）。PR-3（#71）将 spider 与 history_manager 的调用方迁移到直接使用 Repo（573 行新增、44 行删除、11 个文件）。两者均包含边界回归测试，确保已迁移的调用方不能回退到原始 `db_*` 函数。剩余：PR-4（删除 audit 表，受 D10 gate 限制）和 PR-5（删除 `db.py`）。
 
 - **2026-05-22 amendment 6**：**D10 gate sign-off —— PR-4 已解锁。** BakeCheck.yml 连续 4 天（2026-05-18 至 2026-05-21）报告 D10 三项指标全部通过。Operator 于 2026-05-22 批准推进 PR-4，尽管 workflow audit 选项移除仅 6 天（距 D10 #3 文本要求的 7 天差 1 天），因为功能证据——零 audit session、零孤儿行、连续 6 次 DailyIngestion 成功运行——证明该风险不存在。PR-4（删除 audit 表 + 移除 audit 代码）和 PR-5（删除 `db.py`）现已解锁。
+
+- **2026-05-22 amendment 7**：**PR-4 与 PR-5 已交付。** Audit Mode 已完全退役：audit 表、audit archive/cleanup 工具、audit 写入/rollback 分支均已移除。`javdb/storage/db/db.py` 已删除。原 ADR-001 拆出的模块（`db_history_read.py`、`db_history_write.py`、`db_stats.py` 等）已不再是空壳模块；它们现在承载 low-level implementation，并通过 `javdb/storage/db/__init__.py` 的包级 public API 暴露。
 
 ---
 
@@ -217,10 +219,9 @@ PR-2  db.py 内部转调 Repo 类（双写并行：caller 用 db.py 一切照旧
 PR-3a 迁移 packages/python/javdb_spider/ 与 javdb_platform/history_manager.py 的 caller
 PR-3b 迁移 packages/python/javdb_ingestion/ 与 javdb_integrations/ 的 caller
 PR-3c 迁移 apps/cli/、apps/api/、scripts/、packages/python/javdb_migrations/tools/ 的 caller
-PR-4  在 ReportSessions 中确认全部 in_progress session 退场 → 启用 v14 migration drop audit 表
-      → 删除 db.py / db_history_read.py / db_history_write.py / db_session.py 中的 audit 代码
-PR-5  删除 db.py、删除 db_history_read.py / db_history_write.py / db_stats.py 等 ADR-001 抽出的
-      空壳模块；删除 db_session 全局；删除 JAVDB_HISTORY_WRITE_MODE 环境变量
+PR-4  ✅ 2026-05-22 已交付：确认 D10 gate，删除 audit 表，并移除 audit 写入/rollback 代码。
+PR-5  ✅ 2026-05-22 已交付：删除 db.py。ADR-001 拆出的模块保留为 canonical
+      implementation modules，而不是空壳 facade。
 PR-6  由 ADR-011 取代。Parser/helper relocation 从 ADR-005 抽出，
       通过 ADR-011 Phase 1-3 实施。ADR-005 后续工作在 Phase 1 后
       使用 javdb.parsing.common 中的 helper。
