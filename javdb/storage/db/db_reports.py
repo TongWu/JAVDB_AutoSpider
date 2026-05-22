@@ -233,7 +233,8 @@ def db_get_session_status(
                 return ("pending", row["Status"])
             return None
     if row:
-        return (row["WriteMode"], row["Status"])
+        wm = row["WriteMode"] if row["WriteMode"] != "audit" else "pending"
+        return (wm, row["Status"])
     return None
 
 
@@ -346,7 +347,8 @@ def db_find_stale_pending_sessions(
             ).fetchall()
             return [(r["Id"], r["Status"], "pending") for r in rows]
     return [
-        (r["Id"], r["Status"], r["WriteMode"]) for r in rows
+        (r["Id"], r["Status"], "pending" if r["WriteMode"] == "audit" else r["WriteMode"])
+        for r in rows
     ]
 
 
