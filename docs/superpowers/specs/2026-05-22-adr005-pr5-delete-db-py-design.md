@@ -1,6 +1,6 @@
 # ADR-005 PR-5: Delete db.py Facade
 
-**Parent:** [ADR-005](../../design/adr/ADR-005-db-py-retirement-and-repo-pattern.md)
+**Parent:** [ADR-005](../../design/_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md)
 **Scope:** Delete `javdb/storage/db/db.py` (4,497 lines). Redistribute non-facade code into existing shell modules. Update all callers. Shell module restructuring deferred to a future PR.
 
 ## Current State

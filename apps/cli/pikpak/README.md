@@ -15,4 +15,4 @@ PikPak bridge CLI — transfers older torrents to PikPak when the qBittorrent pa
 
 ## Related
 
-- [ADR-007 — Monorepo restructure](../../../docs/design/adr/archive/ADR-007-monorepo-restructure-2026-05.md)
+- [ADR-007 — Monorepo restructure](../../../docs/design/_archive/ADR-007-Monorepo-Restructure/ADR-007-monorepo-restructure-2026-05.md)
