@@ -21,7 +21,9 @@ import re
 import sqlite3
 from typing import Any, Dict, List, Set, Tuple
 
-import javdb.storage.db.db as db_mod
+from javdb.storage.db.db_connection import get_db
+from javdb.storage.db.db_reports import db_create_report_session
+from javdb.storage.db.db_rollback import db_rollback_session
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -62,7 +64,7 @@ def _create_session(*, run_id: str | None = None,
                     run_attempt: int | None = None,
                     when: str | None = None,
                     csv_filename: str = "fidelity-test.csv") -> int:
-    return db_mod.db_create_report_session(
+    return db_create_report_session(
         report_type="DailyReport",
         report_date="2026-05-08",
         csv_filename=csv_filename,
@@ -84,7 +86,7 @@ class TestReportsRollbackPurgesAllTablesForSessionOnly:
     rows are touched."""
 
     def _seed_full_reports_payload(self, sid: int, suffix: str) -> None:
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             conn.execute(
                 "INSERT INTO ReportMovies "
                 "(SessionId, Href, VideoCode, Page, Actor, Rate, "
@@ -134,7 +136,7 @@ class TestReportsRollbackPurgesAllTablesForSessionOnly:
         self._seed_full_reports_payload(sid_keep, "KEEP-001")
         self._seed_full_reports_payload(sid_drop, "DROP-001")
 
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             keep_before = {
                 t: _snapshot_table(
                     conn, t, "SessionId=?", (sid_keep,),
@@ -151,7 +153,7 @@ class TestReportsRollbackPurgesAllTablesForSessionOnly:
                 conn, "ReportSessions", "Id=?", (sid_keep,),
             )
 
-        result = db_mod.db_rollback_session(sid_drop, scope="reports")
+        result = db_rollback_session(sid_drop, scope="reports")
         assert result["reports"]["ReportSessions"] == 1
         assert result["reports"]["ReportMovies"] == 1
         assert result["reports"]["ReportTorrents"] == 1
@@ -159,7 +161,7 @@ class TestReportsRollbackPurgesAllTablesForSessionOnly:
         assert result["reports"]["UploaderStats"] == 1
         assert result["reports"]["PikpakStats"] == 1
 
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             keep_after = {
                 t: _snapshot_table(
                     conn, t, "SessionId=?", (sid_keep,),
@@ -195,7 +197,7 @@ class TestOperationsRollbackPurgesAllTablesForSessionOnly:
     def test_only_targeted_session_rows_purged(self):
         sid_keep = _create_session(csv_filename="ops-keep.csv")
         sid_drop = _create_session(csv_filename="ops-drop.csv")
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             for sid, suffix in (
                 (sid_keep, "KEEP"), (sid_drop, "DROP"),
             ):
@@ -245,13 +247,13 @@ class TestOperationsRollbackPurgesAllTablesForSessionOnly:
                            "InventoryAlignNoExactMatch")
             }
 
-        result = db_mod.db_rollback_session(sid_drop, scope="operations")
+        result = db_rollback_session(sid_drop, scope="operations")
         for t in ("PikpakHistory", "DedupRecords",
                    "InventoryAlignNoExactMatch"):
             assert result["operations"][t] == 1, (
                 f"{t} should have purged 1 row tagged sid_drop"
             )
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             keep_after = {
                 t: _snapshot_table(
                     conn, t, "SessionId=?", (sid_keep,),
@@ -385,7 +387,7 @@ class TestD1MigrationsAreCoveredByLocalSchema:
         # ``init_db`` + ``_ensure_rollback_columns`` against the test
         # SQLite, so every column the production code path declares
         # is present.
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             local_cols: Dict[str, Set[str]] = {}
             for row in conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table'"

@@ -24,7 +24,9 @@ from javdb.storage.history_manager import (
     check_torrent_in_history,
     is_downloaded_torrent,
 )
-import javdb.storage.db.db as db_mod
+from javdb.storage.db.db_reports import db_create_report_session
+from javdb.storage.db.db_history_write import db_stage_history_write, db_commit_session_history
+from javdb.storage.db.db_history_read import db_load_history
 import javdb.storage.db.db_session as _db_session
 from contextlib import contextmanager
 
@@ -32,7 +34,7 @@ from contextlib import contextmanager
 @contextmanager
 def _active_session():
     """Set up an active pending session for tests that call save_parsed_movie_to_history."""
-    sid = db_mod.db_create_report_session(
+    sid = db_create_report_session(
         report_type="DailyReport",
         report_date="2026-01-01",
         csv_filename="test-session.csv",
@@ -46,7 +48,7 @@ def _active_session():
 
 def _seed_history_sqlite(records):
     """Seed the isolated SQLite DB with history records via staging+commit."""
-    sid = db_mod.db_create_report_session(
+    sid = db_create_report_session(
         report_type="DailyReport",
         report_date="2026-01-01",
         csv_filename="seed.csv",
@@ -58,20 +60,20 @@ def _seed_history_sqlite(records):
                 magnets[t] = r[t]
         if not magnets:
             magnets = {'no_subtitle': ''}
-        db_mod.db_stage_history_write(
+        db_stage_history_write(
             sid, "movie",
             {"Href": r['href'], "VideoCode": r['video_code'],
              "DateTimeVisited": "2026-01-01 00:00:00"},
         )
         for category, magnet in magnets.items():
-            db_mod.db_stage_history_write(
+            db_stage_history_write(
                 sid, "torrent",
                 {"Href": r['href'], "VideoCode": r['video_code'],
                  "Category": category, "MagnetUri": magnet,
                  "Size": "", "FileCount": 0,
                  "DateTimeVisited": "2026-01-01 00:00:00"},
             )
-    db_mod.db_commit_session_history(sid)
+    db_commit_session_history(sid)
 
 
 _RECENT_RELEASE_SKIP_FUNCS = [
@@ -457,7 +459,7 @@ class TestMaintainHistoryLimit:
         maintain_history_limit(history_file, max_records=5)
 
         # All 10 records should still exist (no limit in SQLite)
-        history = db_mod.db_load_history()
+        history = db_load_history()
         assert len(history) == 10
     
     def test_maintain_limit_nonexistent_file(self, temp_dir):
@@ -521,11 +523,11 @@ class TestMarkTorrentAsDownloaded:
             result = mark_torrent_as_downloaded(
                 history_file, '/v/NEW-001', 'NEW-001', 'subtitle'
             )
-        db_mod.db_commit_session_history(sid)
+        db_commit_session_history(sid)
 
         assert result is True
 
-        history = db_mod.db_load_history()
+        history = db_load_history()
         assert '/v/NEW-001' in history
 
         assert check_torrent_in_history(history_file, '/v/NEW-001', 'subtitle') is True
@@ -720,7 +722,7 @@ class TestMaintainHistoryLimitExtended:
         history_file = os.path.join(temp_dir, 'history_preserve.csv')
         maintain_history_limit(history_file, max_records=5)
 
-        history = db_mod.db_load_history()
+        history = db_load_history()
         assert len(history) == 10
 
 
@@ -736,7 +738,7 @@ class TestSaveAndLoadIntegration:
         magnet_links = {'subtitle': 'magnet:?xt=urn:btih:test123'}
         with _active_session() as sid:
             save_parsed_movie_to_history(history_file, '/v/INT-001', 1, 'INT-001', magnet_links)
-        db_mod.db_commit_session_history(sid)
+        db_commit_session_history(sid)
 
         result = load_parsed_movies_history(history_file)
 
@@ -757,7 +759,7 @@ class TestBatchUpdateLastVisited:
 
         batch_update_last_visited(history_file, {'/v/ABC-123'})
 
-        history = db_mod.db_load_history()
+        history = db_load_history()
         # ABC-123 should have an updated timestamp (not the seed default)
         assert history['/v/ABC-123']['DateTimeVisited'] != ''
 
@@ -807,7 +809,7 @@ class TestStorageModeDb:
         with _active_session() as sid:
             save_parsed_movie_to_history(hf, '/v/SM-001', 1, 'SM-001',
                                          {'no_subtitle': 'magnet:?xt=urn:btih:sm1'})
-        db_mod.db_commit_session_history(sid)
+        db_commit_session_history(sid)
         history = load_parsed_movies_history(hf)
         assert '/v/SM-001' in history
         assert not os.path.exists(hf)
@@ -816,7 +818,7 @@ class TestStorageModeDb:
         with _active_session() as sid:
             save_parsed_movie_to_history('', '/v/SM-002', 1, 'SM-002')
             batch_update_last_visited('', {'/v/SM-002'})
-        db_mod.db_commit_session_history(sid)
+        db_commit_session_history(sid)
         history = load_parsed_movies_history('')
         assert history['/v/SM-002']['DateTimeVisited'] != ''
 
@@ -848,7 +850,7 @@ class TestStorageModeDuo:
     def test_save_writes_both(self, temp_dir, storage_mode_duo):
         import javdb.storage.db.db_session as db_session
         hf = os.path.join(temp_dir, 'history.csv')
-        sid = db_mod.db_create_report_session(
+        sid = db_create_report_session(
             report_type="DailyReport",
             report_date="2026-01-01",
             csv_filename="duo-test.csv",
@@ -859,7 +861,7 @@ class TestStorageModeDuo:
                                          {'no_subtitle': 'magnet:?xt=urn:btih:d1'})
         finally:
             db_session.set_active_session_id(None)
-        db_mod.db_commit_session_history(sid)
-        history_sqlite = db_mod.db_load_history()
+        db_commit_session_history(sid)
+        history_sqlite = db_load_history()
         assert '/v/DUO-001' in history_sqlite
         assert os.path.exists(hf)

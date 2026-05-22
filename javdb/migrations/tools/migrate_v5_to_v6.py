@@ -196,9 +196,10 @@ def main():
         backup_db(db_path)
 
     logger.info("Running migration via init_db() ...")
-    import javdb.storage.db.db as db_mod
-    db_mod.DB_PATH = db_path
-    db_mod.init_db(db_path, force=True)
+    import javdb.storage.db.db_connection as _db_conn
+    from javdb.storage.db.db_migrations import init_db
+    _db_conn.DB_PATH = db_path
+    init_db(db_path, force=True)
 
     new_version = _detect_version(db_path)
     logger.info(f"Migration complete. Schema version: {new_version}")

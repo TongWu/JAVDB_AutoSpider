@@ -1,6 +1,6 @@
 """Regression tests for history write category mapping."""
 
-import javdb.storage.db.db as db_mod
+from javdb.storage.db.db_connection import get_db
 from javdb.storage.repos.history_repo import HistoryRepo
 
 
@@ -17,7 +17,7 @@ def test_history_repo_stage_torrent_unknown_category_defaults_to_no_subtitle():
         },
     )
 
-    with db_mod.get_db() as conn:
+    with get_db() as conn:
         row = conn.execute(
             "SELECT Category, SubtitleIndicator, CensorIndicator "
             "FROM PendingTorrentHistoryWrites WHERE SessionId=?",
