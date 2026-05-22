@@ -51,6 +51,8 @@ def test_history_manager_sqlite_paths_use_history_repo(monkeypatch):
         _raw_db_forbidden("db_check_torrent_in_history"),
     )
     monkeypatch.setattr(session_db, "get_active_session_id", lambda: "sess-1")
+    import javdb.storage.db as _db_pkg
+    monkeypatch.setattr(_db_pkg, "get_active_session_id", lambda: "sess-1")
 
     assert hm.load_parsed_movies_history("history.csv", phase=1) == {
         "/v/A": {"VideoCode": "A"}
@@ -100,6 +102,8 @@ def test_history_manager_pending_writes_use_history_repo_staging(monkeypatch):
     )
     monkeypatch.setattr(session_db, "get_active_session_id", lambda: "sess-pending")
     monkeypatch.setattr(session_db, "get_active_write_mode", lambda: "pending")
+    import javdb.storage.db as _db_pkg
+    monkeypatch.setattr(_db_pkg, "get_active_session_id", lambda: "sess-pending")
 
     hm.save_parsed_movie_to_history(
         "history.csv",
@@ -404,6 +408,7 @@ def test_run_service_main_saves_spider_stats_through_stats_repo(monkeypatch, tmp
     monkeypatch.setattr(run_service, "set_active_session", lambda *_: None)
 
     import javdb.infra.config as config
+    import javdb.storage.db as db_pkg
     import javdb.storage.db.db_connection as db_connection
     import javdb.storage.db.db_migrations as db_migrations
     import javdb.storage.db.db_reports as db_reports
@@ -412,16 +417,27 @@ def test_run_service_main_saves_spider_stats_through_stats_repo(monkeypatch, tmp
 
     monkeypatch.setattr(config, "use_db_storage", lambda: True)
     monkeypatch.setattr(db_migrations, "init_db", lambda force=False: None)
+    monkeypatch.setattr(db_pkg, "init_db", lambda force=False: None)
     monkeypatch.setattr(db_connection, "verify_d1_schema_versions", lambda: None)
+    monkeypatch.setattr(db_pkg, "verify_d1_schema_versions", lambda: None)
     monkeypatch.setattr(db_reports, "db_create_report_session", lambda **_: "sess-1")
+    monkeypatch.setattr(db_pkg, "db_create_report_session", lambda **_: "sess-1")
     monkeypatch.setattr(
         db_reports, "db_find_in_progress_session_ids_for_run_csv", lambda *_: []
     )
+    monkeypatch.setattr(
+        db_pkg, "db_find_in_progress_session_ids_for_run_csv", lambda *_: []
+    )
     monkeypatch.setattr(db_reports, "db_get_session_status", lambda *_: ("audit",))
+    monkeypatch.setattr(db_pkg, "db_get_session_status", lambda *_: ("audit",))
     monkeypatch.setattr(db_session, "_resolve_write_mode", lambda *_: "audit")
+    monkeypatch.setattr(db_pkg, "_resolve_write_mode", lambda *_: "audit")
     monkeypatch.setattr(db_session, "set_active_session_id", lambda *_: None)
+    monkeypatch.setattr(db_pkg, "set_active_session_id", lambda *_: None)
     monkeypatch.setattr(db_session, "set_active_run_identity", lambda *_: None)
+    monkeypatch.setattr(db_pkg, "set_active_run_identity", lambda *_: None)
     monkeypatch.setattr(db_session, "set_active_write_mode", lambda *_: None)
+    monkeypatch.setattr(db_pkg, "set_active_write_mode", lambda *_: None)
     monkeypatch.setattr(
         db_stats,
         "db_save_spider_stats",
