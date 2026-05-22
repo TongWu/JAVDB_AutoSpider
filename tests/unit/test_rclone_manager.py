@@ -251,10 +251,10 @@ def test_scan_sqlite_uses_staging_when_no_active_session(
 def _patch_rclone_db_mocks(monkeypatch, order, overrides=None):
     """Patch the split modules the rclone manager imports from."""
     import javdb.storage.db as _db_pkg
-    import javdb.storage.db.db_migrations as _mig
-    import javdb.storage.db.db_reports as _rep
-    import javdb.storage.db.db_operations as _ops
-    import javdb.storage.db.db_session as _sess
+    import javdb.storage.db._db_migrations as _mig
+    import javdb.storage.db._db_reports as _rep
+    import javdb.storage.db._db_operations as _ops
+    import javdb.storage.db._db_session as _sess
 
     defaults = {
         "init_db": lambda *_a, **_kw: order.append("init_db"),
@@ -485,7 +485,7 @@ def test_scan_succeeds_when_post_swap_commit_marking_fails(
     _patch_rclone_db_mocks(monkeypatch, order, overrides={
         "db_mark_session_committed": fail_mark,
     })
-    import javdb.storage.db.db_operations as _ops
+    import javdb.storage.db._db_operations as _ops
     monkeypatch.setattr(_ops, "db_drop_rclone_staging", lambda sid: order.append(("drop_staging", sid)))
     monkeypatch.setattr(
         sys,
