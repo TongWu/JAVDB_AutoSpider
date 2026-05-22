@@ -57,28 +57,25 @@ def test_seed_sessions_writes_expected_rows(client: TestClient, tmp_path: Path) 
             ).fetchall()
         )
         assert sessions == {
-            "test-committed-001": "committed|audit",
+            "test-committed-001": "committed|pending",
             "test-finalizing-002": "finalizing|pending",
-            "test-inprogress-003": "in_progress|audit",
+            "test-inprogress-003": "in_progress|pending",
         }
 
-        # Committed session: 2 movies + 3 torrents + matching audit rows.
+        # Committed session: 2 movies + 3 torrents.
         cnt = lambda sql, *params: history.execute(sql, params).fetchone()[0]
         committed = "test-committed-001"
         assert cnt("SELECT COUNT(*) FROM MovieHistory WHERE SessionId = ?", committed) == 2
         assert cnt("SELECT COUNT(*) FROM TorrentHistory WHERE SessionId = ?", committed) == 3
-        assert cnt("SELECT COUNT(*) FROM MovieHistoryAudit WHERE SessionId = ?", committed) == 2
-        assert cnt("SELECT COUNT(*) FROM TorrentHistoryAudit WHERE SessionId = ?", committed) == 3
 
         # Finalizing session: 3 pending movies, no committed history.
         finalizing = "test-finalizing-002"
         assert cnt("SELECT COUNT(*) FROM PendingMovieHistoryWrites WHERE SessionId = ?", finalizing) == 3
         assert cnt("SELECT COUNT(*) FROM MovieHistory WHERE SessionId = ?", finalizing) == 0
 
-        # In-progress session: 1 committed movie + audit row + 2 pending.
+        # In-progress session: 1 committed movie + 2 pending.
         in_progress = "test-inprogress-003"
         assert cnt("SELECT COUNT(*) FROM MovieHistory WHERE SessionId = ?", in_progress) == 1
-        assert cnt("SELECT COUNT(*) FROM MovieHistoryAudit WHERE SessionId = ?", in_progress) == 1
         assert cnt("SELECT COUNT(*) FROM PendingMovieHistoryWrites WHERE SessionId = ?", in_progress) == 2
     finally:
         reports.close()

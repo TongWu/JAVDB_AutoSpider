@@ -36,9 +36,6 @@ def test_history_manager_sqlite_paths_use_history_repo(monkeypatch):
         read_db, "db_load_history", _raw_db_forbidden("db_load_history")
     )
     monkeypatch.setattr(
-        write_db, "db_upsert_history", _raw_db_forbidden("db_upsert_history")
-    )
-    monkeypatch.setattr(
         write_db,
         "db_stage_history_write",
         _raw_db_forbidden("db_stage_history_write"),
@@ -53,8 +50,7 @@ def test_history_manager_sqlite_paths_use_history_repo(monkeypatch):
         "db_check_torrent_in_history",
         _raw_db_forbidden("db_check_torrent_in_history"),
     )
-    monkeypatch.setattr(session_db, "get_active_session_id", lambda: "sess-audit")
-    monkeypatch.setattr(session_db, "get_active_write_mode", lambda: "audit")
+    monkeypatch.setattr(session_db, "get_active_session_id", lambda: "sess-1")
 
     assert hm.load_parsed_movies_history("history.csv", phase=1) == {
         "/v/A": {"VideoCode": "A"}
@@ -77,7 +73,8 @@ def test_history_manager_sqlite_paths_use_history_repo(monkeypatch):
     assert hm.check_torrent_in_history("history.csv", "/v/A", "subtitle") is True
 
     repo.load_history.assert_called_once_with(phase=1)
-    repo.upsert_history.assert_called_once()
+    repo.stage_movie.assert_called_once()
+    assert repo.stage_torrent.call_count >= 1
     repo.batch_update_last_visited.assert_called_once()
     repo.check_torrent_in_history.assert_called_once_with("/v/A", "subtitle")
 
@@ -100,9 +97,6 @@ def test_history_manager_pending_writes_use_history_repo_staging(monkeypatch):
         write_db,
         "db_stage_history_write",
         _raw_db_forbidden("db_stage_history_write"),
-    )
-    monkeypatch.setattr(
-        write_db, "db_upsert_history", _raw_db_forbidden("db_upsert_history")
     )
     monkeypatch.setattr(session_db, "get_active_session_id", lambda: "sess-pending")
     monkeypatch.setattr(session_db, "get_active_write_mode", lambda: "pending")
@@ -441,38 +435,3 @@ def test_run_service_main_saves_spider_stats_through_stats_repo(monkeypatch, tmp
     assert repo.save_spider_stats.call_args.args[1]["total_discovered"] == 0
 
 
-def test_history_repo_exposes_audit_upsert_wrapper(monkeypatch):
-    from javdb.storage.repos.history_repo import HistoryRepo
-    import javdb.storage.db.db_history_write as write_db
-
-    mock_upsert = MagicMock(return_value=11)
-    monkeypatch.setattr(write_db, "db_upsert_history", mock_upsert)
-
-    repo = HistoryRepo(db_path="/tmp/history.db")
-    result = repo.upsert_history(
-        "/v/A",
-        "A",
-        {"subtitle": "magnet:?xt=urn:btih:a"},
-        size_links={"subtitle": "1 GiB"},
-        file_count_links={"subtitle": 1},
-        resolution_links={"subtitle": "1080p"},
-        actor_name="Actor",
-        actor_gender="F",
-        actor_link="/actors/a",
-        supporting_actors="[]",
-    )
-
-    assert result == 11
-    mock_upsert.assert_called_once_with(
-        "/v/A",
-        "A",
-        {"subtitle": "magnet:?xt=urn:btih:a"},
-        size_links={"subtitle": "1 GiB"},
-        file_count_links={"subtitle": 1},
-        resolution_links={"subtitle": "1080p"},
-        actor_name="Actor",
-        actor_gender="F",
-        actor_link="/actors/a",
-        supporting_actors="[]",
-        db_path="/tmp/history.db",
-    )

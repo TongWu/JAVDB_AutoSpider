@@ -2,12 +2,11 @@
 
 Coordinates rollback operations across all databases (history, reports, operations).
 
-Supports two rollback strategies:
-- Pending mode: Delete from Pending* tables
-- Audit mode: Restore from *Audit tables
+Uses pending mode rollback: delete from Pending* tables for uncommitted sessions,
+or resume commit for sessions stuck in 'finalizing'.
 
-The rollback coordinator calls each module's rollback_*_for_session() function
-to ensure all session-related data is cleaned up atomically.
+The rollback coordinator delegates to db.py's db_rollback_session() which handles
+the full rollback lifecycle.
 """
 
 from typing import Optional
@@ -17,7 +16,6 @@ from javdb.infra.logging import get_logger
 logger = get_logger(__name__)
 
 # Lazy imports to avoid circular dependencies
-_rollback_history_for_session = None
 _rollback_reports_for_session = None
 _rollback_operations_for_session = None
 _get_session_status = None
@@ -25,12 +23,9 @@ _get_session_status = None
 
 def _ensure_imports():
     """Lazy import to avoid circular dependency."""
-    global _rollback_history_for_session, _rollback_reports_for_session
+    global _rollback_reports_for_session
     global _rollback_operations_for_session, _get_session_status
-    if _rollback_history_for_session is None:
-        from javdb.storage.db.db_history_write import (
-            rollback_history_for_session,
-        )
+    if _rollback_reports_for_session is None:
         from javdb.storage.db.db_reports import (
             rollback_reports_for_session,
             db_get_session_status,
@@ -38,7 +33,6 @@ def _ensure_imports():
         from javdb.storage.db.db_operations import (
             rollback_operations_for_session,
         )
-        _rollback_history_for_session = rollback_history_for_session
         _rollback_reports_for_session = rollback_reports_for_session
         _rollback_operations_for_session = rollback_operations_for_session
         _get_session_status = db_get_session_status
