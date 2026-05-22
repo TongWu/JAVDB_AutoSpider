@@ -509,43 +509,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_torrent_type
     ON TorrentHistory(MovieHistoryId, SubtitleIndicator, CensorIndicator);
 CREATE INDEX IF NOT EXISTS idx_torrent_history_session ON TorrentHistory(SessionId);
 
--- Audit tables for D1 rollback (X3 hybrid strategy). Every mutating write
--- to MovieHistory / TorrentHistory captures a row here in the same D1 batch
--- (atomic per Cloudflare D1 contract), so a failed run can be rolled back
--- by replaying the audit log in reverse order.
---
--- (RunId, RunAttempt) duplicate the GitHub Actions identity already stored
--- on ReportSessions so the rollback CLI can address audit rows directly
--- by run identity (the primary lookup path) without first joining through
--- ReportSessions. Both columns are NULLABLE: legacy audit rows predate the
--- 2026-05-08 migration and the rollback CLI falls back to SessionId for
--- those rows.
-CREATE TABLE IF NOT EXISTS MovieHistoryAudit (
-    Id INTEGER PRIMARY KEY AUTOINCREMENT,
-    TargetId INTEGER NOT NULL,
-    Action TEXT NOT NULL,
-    OldRowJson TEXT,
-    SessionId TEXT NOT NULL,
-    DateTimeCreated TEXT NOT NULL,
-    RunId TEXT,
-    RunAttempt INTEGER
-);
-CREATE INDEX IF NOT EXISTS idx_mh_audit_session ON MovieHistoryAudit(SessionId, Id);
-CREATE INDEX IF NOT EXISTS idx_mh_audit_run ON MovieHistoryAudit(RunId, RunAttempt);
-
-CREATE TABLE IF NOT EXISTS TorrentHistoryAudit (
-    Id INTEGER PRIMARY KEY AUTOINCREMENT,
-    TargetId INTEGER NOT NULL,
-    Action TEXT NOT NULL,
-    OldRowJson TEXT,
-    SessionId TEXT NOT NULL,
-    DateTimeCreated TEXT NOT NULL,
-    RunId TEXT,
-    RunAttempt INTEGER
-);
-CREATE INDEX IF NOT EXISTS idx_th_audit_session ON TorrentHistoryAudit(SessionId, Id);
-CREATE INDEX IF NOT EXISTS idx_th_audit_run ON TorrentHistoryAudit(RunId, RunAttempt);
-
 -- Pending history write tables (Ingestion Perfect Rollback, Phase 0).
 --
 -- Every ingestion mutation against MovieHistory / TorrentHistory under
@@ -1171,7 +1134,7 @@ def _moviehistory_actor_columns_physical_order_ok(names: List[str]) -> bool:
 
 
 def _ensure_rollback_columns(conn: sqlite3.Connection) -> None:
-    """Add Status/SessionId columns and audit tables for X3 rollback (idempotent).
+    """Add Status/SessionId columns and pending tables for rollback (idempotent).
 
     Adds:
       - ReportSessions.Status TEXT DEFAULT 'in_progress'
@@ -1181,11 +1144,8 @@ def _ensure_rollback_columns(conn: sqlite3.Connection) -> None:
       - MovieHistory.SessionId, TorrentHistory.SessionId
       - PikpakHistory.SessionId, DedupRecords.SessionId,
         InventoryAlignNoExactMatch.SessionId
-      - MovieHistoryAudit, TorrentHistoryAudit tables and indexes
-      - MovieHistoryAudit.RunId, MovieHistoryAudit.RunAttempt and the
-        symmetric pair on TorrentHistoryAudit (added 2026-05-08).
 
-    This handles existing databases that were created before the X3 rollback
+    This handles existing databases that were created before the rollback
     schema. New DBs are created with the columns directly via the DDL
     constants in ``_HISTORY_DDL`` / ``_REPORTS_DDL`` / ``_OPERATIONS_DDL``,
     so the ALTER calls below silently no-op.
@@ -1197,15 +1157,11 @@ def _ensure_rollback_columns(conn: sqlite3.Connection) -> None:
         ('ReportSessions', 'FailureReason', 'TEXT'),
         ('MovieHistory', 'SessionId', 'TEXT'),
         ('TorrentHistory', 'SessionId', 'TEXT'),
-        ('MovieHistoryAudit', 'RunId', 'TEXT'),
-        ('MovieHistoryAudit', 'RunAttempt', 'INTEGER'),
-        ('TorrentHistoryAudit', 'RunId', 'TEXT'),
-        ('TorrentHistoryAudit', 'RunAttempt', 'INTEGER'),
         ('PikpakHistory', 'SessionId', 'TEXT'),
         ('DedupRecords', 'SessionId', 'TEXT'),
         ('InventoryAlignNoExactMatch', 'SessionId', 'TEXT'),
         # Ingestion Perfect Rollback (Phase 0): WriteMode column on
-        # ReportSessions, gating the audit-vs-pending dispatch.
+        # ReportSessions, gating the pending dispatch.
         ('ReportSessions', 'WriteMode', "TEXT DEFAULT 'audit'"),
     ]
     for table, column, ddl in add_column_specs:
@@ -1216,41 +1172,6 @@ def _ensure_rollback_columns(conn: sqlite3.Connection) -> None:
         except sqlite3.OperationalError:
             # Column already exists; ALTER raises "duplicate column name" — fine.
             pass
-
-    audit_ddl = (
-        """
-        CREATE TABLE IF NOT EXISTS MovieHistoryAudit (
-            Id INTEGER PRIMARY KEY AUTOINCREMENT,
-            TargetId INTEGER NOT NULL,
-            Action TEXT NOT NULL,
-            OldRowJson TEXT,
-            SessionId TEXT NOT NULL,
-            DateTimeCreated TEXT NOT NULL,
-            RunId TEXT,
-            RunAttempt INTEGER
-        );
-        CREATE INDEX IF NOT EXISTS idx_mh_audit_session
-            ON MovieHistoryAudit(SessionId, Id);
-        CREATE INDEX IF NOT EXISTS idx_mh_audit_run
-            ON MovieHistoryAudit(RunId, RunAttempt);
-        CREATE TABLE IF NOT EXISTS TorrentHistoryAudit (
-            Id INTEGER PRIMARY KEY AUTOINCREMENT,
-            TargetId INTEGER NOT NULL,
-            Action TEXT NOT NULL,
-            OldRowJson TEXT,
-            SessionId TEXT NOT NULL,
-            DateTimeCreated TEXT NOT NULL,
-            RunId TEXT,
-            RunAttempt INTEGER
-        );
-        CREATE INDEX IF NOT EXISTS idx_th_audit_session
-            ON TorrentHistoryAudit(SessionId, Id);
-        CREATE INDEX IF NOT EXISTS idx_th_audit_run
-            ON TorrentHistoryAudit(RunId, RunAttempt);
-        """
-    )
-    if _has_table(conn, 'MovieHistory'):
-        conn.executescript(audit_ddl)
 
     pending_ddl = (
         """
@@ -1315,10 +1236,6 @@ def _ensure_rollback_columns(conn: sqlite3.Connection) -> None:
          'ReportSessions', 'Status, DateTimeCreated'),
         ('idx_report_sessions_run',
          'ReportSessions', 'RunId, RunAttempt'),
-        ('idx_mh_audit_run',
-         'MovieHistoryAudit', 'RunId, RunAttempt'),
-        ('idx_th_audit_run',
-         'TorrentHistoryAudit', 'RunId, RunAttempt'),
         ('idx_pikpak_history_session', 'PikpakHistory', 'SessionId'),
         ('idx_dedup_records_session', 'DedupRecords', 'SessionId'),
         ('idx_align_no_match_session',
@@ -2157,64 +2074,7 @@ def db_load_history(db_path: Optional[str] = None, phase: Optional[int] = None) 
     return HistoryRepo(db_path=db_path or HISTORY_DB_PATH).load_history(phase=phase)
 
 
-# ── Audit helpers (X3 rollback) ──────────────────────────────────────────
-#
-# Every mutation of ``MovieHistory`` / ``TorrentHistory`` that originates
-# from a tagged session (``session_id is not None``) records a companion
-# audit row in ``MovieHistoryAudit`` / ``TorrentHistoryAudit`` describing
-# what changed. ``apps.cli.db.rollback`` later replays the audit log in
-# reverse order to undo the mutations of a failed run while leaving the
-# committed state of any other concurrent run untouched.
-#
-# The audit row is sent in the same backend batch as the matching
-# mutation whenever a session_id is active. SQLite executes the batch
-# inside the surrounding transaction; D1 treats each backend batch as
-# atomic, so the mutation and audit row succeed or fail together.
-#
-# Phase 4 deprecation (2026-05-13)
-# --------------------------------
-# Setting ``JAVDB_AUDIT_WRITES_DISABLED=1`` (or ``true``) turns every
-# audit-row INSERT here into a no-op so the audit tables become append-
-# never — only the existing rows remain queryable for forensic /
-# historical-session rollback.  The default is ``0`` (writes still
-# enabled) because the legacy ``WriteMode='audit'`` rollback fallback
-# still depends on audit rows being recorded for any sessions running
-# under that mode.  Operators flip the env to ``1`` once they're
-# confident no ingestion workflow is still pinning ``audit``.
-
-
-def _audit_writes_disabled() -> bool:
-    """Return True when Phase 4 has pinned ``JAVDB_AUDIT_WRITES_DISABLED``.
-
-    Accepts ``1``, ``true``, ``yes`` (case-insensitive).  Used to gate
-    the ``_movie_*`` / ``_torrent_*`` audit-statement helpers so flipping
-    the env turns audit appends into no-ops while preserving the rest of
-    the historic write path (live ``MovieHistory`` / ``TorrentHistory``
-    rows still get written for any session still running under
-    ``WriteMode='audit'``).
-    """
-    raw = os.environ.get("JAVDB_AUDIT_WRITES_DISABLED", "")
-    return raw.strip().lower() in ("1", "true", "yes", "on")
-
-_MOVIE_AUDIT_SQL = """INSERT INTO MovieHistoryAudit
-   (TargetId, Action, OldRowJson, SessionId, DateTimeCreated, RunId, RunAttempt)
-   VALUES (?, ?, ?, ?, ?, ?, ?)"""
-
-_MOVIE_AUDIT_FOR_HREF_SQL = """INSERT INTO MovieHistoryAudit
-   (TargetId, Action, OldRowJson, SessionId, DateTimeCreated, RunId, RunAttempt)
-   VALUES ((SELECT Id FROM MovieHistory WHERE Href=?), ?, ?, ?, ?, ?, ?)"""
-
-_TORRENT_AUDIT_SQL = """INSERT INTO TorrentHistoryAudit
-   (TargetId, Action, OldRowJson, SessionId, DateTimeCreated, RunId, RunAttempt)
-   VALUES (?, ?, ?, ?, ?, ?, ?)"""
-
-_TORRENT_AUDIT_FOR_TYPE_SQL = """INSERT INTO TorrentHistoryAudit
-   (TargetId, Action, OldRowJson, SessionId, DateTimeCreated, RunId, RunAttempt)
-   VALUES (
-       (SELECT Id FROM TorrentHistory
-        WHERE MovieHistoryId=? AND SubtitleIndicator=? AND CensorIndicator=?),
-       ?, ?, ?, ?, ?, ?
-   )"""
+# ── Backend batch helper ───────────────────────────────────────────────
 
 
 def _execute_backend_batch(conn, statements: List[Tuple[str, Tuple[Any, ...]]]):
@@ -2227,143 +2087,6 @@ def _execute_backend_batch(conn, statements: List[Tuple[str, Tuple[Any, ...]]]):
     for sql, params in statements:
         cursors.append(conn.execute(sql, params))
     return cursors
-
-
-def _audit_old_json(old_row: Any = None) -> Optional[str]:
-    if old_row is None:
-        return None
-    return json.dumps(
-        _row_to_jsonable_dict(old_row),
-        ensure_ascii=False,
-        default=str,
-    )
-
-
-def _movie_audit_statement(
-    target_id: int,
-    *,
-    action: str,
-    session_id: Optional[str],
-    old_row: Any = None,
-    when: Optional[str] = None,
-) -> Optional[Tuple[str, Tuple[Any, ...]]]:
-    if session_id is None:
-        return None
-    if _audit_writes_disabled():
-        return None
-    if when is None:
-        when = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    run_id, run_attempt = get_active_run_identity()
-    return (
-        _MOVIE_AUDIT_SQL,
-        (target_id, action, _audit_old_json(old_row), session_id, when,
-         run_id, run_attempt),
-    )
-
-
-def _movie_insert_audit_statement_for_href(
-    href: str,
-    *,
-    session_id: Optional[str],
-    when: Optional[str] = None,
-) -> Optional[Tuple[str, Tuple[Any, ...]]]:
-    if session_id is None:
-        return None
-    if _audit_writes_disabled():
-        return None
-    if when is None:
-        when = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    run_id, run_attempt = get_active_run_identity()
-    return (
-        _MOVIE_AUDIT_FOR_HREF_SQL,
-        (href, 'INSERT', None, session_id, when, run_id, run_attempt),
-    )
-
-
-def _torrent_audit_statement(
-    target_id: int,
-    *,
-    action: str,
-    session_id: Optional[str],
-    old_row: Any = None,
-    when: Optional[str] = None,
-) -> Optional[Tuple[str, Tuple[Any, ...]]]:
-    if session_id is None:
-        return None
-    if _audit_writes_disabled():
-        return None
-    if when is None:
-        when = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    run_id, run_attempt = get_active_run_identity()
-    return (
-        _TORRENT_AUDIT_SQL,
-        (target_id, action, _audit_old_json(old_row), session_id, when,
-         run_id, run_attempt),
-    )
-
-
-def _torrent_insert_audit_statement_for_type(
-    movie_id: int,
-    sub_ind: int,
-    cen_ind: int,
-    *,
-    session_id: Optional[str],
-    when: Optional[str] = None,
-) -> Optional[Tuple[str, Tuple[Any, ...]]]:
-    if session_id is None:
-        return None
-    if _audit_writes_disabled():
-        return None
-    if when is None:
-        when = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    run_id, run_attempt = get_active_run_identity()
-    return (
-        _TORRENT_AUDIT_FOR_TYPE_SQL,
-        (movie_id, sub_ind, cen_ind, 'INSERT', None, session_id, when,
-         run_id, run_attempt),
-    )
-
-
-def _audit_record_movie_change(
-    conn,
-    target_id: int,
-    *,
-    action: str,
-    session_id: Optional[str],
-    old_row: Any = None,
-    when: Optional[str] = None,
-) -> None:
-    """Append a row to ``MovieHistoryAudit`` for this session_id."""
-    stmt = _movie_audit_statement(
-        target_id,
-        action=action,
-        session_id=session_id,
-        old_row=old_row,
-        when=when,
-    )
-    if stmt is not None:
-        conn.execute(stmt[0], stmt[1])
-
-
-def _audit_record_torrent_change(
-    conn,
-    target_id: int,
-    *,
-    action: str,
-    session_id: Optional[str],
-    old_row: Any = None,
-    when: Optional[str] = None,
-) -> None:
-    """Append a row to ``TorrentHistoryAudit`` for this session_id."""
-    stmt = _torrent_audit_statement(
-        target_id,
-        action=action,
-        session_id=session_id,
-        old_row=old_row,
-        when=when,
-    )
-    if stmt is not None:
-        conn.execute(stmt[0], stmt[1])
 
 
 def _row_to_jsonable_dict(row) -> dict:
