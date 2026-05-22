@@ -168,7 +168,21 @@ def run_stale_cleanup(
     resume_failures = 0
 
     for sid, status, write_mode in rows:
-        meta = _read_session_meta(sid)
+        try:
+            meta = _read_session_meta(sid)
+        except Exception as e:
+            # A single bad meta read must not abort the whole batch — record
+            # the session as failed and continue. Keeping every loop iteration
+            # exception-safe also guarantees the close_db() below is reached.
+            failed.append(sid)
+            summaries.append({
+                "session_id": sid,
+                "status": status,
+                "write_mode": write_mode,
+                "action": "meta_read",
+                "error": str(e),
+            })
+            continue
         if dry_run:
             if status == 'finalizing' and write_mode == 'pending':
                 action = "resume_commit"

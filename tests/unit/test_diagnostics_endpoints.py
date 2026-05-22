@@ -276,15 +276,13 @@ class TestRefreshAuthChecks:
 
 
 class TestUnknownMethod:
-    def test_unknown_method_returns_success_false(self, admin_client):
-        """POST with an unrecognized method → success=False with descriptive error."""
+    def test_unknown_method_returns_422(self, admin_client):
+        """POST with an unrecognized method → 422 with a descriptive detail."""
         with patch("apps.api.routers.diagnostics._set_last_refresh_time"):
             resp = admin_client.post(
                 "/api/diag/javdb-session/refresh",
                 json={"method": "ssh_tunnel"},
             )
 
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["success"] is False
-        assert "ssh_tunnel" in data["error"]
+        assert resp.status_code == 422
+        assert "ssh_tunnel" in resp.json()["detail"]
