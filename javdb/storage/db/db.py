@@ -1162,7 +1162,7 @@ def _ensure_rollback_columns(conn: sqlite3.Connection) -> None:
         ('InventoryAlignNoExactMatch', 'SessionId', 'TEXT'),
         # Ingestion Perfect Rollback (Phase 0): WriteMode column on
         # ReportSessions, gating the pending dispatch.
-        ('ReportSessions', 'WriteMode', "TEXT DEFAULT 'audit'"),
+        ('ReportSessions', 'WriteMode', "TEXT DEFAULT 'pending'"),
     ]
     for table, column, ddl in add_column_specs:
         if not _has_table(conn, table):
@@ -1282,13 +1282,9 @@ def _materialize_report_session_status_default(conn: sqlite3.Connection) -> None
                 "SET Status='in_progress' WHERE Status IS NULL"
             )
         if 'WriteMode' in columns:
-            # Ingestion Perfect Rollback (Phase 0): legacy rows pre-date
-            # the WriteMode column; backfill them to 'audit' so the
-            # rollback dispatcher (Phase 2) treats them like the existing
-            # X3 audit-replay path.
             conn.execute(
                 "UPDATE ReportSessions "
-                "SET WriteMode='audit' WHERE WriteMode IS NULL"
+                "SET WriteMode='pending' WHERE WriteMode IS NULL"
             )
     except sqlite3.OperationalError:
         pass
@@ -2067,6 +2063,8 @@ def _init_single_legacy_db(db_path: str, *, force: bool = False):
             _migrate_defaults_to_null(conn)
         if current < 13:
             _migrate_session_id_to_text(conn)
+        if current > 0 and current < 14:
+            _migrate_v14_drop_audit_tables(conn)
 
         existing = conn.execute("SELECT Version FROM SchemaVersion LIMIT 1").fetchone()
         if existing is None:
