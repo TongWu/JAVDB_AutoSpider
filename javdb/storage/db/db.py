@@ -3190,7 +3190,7 @@ def _commit_one_movie(
             consumed_torrent_seqs.append(payload["Seq"])
 
     # Apply the same "hacked_subtitle wins over hacked_no_subtitle, subtitle
-    # wins over no_subtitle" rule the audit path enforces in db_upsert_history.
+    # wins over no_subtitle" rule enforced in _upsert_one_history_on_conn.
     has_hacked_sub = any(
         sub == 1 and cen == 0 for (_, sub, cen) in torrent_overlay.keys()
     )
@@ -3212,8 +3212,7 @@ def _commit_one_movie(
         )
         counts["torrents_deleted"] += cur.rowcount or 0
 
-    # Recompute derived indicators directly (avoid the audit-tagged
-    # _update_movie_indicators path; pending mode never writes audit rows).
+    # Recompute derived indicators directly.
     perfect_row = conn.execute(
         "SELECT 1 FROM TorrentHistory t1 "
         "JOIN TorrentHistory t2 ON t1.MovieHistoryId=t2.MovieHistoryId "
@@ -3915,24 +3914,12 @@ def _rollback_pending_in_progress(
 ) -> Dict[str, int]:
     """Drop pending writes for an in-progress pending-mode session.
 
-    Mirrors the structure of :func:`_rollback_history` for the audit
-    path: returns per-table counts, supports dry-run, never touches
-    other sessions' rows.
-
-    Safety net (Phase 2 transition): even though pending-mode sessions
-    SHOULD only hold rows in PendingMovie/TorrentHistoryWrites, any code
-    path that still calls :func:`db_upsert_history` directly under a
-    pending session writes live rows + audit rows.  We replay those
-    audit rows here so a half-migrated callsite cannot silently leak
-    writes into the live MovieHistory / TorrentHistory tables.  Once
-    every ingestion path goes pending the replay finds zero rows and
-    is a cheap no-op.
+    Returns per-table counts, supports dry-run, never touches other
+    sessions' rows.
     """
     counts: Dict[str, int] = {
         "PendingMovieHistoryWrites": 0,
         "PendingTorrentHistoryWrites": 0,
-        "drift_skipped": 0,
-        "orphan_pruned": 0,
     }
     with get_db(db_path or HISTORY_DB_PATH) as conn:
         if dry_run:
@@ -3957,18 +3944,6 @@ def _rollback_pending_in_progress(
             )
             counts["PendingMovieHistoryWrites"] = cur_m.rowcount or 0
             counts["PendingTorrentHistoryWrites"] = cur_t.rowcount or 0
-
-    # Safety net: replay any leftover audit rows for this session.
-    # Returns its own per-table counts; merge into ours so the caller
-    # sees both halves in a single dict (legacy keys stay intact).
-    audit_counts = _rollback_history(
-        session_id,
-        dry_run=dry_run,
-        db_path=db_path,
-        run_started_at=run_started_at,
-    )
-    for k, v in audit_counts.items():
-        counts[k] = counts.get(k, 0) + v
     return counts
 
 # ── ReportSessions + ReportMovies + ReportTorrents helpers ───────────────
@@ -4232,256 +4207,6 @@ def _rollback_operations(
     return counts
 
 
-_ORPHAN_PRUNE_AGE_HOURS = 24
-
-
-def _rollback_history(
-    session_id: str,
-    *,
-    dry_run: bool,
-    db_path: Optional[str] = None,
-    run_started_at: Optional[str] = None,
-) -> Dict[str, int]:
-    """Reverse-apply MovieHistoryAudit + TorrentHistoryAudit for *session_id*.
-
-    Logic:
-      - Action='INSERT' → DELETE FROM <main> WHERE Id=TargetId
-      - Action='UPDATE' → restore main row from OldRowJson WHERE Id=TargetId
-        (only if the row's current SessionId matches; otherwise log drift)
-      - Action='DELETE' → re-INSERT main row from OldRowJson
-    Audit rows must be replayed in *reverse* order (highest Id first) so
-    multi-step audits applied in the same run unwind correctly.
-
-    Idempotency
-    -----------
-    Each successfully applied audit row is DELETEd from the audit table
-    immediately, before processing the next row.  This means a partial
-    failure (e.g. D1 transient error halfway through) can be retried
-    safely: the rerun won't re-process audit rows that already succeeded.
-
-    Orphan pruning
-    --------------
-    When *run_started_at* is supplied and an audit row is older than
-    ``run_started_at - 24h`` AND the corresponding ``main_table`` row
-    cannot be located (either deleted or never existed), the audit row
-    is treated as a phantom from a long-ago run and pruned without
-    counting as drift.  The :func:`db_rollback_session` caller is
-    responsible for ensuring *run_started_at* is recent — otherwise the
-    24h grace might prune legitimate audit rows.
-    """
-    counts: Dict[str, int] = {
-        'MovieHistoryAudit': 0,
-        'TorrentHistoryAudit': 0,
-        'MovieHistory.deleted': 0,
-        'MovieHistory.restored': 0,
-        'TorrentHistory.deleted': 0,
-        'TorrentHistory.restored': 0,
-        'MovieHistory.reinserted': 0,
-        'TorrentHistory.reinserted': 0,
-        'drift_skipped': 0,
-        'orphan_pruned': 0,
-    }
-    orphan_cutoff: Optional[str] = None
-    if run_started_at:
-        try:
-            from datetime import timedelta
-            base = datetime.strptime(run_started_at, "%Y-%m-%d %H:%M:%S")
-            orphan_cutoff = (
-                base - timedelta(hours=_ORPHAN_PRUNE_AGE_HOURS)
-            ).strftime("%Y-%m-%d %H:%M:%S")
-        except (TypeError, ValueError):
-            orphan_cutoff = None
-
-    def _delete_audit_row(conn, table: str, audit_id: int) -> None:
-        conn.execute(f"DELETE FROM {table} WHERE Id=?", (audit_id,))
-
-    with get_db(db_path or HISTORY_DB_PATH) as conn:
-        for kind, audit_table, main_table in (
-            ('torrent', 'TorrentHistoryAudit', 'TorrentHistory'),
-            ('movie', 'MovieHistoryAudit', 'MovieHistory'),
-        ):
-            audit_rows = conn.execute(
-                f"SELECT Id, TargetId, Action, OldRowJson, DateTimeCreated "
-                f"FROM {audit_table} "
-                f"WHERE SessionId=? ORDER BY Id DESC",
-                (session_id,),
-            ).fetchall()
-            counts[audit_table] = len(audit_rows)
-            if dry_run or not audit_rows:
-                continue
-            drifted = 0
-            applied = 0
-            for row in audit_rows:
-                audit_id = int(row['Id'])
-                action = row['Action']
-                target_id = row['TargetId']
-                old_json = row['OldRowJson']
-                created = row['DateTimeCreated']
-                try:
-                    if action == 'INSERT':
-                        # Only delete if the current row is still tagged
-                        # with this session; otherwise another run later
-                        # updated it and we must not erase their work.
-                        cur = conn.execute(
-                            f"DELETE FROM {main_table} "
-                            f"WHERE Id=? AND SessionId=?",
-                            (target_id, session_id),
-                        )
-                        if (cur.rowcount or 0) > 0:
-                            counts[f'{main_table}.deleted'] += 1
-                            _delete_audit_row(conn, audit_table, audit_id)
-                            applied += 1
-                        elif _is_orphan_audit(
-                            conn, main_table, target_id,
-                            created, orphan_cutoff,
-                        ):
-                            counts['orphan_pruned'] += 1
-                            _delete_audit_row(conn, audit_table, audit_id)
-                            logger.info(
-                                "Orphan audit pruned: %s TargetId=%s "
-                                "(action=INSERT; row missing and audit "
-                                "older than %s)",
-                                main_table, target_id, orphan_cutoff,
-                            )
-                        else:
-                            counts['drift_skipped'] += 1
-                            drifted += 1
-                            logger.warning(
-                                "Rollback drift: %s row Id=%s SessionId "
-                                "mismatch or row already gone "
-                                "(action=INSERT)",
-                                main_table, target_id,
-                            )
-                    elif action == 'UPDATE':
-                        if not old_json:
-                            counts['drift_skipped'] += 1
-                            drifted += 1
-                            continue
-                        old = json.loads(old_json)
-                        # Build column list dynamically to support both
-                        # MovieHistory and TorrentHistory.
-                        cols = [c for c in old.keys() if c != 'Id']
-                        set_clause = ', '.join(f'{c}=?' for c in cols)
-                        params = (
-                            [old[c] for c in cols]
-                            + [target_id, session_id]
-                        )
-                        cur = conn.execute(
-                            f"UPDATE {main_table} SET {set_clause} "
-                            f"WHERE Id=? AND SessionId=?",
-                            params,
-                        )
-                        if (cur.rowcount or 0) > 0:
-                            counts[f'{main_table}.restored'] += 1
-                            _delete_audit_row(conn, audit_table, audit_id)
-                            applied += 1
-                        elif _is_orphan_audit(
-                            conn, main_table, target_id,
-                            created, orphan_cutoff,
-                        ):
-                            counts['orphan_pruned'] += 1
-                            _delete_audit_row(conn, audit_table, audit_id)
-                            logger.info(
-                                "Orphan audit pruned: %s TargetId=%s "
-                                "(action=UPDATE; row missing and audit "
-                                "older than %s)",
-                                main_table, target_id, orphan_cutoff,
-                            )
-                        else:
-                            # Concurrent run touched the row after us;
-                            # can't safely overwrite their state — log drift.
-                            counts['drift_skipped'] += 1
-                            drifted += 1
-                            logger.warning(
-                                "Rollback drift: %s row Id=%s SessionId "
-                                "mismatch (action=UPDATE) — manual review "
-                                "needed",
-                                main_table, target_id,
-                            )
-                    elif action == 'DELETE':
-                        if not old_json:
-                            counts['drift_skipped'] += 1
-                            drifted += 1
-                            continue
-                        old = json.loads(old_json)
-                        cols = list(old.keys())
-                        placeholders = ', '.join('?' for _ in cols)
-                        col_names = ', '.join(cols)
-                        params = [old[c] for c in cols]
-                        try:
-                            conn.execute(
-                                f"INSERT INTO {main_table} ({col_names}) "
-                                f"VALUES ({placeholders})",
-                                params,
-                            )
-                            counts[f'{main_table}.reinserted'] += 1
-                            _delete_audit_row(conn, audit_table, audit_id)
-                            applied += 1
-                        except _DB_INTEGRITY_ERRORS as e:
-                            # E.g. UNIQUE conflict — a concurrent run
-                            # already reinserted something with the same
-                            # business key. Skip + drift log. d1-only
-                            # surfaces a UNIQUE violation as
-                            # D1PermanentError (D1 collapses all HTTP-400
-                            # application errors into that type), hence
-                            # _DB_INTEGRITY_ERRORS rather than the bare
-                            # sqlite3.IntegrityError. D1TransientError is
-                            # deliberately NOT caught here — retries are
-                            # already exhausted by then and a network
-                            # failure mid-reinsert must abort, not skip.
-                            counts['drift_skipped'] += 1
-                            drifted += 1
-                            logger.warning(
-                                "Rollback drift: cannot re-insert %s row "
-                                "(action=DELETE): %s", main_table, e,
-                            )
-                except Exception as e:
-                    counts['drift_skipped'] += 1
-                    drifted += 1
-                    logger.error(
-                        "Rollback step failed (table=%s action=%s id=%s): %s",
-                        main_table, action, target_id, e,
-                    )
-
-            if drifted > 0:
-                logger.warning(
-                    "Kept %s unapplied %s row(s) for SessionId=%s because "
-                    "rollback encountered drift or row-level errors",
-                    drifted, audit_table, session_id,
-                )
-    return counts
-
-
-def _is_orphan_audit(
-    conn,
-    main_table: str,
-    target_id: Any,
-    audit_created: Optional[str],
-    orphan_cutoff: Optional[str],
-) -> bool:
-    """Return True when an audit row's main-table target is gone AND old.
-
-    Used to decide whether a drift can be safely pruned (orphan from a
-    long-departed run) vs. preserved for manual review (potentially fresh
-    contention).
-    """
-    if not orphan_cutoff or not audit_created:
-        return False
-    if audit_created >= orphan_cutoff:
-        return False
-    try:
-        row = conn.execute(
-            f"SELECT 1 FROM {main_table} WHERE Id=?",
-            (target_id,),
-        ).fetchone()
-    except _DB_OPERATIONAL_ERRORS:
-        # Main table missing — can't prove the row is orphaned, so play
-        # safe and keep the audit row. d1-only surfaces a missing table
-        # as D1PermanentError.
-        return False
-    return row is None
-
-
 def db_rollback_session(
     session_id: str,
     *,
@@ -4498,10 +4223,9 @@ def db_rollback_session(
     """Roll back all D1/SQLite writes that belong to *session_id*.
 
     Performs deletions in the order *reports → operations → history* so
-    foreign-key like dependencies are unwound cleanly. The history scope
-    walks ``MovieHistoryAudit`` / ``TorrentHistoryAudit`` in reverse Id
-    order and replays each row (INSERT→DELETE, UPDATE→restore from
-    OldRowJson, DELETE→re-INSERT).
+    foreign-key like dependencies are unwound cleanly.  For pending-mode
+    sessions the history scope deletes pending writes (in_progress) or
+    resumes the commit (finalizing).
 
     *scope* may be one of ``'reports'``, ``'operations'``, ``'history'``,
     or ``'all'`` (default). Useful for partial rollbacks during incident
@@ -4512,12 +4236,6 @@ def db_rollback_session(
     on successful runs. Set ``force=True`` for explicit recovery
     scenarios (the manual workflow exposes this as an opt-in flag).
 
-    *run_started_at* (optional, ISO ``YYYY-MM-DD HH:MM:SS``): used by
-    history rollback to decide which drift rows are stale-enough to
-    prune as orphans (audit rows older than ``run_started_at - 24h``
-    whose target has been deleted long ago).  Pass-through to
-    :func:`_rollback_history`.
-
     *failure_reason* (optional): persisted to ``ReportSessions.
     FailureReason`` alongside ``Status='failed'`` so post-incident
     analysis can distinguish ``workflow_cancel`` / ``runtime_error`` /
@@ -4525,8 +4243,7 @@ def db_rollback_session(
 
     Marks the ``ReportSessions`` row ``Status='failed'`` BEFORE the
     deletions for traceability (committed sessions are intentionally
-    skipped — :func:`_rollback_reports` won't delete them and the audit
-    rows never touch them either).
+    skipped).
 
     Returns a nested dict of ``{scope: {table: rows_affected}}`` suitable
     for logging or dry-run output.
@@ -4550,16 +4267,14 @@ def db_rollback_session(
             f"undo a successful run's writes."
         )
 
-    # Ingestion Perfect Rollback (Phase 2): pending-mode sessions
-    # already in 'finalizing' must NOT be flipped to 'failed' before
-    # the dispatcher runs — that would reroute the resume_commit
-    # branch into rollback_pending and silently lose the in-flight
-    # commit.  We only flip on legacy audit sessions and on pending
-    # sessions that are still in 'in_progress' (true rollback path).
+    # Pending-mode sessions already in 'finalizing' must NOT be flipped
+    # to 'failed' before the dispatcher runs — that would reroute the
+    # resume_commit branch into rollback_pending and silently lose the
+    # in-flight commit.
     pre_state = db_get_session_status(
         session_id, db_path=reports_db_path,
     )
-    pre_write_mode = pre_state[0] if pre_state else 'audit'
+    pre_write_mode = pre_state[0] if pre_state else 'pending'
     pre_status = pre_state[1] if pre_state else current_status
     skip_mark_failed = (
         pre_write_mode == 'pending'
@@ -4593,15 +4308,12 @@ def db_rollback_session(
             session_id, dry_run=dry_run, db_path=operations_db_path,
         )
     if scope in ('history', 'all'):
-        # Ingestion Perfect Rollback (Phase 2): dispatch on
-        # (WriteMode, Status).  Pending sessions never have audit
-        # rows so the legacy replay would be a no-op; we want to
-        # either DELETE pending (in_progress) or resume the commit
+        # Dispatch on (WriteMode, Status).  Pending sessions either
+        # DELETE pending writes (in_progress) or resume the commit
         # (finalizing).
         # NOTE: _rollback_reports above DELETEs the ReportSessions row,
         # so a fresh db_get_session_status() here would always return
-        # None and silently fall back to 'audit'.  Reuse the snapshot we
-        # captured before any deletion ran.
+        # None.  Reuse the snapshot we captured before any deletion ran.
         write_mode = pre_write_mode
         sess_status = pre_status
         if write_mode == 'pending':
@@ -4639,14 +4351,12 @@ def db_rollback_session(
                 counts['mode'] = 'rollback_pending'
                 result['history'] = counts
         else:
-            counts = _rollback_history(
-                session_id,
-                dry_run=dry_run,
-                db_path=history_db_path,
-                run_started_at=run_started_at,
+            logger.warning(
+                "Session %s has unexpected write_mode=%r — "
+                "audit replay retired by ADR-005; skipping history rollback",
+                session_id, write_mode,
             )
-            counts['mode'] = 'audit_replay'
-            result['history'] = counts
+            result['history'] = {'mode': 'skipped', 'reason': 'audit_retired'}
     return result
 
 
