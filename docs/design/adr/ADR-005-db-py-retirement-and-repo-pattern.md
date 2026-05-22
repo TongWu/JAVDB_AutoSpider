@@ -1,6 +1,6 @@
 # ADR-005: Full Retirement of db.py + Repo Class Abstraction + Audit Mode Retirement
 
-**Status**: Accepted — **PR-1 through PR-3 shipped**; **D10 gate sign-off completed on 2026-05-22** (4 consecutive days all-pass); **PR-4 and PR-5 unblocked**
+**Status**: Accepted — **PR-1 through PR-5 shipped on 2026-05-22**; ADR-005 storage/audit/db.py retirement is complete
 **Date**: 2026-05-16
 **Deciders**: Architecture depth-pass round 2
 **Prerequisites**: [ADR-006](ADR-006-pending-mode-default-rollout.md) — Pending Mode default must first be rolled out to 100% and the auto-fallback redesigned before this ADR can execute its D10 gate
@@ -9,13 +9,13 @@
 
 ## Outstanding Work
 
-PR-1 (Repo classes) ✅ shipped: `HistoryRepo`, `OperationsRepo`, `StatsRepo`, `SessionsRepo`, `SystemStateRepo` are present in `javdb/storage/repos/`. Remaining:
+PR-1 (Repo classes) ✅ shipped: `HistoryRepo`, `OperationsRepo`, `StatsRepo`, `SessionsRepo`, `SystemStateRepo` are present in `javdb/storage/repos/`. Completion status:
 
 - **PR-2** ✅ shipped (#70, 2026-05-21): `db.py` internally forwards to Repos (dual-write phase).
 - **PR-3** ✅ shipped (#71, 2026-05-21): migrated spider/history_manager callers off the function family.
-- **PR-4** — drop Audit Mode tables (`MovieHistoryAudit`, `TorrentHistoryAudit`) + remove audit code branches. Unblocked by D10 sign-off on 2026-05-22.
-- **PR-5** — delete `db.py` (currently ~5,300 lines) and the nine ADR-001 shell modules. Follows PR-4.
-- **Parser-helper relocation** — extracted from this ADR and superseded by [ADR-011](ADR-011-javdb-parsing-module.md). ADR-005 Storage/Repo work should import parsing helpers from `javdb.parsing.common` after ADR-011 Phase 1 lands.
+- **PR-4** ✅ shipped (2026-05-22): dropped Audit Mode tables and removed audit write / rollback branches.
+- **PR-5** ✅ shipped (2026-05-22): deleted `javdb/storage/db/db.py`; the ADR-001 modules remain as the canonical implementation modules, not shell facades.
+- **Parser-helper relocation** remains outside ADR-005 and is tracked by [ADR-011](ADR-011-javdb-parsing-module.md). There is no remaining ADR-005 implementation work.
 
 ## Amendments
 
@@ -59,6 +59,8 @@ PR-1 (Repo classes) ✅ shipped: `HistoryRepo`, `OperationsRepo`, `StatsRepo`, `
 - **2026-05-21 amendment 5**: **PR-2 and PR-3 shipped.** PR-2 (#70) routed the `db.py` facade through Repo classes (636 additions, 272 deletions, 13 files). PR-3 (#71) migrated spider and history_manager callers to use Repos directly (573 additions, 44 deletions, 11 files). Both include boundary regression tests enforcing that migrated callers cannot fall back to raw `db_*` functions. Remaining: PR-4 (drop audit tables, gated by D10) and PR-5 (delete `db.py`).
 
 - **2026-05-22 amendment 6**: **D10 gate sign-off — PR-4 unblocked.** BakeCheck.yml has reported all three D10 metrics passing for 4 consecutive days (2026-05-18 through 2026-05-21). The operator approved proceeding with PR-4 on 2026-05-22 despite workflow audit-option removal being 6 days old (1 day short of the 7-day text in D10 #3), since the functional evidence — zero audit sessions, zero orphan rows, 6 consecutive successful DailyIngestion runs — proves the risk is moot. PR-4 (drop audit tables + remove audit code) and PR-5 (delete `db.py`) are now unblocked.
+
+- **2026-05-22 amendment 7**: **PR-4 and PR-5 shipped.** Audit Mode is fully retired: audit tables, audit archive/cleanup tooling, and audit write/rollback branches are gone. `javdb/storage/db/db.py` was deleted. The former ADR-001 split modules (`db_history_read.py`, `db_history_write.py`, `db_stats.py`, etc.) are no longer shell modules; they now own the low-level implementation and are intentionally retained behind the package public API in `javdb/storage/db/__init__.py`.
 
 ---
 
@@ -219,12 +221,10 @@ PR-2  db.py internals delegate to the Repo classes (dual-write parallel: callers
 PR-3a Migrate callers in packages/python/javdb_spider/ and javdb_platform/history_manager.py
 PR-3b Migrate callers in packages/python/javdb_ingestion/ and javdb_integrations/
 PR-3c Migrate callers in apps/cli/, apps/api/, scripts/, packages/python/javdb_migrations/tools/
-PR-4  Confirm no in_progress sessions remain in ReportSessions → run v14 migration to drop
-      the audit tables → delete the audit code in db.py / db_history_read.py /
-      db_history_write.py / db_session.py
-PR-5  Delete db.py; delete the ADR-001 shell modules db_history_read.py /
-      db_history_write.py / db_stats.py; delete the db_session global;
-      delete the JAVDB_HISTORY_WRITE_MODE environment variable
+PR-4  ✅ Shipped 2026-05-22: confirmed D10 gate, dropped audit tables, and
+      removed audit write/rollback code.
+PR-5  ✅ Shipped 2026-05-22: deleted db.py. The ADR-001 split modules are
+      retained as canonical implementation modules rather than shell facades.
 PR-6  Superseded by ADR-011. Parser/helper relocation is extracted from
       ADR-005 and implemented through ADR-011 Phase 1-3. Remaining ADR-005
       work should consume helpers from javdb.parsing.common after Phase 1.
@@ -295,10 +295,10 @@ If the check fails, first set `JAVDB_AUDIT_WRITES_DISABLED=1` org-wide and bake 
 
 ### Risks
 
-1. **Audit can still be written before PR-4** → in-flight audit sessions linger across the upgrade path.
-   - **Mitigation**: the three D10 gates; bake `JAVDB_AUDIT_WRITES_DISABLED=1` before removing code.
-2. **`db.py` deletion misses an implicit caller** (external scripts, the user's private automation).
-   - **Mitigation**: before PR-5, add `DeprecationWarning("use HistoryRepo")` at the top of `db.py` for one release cycle and watch the logs for hits.
+1. **External scripts may still import deleted `db.py`**.
+   - **Mitigation**: the package public API now re-exports supported storage helpers from `javdb.storage.db`; internal callers were migrated before deletion and grep checks enforce no `javdb.storage.db.db` imports remain.
+2. **Historical docs may imply audit fallback is still available**.
+   - **Mitigation**: current operator docs mark Audit Mode retired; historical Appendix sections must be explicitly labelled as archival context.
 3. **The Repo class's `session_id=None` default lets "forgot to pass session" become an implicit bug again.**
    - **Mitigation**: every `stage` / `commit` / `rollback` method's first line is `self._require_session()`, which raises `RuntimeError`. The interface contract is executable.
 4. **Storage/Repo work may accidentally keep importing helpers from `apps.api.parsers.common`.**

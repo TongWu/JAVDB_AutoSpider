@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Implemented on 2026-05-22. PR-5 followed in [IMP-038](IMP-038-adr005-pr5-delete-db-py.md) and removed `javdb/storage/db/db.py`; the remaining `javdb/storage/db/*.py` files are canonical modules, not ADR-001 shell facades.
+
 **Goal:** Remove all Audit Mode code, tables, and supporting infrastructure per ADR-005 D2/D9. After this PR, the codebase writes only via Pending Mode; historical audit rows are dropped.
 
 **Architecture:** Delete audit DDL, helper functions, write paths, rollback replay, CLI tools, workflow, and tests. Simplify WriteMode to only `'pending'`. Add v14 migration to DROP the two audit tables. Do NOT delete `db.py` itself or `JAVDB_HISTORY_WRITE_MODE` (those belong to PR-5).
