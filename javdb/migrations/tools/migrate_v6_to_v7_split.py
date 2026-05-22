@@ -23,12 +23,12 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 os.chdir(REPO_ROOT)
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from javdb.infra.logging import setup_logging, get_logger
+from javdb.infra.logging import setup_logging, get_logger, log_summary_block
 
 setup_logging()
 logger = get_logger(__name__)
@@ -171,7 +171,6 @@ def main():
         sys.exit(1)
 
     import javdb.storage.db.db_connection as _db_conn
-    from javdb.storage.db.db_migrations import init_db
 
     reports_dir = os.path.dirname(db_path)
     _db_conn.DB_PATH = db_path
@@ -179,8 +178,17 @@ def main():
     _db_conn.REPORTS_DB_PATH = os.path.join(reports_dir, 'reports.db')
     _db_conn.OPERATIONS_DB_PATH = os.path.join(reports_dir, 'operations.db')
 
+    from javdb.storage.db import db_migrations as _db_mig
+    for name in (
+        'DB_PATH', 'HISTORY_DB_PATH', 'REPORTS_DB_PATH', 'OPERATIONS_DB_PATH',
+    ):
+        setattr(_db_mig, name, getattr(_db_conn, name))
+
     already_split = all(os.path.exists(p) for p in [
-        _db_conn.HISTORY_DB_PATH, _db_conn.REPORTS_DB_PATH, _db_conn.OPERATIONS_DB_PATH])
+        _db_conn.HISTORY_DB_PATH,
+        _db_conn.REPORTS_DB_PATH,
+        _db_conn.OPERATIONS_DB_PATH,
+    ])
 
     if already_split:
         logger.info("All three target databases already exist. No migration needed.")
@@ -193,10 +201,25 @@ def main():
         sys.exit(0)
 
     if args.dry_run:
-        logger.info("[DRY RUN] Would split into:")
-        logger.info(f"  {_db_conn.HISTORY_DB_PATH}    — {', '.join(_HISTORY_TABLES)}")
-        logger.info(f"  {_db_conn.REPORTS_DB_PATH}    — {', '.join(_REPORTS_TABLES)}")
-        logger.info(f"  {_db_conn.OPERATIONS_DB_PATH} — {', '.join(_OPERATIONS_TABLES)}")
+        log_summary_block(
+            logger,
+            "[DRY RUN] Would split into",
+            [
+                (
+                    "history",
+                    f"{_db_conn.HISTORY_DB_PATH} — {', '.join(_HISTORY_TABLES)}",
+                ),
+                (
+                    "reports",
+                    f"{_db_conn.REPORTS_DB_PATH} — {', '.join(_REPORTS_TABLES)}",
+                ),
+                (
+                    "operations",
+                    f"{_db_conn.OPERATIONS_DB_PATH} — {', '.join(_OPERATIONS_TABLES)}",
+                ),
+            ],
+            emoji=None,
+        )
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
         logger.info("\nSource table row counts:")
@@ -210,7 +233,7 @@ def main():
         backup_db(db_path)
 
     logger.info("Running split migration via init_db() ...")
-    init_db(force=True)
+    _db_mig.init_db(force=True)
 
     logger.info("Migration complete.")
     for p in [_db_conn.HISTORY_DB_PATH, _db_conn.REPORTS_DB_PATH, _db_conn.OPERATIONS_DB_PATH]:

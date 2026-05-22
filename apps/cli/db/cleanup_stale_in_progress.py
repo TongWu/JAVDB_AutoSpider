@@ -34,15 +34,12 @@ from typing import List, Optional
 
 import javdb.storage.db.db_connection as _db_conn
 from javdb.storage.db.db_connection import close_db, get_db
-from javdb.storage.db.db_reports import (
-    db_find_in_progress_sessions,
-    db_get_session_status,
-)
 from javdb.storage.db.db_rollback import (
     db_resume_finalizing_session,
     db_rollback_session,
 )
-from javdb.storage.db.db_migrations import init_db
+from javdb.storage.db import db_migrations as _db_mig
+from javdb.storage.repos.sessions_repo import SessionsRepo
 from javdb.infra.logging import (
     get_logger,
     setup_logging,
@@ -50,6 +47,13 @@ from javdb.infra.logging import (
 
 
 logger = get_logger(__name__)
+
+
+def _sync_db_migration_paths() -> None:
+    for name in (
+        "DB_PATH", "HISTORY_DB_PATH", "REPORTS_DB_PATH", "OPERATIONS_DB_PATH",
+    ):
+        setattr(_db_mig, name, getattr(_db_conn, name))
 
 
 def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
@@ -107,15 +111,10 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
 
 def _read_session_meta(session_id: str) -> dict:
     with get_db(_db_conn.REPORTS_DB_PATH) as conn:
-        row = conn.execute(
-            "SELECT Id, ReportType, ReportDate, DisplayName, Status, "
-            "DateTimeCreated, RunId, RunAttempt FROM ReportSessions "
-            "WHERE Id=?",
-            (session_id,),
-        ).fetchone()
+        row = SessionsRepo(conn).get_cleanup_meta(session_id)
     if row is None:
         return {"Id": session_id}
-    return {k: row[k] for k in row.keys()}
+    return row
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -129,7 +128,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
 
     try:
-        init_db()
+        _sync_db_migration_paths()
+        _db_mig.init_db()
     except Exception as e:
         logger.error("Failed to init DB: %s", e)
         return 3
