@@ -32,11 +32,13 @@ from .db_connection import (  # noqa: F401
 from .db_migrations import (  # noqa: F401
     init_db,
     _init_single_db,
+    _init_single_legacy_db,
     _HISTORY_DDL,
     _REPORTS_DDL,
     _OPERATIONS_DDL,
     moviehistory_actor_layout_ok,
     _ensure_rollback_columns,
+    _normalize_moviehistory_actor_column_order,
 )
 
 # ── Session state ──────────────────────────────────────────────────────
@@ -53,6 +55,7 @@ from .db_session import (  # noqa: F401
     _SESSION_ID_SENTINEL,
     _resolve_session_id,
     _resolve_write_mode,
+    _INT_ID_EPOCH_BASE_MS,
 )
 
 # ── History reads ──────────────────────────────────────────────────────
@@ -71,6 +74,8 @@ from .db_history_write import (  # noqa: F401
     db_batch_update_last_visited,
     db_batch_update_movie_actors,
     _compute_indicators,
+    _pending_torrent_overlay,
+    _commit_one_movie,
 )
 
 # ── Report sessions ────────────────────────────────────────────────────
@@ -80,6 +85,7 @@ from .db_reports import (  # noqa: F401
     db_insert_report_rows,
     db_find_stale_pending_sessions,
     db_find_in_progress_sessions,
+    db_count_in_progress_sessions_for_run,
     db_find_in_progress_session_ids_for_run_csv,
     db_find_sessions_by_run,
     db_get_session_run_identity,
@@ -87,6 +93,11 @@ from .db_reports import (  # noqa: F401
     db_mark_session_failed,
     db_get_latest_session_local,
     db_pending_session_stats,
+    db_get_report_rows,
+    db_get_latest_session,
+    db_get_sessions_by_date,
+    db_begin_finalize_session,
+    db_finish_commit_session,
 )
 
 # ── Operations (rclone / dedup / pikpak / align) ───────────────────────
