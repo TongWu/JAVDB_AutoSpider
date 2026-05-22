@@ -360,5 +360,7 @@ def generate_integer_id() -> int:
                 _INT_ID_LAST_MS += 1
                 _INT_ID_COUNTER = 0
                 ms = _INT_ID_LAST_MS
-        # Pack: 40 bits ms + 6 bits tag + 6 bits counter
-        return (ms << 12) | (_INT_ID_PROCESS_TAG << 6) | _INT_ID_COUNTER
+        # Pack: 40 bits ms + 6 bits tag + 6 bits counter.
+        # Always use _INT_ID_LAST_MS (not ms) so clock-backwards still yields
+        # a monotonically increasing result.
+        return (_INT_ID_LAST_MS << 12) | (_INT_ID_PROCESS_TAG << 6) | _INT_ID_COUNTER
