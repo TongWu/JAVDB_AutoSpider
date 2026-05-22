@@ -86,7 +86,7 @@ from javdb.storage.d1_client import (
     get_d1_api_token,
     get_d1_database_id,
 )
-from javdb.storage.db import db as db_mod
+from javdb.storage.db.db_migrations import _ensure_rollback_columns
 from javdb.infra.logging import (
     get_logger,
     log_group_end,
@@ -392,7 +392,7 @@ def _ensure_local_sqlite_schema(conn: sqlite3.Connection) -> None:
     schema bump along with the partial data load — otherwise a
     half-applied schema would survive a failed sync.
     """
-    db_mod._ensure_rollback_columns(conn)
+    _ensure_rollback_columns(conn)
 
 
 def _backup_sqlite(target_paths: List[str]) -> Optional[str]:

@@ -24,7 +24,7 @@ Canonical command-line entry points for JAVDB AutoSpider — all user-facing CLI
 ## Conventions
 
 - All entries are runnable via `python3 -m apps.cli.<subdir>.<name>`.
-- Thin wrapper modules (e.g. `qb/uploader.py`) alias canonical implementations under `javdb.integrations.*` / `javdb.infra.*` via `compat.alias_module` so tests can patch attributes through the CLI import path.
+- `apps.cli.*` is the only user-facing CLI surface. Some integration wrappers still alias `javdb.integrations.*` during the [ADR-015](../../docs/design/adr/ADR-015-integrations-interface-boundary.md) migration; those aliases are tracked by architecture allowlists and are removed by IMP-031 through IMP-036.
 - Workflow invocations live in `.github/workflows/*.yml`; per-subdir READMEs note which CLIs are workflow-invoked.
 
 ## Related

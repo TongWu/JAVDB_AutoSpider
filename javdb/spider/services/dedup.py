@@ -35,6 +35,7 @@ from javdb.spider.contracts import (
 )
 from javdb.spider.magnet_extractor import _parse_size
 from javdb.infra.logging import get_logger
+from javdb.storage.repos.operations_repo import OperationsRepo
 
 # Optional Rust-backed dedup helpers (inlined from the former bridges.rust_adapters.dedup_adapter shim)
 try:
@@ -147,9 +148,8 @@ def load_rclone_inventory(csv_path: str) -> Dict[str, List[RcloneEntry]]:
     if use_sqlite():
         _ensure_db()
     if use_sqlite():
-        from javdb.storage.db.db_operations import db_load_rclone_inventory
         from javdb.storage.db.db_connection import current_backend
-        raw = db_load_rclone_inventory()
+        raw = OperationsRepo().load_rclone_inventory()
         inventory: Dict[str, List[RcloneEntry]] = {}
         for code, entries in raw.items():
             normalised_code = _normalise_code(code)
@@ -450,8 +450,7 @@ def _load_pending_paths_cache() -> Set[str]:
     paths: Set[str] = set()
     try:
         _ensure_db()
-        from javdb.storage.db.db_operations import db_load_dedup_records
-        for r in db_load_dedup_records():
+        for r in OperationsRepo().load_dedup_records():
             is_del = r.get('IsDeleted', r.get('is_deleted'))
             if is_del not in (1, True, 'True', '1'):
                 p = r.get('ExistingGdrivePath', r.get('existing_gdrive_path', ''))
@@ -522,8 +521,7 @@ def load_dedup_csv(csv_path: str, from_file_only: bool = False) -> List[Dict[str
 
     if use_sqlite():
         _ensure_db()
-        from javdb.storage.db.db_operations import db_load_dedup_records
-        rows = db_load_dedup_records()
+        rows = OperationsRepo().load_dedup_records()
         for r in rows:
             r.pop('Id', None)
             r.pop('id', None)
@@ -562,8 +560,7 @@ def append_dedup_record(dedup_csv_path: str, record: DedupRecord) -> bool:
         return False
 
     _ensure_db()
-    from javdb.storage.db.db_operations import db_append_dedup_record
-    row_id = db_append_dedup_record(record._asdict())
+    row_id = OperationsRepo().append_dedup_record(record._asdict())
 
     if row_id == -1:
         logger.debug(f"Skipped duplicate dedup for path: {gdrive_path}")
@@ -586,8 +583,7 @@ def mark_records_deleted(
     a CSV snapshot from the DB when needed.
     """
     _ensure_db()
-    from javdb.storage.db.db_operations import db_mark_records_deleted
-    updated = db_mark_records_deleted(path_datetime_pairs)
+    updated = OperationsRepo().mark_records_deleted(path_datetime_pairs)
 
     # Invalidate cache so next append sees the new state
     if _pending_paths_cache is not None:
@@ -611,8 +607,7 @@ def cleanup_deleted_records(
     a CSV snapshot from the DB when needed.
     """
     _ensure_db()
-    from javdb.storage.db.db_operations import db_cleanup_deleted_records
-    removed = db_cleanup_deleted_records(older_than_days)
+    removed = OperationsRepo().cleanup_deleted_records(older_than_days)
 
     logger.info(f"Cleaned up {removed} old deleted dedup records (retention={older_than_days}d)")
     return removed
@@ -630,8 +625,7 @@ def save_dedup_csv(csv_path: str, rows: List[Dict[str, str]]) -> None:
     )
     if use_sqlite():
         _ensure_db()
-        from javdb.storage.db.db_operations import db_save_dedup_records
-        db_save_dedup_records(rows)
+        OperationsRepo().save_dedup_records(rows)
 
     if use_csv():
         os.makedirs(os.path.dirname(csv_path) or '.', exist_ok=True)
@@ -649,9 +643,7 @@ def export_dedup_db_to_csv(output_path: str) -> int:
     the rclone_inventory table.
     """
     _ensure_db()
-    from javdb.storage.db.db_operations import db_load_dedup_records
-
-    rows = db_load_dedup_records()
+    rows = OperationsRepo().load_dedup_records()
     if not rows:
         logger.warning("No dedup records in DB to export to CSV")
         return 0

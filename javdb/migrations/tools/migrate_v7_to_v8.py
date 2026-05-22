@@ -53,7 +53,7 @@ from javdb.infra.logging import setup_logging, get_logger  # noqa: E402
 setup_logging()
 logger = get_logger(__name__)
 
-from javdb.storage.db.db import moviehistory_actor_layout_ok  # noqa: E402
+from javdb.storage.db.db_migrations import moviehistory_actor_layout_ok  # noqa: E402
 
 EXPECTED_VERSION = 9
 
@@ -163,14 +163,15 @@ def run_schema_migration(
     dry_run: bool,
     verify: bool,
 ) -> int:
-    import javdb.storage.db.db as db_mod
+    from javdb.storage.db.db_connection import HISTORY_DB_PATH, REPORTS_DB_PATH, OPERATIONS_DB_PATH
+    from javdb.storage.db.db_migrations import init_db
     from javdb.infra.config import use_sqlite
 
     if not use_sqlite():
         logger.error("SQLite storage mode required (config STORAGE_MODE / use_sqlite).")
         return 1
 
-    h, r, o = db_mod.HISTORY_DB_PATH, db_mod.REPORTS_DB_PATH, db_mod.OPERATIONS_DB_PATH
+    h, r, o = HISTORY_DB_PATH, REPORTS_DB_PATH, OPERATIONS_DB_PATH
 
     logger.info("=" * 60)
     logger.info("SCHEMA MIGRATION → current (split DB layout + MovieHistory v9)")
@@ -216,7 +217,7 @@ def run_schema_migration(
             backup_db_file(p, label)
 
     logger.info("Running init_db(force=True) …")
-    db_mod.init_db(force=True)
+    init_db(force=True)
 
     new_h = _detect_version(h)
     logger.info("history.db SchemaVersion after migration: %s", new_h)
@@ -407,7 +408,7 @@ def run_actor_backfill(
     use_cf_bypass: bool,
 ) -> int:
     from javdb.infra.config import use_sqlite
-    from javdb.storage.db.db import init_db
+    from javdb.storage.db.db_migrations import init_db
 
     if not use_sqlite():
         logger.error("SQLite storage mode required.")
@@ -695,9 +696,9 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    import javdb.storage.db.db as db_mod
+    from javdb.storage.db.db_connection import HISTORY_DB_PATH as _HIST_DB
 
-    history_db = args.history_db or db_mod.HISTORY_DB_PATH
+    history_db = args.history_db or _HIST_DB
 
     rc = 0
     if not args.skip_schema:

@@ -1,13 +1,7 @@
-"""Pin down the default WriteMode resolution behaviour after ADR-006.
+"""Pin down the default WriteMode resolution behaviour.
 
-Prior to ADR-006 the resolution fallback in
-``packages/python/javdb_platform/db_session._resolve_write_mode`` returned
-``'audit'`` when neither an explicit argument nor the
-``JAVDB_HISTORY_WRITE_MODE`` env var was set. ADR-006 flips that default
-to ``'pending'`` so that pipeline runs follow the modern path without
-opt-in. This regression test fails if any future change reverts the
-default to ``'audit'`` (or to anything other than ``'pending'``) without
-an accompanying ADR amendment.
+ADR-006 set 'pending' as the default. ADR-005 PR-4 retired audit mode
+entirely — requesting 'audit' now falls back to 'pending' with a warning.
 
 Resolution order under test:
   1. Process-local override via ``set_active_write_mode()``
@@ -39,15 +33,23 @@ def test_get_active_returns_pending_when_nothing_set():
     assert db_session.get_active_write_mode() == "pending"
 
 
-@pytest.mark.parametrize("explicit", ["audit", "pending"])
-def test_resolve_honours_explicit_argument(explicit):
-    assert db_session._resolve_write_mode(explicit) == explicit
+def test_resolve_honours_explicit_pending():
+    assert db_session._resolve_write_mode("pending") == "pending"
 
 
-@pytest.mark.parametrize("env_value", ["audit", "pending", "AUDIT", " pending "])
+def test_resolve_audit_falls_back_to_pending():
+    assert db_session._resolve_write_mode("audit") == "pending"
+
+
+@pytest.mark.parametrize("env_value", ["pending", " pending "])
 def test_resolve_honours_env_var(monkeypatch, env_value):
     monkeypatch.setenv("JAVDB_HISTORY_WRITE_MODE", env_value)
     assert db_session._resolve_write_mode(None) == env_value.strip().lower()
+
+
+def test_resolve_env_var_audit_falls_back_to_pending(monkeypatch):
+    monkeypatch.setenv("JAVDB_HISTORY_WRITE_MODE", "audit")
+    assert db_session._resolve_write_mode(None) == "pending"
 
 
 def test_explicit_overrides_env(monkeypatch):
@@ -56,8 +58,8 @@ def test_explicit_overrides_env(monkeypatch):
 
 
 def test_process_local_override_wins_over_default():
-    db_session.set_active_write_mode("audit")
-    assert db_session.get_active_write_mode() == "audit"
+    db_session.set_active_write_mode("pending")
+    assert db_session.get_active_write_mode() == "pending"
 
 
 def test_invalid_value_raises():

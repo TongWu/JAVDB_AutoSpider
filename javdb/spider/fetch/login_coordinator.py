@@ -338,6 +338,47 @@ class LoginCoordinator:
                 exc,
             )
 
+    def _reacquire_and_publish(
+        self, actual_proxy_name: str, cookie: str,
+    ) -> None:
+        """Best-effort re-acquire → publish for a deferred cookie.
+
+        Called after login succeeded on a proxy different from the
+        original lease's ``target_proxy_name``.  Uses the raw client API
+        (not :meth:`_try_acquire_login_lease`) to avoid cooldown/park
+        side effects — the login already succeeded, we just need to
+        broadcast.
+        """
+        client = state.global_login_state_client
+        if client is None:
+            return
+        try:
+            result = client.acquire_lease(
+                state.runtime_holder_id,
+                actual_proxy_name,
+                _DO_LEASE_TTL_MS,
+            )
+        except LoginStateUnavailable as exc:
+            logger.warning(
+                "Re-acquire lease failed for deferred publish (proxy=%s): %s "
+                "— cookie works locally, other runners may re-login "
+                "independently",
+                actual_proxy_name, exc,
+            )
+            return
+        if not result.acquired:
+            logger.warning(
+                "Re-acquire lease denied for deferred publish (proxy=%s, "
+                "holder=%s) — cookie works locally, other runners may "
+                "re-login independently",
+                actual_proxy_name, result.holder_id,
+            )
+            return
+        try:
+            _publish_login_state_to_do(actual_proxy_name, cookie)
+        finally:
+            self._release_login_lease()
+
     def _invalidate_do_state_if_owned(self) -> None:
         """Mark the current published cookie as stale.
 
@@ -600,7 +641,7 @@ class LoginCoordinator:
             publish_to_do=False,
         )
 
-    def _login_and_verify(self, worker) -> tuple[bool, str | None]:
+    def _login_and_verify(self, worker, *, defer_publish: bool = False) -> tuple[bool, str | None]:
         """Run a login refresh on *worker* and verify it via fixed pages.
 
         Updates the worker's request handler with the new cookie when login
@@ -626,7 +667,8 @@ class LoginCoordinator:
         worker._handler.config.javdb_session_cookie = new_cookie
 
         if not LOGIN_VERIFICATION_URLS:
-            _publish_login_state_to_do(worker.proxy_name, new_cookie)
+            if not defer_publish:
+                _publish_login_state_to_do(worker.proxy_name, new_cookie)
             return True, new_cookie
 
         verified = verify_login_via_fixed_pages(
@@ -634,7 +676,8 @@ class LoginCoordinator:
             urls=LOGIN_VERIFICATION_URLS,
         )
         if verified:
-            _publish_login_state_to_do(worker.proxy_name, new_cookie)
+            if not defer_publish:
+                _publish_login_state_to_do(worker.proxy_name, new_cookie)
             return True, new_cookie
 
         logger.warning(
@@ -657,11 +700,16 @@ class LoginCoordinator:
                 return worker
         return None
 
-    def _find_and_login_next_worker(self, exclude: set | None = None) -> int | None:
+    def _find_and_login_next_worker(self, exclude: set | None = None) -> tuple[int | None, str | None]:
         """Find the next proxy with remaining budget, login through it.
 
         On success sets ``logged_in_worker_id`` and updates the winning
-        worker's cookie.  Returns the worker id, or ``None`` on failure.
+        worker's cookie.  Returns ``(worker_id, cookie)`` on success, or
+        ``(None, None)`` on failure.
+
+        Publish is always deferred (``defer_publish=True``) so the caller
+        can re-acquire the DO lease with the correct ``target_proxy_name``
+        before broadcasting.
 
         Note: this method assumes the caller already holds the DO
         re-login lease (when DO is configured); it does not arbitrate
@@ -682,7 +730,7 @@ class LoginCoordinator:
                 "Switching login proxy to [%s] (logins: %d/%d)",
                 w.proxy_name, proxy_attempts, LOGIN_ATTEMPTS_PER_PROXY_LIMIT,
             )
-            verified, _ = self._login_and_verify(w)
+            verified, new_cookie = self._login_and_verify(w, defer_publish=True)
             if verified:
                 self.logged_in_worker_id = w.worker_id
                 logger.info(
@@ -690,9 +738,9 @@ class LoginCoordinator:
                     "becoming the logged-in worker for login-required pages",
                     w.proxy_name,
                 )
-                return w.worker_id
+                return w.worker_id, new_cookie
 
-        return None
+        return None, None
 
     # -- DO-lease-aware wrappers around the private login helpers ----------
 
@@ -746,17 +794,25 @@ class LoginCoordinator:
         Returns ``(next_worker_id, parked)``.  ``parked=True`` semantics
         match :meth:`_login_and_verify_with_lease` — caller must
         ``return`` immediately.  ``hint_proxy_name`` is recorded as the
-        lease's ``target_proxy_name`` for diagnostics; the lease is held
-        for the entire iteration regardless of which proxy ultimately
-        succeeds.
+        lease's ``target_proxy_name`` for the initial acquire; when the
+        actual login succeeds on a different proxy the lease is released
+        and re-acquired with the correct ``target_proxy_name`` before
+        publishing.
         """
         if not self._try_acquire_login_lease(hint_proxy_name):
             self._park_login_task_for_unknown_target(task, login_queue, hint_proxy_name)
             return None, True
         try:
-            next_wid = self._find_and_login_next_worker(exclude=exclude)
+            next_wid, cookie = self._find_and_login_next_worker(exclude=exclude)
         finally:
             self._release_login_lease()
+
+        if next_wid is not None and cookie:
+            success_worker = self._worker_for_id(next_wid)
+            actual_proxy = success_worker.proxy_name if success_worker else None
+            if actual_proxy:
+                self._reacquire_and_publish(actual_proxy, cookie)
+
         # P2-C: report the aggregate outcome of the multi-proxy sweep so
         # the cross-runner failure budget reflects this attempt.  We
         # attribute it to the proxy that ultimately succeeded

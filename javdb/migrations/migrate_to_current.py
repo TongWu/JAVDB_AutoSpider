@@ -320,7 +320,7 @@ def main() -> int:
             "Use --align-no-proxy to disable proxy.",
         )
 
-    import javdb.storage.db.db as db_mod
+    from javdb.storage.db.db_connection import HISTORY_DB_PATH, REPORTS_DB_PATH, OPERATIONS_DB_PATH
     from javdb.infra.config import use_sqlite, cfg
 
     from javdb.migrations.tools.migrate_v6_to_v7_split import _normalize_three_dbs
@@ -332,7 +332,7 @@ def main() -> int:
         verify_v8_layout,
     )
 
-    h, r, o = db_mod.HISTORY_DB_PATH, db_mod.REPORTS_DB_PATH, db_mod.OPERATIONS_DB_PATH
+    h, r, o = HISTORY_DB_PATH, REPORTS_DB_PATH, OPERATIONS_DB_PATH
     history_db = args.history_db or h
 
     # ── Bootstrap storage backend for --align-inventory-history ───────

@@ -239,7 +239,6 @@ class TestPikPakQueue:
 
     def test_returns_seeded_rows(self, admin_client, _isolate_sqlite):
         """Rows inserted into PikpakHistory appear in GET /api/ops/pikpak/queue."""
-        import javdb.storage.db.db as _db_mod
         import javdb.storage.db.db_connection as _conn_mod
 
         # Insert a row directly via SQL using the isolated DB path.

@@ -19,7 +19,8 @@ from typing import List
 import pytest
 
 import apps.cli.db.rollback as rollback_cli
-import javdb.storage.db.db as db_mod
+from javdb.storage.db.db_connection import get_db
+from javdb.storage.db.db_reports import db_create_report_session
 
 
 # ── helpers ──────────────────────────────────────────────────────────────
@@ -33,7 +34,7 @@ def _create_session(
     csv: str = "cli.csv",
     status: str = "in_progress",
 ) -> int:
-    sid = db_mod.db_create_report_session(
+    sid = db_create_report_session(
         report_type="DailyReport",
         report_date="2026-05-08",
         csv_filename=csv,
@@ -42,7 +43,7 @@ def _create_session(
         run_attempt=run_attempt,
     )
     if status != "in_progress":
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             conn.execute(
                 "UPDATE ReportSessions SET Status=? WHERE Id=?",
                 (status, sid),
@@ -77,7 +78,7 @@ class TestIncludeOrphanedGating:
         assert rc in (0, 4)
 
         # ReportSessions row for sweepable must still exist.
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             row = conn.execute(
                 "SELECT COUNT(*) AS n FROM ReportSessions WHERE CsvFilename='s.csv'"
             ).fetchone()
@@ -96,7 +97,7 @@ class TestIncludeOrphanedGating:
         ])
         assert rc in (0, 4)
 
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             t_left = conn.execute(
                 "SELECT COUNT(*) AS n FROM ReportSessions WHERE CsvFilename='ti.csv'"
             ).fetchone()["n"]
@@ -123,7 +124,7 @@ class TestIncludeOrphanedGating:
         ])
 
         assert rc == 2
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             remaining = conn.execute(
                 "SELECT COUNT(*) AS n FROM ReportSessions WHERE Id IN (?, ?)",
                 (a, b),
@@ -146,7 +147,7 @@ class TestCrossDayReject:
         assert rc == 2
 
         # Old session must still exist.
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             row = conn.execute(
                 "SELECT COUNT(*) AS n FROM ReportSessions WHERE Id=?",
                 (old,),
@@ -182,7 +183,7 @@ class TestRunIdPrimaryPath:
         ])
         assert rc in (0, 4)
 
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             x_left = conn.execute(
                 "SELECT COUNT(*) AS n FROM ReportSessions WHERE RunId='r-X'"
             ).fetchone()["n"]
@@ -250,7 +251,7 @@ class TestFailureReasonFromCli:
         ])
         # operations scope only, so the ReportSessions row remains.
         assert rc in (0, 4)
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             row = conn.execute(
                 "SELECT FailureReason FROM ReportSessions WHERE Id=?",
                 (sid,),

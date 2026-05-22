@@ -20,7 +20,8 @@ import os
 
 import pytest
 
-import javdb.storage.db.db as db_mod
+from javdb.storage.db.db_session import SESSION_ID_PATTERN as _SESSION_ID_PATTERN
+from javdb.storage.db.db_reports import db_create_report_session
 import javdb.infra.config as config_helper
 
 
@@ -90,7 +91,7 @@ class TestKillSwitchBlocksDbCreateReportSession:
         self, kill_switch
     ):
         with pytest.raises(RuntimeError) as exc_info:
-            db_mod.db_create_report_session(
+            db_create_report_session(
                 report_type='daily',
                 report_date='2026-05-08',
                 csv_filename='kill-switch.csv',
@@ -109,11 +110,11 @@ class TestKillSwitchBlocksDbCreateReportSession:
         # switch itself isn't engaged here, so storage_backend() falls
         # through to the env var resolution path.
         monkeypatch.setenv('STORAGE_BACKEND', 'sqlite')
-        sid = db_mod.db_create_report_session(
+        sid = db_create_report_session(
             report_type='daily',
             report_date='2026-05-08',
             csv_filename='kill-switch-off.csv',
             run_id='non-kill-run',
             run_attempt=1,
         )
-        assert isinstance(sid, str) and db_mod._SESSION_ID_PATTERN.match(sid)
+        assert isinstance(sid, str) and _SESSION_ID_PATTERN.match(sid)

@@ -38,7 +38,7 @@ from javdb.storage.rollback.session_helpers import (
     read_session_pre_state,
     write_github_output,
 )
-from javdb.storage.db import db as _db
+import javdb.storage.db.db_connection as _db_conn
 from javdb.storage.db.db_connection import get_db
 from javdb.storage.db.db_reports import db_pending_session_stats
 from javdb.storage.db.db_rollback import db_rollback_session
@@ -57,9 +57,8 @@ _CROSS_DAY_REJECT_HOURS = 1
 class RollbackRequest:
     """Inputs to :func:`plan_rollback` / :func:`apply_rollback`.
 
-    Mirrors the CLI flags 1:1.  ``include_pending`` and
-    ``restore_from_audit`` are HTTP-friendly aliases that map onto the
-    underlying CLI semantics.
+    Mirrors the CLI flags 1:1.  ``include_pending`` is an HTTP-friendly
+    alias that maps onto the underlying CLI semantics.
     """
 
     session_id: Optional[str] = None
@@ -74,7 +73,6 @@ class RollbackRequest:
     shard_date: Optional[str] = None
     no_claim_rollback: bool = False
     include_pending: bool = True
-    restore_from_audit: bool = True
     claim_rollback_attempts: int = 3
 
 
@@ -138,7 +136,7 @@ def _detect_cross_day(
     cutoff = run_started_dt - timedelta(hours=_CROSS_DAY_REJECT_HOURS)
     cutoff_str = cutoff.strftime("%Y-%m-%d %H:%M:%S")
 
-    with get_db(_db.REPORTS_DB_PATH) as conn:
+    with get_db(_db_conn.REPORTS_DB_PATH) as conn:
         row = conn.execute(
             "SELECT DateTimeCreated FROM ReportSessions WHERE Id=?",
             (session_id,),
@@ -505,7 +503,7 @@ def _build_namespace(
 def _session_exists(session_id: str) -> bool:
     """Probe ReportSessions for *session_id*."""
     try:
-        with get_db(_db.REPORTS_DB_PATH) as conn:
+        with get_db(_db_conn.REPORTS_DB_PATH) as conn:
             row = conn.execute(
                 "SELECT 1 FROM ReportSessions WHERE Id=? LIMIT 1",
                 (session_id,),

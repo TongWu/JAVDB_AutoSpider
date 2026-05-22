@@ -2545,11 +2545,6 @@
             "default": true,
             "title": "Include Pending",
             "type": "boolean"
-          },
-          "restore_from_audit": {
-            "default": true,
-            "title": "Restore From Audit",
-            "type": "boolean"
           }
         },
         "title": "SessionRollbackPayload",
