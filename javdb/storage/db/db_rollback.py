@@ -49,5 +49,5 @@ def db_rollback_session(session_id, **kwargs):
 
 def db_resume_finalizing_session(session_id, **kwargs):
     """Resume a session stuck in 'finalizing' status. Delegates to db.py."""
-    from javdb.storage.db.db import db_resume_finalizing_session as _f
+    from javdb.storage.db.db_history_write import db_resume_finalizing_session as _f
     return _f(session_id, **kwargs)

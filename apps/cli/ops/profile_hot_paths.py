@@ -290,7 +290,7 @@ def bench_db_load_history(iterations: int) -> Dict[str, float]:
 
 def bench_compute_indicators(iterations: int) -> Dict[str, float]:
     """_compute_indicators on synthetic torrent tuples (pure CPU)."""
-    from javdb.storage.db.db import _compute_indicators
+    from javdb.storage.db.db_history_write import _compute_indicators
     torrents = [
         (1, 1, 1080),   # subtitle
         (1, 0, 720),    # hacked_subtitle
