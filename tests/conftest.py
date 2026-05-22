@@ -20,7 +20,6 @@ sys.modules['pikpakapi'] = mock_pikpakapi
 import pytest
 import tempfile
 import shutil
-import javdb.storage.db.db as _db_mod
 import javdb.infra.config as _cfg_mod
 import javdb.spider.services.dedup as _dedup_mod
 import javdb.storage.db.db_connection as _db_conn_mod
@@ -46,17 +45,14 @@ def _isolate_sqlite(tmp_path):
     """
     test_db = str(tmp_path / "test.db")
 
-    orig_db_path = _db_mod.DB_PATH
-    orig_history = _db_mod.HISTORY_DB_PATH
-    orig_reports = _db_mod.REPORTS_DB_PATH
-    orig_operations = _db_mod.OPERATIONS_DB_PATH
+    orig_db_path = _db_conn_mod.DB_PATH
+    orig_history = _db_conn_mod.HISTORY_DB_PATH
+    orig_reports = _db_conn_mod.REPORTS_DB_PATH
+    orig_operations = _db_conn_mod.OPERATIONS_DB_PATH
     orig_override = _cfg_mod._storage_mode_override
     orig_storage_backend = os.environ.get("STORAGE_BACKEND")
 
-    _db_mod.DB_PATH = test_db
-    _db_mod.HISTORY_DB_PATH = test_db
-    _db_mod.REPORTS_DB_PATH = test_db
-    _db_mod.OPERATIONS_DB_PATH = test_db
+    _db_conn_mod.DB_PATH = test_db
     _cfg_mod._storage_mode_override = 'db'
     # The local config may default to D1/dual, but this fixture promises SQLite.
     os.environ["STORAGE_BACKEND"] = "sqlite"
@@ -82,15 +78,15 @@ def _isolate_sqlite(tmp_path):
     _dedup_mod._db_initialised = False
     _dedup_mod._pending_paths_cache = None
 
-    _db_mod.init_db(test_db)
+    _db_migrations_mod.init_db(test_db)
 
     yield test_db
 
-    _db_mod.close_db()
-    _db_mod.DB_PATH = orig_db_path
-    _db_mod.HISTORY_DB_PATH = orig_history
-    _db_mod.REPORTS_DB_PATH = orig_reports
-    _db_mod.OPERATIONS_DB_PATH = orig_operations
+    _db_conn_mod.close_db()
+    _db_conn_mod.DB_PATH = orig_db_path
+    _db_conn_mod.HISTORY_DB_PATH = orig_history
+    _db_conn_mod.REPORTS_DB_PATH = orig_reports
+    _db_conn_mod.OPERATIONS_DB_PATH = orig_operations
     _db_conn_mod.HISTORY_DB_PATH = orig_conn_history
     _db_conn_mod.REPORTS_DB_PATH = orig_conn_reports
     _db_conn_mod.OPERATIONS_DB_PATH = orig_conn_operations
