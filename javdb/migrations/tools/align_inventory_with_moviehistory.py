@@ -608,6 +608,13 @@ def _align_eff_denominator(
 
 
 def run_alignment(args: argparse.Namespace) -> int:
+    if not args.dry_run and db_upsert_history is _audit_retired_stub:
+        logger.error(
+            "db_upsert_history was removed by ADR-005 PR-4. "
+            "This tool cannot write history in non-dry-run mode until "
+            "it is rewritten to use the staging+commit path."
+        )
+        raise SystemExit(1)
     init_db(force=True)
     history = db_load_history()
     inventory = db_load_rclone_inventory()
