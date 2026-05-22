@@ -162,7 +162,7 @@ def _logical_name_for(db_path: str) -> str:
 # Legacy single-DB path — kept for migration source detection
 DB_PATH = cfg('SQLITE_DB_PATH', os.path.join(_REPORTS_DIR, 'javdb_autospider.db'))
 
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 
 # ── Connection management ────────────────────────────────────────────────
 
@@ -1563,6 +1563,13 @@ def _rebuild_table_with_new_ddl(
         conn.execute("PRAGMA foreign_keys = ON")
 
 
+def _migrate_v14_drop_audit_tables(conn: sqlite3.Connection) -> None:
+    """v14: drop MovieHistoryAudit / TorrentHistoryAudit per ADR-005."""
+    conn.execute("DROP TABLE IF EXISTS MovieHistoryAudit")
+    conn.execute("DROP TABLE IF EXISTS TorrentHistoryAudit")
+    logger.info("v14 migration: dropped audit tables")
+
+
 def _dedupe_session_keyed_stats_rows(conn: sqlite3.Connection) -> None:
     """Collapse duplicate ``(SessionId)`` rows in per-session stats tables.
 
@@ -1659,6 +1666,9 @@ def _init_single_db(db_path: str, ddl: str, *, force: bool = False):
 
         if current > 0 and current < 13:
             _migrate_session_id_to_text(conn)
+
+        if current > 0 and current < 14:
+            _migrate_v14_drop_audit_tables(conn)
 
         if current == 0:
             conn.execute("INSERT INTO SchemaVersion (Version) VALUES (?)", (SCHEMA_VERSION,))

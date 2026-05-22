@@ -123,9 +123,7 @@ def batch_update_movie_actors(
     good data with empty values.
 
     When *session_id* is set, each affected MovieHistory row also gets
-    ``SessionId=?`` and a companion ``MovieHistoryAudit`` row capturing
-    the prior state. The audit callbacks are injected from
-    :mod:`javdb.storage.db.db` to avoid an import cycle.
+    ``SessionId=?`` stamped.
     """
     if not updates:
         return 0
@@ -333,23 +331,6 @@ class HistoryRepo:
     def stage_torrent(self, session_id: str, payload: Dict) -> str:
         """Append a row to PendingTorrentHistoryWrites. Returns Seq."""
         return self.stage_history_write(session_id, "torrent", payload)
-
-    def upsert_history(
-        self,
-        href: str,
-        video_code: str,
-        magnet_links: Optional[Dict[str, str]] = None,
-        **kwargs,
-    ):
-        """Audit-mode live upsert wrapper for remaining history callers."""
-        from javdb.storage.db.db_history_write import db_upsert_history
-        return db_upsert_history(
-            href,
-            video_code,
-            magnet_links,
-            db_path=self._db_path,
-            **kwargs,
-        )
 
     def commit_session(self, session_id: str, **kwargs) -> dict:
         """Drain Pending* tables into live MovieHistory / TorrentHistory."""
