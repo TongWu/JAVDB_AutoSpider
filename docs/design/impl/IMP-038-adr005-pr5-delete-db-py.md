@@ -3,6 +3,7 @@
 **Related:** [ADR-005](../adr/ADR-005-db-py-retirement-and-repo-pattern.md)
 **Spec:** [2026-05-22-adr005-pr5-delete-db-py-design](../../superpowers/specs/2026-05-22-adr005-pr5-delete-db-py-design.md)
 **Branch:** `adr005-pr5-delete-db-py`
+**Status:** Implemented on 2026-05-22. `javdb/storage/db/db.py` is deleted; `javdb/storage/db/__init__.py` is the package public API; ADR-005 English/Chinese and IMP-037 were updated to reference PR-5 completion.
 
 ## Overview
 
@@ -262,8 +263,8 @@ from .db_session import (
 3. `python -c "from javdb.storage.db import get_db, init_db, generate_session_id"` succeeds
 
 **Also:**
-- Update ADR-005 progress section (both `.md` and `.zh.md`)
-- Update IMP-037 status to reference PR-5 completion
+- ✅ Update ADR-005 progress section (both `.md` and `.zh.md`)
+- ✅ Update IMP-037 status to reference PR-5 completion
 
 **Verification:** Full `pytest` passes, no import references to `javdb.storage.db.db` remain
 
