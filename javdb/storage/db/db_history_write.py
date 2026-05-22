@@ -70,7 +70,7 @@ def _ensure_imports():
             _has_meaningful_actor_data as hmad,
             batch_update_movie_actors as buam,
         )
-        from javdb.storage.db.db import _generate_integer_id as gii
+        from javdb.storage.db.db_session import generate_integer_id as gii
         _get_db = get_db
         _HISTORY_DB_PATH = HISTORY_DB_PATH
         _REPORTS_DB_PATH = REPORTS_DB_PATH

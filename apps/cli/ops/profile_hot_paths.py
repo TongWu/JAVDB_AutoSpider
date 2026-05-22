@@ -243,14 +243,14 @@ def _setup_in_memory_db() -> str:
     # path the get_db() routing layer can consistently reopen.
     fd, path = tempfile.mkstemp(suffix=".db", prefix="profile_hot_paths_")
     os.close(fd)
-    from javdb.storage.db.db import init_db
+    from javdb.storage.db.db_migrations import init_db
     init_db(db_path=path, force=True)
     return path
 
 
 def _seed_history(db_path: str, n_movies: int) -> None:
     """Insert ``n_movies`` synthetic rows into MovieHistory + TorrentHistory."""
-    from javdb.storage.db.db import get_db
+    from javdb.storage.db.db_connection import get_db
     with get_db(db_path) as conn:
         for i in range(n_movies):
             cur = conn.execute(

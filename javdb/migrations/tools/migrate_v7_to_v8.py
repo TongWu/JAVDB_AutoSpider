@@ -53,7 +53,7 @@ from javdb.infra.logging import setup_logging, get_logger  # noqa: E402
 setup_logging()
 logger = get_logger(__name__)
 
-from javdb.storage.db.db import moviehistory_actor_layout_ok  # noqa: E402
+from javdb.storage.db.db_migrations import moviehistory_actor_layout_ok  # noqa: E402
 
 EXPECTED_VERSION = 9
 
@@ -407,7 +407,7 @@ def run_actor_backfill(
     use_cf_bypass: bool,
 ) -> int:
     from javdb.infra.config import use_sqlite
-    from javdb.storage.db.db import init_db
+    from javdb.storage.db.db_migrations import init_db
 
     if not use_sqlite():
         logger.error("SQLite storage mode required.")
