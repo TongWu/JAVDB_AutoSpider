@@ -62,7 +62,7 @@ javdb/            Python namespace (PEP 420 — no top-level __init__.py)
 └── rust_core/    Rust crate source (PyO3 + maturin; installs as javdb.rust_core)
 ```
 
-Canonical layout established by [ADR-007](docs/design/adr/archive/ADR-007-monorepo-restructure-2026-05.md); all legacy paths (`utils/`, `api/`, `migration/`, `legacy/`, `scripts/spider/`, `scripts/ingestion/`, root `compat.py`/`pipeline.py`) were retired in Phase 3.
+Canonical layout established by [ADR-007](docs/design/_archive/ADR-007-Monorepo-Restructure/ADR-007-monorepo-restructure-2026-05.md); all legacy paths (`utils/`, `api/`, `migration/`, `legacy/`, `scripts/spider/`, `scripts/ingestion/`, root `compat.py`/`pipeline.py`) were retired in Phase 3.
 
 ## Configuration
 

@@ -34,7 +34,7 @@ directory; restored to this location for the reasons below.
 ## See also
 
 - [`../spider/`](../spider/) — canonical spider implementation
-- [ADR-007](../../docs/design/adr/archive/ADR-007-monorepo-restructure-2026-05.md)
+- [ADR-007](../../docs/design/_archive/ADR-007-Monorepo-Restructure/ADR-007-monorepo-restructure-2026-05.md)
   — restructure decision that retired the original `legacy/` location
 - [`../../docs/design/architecture/python-tree-2026-05.md`](../../docs/design/architecture/python-tree-2026-05.md)
   — current canonical tree map

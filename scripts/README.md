@@ -24,5 +24,5 @@ This directory is **no longer the home of user-facing CLIs** — after ADR-007 P
 
 ## Related
 
-- [ADR-007 — Monorepo restructure](../docs/design/adr/archive/ADR-007-monorepo-restructure-2026-05.md)
+- [ADR-007 — Monorepo restructure](../docs/design/_archive/ADR-007-Monorepo-Restructure/ADR-007-monorepo-restructure-2026-05.md)
 - [`apps/cli/README.md`](../apps/cli/README.md)

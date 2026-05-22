@@ -1,7 +1,7 @@
 # ADR-005 PR-6: Internalize Shell Modules
 
-**Parent:** [ADR-005](../../design/adr/ADR-005-db-py-retirement-and-repo-pattern.md)
-**Plan:** [IMP-ADR005-03](../../design/impl/archive/IMP-ADR005-03-internalize-shell-modules.md)
+**Parent:** [ADR-005](../../design/_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md)
+**Plan:** [IMP-ADR005-03](../../design/_archive/ADR-005-Db-Py-Retirement/IMP-ADR005-03-internalize-shell-modules.md)
 **Scope:** Rename 9 shell modules to `_db_*.py`, expand `__init__.py` as public API, migrate 254 import statements across 58 files.
 
 ## Current State
