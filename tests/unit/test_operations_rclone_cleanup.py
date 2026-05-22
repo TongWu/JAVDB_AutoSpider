@@ -67,7 +67,7 @@ class TestRcloneLast:
         assert body["dedup_completed"] == 0
         assert body["total_freed_bytes"] == 0
 
-    def test_returns_seeded_inventory_count(self, admin_client, _isolate_sqlite):
+    def test_returns_seeded_inventory_count(self, admin_client):
         """Seeded RcloneInventory rows appear in inventory_count."""
         import javdb.storage.db.db_connection as _conn_mod
 
@@ -99,7 +99,7 @@ class TestRcloneLast:
         assert body["inventory_count"] == 2
         assert body["last_scan_time"] == "2025-01-20 12:00:00"
 
-    def test_dedup_counts_and_freed_bytes(self, admin_client, _isolate_sqlite):
+    def test_dedup_counts_and_freed_bytes(self, admin_client):
         """Seeded DedupRecords are counted correctly."""
         import javdb.storage.db.db_connection as _conn_mod
 
@@ -271,6 +271,22 @@ class TestCleanupStaleSessions:
         assert body["sessions_found"] == 2
         assert body["sessions_cleaned"] == 0
         assert len(body["details"]) == 2
+
+    def test_invalid_scope_returns_422(self, admin_client):
+        """A scope outside the allowed enum is rejected before the handler runs."""
+        resp = admin_client.post(
+            "/api/ops/cleanup/stale-sessions",
+            json={"scope": "bogus"},
+        )
+        assert resp.status_code == 422
+
+    def test_non_positive_older_than_hours_returns_422(self, admin_client):
+        """older_than_hours must be strictly greater than 0."""
+        resp = admin_client.post(
+            "/api/ops/cleanup/stale-sessions",
+            json={"older_than_hours": -1},
+        )
+        assert resp.status_code == 422
 
     def test_apply_returns_200_with_sessions_cleaned(self, admin_client):
         """POST dry_run=False → 200 with sessions_cleaned count."""

@@ -93,16 +93,17 @@ def _make_mock_transport():
                 json={
                     "workflow_runs": [
                         {
-                            "id": 102,
-                            "name": "Daily",
-                            "display_title": "Daily pipeline",
-                            "status": "in_progress",
-                            "conclusion": None,
-                            "event": "schedule",
-                            "created_at": "2024-01-02T00:00:00Z",
-                            "updated_at": "2024-01-02T00:05:00Z",
-                            "head_sha": "def456",
-                            "run_number": 10,
+                            "id": 101,
+                            "workflow_id": 1,
+                            "name": "CI",
+                            "display_title": "Fix bug",
+                            "status": "completed",
+                            "conclusion": "success",
+                            "event": "push",
+                            "created_at": "2024-01-01T10:00:00Z",
+                            "updated_at": "2024-01-01T10:30:00Z",
+                            "head_sha": "abc123",
+                            "run_number": 5,
                         }
                     ]
                 },

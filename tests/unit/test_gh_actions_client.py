@@ -238,7 +238,7 @@ class TestGetRunLogsUrl:
             c.get_run_logs_url(999)
         c.close()
 
-    def test_302_missing_location_returns_empty(self):
+    def test_302_missing_location_raises(self):
         def handler(req):
             if "/runs/" in req.url.path and req.url.path.endswith("/logs"):
                 return httpx.Response(302, headers={})
@@ -247,9 +247,9 @@ class TestGetRunLogsUrl:
         c = GitHubActionsClient(
             token="t", repo="o/r", transport=httpx.MockTransport(handler)
         )
-        url = c.get_run_logs_url(101)
+        with pytest.raises(httpx.HTTPError):
+            c.get_run_logs_url(101)
         c.close()
-        assert url == ""
 
 
 class TestAuthHeader:
