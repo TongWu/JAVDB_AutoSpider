@@ -214,6 +214,7 @@
         "properties": {
           "older_than_hours": {
             "default": 6.0,
+            "exclusiveMinimum": 0.0,
             "title": "Older Than Hours",
             "type": "number"
           },
@@ -276,11 +277,18 @@
           },
           "older_than_hours": {
             "default": 48.0,
+            "exclusiveMinimum": 0.0,
             "title": "Older Than Hours",
             "type": "number"
           },
           "scope": {
             "default": "all",
+            "enum": [
+              "reports",
+              "operations",
+              "history",
+              "all"
+            ],
             "title": "Scope",
             "type": "string"
           }

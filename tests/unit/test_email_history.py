@@ -94,6 +94,18 @@ class TestAppendEmailHistory:
         rows, _ = repo.list_email_history()
         assert rows[0]["AttachmentNames"] is None
 
+    def test_append_invalid_status_raises(self, _isolate_sqlite):
+        repo = _repo()
+        with pytest.raises(ValueError):
+            repo.append_email_history(None, "a@b.com", "sub", "bogus")
+
+    def test_append_invalid_created_by_raises(self, _isolate_sqlite):
+        repo = _repo()
+        with pytest.raises(ValueError):
+            repo.append_email_history(
+                None, "a@b.com", "sub", "sent", created_by="bogus"
+            )
+
 
 class TestListEmailHistory:
     """list_email_history returns rows newest-first and respects status filter."""

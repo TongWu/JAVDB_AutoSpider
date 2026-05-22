@@ -136,16 +136,23 @@ def list_workflows(
     client = _get_gh_client()
     try:
         raw_workflows = client.list_workflows()
+        # Fetch recent repo-wide runs once and bucket by workflow_id to avoid
+        # an N+1 call per workflow. Runs come back newest-first, so the first
+        # run seen for a given workflow id is its latest.
+        latest_by_wf: dict[int, dict] = {}
+        for run in client.list_runs(per_page=100):
+            wf_id = run.get("workflow_id")
+            if wf_id is not None and wf_id not in latest_by_wf:
+                latest_by_wf[wf_id] = run
         result: list[WorkflowItem] = []
         for wf in raw_workflows:
-            runs = client.list_runs(workflow_id=wf["id"], per_page=1)
-            last_run = _run_to_item(runs[0]) if runs else None
+            run = latest_by_wf.get(wf["id"])
             result.append(
                 WorkflowItem(
                     id=wf["id"],
                     name=wf.get("name", ""),
                     state=wf.get("state"),
-                    last_run=last_run,
+                    last_run=_run_to_item(run) if run else None,
                 )
             )
         return WorkflowsResponse(workflows=result)

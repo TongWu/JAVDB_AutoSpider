@@ -277,6 +277,12 @@ class OperationsRepo:
     their own conn.
     """
 
+    # Hard caps / whitelists enforced at the repository layer as defence in
+    # depth — HTTP callers are also bounded by FastAPI Query validators.
+    _MAX_PAGE_LIMIT = 200
+    _EMAIL_STATUSES = frozenset({"sent", "failed", "resent"})
+    _EMAIL_CREATED_BY = frozenset({"pipeline", "manual", "resend"})
+
     def __init__(self, *, db_path: Optional[str] = None) -> None:
         self._db_path = db_path
 
@@ -397,6 +403,7 @@ class OperationsRepo:
             ORDER BY Id DESC
             LIMIT ?
         """
+        limit = max(1, min(limit, self._MAX_PAGE_LIMIT))
         fetch_limit = limit + 1
         with get_db(self._db_path or OPERATIONS_DB_PATH) as conn:
             rows = conn.execute(sql, params + [fetch_limit]).fetchall()
@@ -548,6 +555,10 @@ class OperationsRepo:
             attachments: List of attachment filenames (stored as JSON).
             created_by: 'pipeline' | 'manual' | 'resend'.
         """
+        if status not in self._EMAIL_STATUSES:
+            raise ValueError(f"invalid email status: {status!r}")
+        if created_by not in self._EMAIL_CREATED_BY:
+            raise ValueError(f"invalid created_by: {created_by!r}")
         from javdb.storage.db.db_connection import get_db, OPERATIONS_DB_PATH
         now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
         attachment_names = json.dumps(attachments) if attachments is not None else None
@@ -609,6 +620,7 @@ class OperationsRepo:
             ORDER BY Id DESC
             LIMIT ?
         """
+        limit = max(1, min(limit, self._MAX_PAGE_LIMIT))
         fetch_limit = limit + 1
         with get_db(self._db_path or OPERATIONS_DB_PATH) as conn:
             rows = conn.execute(sql, params + [fetch_limit]).fetchall()
@@ -651,7 +663,7 @@ class OperationsRepo:
         from javdb.storage.db.db_connection import get_db, OPERATIONS_DB_PATH
         now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
         with get_db(self._db_path or OPERATIONS_DB_PATH) as conn:
-            conn.execute(
+            cur = conn.execute(
                 """
                 UPDATE EmailNotificationHistory
                 SET Status = 'resent', ResentAt = ?
@@ -659,3 +671,5 @@ class OperationsRepo:
                 """,
                 (now, record_id),
             )
+            if (cur.rowcount or 0) == 0:
+                raise ValueError(f"email history record not found: {record_id}")

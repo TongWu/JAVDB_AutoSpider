@@ -23,7 +23,7 @@ import httpx
 from javdb.infra.config import cfg
 
 _GH_REPO_URL_RE = re.compile(
-    r"github\.com[:/](?P<owner>[^/]+)/(?P<name>[^/]+?)(?:\.git)?$"
+    r"github\.com[:/](?P<owner>[^/]+)/(?P<name>[^/]+?)(?:\.git)?/?$"
 )
 
 
@@ -147,7 +147,12 @@ class GitHubActionsClient:
             follow_redirects=False,
         )
         if resp.status_code == 302:
-            return resp.headers.get("location", "")
+            location = resp.headers.get("location")
+            if not location:
+                raise httpx.HTTPError(
+                    "GitHub logs redirect (302) missing Location header"
+                )
+            return location
         resp.raise_for_status()
         return ""
 
