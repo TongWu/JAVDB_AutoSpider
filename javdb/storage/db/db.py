@@ -57,35 +57,9 @@ from javdb.storage.repos.stats_repo import StatsRepo
 logger = get_logger(__name__)
 
 # MR-3 (multi-runtime): backend-agnostic exception tuples.
-#
-# Several best-effort code paths catch ``sqlite3.OperationalError`` to mean
-# "table / column doesn't exist on a legacy schema, fall back" and
-# ``sqlite3.IntegrityError`` to mean "UNIQUE conflict, a concurrent run
-# already did this". Under ``STORAGE_BACKEND=d1`` the connection is a
-# ``D1Connection`` whose ``execute`` raises ``D1PermanentError`` (HTTP 400
-# application-level error from Cloudflare) for BOTH situations — it never
-# raises the ``sqlite3.*`` types. Without broadening the catch, a missing
-# table or a UNIQUE conflict on D1 would propagate out of those
-# best-effort paths and abort an otherwise-recoverable rollback / verify.
-#
-# ``D1PermanentError`` (not the ``D1Error`` base) is intentionally the only
-# D1 type added: ``D1TransientError`` means retries were already exhausted
-# by ``_post_with_retry`` and must NOT be silently swallowed as "legacy
-# schema" / "concurrent run". The import is guarded so a sqlite-only
-# deployment without the d1_client deps still loads db.py.
-try:  # pragma: no cover - import wiring
-    from javdb.storage.d1_client import (
-        D1PermanentError as _D1PermanentError,
-    )
-    _DB_OPERATIONAL_ERRORS: Tuple[type, ...] = (
-        sqlite3.OperationalError, _D1PermanentError,
-    )
-    _DB_INTEGRITY_ERRORS: Tuple[type, ...] = (
-        sqlite3.IntegrityError, _D1PermanentError,
-    )
-except Exception:  # noqa: BLE001 - d1_client optional in sqlite-only installs
-    _DB_OPERATIONAL_ERRORS = (sqlite3.OperationalError,)
-    _DB_INTEGRITY_ERRORS = (sqlite3.IntegrityError,)
+# Canonical definitions live in db_connection.py; re-exported here for
+# backwards compatibility.
+from .db_connection import _DB_OPERATIONAL_ERRORS, _DB_INTEGRITY_ERRORS
 
 _REPORTS_DIR = cfg('REPORTS_DIR', 'reports')
 
@@ -2083,30 +2057,9 @@ def db_load_history(db_path: Optional[str] = None, phase: Optional[int] = None) 
 
 
 # ── Backend batch helper ───────────────────────────────────────────────
-
-
-def _execute_backend_batch(conn, statements: List[Tuple[str, Tuple[Any, ...]]]):
-    if not statements:
-        return []
-    batch = getattr(conn, "batch_execute", None)
-    if callable(batch):
-        return batch(statements)
-    cursors = []
-    for sql, params in statements:
-        cursors.append(conn.execute(sql, params))
-    return cursors
-
-
-def _row_to_jsonable_dict(row) -> dict:
-    """Convert a sqlite3.Row / dict / mapping into a plain JSON-friendly dict."""
-    if row is None:
-        return {}
-    if isinstance(row, dict):
-        return dict(row)
-    try:
-        return {k: row[k] for k in row.keys()}
-    except Exception:
-        return dict(row)
+# Canonical definitions live in db_connection.py; re-exported here for
+# backwards compatibility.
+from .db_connection import _execute_backend_batch, _row_to_jsonable_dict
 
 
 def _upsert_one_history_on_conn(
