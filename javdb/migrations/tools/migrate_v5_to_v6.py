@@ -197,7 +197,7 @@ def main():
 
     logger.info("Running migration via init_db() ...")
     import javdb.storage.db.db_connection as _db_conn
-    from javdb.storage.db.db_migrations import init_db
+    from javdb.storage.db import init_db
     _db_conn.DB_PATH = db_path
     init_db(db_path, force=True)
 

@@ -317,8 +317,7 @@ def load_inventory_as_folder_structure(
 
     if use_sqlite():
         try:
-            from javdb.storage.db.db_operations import db_load_rclone_inventory
-            from javdb.storage.db.db_connection import current_backend
+            from javdb.storage.db import db_load_rclone_inventory, current_backend
             raw = db_load_rclone_inventory()
             for entries in raw.values():
                 rows.extend(entries)
@@ -559,7 +558,7 @@ def validate_dedup_records_against_inventory() -> Tuple[int, List[dict]]:
     Returns ``(orphan_count, orphan_rows)``. Zero remote calls are made.
     """
     try:
-        from javdb.storage.db.db_operations import (
+        from javdb.storage.db import (
             db_load_rclone_inventory,
             db_load_dedup_records,
             db_mark_orphan_records,
@@ -742,7 +741,7 @@ def run_validate_inventory(
 
     Returns 0 on success, 1 on failure.
     """
-    from javdb.storage.db.db_operations import (
+    from javdb.storage.db import (
         db_load_rclone_inventory,
         db_delete_rclone_inventory_paths,
     )

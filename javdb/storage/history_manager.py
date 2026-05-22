@@ -52,7 +52,7 @@ def _ensure_db():
     with _db_init_lock:
         if _db_initialised:
             return
-        from javdb.storage.db.db_migrations import init_db
+        from javdb.storage.db import init_db
         init_db()
         _db_initialised = True
 

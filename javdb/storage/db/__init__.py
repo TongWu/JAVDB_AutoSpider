@@ -52,6 +52,7 @@ from .db_session import (  # noqa: F401
     SESSION_ID_PATTERN,
     _SESSION_ID_SENTINEL,
     _resolve_session_id,
+    _resolve_write_mode,
 )
 
 # ── History reads ──────────────────────────────────────────────────────
@@ -78,6 +79,12 @@ from .db_reports import (  # noqa: F401
     db_get_session_status,
     db_insert_report_rows,
     db_find_stale_pending_sessions,
+    db_find_in_progress_sessions,
+    db_find_in_progress_session_ids_for_run_csv,
+    db_find_sessions_by_run,
+    db_get_session_run_identity,
+    db_mark_session_committed,
+    db_mark_session_failed,
     db_get_latest_session_local,
     db_pending_session_stats,
 )
@@ -92,6 +99,7 @@ from .db_operations import (  # noqa: F401
     db_open_rclone_staging,
     db_append_rclone_staging,
     db_swap_rclone_inventory,
+    db_merge_rclone_inventory_from_stage,
     db_drop_rclone_staging,
     db_save_dedup_records,
     db_load_dedup_records,
@@ -101,6 +109,7 @@ from .db_operations import (  # noqa: F401
     db_mark_orphan_records,
     db_cleanup_deleted_records,
     db_upsert_align_no_exact_match,
+    db_load_align_no_exact_match_codes,
     db_delete_align_no_exact_match,
 )
 
@@ -149,6 +158,7 @@ __all__ = [
     "generate_session_id",
     "generate_integer_id",
     "SESSION_ID_PATTERN",
+    "_resolve_write_mode",
     # db_history_read
     "db_load_history",
     "db_load_history_snapshot",
@@ -165,6 +175,12 @@ __all__ = [
     "db_get_session_status",
     "db_insert_report_rows",
     "db_find_stale_pending_sessions",
+    "db_find_in_progress_sessions",
+    "db_find_in_progress_session_ids_for_run_csv",
+    "db_find_sessions_by_run",
+    "db_get_session_run_identity",
+    "db_mark_session_committed",
+    "db_mark_session_failed",
     "db_get_latest_session_local",
     "db_pending_session_stats",
     # db_operations
@@ -176,6 +192,7 @@ __all__ = [
     "db_open_rclone_staging",
     "db_append_rclone_staging",
     "db_swap_rclone_inventory",
+    "db_merge_rclone_inventory_from_stage",
     "db_drop_rclone_staging",
     "db_save_dedup_records",
     "db_load_dedup_records",
@@ -185,6 +202,7 @@ __all__ = [
     "db_mark_orphan_records",
     "db_cleanup_deleted_records",
     "db_upsert_align_no_exact_match",
+    "db_load_align_no_exact_match_codes",
     "db_delete_align_no_exact_match",
     # db_stats
     "db_save_spider_stats",
