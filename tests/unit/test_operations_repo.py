@@ -19,7 +19,7 @@ class TestOperationsRepoConstruction:
 class TestOperationsRepoRcloneInventory:
 
     @patch(
-        "javdb.storage.db.db_operations.db_load_rclone_inventory",
+        "javdb.storage.db.db_load_rclone_inventory",
         return_value={"ABC-123": [{"VideoCode": "ABC-123"}]},
     )
     def test_load_rclone_inventory_delegates(self, mock_fn):
@@ -29,7 +29,7 @@ class TestOperationsRepoRcloneInventory:
         mock_fn.assert_called_once_with(db_path="/tmp/o.db")
 
     @patch(
-        "javdb.storage.db.db_operations.db_replace_rclone_inventory",
+        "javdb.storage.db.db_replace_rclone_inventory",
         return_value=5,
     )
     def test_replace_rclone_inventory_delegates(self, mock_fn):
@@ -39,7 +39,7 @@ class TestOperationsRepoRcloneInventory:
         mock_fn.assert_called_once_with(entries=entries, db_path=None)
 
     @patch(
-        "javdb.storage.db.db_operations.db_swap_rclone_inventory",
+        "javdb.storage.db.db_swap_rclone_inventory",
         return_value=10,
     )
     def test_swap_rclone_inventory_delegates(self, mock_fn):
@@ -47,14 +47,14 @@ class TestOperationsRepoRcloneInventory:
         assert repo.swap_rclone_inventory("sess-1") == 10
         mock_fn.assert_called_once_with(session_id="sess-1", db_path=None)
 
-    @patch("javdb.storage.db.db_operations.db_clear_rclone_inventory")
+    @patch("javdb.storage.db.db_clear_rclone_inventory")
     def test_clear_rclone_inventory_delegates(self, mock_fn):
         repo = OperationsRepo()
         repo.clear_rclone_inventory()
         mock_fn.assert_called_once_with(db_path=None)
 
     @patch(
-        "javdb.storage.db.db_operations.db_append_rclone_inventory",
+        "javdb.storage.db.db_append_rclone_inventory",
         return_value=3,
     )
     def test_append_rclone_inventory_delegates(self, mock_fn):
@@ -70,14 +70,14 @@ class TestOperationsRepoRcloneInventory:
 class TestOperationsRepoDedup:
 
     @patch(
-        "javdb.storage.db.db_operations.db_load_dedup_records",
+        "javdb.storage.db.db_load_dedup_records",
         return_value=[{"Id": 1}],
     )
     def test_load_dedup_records_delegates(self, mock_fn):
         repo = OperationsRepo()
         assert repo.load_dedup_records() == [{"Id": 1}]
 
-    @patch("javdb.storage.db.db_operations.db_save_dedup_records")
+    @patch("javdb.storage.db.db_save_dedup_records")
     def test_save_dedup_records_delegates(self, mock_fn):
         repo = OperationsRepo()
         rows = [{"VideoCode": "A"}]
@@ -85,7 +85,7 @@ class TestOperationsRepoDedup:
         mock_fn.assert_called_once_with(rows=rows, db_path=None)
 
     @patch(
-        "javdb.storage.db.db_operations.db_append_dedup_record",
+        "javdb.storage.db.db_append_dedup_record",
         return_value=9,
     )
     def test_append_dedup_record_delegates(self, mock_fn):
@@ -97,7 +97,7 @@ class TestOperationsRepoDedup:
             record, session_id="s1", db_path="/tmp/o.db",
         )
 
-    @patch("javdb.storage.db.db_operations.db_append_dedup_record")
+    @patch("javdb.storage.db.db_append_dedup_record")
     def test_append_dedup_record_keeps_payload_alias(self, mock_fn):
         repo = OperationsRepo(db_path="/tmp/o.db")
         payload = {"VideoCode": "B"}
@@ -110,7 +110,7 @@ class TestOperationsRepoDedup:
 class TestOperationsRepoDedupLifecycle:
 
     @patch(
-        "javdb.storage.db.db_operations.db_mark_records_deleted",
+        "javdb.storage.db.db_mark_records_deleted",
         return_value=2,
     )
     def test_mark_records_deleted_with_session(self, mock_fn):
@@ -123,7 +123,7 @@ class TestOperationsRepoDedupLifecycle:
         )
 
     @patch(
-        "javdb.storage.db.db_operations.db_mark_records_deleted",
+        "javdb.storage.db.db_mark_records_deleted",
         return_value=0,
     )
     def test_mark_records_deleted_without_session(self, mock_fn):
@@ -132,7 +132,7 @@ class TestOperationsRepoDedupLifecycle:
         mock_fn.assert_called_once_with([], db_path=None, session_id=None)
 
     @patch(
-        "javdb.storage.db.db_operations.db_cleanup_deleted_records",
+        "javdb.storage.db.db_cleanup_deleted_records",
         return_value=5,
     )
     def test_cleanup_deleted_records_delegates(self, mock_fn):
@@ -141,7 +141,7 @@ class TestOperationsRepoDedupLifecycle:
         mock_fn.assert_called_once_with(older_than_days=14, db_path=None)
 
     @patch(
-        "javdb.storage.db.db_operations.db_mark_orphan_records",
+        "javdb.storage.db.db_mark_orphan_records",
         return_value=1,
     )
     def test_mark_orphan_records_delegates(self, mock_fn):
@@ -162,7 +162,7 @@ class TestOperationsRepoDedupLifecycle:
 class TestOperationsRepoRcloneStaging:
 
     @patch(
-        "javdb.storage.db.db_operations.db_open_rclone_staging",
+        "javdb.storage.db.db_open_rclone_staging",
         return_value="RcloneInventoryStaging_sess1",
     )
     def test_open_rclone_staging_delegates(self, mock_fn):
@@ -172,7 +172,7 @@ class TestOperationsRepoRcloneStaging:
         mock_fn.assert_called_once_with(session_id="sess1", db_path=None)
 
     @patch(
-        "javdb.storage.db.db_operations.db_append_rclone_staging",
+        "javdb.storage.db.db_append_rclone_staging",
         return_value=3,
     )
     def test_append_rclone_staging_delegates(self, mock_fn):
@@ -184,7 +184,7 @@ class TestOperationsRepoRcloneStaging:
         )
 
     @patch(
-        "javdb.storage.db.db_operations.db_merge_rclone_inventory_from_stage",
+        "javdb.storage.db.db_merge_rclone_inventory_from_stage",
         return_value=50,
     )
     def test_merge_rclone_inventory_from_stage_delegates(self, mock_fn):
@@ -195,14 +195,14 @@ class TestOperationsRepoRcloneStaging:
             session_id="s1", years=["2025", "2026"], db_path="/tmp/o.db",
         )
 
-    @patch("javdb.storage.db.db_operations.db_drop_rclone_staging")
+    @patch("javdb.storage.db.db_drop_rclone_staging")
     def test_drop_rclone_staging_delegates(self, mock_fn):
         repo = OperationsRepo()
         repo.drop_rclone_staging("sess1")
         mock_fn.assert_called_once_with(session_id="sess1", db_path=None)
 
     @patch(
-        "javdb.storage.db.db_operations.db_delete_rclone_inventory_paths",
+        "javdb.storage.db.db_delete_rclone_inventory_paths",
         return_value=2,
     )
     def test_delete_rclone_inventory_paths_delegates(self, mock_fn):
@@ -213,7 +213,7 @@ class TestOperationsRepoRcloneStaging:
 
 class TestOperationsRepoAlignNoExactMatch:
 
-    @patch("javdb.storage.db.db_operations.db_upsert_align_no_exact_match")
+    @patch("javdb.storage.db.db_upsert_align_no_exact_match")
     def test_upsert_delegates_with_session(self, mock_fn):
         repo = OperationsRepo(db_path="/tmp/o.db")
         repo.upsert_align_no_exact_match("ABC-123", session_id="s1")
@@ -224,7 +224,7 @@ class TestOperationsRepoAlignNoExactMatch:
             session_id="s1",
         )
 
-    @patch("javdb.storage.db.db_operations.db_upsert_align_no_exact_match")
+    @patch("javdb.storage.db.db_upsert_align_no_exact_match")
     def test_upsert_custom_reason(self, mock_fn):
         repo = OperationsRepo()
         repo.upsert_align_no_exact_match("X-001", reason="custom_reason")
@@ -236,7 +236,7 @@ class TestOperationsRepoAlignNoExactMatch:
         )
 
     @patch(
-        "javdb.storage.db.db_operations.db_load_align_no_exact_match_codes",
+        "javdb.storage.db.db_load_align_no_exact_match_codes",
         return_value={"ABC-123", "DEF-456"},
     )
     def test_load_align_no_exact_match_codes_delegates(self, mock_fn):
@@ -245,7 +245,7 @@ class TestOperationsRepoAlignNoExactMatch:
         assert result == {"ABC-123", "DEF-456"}
         mock_fn.assert_called_once_with(db_path=None)
 
-    @patch("javdb.storage.db.db_operations.db_delete_align_no_exact_match")
+    @patch("javdb.storage.db.db_delete_align_no_exact_match")
     def test_delete_align_no_exact_match_delegates(self, mock_fn):
         repo = OperationsRepo()
         repo.delete_align_no_exact_match("ABC-123")
@@ -255,7 +255,7 @@ class TestOperationsRepoAlignNoExactMatch:
 class TestOperationsRepoPikpak:
 
     @patch(
-        "javdb.storage.db.db_operations.db_append_pikpak_history",
+        "javdb.storage.db.db_append_pikpak_history",
         return_value=10,
     )
     def test_append_pikpak_history_delegates(self, mock_fn):
@@ -267,7 +267,7 @@ class TestOperationsRepoPikpak:
             record, session_id="s1", db_path="/tmp/o.db",
         )
 
-    @patch("javdb.storage.db.db_operations.db_append_pikpak_history")
+    @patch("javdb.storage.db.db_append_pikpak_history")
     def test_append_pikpak_history_keeps_payload_alias(self, mock_fn):
         repo = OperationsRepo(db_path="/tmp/o.db")
         payload = {"magnet": "..."}
