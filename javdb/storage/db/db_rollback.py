@@ -439,6 +439,34 @@ def db_rollback_session(
             )
 
     result: Dict[str, Dict[str, int]] = {}
+    if (
+        pre_write_mode == 'pending'
+        and pre_status == 'finalizing'
+        and scope in ('reports', 'history', 'all')
+    ):
+        if not auto_resume_finalizing:
+            raise ValueError(
+                f"Refusing to roll back ReportSessions.Id={session_id}: "
+                "pending-mode session is in Status='finalizing' and "
+                "auto_resume_finalizing=False. Pass "
+                "--auto-resume-finalizing to drive it to committed instead, "
+                "or --force-fail-finalizing to give up."
+            )
+        if dry_run:
+            result['history'] = {
+                'mode': 'resume_commit',
+                'dry_run': 1,
+            }
+        else:
+            counts = db_resume_finalizing_session(
+                session_id,
+                history_db_path=history_db_path,
+                reports_db_path=reports_db_path,
+            )
+            counts['mode'] = 'resume_commit'
+            result['history'] = counts
+        return result
+
     if scope in ('reports', 'all'):
         result['reports'] = _rollback_reports(
             session_id, dry_run=dry_run, db_path=reports_db_path,
@@ -448,48 +476,23 @@ def db_rollback_session(
             session_id, dry_run=dry_run, db_path=operations_db_path,
         )
     if scope in ('history', 'all'):
-        # Dispatch on (WriteMode, Status).  Pending sessions either
-        # DELETE pending writes (in_progress) or resume the commit
-        # (finalizing).
+        # Dispatch on the pre-rollback snapshot.  Pending finalizing
+        # sessions are resumed above before report rows can be deleted;
+        # remaining pending sessions are in_progress rollbacks.
         # NOTE: _rollback_reports above DELETEs the ReportSessions row,
         # so a fresh db_get_session_status() here would always return
         # None.  Reuse the snapshot we captured before any deletion ran.
         write_mode = pre_write_mode
         sess_status = pre_status
         if write_mode == 'pending':
-            if sess_status == 'finalizing':
-                if not auto_resume_finalizing:
-                    raise ValueError(
-                        f"Refusing to roll back ReportSessions."
-                        f"Id={session_id}: pending-mode session is "
-                        "in Status='finalizing' and "
-                        "auto_resume_finalizing=False. Pass "
-                        "--auto-resume-finalizing to drive it to "
-                        "committed instead, or --force-fail-finalizing "
-                        "to give up."
-                    )
-                if dry_run:
-                    result['history'] = {
-                        'mode': 'resume_commit',
-                        'dry_run': 1,
-                    }
-                else:
-                    counts = db_resume_finalizing_session(
-                        session_id,
-                        history_db_path=history_db_path,
-                        reports_db_path=reports_db_path,
-                    )
-                    counts['mode'] = 'resume_commit'
-                    result['history'] = counts
-            else:
-                counts = _rollback_pending_in_progress(
-                    session_id,
-                    dry_run=dry_run,
-                    db_path=history_db_path,
-                    run_started_at=run_started_at,
-                )
-                counts['mode'] = 'rollback_pending'
-                result['history'] = counts
+            counts = _rollback_pending_in_progress(
+                session_id,
+                dry_run=dry_run,
+                db_path=history_db_path,
+                run_started_at=run_started_at,
+            )
+            counts['mode'] = 'rollback_pending'
+            result['history'] = counts
         else:
             logger.warning(
                 "Session %s has unexpected write_mode=%r — "
