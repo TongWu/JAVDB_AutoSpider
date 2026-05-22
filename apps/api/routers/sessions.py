@@ -19,7 +19,7 @@ from apps.api.schemas.capabilities_payloads import (
     SessionRollbackPayload,
     SessionRollbackResponse,
 )
-from javdb.storage.db import get_db, REPORTS_DB_PATH
+import javdb.storage.db as _db
 from javdb.storage.repos.sessions_repo import SessionsRepo
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
@@ -41,8 +41,8 @@ def get_session_detail(
     session_id: str,
     _user=Depends(_require_auth),
 ) -> SessionDetailResponse:
-    reports_path = REPORTS_DB_PATH
-    with get_db(reports_path) as conn:
+    reports_path = _db.REPORTS_DB_PATH
+    with _db.get_db(reports_path) as conn:
         repo = SessionsRepo(conn)
         row = repo.get(session_id)
         if not row:
@@ -62,8 +62,8 @@ def post_commit(
     _user=Depends(require_role("admin")),
 ) -> SessionCommitResponse:
     from javdb.storage.sessions import CommitRequest, commit_session
-    reports_path = REPORTS_DB_PATH
-    with get_db(reports_path) as conn:
+    reports_path = _db.REPORTS_DB_PATH
+    with _db.get_db(reports_path) as conn:
         if not SessionsRepo(conn).get(session_id):
             raise HTTPException(status_code=404, detail={"error": {"code": "session.not_found"}})
     try:
@@ -102,8 +102,8 @@ def post_rollback(
         apply_rollback,
         plan_rollback,
     )
-    reports_path = REPORTS_DB_PATH
-    with get_db(reports_path) as conn:
+    reports_path = _db.REPORTS_DB_PATH
+    with _db.get_db(reports_path) as conn:
         if not SessionsRepo(conn).get(session_id):
             raise HTTPException(status_code=404, detail={"error": {"code": "session.not_found"}})
     req = RollbackRequest(
@@ -141,8 +141,8 @@ def list_sessions(
     limit: int = Query(default=50, ge=1, le=200),
     _user=Depends(_require_auth),
 ) -> SessionListResponse:
-    reports_path = REPORTS_DB_PATH
-    with get_db(reports_path) as conn:
+    reports_path = _db.REPORTS_DB_PATH
+    with _db.get_db(reports_path) as conn:
         result = SessionsRepo(conn).list(state=state, cursor=cursor, limit=limit)
     return SessionListResponse(
         items=[_row_to_item(r) for r in result.items],

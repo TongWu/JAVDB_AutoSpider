@@ -32,13 +32,10 @@ import sys
 from datetime import datetime, timezone
 from typing import List, Optional
 
+import javdb.storage.db as _db
 from javdb.storage.db import (
     close_db,
     get_db,
-    DB_PATH,
-    HISTORY_DB_PATH,
-    REPORTS_DB_PATH,
-    OPERATIONS_DB_PATH,
     db_resume_finalizing_session,
     db_rollback_session,
 )
@@ -123,7 +120,7 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
 
 
 def _read_session_meta(session_id: str) -> dict:
-    with get_db(REPORTS_DB_PATH) as conn:
+    with get_db(_db.REPORTS_DB_PATH) as conn:
         row = SessionsRepo(conn).get_cleanup_meta(session_id)
     if row is None:
         return {"Id": session_id}
