@@ -108,6 +108,17 @@ class SessionsRepo:
             return None
         return _row_to_session(row)
 
+    def get_cleanup_meta(self, session_id: str) -> dict | None:
+        row = self._conn.execute(
+            "SELECT Id, ReportType, ReportDate, DisplayName, Status, "
+            "DateTimeCreated, RunId, RunAttempt FROM ReportSessions "
+            "WHERE Id = ?",
+            (session_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return {k: row[k] for k in row.keys()}
+
     def get_writes(self, session_id: str) -> tuple[list[dict], list[dict]]:
         """Return (movies, torrents) for a session.
 

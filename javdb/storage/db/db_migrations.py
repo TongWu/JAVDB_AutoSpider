@@ -737,7 +737,7 @@ def _ensure_rollback_columns(conn: sqlite3.Connection) -> None:
         ('InventoryAlignNoExactMatch', 'SessionId', 'TEXT'),
         # Ingestion Perfect Rollback (Phase 0): WriteMode column on
         # ReportSessions, gating the pending dispatch.
-        ('ReportSessions', 'WriteMode', "TEXT DEFAULT 'pending'"),
+        ('ReportSessions', 'WriteMode', "TEXT DEFAULT 'audit'"),
     ]
     for table, column, ddl in add_column_specs:
         if not _has_table(conn, table):
@@ -859,7 +859,7 @@ def _materialize_report_session_status_default(conn: sqlite3.Connection) -> None
         if 'WriteMode' in columns:
             conn.execute(
                 "UPDATE ReportSessions "
-                "SET WriteMode='pending' WHERE WriteMode IS NULL"
+                "SET WriteMode='audit' WHERE WriteMode IS NULL"
             )
     except sqlite3.OperationalError:
         pass

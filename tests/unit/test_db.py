@@ -8,9 +8,10 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 sys.path.insert(0, project_root)
 
 import pytest
+import javdb.storage.db.db_connection as _db_conn
 from javdb.storage.db.db_connection import (
-    get_db, close_db, HISTORY_DB_PATH, REPORTS_DB_PATH, OPERATIONS_DB_PATH,
-    SCHEMA_VERSION, _DB_OPERATIONAL_ERRORS, _DB_INTEGRITY_ERRORS,
+    get_db, close_db, SCHEMA_VERSION, _DB_OPERATIONAL_ERRORS,
+    _DB_INTEGRITY_ERRORS,
 )
 from javdb.storage.db.db_migrations import (
     init_db, _init_single_db, _init_single_legacy_db, _REPORTS_DDL,
@@ -165,9 +166,9 @@ class TestInitDb:
         try:
             init_db(force=True)
 
-            assert os.path.exists(HISTORY_DB_PATH)
-            assert os.path.exists(REPORTS_DB_PATH)
-            assert os.path.exists(OPERATIONS_DB_PATH)
+            assert os.path.exists(_db_conn.HISTORY_DB_PATH)
+            assert os.path.exists(_db_conn.REPORTS_DB_PATH)
+            assert os.path.exists(_db_conn.OPERATIONS_DB_PATH)
 
             def _tables(path):
                 conn = sqlite3.connect(path)
@@ -177,17 +178,17 @@ class TestInitDb:
                 conn.close()
                 return t
 
-            h_tables = _tables(HISTORY_DB_PATH)
+            h_tables = _tables(_db_conn.HISTORY_DB_PATH)
             assert 'MovieHistory' in h_tables
             assert 'TorrentHistory' in h_tables
             assert 'ReportSessions' not in h_tables
 
-            r_tables = _tables(REPORTS_DB_PATH)
+            r_tables = _tables(_db_conn.REPORTS_DB_PATH)
             assert 'ReportSessions' in r_tables
             assert 'SpiderStats' in r_tables
             assert 'MovieHistory' not in r_tables
 
-            o_tables = _tables(OPERATIONS_DB_PATH)
+            o_tables = _tables(_db_conn.OPERATIONS_DB_PATH)
             assert 'RcloneInventory' in o_tables
             assert 'DedupRecords' in o_tables
             assert 'MovieHistory' not in o_tables
@@ -456,7 +457,7 @@ class TestInitDb:
         assert dict(row) == {"ReportType": "daily", "Status": "in_progress"}
         assert version["Version"] == SCHEMA_VERSION
 
-    def test_init_single_db_materializes_added_report_status(self, tmp_path):
+    def test_init_single_db_materializes_added_report_defaults(self, tmp_path):
         db_path = str(tmp_path / 'reports_v6.db')
         conn = sqlite3.connect(db_path)
         try:
@@ -490,10 +491,10 @@ class TestInitDb:
         _init_single_db(db_path, _REPORTS_DDL, force=True)
 
         with get_db(db_path) as migrated:
-            status = migrated.execute(
-                "SELECT Status FROM ReportSessions LIMIT 1"
-            ).fetchone()["Status"]
-        assert status == "in_progress"
+            row = migrated.execute(
+                "SELECT Status, WriteMode FROM ReportSessions LIMIT 1"
+            ).fetchone()
+        assert dict(row) == {"Status": "in_progress", "WriteMode": "audit"}
 
     def test_split_migration_from_single_db(self, tmp_path):
         """Placing a v6 single DB at DB_PATH triggers automatic split."""
@@ -551,9 +552,9 @@ class TestInitDb:
             # Now init_db() without db_path should detect + split
             init_db(force=True)
 
-            assert os.path.exists(HISTORY_DB_PATH)
-            assert os.path.exists(REPORTS_DB_PATH)
-            assert os.path.exists(OPERATIONS_DB_PATH)
+            assert os.path.exists(_db_conn.HISTORY_DB_PATH)
+            assert os.path.exists(_db_conn.REPORTS_DB_PATH)
+            assert os.path.exists(_db_conn.OPERATIONS_DB_PATH)
             assert not os.path.exists(single_db)
             assert os.path.exists(single_db + '.v6.bak')
 
