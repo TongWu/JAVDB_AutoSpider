@@ -2101,82 +2101,6 @@ def _row_to_jsonable_dict(row) -> dict:
         return dict(row)
 
 
-def db_upsert_history(
-    href: str,
-    video_code: str,
-    magnet_links: Optional[Dict[str, str]] = None,
-    size_links: Optional[Dict[str, str]] = None,
-    file_count_links: Optional[Dict[str, int]] = None,
-    resolution_links: Optional[Dict[str, Optional[int]]] = None,
-    actor_name: Optional[str] = None,
-    actor_gender: Optional[str] = None,
-    actor_link: Optional[str] = None,
-    supporting_actors: Optional[str] = None,
-    db_path: Optional[str] = None,
-    session_id: Any = _SESSION_ID_SENTINEL,
-) -> None:
-    """Insert or update history across MovieHistory + TorrentHistory.
-
-    .. deprecated:: Phase 4 (2026-05-13)
-        Direct callers must switch to
-        :func:`javdb.storage.history_manager.save_parsed_movie_to_history`
-        (or :func:`db_stage_history_write` when the active session is in
-        ``WriteMode='pending'``).  Calling this function emits
-        :class:`DeprecationWarning` so the remaining audit-mode callsites
-        surface in CI logs; the implementation is **still** functional
-        for the audit fallback path and for the migration tool, but
-        every ingestion workflow now defaults to pending mode where this
-        upsert is no longer reached.  See
-        :doc:`docs/D1_ROLLBACK.md` (Appendix A) for the sunset timeline.
-
-    Actor fields: when ``None``, existing MovieHistory values are left unchanged
-    on update; use ``''`` to clear. On insert, ``None`` stays NULL.
-
-    *session_id*: the active ``ReportSessions.Id`` for X3 rollback bookkeeping.
-    Defaults to :func:`get_active_session_id`. When set, the row's ``SessionId``
-    column is populated and a companion ``MovieHistoryAudit`` /
-    ``TorrentHistoryAudit`` row is written for each INSERT/UPDATE — unless
-    ``JAVDB_AUDIT_WRITES_DISABLED=1`` is set (Phase 4 kill switch), in which
-    case the audit row is silently skipped.
-    """
-    warnings.warn(
-        "db_upsert_history is deprecated (Phase 4, 2026-05). "
-        "Route ingestion writes through "
-        "javdb_platform.history_manager.save_parsed_movie_to_history "
-        "(pending-mode auto-stage) or db_stage_history_write. "
-        "This entry-point will keep working through the audit fallback "
-        "sunset window — see docs/D1_ROLLBACK.md Appendix A.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    if magnet_links is None:
-        magnet_links = {}
-    if size_links is None:
-        size_links = {}
-    if file_count_links is None:
-        file_count_links = {}
-    if resolution_links is None:
-        resolution_links = {}
-
-    sid = _resolve_session_id(session_id)
-
-    with get_db(db_path or HISTORY_DB_PATH) as conn:
-        _upsert_one_history_on_conn(
-            conn,
-            href=href,
-            video_code=video_code,
-            magnet_links=magnet_links,
-            size_links=size_links,
-            file_count_links=file_count_links,
-            resolution_links=resolution_links,
-            actor_name=actor_name,
-            actor_gender=actor_gender,
-            actor_link=actor_link,
-            supporting_actors=supporting_actors,
-            session_id=sid,
-        )
-
-
 def _upsert_one_history_on_conn(
     conn,
     *,
@@ -2243,27 +2167,18 @@ def _upsert_one_history_on_conn(
              actor_name, actor_gender, prepared_actor_link,
              prepared_supporting_actors, sid),
         )
-        statements = [insert_movie]
-        audit_stmt = _movie_insert_audit_statement_for_href(
-            normalized_href,
-            session_id=sid,
-            when=now,
-        )
-        if audit_stmt is not None:
-            statements.append(audit_stmt)
-        _execute_backend_batch(conn, statements)
+        _execute_backend_batch(conn, [insert_movie])
     else:
         movie_id = existing['Id']
-        old_full = conn.execute(
-            "SELECT * FROM MovieHistory WHERE Id=?", (movie_id,),
-        ).fetchone()
         if (
             actor_name is not None
             or actor_gender is not None
             or actor_link is not None
             or supporting_actors is not None
         ):
-            row_m = old_full  # contains the actor columns we need
+            row_m = conn.execute(
+                "SELECT * FROM MovieHistory WHERE Id=?", (movie_id,),
+            ).fetchone()
             new_an = (
                 actor_name if actor_name is not None else row_m['ActorName']
             )
@@ -2298,17 +2213,7 @@ def _upsert_one_history_on_conn(
                    Href=?, SessionId=? WHERE Id=?""",
                 (now, now, normalized_href, sid, movie_id),
             )
-        statements = [update_movie]
-        audit_stmt = _movie_audit_statement(
-            movie_id,
-            action='UPDATE',
-            session_id=sid,
-            old_row=old_full,
-            when=now,
-        )
-        if audit_stmt is not None:
-            statements.append(audit_stmt)
-        _execute_backend_batch(conn, statements)
+        _execute_backend_batch(conn, [update_movie])
 
     # Upsert torrents
     has_hacked_subtitle = False
@@ -2339,17 +2244,7 @@ def _upsert_one_history_on_conn(
                 (torrent_id, movie_id, magnet, sub_ind, cen_ind, res, size, fc,
                  now, now, sid),
             )
-            statements = [insert_torrent]
-            audit_stmt = _torrent_insert_audit_statement_for_type(
-                movie_id,
-                sub_ind,
-                cen_ind,
-                session_id=sid,
-                when=now,
-            )
-            if audit_stmt is not None:
-                statements.append(audit_stmt)
-            _execute_backend_batch(conn, statements)
+            _execute_backend_batch(conn, [insert_torrent])
         else:
             update_torrent = (
                 """UPDATE TorrentHistory
@@ -2358,17 +2253,7 @@ def _upsert_one_history_on_conn(
                    WHERE Id=?""",
                 (magnet, size, fc, res, now, sid, existing_t['Id']),
             )
-            statements = [update_torrent]
-            audit_stmt = _torrent_audit_statement(
-                existing_t['Id'],
-                action='UPDATE',
-                session_id=sid,
-                old_row=existing_t,
-                when=now,
-            )
-            if audit_stmt is not None:
-                statements.append(audit_stmt)
-            _execute_backend_batch(conn, statements)
+            _execute_backend_batch(conn, [update_torrent])
 
         if tt == 'hacked_subtitle':
             has_hacked_subtitle = True
@@ -2392,68 +2277,6 @@ def _upsert_one_history_on_conn(
     _update_movie_indicators(conn, movie_id, session_id=sid, when=now)
 
 
-def db_upsert_history_batch(
-    rows: List[Dict[str, Any]],
-    *,
-    db_path: Optional[str] = None,
-    session_id: Any = _SESSION_ID_SENTINEL,
-) -> None:
-    """Upsert ``MovieHistory`` / ``TorrentHistory`` for a batch of movies.
-
-    Each ``rows`` entry is a dict with the same keys
-    :func:`db_upsert_history` takes (``href``, ``video_code``,
-    ``magnet_links``, ``size_links``, ``file_count_links``,
-    ``resolution_links``, ``actor_name``, ``actor_gender``, ``actor_link``,
-    ``supporting_actors``). All rows write through a single connection so
-    that:
-
-    * Under ``STORAGE_BACKEND=dual``, the whole batch lands in one
-      :class:`~javdb.storage.dual_connection.DualConnection` transaction —
-      drift accounting consolidates to a single commit decision, and
-      ``STRICT_DUAL_WRITE=1`` callers see a single all-or-nothing failure
-      surface instead of N independent ones.
-    * SQLite WAL fsync amortises across the batch instead of per row.
-    * Statements that ``_execute_backend_batch`` already groups (movie +
-      audit, torrent + audit) keep their per-row D1 ``batch_execute``
-      grouping; the larger win — true cross-row ``executemany`` on the
-      INSERT-only fast path — is deliberately out of scope here, see the
-      "Future work" comment below.
-
-    ``session_id`` is resolved once for the whole batch (default: active
-    session). Pass an explicit id to override.
-
-    Future work: an INSERT-only fast-path that bulk-fetches existing rows
-    in one SELECT and emits per-table ``executemany`` calls would cut D1
-    round-trips from ~5 per movie to ~5 per batch on the alignment
-    workload (where most rows are new). It is non-trivial because the
-    audit + indicator + torrent-dedup logic needs separate fast variants;
-    the per-row path through this wrapper is the safe baseline.
-    """
-    if not rows:
-        return
-    sid = _resolve_session_id(session_id)
-    with get_db(db_path or HISTORY_DB_PATH) as conn:
-        for row in rows:
-            magnet_links = row.get('magnet_links') or {}
-            size_links = row.get('size_links') or {}
-            file_count_links = row.get('file_count_links') or {}
-            resolution_links = row.get('resolution_links') or {}
-            _upsert_one_history_on_conn(
-                conn,
-                href=row['href'],
-                video_code=row['video_code'],
-                magnet_links=magnet_links,
-                size_links=size_links,
-                file_count_links=file_count_links,
-                resolution_links=resolution_links,
-                actor_name=row.get('actor_name'),
-                actor_gender=row.get('actor_gender'),
-                actor_link=row.get('actor_link'),
-                supporting_actors=row.get('supporting_actors'),
-                session_id=sid,
-            )
-
-
 def _delete_torrents_with_audit(
     conn,
     movie_id: int,
@@ -2463,40 +2286,12 @@ def _delete_torrents_with_audit(
     session_id: Optional[str],
     when: Optional[str],
 ) -> None:
-    """Delete TorrentHistory rows matching ``(movie_id, sub_ind, cen_ind)``,
-    capturing each as a 'DELETE' audit row so rollback can re-insert them.
-    """
-    if session_id is None:
-        conn.execute(
-            "DELETE FROM TorrentHistory WHERE MovieHistoryId=? "
-            "AND SubtitleIndicator=? AND CensorIndicator=?",
-            (movie_id, sub_ind, cen_ind),
-        )
-        return
-    rows = conn.execute(
-        "SELECT * FROM TorrentHistory WHERE MovieHistoryId=? "
+    """Delete TorrentHistory rows matching ``(movie_id, sub_ind, cen_ind)``."""
+    conn.execute(
+        "DELETE FROM TorrentHistory WHERE MovieHistoryId=? "
         "AND SubtitleIndicator=? AND CensorIndicator=?",
         (movie_id, sub_ind, cen_ind),
-    ).fetchall()
-    if rows:
-        statements = [
-            (
-                "DELETE FROM TorrentHistory WHERE MovieHistoryId=? "
-                "AND SubtitleIndicator=? AND CensorIndicator=?",
-                (movie_id, sub_ind, cen_ind),
-            )
-        ]
-        for row in rows:
-            audit_stmt = _torrent_audit_statement(
-                row['Id'],
-                action='DELETE',
-                session_id=session_id,
-                old_row=row,
-                when=when,
-            )
-            if audit_stmt is not None:
-                statements.append(audit_stmt)
-        _execute_backend_batch(conn, statements)
+    )
 
 
 def _update_movie_indicators(
@@ -2506,12 +2301,7 @@ def _update_movie_indicators(
     session_id: Optional[str] = None,
     when: Optional[str] = None,
 ):
-    """Recompute PerfectMatchIndicator and HiResIndicator for a movie.
-
-    When ``session_id`` is provided, the audit log captures the prior
-    ``MovieHistory`` row so rollback can restore the original indicators
-    along with everything else.
-    """
+    """Recompute PerfectMatchIndicator and HiResIndicator for a movie."""
     perfect = conn.execute("""
         SELECT 1 FROM TorrentHistory t1
         JOIN TorrentHistory t2 ON t1.MovieHistoryId = t2.MovieHistoryId
@@ -2529,32 +2319,11 @@ def _update_movie_indicators(
     hires_val = 1 if hires else 0
 
     if session_id is not None:
-        old_full = conn.execute(
-            "SELECT * FROM MovieHistory WHERE Id=?", (movie_id,),
-        ).fetchone()
-        if (
-            old_full is not None
-            and (
-                (old_full['PerfectMatchIndicator'] or 0) != perfect_val
-                or (old_full['HiResIndicator'] or 0) != hires_val
-            )
-        ):
-            update_movie = (
-                """UPDATE MovieHistory SET PerfectMatchIndicator=?,
-                   HiResIndicator=?, SessionId=? WHERE Id=?""",
-                (perfect_val, hires_val, session_id, movie_id),
-            )
-            statements = [update_movie]
-            audit_stmt = _movie_audit_statement(
-                movie_id,
-                action='UPDATE',
-                session_id=session_id,
-                old_row=old_full,
-                when=when,
-            )
-            if audit_stmt is not None:
-                statements.append(audit_stmt)
-            _execute_backend_batch(conn, statements)
+        conn.execute(
+            """UPDATE MovieHistory SET PerfectMatchIndicator=?,
+               HiResIndicator=?, SessionId=? WHERE Id=?""",
+            (perfect_val, hires_val, session_id, movie_id),
+        )
         return
 
     conn.execute(
@@ -2571,15 +2340,12 @@ def db_batch_update_last_visited(
     """Update DateTimeVisited for a batch of hrefs.
 
     When *session_id* is set (or :func:`get_active_session_id` returns a
-    value), each affected MovieHistory row also gets ``SessionId=?`` and a
-    companion ``MovieHistoryAudit`` row capturing the prior state so the
-    visit timestamp change can be rolled back.
+    value), each affected MovieHistory row also gets ``SessionId=?``.
 
     Ingestion Perfect Rollback (Phase 2): when the active session runs
     under ``WriteMode='pending'`` the visit timestamps are staged into
     :data:`PendingMovieHistoryWrites` (a sparse "DateTimeVisited only"
     row per href) and applied to live in :func:`db_commit_session_history`.
-    The audit-mode in-place UPDATE path is preserved for legacy sessions.
     """
     if not hrefs:
         return 0
@@ -2599,11 +2365,6 @@ def db_batch_update_last_visited(
                 _KIND_MOVIE,
                 {
                     "Href": href,
-                    # Explicit visited timestamp — db_stage_history_write
-                    # would otherwise default to "now" via its own
-                    # fallback, which is what we want anyway, but pin
-                    # it here so every href in the batch shares the
-                    # exact same value (mirrors the audit path).
                     "DateTimeVisited": (
                         datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     ),
@@ -2625,39 +2386,18 @@ def db_batch_update_last_visited(
     if not lookup_hrefs:
         return 0
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    # D1 caps bound parameters and batch statements. Keep session-tagged
-    # chunks small enough for one UPDATE plus per-row audit INSERTs.
-    CHUNK = 40 if sid is not None else 90
+    CHUNK = 90
     total = 0
     with get_db(db_path or HISTORY_DB_PATH) as conn:
         for i in range(0, len(lookup_hrefs), CHUNK):
             chunk = lookup_hrefs[i:i + CHUNK]
             placeholders = ','.join('?' for _ in chunk)
             if sid is not None:
-                # Snapshot affected rows BEFORE the update so we can audit.
-                affected_rows = conn.execute(
-                    f"SELECT * FROM MovieHistory WHERE Href IN ({placeholders})",
-                    chunk,
-                ).fetchall()
-                statements = [
-                    (
-                        f"UPDATE MovieHistory SET DateTimeVisited=?, SessionId=? "
-                        f"WHERE Href IN ({placeholders})",
-                        tuple([now, sid] + chunk),
-                    )
-                ]
-                for row in affected_rows:
-                    audit_stmt = _movie_audit_statement(
-                        row['Id'],
-                        action='UPDATE',
-                        session_id=sid,
-                        old_row=row,
-                        when=now,
-                    )
-                    if audit_stmt is not None:
-                        statements.append(audit_stmt)
-                cursors = _execute_backend_batch(conn, statements)
-                cur = cursors[0]
+                cur = conn.execute(
+                    f"UPDATE MovieHistory SET DateTimeVisited=?, SessionId=? "
+                    f"WHERE Href IN ({placeholders})",
+                    tuple([now, sid] + chunk),
+                )
             else:
                 cur = conn.execute(
                     f"UPDATE MovieHistory SET DateTimeVisited=? WHERE Href IN ({placeholders})",
@@ -2678,13 +2418,12 @@ def db_batch_update_movie_actors(
     Returns the number of rows matched by UPDATE (may be 0 for unknown hrefs).
 
     When *session_id* is set (or :func:`get_active_session_id` returns a
-    value), each affected MovieHistory row also gets ``SessionId=?`` and a
-    companion ``MovieHistoryAudit`` row capturing the prior state.
+    value), each affected MovieHistory row also gets ``SessionId=?``.
 
     Ingestion Perfect Rollback (Phase 2): pending-mode sessions stage a
     sparse "actor fields only" pending movie row per href instead of
-    UPDATE-ing live + writing audit; commit merges with the earlier
-    stages from the same session.
+    UPDATE-ing live; commit merges with the earlier stages from the same
+    session.
     """
     if not updates:
         return 0
@@ -2712,8 +2451,6 @@ def db_batch_update_movie_actors(
         return _batch_update_movie_actors(
             conn, updates,
             session_id=sid,
-            audit_record_movie_change=_audit_record_movie_change,
-            audit_movie_change_statement=_movie_audit_statement,
         )
 
 
