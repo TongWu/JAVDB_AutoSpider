@@ -3,7 +3,7 @@
 Covers:
 - Successful change with correct current password updates the in-memory hash
 - Persists the new hash to the API config store so it survives BE restart
-- Returns 401 when current_password is wrong (and does not mutate state)
+- Returns 400 when current_password is wrong (and does not mutate state)
 - Returns 422 when new_password is shorter than the minimum length
 - Requires authentication (anon → 401)
 """
