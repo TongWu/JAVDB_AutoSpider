@@ -1104,7 +1104,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description='Align inventory-only movie codes into MovieHistory with JavDB search/detail enrichment.',
     )
-    parser.add_argument('--dry-run', action='store_true', help='Parse and plan only; do not write DB.')
+    parser.add_argument('--dry-run', action='store_true', help='Parse and plan only; do not write DB. (Required until staging+commit rewrite; see ADR-005 PR-4.)')
     parser.add_argument(
         '--limit',
         type=int,
