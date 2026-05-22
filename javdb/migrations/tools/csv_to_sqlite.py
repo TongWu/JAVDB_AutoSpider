@@ -31,7 +31,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from javdb.infra.logging import setup_logging, get_logger
 from javdb.storage.sqlite_datetime import normalize_storage_datetime
-from javdb.storage.db.db import _generate_session_id
+from javdb.storage.db.db_session import generate_session_id
 from apps.api.parsers.common import javdb_absolute_url
 from javdb.infra.config import cfg
 
@@ -72,7 +72,7 @@ def migrate_history(csv_path: str, db_path: str, dry_run: bool = False) -> int:
         logger.info(f"Skipping history: {csv_path} not found")
         return 0
 
-    from javdb.storage.db.db import get_db
+    from javdb.storage.db.db_connection import get_db
     with open(csv_path, 'r', encoding='utf-8-sig') as f:
         reader = csv.DictReader(f)
         rows = list(reader)
@@ -182,7 +182,7 @@ def migrate_inventory(csv_path: str, db_path: str, dry_run: bool = False) -> int
         logger.info(f"Skipping inventory: {csv_path} not found")
         return 0
 
-    from javdb.storage.db.db import get_db
+    from javdb.storage.db.db_connection import get_db
     with open(csv_path, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
         rows = list(reader)
@@ -222,7 +222,7 @@ def migrate_dedup(csv_path: str, db_path: str, dry_run: bool = False) -> int:
         logger.info(f"Skipping dedup: {csv_path} not found")
         return 0
 
-    from javdb.storage.db.db import get_db
+    from javdb.storage.db.db_connection import get_db
     with open(csv_path, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
         rows = list(reader)
@@ -336,7 +336,7 @@ def migrate_dedup_all(reports_dir: str, db_path: str, dry_run: bool = False) -> 
 
     After import the merged data is exported to ``reports/dedup_history.csv``.
     """
-    from javdb.storage.db.db import get_db
+    from javdb.storage.db.db_connection import get_db
     import glob as _glob
 
     all_rows: list = []
@@ -469,7 +469,7 @@ def migrate_pikpak(csv_path: str, db_path: str, dry_run: bool = False) -> int:
         logger.info(f"Skipping pikpak: {csv_path} not found")
         return 0
 
-    from javdb.storage.db.db import get_db
+    from javdb.storage.db.db_connection import get_db
     with open(csv_path, 'r', encoding='utf-8-sig') as f:
         reader = csv.DictReader(f)
         rows = list(reader)
@@ -628,7 +628,7 @@ def migrate_single_csv(csv_path: str, filename: str, is_adhoc: bool,
     Returns dict with keys: session_id, row_count, skipped.
     """
     from datetime import datetime
-    from javdb.storage.db.db import get_db
+    from javdb.storage.db.db_connection import get_db
 
     meta = parse_csv_filename(filename, is_adhoc)
 
@@ -658,7 +658,7 @@ def migrate_single_csv(csv_path: str, filename: str, is_adhoc: bool,
         # ReportSessions.Id is TEXT post-2026-05-13 (no AUTOINCREMENT), so
         # the migration tool must supply an explicit Id rather than relying
         # on cur.lastrowid.
-        session_id = _generate_session_id()
+        session_id = generate_session_id()
         conn.execute(
             """INSERT INTO ReportSessions
                (Id, ReportType, ReportDate, UrlType, DisplayName,
@@ -707,7 +707,7 @@ def migrate_single_csv(csv_path: str, filename: str, is_adhoc: bool,
 
 def verify_session(session_id: str, csv_path: str, db_path: str) -> bool:
     """Verify a migrated session: movie count matches CSV row count."""
-    from javdb.storage.db.db import get_db
+    from javdb.storage.db.db_connection import get_db
 
     try:
         with open(csv_path, 'r', encoding='utf-8-sig') as f:

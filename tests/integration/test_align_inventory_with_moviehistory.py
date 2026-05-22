@@ -346,12 +346,12 @@ def test_compute_missing_codes_skip_and_only_codes_combined():
 
 def test_db_align_no_exact_match_roundtrip(temp_dir):
     import sqlite3
-    from javdb.storage.db.db import (
+    from javdb.storage.db.db_operations import (
         db_upsert_align_no_exact_match,
         db_load_align_no_exact_match_codes,
         db_delete_align_no_exact_match,
-        _OPERATIONS_DDL,
     )
+    from javdb.storage.db.db_migrations import _OPERATIONS_DDL
 
     db_path = os.path.join(temp_dir, 'ops_test.db')
     conn = sqlite3.connect(db_path)

@@ -1127,8 +1127,8 @@ class TestSnowflakeProcessTag:
     """
 
     def test_ids_within_one_process_are_monotonic(self):
-        from javdb.storage.db.db import _generate_session_id
-        ids = [_generate_session_id() for _ in range(50)]
+        from javdb.storage.db.db_session import generate_session_id
+        ids = [generate_session_id() for _ in range(50)]
         assert ids == sorted(ids), "snowflake Ids must be monotonic"
         assert len(set(ids)) == len(ids), "snowflake Ids must be unique"
 
@@ -1136,8 +1136,8 @@ class TestSnowflakeProcessTag:
         """Tag is fixed at import time, so every Id from one process
         shares the same hex tag segment (the second ``-``-delimited block).
         """
-        from javdb.storage.db.db import _generate_session_id
-        ids = [_generate_session_id() for _ in range(30)]
+        from javdb.storage.db.db_session import generate_session_id
+        ids = [generate_session_id() for _ in range(30)]
         tags = {sid.split("-")[1] for sid in ids}
         assert len(tags) == 1, (
             f"process tag should be constant per process; got {tags!r}"
@@ -1148,19 +1148,19 @@ class TestSnowflakeProcessTag:
         sibling Python process that drew a different ``secrets.randbits``)
         and confirm the two Id streams are disjoint.
         """
-        from javdb.storage.db import db as dbmod
+        from javdb.storage.db import db_session as _sess_mod
 
-        ids_a = [dbmod._generate_session_id() for _ in range(3)]
+        ids_a = [_sess_mod.generate_session_id() for _ in range(3)]
 
-        new_tag = (dbmod._SESSION_ID_PROCESS_TAG ^ 0xABCD) & 0xFFFF
-        if new_tag == dbmod._SESSION_ID_PROCESS_TAG:
+        new_tag = (_sess_mod._SESSION_ID_PROCESS_TAG ^ 0xABCD) & 0xFFFF
+        if new_tag == _sess_mod._SESSION_ID_PROCESS_TAG:
             new_tag = (new_tag + 1) & 0xFFFF
-        monkeypatch.setattr(dbmod, "_SESSION_ID_PROCESS_TAG", new_tag)
-        monkeypatch.setattr(dbmod, "_SESSION_ID_TAG_HEX", f"{new_tag:04x}")
-        monkeypatch.setattr(dbmod, "_SESSION_ID_LAST", "")
-        monkeypatch.setattr(dbmod, "_SESSION_ID_LAST_US", -1)
-        monkeypatch.setattr(dbmod, "_SESSION_ID_COUNTER", 0)
-        ids_b = [dbmod._generate_session_id() for _ in range(3)]
+        monkeypatch.setattr(_sess_mod, "_SESSION_ID_PROCESS_TAG", new_tag)
+        monkeypatch.setattr(_sess_mod, "_SESSION_ID_TAG_HEX", f"{new_tag:04x}")
+        monkeypatch.setattr(_sess_mod, "_SESSION_ID_LAST", "")
+        monkeypatch.setattr(_sess_mod, "_SESSION_ID_LAST_US", -1)
+        monkeypatch.setattr(_sess_mod, "_SESSION_ID_COUNTER", 0)
+        ids_b = [_sess_mod.generate_session_id() for _ in range(3)]
 
         tag_a = ids_a[0].split("-")[1]
         tag_b = ids_b[0].split("-")[1]

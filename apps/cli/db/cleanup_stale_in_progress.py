@@ -32,7 +32,7 @@ import sys
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from javdb.storage.db import db as _db
+import javdb.storage.db.db_connection as _db_conn
 from javdb.storage.db.db_connection import close_db, get_db
 from javdb.storage.db.db_reports import (
     db_find_in_progress_sessions,
@@ -106,7 +106,7 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
 
 
 def _read_session_meta(session_id: str) -> dict:
-    with get_db(_db.REPORTS_DB_PATH) as conn:
+    with get_db(_db_conn.REPORTS_DB_PATH) as conn:
         row = conn.execute(
             "SELECT Id, ReportType, ReportDate, DisplayName, Status, "
             "DateTimeCreated, RunId, RunAttempt FROM ReportSessions "
