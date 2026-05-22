@@ -110,7 +110,6 @@ def post_rollback(
         session_id=session_id,
         dry_run=payload.dry_run,
         include_pending=payload.include_pending,
-        restore_from_audit=payload.restore_from_audit,
     )
     try:
         if payload.dry_run:

@@ -57,9 +57,8 @@ _CROSS_DAY_REJECT_HOURS = 1
 class RollbackRequest:
     """Inputs to :func:`plan_rollback` / :func:`apply_rollback`.
 
-    Mirrors the CLI flags 1:1.  ``include_pending`` and
-    ``restore_from_audit`` are HTTP-friendly aliases that map onto the
-    underlying CLI semantics.
+    Mirrors the CLI flags 1:1.  ``include_pending`` is an HTTP-friendly
+    alias that maps onto the underlying CLI semantics.
     """
 
     session_id: Optional[str] = None
@@ -74,7 +73,6 @@ class RollbackRequest:
     shard_date: Optional[str] = None
     no_claim_rollback: bool = False
     include_pending: bool = True
-    restore_from_audit: bool = True
     claim_rollback_attempts: int = 3
 
 

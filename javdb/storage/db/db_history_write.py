@@ -2,11 +2,8 @@
 
 Handles writing to MovieHistory and TorrentHistory tables in history.db.
 
-Supports two write modes:
-- 'pending' (default) — Stage writes to Pending* tables, commit in bulk
-- 'audit' (legacy) — Direct upsert with audit trail for rollback
-
-The pending mode is the recommended approach for new workflows.
+Uses pending mode: stage writes to Pending* tables, then commit in bulk
+via db_commit_session_history().
 """
 
 import os
@@ -196,40 +193,3 @@ def db_commit_session_history(session_id, **kwargs):
     """Commit all pending writes for a session. Delegates to db.py."""
     from javdb.storage.db.db import db_commit_session_history as _f
     return _f(session_id, **kwargs)
-
-
-# ── Audit mode (legacy) ──────────────────────────────────────────────────
-
-
-def db_upsert_history(*args, **kwargs):
-    """Legacy audit-mode upsert. Delegates to db.py."""
-    from javdb.storage.db.db import db_upsert_history as _f
-    return _f(*args, **kwargs)
-
-
-# ── Rollback interface ───────────────────────────────────────────────────
-
-
-def rollback_history_for_session(
-    session_id: str,
-    db_path: Optional[str] = None,
-) -> int:
-    """Rollback history writes for a session.
-
-    Handles both pending mode (delete from Pending* tables) and
-    audit mode (restore from *Audit tables).
-
-    Args:
-        session_id: Session identifier
-        db_path: Database path (defaults to HISTORY_DB_PATH)
-
-    Returns:
-        Number of rows rolled back
-    """
-    _ensure_imports()
-
-    # Import rollback logic from db.py (will be refactored later)
-    from javdb.storage.db.db import _rollback_history
-
-    with _get_db(db_path or _HISTORY_DB_PATH) as conn:
-        return _rollback_history(conn, session_id)
