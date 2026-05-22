@@ -187,7 +187,7 @@ class TestPikpakBridgeLogic:
 
     def test_clears_active_session_id_after_impl_returns(self, monkeypatch):
         import apps.cli.pikpak.bridge as pikpak_mod
-        import javdb.storage.db.db_session as db_sess
+        import javdb.storage.db._db_session as db_sess
 
         def fake_impl(*_args, **_kwargs):
             assert db_sess.get_active_session_id() == 42

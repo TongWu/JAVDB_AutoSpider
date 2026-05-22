@@ -28,9 +28,9 @@ def test_history_manager_sqlite_paths_use_history_repo(monkeypatch):
     monkeypatch.setattr(hm, "_ensure_db", lambda: None)
     monkeypatch.setattr(hm, "HistoryRepo", repo_cls, raising=False)
 
-    import javdb.storage.db.db_history_read as read_db
-    import javdb.storage.db.db_history_write as write_db
-    import javdb.storage.db.db_session as session_db
+    import javdb.storage.db._db_history_read as read_db
+    import javdb.storage.db._db_history_write as write_db
+    import javdb.storage.db._db_session as session_db
 
     monkeypatch.setattr(
         read_db, "db_load_history", _raw_db_forbidden("db_load_history")
@@ -92,8 +92,8 @@ def test_history_manager_pending_writes_use_history_repo_staging(monkeypatch):
     monkeypatch.setattr(hm, "_ensure_db", lambda: None)
     monkeypatch.setattr(hm, "HistoryRepo", repo_cls, raising=False)
 
-    import javdb.storage.db.db_history_write as write_db
-    import javdb.storage.db.db_session as session_db
+    import javdb.storage.db._db_history_write as write_db
+    import javdb.storage.db._db_session as session_db
 
     monkeypatch.setattr(
         write_db,
@@ -164,7 +164,7 @@ def _patch_legacy_actor_update_dependencies(monkeypatch, legacy, repo_cls):
 
 
 def test_legacy_sequential_actor_updates_use_history_repo(monkeypatch):
-    import javdb.storage.db.db_history_write as db_hw
+    import javdb.storage.db._db_history_write as db_hw
 
     monkeypatch.setattr(
         db_hw,
@@ -214,7 +214,7 @@ def test_legacy_sequential_actor_updates_use_history_repo(monkeypatch):
 
 
 def test_legacy_parallel_actor_updates_use_history_repo(monkeypatch):
-    import javdb.storage.db.db_history_write as db_hw
+    import javdb.storage.db._db_history_write as db_hw
 
     monkeypatch.setattr(
         db_hw,
@@ -301,7 +301,7 @@ def test_dedup_sqlite_paths_use_operations_repo(monkeypatch):
     monkeypatch.setattr(dedup, "OperationsRepo", repo_cls, raising=False)
     monkeypatch.setattr(dedup, "_pending_paths_cache", None)
 
-    import javdb.storage.db.db_operations as ops_db
+    import javdb.storage.db._db_operations as ops_db
 
     for name in (
         "db_load_rclone_inventory",
@@ -409,11 +409,11 @@ def test_run_service_main_saves_spider_stats_through_stats_repo(monkeypatch, tmp
 
     import javdb.infra.config as config
     import javdb.storage.db as db_pkg
-    import javdb.storage.db.db_connection as db_connection
-    import javdb.storage.db.db_migrations as db_migrations
-    import javdb.storage.db.db_reports as db_reports
-    import javdb.storage.db.db_session as db_session
-    import javdb.storage.db.db_stats as db_stats
+    import javdb.storage.db._db_connection as db_connection
+    import javdb.storage.db._db_migrations as db_migrations
+    import javdb.storage.db._db_reports as db_reports
+    import javdb.storage.db._db_session as db_session
+    import javdb.storage.db._db_stats as db_stats
 
     monkeypatch.setattr(config, "use_db_storage", lambda: True)
     monkeypatch.setattr(db_migrations, "init_db", lambda force=False: None)

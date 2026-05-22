@@ -8,13 +8,13 @@ sys.path.insert(0, project_root)
 
 import pytest
 from unittest.mock import patch, MagicMock
-from javdb.storage.db import db_stats
+from javdb.storage.db import _db_stats as db_stats
 
 
 class TestDbSaveSpiderStats:
     """Tests for db_save_spider_stats()"""
 
-    @patch('javdb.storage.db.db_stats._get_db')
+    @patch('javdb.storage.db._db_stats._get_db')
     def test_saves_spider_stats_successfully(self, mock_get_db):
         """Should insert spider stats with all fields"""
         mock_conn = MagicMock()
@@ -55,7 +55,7 @@ class TestDbSaveSpiderStats:
         assert call_args[0][1][1] == 10  # phase1_discovered
         assert call_args[0][1][11] == 15  # total_discovered
 
-    @patch('javdb.storage.db.db_stats._get_db')
+    @patch('javdb.storage.db._db_stats._get_db')
     def test_handles_missing_fields_with_defaults(self, mock_get_db):
         """Should use default values for missing fields"""
         mock_conn = MagicMock()
@@ -78,7 +78,7 @@ class TestDbSaveSpiderStats:
         # failed_movies should be empty string
         assert call_args[0][1][16] == ''
 
-    @patch('javdb.storage.db.db_stats._get_db')
+    @patch('javdb.storage.db._db_stats._get_db')
     def test_serializes_failed_movies_as_json(self, mock_get_db):
         """Should serialize failed_movies list as JSON"""
         mock_conn = MagicMock()
@@ -104,7 +104,7 @@ class TestDbSaveSpiderStats:
 class TestDbSaveUploaderStats:
     """Tests for db_save_uploader_stats()"""
 
-    @patch('javdb.storage.db.db_stats._get_db')
+    @patch('javdb.storage.db._db_stats._get_db')
     def test_saves_uploader_stats_successfully(self, mock_get_db):
         """Should insert uploader stats with all fields"""
         mock_conn = MagicMock()
@@ -142,7 +142,7 @@ class TestDbSaveUploaderStats:
 class TestDbSavePikpakStats:
     """Tests for db_save_pikpak_stats()"""
 
-    @patch('javdb.storage.db.db_stats._get_db')
+    @patch('javdb.storage.db._db_stats._get_db')
     def test_saves_pikpak_stats_successfully(self, mock_get_db):
         """Should insert PikPak stats with all fields"""
         mock_conn = MagicMock()
@@ -172,7 +172,7 @@ class TestDbSavePikpakStats:
         assert call_args[0][1][0] == 'test-session-abc'
         assert call_args[0][1][1] == 7  # threshold_days
 
-    @patch('javdb.storage.db.db_stats._get_db')
+    @patch('javdb.storage.db._db_stats._get_db')
     def test_defaults_uploaded_count_to_successful_count(self, mock_get_db):
         """Should default uploaded_count to successful_count if not provided"""
         mock_conn = MagicMock()
@@ -198,7 +198,7 @@ class TestDbSavePikpakStats:
 class TestDbGetSpiderStats:
     """Tests for db_get_spider_stats()"""
 
-    @patch('javdb.storage.db.db_stats._get_db')
+    @patch('javdb.storage.db._db_stats._get_db')
     def test_returns_stats_when_found(self, mock_get_db):
         """Should return stats dictionary when session exists"""
         mock_conn = MagicMock()
@@ -222,7 +222,7 @@ class TestDbGetSpiderStats:
         assert 'SELECT * FROM SpiderStats' in call_args[0][0]
         assert call_args[0][1] == ('test-session',)
 
-    @patch('javdb.storage.db.db_stats._get_db')
+    @patch('javdb.storage.db._db_stats._get_db')
     def test_returns_none_when_not_found(self, mock_get_db):
         """Should return None when session does not exist"""
         mock_conn = MagicMock()
@@ -241,7 +241,7 @@ class TestDbGetSpiderStats:
 class TestDbGetSpiderStatsLocal:
     """Tests for db_get_spider_stats_local()"""
 
-    @patch('javdb.storage.db.db_stats._ensure_imports')
+    @patch('javdb.storage.db._db_stats._ensure_imports')
     def test_uses_local_sqlite_connection(self, mock_ensure_imports):
         """Should use get_local_sqlite_db() instead of get_db()"""
         import sqlite3
@@ -284,7 +284,7 @@ class TestDbGetSpiderStatsLocal:
         assert result['TotalProcessed'] == 10
         mock_get_local_db.assert_called_once()
 
-    @patch('javdb.storage.db.db_stats._ensure_imports')
+    @patch('javdb.storage.db._db_stats._ensure_imports')
     def test_sets_row_factory(self, mock_ensure_imports):
         """Should set row_factory to sqlite3.Row"""
         import sqlite3

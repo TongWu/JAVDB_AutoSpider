@@ -25,7 +25,7 @@ from javdb.storage.history_manager import (
     is_downloaded_torrent,
 )
 from javdb.storage.db import db_create_report_session, db_stage_history_write, db_commit_session_history, db_load_history
-import javdb.storage.db.db_session as _db_session
+import javdb.storage.db._db_session as _db_session
 from contextlib import contextmanager
 
 
@@ -846,7 +846,7 @@ class TestStorageModeDuo:
     """In duo mode, both SQLite and CSV are written."""
 
     def test_save_writes_both(self, temp_dir, storage_mode_duo):
-        import javdb.storage.db.db_session as db_session
+        import javdb.storage.db._db_session as db_session
         hf = os.path.join(temp_dir, 'history.csv')
         sid = db_create_report_session(
             report_type="DailyReport",

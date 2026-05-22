@@ -23,14 +23,14 @@ import shutil
 import javdb.infra.config as _cfg_mod
 import javdb.spider.services.dedup as _dedup_mod
 import javdb.storage.db as _db_pkg
-import javdb.storage.db.db_connection as _db_conn_mod
-import javdb.storage.db.db_history_read as _db_history_read_mod
-import javdb.storage.db.db_history_write as _db_history_write_mod
-import javdb.storage.db.db_reports as _db_reports_mod
-import javdb.storage.db.db_migrations as _db_migrations_mod
-import javdb.storage.db.db_operations as _db_operations_mod
-import javdb.storage.db.db_rollback as _db_rollback_mod
-import javdb.storage.db.db_stats as _db_stats_mod
+import javdb.storage.db._db_connection as _db_conn_mod
+import javdb.storage.db._db_history_read as _db_history_read_mod
+import javdb.storage.db._db_history_write as _db_history_write_mod
+import javdb.storage.db._db_reports as _db_reports_mod
+import javdb.storage.db._db_migrations as _db_migrations_mod
+import javdb.storage.db._db_operations as _db_operations_mod
+import javdb.storage.db._db_rollback as _db_rollback_mod
+import javdb.storage.db._db_stats as _db_stats_mod
 
 
 @pytest.fixture(autouse=True)

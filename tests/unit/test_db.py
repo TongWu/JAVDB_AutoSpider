@@ -8,7 +8,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 sys.path.insert(0, project_root)
 
 import pytest
-import javdb.storage.db.db_connection as _db_conn
+import javdb.storage.db._db_connection as _db_conn
 from javdb.storage.db import (
     get_db, close_db, SCHEMA_VERSION, _DB_OPERATIONAL_ERRORS,
     _DB_INTEGRITY_ERRORS,
@@ -132,8 +132,8 @@ class TestInitDb:
     def test_split_db_init(self, tmp_path):
         """init_db() without db_path should create three separate DB files."""
         import javdb.infra.config as _cfg_mod
-        from javdb.storage.db import db_migrations as _db_mig
-        from javdb.storage.db import db_connection as _db_conn
+        from javdb.storage.db import _db_migrations as _db_mig
+        from javdb.storage.db import _db_connection as _db_conn
         orig_override = _cfg_mod._storage_mode_override
         _cfg_mod._storage_mode_override = 'db'
 
@@ -202,8 +202,8 @@ class TestInitDb:
         DDL, so the columns exist when the index DDL is evaluated.
         """
         import javdb.infra.config as _cfg_mod
-        from javdb.storage.db import db_migrations as _db_mig
-        from javdb.storage.db import db_connection as _db_conn
+        from javdb.storage.db import _db_migrations as _db_mig
+        from javdb.storage.db import _db_connection as _db_conn
         orig_override = _cfg_mod._storage_mode_override
         _cfg_mod._storage_mode_override = 'db'
 
@@ -491,8 +491,8 @@ class TestInitDb:
     def test_split_migration_from_single_db(self, tmp_path):
         """Placing a v6 single DB at DB_PATH triggers automatic split."""
         import javdb.infra.config as _cfg_mod
-        from javdb.storage.db import db_migrations as _db_mig
-        from javdb.storage.db import db_connection as _db_conn
+        from javdb.storage.db import _db_migrations as _db_mig
+        from javdb.storage.db import _db_connection as _db_conn
         orig_override = _cfg_mod._storage_mode_override
         _cfg_mod._storage_mode_override = 'db'
 
@@ -1167,7 +1167,7 @@ class TestSnowflakeProcessTag:
         sibling Python process that drew a different ``secrets.randbits``)
         and confirm the two Id streams are disjoint.
         """
-        from javdb.storage.db import db_session as _sess_mod
+        from javdb.storage.db import _db_session as _sess_mod
 
         ids_a = [_sess_mod.generate_session_id() for _ in range(3)]
 

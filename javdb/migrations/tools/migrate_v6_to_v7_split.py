@@ -89,7 +89,7 @@ def _normalize_three_dbs(history_path: str, reports_path: str, operations_path: 
 
 
 def verify_split(reports_dir: str) -> bool:
-    import javdb.storage.db.db_connection as _db_conn
+    import javdb.storage.db._db_connection as _db_conn
 
     ok = True
     for db_name, expected_tables in [
@@ -169,7 +169,7 @@ def main():
         logger.info("Database is below v6. Run migration/tools/migrate_v5_to_v6.py first.")
         sys.exit(1)
 
-    import javdb.storage.db.db_connection as _db_conn
+    import javdb.storage.db._db_connection as _db_conn
 
     reports_dir = os.path.dirname(db_path)
     _db_conn.DB_PATH = db_path
@@ -177,7 +177,7 @@ def main():
     _db_conn.REPORTS_DB_PATH = os.path.join(reports_dir, 'reports.db')
     _db_conn.OPERATIONS_DB_PATH = os.path.join(reports_dir, 'operations.db')
 
-    from javdb.storage.db import db_migrations as _db_mig
+    import javdb.storage.db._db_migrations as _db_mig
     for name in (
         'DB_PATH', 'HISTORY_DB_PATH', 'REPORTS_DB_PATH', 'OPERATIONS_DB_PATH',
     ):
