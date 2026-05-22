@@ -148,7 +148,7 @@ async def change_password_payload(
         context.audit_logger.warning(
             "change_password_invalid_current username=%s", username
         )
-        raise HTTPException(status_code=401, detail="Current password incorrect")
+        raise HTTPException(status_code=400, detail="Current password incorrect")
     role = user.get("role", "")
     store_key = _PASSWORD_HASH_STORE_KEY.get(role)
     if not store_key:

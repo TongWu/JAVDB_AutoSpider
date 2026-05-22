@@ -23,17 +23,16 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
-os.chdir(REPO_ROOT)
+REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from javdb.infra.logging import setup_logging, get_logger
+from javdb.infra.logging import setup_logging, get_logger, log_summary_block
 
 setup_logging()
 logger = get_logger(__name__)
 
-DEFAULT_DB_PATH = os.path.join('reports', 'javdb_autospider.db')
+DEFAULT_DB_PATH = str(REPO_ROOT / 'reports' / 'javdb_autospider.db')
 
 _HISTORY_TABLES = ['MovieHistory', 'TorrentHistory']
 _REPORTS_TABLES = [
@@ -90,13 +89,13 @@ def _normalize_three_dbs(history_path: str, reports_path: str, operations_path: 
 
 
 def verify_split(reports_dir: str) -> bool:
-    import javdb.storage.db.db as db_mod
+    import javdb.storage.db.db_connection as _db_conn
 
     ok = True
     for db_name, expected_tables in [
-        (db_mod.HISTORY_DB_PATH, _HISTORY_TABLES),
-        (db_mod.REPORTS_DB_PATH, _REPORTS_TABLES),
-        (db_mod.OPERATIONS_DB_PATH, _OPERATIONS_TABLES),
+        (_db_conn.HISTORY_DB_PATH, _HISTORY_TABLES),
+        (_db_conn.REPORTS_DB_PATH, _REPORTS_TABLES),
+        (_db_conn.OPERATIONS_DB_PATH, _OPERATIONS_TABLES),
     ]:
         if not os.path.exists(db_name):
             logger.error(f"Missing database file: {db_name}")
@@ -170,32 +169,56 @@ def main():
         logger.info("Database is below v6. Run migration/tools/migrate_v5_to_v6.py first.")
         sys.exit(1)
 
-    import javdb.storage.db.db as db_mod
+    import javdb.storage.db.db_connection as _db_conn
 
     reports_dir = os.path.dirname(db_path)
-    db_mod.DB_PATH = db_path
-    db_mod.HISTORY_DB_PATH = os.path.join(reports_dir, 'history.db')
-    db_mod.REPORTS_DB_PATH = os.path.join(reports_dir, 'reports.db')
-    db_mod.OPERATIONS_DB_PATH = os.path.join(reports_dir, 'operations.db')
+    _db_conn.DB_PATH = db_path
+    _db_conn.HISTORY_DB_PATH = os.path.join(reports_dir, 'history.db')
+    _db_conn.REPORTS_DB_PATH = os.path.join(reports_dir, 'reports.db')
+    _db_conn.OPERATIONS_DB_PATH = os.path.join(reports_dir, 'operations.db')
+
+    from javdb.storage.db import db_migrations as _db_mig
+    for name in (
+        'DB_PATH', 'HISTORY_DB_PATH', 'REPORTS_DB_PATH', 'OPERATIONS_DB_PATH',
+    ):
+        setattr(_db_mig, name, getattr(_db_conn, name))
 
     already_split = all(os.path.exists(p) for p in [
-        db_mod.HISTORY_DB_PATH, db_mod.REPORTS_DB_PATH, db_mod.OPERATIONS_DB_PATH])
+        _db_conn.HISTORY_DB_PATH,
+        _db_conn.REPORTS_DB_PATH,
+        _db_conn.OPERATIONS_DB_PATH,
+    ])
 
     if already_split:
         logger.info("All three target databases already exist. No migration needed.")
         if args.normalize_datetimes:
             _normalize_three_dbs(
-                db_mod.HISTORY_DB_PATH, db_mod.REPORTS_DB_PATH, db_mod.OPERATIONS_DB_PATH)
+                _db_conn.HISTORY_DB_PATH, _db_conn.REPORTS_DB_PATH, _db_conn.OPERATIONS_DB_PATH)
         if args.verify:
             ok = verify_split(reports_dir)
             sys.exit(0 if ok else 1)
         sys.exit(0)
 
     if args.dry_run:
-        logger.info("[DRY RUN] Would split into:")
-        logger.info(f"  {db_mod.HISTORY_DB_PATH}    — {', '.join(_HISTORY_TABLES)}")
-        logger.info(f"  {db_mod.REPORTS_DB_PATH}    — {', '.join(_REPORTS_TABLES)}")
-        logger.info(f"  {db_mod.OPERATIONS_DB_PATH} — {', '.join(_OPERATIONS_TABLES)}")
+        log_summary_block(
+            logger,
+            "[DRY RUN] Would split into",
+            [
+                (
+                    "history",
+                    f"{_db_conn.HISTORY_DB_PATH} — {', '.join(_HISTORY_TABLES)}",
+                ),
+                (
+                    "reports",
+                    f"{_db_conn.REPORTS_DB_PATH} — {', '.join(_REPORTS_TABLES)}",
+                ),
+                (
+                    "operations",
+                    f"{_db_conn.OPERATIONS_DB_PATH} — {', '.join(_OPERATIONS_TABLES)}",
+                ),
+            ],
+            emoji=None,
+        )
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
         logger.info("\nSource table row counts:")
@@ -209,10 +232,10 @@ def main():
         backup_db(db_path)
 
     logger.info("Running split migration via init_db() ...")
-    db_mod.init_db(force=True)
+    _db_mig.init_db(force=True)
 
     logger.info("Migration complete.")
-    for p in [db_mod.HISTORY_DB_PATH, db_mod.REPORTS_DB_PATH, db_mod.OPERATIONS_DB_PATH]:
+    for p in [_db_conn.HISTORY_DB_PATH, _db_conn.REPORTS_DB_PATH, _db_conn.OPERATIONS_DB_PATH]:
         if os.path.exists(p):
             logger.info(f"  {p}: {os.path.getsize(p) / 1024:.1f} KB")
 
@@ -229,7 +252,7 @@ def main():
     if args.normalize_datetimes:
         logger.info("-" * 60)
         _normalize_three_dbs(
-            db_mod.HISTORY_DB_PATH, db_mod.REPORTS_DB_PATH, db_mod.OPERATIONS_DB_PATH)
+            _db_conn.HISTORY_DB_PATH, _db_conn.REPORTS_DB_PATH, _db_conn.OPERATIONS_DB_PATH)
 
     logger.info("=" * 60)
     logger.info("Done.")

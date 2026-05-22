@@ -16,20 +16,26 @@ import sqlite3
 
 import pytest
 
-import javdb.storage.db.db as db_mod
+from javdb.storage.db.db_connection import get_db
+from javdb.storage.db.db_session import SESSION_ID_PATTERN as _SESSION_ID_PATTERN
+from javdb.storage.db.db_reports import (
+    db_create_report_session, db_mark_session_committed,
+    db_count_in_progress_sessions_for_run,
+    db_find_in_progress_session_ids_for_run_csv,
+)
 
 
 class TestSelfCheckHelper:
     def test_zero_for_unknown_run(self):
         assert (
-            db_mod.db_count_in_progress_sessions_for_run(
+            db_count_in_progress_sessions_for_run(
                 "never-seen", 1,
             )
             == 0
         )
 
     def test_count_one_after_creation(self):
-        db_mod.db_create_report_session(
+        db_create_report_session(
             report_type="DailyReport",
             report_date="2026-05-08",
             csv_filename="ssch1.csv",
@@ -37,27 +43,27 @@ class TestSelfCheckHelper:
             run_attempt=1,
         )
         assert (
-            db_mod.db_count_in_progress_sessions_for_run("run-X", 1) == 1
+            db_count_in_progress_sessions_for_run("run-X", 1) == 1
         )
 
     def test_committed_session_is_excluded(self):
-        sid = db_mod.db_create_report_session(
+        sid = db_create_report_session(
             report_type="DailyReport",
             report_date="2026-05-08",
             csv_filename="ssch2.csv",
             run_id="run-Y",
             run_attempt=1,
         )
-        db_mod.db_mark_session_committed(sid)
+        db_mark_session_committed(sid)
         # After commit, the session is no longer in_progress, so
         # the count must be zero — meaning a retry of the same run
         # could legitimately create a fresh session.
         assert (
-            db_mod.db_count_in_progress_sessions_for_run("run-Y", 1) == 0
+            db_count_in_progress_sessions_for_run("run-Y", 1) == 0
         )
 
     def test_attempt_isolation(self):
-        db_mod.db_create_report_session(
+        db_create_report_session(
             report_type="DailyReport",
             report_date="2026-05-08",
             csv_filename="ssch3.csv",
@@ -66,21 +72,21 @@ class TestSelfCheckHelper:
         )
         # Same run id but a different attempt — independent count.
         assert (
-            db_mod.db_count_in_progress_sessions_for_run("run-Z", 1) == 1
+            db_count_in_progress_sessions_for_run("run-Z", 1) == 1
         )
         assert (
-            db_mod.db_count_in_progress_sessions_for_run("run-Z", 2) == 0
+            db_count_in_progress_sessions_for_run("run-Z", 2) == 0
         )
 
     def test_run_id_only_aggregates_across_attempts(self):
-        db_mod.db_create_report_session(
+        db_create_report_session(
             report_type="DailyReport",
             report_date="2026-05-08",
             csv_filename="ssch4a.csv",
             run_id="run-W",
             run_attempt=1,
         )
-        db_mod.db_create_report_session(
+        db_create_report_session(
             report_type="DailyReport",
             report_date="2026-05-08",
             csv_filename="ssch4b.csv",
@@ -88,7 +94,7 @@ class TestSelfCheckHelper:
             run_attempt=2,
         )
         # No attempt argument → aggregates.
-        assert db_mod.db_count_in_progress_sessions_for_run("run-W") == 2
+        assert db_count_in_progress_sessions_for_run("run-W") == 2
 
 
 class TestCsvScopedDuplicateCheck:
@@ -101,47 +107,47 @@ class TestCsvScopedDuplicateCheck:
     """
 
     def test_returns_existing_id_when_csv_matches(self):
-        sid = db_mod.db_create_report_session(
+        sid = db_create_report_session(
             report_type="DailyReport",
             report_date="2026-05-08",
             csv_filename="csv-dup.csv",
             run_id="run-DUP",
             run_attempt=1,
         )
-        ids = db_mod.db_find_in_progress_session_ids_for_run_csv(
+        ids = db_find_in_progress_session_ids_for_run_csv(
             "run-DUP", 1, "csv-dup.csv",
         )
         assert ids == [sid]
 
     def test_returns_empty_for_sibling_with_different_csv(self):
-        db_mod.db_create_report_session(
+        db_create_report_session(
             report_type="DailyReport",
             report_date="2026-05-08",
             csv_filename="sibling-A.csv",
             run_id="run-SIB",
             run_attempt=1,
         )
-        ids = db_mod.db_find_in_progress_session_ids_for_run_csv(
+        ids = db_find_in_progress_session_ids_for_run_csv(
             "run-SIB", 1, "sibling-B.csv",
         )
         assert ids == []
         # ``count_in_progress_sessions_for_run`` still sees the sibling,
         # which is what powers the warning log line.
         assert (
-            db_mod.db_count_in_progress_sessions_for_run("run-SIB", 1)
+            db_count_in_progress_sessions_for_run("run-SIB", 1)
             == 1
         )
 
     def test_committed_session_does_not_block_csv_reuse(self):
-        sid = db_mod.db_create_report_session(
+        sid = db_create_report_session(
             report_type="DailyReport",
             report_date="2026-05-08",
             csv_filename="csv-reuse.csv",
             run_id="run-REUSE",
             run_attempt=1,
         )
-        db_mod.db_mark_session_committed(sid)
-        ids = db_mod.db_find_in_progress_session_ids_for_run_csv(
+        db_mark_session_committed(sid)
+        ids = db_find_in_progress_session_ids_for_run_csv(
             "run-REUSE", 1, "csv-reuse.csv",
         )
         assert ids == []
@@ -152,19 +158,19 @@ class TestCsvScopedDuplicateCheck:
         This is the root-cause fix that makes the application-layer
         self-check defence-in-depth rather than the only line of defence.
         """
-        sid = db_mod.db_create_report_session(
+        sid = db_create_report_session(
             report_type="DailyReport",
             report_date="2026-05-08",
             csv_filename="uq-block.csv",
             run_id="run-UQ",
             run_attempt=1,
         )
-        assert isinstance(sid, str) and db_mod._SESSION_ID_PATTERN.match(sid)
+        assert isinstance(sid, str) and _SESSION_ID_PATTERN.match(sid)
 
         # A bypass-the-Python-helper raw INSERT that would have created
         # a second in-progress row for the same CSV must now be refused
         # by the partial UNIQUE index.
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             with pytest.raises(sqlite3.IntegrityError):
                 conn.execute(
                     "INSERT INTO ReportSessions ("
@@ -193,7 +199,7 @@ class TestCsvScopedDuplicateCheck:
         (DailyIngestion runs multiple spiders) — the partial index must
         not block it.
         """
-        db_mod.db_create_report_session(
+        db_create_report_session(
             report_type="DailyReport",
             report_date="2026-05-08",
             csv_filename="uq-sibling-A.csv",
@@ -201,54 +207,54 @@ class TestCsvScopedDuplicateCheck:
             run_attempt=1,
         )
         # Should succeed — different CSV.
-        sid_b = db_mod.db_create_report_session(
+        sid_b = db_create_report_session(
             report_type="DailyReport",
             report_date="2026-05-08",
             csv_filename="uq-sibling-B.csv",
             run_id="run-UQ-SIB",
             run_attempt=1,
         )
-        assert isinstance(sid_b, str) and db_mod._SESSION_ID_PATTERN.match(sid_b)
+        assert isinstance(sid_b, str) and _SESSION_ID_PATTERN.match(sid_b)
 
     def test_partial_unique_index_allows_csv_reuse_after_resolution(self):
         """The partial WHERE clause excludes resolved sessions, so the
         same CSV can be re-ingested after the previous attempt was
         committed (or failed and rolled back).
         """
-        sid = db_mod.db_create_report_session(
+        sid = db_create_report_session(
             report_type="DailyReport",
             report_date="2026-05-08",
             csv_filename="uq-after-commit.csv",
             run_id="run-UQ-RC",
             run_attempt=1,
         )
-        db_mod.db_mark_session_committed(sid)
+        db_mark_session_committed(sid)
         # Same CSV, *next* attempt — must succeed.
-        sid2 = db_mod.db_create_report_session(
+        sid2 = db_create_report_session(
             report_type="DailyReport",
             report_date="2026-05-08",
             csv_filename="uq-after-commit.csv",
             run_id="run-UQ-RC",
             run_attempt=2,
         )
-        assert isinstance(sid2, str) and db_mod._SESSION_ID_PATTERN.match(sid2)
+        assert isinstance(sid2, str) and _SESSION_ID_PATTERN.match(sid2)
         # And the same CSV in the *same* attempt also works once the
         # previous one is resolved.
-        db_mod.db_mark_session_committed(sid2)
-        sid3 = db_mod.db_create_report_session(
+        db_mark_session_committed(sid2)
+        sid3 = db_create_report_session(
             report_type="DailyReport",
             report_date="2026-05-08",
             csv_filename="uq-after-commit.csv",
             run_id="run-UQ-RC",
             run_attempt=2,
         )
-        assert isinstance(sid3, str) and db_mod._SESSION_ID_PATTERN.match(sid3)
+        assert isinstance(sid3, str) and _SESSION_ID_PATTERN.match(sid3)
 
     def test_partial_unique_index_ignores_legacy_null_runid(self):
         """Legacy rows with RunId IS NULL are intentionally excluded —
         the migration must remain backwards-compatible.
         """
-        db_mod.db_create_report_session(
+        db_create_report_session(
             report_type="DailyReport",
             report_date="2026-05-08",
             csv_filename="uq-legacy.csv",
@@ -257,17 +263,17 @@ class TestCsvScopedDuplicateCheck:
         )
         # A second null-RunId row with the same CSV is allowed (legacy
         # contract) — the index doesn't apply.
-        sid2 = db_mod.db_create_report_session(
+        sid2 = db_create_report_session(
             report_type="DailyReport",
             report_date="2026-05-08",
             csv_filename="uq-legacy.csv",
             run_id=None,
             run_attempt=None,
         )
-        assert isinstance(sid2, str) and db_mod._SESSION_ID_PATTERN.match(sid2)
+        assert isinstance(sid2, str) and _SESSION_ID_PATTERN.match(sid2)
 
     def test_attempt_isolation_for_csv_check(self):
-        db_mod.db_create_report_session(
+        db_create_report_session(
             report_type="DailyReport",
             report_date="2026-05-08",
             csv_filename="csv-att.csv",
@@ -276,7 +282,7 @@ class TestCsvScopedDuplicateCheck:
         )
         # Same csv on a different attempt is treated as fresh.
         assert (
-            db_mod.db_find_in_progress_session_ids_for_run_csv(
+            db_find_in_progress_session_ids_for_run_csv(
                 "run-ATT", 2, "csv-att.csv",
             )
             == []

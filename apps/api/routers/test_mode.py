@@ -27,6 +27,8 @@ _TRUNCATE_TARGETS = {
 
 @router.post("/reset")
 def reset_state() -> dict[str, bool]:
+    from apps.api.infra import auth as auth_infra
+
     root = _reports_root()
     for db_name, tables in _TRUNCATE_TARGETS.items():
         db_path = root / db_name
@@ -41,6 +43,12 @@ def reset_state() -> dict[str, bool]:
                 except sqlite3.OperationalError:
                     pass
             conn.commit()
+
+    with auth_infra._AUTH_LOCK:
+        auth_infra.RATE_BUCKETS.clear()
+        auth_infra.ACTIVE_TOKENS.clear()
+        auth_infra.REVOKED_JTI.clear()
+
     return {"reset": True}
 
 
@@ -115,26 +123,6 @@ def _ensure_schema(history_conn: sqlite3.Connection, reports_conn: sqlite3.Conne
             DateTimeUpdated TEXT,
             SessionId TEXT
         );
-        CREATE TABLE IF NOT EXISTS "MovieHistoryAudit" (
-            Id INTEGER PRIMARY KEY AUTOINCREMENT,
-            TargetId INTEGER NOT NULL,
-            Action TEXT NOT NULL,
-            OldRowJson TEXT,
-            SessionId TEXT NOT NULL,
-            DateTimeCreated TEXT NOT NULL,
-            RunId TEXT,
-            RunAttempt INTEGER
-        );
-        CREATE TABLE IF NOT EXISTS "TorrentHistoryAudit" (
-            Id INTEGER PRIMARY KEY AUTOINCREMENT,
-            TargetId INTEGER NOT NULL,
-            Action TEXT NOT NULL,
-            OldRowJson TEXT,
-            SessionId TEXT NOT NULL,
-            DateTimeCreated TEXT NOT NULL,
-            RunId TEXT,
-            RunAttempt INTEGER
-        );
         CREATE TABLE IF NOT EXISTS "PendingMovieHistoryWrites" (
             Seq TEXT PRIMARY KEY NOT NULL,
             SessionId TEXT NOT NULL,
@@ -177,9 +165,7 @@ def _purge_seed_rows(history_conn: sqlite3.Connection, reports_conn: sqlite3.Con
     placeholders = ",".join("?" for _ in _SEED_SESSION_IDS)
     # Drop torrent rows first (FK on MovieHistory.Id).
     for table in (
-        "TorrentHistoryAudit",
         "TorrentHistory",
-        "MovieHistoryAudit",
         "PendingMovieHistoryWrites",
         "MovieHistory",
     ):
@@ -233,21 +219,6 @@ def _insert_movie(
     return int(cur.lastrowid)
 
 
-def _insert_movie_audit(
-    conn: sqlite3.Connection,
-    target_id: int,
-    session_id: str,
-) -> None:
-    conn.execute(
-        """
-        INSERT INTO MovieHistoryAudit
-            (TargetId, Action, OldRowJson, SessionId, DateTimeCreated)
-        VALUES (?, 'insert', NULL, ?, ?)
-        """,
-        (target_id, session_id, _SEED_TIMESTAMP),
-    )
-
-
 def _insert_torrent(
     conn: sqlite3.Connection,
     session_id: str,
@@ -273,21 +244,6 @@ def _insert_torrent(
         ),
     )
     return int(cur.lastrowid)
-
-
-def _insert_torrent_audit(
-    conn: sqlite3.Connection,
-    target_id: int,
-    session_id: str,
-) -> None:
-    conn.execute(
-        """
-        INSERT INTO TorrentHistoryAudit
-            (TargetId, Action, OldRowJson, SessionId, DateTimeCreated)
-        VALUES (?, 'insert', NULL, ?, ?)
-        """,
-        (target_id, session_id, _SEED_TIMESTAMP),
-    )
 
 
 def _insert_pending_movie(
@@ -332,20 +288,16 @@ def seed_sessions() -> dict[str, object]:
         _ensure_schema(history_conn, reports_conn)
         _purge_seed_rows(history_conn, reports_conn)
 
-        # 1. committed / audit — 2 movies + 3 torrents + matching audit rows.
+        # 1. committed / pending — 2 movies + 3 torrents.
         committed = _SEED_SESSION_IDS[0]
-        _insert_session(reports_conn, committed, "committed", "audit")
+        _insert_session(reports_conn, committed, "committed", "pending")
         m1 = _insert_movie(history_conn, committed, "ABC-001", "https://javdb.com/v/seed-committed-1")
         m2 = _insert_movie(history_conn, committed, "ABC-002", "https://javdb.com/v/seed-committed-2")
-        _insert_movie_audit(history_conn, m1, committed)
-        _insert_movie_audit(history_conn, m2, committed)
         # 3 torrents distributed across the 2 movies, each with a unique
         # (MovieHistoryId, SubtitleIndicator, CensorIndicator) tuple.
         t1 = _insert_torrent(history_conn, committed, m1, 1, 1)
         t2 = _insert_torrent(history_conn, committed, m1, 0, 1)
         t3 = _insert_torrent(history_conn, committed, m2, 1, 1)
-        for tid in (t1, t2, t3):
-            _insert_torrent_audit(history_conn, tid, committed)
 
         # 2. finalizing / pending — 3 pending movies only.
         finalizing = _SEED_SESSION_IDS[1]
@@ -359,11 +311,10 @@ def seed_sessions() -> dict[str, object]:
                 f"FIN-00{idx}",
             )
 
-        # 3. in_progress / audit — 1 committed movie (+audit) + 2 pending.
+        # 3. in_progress / pending — 1 committed movie + 2 pending.
         in_progress = _SEED_SESSION_IDS[2]
-        _insert_session(reports_conn, in_progress, "in_progress", "audit")
+        _insert_session(reports_conn, in_progress, "in_progress", "pending")
         m3 = _insert_movie(history_conn, in_progress, "INP-001", "https://javdb.com/v/seed-inprog-1")
-        _insert_movie_audit(history_conn, m3, in_progress)
         for idx in range(2):
             _insert_pending_movie(
                 history_conn,

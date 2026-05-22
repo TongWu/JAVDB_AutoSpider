@@ -441,13 +441,12 @@ runtime by various modules.
 | Variable | Type | Default | Description |
 |---|---|---|---|
 | `STORAGE_BACKEND` | `str` | `'sqlite'` | Storage backend. `'sqlite'` -- local SQLite files. `'d1'` -- Cloudflare D1 (GitHub Actions). `'dual'` -- write to both, read from D1. |
-| `WRITE_MODE` | `str` | `'pending'` | Write mode for session management. `'pending'` (default) -- stage writes in pending tables, commit at end. `'audit'` (legacy) -- save old rows to audit tables before upsert. |
+| `WRITE_MODE` | `str` | `'pending'` | Write mode for session management. Only `'pending'` is supported; legacy `'audit'` requests fall back to pending. |
 | `STRICT_DUAL_WRITE` | `str` | `''` | When set to `'1'`, fail the run if a D1 write fails in dual mode. |
 | `LOG_LEVEL` | `str` | `'INFO'` | Overrides the `LOG_LEVEL` in `config.py` when set as an environment variable. |
 | `LOG_STYLE` | `str` | `'compact'` | Log output format. `'compact'` -- concise single-line. `'plain'` -- standard format. `'verbose'` -- full 4-field format. |
 | `LOG_GITHUB_GROUPS` | `str` | `'auto'` | GitHub Actions log grouping. `'on'` -- always emit `::group::` markers. `'off'` -- never. `'auto'` -- detect CI environment. |
 | `VAR_MOVIE_SLEEP` | `str` | *(none)* | Override adaptive sleep range as `"min,max"` in seconds, e.g. `"0,0"` for CI. |
-| `JAVDB_AUDIT_WRITES_DISABLED` | `str` | *(none)* | When set, gates direct writes to audit tables (audit mode is read-only forensics). |
 
 ### 14.3 Docker-Specific `.env` (`docker/.env.example`)
 

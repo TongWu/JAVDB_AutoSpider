@@ -187,19 +187,19 @@ class TestPikpakBridgeLogic:
 
     def test_clears_active_session_id_after_impl_returns(self, monkeypatch):
         import apps.cli.pikpak.bridge as pikpak_mod
-        import javdb.storage.db.db as db_mod
+        import javdb.storage.db.db_session as db_sess
 
         def fake_impl(*_args, **_kwargs):
-            assert db_mod.get_active_session_id() == 42
+            assert db_sess.get_active_session_id() == 42
             return "done"
 
-        db_mod.set_active_session_id(999)
+        db_sess.set_active_session_id(999)
         monkeypatch.setattr(pikpak_mod, "_pikpak_bridge_impl", fake_impl)
 
         assert pikpak_mod.pikpak_bridge(
             3, True, session_id=42, root_folder="/root",
         ) == "done"
-        assert db_mod.get_active_session_id() is None
+        assert db_sess.get_active_session_id() is None
 
     def test_filter_old_torrents(self):
         """Test filtering old torrents by date."""

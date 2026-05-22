@@ -947,24 +947,24 @@ def test_uncommitted_writes_reset_after_commit(monkeypatch, sqlite_conn, tmp_pat
 
 def test_current_backend_reflects_env(monkeypatch):
     """``current_backend()`` should reflect the active STORAGE_BACKEND."""
-    from javdb.storage.db import db as _db
+    from javdb.storage.db.db_connection import current_backend
 
     monkeypatch.delenv("_STORAGE_BACKEND_INIT_OVERRIDE", raising=False)
 
     monkeypatch.setenv("STORAGE_BACKEND", "sqlite")
-    assert _db.current_backend() == "sqlite"
+    assert current_backend() == "sqlite"
 
     monkeypatch.setenv("STORAGE_BACKEND", "d1")
-    assert _db.current_backend() == "d1"
+    assert current_backend() == "d1"
 
     monkeypatch.setenv("STORAGE_BACKEND", "dual")
-    assert _db.current_backend() == "dual"
+    assert current_backend() == "dual"
 
     monkeypatch.setenv("STORAGE_BACKEND", "DUAL")
-    assert _db.current_backend() == "dual"
+    assert current_backend() == "dual"
 
     monkeypatch.setenv("STORAGE_BACKEND", "garbage")
-    assert _db.current_backend() == "sqlite"
+    assert current_backend() == "sqlite"
 
 
 def test_use_db_storage_includes_d1_backends(monkeypatch):
@@ -997,7 +997,7 @@ def test_backend_mode_thread_local_invisible_to_siblings(monkeypatch):
     """
     import threading
 
-    from javdb.storage.db import db as _db
+    from javdb.storage.db import db_connection as _db_conn
 
     monkeypatch.delenv("_STORAGE_BACKEND_INIT_OVERRIDE", raising=False)
     monkeypatch.setenv("STORAGE_BACKEND", "dual")
@@ -1010,22 +1010,22 @@ def test_backend_mode_thread_local_invisible_to_siblings(monkeypatch):
         if not main_set.wait(timeout=5):
             sibling_observed["error"] = "timed out waiting for main"
             return
-        sibling_observed["mode"] = _db._backend_mode()
+        sibling_observed["mode"] = _db_conn._backend_mode()
         sibling_observed["env"] = os.environ.get("_STORAGE_BACKEND_INIT_OVERRIDE")
         sibling_done.set()
 
     t = threading.Thread(target=sibling, name="sibling-mode-probe")
     t.start()
 
-    _db._local._storage_backend_init_override = "sqlite"
+    _db_conn._local._storage_backend_init_override = "sqlite"
     try:
         # Main thread sees its own override (proves the mechanism works).
-        assert _db._backend_mode() == "sqlite"
+        assert _db_conn._backend_mode() == "sqlite"
         main_set.set()
         assert sibling_done.wait(timeout=5), "sibling never reported"
     finally:
         try:
-            del _db._local._storage_backend_init_override
+            del _db_conn._local._storage_backend_init_override
         except AttributeError:
             pass
 
@@ -1057,7 +1057,8 @@ def test_init_db_dual_does_not_set_global_env_var(monkeypatch):
     import threading
 
     import javdb.infra.config as _cfg
-    from javdb.storage.db import db as _db
+    from javdb.storage.db import db_connection as _db_conn
+    from javdb.storage.db import db_migrations as _db_mig
 
     monkeypatch.delenv("_STORAGE_BACKEND_INIT_OVERRIDE", raising=False)
     monkeypatch.setenv("STORAGE_BACKEND", "dual")
@@ -1073,13 +1074,15 @@ def test_init_db_dual_does_not_set_global_env_var(monkeypatch):
             "_STORAGE_BACKEND_INIT_OVERRIDE"
         )
         # Main thread (which set the thread-local) must see 'sqlite'.
-        observed["mode_during_init_main_view"] = _db._backend_mode()
+        observed["mode_during_init_main_view"] = _db_conn._backend_mode()
         inside_init.set()
         # Block until the sibling has had a chance to probe.
         if not sibling_done.wait(timeout=5):
             observed["error"] = "sibling never finished probing"
 
-    monkeypatch.setattr(_db, "_do_init", fake_do_init)
+    # _do_init now lives in db_migrations; patch it there so init_db's
+    # call resolves to the fake.
+    monkeypatch.setattr(_db_mig, "_do_init", fake_do_init)
 
     def sibling():
         if not inside_init.wait(timeout=5):
@@ -1088,14 +1091,14 @@ def test_init_db_dual_does_not_set_global_env_var(monkeypatch):
             return
         # Sibling has no thread-local; with the old bug it would fall
         # through to the env-var branch and see 'sqlite'.
-        observed["sibling_mode"] = _db._backend_mode()
+        observed["sibling_mode"] = _db_conn._backend_mode()
         observed["sibling_env"] = os.environ.get("_STORAGE_BACKEND_INIT_OVERRIDE")
         sibling_done.set()
 
     t = threading.Thread(target=sibling, name="sibling-init-probe")
     t.start()
 
-    _db.init_db(force=True)
+    _db_mig.init_db(force=True)
     t.join(timeout=5)
 
     assert "error" not in observed, observed.get("error")
@@ -1123,8 +1126,8 @@ def test_init_db_dual_does_not_set_global_env_var(monkeypatch):
 
     # Post-init: state is fully restored.
     assert os.environ.get("_STORAGE_BACKEND_INIT_OVERRIDE") is None
-    assert not hasattr(_db._local, "_storage_backend_init_override")
-    assert _db._backend_mode() == "dual"
+    assert not hasattr(_db_conn._local, "_storage_backend_init_override")
+    assert _db_conn._backend_mode() == "dual"
 
 
 # ── Application-generated id guard (Phase 3) ────────────────────────────
@@ -1563,29 +1566,32 @@ def test_db_stage_history_write_supplies_explicit_seq():
     because production writes go back through AUTOINCREMENT (and that's
     exactly the silent-residual scenario R2 was filed against).
     """
-    from javdb.storage.db import db as _db
+    from javdb.storage.db.db_connection import get_db, HISTORY_DB_PATH
+    from javdb.storage.db.db_history_write import db_stage_history_write
+    from javdb.storage.db.db_reports import db_create_report_session
+    from javdb.storage.db.db_session import SESSION_ID_PATTERN
 
     # The autouse `_isolate_sqlite` conftest fixture has already pointed
-    # _db.HISTORY_DB_PATH at a temp file and run init_db.  Stage one
+    # HISTORY_DB_PATH at a temp file and run init_db.  Stage one
     # row, then read back the Seq.
-    _db.db_create_report_session(
+    db_create_report_session(
         report_type="DailyReport",
         report_date="2026-05-09",
         csv_filename="r2-test.csv",
         write_mode="pending",
     )
     sid = "999_999_999"
-    seq = _db.db_stage_history_write(
+    seq = db_stage_history_write(
         sid, "movie", {"Href": "/v/r2-test", "VideoCode": "R2TEST"},
     )
     # Post-2026-05-13 Seq is a TEXT ISO-like snowflake. AUTOINCREMENT
     # would give a tiny decimal string like "1" / "2"; assert the
     # canonical shape instead.
-    assert _db._SESSION_ID_PATTERN.match(seq), (
+    assert SESSION_ID_PATTERN.match(seq), (
         f"Seq={seq!r} looks like AUTOINCREMENT; the explicit-Seq INSERT "
         "path may have regressed."
     )
-    with _db.get_db(_db.HISTORY_DB_PATH) as conn:
+    with get_db(HISTORY_DB_PATH) as conn:
         row = conn.execute(
             "SELECT Seq, SessionId, Href FROM PendingMovieHistoryWrites "
             "WHERE SessionId=?",
@@ -1598,16 +1604,19 @@ def test_db_stage_history_write_supplies_explicit_seq():
 
 def test_db_stage_history_write_torrent_supplies_explicit_seq():
     """Same as above for the torrent staging path."""
-    from javdb.storage.db import db as _db
+    from javdb.storage.db.db_connection import get_db, HISTORY_DB_PATH
+    from javdb.storage.db.db_history_write import db_stage_history_write
+    from javdb.storage.db.db_reports import db_create_report_session
+    from javdb.storage.db.db_session import SESSION_ID_PATTERN
 
-    _db.db_create_report_session(
+    db_create_report_session(
         report_type="DailyReport",
         report_date="2026-05-09",
         csv_filename="r2-torrent-test.csv",
         write_mode="pending",
     )
     sid = "888_888_888"
-    seq = _db.db_stage_history_write(
+    seq = db_stage_history_write(
         sid, "torrent",
         {
             "Href": "/v/r2-tor",
@@ -1616,10 +1625,10 @@ def test_db_stage_history_write_torrent_supplies_explicit_seq():
             "MagnetUri": "magnet:?xt=urn:btih:abc",
         },
     )
-    assert _db._SESSION_ID_PATTERN.match(seq), (
+    assert SESSION_ID_PATTERN.match(seq), (
         f"torrent Seq={seq!r} looks like AUTOINCREMENT"
     )
-    with _db.get_db(_db.HISTORY_DB_PATH) as conn:
+    with get_db(HISTORY_DB_PATH) as conn:
         row = conn.execute(
             "SELECT Seq FROM PendingTorrentHistoryWrites WHERE SessionId=?",
             (sid,),

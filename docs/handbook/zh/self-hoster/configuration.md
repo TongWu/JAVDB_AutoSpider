@@ -418,13 +418,12 @@ uvicorn 之前 `export VAR=...`。
 | 变量 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `STORAGE_BACKEND` | `str` | `'sqlite'` | 存储后端。`'sqlite'` —— 本地 SQLite 文件。`'d1'` —— Cloudflare D1（GitHub Actions）。`'dual'` —— 双写，从 D1 读取。 |
-| `WRITE_MODE` | `str` | `'pending'` | 会话管理的写入模式。`'pending'`（默认）—— 将写入暂存到 pending 表，在结束时提交。`'audit'`（旧版）—— 在 upsert 前将旧行保存到 audit 表。 |
+| `WRITE_MODE` | `str` | `'pending'` | 会话管理的写入模式。仅支持 `'pending'`；遗留 `'audit'` 请求会降级为 pending。 |
 | `STRICT_DUAL_WRITE` | `str` | `''` | 设为 `'1'` 时，在 dual 模式下 D1 写入失败会导致运行失败。 |
 | `LOG_LEVEL` | `str` | `'INFO'` | 当设为环境变量时，覆盖 `config.py` 中的 `LOG_LEVEL`。 |
 | `LOG_STYLE` | `str` | `'compact'` | 日志输出格式。`'compact'` —— 简洁单行。`'plain'` —— 标准格式。`'verbose'` —— 完整四字段格式。 |
 | `LOG_GITHUB_GROUPS` | `str` | `'auto'` | GitHub Actions 日志分组。`'on'` —— 始终输出 `::group::` 标记。`'off'` —— 从不。`'auto'` —— 自动检测 CI 环境。 |
 | `VAR_MOVIE_SLEEP` | `str` | *（无）* | 覆盖自适应休眠范围，格式为 `"min,max"`（秒），例如 CI 中使用 `"0,0"`。 |
-| `JAVDB_AUDIT_WRITES_DISABLED` | `str` | *（无）* | 设置后，阻止直接写入 audit 表（audit 模式仅用于只读取证）。 |
 
 ### 14.3 Docker 专用 `.env`（`docker/.env.example`）
 

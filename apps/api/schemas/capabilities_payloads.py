@@ -92,7 +92,6 @@ class SessionDetailResponse(BaseModel):
 class SessionRollbackPayload(BaseModel):
     dry_run: bool = True
     include_pending: bool = True
-    restore_from_audit: bool = True
 
 
 class SessionRollbackResponse(BaseModel):

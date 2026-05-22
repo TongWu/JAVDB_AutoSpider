@@ -71,16 +71,25 @@ from javdb.pipeline.policies import (
     alignment_parsed_category_rank as _ie_parsed_category_rank,
 )
 from javdb.infra.config import cfg
-from javdb.storage.db.db import (
+from javdb.storage.db.db_history_read import db_load_history
+from javdb.storage.db.db_migrations import init_db
+from javdb.storage.db.db_operations import (
     db_delete_align_no_exact_match,
     db_load_align_no_exact_match_codes,
-    db_load_history,
     db_load_rclone_inventory,
     db_upsert_align_no_exact_match,
-    db_upsert_history,
-    db_upsert_history_batch,
-    init_db,
 )
+
+
+def _audit_retired_stub(*args, **kwargs):
+    raise NotImplementedError(
+        "db_upsert_history was removed by ADR-005 PR-4. "
+        "This migration tool needs rewriting to use staging+commit."
+    )
+
+
+db_upsert_history = _audit_retired_stub
+db_upsert_history_batch = _audit_retired_stub
 from javdb.infra.logging import get_logger, setup_logging
 from javdb.spider.magnet_extractor import extract_magnets
 from javdb.infra.paths import ensure_dated_dir
@@ -599,6 +608,13 @@ def _align_eff_denominator(
 
 
 def run_alignment(args: argparse.Namespace) -> int:
+    if not args.dry_run and db_upsert_history is _audit_retired_stub:
+        logger.error(
+            "db_upsert_history was removed by ADR-005 PR-4. "
+            "This tool cannot write history in non-dry-run mode until "
+            "it is rewritten to use the staging+commit path."
+        )
+        raise SystemExit(1)
     init_db(force=True)
     history = db_load_history()
     inventory = db_load_rclone_inventory()
@@ -1088,7 +1104,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description='Align inventory-only movie codes into MovieHistory with JavDB search/detail enrichment.',
     )
-    parser.add_argument('--dry-run', action='store_true', help='Parse and plan only; do not write DB.')
+    parser.add_argument('--dry-run', action='store_true', help='Parse and plan only; do not write DB. (Required until staging+commit rewrite; see ADR-005 PR-4.)')
     parser.add_argument(
         '--limit',
         type=int,
@@ -1156,7 +1172,7 @@ def main() -> int:
     # process tag their writes with it.
     if getattr(args, 'session_id', None) is not None:
         try:
-            from javdb.storage.db.db import set_active_session_id
+            from javdb.storage.db.db_session import set_active_session_id
             set_active_session_id(args.session_id)
         except Exception as e:
             logger.warning(

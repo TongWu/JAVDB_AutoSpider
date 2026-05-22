@@ -4,12 +4,13 @@ This directory contains all project documentation, organized by audience.
 
 ## Design Records (`design/`)
 
-Architecture decision records, implementation plans, and architecture analyses.
+Architecture decision records, implementation plans, bug fix records, and architecture analyses.
 
 - [CONTEXT.md](design/CONTEXT.md) — Domain language glossary
 - [architecture/](design/architecture/) — Module mappings and reorganization plans
-- [adr/](design/adr/) — Architecture Decision Records
-- [impl/](design/impl/) — Implementation plans
+- [adr/](design/adr/) — Architecture Decision Records (bilingual `.md` + `.zh.md`)
+- [impl/](design/impl/) — Implementation plans (English only)
+- [bfr/](design/bfr/) — Bug Fix Records (bilingual `.md` + `.zh.md`)
 
 ## For Self-Hosters (`handbook/en/self-hoster/` | `handbook/zh/self-hoster/`)
 

@@ -14,7 +14,7 @@ import os
 import sqlite3
 import threading
 from contextlib import contextmanager
-from typing import Optional
+from typing import Any, List, Optional, Tuple
 
 from javdb.infra.config import cfg
 from javdb.infra.logging import get_logger
@@ -32,7 +32,7 @@ OPERATIONS_DB_PATH = cfg('OPERATIONS_DB_PATH', os.path.join(_REPORTS_DIR, 'opera
 # Legacy single-DB path — kept for migration source detection
 DB_PATH = cfg('SQLITE_DB_PATH', os.path.join(_REPORTS_DIR, 'javdb_autospider.db'))
 
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 
 # Logical-name mapping for D1 / dual backends
 _DB_PATH_TO_LOGICAL_NAME = {
@@ -40,6 +40,65 @@ _DB_PATH_TO_LOGICAL_NAME = {
     REPORTS_DB_PATH: 'reports',
     OPERATIONS_DB_PATH: 'operations',
 }
+
+# ── Backend-agnostic error tuples ────────────────────────────────────────
+#
+# Several best-effort code paths catch ``sqlite3.OperationalError`` to mean
+# "table / column doesn't exist on a legacy schema, fall back" and
+# ``sqlite3.IntegrityError`` to mean "UNIQUE conflict, a concurrent run
+# already did this". Under ``STORAGE_BACKEND=d1`` the connection is a
+# ``D1Connection`` whose ``execute`` raises ``D1PermanentError`` (HTTP 400
+# application-level error from Cloudflare) for BOTH situations — it never
+# raises the ``sqlite3.*`` types. Without broadening the catch, a missing
+# table or a UNIQUE conflict on D1 would propagate out of those
+# best-effort paths and abort an otherwise-recoverable rollback / verify.
+#
+# ``D1PermanentError`` (not the ``D1Error`` base) is intentionally the only
+# D1 type added: ``D1TransientError`` means retries were already exhausted
+# by ``_post_with_retry`` and must NOT be silently swallowed as "legacy
+# schema" / "concurrent run". The import is guarded so a sqlite-only
+# deployment without the d1_client deps still loads db_connection.py.
+try:  # pragma: no cover - import wiring
+    from javdb.storage.d1_client import (
+        D1PermanentError as _D1PermanentError,
+    )
+    _DB_OPERATIONAL_ERRORS: Tuple[type, ...] = (
+        sqlite3.OperationalError, _D1PermanentError,
+    )
+    _DB_INTEGRITY_ERRORS: Tuple[type, ...] = (
+        sqlite3.IntegrityError, _D1PermanentError,
+    )
+except Exception:  # noqa: BLE001 - d1_client optional in sqlite-only installs
+    _DB_OPERATIONAL_ERRORS = (sqlite3.OperationalError,)
+    _DB_INTEGRITY_ERRORS = (sqlite3.IntegrityError,)
+
+# ── Shared utility functions ────────────────────────────────────────────
+
+
+def _execute_backend_batch(conn, statements: List[Tuple[str, Tuple[Any, ...]]]):
+    """Execute a list of SQL statements, using D1's batch_execute when available."""
+    if not statements:
+        return []
+    batch = getattr(conn, "batch_execute", None)
+    if callable(batch):
+        return batch(statements)
+    cursors = []
+    for sql, params in statements:
+        cursors.append(conn.execute(sql, params))
+    return cursors
+
+
+def _row_to_jsonable_dict(row) -> dict:
+    """Convert a sqlite3.Row / dict / mapping into a plain JSON-friendly dict."""
+    if row is None:
+        return {}
+    if isinstance(row, dict):
+        return dict(row)
+    try:
+        return {k: row[k] for k in row.keys()}
+    except Exception:
+        return dict(row)
+
 
 # ── Thread-local connection cache ────────────────────────────────────────
 

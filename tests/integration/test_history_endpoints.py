@@ -14,7 +14,7 @@ import pytest
 
 @pytest.fixture(autouse=True, scope="module")
 def _ensure_db_initialized():
-    from javdb.storage.db.db import init_db
+    from javdb.storage.db.db_migrations import init_db
     init_db()
 
 

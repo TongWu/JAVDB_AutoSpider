@@ -14,6 +14,7 @@ from javdb.infra.logging import (
     log_section,
 )
 from javdb.storage.history_manager import load_parsed_movies_history, validate_history_file
+from javdb.storage.repos.stats_repo import StatsRepo
 from javdb.infra.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
 from javdb.spider.filename_helper import generate_output_csv_name
 from javdb.infra.paths import ensure_dated_dir
@@ -619,7 +620,6 @@ def _main():
     # Save spider stats and end_page to SQLite (when session exists)
     if _session_id is not None:
         try:
-            from javdb.storage.db.db_stats import db_save_spider_stats
             from javdb.storage.db.db_connection import get_db, REPORTS_DB_PATH
             p1_discovered = len(all_index_results_phase1) if phase_mode in ('1', 'all') else 0
             p1_processed = len(phase1_rows)
@@ -647,7 +647,7 @@ def _main():
                 'total_failed': failed_count,
                 'failed_movies': failed_movies_list,
             }
-            db_save_spider_stats(_session_id, stats)
+            StatsRepo().save_spider_stats(_session_id, stats)
 
             last_page = idx_result.get('last_valid_page')
             if last_page is not None:

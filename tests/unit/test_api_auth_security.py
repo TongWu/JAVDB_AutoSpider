@@ -1,11 +1,14 @@
 import importlib
 import os
 import sys
+from pathlib import Path
 
 import pytest
 
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
+
+_CONFIG_STORE = Path(project_root) / "reports" / "api_config_store.json"
 
 
 def _reload_auth_module():
@@ -28,8 +31,28 @@ def test_missing_api_secret_raises_in_production(monkeypatch):
     monkeypatch.delenv("FLASK_ENV", raising=False)
     monkeypatch.delenv("API_SECRET_KEY", raising=False)
 
-    with pytest.raises(RuntimeError, match="API_SECRET_KEY is required"):
-        _reload_auth_module()
+    from javdb.infra.config import cfg as _real_cfg
+
+    def _cfg_no_secret(name, default=""):
+        if name == "API_SECRET_KEY":
+            return default
+        return _real_cfg(name, default)
+
+    monkeypatch.setattr("javdb.infra.config.cfg", _cfg_no_secret)
+
+    # _read_store_value reads from the on-disk config store which may
+    # also carry API_SECRET_KEY.  Temporarily hide the file so _resolve
+    # sees all three sources as empty.
+    backup = _CONFIG_STORE.with_suffix(".json.test_bak")
+    existed = _CONFIG_STORE.exists()
+    if existed:
+        _CONFIG_STORE.rename(backup)
+    try:
+        with pytest.raises(RuntimeError, match="API_SECRET_KEY is required"):
+            _reload_auth_module()
+    finally:
+        if existed:
+            backup.rename(_CONFIG_STORE)
 
 
 class _StubURL:

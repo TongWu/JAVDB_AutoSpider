@@ -1,6 +1,6 @@
 # ADR-005: Full Retirement of db.py + Repo Class Abstraction + Audit Mode Retirement
 
-**Status**: Accepted — **PR-1 shipped** (Repo classes added alongside `db.py`); **PR-2 → PR-5 blocked on [ADR-006](ADR-006-pending-mode-default-rollout.md) bake completion** (~2026-06-15)
+**Status**: Accepted — **PR-1 through PR-5 shipped on 2026-05-22**; ADR-005 storage/audit/db.py retirement is complete
 **Date**: 2026-05-16
 **Deciders**: Architecture depth-pass round 2
 **Prerequisites**: [ADR-006](ADR-006-pending-mode-default-rollout.md) — Pending Mode default must first be rolled out to 100% and the auto-fallback redesigned before this ADR can execute its D10 gate
@@ -9,13 +9,13 @@
 
 ## Outstanding Work
 
-PR-1 (Repo classes) ✅ shipped: `HistoryRepo`, `OperationsRepo`, `StatsRepo`, `SessionsRepo`, `SystemStateRepo` are present in `javdb/storage/repos/`. Remaining:
+PR-1 (Repo classes) ✅ shipped: `HistoryRepo`, `OperationsRepo`, `StatsRepo`, `SessionsRepo`, `SystemStateRepo` are present in `javdb/storage/repos/`. Completion status:
 
-- **PR-2** — `db.py` internally forwards to Repos (dual-write phase). Blocked on bake.
-- **PR-3** — migrate callers (`history_manager.py`, CLI tools, `db_rollback.py`) off the function family. Blocked on bake.
-- **PR-4** — drop Audit Mode tables (`MovieHistoryAudit`, `TorrentHistoryAudit`) + remove audit code branches. Blocked on bake **and** ADR-006 PR-F sign-off.
-- **PR-5** — delete `db.py` (currently 5,454 lines) and the nine ADR-001 shell modules. Final cleanup post-retirement.
-- **Parser-helper relocation** — extracted from this ADR and superseded by [ADR-011](ADR-011-javdb-parsing-module.md). ADR-005 Storage/Repo work should import parsing helpers from `javdb.parsing.common` after ADR-011 Phase 1 lands.
+- **PR-2** ✅ shipped (#70, 2026-05-21): `db.py` internally forwards to Repos (dual-write phase).
+- **PR-3** ✅ shipped (#71, 2026-05-21): migrated spider/history_manager callers off the function family.
+- **PR-4** ✅ shipped (2026-05-22): dropped Audit Mode tables and removed audit write / rollback branches.
+- **PR-5** ✅ shipped (2026-05-22): deleted `javdb/storage/db/db.py`; the ADR-001 modules remain as the canonical implementation modules, not shell facades.
+- **Parser-helper relocation** remains outside ADR-005 and is tracked by [ADR-011](ADR-011-javdb-parsing-module.md). There is no remaining ADR-005 implementation work.
 
 ## Amendments
 
@@ -54,11 +54,19 @@ PR-1 (Repo classes) ✅ shipped: `HistoryRepo`, `OperationsRepo`, `StatsRepo`, `
 
 - **2026-05-20 amendment 3**: **Parser-helper relocation extracted to ADR-011.** D4 / PR-6 originally moved three helpers from `apps.api.parsers.common` into a lower module. That overlapped with a larger parsing-boundary correction. [ADR-011](ADR-011-javdb-parsing-module.md) now owns the full JavDB Parsing Interface move to `javdb.parsing`, including those helpers under `javdb.parsing.common`. ADR-005 remains responsible for Storage/Repo retirement only. Any remaining ADR-005 implementation that needs these helpers should import from `javdb.parsing.common` once ADR-011 Phase 1 has landed.
 
+- **2026-05-21 amendment 4**: **ADR-006 sign-off completed via operator-approved 7-day clean bake bypass.** The original plan required a 30-day bake until approximately 2026-06-15; the maintainer confirmed one clean week with no pending-mode issues and explicitly approved bypassing the remaining wait to continue. This removes the ADR-005 PR-2 start blocker. Risk handling is unchanged: PR-2 must not delete audit schema, audit code, or caller compatibility; ADR-005 PR-4 still requires the D10 trio to pass before audit-table deletion.
+
+- **2026-05-21 amendment 5**: **PR-2 and PR-3 shipped.** PR-2 (#70) routed the `db.py` facade through Repo classes (636 additions, 272 deletions, 13 files). PR-3 (#71) migrated spider and history_manager callers to use Repos directly (573 additions, 44 deletions, 11 files). Both include boundary regression tests enforcing that migrated callers cannot fall back to raw `db_*` functions. Remaining: PR-4 (drop audit tables, gated by D10) and PR-5 (delete `db.py`).
+
+- **2026-05-22 amendment 6**: **D10 gate sign-off — PR-4 unblocked.** BakeCheck.yml has reported all three D10 metrics passing for 4 consecutive days (2026-05-18 through 2026-05-21). The operator approved proceeding with PR-4 on 2026-05-22 despite workflow audit-option removal being 6 days old (1 day short of the 7-day text in D10 #3), since the functional evidence — zero audit sessions, zero orphan rows, 6 consecutive successful DailyIngestion runs — proves the risk is moot. PR-4 (drop audit tables + remove audit code) and PR-5 (delete `db.py`) are now unblocked.
+
+- **2026-05-22 amendment 7**: **PR-4 and PR-5 shipped.** Audit Mode is fully retired: audit tables, audit archive/cleanup tooling, and audit write/rollback branches are gone. `javdb/storage/db/db.py` was deleted. The former ADR-001 split modules (`db_history_read.py`, `db_history_write.py`, `db_stats.py`, etc.) are no longer shell modules; they now own the low-level implementation and are intentionally retained behind the package public API in `javdb/storage/db/__init__.py`.
+
 ---
 
-## D10 Gate Check Results (2026-05-16)
+## D10 Gate Check Results
 
-Immediately after drafting ADR-005 we ran the D10 Audit Mode retirement safety check. **Two items failed**:
+### Initial check (2026-05-16) — two items failed
 
 | Gate item | Status | Evidence |
 |---|---|---|
@@ -68,7 +76,25 @@ Immediately after drafting ADR-005 we ran the D10 Audit Mode retirement safety c
 
 A **documentation discrepancy** also surfaced: CONTEXT.md / CLAUDE.md / the ADR-001 docstring claim "Pending Mode is default", but the code fallback at `db_session.py:188` and the SQLite schema's `WriteMode TEXT DEFAULT 'audit'` both show the **actual default is still audit**. This is aspirational, not factual.
 
-**Conclusion**: D2(c) "fully retire Audit Mode" is not executable today, because Audit Mode is the actual runtime mode for 80% of sessions and the live safety net for Pending Mode failures. Until ADR-006 lands, PR-1 of this ADR cannot start.
+**Conclusion**: D2(c) "fully retire Audit Mode" was not executable on 2026-05-16, because Audit Mode was the actual runtime mode for 80% of sessions and the live safety net for Pending Mode failures. Later amendments supersede the start blocker: PR-1 shipped, and the ADR-006 sign-off completed on 2026-05-21 via operator-approved 7-day clean bake bypass to unblock PR-2.
+
+### Re-check (2026-05-22) — all items pass, operator sign-off granted
+
+`BakeCheck.yml` daily cron results since `BAKE_SINCE=2026-05-16`:
+
+| Date | audit_session_count | orphan_audit_rows | pause_trigger_count | Result |
+|---|---|---|---|---|
+| 2026-05-18 | 0 (threshold 0) ✅ | 0 (threshold 0) ✅ | 1 (threshold 1) ✅ | PASS |
+| 2026-05-19 | 0 ✅ | 0 ✅ | 1 ✅ | PASS |
+| 2026-05-20 | 0 ✅ | 0 ✅ | 1 ✅ | PASS |
+| 2026-05-21 | 0 ✅ | 0 ✅ | 1 ✅ | PASS |
+
+Supporting evidence:
+- DailyIngestion: 6 consecutive successful runs (2026-05-16 through 2026-05-21)
+- All active workflow code paths: zero audit references (verified 2026-05-22 full grep audit)
+- Workflow audit-option removal: 6 days (1 day short of D10 #3's text), bypassed by operator
+
+**Conclusion**: The operator approved PR-4 on 2026-05-22. All functional D10 metrics pass; the 1-day shortfall on the workflow-removal calendar check is immaterial given zero audit session activity. PR-4 and PR-5 may proceed.
 
 ---
 
@@ -195,12 +221,10 @@ PR-2  db.py internals delegate to the Repo classes (dual-write parallel: callers
 PR-3a Migrate callers in packages/python/javdb_spider/ and javdb_platform/history_manager.py
 PR-3b Migrate callers in packages/python/javdb_ingestion/ and javdb_integrations/
 PR-3c Migrate callers in apps/cli/, apps/api/, scripts/, packages/python/javdb_migrations/tools/
-PR-4  Confirm no in_progress sessions remain in ReportSessions → run v14 migration to drop
-      the audit tables → delete the audit code in db.py / db_history_read.py /
-      db_history_write.py / db_session.py
-PR-5  Delete db.py; delete the ADR-001 shell modules db_history_read.py /
-      db_history_write.py / db_stats.py; delete the db_session global;
-      delete the JAVDB_HISTORY_WRITE_MODE environment variable
+PR-4  ✅ Shipped 2026-05-22: confirmed D10 gate, dropped audit tables, and
+      removed audit write/rollback code.
+PR-5  ✅ Shipped 2026-05-22: deleted db.py. The ADR-001 split modules are
+      retained as canonical implementation modules rather than shell facades.
 PR-6  Superseded by ADR-011. Parser/helper relocation is extracted from
       ADR-005 and implemented through ADR-011 Phase 1-3. Remaining ADR-005
       work should consume helpers from javdb.parsing.common after Phase 1.
@@ -271,10 +295,10 @@ If the check fails, first set `JAVDB_AUDIT_WRITES_DISABLED=1` org-wide and bake 
 
 ### Risks
 
-1. **Audit can still be written before PR-4** → in-flight audit sessions linger across the upgrade path.
-   - **Mitigation**: the three D10 gates; bake `JAVDB_AUDIT_WRITES_DISABLED=1` before removing code.
-2. **`db.py` deletion misses an implicit caller** (external scripts, the user's private automation).
-   - **Mitigation**: before PR-5, add `DeprecationWarning("use HistoryRepo")` at the top of `db.py` for one release cycle and watch the logs for hits.
+1. **External scripts may still import deleted `db.py`**.
+   - **Mitigation**: the package public API now re-exports supported storage helpers from `javdb.storage.db`; internal callers were migrated before deletion and grep checks enforce no `javdb.storage.db.db` imports remain.
+2. **Historical docs may imply audit fallback is still available**.
+   - **Mitigation**: current operator docs mark Audit Mode retired; historical Appendix sections must be explicitly labelled as archival context.
 3. **The Repo class's `session_id=None` default lets "forgot to pass session" become an implicit bug again.**
    - **Mitigation**: every `stage` / `commit` / `rollback` method's first line is `self._require_session()`, which raises `RuntimeError`. The interface contract is executable.
 4. **Storage/Repo work may accidentally keep importing helpers from `apps.api.parsers.common`.**

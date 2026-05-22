@@ -15,7 +15,10 @@ from typing import Dict, List, Tuple
 
 import pytest
 
-import javdb.storage.db.db as db_mod
+from javdb.storage.db.db_connection import get_db
+from javdb.storage.db.db_reports import db_create_report_session
+from javdb.storage.db.db_history_write import db_stage_history_write, db_commit_session_history
+import javdb.storage.db.db_history_write as _db_hw
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -24,7 +27,7 @@ import javdb.storage.db.db as db_mod
 
 
 def _create_session(filename: str) -> int:
-    return db_mod.db_create_report_session(
+    return db_create_report_session(
         report_type="DailyReport",
         report_date="2026-05-13",
         csv_filename=filename,
@@ -33,7 +36,7 @@ def _create_session(filename: str) -> int:
 
 
 def _stage_movie(sid, href, code, *, actor=None, visited="2026-05-13 12:00:00"):
-    return db_mod.db_stage_history_write(sid, "movie", {
+    return db_stage_history_write(sid, "movie", {
         "Href": href,
         "VideoCode": code,
         "ActorName": actor,
@@ -45,7 +48,7 @@ def _stage_torrent(
     sid, href, code, category,
     *, magnet="magnet:test", size="1.0GB", file_count=1, resolution=None,
 ):
-    return db_mod.db_stage_history_write(sid, "torrent", {
+    return db_stage_history_write(sid, "torrent", {
         "Href": href,
         "VideoCode": code,
         "Category": category,
@@ -104,7 +107,7 @@ def _capture_live_state(hrefs: List[str]) -> Dict[str, dict]:
     from apps.api.parsers.common import movie_href_lookup_values
     base = "https://javdb.com"
     out: Dict[str, dict] = {}
-    with db_mod.get_db() as conn:
+    with get_db() as conn:
         for href in hrefs:
             path_href, abs_href = movie_href_lookup_values(href, base)
             variants = [v for v in (path_href, abs_href, href) if v]
@@ -153,7 +156,7 @@ def test_bulk_produces_expected_live_state(monkeypatch, bulk):
     monkeypatch.setenv("COMMIT_SESSION_BULK", bulk)
     sid = _create_session(f"bulk-{bulk}.csv")
     hrefs = _seed_workload(sid, n_hrefs=12)
-    counts = db_mod.db_commit_session_history(sid)
+    counts = db_commit_session_history(sid)
 
     # Sanity: every staged movie was upserted; pending rows fully drained.
     assert counts["hrefs_processed"] == 12
@@ -325,8 +328,9 @@ def test_bulk_path_issues_far_fewer_statements(monkeypatch):
 
 
 def _count_executes_during_commit(session_id) -> int:
-    """Patch ``get_db`` so every execute() during commit gets tallied."""
-    orig_get_db = db_mod.get_db
+    """Patch ``_get_db`` so every execute() during commit gets tallied."""
+    _db_hw._ensure_imports()
+    orig_get_db = _db_hw._get_db
     counters: List[int] = []
 
     from contextlib import contextmanager
@@ -340,17 +344,17 @@ def _count_executes_during_commit(session_id) -> int:
             finally:
                 counters.append(wrapped.executes)
 
-    db_mod.get_db = _patched
+    _db_hw._get_db = _patched
     try:
-        db_mod.db_commit_session_history(session_id)
+        db_commit_session_history(session_id)
     finally:
-        db_mod.get_db = orig_get_db
+        _db_hw._get_db = orig_get_db
     return sum(counters)
 
 
 def _truncate_workload_tables():
     """Clear pending + live tables between budget-test phases."""
-    with db_mod.get_db() as conn:
+    with get_db() as conn:
         for tbl in (
             "TorrentHistory", "MovieHistory",
             "PendingTorrentHistoryWrites", "PendingMovieHistoryWrites",
