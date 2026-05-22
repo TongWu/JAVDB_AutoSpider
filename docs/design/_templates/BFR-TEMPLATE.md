@@ -4,7 +4,7 @@
 **Date**: YYYY-MM-DD
 **Severity**: Critical / High / Medium
 **Affected**: `module/file.py`, `other/module.py`
-**Related**: [ADR-NNN](../adr/ADR-NNN-xxx.md), [PR #NN](https://github.com/...)
+**Related**: [ADR-NNN](../ADR-NNN-Foo/ADR-NNN-xxx.md), [PR #NN](https://github.com/...)
 
 ---
 
