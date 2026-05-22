@@ -71,9 +71,9 @@ from javdb.pipeline.policies import (
     alignment_parsed_category_rank as _ie_parsed_category_rank,
 )
 from javdb.infra.config import cfg
-from javdb.storage.db.db_history_read import db_load_history
-from javdb.storage.db.db_migrations import init_db
-from javdb.storage.db.db_operations import (
+from javdb.storage.db import (
+    db_load_history,
+    init_db,
     db_delete_align_no_exact_match,
     db_load_align_no_exact_match_codes,
     db_load_rclone_inventory,
@@ -1172,7 +1172,7 @@ def main() -> int:
     # process tag their writes with it.
     if getattr(args, 'session_id', None) is not None:
         try:
-            from javdb.storage.db.db_session import set_active_session_id
+            from javdb.storage.db import set_active_session_id
             set_active_session_id(args.session_id)
         except Exception as e:
             logger.warning(

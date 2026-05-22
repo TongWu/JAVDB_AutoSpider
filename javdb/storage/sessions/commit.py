@@ -80,7 +80,7 @@ def _emit_commit_metrics(
         append_jsonl_record,
         attach_run_identity,
     )
-    from javdb.storage.db.db_reports import db_pending_session_stats
+    from javdb.storage.db import db_pending_session_stats
 
     try:
         stats = db_pending_session_stats(session_id)

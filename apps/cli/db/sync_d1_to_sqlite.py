@@ -86,7 +86,7 @@ from javdb.storage.d1_client import (
     get_d1_api_token,
     get_d1_database_id,
 )
-from javdb.storage.db.db_migrations import _ensure_rollback_columns
+from javdb.storage.db import _ensure_rollback_columns
 from javdb.infra.logging import (
     get_logger,
     log_group_end,

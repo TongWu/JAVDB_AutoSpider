@@ -8,7 +8,7 @@ from urllib.parse import urljoin
 
 from javdb.infra.logging import get_logger
 from javdb.infra.config import use_sqlite
-from javdb.storage.db.db_session import get_active_session_id
+from javdb.storage.db import get_active_session_id
 from javdb.storage.history_manager import (
     save_parsed_movie_to_history,
     batch_update_last_visited,

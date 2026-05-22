@@ -213,7 +213,7 @@ def write_csv(rows, csv_path, fieldnames, dry_run=False, append_mode=False):
         try:
             from javdb.infra.config import use_sqlite
             if use_sqlite():
-                from javdb.storage.db.db_reports import db_insert_report_rows
+                from javdb.storage.db import db_insert_report_rows
                 db_insert_report_rows(_active_session_id, rows)
         except Exception as e:
             logger.warning(f"[CSV] Failed to write rows to SQLite: {e}")

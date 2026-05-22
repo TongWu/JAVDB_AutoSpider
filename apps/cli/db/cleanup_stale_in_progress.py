@@ -34,7 +34,7 @@ from typing import List, Optional
 
 import javdb.storage.db.db_connection as _db_conn
 from javdb.storage.db.db_connection import close_db, get_db
-from javdb.storage.db.db_rollback import (
+from javdb.storage.db import (
     db_resume_finalizing_session,
     db_rollback_session,
 )
@@ -139,7 +139,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     #   in_progress → db_rollback_session (audit replay or DELETE pending)
     #   finalizing  → db_resume_finalizing_session (idempotent commit drive)
     try:
-        from javdb.storage.db.db_reports import (
+        from javdb.storage.db import (
             db_find_stale_pending_sessions,
         )
         rows = db_find_stale_pending_sessions(
