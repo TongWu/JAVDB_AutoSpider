@@ -28,7 +28,7 @@ def _ensure_imports():
     global _load_history_joined, _batch_update_movie_actors
     global _category_to_indicators, _movie_href_lookup_values, _cfg
     if _get_db is None:
-        from javdb.storage.db.db_connection import (
+        from javdb.storage.db._db_connection import (
             get_db,
             HISTORY_DB_PATH,
         )
@@ -367,5 +367,5 @@ def db_get_all_history_records(db_path: Optional[str] = None) -> list:
 
 def db_batch_update_last_visited(*args, **kwargs):
     """Update DateTimeVisited for a batch of hrefs. Delegates to db_history_write."""
-    from javdb.storage.db.db_history_write import db_batch_update_last_visited as _f
+    from javdb.storage.db._db_history_write import db_batch_update_last_visited as _f
     return _f(*args, **kwargs)

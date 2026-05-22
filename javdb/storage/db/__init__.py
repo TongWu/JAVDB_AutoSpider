@@ -9,7 +9,7 @@ instead of reaching into individual sub-modules.
 """
 
 # ── Connection management ───────────────────────────────────────────────
-from .db_connection import (  # noqa: F401
+from ._db_connection import (  # noqa: F401
     get_db,
     get_local_sqlite_db,
     close_db,
@@ -29,7 +29,7 @@ from .db_connection import (  # noqa: F401
 )
 
 # ── Schema DDL & init ──────────────────────────────────────────────────
-from .db_migrations import (  # noqa: F401
+from ._db_migrations import (  # noqa: F401
     init_db,
     _init_single_db,
     _init_single_legacy_db,
@@ -42,7 +42,7 @@ from .db_migrations import (  # noqa: F401
 )
 
 # ── Session state ──────────────────────────────────────────────────────
-from .db_session import (  # noqa: F401
+from ._db_session import (  # noqa: F401
     set_active_session_id,
     get_active_session_id,
     set_active_run_identity,
@@ -59,7 +59,7 @@ from .db_session import (  # noqa: F401
 )
 
 # ── History reads ──────────────────────────────────────────────────────
-from .db_history_read import (  # noqa: F401
+from ._db_history_read import (  # noqa: F401
     db_load_history,
     db_load_history_snapshot,
     db_check_torrent_in_history,
@@ -67,7 +67,7 @@ from .db_history_read import (  # noqa: F401
 )
 
 # ── History writes ─────────────────────────────────────────────────────
-from .db_history_write import (  # noqa: F401
+from ._db_history_write import (  # noqa: F401
     db_stage_history_write,
     db_commit_session_history,
     db_resume_finalizing_session,
@@ -79,7 +79,7 @@ from .db_history_write import (  # noqa: F401
 )
 
 # ── Report sessions ────────────────────────────────────────────────────
-from .db_reports import (  # noqa: F401
+from ._db_reports import (  # noqa: F401
     db_create_report_session,
     db_get_session_status,
     db_insert_report_rows,
@@ -101,7 +101,7 @@ from .db_reports import (  # noqa: F401
 )
 
 # ── Operations (rclone / dedup / pikpak / align) ───────────────────────
-from .db_operations import (  # noqa: F401
+from ._db_operations import (  # noqa: F401
     db_replace_rclone_inventory,
     db_load_rclone_inventory,
     db_append_rclone_inventory,
@@ -125,7 +125,7 @@ from .db_operations import (  # noqa: F401
 )
 
 # ── Stats ──────────────────────────────────────────────────────────────
-from .db_stats import (  # noqa: F401
+from ._db_stats import (  # noqa: F401
     db_save_spider_stats,
     db_get_spider_stats,
     db_get_spider_stats_local,
@@ -138,7 +138,7 @@ from .db_stats import (  # noqa: F401
 )
 
 # ── Rollback ───────────────────────────────────────────────────────────
-from .db_rollback import (  # noqa: F401
+from ._db_rollback import (  # noqa: F401
     db_rollback_session,
     _session_id_to_identifier_suffix,
 )

@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 from javdb.infra.logging import get_logger
-from javdb.storage.db.db_session import (
+from javdb.storage.db._db_session import (
     _SESSION_ID_SENTINEL,
     _resolve_session_id,
 )
@@ -39,7 +39,7 @@ def _ensure_imports():
     global _replace_rclone_inventory, _open_rclone_staging, _append_rclone_staging
     global _swap_rclone_inventory, _merge_rclone_inventory_from_stage, _drop_rclone_staging
     if _get_db is None:
-        from javdb.storage.db.db_connection import (
+        from javdb.storage.db._db_connection import (
             get_db,
             OPERATIONS_DB_PATH,
         )

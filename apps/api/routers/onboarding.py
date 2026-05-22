@@ -12,7 +12,7 @@ from apps.api.schemas.capabilities_payloads import (
 from apps.api.infra.auth import _require_auth, require_role
 from apps.api.services import config_service
 from javdb.storage.repos.system_state_repo import SystemStateRepo
-from javdb.storage.db import db_connection
+import javdb.storage.db._db_connection as db_connection
 
 
 REQUIRED_COMPONENTS = ("javdb_session", "qb")

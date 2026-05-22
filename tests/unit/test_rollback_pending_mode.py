@@ -483,7 +483,7 @@ class TestFinalizingResumeIdempotency:
 
         # Resume must clean up the residual applied rows without
         # re-running _commit_one_movie (live tables already correct).
-        import javdb.storage.db.db_history_write as write_mod
+        import javdb.storage.db._db_history_write as write_mod
 
         def _fail_commit_one_movie(*_args, **_kwargs):
             raise AssertionError("_commit_one_movie must not run for committed resume")

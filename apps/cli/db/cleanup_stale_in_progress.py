@@ -42,7 +42,7 @@ from javdb.storage.db import (
     db_resume_finalizing_session,
     db_rollback_session,
 )
-from javdb.storage.db import db_migrations as _db_mig
+import javdb.storage.db._db_migrations as _db_mig
 from javdb.storage.repos.sessions_repo import SessionsRepo
 from javdb.infra.logging import (
     get_logger,

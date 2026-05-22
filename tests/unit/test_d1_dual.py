@@ -997,7 +997,7 @@ def test_backend_mode_thread_local_invisible_to_siblings(monkeypatch):
     """
     import threading
 
-    from javdb.storage.db import db_connection as _db_conn
+    from javdb.storage.db import _db_connection as _db_conn
 
     monkeypatch.delenv("_STORAGE_BACKEND_INIT_OVERRIDE", raising=False)
     monkeypatch.setenv("STORAGE_BACKEND", "dual")
@@ -1057,8 +1057,8 @@ def test_init_db_dual_does_not_set_global_env_var(monkeypatch):
     import threading
 
     import javdb.infra.config as _cfg
-    from javdb.storage.db import db_connection as _db_conn
-    from javdb.storage.db import db_migrations as _db_mig
+    from javdb.storage.db import _db_connection as _db_conn
+    from javdb.storage.db import _db_migrations as _db_mig
 
     monkeypatch.delenv("_STORAGE_BACKEND_INIT_OVERRIDE", raising=False)
     monkeypatch.setenv("STORAGE_BACKEND", "dual")

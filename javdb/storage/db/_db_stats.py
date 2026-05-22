@@ -28,7 +28,7 @@ def _ensure_imports():
     """Lazy import to avoid circular dependency with db_connection."""
     global _get_db, _get_local_sqlite_db, _REPORTS_DB_PATH
     if _get_db is None:
-        from javdb.storage.db.db_connection import (
+        from javdb.storage.db._db_connection import (
             get_db,
             get_local_sqlite_db,
             REPORTS_DB_PATH,
