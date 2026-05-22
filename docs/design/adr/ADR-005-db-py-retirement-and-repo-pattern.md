@@ -1,6 +1,6 @@
 # ADR-005: Full Retirement of db.py + Repo Class Abstraction + Audit Mode Retirement
 
-**Status**: Accepted — **PR-1 shipped** (Repo classes added alongside `db.py`); **ADR-006 sign-off completed on 2026-05-21** (operator-approved 7-day clean bake bypass); **PR-2 unblocked, PR-3 → PR-5 proceed in order**
+**Status**: Accepted — **PR-1 through PR-3 shipped**; **D10 gate sign-off completed on 2026-05-22** (4 consecutive days all-pass); **PR-4 and PR-5 unblocked**
 **Date**: 2026-05-16
 **Deciders**: Architecture depth-pass round 2
 **Prerequisites**: [ADR-006](ADR-006-pending-mode-default-rollout.md) — Pending Mode default must first be rolled out to 100% and the auto-fallback redesigned before this ADR can execute its D10 gate
@@ -11,10 +11,10 @@
 
 PR-1 (Repo classes) ✅ shipped: `HistoryRepo`, `OperationsRepo`, `StatsRepo`, `SessionsRepo`, `SystemStateRepo` are present in `javdb/storage/repos/`. Remaining:
 
-- **PR-2** — `db.py` internally forwards to Repos (dual-write phase). Unblocked by ADR-006 sign-off.
-- **PR-3** — migrate callers (`history_manager.py`, CLI tools, `db_rollback.py`) off the function family. Starts after PR-2 verification.
-- **PR-4** — drop Audit Mode tables (`MovieHistoryAudit`, `TorrentHistoryAudit`) + remove audit code branches. Starts after PR-3 and only after the D10 trio passes again.
-- **PR-5** — delete `db.py` (currently 5,454 lines) and the nine ADR-001 shell modules. Final cleanup post-retirement.
+- **PR-2** ✅ shipped (#70, 2026-05-21): `db.py` internally forwards to Repos (dual-write phase).
+- **PR-3** ✅ shipped (#71, 2026-05-21): migrated spider/history_manager callers off the function family.
+- **PR-4** — drop Audit Mode tables (`MovieHistoryAudit`, `TorrentHistoryAudit`) + remove audit code branches. Unblocked by D10 sign-off on 2026-05-22.
+- **PR-5** — delete `db.py` (currently ~5,300 lines) and the nine ADR-001 shell modules. Follows PR-4.
 - **Parser-helper relocation** — extracted from this ADR and superseded by [ADR-011](ADR-011-javdb-parsing-module.md). ADR-005 Storage/Repo work should import parsing helpers from `javdb.parsing.common` after ADR-011 Phase 1 lands.
 
 ## Amendments
@@ -56,11 +56,15 @@ PR-1 (Repo classes) ✅ shipped: `HistoryRepo`, `OperationsRepo`, `StatsRepo`, `
 
 - **2026-05-21 amendment 4**: **ADR-006 sign-off completed via operator-approved 7-day clean bake bypass.** The original plan required a 30-day bake until approximately 2026-06-15; the maintainer confirmed one clean week with no pending-mode issues and explicitly approved bypassing the remaining wait to continue. This removes the ADR-005 PR-2 start blocker. Risk handling is unchanged: PR-2 must not delete audit schema, audit code, or caller compatibility; ADR-005 PR-4 still requires the D10 trio to pass before audit-table deletion.
 
+- **2026-05-21 amendment 5**: **PR-2 and PR-3 shipped.** PR-2 (#70) routed the `db.py` facade through Repo classes (636 additions, 272 deletions, 13 files). PR-3 (#71) migrated spider and history_manager callers to use Repos directly (573 additions, 44 deletions, 11 files). Both include boundary regression tests enforcing that migrated callers cannot fall back to raw `db_*` functions. Remaining: PR-4 (drop audit tables, gated by D10) and PR-5 (delete `db.py`).
+
+- **2026-05-22 amendment 6**: **D10 gate sign-off — PR-4 unblocked.** BakeCheck.yml has reported all three D10 metrics passing for 4 consecutive days (2026-05-18 through 2026-05-21). The operator approved proceeding with PR-4 on 2026-05-22 despite workflow audit-option removal being 6 days old (1 day short of the 7-day text in D10 #3), since the functional evidence — zero audit sessions, zero orphan rows, 6 consecutive successful DailyIngestion runs — proves the risk is moot. PR-4 (drop audit tables + remove audit code) and PR-5 (delete `db.py`) are now unblocked.
+
 ---
 
-## D10 Gate Check Results (2026-05-16)
+## D10 Gate Check Results
 
-Immediately after drafting ADR-005 we ran the D10 Audit Mode retirement safety check. **Two items failed**:
+### Initial check (2026-05-16) — two items failed
 
 | Gate item | Status | Evidence |
 |---|---|---|
@@ -70,7 +74,25 @@ Immediately after drafting ADR-005 we ran the D10 Audit Mode retirement safety c
 
 A **documentation discrepancy** also surfaced: CONTEXT.md / CLAUDE.md / the ADR-001 docstring claim "Pending Mode is default", but the code fallback at `db_session.py:188` and the SQLite schema's `WriteMode TEXT DEFAULT 'audit'` both show the **actual default is still audit**. This is aspirational, not factual.
 
-**Conclusion**: D2(c) "fully retire Audit Mode" was not executable on 2026-05-16, because Audit Mode was the actual runtime mode for 80% of sessions and the live safety net for Pending Mode failures. Later amendments supersede the start blocker: PR-1 shipped, and the ADR-006 sign-off completed on 2026-05-21 via operator-approved 7-day clean bake bypass to unblock PR-2. Audit-table deletion remains gated by a fresh D10 pass before PR-4.
+**Conclusion**: D2(c) "fully retire Audit Mode" was not executable on 2026-05-16, because Audit Mode was the actual runtime mode for 80% of sessions and the live safety net for Pending Mode failures. Later amendments supersede the start blocker: PR-1 shipped, and the ADR-006 sign-off completed on 2026-05-21 via operator-approved 7-day clean bake bypass to unblock PR-2.
+
+### Re-check (2026-05-22) — all items pass, operator sign-off granted
+
+`BakeCheck.yml` daily cron results since `BAKE_SINCE=2026-05-16`:
+
+| Date | audit_session_count | orphan_audit_rows | pause_trigger_count | Result |
+|---|---|---|---|---|
+| 2026-05-18 | 0 (threshold 0) ✅ | 0 (threshold 0) ✅ | 1 (threshold 1) ✅ | PASS |
+| 2026-05-19 | 0 ✅ | 0 ✅ | 1 ✅ | PASS |
+| 2026-05-20 | 0 ✅ | 0 ✅ | 1 ✅ | PASS |
+| 2026-05-21 | 0 ✅ | 0 ✅ | 1 ✅ | PASS |
+
+Supporting evidence:
+- DailyIngestion: 6 consecutive successful runs (2026-05-16 through 2026-05-21)
+- All active workflow code paths: zero audit references (verified 2026-05-22 full grep audit)
+- Workflow audit-option removal: 6 days (1 day short of D10 #3's text), bypassed by operator
+
+**Conclusion**: The operator approved PR-4 on 2026-05-22. All functional D10 metrics pass; the 1-day shortfall on the workflow-removal calendar check is immaterial given zero audit session activity. PR-4 and PR-5 may proceed.
 
 ---
 
