@@ -187,9 +187,7 @@ def test_scan_sqlite_uses_staging_when_no_active_session(
     monkeypatch, tmp_path, storage_mode_db
 ):
     import apps.cli.rclone.manager as rm
-    from javdb.storage.db.db_session import set_active_session_id
-    from javdb.storage.db.db_operations import db_replace_rclone_inventory
-    from javdb.storage.db.db_connection import get_db
+    from javdb.storage.db import set_active_session_id, db_replace_rclone_inventory, get_db
 
     output = tmp_path / "inventory.csv"
     seed = {
@@ -661,7 +659,7 @@ class TestLoadInventoryAsFolderStructure:
     @patch('apps.cli.rclone.manager.get_configured_drive_name', return_value='gdrive')
     @patch('apps.cli.rclone.manager.get_configured_root_folder', return_value='root')
     def test_loads_from_db(self, _mock_root, _mock_dn, storage_mode_db):
-        from javdb.storage.db.db_operations import db_replace_rclone_inventory
+        from javdb.storage.db import db_replace_rclone_inventory
         db_replace_rclone_inventory([
             {
                 'video_code': 'DB-001',
@@ -686,7 +684,7 @@ class TestLoadInventoryAsFolderStructure:
     @patch('apps.cli.rclone.manager.get_configured_drive_name', return_value='gdrive')
     def test_db_priority_over_csv(self, _mock_dn, tmp_path, storage_mode_db):
         """When DB has data, CSV should not be loaded even if it exists."""
-        from javdb.storage.db.db_operations import db_replace_rclone_inventory
+        from javdb.storage.db import db_replace_rclone_inventory
         db_replace_rclone_inventory([
             {
                 'video_code': 'DB-ONLY',
@@ -1063,8 +1061,8 @@ class TestGetConfiguredDriveName:
 
 class TestMigrateStripDriveNames:
     def test_strips_drive_names_in_db(self):
-        from javdb.storage.db.db_operations import db_replace_rclone_inventory
-        from javdb.storage.db.db_connection import get_db, OPERATIONS_DB_PATH
+        from javdb.storage.db import db_replace_rclone_inventory
+        from javdb.storage.db import get_db, OPERATIONS_DB_PATH
         db_replace_rclone_inventory([
             {
                 'video_code': 'MIG-001',
@@ -1087,8 +1085,8 @@ class TestMigrateStripDriveNames:
         assert row[0] == 'root/2025/Actor/MIG-001 [有码-中字]'
 
     def test_idempotent(self):
-        from javdb.storage.db.db_operations import db_replace_rclone_inventory
-        from javdb.storage.db.db_connection import get_db, OPERATIONS_DB_PATH
+        from javdb.storage.db import db_replace_rclone_inventory
+        from javdb.storage.db import get_db, OPERATIONS_DB_PATH
         db_replace_rclone_inventory([
             {
                 'video_code': 'MIG-002',
@@ -1137,7 +1135,7 @@ from apps.cli.rclone.manager import (
 
 
 def _add_inventory(rows):
-    from javdb.storage.db.db_operations import db_replace_rclone_inventory
+    from javdb.storage.db import db_replace_rclone_inventory
     entries = []
     for code, path in rows:
         entries.append({
@@ -1150,7 +1148,7 @@ def _add_inventory(rows):
 
 
 def _add_dedup_pending(code, path, reason='Subtitle upgrade'):
-    from javdb.storage.db.db_operations import db_append_dedup_record
+    from javdb.storage.db import db_append_dedup_record
     db_append_dedup_record({
         'video_code': code, 'existing_sensor': '有码',
         'existing_subtitle': '中字', 'existing_gdrive_path': path,
@@ -1179,7 +1177,7 @@ class TestValidateDedupRecords:
         assert len(orphans) == 1
         assert orphans[0]['VideoCode'] == 'C'
 
-        from javdb.storage.db.db_operations import db_load_dedup_records
+        from javdb.storage.db import db_load_dedup_records
         rows = db_load_dedup_records()
         deleted = [r for r in rows if int(r.get('IsDeleted') or 0) == 1]
         pending = [r for r in rows if int(r.get('IsDeleted') or 0) == 0]
@@ -1205,7 +1203,7 @@ class TestValidateDedupRecords:
         _add_dedup_pending('X', '2025/Actor/X/有码-中字')
         count, orphans = validate_dedup_records_against_inventory()
         assert count == 0 and orphans == []
-        from javdb.storage.db.db_operations import db_load_dedup_records
+        from javdb.storage.db import db_load_dedup_records
         rows = db_load_dedup_records()
         assert int(rows[0].get('IsDeleted') or 0) == 0
 
@@ -1262,7 +1260,7 @@ class TestRunValidateInventory:
         )
         assert rc == 0
 
-        from javdb.storage.db.db_operations import db_load_rclone_inventory, db_load_dedup_records
+        from javdb.storage.db import db_load_rclone_inventory, db_load_dedup_records
         inv = db_load_rclone_inventory()
         assert 'A' in inv and 'B' in inv
         assert 'X' not in inv
@@ -1297,7 +1295,7 @@ class TestRunValidateInventory:
             'gdrive', 'root', year_filter=None, max_workers=1, prune=False,
         )
         assert rc == 0
-        from javdb.storage.db.db_operations import db_load_rclone_inventory
+        from javdb.storage.db import db_load_rclone_inventory
         inv = db_load_rclone_inventory()
         assert 'A' in inv and 'X' in inv  # not pruned
 
@@ -1314,7 +1312,7 @@ class TestRunValidateInventory:
             'gdrive', 'root', year_filter=None, max_workers=1, prune=True,
         )
         assert rc == 1
-        from javdb.storage.db.db_operations import db_load_rclone_inventory
+        from javdb.storage.db import db_load_rclone_inventory
         assert 'A' in db_load_rclone_inventory()
 
 

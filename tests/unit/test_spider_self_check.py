@@ -16,9 +16,9 @@ import sqlite3
 
 import pytest
 
-from javdb.storage.db.db_connection import get_db
-from javdb.storage.db.db_session import SESSION_ID_PATTERN as _SESSION_ID_PATTERN
-from javdb.storage.db.db_reports import (
+from javdb.storage.db import (
+    get_db,
+    SESSION_ID_PATTERN as _SESSION_ID_PATTERN,
     db_create_report_session, db_mark_session_committed,
     db_count_in_progress_sessions_for_run,
     db_find_in_progress_session_ids_for_run_csv,

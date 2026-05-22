@@ -1,6 +1,6 @@
 """Regression tests for history write category mapping."""
 
-from javdb.storage.db.db_connection import get_db
+from javdb.storage.db import get_db
 from javdb.storage.repos.history_repo import HistoryRepo
 
 
