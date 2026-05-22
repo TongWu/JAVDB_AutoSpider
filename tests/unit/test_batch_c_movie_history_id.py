@@ -105,28 +105,54 @@ class TestMovieHistoryExplicitId:
             ).fetchall()
         return [int(r["Id"]) for r in rows]
 
-    def test_db_upsert_history_movie_id_is_snowflake(self, _isolate_sqlite):
-        import warnings
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            db_mod.db_upsert_history(
-                "/v/C1-UPSERT",
-                "C1-UPSERT",
-                magnet_links={"subtitle": "magnet:upsert"},
-            )
+    def test_staging_commit_movie_id_is_snowflake(self, _isolate_sqlite):
+        sid = db_mod.db_create_report_session(
+            report_type="DailyReport",
+            report_date="2026-05-15",
+            csv_filename="c1-upsert.csv",
+            write_mode="pending",
+        )
+        db_mod.db_stage_history_write(sid, "movie", {
+            "Href": "/v/C1-UPSERT",
+            "VideoCode": "C1-UPSERT",
+            "DateTimeVisited": "2026-05-15 12:00:00",
+        })
+        db_mod.db_stage_history_write(sid, "torrent", {
+            "Href": "/v/C1-UPSERT",
+            "VideoCode": "C1-UPSERT",
+            "Category": "subtitle",
+            "MagnetUri": "magnet:upsert",
+            "Size": "1.0GB",
+            "FileCount": 1,
+            "DateTimeVisited": "2026-05-15 12:00:00",
+        })
+        db_mod.db_commit_session_history(sid)
         mid = self._read_movie_id("/v/C1-UPSERT")
         assert mid > 10**10, f"MovieHistory.Id too small (AUTOINCREMENT?): {mid}"
         assert mid < 2**53, f"MovieHistory.Id exceeds D1 safe range: {mid}"
 
-    def test_db_upsert_history_torrent_id_is_snowflake(self, _isolate_sqlite):
-        import warnings
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            db_mod.db_upsert_history(
-                "/v/C1-UPSERT-TH",
-                "C1-UPSERT-TH",
-                magnet_links={"subtitle": "magnet:upsert-th"},
-            )
+    def test_staging_commit_torrent_id_is_snowflake(self, _isolate_sqlite):
+        sid = db_mod.db_create_report_session(
+            report_type="DailyReport",
+            report_date="2026-05-15",
+            csv_filename="c1-upsert-th.csv",
+            write_mode="pending",
+        )
+        db_mod.db_stage_history_write(sid, "movie", {
+            "Href": "/v/C1-UPSERT-TH",
+            "VideoCode": "C1-UPSERT-TH",
+            "DateTimeVisited": "2026-05-15 12:00:00",
+        })
+        db_mod.db_stage_history_write(sid, "torrent", {
+            "Href": "/v/C1-UPSERT-TH",
+            "VideoCode": "C1-UPSERT-TH",
+            "Category": "subtitle",
+            "MagnetUri": "magnet:upsert-th",
+            "Size": "1.0GB",
+            "FileCount": 1,
+            "DateTimeVisited": "2026-05-15 12:00:00",
+        })
+        db_mod.db_commit_session_history(sid)
         mid = self._read_movie_id("/v/C1-UPSERT-TH")
         tids = self._read_torrent_id(mid)
         assert tids, "No TorrentHistory row inserted"
@@ -208,11 +234,19 @@ class TestMovieHistoryExplicitId:
 
     def test_multiple_inserts_get_distinct_ids(self, _isolate_sqlite):
         """Two separate MovieHistory rows must not share an Id."""
-        import warnings
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            db_mod.db_upsert_history("/v/C1-M1", "C1-M1")
-            db_mod.db_upsert_history("/v/C1-M2", "C1-M2")
+        sid = db_mod.db_create_report_session(
+            report_type="DailyReport",
+            report_date="2026-05-15",
+            csv_filename="c1-distinct.csv",
+            write_mode="pending",
+        )
+        for code in ("C1-M1", "C1-M2"):
+            db_mod.db_stage_history_write(sid, "movie", {
+                "Href": f"/v/{code}",
+                "VideoCode": code,
+                "DateTimeVisited": "2026-05-15 12:00:00",
+            })
+        db_mod.db_commit_session_history(sid)
         id1 = self._read_movie_id("/v/C1-M1")
         id2 = self._read_movie_id("/v/C1-M2")
         assert id1 != id2, f"Two rows share the same MovieHistory.Id: {id1}"

@@ -15,18 +15,6 @@ from javdb.infra.config import cfg
 from javdb.spider.contracts import indicators_to_category as _indicators_to_category
 
 
-def _execute_backend_batch(conn, statements):
-    if not statements:
-        return []
-    batch = getattr(conn, "batch_execute", None)
-    if callable(batch):
-        return batch(statements)
-    cursors = []
-    for sql, params in statements:
-        cursors.append(conn.execute(sql, params))
-    return cursors
-
-
 def load_history_joined(conn) -> Dict[str, dict]:
     """Load MovieHistory+TorrentHistory in one LEFT JOIN query."""
     rows = conn.execute(
@@ -113,8 +101,6 @@ def batch_update_movie_actors(
     updates: List[Tuple[str, str, str, str, str]],
     *,
     session_id: Optional[str] = None,
-    audit_record_movie_change=None,
-    audit_movie_change_statement=None,
 ) -> int:
     """Batch update actor fields using executemany.
 
@@ -123,16 +109,13 @@ def batch_update_movie_actors(
     good data with empty values.
 
     When *session_id* is set, each affected MovieHistory row also gets
-    ``SessionId=?`` and a companion ``MovieHistoryAudit`` row capturing
-    the prior state. The audit callbacks are injected from
-    :mod:`javdb.storage.db.db` to avoid an import cycle.
+    ``SessionId=?`` stamped.
     """
     if not updates:
         return 0
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     base_url = cfg('BASE_URL', 'https://javdb.com')
     payload = []
-    href_pair_lookup: List[Tuple[str, str]] = []
     for href, an, ag, al, sup in updates:
         if not _has_meaningful_actor_data(an, al, sup):
             continue
@@ -140,7 +123,6 @@ def batch_update_movie_actors(
         if not path_href and not abs_href:
             path_href = href
             abs_href = href
-        href_pair_lookup.append((path_href, abs_href))
         payload.append((
             an,
             ag,
@@ -154,88 +136,21 @@ def batch_update_movie_actors(
         return 0
 
     if session_id is not None:
-        if audit_movie_change_statement is None:
-            if audit_record_movie_change is not None:
-                # Snapshot pre-update rows for audit. We record one audit row per
-                # affected MovieHistory.Id; since several updates could resolve to
-                # the same Href pair, dedupe by Id.
-                seen_ids = set()
-                for path_href, abs_href in href_pair_lookup:
-                    old_rows = conn.execute(
-                        "SELECT * FROM MovieHistory WHERE Href IN (?, ?)",
-                        (path_href, abs_href),
-                    ).fetchall()
-                    for row in old_rows:
-                        rid = row['Id']
-                        if rid in seen_ids:
-                            continue
-                        seen_ids.add(rid)
-                        audit_record_movie_change(
-                            conn, rid, action='UPDATE', session_id=session_id,
-                            old_row=row, when=now,
-                        )
-            before = conn.total_changes
-            # Tag each updated row with SessionId. Build an extended payload
-            # that puts session_id alongside the other UPDATE values.
-            ext_payload = [
-                (an, ag, al, sup, now_v, session_id, p, a)
-                for (an, ag, al, sup, now_v, p, a) in payload
-            ]
-            conn.executemany(
-                """
-                UPDATE MovieHistory
-                SET ActorName=?, ActorGender=?, ActorLink=?, SupportingActors=?,
-                    DateTimeUpdated=?, SessionId=?
-                WHERE Href IN (?, ?)
-                """,
-                ext_payload,
-            )
-            return conn.total_changes - before
-
-        total = 0
-        update_sql = """
+        before = conn.total_changes
+        ext_payload = [
+            (an, ag, al, sup, now_v, session_id, p, a)
+            for (an, ag, al, sup, now_v, p, a) in payload
+        ]
+        conn.executemany(
+            """
             UPDATE MovieHistory
             SET ActorName=?, ActorGender=?, ActorLink=?, SupportingActors=?,
                 DateTimeUpdated=?, SessionId=?
             WHERE Href IN (?, ?)
-            """
-        batch_size = 20
-        for start in range(0, len(payload), batch_size):
-            payload_chunk = payload[start:start + batch_size]
-            href_chunk = href_pair_lookup[start:start + batch_size]
-            seen_ids = set()
-            audit_rows = []
-            for path_href, abs_href in href_chunk:
-                old_rows = conn.execute(
-                    "SELECT * FROM MovieHistory WHERE Href IN (?, ?)",
-                    (path_href, abs_href),
-                ).fetchall()
-                for row in old_rows:
-                    rid = row['Id']
-                    if rid in seen_ids:
-                        continue
-                    seen_ids.add(rid)
-                    audit_rows.append(row)
-            statements = [
-                (
-                    update_sql,
-                    (an, ag, al, sup, now_v, session_id, p, a),
-                )
-                for (an, ag, al, sup, now_v, p, a) in payload_chunk
-            ]
-            for row in audit_rows:
-                audit_stmt = audit_movie_change_statement(
-                    row['Id'],
-                    action='UPDATE',
-                    session_id=session_id,
-                    old_row=row,
-                    when=now,
-                )
-                if audit_stmt is not None:
-                    statements.append(audit_stmt)
-            cursors = _execute_backend_batch(conn, statements)
-            total += sum((cur.rowcount or 0) for cur in cursors[:len(payload_chunk)])
-        return total
+            """,
+            ext_payload,
+        )
+        return conn.total_changes - before
 
     before = conn.total_changes
     conn.executemany(
@@ -333,23 +248,6 @@ class HistoryRepo:
     def stage_torrent(self, session_id: str, payload: Dict) -> str:
         """Append a row to PendingTorrentHistoryWrites. Returns Seq."""
         return self.stage_history_write(session_id, "torrent", payload)
-
-    def upsert_history(
-        self,
-        href: str,
-        video_code: str,
-        magnet_links: Optional[Dict[str, str]] = None,
-        **kwargs,
-    ):
-        """Audit-mode live upsert wrapper for remaining history callers."""
-        from javdb.storage.db.db_history_write import db_upsert_history
-        return db_upsert_history(
-            href,
-            video_code,
-            magnet_links,
-            db_path=self._db_path,
-            **kwargs,
-        )
 
     def commit_session(self, session_id: str, **kwargs) -> dict:
         """Drain Pending* tables into live MovieHistory / TorrentHistory."""

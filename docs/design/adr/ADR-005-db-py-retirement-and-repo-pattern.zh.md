@@ -1,6 +1,6 @@
 # ADR-005: db.py 彻底退役 + Repo 类抽象 + Audit Mode 退役
 
-**状态**: 已接受 —— **PR-1 已交付**（在 `db.py` 旁新增 Repo 类）；**ADR-006 sign-off completed on 2026-05-21**（operator-approved 7-day clean bake bypass）；**PR-2 已解锁，PR-3 → PR-5 按序推进**
+**状态**: 已接受 —— **PR-1 至 PR-3 已交付**；**D10 gate sign-off completed on 2026-05-22**（连续 4 天全部通过）；**PR-4 与 PR-5 已解锁**
 **日期**: 2026-05-16
 **决策者**: 架构深化第二轮
 **前置**: [ADR-006](ADR-006-pending-mode-default-rollout.md) — 必须先把 Pending Mode 默认推到 100% + 重设计 auto-fallback，本 ADR 才能执行 D10 gate
@@ -11,10 +11,10 @@
 
 PR-1（Repo 类）✅ 已交付：`HistoryRepo`、`OperationsRepo`、`StatsRepo`、`SessionsRepo`、`SystemStateRepo` 全部在 `javdb/storage/repos/` 中。其余：
 
-- **PR-2** —— `db.py` 内部转发到 Repo（双写阶段）。已由 ADR-006 sign-off 解锁。
-- **PR-3** —— 把调用方（`history_manager.py`、CLI 工具、`db_rollback.py`）迁移出函数族。待 PR-2 验证后启动。
-- **PR-4** —— 删除 Audit Mode 表（`MovieHistoryAudit`、`TorrentHistoryAudit`）+ 移除 audit 代码分支。待 PR-3 后启动，且必须先重新通过 D10 三项核查。
-- **PR-5** —— 删除 `db.py`（当前 5,454 行）和 ADR-001 留下的九个壳模块。退役后的最终清理。
+- **PR-2** ✅ 已交付（#70, 2026-05-21）：`db.py` 内部转发到 Repo（双写阶段）。
+- **PR-3** ✅ 已交付（#71, 2026-05-21）：spider/history_manager 调用方迁移完成。
+- **PR-4** —— 删除 Audit Mode 表（`MovieHistoryAudit`、`TorrentHistoryAudit`）+ 移除 audit 代码分支。已由 2026-05-22 D10 sign-off 解锁。
+- **PR-5** —— 删除 `db.py`（当前约 5,300 行）和 ADR-001 留下的九个壳模块。随 PR-4 之后。
 - **Parser helper relocation** —— 已从本 ADR 抽出，由 [ADR-011](ADR-011-javdb-parsing-module.md) 接管。ADR-005 后续 Storage/Repo 工作在 ADR-011 Phase 1 落地后应从 `javdb.parsing.common` import helper。
 
 ## 修订记录 (Amendments)
@@ -56,11 +56,15 @@ PR-1（Repo 类）✅ 已交付：`HistoryRepo`、`OperationsRepo`、`StatsRepo`
 
 - **2026-05-21 amendment 4**：**ADR-006 sign-off 以 operator-approved 7-day clean bake bypass 完成。** 原计划要求 30 天 bake 至约 2026-06-15；维护者确认当前已连续一周无 pending-mode 问题，并明确要求 bypass 剩余期限继续推进。由此解除 ADR-005 PR-2 起始阻塞。风险处置不变：PR-2 仍不得删除 audit schema / audit code / caller compatibility；PR-4 前仍需重新运行 D10 三项核查。
 
+- **2026-05-21 amendment 5**：**PR-2 与 PR-3 已交付。** PR-2（#70）将 `db.py` facade 通过 Repo 类转发（636 行新增、272 行删除、13 个文件）。PR-3（#71）将 spider 与 history_manager 的调用方迁移到直接使用 Repo（573 行新增、44 行删除、11 个文件）。两者均包含边界回归测试，确保已迁移的调用方不能回退到原始 `db_*` 函数。剩余：PR-4（删除 audit 表，受 D10 gate 限制）和 PR-5（删除 `db.py`）。
+
+- **2026-05-22 amendment 6**：**D10 gate sign-off —— PR-4 已解锁。** BakeCheck.yml 连续 4 天（2026-05-18 至 2026-05-21）报告 D10 三项指标全部通过。Operator 于 2026-05-22 批准推进 PR-4，尽管 workflow audit 选项移除仅 6 天（距 D10 #3 文本要求的 7 天差 1 天），因为功能证据——零 audit session、零孤儿行、连续 6 次 DailyIngestion 成功运行——证明该风险不存在。PR-4（删除 audit 表 + 移除 audit 代码）和 PR-5（删除 `db.py`）现已解锁。
+
 ---
 
-## D10 Gate 核查结果（2026-05-16）
+## D10 Gate 核查结果
 
-ADR-005 起草后立即跑了 D10 Audit Mode 退役安全核查，**两项失败**：
+### 初次核查（2026-05-16）—— 两项失败
 
 | Gate 项 | 状态 | 证据 |
 |---|---|---|
@@ -70,7 +74,25 @@ ADR-005 起草后立即跑了 D10 Audit Mode 退役安全核查，**两项失败
 
 同时发现的**文档失实**：CONTEXT.md / CLAUDE.md / ADR-001 docstring 声称 "Pending Mode is default"，但 `db_session.py:188` 的代码 fallback 与 SQLite schema 的 `WriteMode TEXT DEFAULT 'audit'` 都说明**实际默认仍是 audit**——这是愿景而非事实。
 
-**结论**：D2(c) "完全退役 Audit Mode" 在 2026-05-16 不可执行，因为 Audit Mode 是 80% session 的实际运行模式 + 是 Pending Mode 失败时的 live safety net。后续修订已取代该启动阻塞：PR-1 已交付，且 ADR-006 sign-off completed on 2026-05-21 通过 operator-approved 7-day clean bake bypass 完成，从而解锁 PR-2。Audit 表删除仍必须在 PR-4 前重新通过 D10 三项核查。
+**结论**：D2(c) "完全退役 Audit Mode" 在 2026-05-16 不可执行，因为 Audit Mode 是 80% session 的实际运行模式 + 是 Pending Mode 失败时的 live safety net。后续修订已取代该启动阻塞：PR-1 已交付，且 ADR-006 sign-off completed on 2026-05-21 通过 operator-approved 7-day clean bake bypass 完成，从而解锁 PR-2。
+
+### 复查（2026-05-22）—— 全部通过，operator sign-off 已授予
+
+`BakeCheck.yml` 每日 cron 结果（`BAKE_SINCE=2026-05-16`）：
+
+| 日期 | audit_session_count | orphan_audit_rows | pause_trigger_count | 结果 |
+|---|---|---|---|---|
+| 2026-05-18 | 0（阈值 0）✅ | 0（阈值 0）✅ | 1（阈值 1）✅ | PASS |
+| 2026-05-19 | 0 ✅ | 0 ✅ | 1 ✅ | PASS |
+| 2026-05-20 | 0 ✅ | 0 ✅ | 1 ✅ | PASS |
+| 2026-05-21 | 0 ✅ | 0 ✅ | 1 ✅ | PASS |
+
+辅助证据：
+- DailyIngestion：连续 6 次成功运行（2026-05-16 至 2026-05-21）
+- 所有活跃 workflow 代码路径：零 audit 引用（2026-05-22 全量 grep 验证）
+- Workflow audit 选项移除：6 天（距 D10 #3 文本差 1 天），由 operator bypass
+
+**结论**：Operator 于 2026-05-22 批准 PR-4。所有功能 D10 指标通过；workflow 移除日历检查差 1 天在零 audit session 活动的情况下无实质影响。PR-4 和 PR-5 可继续推进。
 
 ---
 
