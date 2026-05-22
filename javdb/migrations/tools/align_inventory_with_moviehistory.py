@@ -77,10 +77,19 @@ from javdb.storage.db.db import (
     db_load_history,
     db_load_rclone_inventory,
     db_upsert_align_no_exact_match,
-    db_upsert_history,
-    db_upsert_history_batch,
     init_db,
 )
+
+
+def _audit_retired_stub(*args, **kwargs):
+    raise NotImplementedError(
+        "db_upsert_history was removed by ADR-005 PR-4. "
+        "This migration tool needs rewriting to use staging+commit."
+    )
+
+
+db_upsert_history = _audit_retired_stub
+db_upsert_history_batch = _audit_retired_stub
 from javdb.infra.logging import get_logger, setup_logging
 from javdb.spider.magnet_extractor import extract_magnets
 from javdb.infra.paths import ensure_dated_dir
