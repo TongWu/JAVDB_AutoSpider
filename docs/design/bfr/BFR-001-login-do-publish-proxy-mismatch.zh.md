@@ -1,6 +1,6 @@
 # BFR-001: Login state DO publish 因 proxy_name_mismatch_with_lease 失败（409）
 
-**Status:** Open
+**Status:** Fixed
 **Date:** 2026-05-22
 **Severity:** Medium
 **Affected:** `javdb/spider/fetch/login_coordinator.py`
@@ -97,5 +97,5 @@ return w.worker_id, new_cookie
 
 ## 后续工作
 
-- [ ] 实现修复（上述 3 个变更 + 测试）
+- [x] 实现修复（上述 3 个变更 + 测试）
 - [ ] 在下一次 AdHoc/Daily ingestion 运行中验证 409 不再出现，cookie 成功广播

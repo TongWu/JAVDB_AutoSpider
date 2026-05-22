@@ -1,6 +1,6 @@
 # BFR-001: Login state DO publish fails with 409 proxy_name_mismatch_with_lease
 
-**Status:** Open
+**Status:** Fixed
 **Date:** 2026-05-22
 **Severity:** Medium
 **Affected:** `javdb/spider/fetch/login_coordinator.py`
@@ -114,5 +114,5 @@ return type change is internal — the only consumer is
 
 ## Follow-Up
 
-- [ ] Implement the fix (3 changes + tests as described above)
+- [x] Implement the fix (3 changes + tests as described above)
 - [ ] Verify on next AdHoc/Daily ingestion run that the 409 no longer appears and cookie is broadcast
