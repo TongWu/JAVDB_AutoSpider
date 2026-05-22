@@ -3,7 +3,7 @@
 **状态**: 已完成 2026-05-17 —— `MetricsState` DO + 每分钟 scheduled cron（`* * * * *`）+ 空闲抑制（`is_transition_marker` / `is_heartbeat_anchor` 列）+ 5 秒 bucket JSON 快照按决策矩阵全部落地。
 **日期**: 2026-05-16
 **决策者**: Proxy Coordinator Dashboard 改造
-**关联实现计划 (Related Implementation Plans)**: [IMP-003](../../impl/IMP-003-dashboard-phase2-worker-backend.md)（worker backend——pipeline 已交付）、[IMP-004](../../impl/IMP-004-dashboard-phase3-ui.md)（主仪表盘 UI 消费方——计划中）
+**关联实现计划 (Related Implementation Plans)**: [IMP-ADR003-01](../../impl/IMP-ADR003-01-dashboard-phase2-worker-backend.md)（worker backend——pipeline 已交付）、[IMP-ADR003-02](../../impl/IMP-ADR003-02-dashboard-phase3-ui.md)（主仪表盘 UI 消费方——计划中）
 
 ---
 

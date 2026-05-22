@@ -3,7 +3,7 @@
 **Status**: Accepted - implementation pending
 **Date**: 2026-05-20
 **Deciders**: Pipeline Run module brainstorming and grill session
-**Related Implementation Plans**: [IMP-019](../impl/IMP-019-pipeline-run-phase1-result-sidecar.md) (Phase 1 - result sidecar), [IMP-020](../impl/IMP-020-pipeline-run-phase1-bake.md) (Phase 1 bake), [IMP-021](../impl/IMP-021-pipeline-run-phase2-in-process-spider.md) (Phase 2 - in-process Spider), [IMP-022](../impl/IMP-022-pipeline-run-final-result-consumption.md) (Final phase - result consumption cleanup)
+**Related Implementation Plans**: [IMP-ADR012-01](../impl/IMP-ADR012-01-pipeline-run-phase1-result-sidecar.md) (Phase 1 - result sidecar), [IMP-ADR012-02](../impl/IMP-ADR012-02-pipeline-run-phase1-bake.md) (Phase 1 bake), [IMP-ADR012-03](../impl/IMP-ADR012-03-pipeline-run-phase2-in-process-spider.md) (Phase 2 - in-process Spider), [IMP-ADR012-04](../impl/IMP-ADR012-04-pipeline-run-final-result-consumption.md) (Final phase - result consumption cleanup)
 
 ## Outstanding Work
 
@@ -310,8 +310,8 @@ ADR-012.
 
 ## References
 
-- [IMP-019](../impl/IMP-019-pipeline-run-phase1-result-sidecar.md)
-- [IMP-020](../impl/IMP-020-pipeline-run-phase1-bake.md)
-- [IMP-021](../impl/IMP-021-pipeline-run-phase2-in-process-spider.md)
-- [IMP-022](../impl/IMP-022-pipeline-run-final-result-consumption.md)
+- [IMP-ADR012-01](../impl/IMP-ADR012-01-pipeline-run-phase1-result-sidecar.md)
+- [IMP-ADR012-02](../impl/IMP-ADR012-02-pipeline-run-phase1-bake.md)
+- [IMP-ADR012-03](../impl/IMP-ADR012-03-pipeline-run-phase2-in-process-spider.md)
+- [IMP-ADR012-04](../impl/IMP-ADR012-04-pipeline-run-final-result-consumption.md)
 - [Logging handbook](../../handbook/en/ops/logging.md)

@@ -3,7 +3,7 @@
 **Status**: Completed 2026-05-16 — runner `/register` payload now uploads `proxy_pool`; worker-side `proxies_seen` table + handlers (`/do/proxies_seen`, `/proxies_seen`) shipped in RunnerRegistry DO.
 **Date**: 2026-05-16
 **Deciders**: Proxy Coordinator Dashboard rework
-**Related Implementation Plans**: [IMP-002](../../impl/IMP-002-dashboard-phase1-proxy-pool-upload.md) (Phase 1 — runner-side upload, completed 2026-05-16), [IMP-003](../../impl/IMP-003-dashboard-phase2-worker-backend.md) (worker backend persistence — schema shipped)
+**Related Implementation Plans**: [IMP-ADR004-01](../../impl/archive/IMP-ADR004-01-dashboard-phase1-proxy-pool-upload.md) (Phase 1 — runner-side upload, completed 2026-05-16), [IMP-ADR003-01](../../impl/IMP-ADR003-01-dashboard-phase2-worker-backend.md) (worker backend persistence — schema shipped)
 
 ---
 

@@ -3,7 +3,7 @@
 **Status**: Accepted - implementation pending
 **Date**: 2026-05-20
 **Deciders**: Storage CLI layering brainstorming and grill session
-**Related Implementation Plans**: [IMP-027](../impl/IMP-027-storage-cli-layering-phase1-guard.md) (Phase 1 - guard and direct storage imports), [IMP-028](../impl/IMP-028-storage-cli-layering-phase2-lifecycle-helpers.md) (Phase 2 - canonical lifecycle helpers), [IMP-029](../impl/IMP-029-storage-cli-layering-phase3-delete-legacy-wrappers.md) (Phase 3 - delete legacy wrappers)
+**Related Implementation Plans**: [IMP-ADR014-01](../impl/IMP-ADR014-01-storage-cli-layering-phase1-guard.md) (Phase 1 - guard and direct storage imports), [IMP-ADR014-02](../impl/IMP-ADR014-02-storage-cli-layering-phase2-lifecycle-helpers.md) (Phase 2 - canonical lifecycle helpers), [IMP-ADR014-03](../impl/IMP-ADR014-03-storage-cli-layering-phase3-delete-legacy-wrappers.md) (Phase 3 - delete legacy wrappers)
 
 ## Outstanding Work
 
@@ -143,7 +143,7 @@ Every phase must preserve the observable behavior of:
 
 ### D9. Update Historical Docs With Supersession Notes
 
-ADR-008 and IMP-009 were correct when written, but the code has moved since
+ADR-008 and IMP-ADR008-02 were correct when written, but the code has moved since
 then. They receive short update notes that point to this ADR for the final
 convergence work.
 
@@ -151,9 +151,9 @@ convergence work.
 
 This ADR rolls out through three independent implementation plans:
 
-- [IMP-027](../impl/IMP-027-storage-cli-layering-phase1-guard.md)
-- [IMP-028](../impl/IMP-028-storage-cli-layering-phase2-lifecycle-helpers.md)
-- [IMP-029](../impl/IMP-029-storage-cli-layering-phase3-delete-legacy-wrappers.md)
+- [IMP-ADR014-01](../impl/IMP-ADR014-01-storage-cli-layering-phase1-guard.md)
+- [IMP-ADR014-02](../impl/IMP-ADR014-02-storage-cli-layering-phase2-lifecycle-helpers.md)
+- [IMP-ADR014-03](../impl/IMP-ADR014-03-storage-cli-layering-phase3-delete-legacy-wrappers.md)
 
 Each phase has its own test gate and can be implemented independently.
 

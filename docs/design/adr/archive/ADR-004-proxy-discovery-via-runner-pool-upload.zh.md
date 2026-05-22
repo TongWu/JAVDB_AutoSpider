@@ -3,7 +3,7 @@
 **状态**: 已完成 2026-05-16 —— runner `/register` payload 已上传 `proxy_pool`；worker 侧 RunnerRegistry DO 已上线 `proxies_seen` 表 + 处理器（`/do/proxies_seen`、`/proxies_seen`）。
 **日期**: 2026-05-16
 **决策者**: Proxy Coordinator Dashboard 改造
-**关联实现计划 (Related Implementation Plans)**: [IMP-002](../../impl/IMP-002-dashboard-phase1-proxy-pool-upload.md)（Phase 1 —— runner 端上传，2026-05-16 完成）、[IMP-003](../../impl/IMP-003-dashboard-phase2-worker-backend.md)（worker 后端持久化——schema 已上线）
+**关联实现计划 (Related Implementation Plans)**: [IMP-ADR004-01](../../impl/archive/IMP-ADR004-01-dashboard-phase1-proxy-pool-upload.md)（Phase 1 —— runner 端上传，2026-05-16 完成）、[IMP-ADR003-01](../../impl/IMP-ADR003-01-dashboard-phase2-worker-backend.md)（worker 后端持久化——schema 已上线）
 
 ---
 

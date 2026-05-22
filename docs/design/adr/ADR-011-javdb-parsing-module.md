@@ -4,7 +4,7 @@
 **Date**: 2026-05-20
 **Deciders**: Parsing module architecture review
 **Supersedes**: [ADR-005](ADR-005-db-py-retirement-and-repo-pattern.md) D4 / PR-6 parser-helper relocation
-**Related Implementation Plans**: [IMP-016](../impl/IMP-016-parsing-phase1-core-module.md) (Phase 1 — core module), [IMP-017](../impl/IMP-017-parsing-phase2-caller-migration.md) (Phase 2 — caller migration), [IMP-018](../impl/IMP-018-parsing-phase3-delete-compat.md) (Phase 3 — compatibility deletion)
+**Related Implementation Plans**: [IMP-ADR011-01](../impl/IMP-ADR011-01-parsing-phase1-core-module.md) (Phase 1 — core module), [IMP-ADR011-02](../impl/IMP-ADR011-02-parsing-phase2-caller-migration.md) (Phase 2 — caller migration), [IMP-ADR011-03](../impl/IMP-ADR011-03-parsing-phase3-delete-compat.md) (Phase 3 — compatibility deletion)
 
 ## Context
 
@@ -138,9 +138,9 @@ Implementation is split into three independently reviewable phases:
 
 | Phase | Implementation plan | Outcome |
 |---|---|---|
-| Phase 1 | [IMP-016](../impl/IMP-016-parsing-phase1-core-module.md) | Establish `javdb.parsing`; API parser/model modules become compatibility Adapters. |
-| Phase 2 | [IMP-017](../impl/IMP-017-parsing-phase2-caller-migration.md) | Internal callers move to `javdb.parsing`; index selection moves to Pipeline. |
-| Phase 3 | [IMP-018](../impl/IMP-018-parsing-phase3-delete-compat.md) | Delete API parser/model re-export Adapters and the legacy Spider parser Adapter. |
+| Phase 1 | [IMP-ADR011-01](../impl/IMP-ADR011-01-parsing-phase1-core-module.md) | Establish `javdb.parsing`; API parser/model modules become compatibility Adapters. |
+| Phase 2 | [IMP-ADR011-02](../impl/IMP-ADR011-02-parsing-phase2-caller-migration.md) | Internal callers move to `javdb.parsing`; index selection moves to Pipeline. |
+| Phase 3 | [IMP-ADR011-03](../impl/IMP-ADR011-03-parsing-phase3-delete-compat.md) | Delete API parser/model re-export Adapters and the legacy Spider parser Adapter. |
 
 Phase 1 compatibility is not the final architecture. The implementation must
 continue through Phase 3 before this ADR is fully delivered.
@@ -220,6 +220,6 @@ lands, ADR-005 Storage work should import parsing helpers from
 ## References
 
 - [ADR-005](ADR-005-db-py-retirement-and-repo-pattern.md)
-- [IMP-016](../impl/IMP-016-parsing-phase1-core-module.md)
-- [IMP-017](../impl/IMP-017-parsing-phase2-caller-migration.md)
-- [IMP-018](../impl/IMP-018-parsing-phase3-delete-compat.md)
+- [IMP-ADR011-01](../impl/IMP-ADR011-01-parsing-phase1-core-module.md)
+- [IMP-ADR011-02](../impl/IMP-ADR011-02-parsing-phase2-caller-migration.md)
+- [IMP-ADR011-03](../impl/IMP-ADR011-03-parsing-phase3-delete-compat.md)

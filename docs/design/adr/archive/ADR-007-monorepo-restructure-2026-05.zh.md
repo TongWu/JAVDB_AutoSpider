@@ -4,7 +4,7 @@
 **日期**: 2026-05-17
 **决策者**: 架构深化第三轮（承接 [docs/design/architecture/python-core-mapping.md](../../architecture/python-core-mapping.md) 与 [spider-module-reorg.md](../../architecture/spider-module-reorg.md) 未完成的 Python core 重构）
 **取代 (Supersedes)**: `docs/design/architecture/python-core-mapping.md`、`docs/design/architecture/spider-module-reorg.md`（Phase 3 时标记为 superseded）
-**关联实现计划 (Related Implementation Plans)**: [IMP-006](../../impl/IMP-006-restructure-phase1-javdb-tree.md)（Phase 1 —— 构建 `javdb/` 树，已完成）、[IMP-007](../../impl/IMP-007-restructure-phase2-scripts-to-cli.md)（Phase 2 —— `scripts/` 迁入 `apps/cli/`，已完成）、[IMP-008](../../impl/IMP-008-restructure-phase3-delete-compat.md)（Phase 3 —— 执行 deletion manifest，已完成）；另见 [ADR-007 deletion manifest](ADR-007-deletion-manifest.md)（Phase 1 交付物，Phase 3 据其执行）。
+**关联实现计划 (Related Implementation Plans)**: [IMP-ADR007-01](../../impl/archive/IMP-ADR007-01-restructure-phase1-javdb-tree.md)（Phase 1 —— 构建 `javdb/` 树，已完成）、[IMP-ADR007-02](../../impl/archive/IMP-ADR007-02-restructure-phase2-scripts-to-cli.md)（Phase 2 —— `scripts/` 迁入 `apps/cli/`，已完成）、[IMP-ADR007-03](../../impl/archive/IMP-ADR007-03-restructure-phase3-delete-compat.md)（Phase 3 —— 执行 deletion manifest，已完成）；另见 [ADR-007 deletion manifest](ADR-007-deletion-manifest.md)（Phase 1 交付物，Phase 3 据其执行）。
 
 ---
 

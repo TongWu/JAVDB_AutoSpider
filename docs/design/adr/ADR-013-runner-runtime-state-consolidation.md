@@ -3,7 +3,7 @@
 **Status**: Accepted - implementation pending
 **Date**: 2026-05-20
 **Deciders**: Runner runtime state brainstorming and grill session
-**Related Implementation Plans**: [IMP-023](../impl/IMP-023-runner-runtime-phase1-skeleton-facade.md) (Phase 1 - runtime skeleton and active facade), [IMP-024](../impl/IMP-024-runner-runtime-phase2-registry-movieclaim.md) (Phase 2 - registry and MovieClaim lifecycle), [IMP-025](../impl/IMP-025-runner-runtime-phase3-explicit-callers.md) (Phase 3 - explicit production callers), [IMP-026](../impl/IMP-026-runner-runtime-phase4-legacy-facade-removal.md) (Phase 4 - legacy facade freeze/removal)
+**Related Implementation Plans**: [IMP-ADR013-01](../impl/IMP-ADR013-01-runner-runtime-phase1-skeleton-facade.md) (Phase 1 - runtime skeleton and active facade), [IMP-ADR013-02](../impl/IMP-ADR013-02-runner-runtime-phase2-registry-movieclaim.md) (Phase 2 - registry and MovieClaim lifecycle), [IMP-ADR013-03](../impl/IMP-ADR013-03-runner-runtime-phase3-explicit-callers.md) (Phase 3 - explicit production callers), [IMP-ADR013-04](../impl/IMP-ADR013-04-runner-runtime-phase4-legacy-facade-removal.md) (Phase 4 - legacy facade freeze/removal)
 
 ## Outstanding Work
 
@@ -175,10 +175,10 @@ The following behavior must remain unchanged after each phase:
 
 This ADR rolls out through four independent implementation plans:
 
-- [IMP-023](../impl/IMP-023-runner-runtime-phase1-skeleton-facade.md)
-- [IMP-024](../impl/IMP-024-runner-runtime-phase2-registry-movieclaim.md)
-- [IMP-025](../impl/IMP-025-runner-runtime-phase3-explicit-callers.md)
-- [IMP-026](../impl/IMP-026-runner-runtime-phase4-legacy-facade-removal.md)
+- [IMP-ADR013-01](../impl/IMP-ADR013-01-runner-runtime-phase1-skeleton-facade.md)
+- [IMP-ADR013-02](../impl/IMP-ADR013-02-runner-runtime-phase2-registry-movieclaim.md)
+- [IMP-ADR013-03](../impl/IMP-ADR013-03-runner-runtime-phase3-explicit-callers.md)
+- [IMP-ADR013-04](../impl/IMP-ADR013-04-runner-runtime-phase4-legacy-facade-removal.md)
 
 Each phase has its own test gate and can bake separately.
 

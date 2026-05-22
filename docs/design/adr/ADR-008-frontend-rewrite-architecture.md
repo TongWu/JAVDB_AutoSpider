@@ -3,13 +3,13 @@
 **Status**: Accepted — Phase 1 shipped; Phase 2 planned, Phase 3 deferred (as of 2026-05-19)
 **Date**: 2026-05-17 (amended 2026-05-18)
 **Deciders**: Brainstorming session (design spec: `docs/superpowers/specs/2026-05-16-frontend-rewrite-design.md`)
-**Related Implementation Plans**: [IMP-001](../impl/IMP-001-frontend-phase1-backend-prerequisites.md) (BE prerequisites — completed 2026-05-16), [IMP-009](../impl/IMP-009-frontend-phase1-completion.md) (Phase 1 completion — feature-complete; cutover pending), [IMP-010](../impl/IMP-010-frontend-phase2-full-cli-coverage.md) (Phase 2 — planned, not started), [IMP-011](../impl/IMP-011-frontend-phase3-power-user.md) (Phase 3 — deferred, depends on Phase 2 dogfooding)
+**Related Implementation Plans**: [IMP-ADR008-01](../impl/archive/IMP-ADR008-01-frontend-phase1-backend-prerequisites.md) (BE prerequisites — completed 2026-05-16), [IMP-ADR008-02](../impl/IMP-ADR008-02-frontend-phase1-completion.md) (Phase 1 completion — feature-complete; cutover pending), [IMP-ADR008-03](../impl/IMP-ADR008-03-frontend-phase2-full-cli-coverage.md) (Phase 2 — planned, not started), [IMP-ADR008-04](../impl/IMP-ADR008-04-frontend-phase3-power-user.md) (Phase 3 — deferred, depends on Phase 2 dogfooding)
 
 ## Outstanding Work
 
-- IMP-009 cutover items: E2E fixtures, 2 remaining user journeys, BE cleanups, production cutover from `apps/web/` (deleted) to standalone `javdb-autospider-web` repo.
-- IMP-010 (Phase 2 — full CLI surface coverage): not yet started.
-- IMP-011 (Phase 3 — power-user features and analytics): deferred; scope to be decided after Phase 2 dogfooding.
+- IMP-ADR008-02 cutover items: E2E fixtures, 2 remaining user journeys, BE cleanups, production cutover from `apps/web/` (deleted) to standalone `javdb-autospider-web` repo.
+- IMP-ADR008-03 (Phase 2 — full CLI surface coverage): not yet started.
+- IMP-ADR008-04 (Phase 3 — power-user features and analytics): deferred; scope to be decided after Phase 2 dogfooding.
 
 ---
 
@@ -251,16 +251,16 @@ No Full-Text Search (FTS5). SQLite supports it but Cloudflare D1 does not. Maint
 - **Backend version skew**: FE refuses to boot when `capabilities.build.backend_version` < minimum. Boot gate renders "please upgrade" page.
 - **i18n for BE errors**: BE error codes mapped to FE translations. Log strings stay English.
 - **Rollback library layering inversion (updated 2026-05-20)**: the original `javdb/storage/rollback/core.py` -> `apps.cli.db._session_helpers` import has been removed. The interim helper path is `javdb.storage.rollback.session_helpers`, while `apps.cli.db._session_helpers` remains a shim. [ADR-014](ADR-014-storage-cli-layering.md) tracks final convergence to `javdb.storage.sessions.lifecycle_helpers` and deletion of both legacy wrappers.
-- **Commit endpoint side-effect parity**: `javdb/storage/sessions/commit.py` already has `fanout_claims` and `emit_metrics` flags; HTTP endpoint defaults them to `False`. Fix: default to `True` in the API request body for CLI parity. Tracked in [IMP-009](../impl/IMP-009-frontend-phase1-completion.md) Task 5.
+- **Commit endpoint side-effect parity**: `javdb/storage/sessions/commit.py` already has `fanout_claims` and `emit_metrics` flags; HTTP endpoint defaults them to `False`. Fix: default to `True` in the API request body for CLI parity. Tracked in [IMP-ADR008-02](../impl/IMP-ADR008-02-frontend-phase1-completion.md) Task 5.
 - **PikPak endpoint granularity**: Batch mode only (`POST /api/ops/pikpak/transfer { days, dry_run }`). Single-torrent transfer deferred.
 - **Rclone endpoint granularity**: Single endpoint with flags (`POST /api/ops/rclone/run { scan, report, execute, dry_run }`). FE presets "Quick Dedup" and "Advanced" mode.
 
 ## Open Questions
 
-- **Multi-tab behavior**: Two tabs double request volume. BroadcastChannel-shared polling recommended but deferred to Phase 3. See [IMP-011](../impl/IMP-011-frontend-phase3-power-user.md) Task 6.
+- **Multi-tab behavior**: Two tabs double request volume. BroadcastChannel-shared polling recommended but deferred to Phase 3. See [IMP-ADR008-04](../impl/IMP-ADR008-04-frontend-phase3-power-user.md) Task 6.
 - **D1 status caching TTL**: ~10 s server / session client proposed. Needs validation under realistic Browse-Lists usage post-Phase 2.
-- **Global log search storage**: Log persistence strategy (DB table vs. filesystem vs. structured rows) not decided. Depends on Phase 2 log volume observations. Deferred to Phase 3 design session → ADR-009. See [IMP-011](../impl/IMP-011-frontend-phase3-power-user.md) Task 4.
-- **Statistics dashboard scope**: Candidate metrics identified (run success rate, history growth, dedup freed bytes) but scope and chart library not finalized. Deferred to Phase 3 design session → ADR-010. See [IMP-011](../impl/IMP-011-frontend-phase3-power-user.md) Task 5.
+- **Global log search storage**: Log persistence strategy (DB table vs. filesystem vs. structured rows) not decided. Depends on Phase 2 log volume observations. Deferred to Phase 3 design session → ADR-009. See [IMP-ADR008-04](../impl/IMP-ADR008-04-frontend-phase3-power-user.md) Task 4.
+- **Statistics dashboard scope**: Candidate metrics identified (run success rate, history growth, dedup freed bytes) but scope and chart library not finalized. Deferred to Phase 3 design session → ADR-010. See [IMP-ADR008-04](../impl/IMP-ADR008-04-frontend-phase3-power-user.md) Task 5.
 
 ---
 
