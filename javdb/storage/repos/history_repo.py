@@ -264,5 +264,5 @@ class HistoryRepo:
     ) -> int:
         """Bulk overwrite actor fields, preserving pending-mode staging."""
         # The db.py facade owns pending-mode staging for actor-only writes.
-        from javdb.storage.db.db import db_batch_update_movie_actors
+        from javdb.storage.db.db_history_write import db_batch_update_movie_actors
         return db_batch_update_movie_actors(updates, db_path=self._db_path)
