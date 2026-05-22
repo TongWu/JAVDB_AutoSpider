@@ -718,7 +718,7 @@ def run_file_filter(
     dry_run: bool = True,
     categories=None,
     delete_local_files: bool = False,
-    use_proxy=False,
+    use_proxy=None,
 ) -> dict:
     """Programmatic entry point for the file-filter logic.
 

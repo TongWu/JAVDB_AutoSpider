@@ -1219,7 +1219,40 @@ def run_rclone_manager(
             raise RuntimeError(f"Remote not reachable: {msg}")
 
         os.makedirs(REPORTS_DIR, exist_ok=True)
-        total_rows, error_count = scan_inventory(remote_name, root_folder)
+        # Persist the scan via the same staging-then-swap path the CLI main()
+        # uses, so a subsequent report/execute phase reads fresh inventory
+        # rather than stale rows. A partial scan drops staging and leaves the
+        # live RcloneInventory untouched.
+        from javdb.storage.db.db_migrations import init_db
+        from javdb.storage.db.db_reports import db_create_report_session
+        from javdb.storage.db.db_operations import (
+            db_open_rclone_staging,
+            db_append_rclone_staging,
+            db_swap_rclone_inventory,
+            db_drop_rclone_staging,
+        )
+        from javdb.storage.db.db_session import get_active_session_id
+
+        init_db()
+        staging_sid = get_active_session_id()
+        if staging_sid is None:
+            staging_sid = db_create_report_session(
+                report_type="rclone_inventory",
+                report_date=datetime.now().strftime("%Y%m%d"),
+                csv_filename=RCLONE_INVENTORY_CSV,
+            )
+        db_open_rclone_staging(staging_sid)
+        total_rows, error_count = scan_inventory(
+            remote_name,
+            root_folder,
+            row_callback=lambda rows: db_append_rclone_staging(
+                rows, session_id=staging_sid
+            ),
+        )
+        if error_count == 0:
+            db_swap_rclone_inventory(session_id=staging_sid)
+        else:
+            db_drop_rclone_staging(staging_sid)
         phase_results["scan"] = {
             "exit_code": 0 if error_count == 0 else 1,
             "total_rows": total_rows,

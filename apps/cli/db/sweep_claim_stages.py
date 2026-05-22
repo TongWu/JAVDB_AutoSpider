@@ -155,7 +155,10 @@ def run_claim_stage_sweep(
             coordinator_configured (bool): False when no coordinator is
                 available (no-op path).
     """
-    dates = shard_dates or _default_shard_dates()
+    # Distinguish None (use defaults) from an explicit empty list (sweep
+    # nothing) — an API caller serializing an unselected list as [] must not
+    # accidentally trigger a default-shard sweep that deletes stages.
+    dates = _default_shard_dates() if shard_dates is None else shard_dates
     older_than_ms = int(older_than_hours * 3600 * 1000)
 
     client = create_movie_claim_client_from_env()

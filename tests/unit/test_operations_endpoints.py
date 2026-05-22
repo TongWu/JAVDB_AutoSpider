@@ -237,7 +237,7 @@ class TestPikPakQueue:
         assert isinstance(body["items"], list)
         assert body["total"] == 0
 
-    def test_returns_seeded_rows(self, admin_client, _isolate_sqlite):
+    def test_returns_seeded_rows(self, admin_client):
         """Rows inserted into PikpakHistory appear in GET /api/ops/pikpak/queue."""
         import javdb.storage.db.db_connection as _conn_mod
 
@@ -282,7 +282,7 @@ class TestEmailHistory:
         assert body["items"] == []
         assert body.get("next_cursor") is None
 
-    def test_returns_seeded_rows(self, admin_client, _isolate_sqlite):
+    def test_returns_seeded_rows(self, admin_client):
         """Rows from OperationsRepo.append_email_history appear in GET."""
         from javdb.storage.repos.operations_repo import OperationsRepo
 
@@ -320,7 +320,7 @@ class TestEmailResend:
         resp = admin_client.post("/api/ops/email/9999/resend")
         assert resp.status_code == 404
 
-    def test_resend_success(self, admin_client, _isolate_sqlite):
+    def test_resend_success(self, admin_client):
         """Successful resend returns 200 with status='resent'."""
         from javdb.storage.repos.operations_repo import OperationsRepo
 

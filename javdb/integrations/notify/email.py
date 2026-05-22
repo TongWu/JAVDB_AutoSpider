@@ -1877,9 +1877,12 @@ def send_email(subject, body, attachments=None, dry_run=False):
         _active_session_id = get_active_session_id()
     except Exception:
         _active_session_id = None
-    _attachment_names = (
-        [os.path.basename(p) for p in attachments] if attachments else None
-    )
+    # Record only filenames actually attached to the message — attachment
+    # processing above skips missing / empty files.
+    _attachment_names = [
+        name for part in msg.iter_attachments()
+        if (name := part.get_filename())
+    ] or None
 
     def _record_email_history(status: str, error: str = None) -> None:
         """Defensively write an email history row; never raises."""

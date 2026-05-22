@@ -14,6 +14,7 @@ POST /api/ops/cleanup/claim-stages     — sweep orphaned MovieClaim stages
 """
 from __future__ import annotations
 
+import logging
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -42,6 +43,8 @@ from apps.api.schemas.operations import (
 from javdb.storage.repos.operations_repo import OperationsRepo
 
 router = APIRouter(prefix="/api/ops", tags=["operations"])
+
+logger = logging.getLogger(__name__)
 
 _ERR_QB_UNREACHABLE = {"error": {"code": "ops.qb.unreachable", "message": "Cannot connect to qBittorrent"}}
 _ERR_QB_AUTH = {"error": {"code": "ops.qb.auth_failed", "message": "Failed to login to qBittorrent"}}
@@ -305,8 +308,20 @@ def email_resend(
     if not ok:
         raise HTTPException(status_code=500, detail=_ERR_EMAIL_RESEND)
 
-    repo.mark_email_resent(record_id)
-    return {"status": "resent", "id": record_id}
+    try:
+        repo.mark_email_resent(record_id)
+        return {"status": "resent", "id": record_id}
+    except Exception as exc:
+        # The email was already sent successfully — returning a 500 here would
+        # make the caller retry and send a duplicate. Report success with a
+        # flag so the history-write failure stays visible.
+        logger.warning("Email resent but history update failed: %s", exc)
+        return {
+            "status": "resent",
+            "id": record_id,
+            "history_updated": False,
+            "warning": "Email sent, but failed to update resend history.",
+        }
 
 
 # ---------------------------------------------------------------------------

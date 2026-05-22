@@ -5,7 +5,7 @@ can import them directly without needing to modify this file.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -140,9 +140,9 @@ class EmailHistoryResponse(BaseModel):
 
 
 class CleanupStaleRequest(BaseModel):
-    older_than_hours: float = 48.0
+    older_than_hours: float = Field(default=48.0, gt=0)
     dry_run: bool = True
-    scope: str = "all"
+    scope: Literal["reports", "operations", "history", "all"] = "all"
     include_legacy: bool = False
 
 
@@ -156,7 +156,7 @@ class CleanupStaleResponse(BaseModel):
 
 class CleanupClaimStagesRequest(BaseModel):
     shard_dates: Optional[List[str]] = None
-    older_than_hours: float = 6.0
+    older_than_hours: float = Field(default=6.0, gt=0)
 
 
 class CleanupClaimStagesResponse(BaseModel):

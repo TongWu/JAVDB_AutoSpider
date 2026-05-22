@@ -5,6 +5,7 @@ POST /api/diag/javdb-session/refresh — refresh javdb session (headless or cook
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict
 
@@ -21,6 +22,8 @@ from javdb.storage.db import db_connection
 from javdb.storage.repos.system_state_repo import SystemStateRepo
 
 router = APIRouter(prefix="/api/diag", tags=["diagnostics"])
+
+logger = logging.getLogger(__name__)
 
 _KEY_LAST_REFRESH = "last_javdb_refresh"
 
@@ -140,8 +143,9 @@ async def refresh_javdb_session_diag(
             ts = datetime.now(timezone.utc).isoformat()
             try:
                 _set_last_refresh_time(ts)
-            except Exception:
-                pass  # non-fatal; status is still success
+            except Exception as exc:
+                # non-fatal; refresh itself succeeded — log and continue
+                logger.warning("Failed to persist last_javdb_refresh: %s", exc)
 
             new_cookie = cfg("JAVDB_SESSION_COOKIE", "") or ""
             return JavdbSessionRefreshResponse(
