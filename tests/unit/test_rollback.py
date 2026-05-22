@@ -8,9 +8,6 @@ Covers:
   * `db_rollback_session` operations-scope deletes session-tagged rows in
     PikpakHistory / DedupRecords / InventoryAlignNoExactMatch and drops
     the per-session RcloneInventory staging table
-  * `db_rollback_session` history-scope replays MovieHistoryAudit /
-    TorrentHistoryAudit (INSERT → DELETE, UPDATE → restore from OldRowJson,
-    DELETE → re-INSERT) and detects concurrent-run drift
   * Rclone staging-then-swap atomicity (open / append / swap / drop)
   * Refusal to roll back ``Status='committed'`` sessions without ``force=True``
   * Dry-run mode reports counts without mutating any table
@@ -46,18 +43,6 @@ def _create_session(status: str = "in_progress", *, when: str | None = None) -> 
             )
     return sid
 
-
-def _insert_movie(href: str, video_code: str, session_id: int) -> int:
-    """Create a MovieHistory row + companion MovieHistoryAudit INSERT row."""
-    db_mod.db_upsert_history(
-        href=href, video_code=video_code, session_id=session_id,
-    )
-    with db_mod.get_db() as conn:
-        row = conn.execute(
-            "SELECT Id FROM MovieHistory WHERE VideoCode=?",
-            (video_code,),
-        ).fetchone()
-    return row["Id"] if row else -1
 
 
 # ── Status lifecycle ─────────────────────────────────────────────────────
