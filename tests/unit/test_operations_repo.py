@@ -20,12 +20,12 @@ class TestOperationsRepoRcloneInventory:
 
     @patch(
         "javdb.storage.db.db_operations.db_load_rclone_inventory",
-        return_value=[{"VideoCode": "ABC-123"}],
+        return_value={"ABC-123": [{"VideoCode": "ABC-123"}]},
     )
     def test_load_rclone_inventory_delegates(self, mock_fn):
         repo = OperationsRepo(db_path="/tmp/o.db")
         result = repo.load_rclone_inventory()
-        assert result == [{"VideoCode": "ABC-123"}]
+        assert result == {"ABC-123": [{"VideoCode": "ABC-123"}]}
         mock_fn.assert_called_once_with(db_path="/tmp/o.db")
 
     @patch(
@@ -84,13 +84,26 @@ class TestOperationsRepoDedup:
         repo.save_dedup_records(rows)
         mock_fn.assert_called_once_with(rows=rows, db_path=None)
 
-    @patch("javdb.storage.db.db_operations.db_append_dedup_record")
+    @patch(
+        "javdb.storage.db.db_operations.db_append_dedup_record",
+        return_value=9,
+    )
     def test_append_dedup_record_delegates(self, mock_fn):
+        repo = OperationsRepo(db_path="/tmp/o.db")
+        record = {"VideoCode": "B"}
+        result = repo.append_dedup_record(record, session_id="s1")
+        assert result == 9
+        mock_fn.assert_called_once_with(
+            record, session_id="s1", db_path="/tmp/o.db",
+        )
+
+    @patch("javdb.storage.db.db_operations.db_append_dedup_record")
+    def test_append_dedup_record_keeps_payload_alias(self, mock_fn):
         repo = OperationsRepo(db_path="/tmp/o.db")
         payload = {"VideoCode": "B"}
         repo.append_dedup_record(session_id="s1", payload=payload)
         mock_fn.assert_called_once_with(
-            session_id="s1", payload=payload, db_path="/tmp/o.db",
+            payload, session_id="s1", db_path="/tmp/o.db",
         )
 
 
@@ -241,11 +254,24 @@ class TestOperationsRepoAlignNoExactMatch:
 
 class TestOperationsRepoPikpak:
 
-    @patch("javdb.storage.db.db_operations.db_append_pikpak_history")
+    @patch(
+        "javdb.storage.db.db_operations.db_append_pikpak_history",
+        return_value=10,
+    )
     def test_append_pikpak_history_delegates(self, mock_fn):
+        repo = OperationsRepo(db_path="/tmp/o.db")
+        record = {"magnet": "..."}
+        result = repo.append_pikpak_history(record, session_id="s1")
+        assert result == 10
+        mock_fn.assert_called_once_with(
+            record, session_id="s1", db_path="/tmp/o.db",
+        )
+
+    @patch("javdb.storage.db.db_operations.db_append_pikpak_history")
+    def test_append_pikpak_history_keeps_payload_alias(self, mock_fn):
         repo = OperationsRepo(db_path="/tmp/o.db")
         payload = {"magnet": "..."}
         repo.append_pikpak_history(session_id="s1", payload=payload)
         mock_fn.assert_called_once_with(
-            session_id="s1", payload=payload, db_path="/tmp/o.db",
+            payload, session_id="s1", db_path="/tmp/o.db",
         )

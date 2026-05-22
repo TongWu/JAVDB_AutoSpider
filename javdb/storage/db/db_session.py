@@ -33,7 +33,7 @@ _active_run_attempt_value: Optional[int] = None
 _active_write_mode_value: Optional[str] = None
 
 # Allowed write modes
-_ALLOWED_WRITE_MODES = {'audit', 'pending'}
+_ALLOWED_WRITE_MODES = {'pending'}
 
 
 # ── Session ID setters/getters ───────────────────────────────────────────
@@ -43,10 +43,9 @@ def set_active_session_id(session_id: Optional[str]) -> None:
     """Set the current pipeline ReportSessions.Id.
 
     Called by the spider once after creating the report session. All
-    subsequent db_upsert_history / db_batch_update_last_visited /
+    subsequent db_batch_update_last_visited /
     db_batch_update_movie_actors / etc. that don't pass an explicit
-    session_id= will tag their writes with this value (and audit
-    rows where applicable).
+    session_id= will tag their writes with this value.
 
     Pass None to clear the context (e.g. between pipeline phases in
     long-lived processes / tests).
@@ -88,13 +87,12 @@ def set_active_run_identity(
     run_id: Optional[str],
     run_attempt: Optional[int],
 ) -> None:
-    """Set the GitHub Actions workflow identity for subsequent audit rows.
+    """Set the GitHub Actions workflow identity for subsequent writes.
 
     Called by the spider alongside set_active_session_id() so that
-    every MovieHistoryAudit / TorrentHistoryAudit row written by
-    this process is stamped with the run that produced it. Allows the
-    rollback CLI to look up audit rows by (RunId, RunAttempt) —
-    independent of any ReportSessions.Id drift between SQLite and D1.
+    every pending write staged by this process is stamped with the
+    run that produced it. Allows the rollback CLI to look up sessions
+    by (RunId, RunAttempt).
 
     Args:
         run_id: GitHub Actions run_id (e.g., github.run_id)
@@ -132,10 +130,10 @@ def set_active_write_mode(write_mode: Optional[str]) -> None:
     long-lived processes / tests).
 
     Args:
-        write_mode: 'audit' or 'pending', or None to clear
+        write_mode: 'pending' (or None to clear)
 
     Raises:
-        ValueError: If write_mode is not 'audit' or 'pending'
+        ValueError: If write_mode is not 'pending'
     """
     global _active_write_mode_value
     if write_mode is not None:
@@ -145,7 +143,7 @@ def set_active_write_mode(write_mode: Optional[str]) -> None:
 
 
 def get_active_write_mode() -> str:
-    """Return the resolved active WriteMode ('audit' or 'pending').
+    """Return the resolved active WriteMode ('pending').
 
     Resolution order:
       1. Process-local override set by set_active_write_mode().
@@ -153,7 +151,7 @@ def get_active_write_mode() -> str:
       3. Default 'pending' (per ADR-006).
 
     Returns:
-        'audit' or 'pending'
+        'pending'
     """
     with _active_session_id_lock:
         cached = _active_write_mode_value
@@ -163,23 +161,21 @@ def get_active_write_mode() -> str:
 
 
 def _resolve_write_mode(explicit: Optional[str]) -> str:
-    """Return a validated WriteMode ('audit' or 'pending').
+    """Return a validated WriteMode ('pending').
 
     Resolution order:
       1. Explicit argument (when set).
       2. JAVDB_HISTORY_WRITE_MODE env var.
-      3. Default 'pending' (per ADR-006). Workflows or operators that
-         still need the legacy audit path must set the env var or pass
-         it explicitly.
+      3. Default 'pending' (per ADR-006).
 
     Args:
         explicit: Explicit write mode override
 
     Returns:
-        'audit' or 'pending'
+        'pending'
 
     Raises:
-        ValueError: If write mode is not 'audit' or 'pending'
+        ValueError: If write mode is not 'pending'
     """
     candidate = explicit
     if candidate is None:
@@ -187,6 +183,12 @@ def _resolve_write_mode(explicit: Optional[str]) -> str:
     if not candidate:
         return "pending"
     candidate = candidate.strip().lower()
+    if candidate == 'audit':
+        logger.warning(
+            "WriteMode 'audit' requested but audit mode retired (ADR-005); "
+            "falling back to 'pending'"
+        )
+        return 'pending'
     if candidate not in _ALLOWED_WRITE_MODES:
         raise ValueError(
             f"Unknown WriteMode {candidate!r}; "
@@ -358,5 +360,7 @@ def generate_integer_id() -> int:
                 _INT_ID_LAST_MS += 1
                 _INT_ID_COUNTER = 0
                 ms = _INT_ID_LAST_MS
-        # Pack: 40 bits ms + 6 bits tag + 6 bits counter
-        return (ms << 12) | (_INT_ID_PROCESS_TAG << 6) | _INT_ID_COUNTER
+        # Pack: 40 bits ms + 6 bits tag + 6 bits counter.
+        # Always use _INT_ID_LAST_MS (not ms) so clock-backwards still yields
+        # a monotonically increasing result.
+        return (_INT_ID_LAST_MS << 12) | (_INT_ID_PROCESS_TAG << 6) | _INT_ID_COUNTER

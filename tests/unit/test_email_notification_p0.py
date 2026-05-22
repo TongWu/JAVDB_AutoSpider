@@ -143,7 +143,7 @@ def test_local_stats_getter_uses_sqlite_regardless_of_backend(monkeypatch, tmp_p
     import sqlite3
 
     monkeypatch.setenv("STORAGE_BACKEND", "sqlite")
-    from javdb.storage.db import db as db_mod
+    from javdb.storage.db.db_stats import db_get_spider_stats_local
 
     test_db = tmp_path / "reports.db"
     # Lay down just enough schema for the read path under test. Using
@@ -165,7 +165,7 @@ def test_local_stats_getter_uses_sqlite_regardless_of_backend(monkeypatch, tmp_p
     # care: it must always open raw SQLite.
     monkeypatch.setenv("STORAGE_BACKEND", "dual")
 
-    out = db_mod.db_get_spider_stats_local(12345, db_path=str(test_db))
+    out = db_get_spider_stats_local(12345, db_path=str(test_db))
     assert out is not None
     assert out["TotalDiscovered"] == 999
 

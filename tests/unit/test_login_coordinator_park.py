@@ -888,3 +888,240 @@ class TestP2CLoginCooldown:
         assert state_mod.refreshed_session_cookie == "cookie-NEW"
         with coord._lock:
             assert coord._cooldown_until_ms == 0
+
+
+# ── _login_and_verify defer_publish ───────────────────────────────────────────
+
+
+class TestDeferPublish:
+    """Verify that ``_login_and_verify(defer_publish=True)`` skips the DO publish."""
+
+    def test_defer_publish_skips_do_publish(self):
+        worker = _make_worker(0, "P1")
+        coord = LoginCoordinator(all_workers=[worker])
+
+        with (
+            patch.object(coord, "_do_login_for_proxy", return_value=(True, "cookie-X", "ok")),
+            patch.object(lc_mod, "verify_login_via_fixed_pages", return_value=True),
+            patch.object(lc_mod, "_publish_login_state_to_do") as mock_publish,
+            patch.object(lc_mod, "LOGIN_VERIFICATION_URLS", ["https://example.com/check"]),
+        ):
+            verified, cookie = coord._login_and_verify(worker, defer_publish=True)
+
+        assert verified is True
+        assert cookie == "cookie-X"
+        mock_publish.assert_not_called()
+
+    def test_default_publish_still_fires(self):
+        worker = _make_worker(0, "P1")
+        coord = LoginCoordinator(all_workers=[worker])
+
+        with (
+            patch.object(coord, "_do_login_for_proxy", return_value=(True, "cookie-Y", "ok")),
+            patch.object(lc_mod, "verify_login_via_fixed_pages", return_value=True),
+            patch.object(lc_mod, "_publish_login_state_to_do") as mock_publish,
+            patch.object(lc_mod, "LOGIN_VERIFICATION_URLS", ["https://example.com/check"]),
+        ):
+            verified, cookie = coord._login_and_verify(worker)
+
+        assert verified is True
+        mock_publish.assert_called_once_with("P1", "cookie-Y")
+
+
+# ── _find_and_login_next_worker return type ───────────────────────────────────
+
+
+class TestFindAndLoginNextWorkerReturnsCookie:
+    """Verify ``_find_and_login_next_worker`` returns (worker_id, cookie)
+    and passes ``defer_publish=True``."""
+
+    def test_returns_worker_id_and_cookie_on_success(self):
+        w1 = _make_worker(0, "P1")
+        w2 = _make_worker(1, "P2")
+        coord = LoginCoordinator(all_workers=[w1, w2])
+
+        with patch.object(
+            coord, "_login_and_verify", return_value=(True, "fresh-cookie")
+        ) as mock_lv:
+            result = coord._find_and_login_next_worker(exclude={"P1"})
+
+        assert result == (1, "fresh-cookie")
+        mock_lv.assert_called_once_with(w2, defer_publish=True)
+
+    def test_returns_none_tuple_when_all_fail(self):
+        w1 = _make_worker(0, "P1")
+        coord = LoginCoordinator(all_workers=[w1])
+
+        with patch.object(coord, "_login_and_verify", return_value=(False, None)):
+            result = coord._find_and_login_next_worker(exclude=set())
+
+        assert result == (None, None)
+
+
+# ── _find_and_login_next_worker_with_lease re-acquire ─────────────────────────
+
+
+class TestFindAndLoginNextWorkerWithLeaseReacquire:
+    """Verify the release → re-acquire → publish → release flow in
+    ``_find_and_login_next_worker_with_lease``."""
+
+    def _setup(self):
+        w1 = _make_worker(0, "HintProxy")
+        w2 = _make_worker(1, "ActualProxy")
+        coord = LoginCoordinator(all_workers=[w1, w2])
+        client = MagicMock()
+        client.acquire_lease.return_value = AcquireLeaseResult(
+            acquired=True, holder_id="runner-test",
+            target_proxy_name="HintProxy",
+            lease_expires_at=99_999, server_time_ms=0,
+        )
+        client.release_lease.return_value = ReleaseLeaseResult(
+            released=True, server_time_ms=0,
+        )
+        state_mod.global_login_state_client = client
+        return coord, client, w1, w2
+
+    def test_happy_path_reacquires_and_publishes(self):
+        coord, client, w1, w2 = self._setup()
+        task = _make_task()
+        login_q = queue.Queue()
+
+        with (
+            patch.object(
+                coord, "_find_and_login_next_worker",
+                return_value=(1, "reacquired-cookie"),
+            ),
+            patch.object(lc_mod, "_publish_login_state_to_do") as mock_pub,
+        ):
+            client.acquire_lease.side_effect = [
+                AcquireLeaseResult(
+                    acquired=True, holder_id="runner-test",
+                    target_proxy_name="HintProxy",
+                    lease_expires_at=99_999, server_time_ms=0,
+                ),
+                AcquireLeaseResult(
+                    acquired=True, holder_id="runner-test",
+                    target_proxy_name="ActualProxy",
+                    lease_expires_at=99_999, server_time_ms=0,
+                ),
+            ]
+            next_wid, parked = coord._find_and_login_next_worker_with_lease(
+                exclude={"HintProxy"}, task=task,
+                login_queue=login_q, hint_proxy_name="HintProxy",
+            )
+
+        assert next_wid == 1
+        assert parked is False
+        assert client.release_lease.call_count == 2
+        second_acquire = client.acquire_lease.call_args_list[1]
+        assert second_acquire.args == (
+            "runner-test", "ActualProxy", lc_mod._DO_LEASE_TTL_MS,
+        )
+        mock_pub.assert_called_once_with("ActualProxy", "reacquired-cookie")
+
+    def test_reacquire_fails_skips_publish(self):
+        coord, client, w1, w2 = self._setup()
+        task = _make_task()
+        login_q = queue.Queue()
+
+        with (
+            patch.object(
+                coord, "_find_and_login_next_worker",
+                return_value=(1, "good-cookie"),
+            ),
+            patch.object(lc_mod, "_publish_login_state_to_do") as mock_pub,
+        ):
+            client.acquire_lease.side_effect = [
+                AcquireLeaseResult(
+                    acquired=True, holder_id="runner-test",
+                    target_proxy_name="HintProxy",
+                    lease_expires_at=99_999, server_time_ms=0,
+                ),
+                AcquireLeaseResult(
+                    acquired=False, holder_id="other-runner",
+                    target_proxy_name="OtherProxy",
+                    lease_expires_at=99_999, server_time_ms=0,
+                ),
+            ]
+            next_wid, parked = coord._find_and_login_next_worker_with_lease(
+                exclude={"HintProxy"}, task=task,
+                login_queue=login_q, hint_proxy_name="HintProxy",
+            )
+
+        assert next_wid == 1
+        assert parked is False
+        mock_pub.assert_not_called()
+
+    def test_reacquire_network_error_skips_publish(self):
+        coord, client, w1, w2 = self._setup()
+        task = _make_task()
+        login_q = queue.Queue()
+
+        with (
+            patch.object(
+                coord, "_find_and_login_next_worker",
+                return_value=(1, "good-cookie"),
+            ),
+            patch.object(lc_mod, "_publish_login_state_to_do") as mock_pub,
+        ):
+            client.acquire_lease.side_effect = [
+                AcquireLeaseResult(
+                    acquired=True, holder_id="runner-test",
+                    target_proxy_name="HintProxy",
+                    lease_expires_at=99_999, server_time_ms=0,
+                ),
+                LoginStateUnavailable("network timeout"),
+            ]
+            next_wid, parked = coord._find_and_login_next_worker_with_lease(
+                exclude={"HintProxy"}, task=task,
+                login_queue=login_q, hint_proxy_name="HintProxy",
+            )
+
+        assert next_wid == 1
+        assert parked is False
+        mock_pub.assert_not_called()
+
+    def test_no_do_configured_skips_reacquire(self):
+        w1 = _make_worker(0, "P1")
+        w2 = _make_worker(1, "P2")
+        coord = LoginCoordinator(all_workers=[w1, w2])
+        state_mod.global_login_state_client = None
+        task = _make_task()
+        login_q = queue.Queue()
+
+        with (
+            patch.object(
+                coord, "_find_and_login_next_worker",
+                return_value=(1, "local-cookie"),
+            ),
+            patch.object(lc_mod, "_publish_login_state_to_do") as mock_pub,
+        ):
+            next_wid, parked = coord._find_and_login_next_worker_with_lease(
+                exclude={"P1"}, task=task,
+                login_queue=login_q, hint_proxy_name="P1",
+            )
+
+        assert next_wid == 1
+        assert parked is False
+        mock_pub.assert_not_called()
+
+    def test_login_failed_no_reacquire_attempted(self):
+        coord, client, w1, w2 = self._setup()
+        task = _make_task()
+        login_q = queue.Queue()
+
+        with (
+            patch.object(
+                coord, "_find_and_login_next_worker",
+                return_value=(None, None),
+            ),
+            patch.object(lc_mod, "_publish_login_state_to_do") as mock_pub,
+        ):
+            next_wid, parked = coord._find_and_login_next_worker_with_lease(
+                exclude={"HintProxy"}, task=task,
+                login_queue=login_q, hint_proxy_name="HintProxy",
+            )
+
+        assert next_wid is None
+        assert client.acquire_lease.call_count == 1
+        mock_pub.assert_not_called()
