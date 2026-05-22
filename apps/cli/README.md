@@ -24,10 +24,10 @@ Canonical command-line entry points for JAVDB AutoSpider — all user-facing CLI
 ## Conventions
 
 - All entries are runnable via `python3 -m apps.cli.<subdir>.<name>`.
-- `apps.cli.*` is the only user-facing CLI surface. Some integration wrappers still alias `javdb.integrations.*` during the [ADR-015](../../docs/design/adr/ADR-015-integrations-interface-boundary.md) migration; those aliases are tracked by architecture allowlists and are removed by IMP-ADR015-02 through IMP-ADR015-07.
+- `apps.cli.*` is the only user-facing CLI surface. Some integration wrappers still alias `javdb.integrations.*` during the [ADR-015](../../docs/design/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md) migration; those aliases are tracked by architecture allowlists and are removed by IMP-ADR015-02 through IMP-ADR015-07.
 - Workflow invocations live in `.github/workflows/*.yml`; per-subdir READMEs note which CLIs are workflow-invoked.
 
 ## Related
 
-- [ADR-007 — Monorepo restructure](../../docs/design/adr/archive/ADR-007-monorepo-restructure-2026-05.md)
+- [ADR-007 — Monorepo restructure](../../docs/design/_archive/ADR-007-Monorepo-Restructure/ADR-007-monorepo-restructure-2026-05.md)
 - [scripts/README.md](../../scripts/README.md) — what remains in `scripts/` after Phase 2

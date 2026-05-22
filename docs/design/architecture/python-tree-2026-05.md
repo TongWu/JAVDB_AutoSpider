@@ -1,6 +1,6 @@
 # Python Tree (post-2026-05 restructure)
 
-This is the current canonical layout, established by [ADR-007](../adr/archive/ADR-007-monorepo-restructure-2026-05.md).
+This is the current canonical layout, established by [ADR-007](../_archive/ADR-007-Monorepo-Restructure/ADR-007-monorepo-restructure-2026-05.md).
 
 ## Top-level
 
