@@ -24,7 +24,6 @@ from datetime import datetime
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-os.chdir(REPO_ROOT)
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -33,7 +32,7 @@ from javdb.infra.logging import setup_logging, get_logger, log_summary_block
 setup_logging()
 logger = get_logger(__name__)
 
-DEFAULT_DB_PATH = os.path.join('reports', 'javdb_autospider.db')
+DEFAULT_DB_PATH = str(REPO_ROOT / 'reports' / 'javdb_autospider.db')
 
 _HISTORY_TABLES = ['MovieHistory', 'TorrentHistory']
 _REPORTS_TABLES = [
