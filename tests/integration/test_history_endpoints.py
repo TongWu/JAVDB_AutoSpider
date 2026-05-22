@@ -11,6 +11,8 @@ import sqlite3
 
 import pytest
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.fixture(autouse=True, scope="module")
 def _ensure_db_initialized():
