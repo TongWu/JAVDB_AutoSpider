@@ -28,6 +28,7 @@ Delete `javdb/storage/db/db.py` (4,497 lines) by redistributing non-facade code 
 - `db_connection.py` has `SCHEMA_VERSION = 13` — update to `14` (db.py already has 14 after PR-4)
 
 **After move:** In db.py, replace the moved definitions with:
+
 ```python
 from .db_connection import _DB_OPERATIONAL_ERRORS, _DB_INTEGRITY_ERRORS
 from .db_connection import _execute_backend_batch, _row_to_jsonable_dict
@@ -87,6 +88,7 @@ from .db_connection import _execute_backend_batch, _row_to_jsonable_dict
 - `generate_session_id` — from `db_session`
 
 **After move:** In db.py, replace with re-imports:
+
 ```python
 from .db_migrations import init_db, _init_single_db, _do_init, _init_single_legacy_db
 from .db_migrations import _detect_version, _migrate_single_to_split, ...
@@ -192,6 +194,7 @@ from .db_migrations import _HISTORY_DDL, _REPORTS_DDL, _OPERATIONS_DDL, _TABLES_
 - All 62 import sites (listed below)
 
 **__init__.py contents:**
+
 ```python
 from .db_connection import (
     get_db, get_local_sqlite_db, close_db, current_backend,

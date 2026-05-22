@@ -366,6 +366,6 @@ def db_get_all_history_records(db_path: Optional[str] = None) -> list:
 
 
 def db_batch_update_last_visited(*args, **kwargs):
-    """Update DateTimeVisited for a batch of hrefs. Delegates to db.py."""
+    """Update DateTimeVisited for a batch of hrefs. Delegates to db_history_write."""
     from javdb.storage.db.db_history_write import db_batch_update_last_visited as _f
     return _f(*args, **kwargs)
