@@ -102,7 +102,7 @@ def db_create_report_session(
         run_id: GitHub Actions run_id (optional)
         run_attempt: GitHub Actions run_attempt (optional)
         session_id: Optional explicit session ID (for migration tool)
-        write_mode: 'audit' or 'pending' (defaults to env var or 'audit')
+        write_mode: 'pending' (defaults to env var or 'pending')
 
     Returns:
         Session ID (TEXT format)
@@ -150,10 +150,6 @@ def db_mark_session_committed(
 ) -> int:
     """Mark a session as 'committed' so it survives any future cleanup.
 
-    Once a session is committed, its audit rows in MovieHistoryAudit /
-    TorrentHistoryAudit are pruned (the rollback CLI refuses committed
-    sessions anyway, so the audit log is no longer needed).
-
     Args:
         session_id: Session identifier
         db_path: Database path (defaults to REPORTS_DB_PATH)
@@ -170,31 +166,6 @@ def db_mark_session_committed(
             (session_id,),
         )
         marked = cur.rowcount or 0
-
-    # Audit retention: prune audit rows for this session even when the
-    # ReportSessions update was a no-op (Status was already 'committed' on
-    # a previous call). Keeps the tables bounded if commit is retried.
-    try:
-        with _get_db(_HISTORY_DB_PATH) as conn:
-            mh = conn.execute(
-                "DELETE FROM MovieHistoryAudit WHERE SessionId=?",
-                (session_id,),
-            )
-            th = conn.execute(
-                "DELETE FROM TorrentHistoryAudit WHERE SessionId=?",
-                (session_id,),
-            )
-        pruned = (mh.rowcount or 0) + (th.rowcount or 0)
-        if pruned > 0:
-            logger.info(
-                "Pruned %d audit row(s) on commit of session %s",
-                pruned, session_id,
-            )
-    except Exception as exc:  # noqa: BLE001 - best-effort retention
-        logger.warning(
-            "Could not prune audit rows for committed session %s: %s",
-            session_id, exc,
-        )
 
     return marked
 
@@ -248,7 +219,7 @@ def db_get_session_status(
     with _get_db(db_path or _REPORTS_DB_PATH) as conn:
         try:
             row = conn.execute(
-                "SELECT COALESCE(WriteMode,'audit') AS WriteMode, Status "
+                "SELECT COALESCE(WriteMode,'pending') AS WriteMode, Status "
                 "FROM ReportSessions WHERE Id=?",
                 (session_id,),
             ).fetchone()
@@ -259,7 +230,7 @@ def db_get_session_status(
                 (session_id,),
             ).fetchone()
             if row:
-                return ("audit", row["Status"])
+                return ("pending", row["Status"])
             return None
     if row:
         return (row["WriteMode"], row["Status"])
@@ -359,7 +330,7 @@ def db_find_stale_pending_sessions(
     with _get_db(db_path or _REPORTS_DB_PATH) as conn:
         try:
             rows = conn.execute(
-                "SELECT Id, Status, COALESCE(WriteMode,'audit') AS WriteMode "
+                "SELECT Id, Status, COALESCE(WriteMode,'pending') AS WriteMode "
                 "FROM ReportSessions "
                 "WHERE Status IN ('in_progress','finalizing') "
                 "AND DateTimeCreated < ?" + run_identity_clause,
@@ -373,7 +344,7 @@ def db_find_stale_pending_sessions(
                 "AND DateTimeCreated < ?" + run_identity_clause,
                 (cutoff,),
             ).fetchall()
-            return [(r["Id"], r["Status"], "audit") for r in rows]
+            return [(r["Id"], r["Status"], "pending") for r in rows]
     return [
         (r["Id"], r["Status"], r["WriteMode"]) for r in rows
     ]
@@ -745,8 +716,7 @@ def db_find_sessions_by_run(
 ) -> List[str]:
     """Return every session id touched by a (RunId, RunAttempt) workflow run.
 
-    Looks at ReportSessions first, then unions in audit tables for any
-    rows tagged with the run identity but whose owning session row is missing.
+    Looks at ReportSessions for matching rows.
     """
     _ensure_imports()
     found: set = set()
@@ -762,26 +732,6 @@ def db_find_sessions_by_run(
             ).fetchall()
         for r in rows:
             found.add(r['Id'])
-
-    with _get_db(history_db_path or _HISTORY_DB_PATH) as conn:
-        for table in ('MovieHistoryAudit', 'TorrentHistoryAudit'):
-            try:
-                if run_attempt is None:
-                    rows = conn.execute(
-                        f"SELECT DISTINCT SessionId FROM {table} WHERE RunId=?",
-                        (run_id,),
-                    ).fetchall()
-                else:
-                    rows = conn.execute(
-                        f"SELECT DISTINCT SessionId FROM {table} "
-                        f"WHERE RunId=? AND RunAttempt=?",
-                        (run_id, int(run_attempt)),
-                    ).fetchall()
-            except _DB_OPERATIONAL_ERRORS:
-                continue
-            for r in rows:
-                if r['SessionId'] is not None:
-                    found.add(r['SessionId'])
 
     return sorted(found)
 
