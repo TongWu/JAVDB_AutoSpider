@@ -84,7 +84,7 @@ For the full configuration reference (60+ options), see [Configuration Guide](do
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `STORAGE_BACKEND` | `sqlite` | `sqlite`, `d1`, or `dual` |
-| `WRITE_MODE` | `pending` | `pending` (default) or `audit` (legacy, sunset 2026-08-13) |
+| `WRITE_MODE` | `pending` | `pending` only; legacy `audit` requests fall back to pending |
 | `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 | `STRICT_DUAL_WRITE` | unset | Set `1` to fail on D1 write errors |
 
@@ -132,7 +132,6 @@ For the full CLI reference, see [CLI Reference](docs/handbook/en/developer/cli-r
 | `WeeklyDedup.yml` | Cron Sunday + manual | Rclone deduplication |
 | `RollbackD1.yml` | Manual | Session rollback |
 | `StaleSessionCleanup.yml` | Cron daily 02:00 UTC | Clean up stuck sessions (>48h) |
-| `AuditArchive.yml` | Cron weekly Monday | Prune old audit rows |
 | `Migration.yml` | Manual | Database migration runner |
 | `TestIngestion.yml` | Manual | Dry-run test pipeline |
 
