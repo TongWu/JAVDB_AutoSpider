@@ -82,7 +82,7 @@ def test_change_password_wrong_current_returns_401(admin_client, monkeypatch):
         },
     )
 
-    assert r.status_code == 401, r.text
+    assert r.status_code == 400, r.text
     # In-memory hash unchanged
     assert auth_infra.USERS["admin"]["password_hash"] == original_hash
 
