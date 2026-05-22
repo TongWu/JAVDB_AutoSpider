@@ -3,7 +3,7 @@
 **Related:** [ADR-005](../adr/ADR-005-db-py-retirement-and-repo-pattern.md)
 **Prereq:** PR-5 (IMP-038) must be merged first
 **Branch:** `adr005-pr6-internalize-shell-modules`
-**Status:** Planned
+**Status:** Implemented on 2026-05-22
 
 ## Overview
 
