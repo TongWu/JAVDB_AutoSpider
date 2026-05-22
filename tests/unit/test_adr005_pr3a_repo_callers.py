@@ -160,10 +160,10 @@ def _patch_legacy_actor_update_dependencies(monkeypatch, legacy, repo_cls):
 
 
 def test_legacy_sequential_actor_updates_use_history_repo(monkeypatch):
-    import javdb.storage.db.db as db_facade
+    import javdb.storage.db.db_history_write as db_hw
 
     monkeypatch.setattr(
-        db_facade,
+        db_hw,
         "db_batch_update_movie_actors",
         _raw_db_forbidden("db_batch_update_movie_actors"),
     )
@@ -210,10 +210,10 @@ def test_legacy_sequential_actor_updates_use_history_repo(monkeypatch):
 
 
 def test_legacy_parallel_actor_updates_use_history_repo(monkeypatch):
-    import javdb.storage.db.db as db_facade
+    import javdb.storage.db.db_history_write as db_hw
 
     monkeypatch.setattr(
-        db_facade,
+        db_hw,
         "db_batch_update_movie_actors",
         _raw_db_forbidden("db_batch_update_movie_actors"),
     )

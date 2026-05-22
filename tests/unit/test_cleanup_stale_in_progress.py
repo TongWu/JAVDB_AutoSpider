@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 import apps.cli.db.cleanup_stale_in_progress as cleanup_cli
-import javdb.storage.db.db as db_mod
+from javdb.storage.db.db_connection import get_db
+from javdb.storage.db.db_reports import db_create_report_session
 
 
 def _make_session(
@@ -19,7 +20,7 @@ def _make_session(
     when = (datetime.utcnow() - timedelta(hours=age_hours)).strftime(
         "%Y-%m-%d %H:%M:%S"
     )
-    sid = db_mod.db_create_report_session(
+    sid = db_create_report_session(
         report_type="DailyReport",
         report_date="2026-05-08",
         csv_filename=csv,
@@ -27,7 +28,7 @@ def _make_session(
         run_id=run_id,
     )
     if status != "in_progress":
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             conn.execute(
                 "UPDATE ReportSessions SET Status=? WHERE Id=?",
                 (status, sid),
@@ -46,7 +47,7 @@ class TestStaleSessionCleanup:
         ])
         assert rc == 0
 
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             row = conn.execute(
                 "SELECT Status FROM ReportSessions WHERE Id=?", (sid,),
             ).fetchone()
@@ -65,7 +66,7 @@ class TestStaleSessionCleanup:
         ])
         # reports scope DELETEs the ReportSessions row, so it's gone now.
         assert rc in (0, 4)
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             row = conn.execute(
                 "SELECT COUNT(*) AS n FROM ReportSessions WHERE Id=?", (sid,),
             ).fetchone()
@@ -83,7 +84,7 @@ class TestStaleSessionCleanup:
             "--scope", "operations",  # reports scope would DELETE the row
         ])
         assert rc in (0, 4)
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             row = conn.execute(
                 "SELECT FailureReason, Status FROM ReportSessions WHERE Id=?",
                 (sid,),
@@ -106,7 +107,7 @@ class TestStaleSessionCleanup:
             "--scope", "operations",
         ])
         assert rc in (0, 4)
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             r_status = conn.execute(
                 "SELECT Status FROM ReportSessions WHERE Id=?", (recent,),
             ).fetchone()["Status"]
@@ -133,7 +134,7 @@ class TestStaleSessionCleanup:
             "--scope", "operations",
         ])
         assert rc == 0
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             row = conn.execute(
                 "SELECT Status FROM ReportSessions WHERE Id=?",
                 (legacy,),
@@ -158,7 +159,7 @@ class TestStaleSessionCleanup:
             "--include-legacy",
         ])
         assert rc in (0, 4)
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             row = conn.execute(
                 "SELECT Status FROM ReportSessions WHERE Id=?",
                 (legacy,),

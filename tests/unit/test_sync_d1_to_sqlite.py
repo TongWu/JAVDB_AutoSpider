@@ -190,25 +190,30 @@ class TestDryRunNoOp:
     ):
         # Build a real local sqlite mirror with one MovieHistory row that
         # we'll verify is preserved across the dry-run.
-        import javdb.storage.db.db as db_mod
-        sid = db_mod.db_create_report_session(
+        from javdb.storage.db.db_connection import get_db as _get_db
+        from javdb.storage.db.db_reports import db_create_report_session as _db_crs
+        from javdb.storage.db.db_history_write import (
+            db_stage_history_write as _db_shw,
+            db_commit_session_history as _db_csh,
+        )
+        sid = _db_crs(
             report_type="DailyReport",
             report_date="2026-05-08",
             csv_filename="dryrun.csv",
         )
-        db_mod.db_stage_history_write(
+        _db_shw(
             sid, "movie",
             {"Href": "/v/SYNC-001", "VideoCode": "SYNC-001",
              "DateTimeVisited": "2026-05-08 00:00:00"},
         )
-        db_mod.db_stage_history_write(
+        _db_shw(
             sid, "torrent",
             {"Href": "/v/SYNC-001", "VideoCode": "SYNC-001",
              "Category": "no_subtitle", "MagnetUri": "",
              "Size": "", "FileCount": 0,
              "DateTimeVisited": "2026-05-08 00:00:00"},
         )
-        db_mod.db_commit_session_history(sid)
+        _db_csh(sid)
 
         # Stub out D1 so the script can pretend D1 has a different row.
         monkeypatch.setenv("STORAGE_BACKEND", "sqlite")
@@ -235,7 +240,7 @@ class TestDryRunNoOp:
         assert rc in (0, 4)
 
         # The original row must still exist (dry-run is non-destructive).
-        with db_mod.get_db() as conn:
+        with _get_db() as conn:
             n = conn.execute(
                 "SELECT COUNT(*) AS n FROM MovieHistory WHERE VideoCode='SYNC-001'"
             ).fetchone()["n"]

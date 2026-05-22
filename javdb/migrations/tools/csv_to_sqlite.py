@@ -753,9 +753,10 @@ def main():
         logger.info("[VERIFY MODE]")
     logger.info("=" * 60)
 
-    import javdb.storage.db.db as db_mod
-    db_mod.DB_PATH = db_path
-    db_mod.init_db(db_path, force=True)
+    import javdb.storage.db.db_connection as _db_conn
+    from javdb.storage.db.db_migrations import init_db
+    _db_conn.DB_PATH = db_path
+    init_db(db_path, force=True)
 
     # ── Phase 1: data tables ─────────────────────────────────────────
     logger.info("-" * 60)

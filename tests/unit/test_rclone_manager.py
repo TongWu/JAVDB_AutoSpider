@@ -187,7 +187,9 @@ def test_scan_sqlite_uses_staging_when_no_active_session(
     monkeypatch, tmp_path, storage_mode_db
 ):
     import apps.cli.rclone.manager as rm
-    import javdb.storage.db.db as db_mod
+    from javdb.storage.db.db_session import set_active_session_id
+    from javdb.storage.db.db_operations import db_replace_rclone_inventory
+    from javdb.storage.db.db_connection import get_db
 
     output = tmp_path / "inventory.csv"
     seed = {
@@ -206,8 +208,8 @@ def test_scan_sqlite_uses_staging_when_no_active_session(
         "scan_datetime": "2026-05-05 00:00:00",
     })
 
-    db_mod.set_active_session_id(None)
-    db_mod.db_replace_rclone_inventory([seed])
+    set_active_session_id(None)
+    db_replace_rclone_inventory([seed])
 
     def fake_scan(*_args, row_callback=None, **_kwargs):
         row_callback([incoming])
@@ -231,7 +233,7 @@ def test_scan_sqlite_uses_staging_when_no_active_session(
     )
 
     assert rm.main() == 1
-    with db_mod.get_db() as conn:
+    with get_db() as conn:
         rows = conn.execute(
             "SELECT VideoCode FROM RcloneInventory ORDER BY VideoCode"
         ).fetchall()
@@ -248,8 +250,8 @@ def test_scan_sqlite_uses_staging_when_no_active_session(
     assert [row["Status"] for row in sessions] == ["failed"]
 
 
-def _patch_rclone_db_mocks(monkeypatch, db_mod, order, overrides=None):
-    """Patch both db_mod and the split modules the rclone manager imports from."""
+def _patch_rclone_db_mocks(monkeypatch, order, overrides=None):
+    """Patch the split modules the rclone manager imports from."""
     import javdb.storage.db.db_migrations as _mig
     import javdb.storage.db.db_reports as _rep
     import javdb.storage.db.db_operations as _ops
@@ -284,7 +286,6 @@ def _patch_rclone_db_mocks(monkeypatch, db_mod, order, overrides=None):
     }
 
     for name, mock_fn in defaults.items():
-        monkeypatch.setattr(db_mod, name, mock_fn)
         for mod, attr in module_map.get(name, []):
             monkeypatch.setattr(mod, attr, mock_fn)
 
@@ -293,7 +294,7 @@ def test_scan_marks_local_session_committed_after_inventory_swap(
     monkeypatch, tmp_path, storage_mode_db
 ):
     import apps.cli.rclone.manager as rm
-    import javdb.storage.db.db as db_mod
+
 
     output = tmp_path / "inventory.csv"
     incoming = {field: "" for field in INVENTORY_FIELDNAMES}
@@ -315,7 +316,7 @@ def test_scan_marks_local_session_committed_after_inventory_swap(
     monkeypatch.setattr(rm, "check_remote_exists", lambda _remote: (True, "ok"))
     monkeypatch.setattr(rm, "scan_inventory", fake_scan)
     monkeypatch.setattr(rm, "export_db_to_csv", lambda _path: order.append("export"))
-    _patch_rclone_db_mocks(monkeypatch, db_mod, order)
+    _patch_rclone_db_mocks(monkeypatch, order)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -338,7 +339,7 @@ def test_scan_year_filter_merges_staging_instead_of_full_swap(
     monkeypatch, tmp_path, storage_mode_db
 ):
     import apps.cli.rclone.manager as rm
-    import javdb.storage.db.db as db_mod
+
 
     output = tmp_path / "inventory.csv"
     incoming = {field: "" for field in INVENTORY_FIELDNAMES}
@@ -364,7 +365,7 @@ def test_scan_year_filter_merges_staging_instead_of_full_swap(
     monkeypatch.setattr(rm, "check_remote_exists", lambda _remote: (True, "ok"))
     monkeypatch.setattr(rm, "scan_inventory", fake_scan)
     monkeypatch.setattr(rm, "export_db_to_csv", lambda _path: order.append("export"))
-    _patch_rclone_db_mocks(monkeypatch, db_mod, order, overrides={
+    _patch_rclone_db_mocks(monkeypatch, order, overrides={
         "db_swap_rclone_inventory": fail_swap,
     })
     monkeypatch.setattr(
@@ -392,7 +393,7 @@ def test_scan_does_not_mark_local_session_committed_when_swap_fails(
     monkeypatch, tmp_path, storage_mode_db, caplog
 ):
     import apps.cli.rclone.manager as rm
-    import javdb.storage.db.db as db_mod
+
 
     caplog.set_level("ERROR", logger=rm.logger.name)
     output = tmp_path / "inventory.csv"
@@ -422,7 +423,7 @@ def test_scan_does_not_mark_local_session_committed_when_swap_fails(
     monkeypatch.setattr(rm, "check_rclone_installed", lambda: (True, "ok"))
     monkeypatch.setattr(rm, "check_remote_exists", lambda _remote: (True, "ok"))
     monkeypatch.setattr(rm, "scan_inventory", fake_scan)
-    _patch_rclone_db_mocks(monkeypatch, db_mod, order, overrides={
+    _patch_rclone_db_mocks(monkeypatch, order, overrides={
         "db_swap_rclone_inventory": fail_swap,
         "db_drop_rclone_staging": fail_drop,
     })
@@ -456,7 +457,7 @@ def test_scan_succeeds_when_post_swap_commit_marking_fails(
     monkeypatch, tmp_path, storage_mode_db
 ):
     import apps.cli.rclone.manager as rm
-    import javdb.storage.db.db as db_mod
+
 
     output = tmp_path / "inventory.csv"
     incoming = {field: "" for field in INVENTORY_FIELDNAMES}
@@ -482,14 +483,9 @@ def test_scan_succeeds_when_post_swap_commit_marking_fails(
     monkeypatch.setattr(rm, "check_remote_exists", lambda _remote: (True, "ok"))
     monkeypatch.setattr(rm, "scan_inventory", fake_scan)
     monkeypatch.setattr(rm, "export_db_to_csv", lambda _path: order.append("export"))
-    _patch_rclone_db_mocks(monkeypatch, db_mod, order, overrides={
+    _patch_rclone_db_mocks(monkeypatch, order, overrides={
         "db_mark_session_committed": fail_mark,
     })
-    monkeypatch.setattr(
-        db_mod,
-        "db_drop_rclone_staging",
-        lambda sid: order.append(("drop_staging", sid)),
-    )
     import javdb.storage.db.db_operations as _ops
     monkeypatch.setattr(_ops, "db_drop_rclone_staging", lambda sid: order.append(("drop_staging", sid)))
     monkeypatch.setattr(
@@ -514,7 +510,7 @@ def test_scan_aborts_when_sqlite_staging_init_fails(
     monkeypatch, tmp_path, storage_mode_duo, caplog
 ):
     import apps.cli.rclone.manager as rm
-    import javdb.storage.db.db as db_mod
+
 
     caplog.set_level("ERROR", logger=rm.logger.name)
     output = tmp_path / "inventory.csv"
@@ -535,7 +531,7 @@ def test_scan_aborts_when_sqlite_staging_init_fails(
     monkeypatch.setattr(rm, "check_rclone_installed", lambda: (True, "ok"))
     monkeypatch.setattr(rm, "check_remote_exists", lambda _remote: (True, "ok"))
     monkeypatch.setattr(rm, "scan_inventory", fake_scan)
-    _patch_rclone_db_mocks(monkeypatch, db_mod, order, overrides={
+    _patch_rclone_db_mocks(monkeypatch, order, overrides={
         "db_open_rclone_staging": fail_open,
         "db_drop_rclone_staging": fail_drop,
     })

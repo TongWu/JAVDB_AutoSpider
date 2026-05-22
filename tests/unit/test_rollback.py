@@ -21,7 +21,20 @@ import argparse
 
 import pytest
 
-import javdb.storage.db.db as db_mod
+from javdb.storage.db.db_connection import get_db
+from javdb.storage.db.db_session import set_active_session_id, SESSION_ID_PATTERN as _SESSION_ID_PATTERN
+from javdb.storage.db.db_reports import (
+    db_create_report_session, db_mark_session_committed, db_mark_session_failed,
+    db_find_in_progress_sessions, db_count_in_progress_sessions_for_run,
+    db_find_sessions_by_run,
+)
+from javdb.storage.db.db_rollback import db_rollback_session, _session_id_to_identifier_suffix
+from javdb.storage.db.db_operations import (
+    db_replace_rclone_inventory, db_append_dedup_record, db_mark_records_deleted,
+    db_append_pikpak_history, db_upsert_align_no_exact_match,
+    db_open_rclone_staging, db_append_rclone_staging, db_swap_rclone_inventory,
+    db_merge_rclone_inventory_from_stage, db_drop_rclone_staging,
+)
 import javdb.storage.rollback.core as rollback_core
 
 
@@ -29,14 +42,14 @@ import javdb.storage.rollback.core as rollback_core
 
 
 def _create_session(status: str = "in_progress", *, when: str | None = None) -> int:
-    sid = db_mod.db_create_report_session(
+    sid = db_create_report_session(
         report_type="DailyReport",
         report_date="2026-05-04",
         csv_filename="test.csv",
         created_at=when,
     )
     if status != "in_progress":
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             conn.execute(
                 "UPDATE ReportSessions SET Status=? WHERE Id=?",
                 (status, sid),
@@ -51,7 +64,7 @@ def _create_session(status: str = "in_progress", *, when: str | None = None) -> 
 class TestSessionStatusLifecycle:
     def test_create_starts_in_progress(self):
         sid = _create_session()
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             row = conn.execute(
                 "SELECT Status FROM ReportSessions WHERE Id=?", (sid,)
             ).fetchone()
@@ -59,9 +72,9 @@ class TestSessionStatusLifecycle:
 
     def test_mark_committed_flips_status(self):
         sid = _create_session()
-        n = db_mod.db_mark_session_committed(sid)
+        n = db_mark_session_committed(sid)
         assert n == 1
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             row = conn.execute(
                 "SELECT Status FROM ReportSessions WHERE Id=?", (sid,)
             ).fetchone()
@@ -69,15 +82,15 @@ class TestSessionStatusLifecycle:
 
     def test_mark_committed_idempotent(self):
         sid = _create_session()
-        db_mod.db_mark_session_committed(sid)
-        n = db_mod.db_mark_session_committed(sid)
+        db_mark_session_committed(sid)
+        n = db_mark_session_committed(sid)
         assert n == 0  # nothing changed second time
 
     def test_mark_failed(self):
         sid = _create_session()
-        n = db_mod.db_mark_session_failed(sid)
+        n = db_mark_session_failed(sid)
         assert n == 1
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             row = conn.execute(
                 "SELECT Status FROM ReportSessions WHERE Id=?", (sid,)
             ).fetchone()
@@ -92,9 +105,9 @@ class TestFindInProgressSessions:
         a = _create_session()
         b = _create_session()
         c = _create_session()
-        db_mod.db_mark_session_committed(b)
+        db_mark_session_committed(b)
 
-        ids = db_mod.db_find_in_progress_sessions()
+        ids = db_find_in_progress_sessions()
         assert a in ids
         assert c in ids
         assert b not in ids
@@ -103,7 +116,7 @@ class TestFindInProgressSessions:
         old = _create_session(when="2026-04-30 10:00:00")
         new = _create_session(when="2026-05-04 19:30:00")
 
-        ids = db_mod.db_find_in_progress_sessions(since="2026-05-04 00:00:00")
+        ids = db_find_in_progress_sessions(since="2026-05-04 00:00:00")
         assert new in ids
         assert old not in ids
 
@@ -270,9 +283,9 @@ class TestRollbackReports:
         sid_failed = _create_session()
         # …and a successful one we must NOT touch.
         sid_good = _create_session()
-        db_mod.db_mark_session_committed(sid_good)
+        db_mark_session_committed(sid_good)
 
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             for sid in (sid_failed, sid_good):
                 conn.execute(
                     "INSERT INTO ReportMovies (SessionId, Href, VideoCode) "
@@ -280,14 +293,14 @@ class TestRollbackReports:
                     (sid, f"/v/{sid}", f"CODE-{sid}"),
                 )
 
-        result = db_mod.db_rollback_session(sid_failed, scope="reports")
+        result = db_rollback_session(sid_failed, scope="reports")
         assert result["reports"]["ReportMovies"] == 1
         assert result["reports"]["ReportSessions"] == 1
 
         # Forced rollback coverage lives in
         # TestRollbackRefusesCommitted::test_refuses_without_force.
 
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             ids = [r["Id"] for r in conn.execute(
                 "SELECT Id FROM ReportSessions ORDER BY Id"
             ).fetchall()]
@@ -296,18 +309,18 @@ class TestRollbackReports:
 
     def test_dry_run_reports_counts_without_mutation(self):
         sid = _create_session()
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             conn.execute(
                 "INSERT INTO ReportMovies (SessionId, Href, VideoCode) "
                 "VALUES (?, ?, ?)",
                 (sid, "/v/X", "X-1"),
             )
 
-        result = db_mod.db_rollback_session(sid, scope="reports", dry_run=True)
+        result = db_rollback_session(sid, scope="reports", dry_run=True)
         assert result["reports"]["ReportMovies"] == 1
         assert result["reports"]["ReportSessions"] == 1
 
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             n = conn.execute(
                 "SELECT COUNT(*) AS n FROM ReportMovies WHERE SessionId=?",
                 (sid,),
@@ -321,25 +334,25 @@ class TestRollbackReports:
 class TestRollbackRefusesCommitted:
     def test_refuses_without_force(self):
         sid = _create_session()
-        db_mod.db_mark_session_committed(sid)
+        db_mark_session_committed(sid)
         with pytest.raises(ValueError, match="committed"):
-            db_mod.db_rollback_session(sid)
+            db_rollback_session(sid)
 
     def test_force_overrides(self):
         sid = _create_session()
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             conn.execute(
                 "INSERT INTO ReportMovies (SessionId, Href, VideoCode) "
                 "VALUES (?, ?, ?)",
                 (sid, "/v/force", "FORCE-001"),
             )
-        db_mod.db_mark_session_committed(sid)
-        result = db_mod.db_rollback_session(sid, force=True, scope="reports")
+        db_mark_session_committed(sid)
+        result = db_rollback_session(sid, force=True, scope="reports")
         # Even with force, _rollback_reports keeps committed ReportSessions
         # row intact (only it would have been deleted by removing the WHERE
         # clause). The other tables still get cleaned.
         assert "reports" in result
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             remaining = conn.execute(
                 "SELECT COUNT(*) AS n FROM ReportMovies WHERE SessionId=?",
                 (sid,),
@@ -354,7 +367,7 @@ class TestRollbackRefusesCommitted:
     def test_unknown_scope_raises(self):
         sid = _create_session()
         with pytest.raises(ValueError, match="scope"):
-            db_mod.db_rollback_session(sid, scope="garbage")
+            db_rollback_session(sid, scope="garbage")
 
 
 # ── Operations-scope rollback ────────────────────────────────────────────
@@ -365,33 +378,33 @@ class TestRollbackOperations:
         sid_a = _create_session()
         sid_b = _create_session()
 
-        db_mod.db_append_pikpak_history(
+        db_append_pikpak_history(
             {"torrent_hash": "h1", "torrent_name": "n1"},
             session_id=sid_a,
         )
-        db_mod.db_append_pikpak_history(
+        db_append_pikpak_history(
             {"torrent_hash": "h2", "torrent_name": "n2"},
             session_id=sid_b,
         )
 
-        db_mod.db_append_dedup_record(
+        db_append_dedup_record(
             {"video_code": "ABC-001", "existing_gdrive_path": "/a/1"},
             session_id=sid_a,
         )
-        db_mod.db_append_dedup_record(
+        db_append_dedup_record(
             {"video_code": "ABC-002", "existing_gdrive_path": "/a/2"},
             session_id=sid_b,
         )
 
-        db_mod.db_upsert_align_no_exact_match("XYZ-001", session_id=sid_a)
-        db_mod.db_upsert_align_no_exact_match("XYZ-002", session_id=sid_b)
+        db_upsert_align_no_exact_match("XYZ-001", session_id=sid_a)
+        db_upsert_align_no_exact_match("XYZ-002", session_id=sid_b)
 
-        result = db_mod.db_rollback_session(sid_a, scope="operations")
+        result = db_rollback_session(sid_a, scope="operations")
         assert result["operations"]["PikpakHistory"] == 1
         assert result["operations"]["DedupRecords"] == 1
         assert result["operations"]["InventoryAlignNoExactMatch"] == 1
 
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             assert conn.execute(
                 "SELECT COUNT(*) AS n FROM PikpakHistory WHERE SessionId=?",
                 (sid_a,),
@@ -404,19 +417,19 @@ class TestRollbackOperations:
     def test_dedup_deletes_session_rows_even_when_marked_deleted(self):
         """Rows created by the failed session are deleted even after soft-delete."""
         sid = _create_session()
-        db_mod.db_append_dedup_record(
+        db_append_dedup_record(
             {"video_code": "ABC-001", "existing_gdrive_path": "/a/1"},
             session_id=sid,
         )
-        db_mod.db_mark_records_deleted(
+        db_mark_records_deleted(
             [("/a/1", "2026-05-04 10:00:00")],
             session_id=sid,
         )
 
-        result = db_mod.db_rollback_session(sid, scope="operations")
+        result = db_rollback_session(sid, scope="operations")
         assert result["operations"]["DedupRecords"] == 1
 
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             n = conn.execute(
                 "SELECT COUNT(*) AS n FROM DedupRecords WHERE SessionId=?",
                 (sid,),
@@ -425,20 +438,20 @@ class TestRollbackOperations:
 
     def test_dedup_restores_preexisting_rows_marked_deleted_by_session(self):
         sid = _create_session()
-        row_id = db_mod.db_append_dedup_record(
+        row_id = db_append_dedup_record(
             {"video_code": "ABC-003", "existing_gdrive_path": "/a/3"},
             session_id=None,
         )
-        db_mod.db_mark_records_deleted(
+        db_mark_records_deleted(
             [("/a/3", "2026-05-04 10:00:00")],
             session_id=sid,
         )
 
-        result = db_mod.db_rollback_session(sid, scope="operations")
+        result = db_rollback_session(sid, scope="operations")
         assert result["operations"]["DedupRecords.restored"] == 1
         assert result["operations"]["DedupRecords"] == 0
 
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             row = conn.execute(
                 "SELECT IsDeleted, DateTimeDeleted, SessionId "
                 "FROM DedupRecords WHERE Id=?",
@@ -455,20 +468,20 @@ class TestRollbackOperations:
 
     def test_explicit_none_session_id_opts_out_of_active_context(self):
         sid = _create_session()
-        db_mod.set_active_session_id(sid)
+        set_active_session_id(sid)
         try:
-            dedup_id = db_mod.db_append_dedup_record(
+            dedup_id = db_append_dedup_record(
                 {"video_code": "ABC-004", "existing_gdrive_path": "/a/4"},
                 session_id=None,
             )
-            db_mod.db_upsert_align_no_exact_match(
+            db_upsert_align_no_exact_match(
                 "XYZ-004",
                 session_id=None,
             )
         finally:
-            db_mod.set_active_session_id(None)
+            set_active_session_id(None)
 
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             dedup = conn.execute(
                 "SELECT SessionId FROM DedupRecords WHERE Id=?",
                 (dedup_id,),
@@ -501,21 +514,21 @@ class TestRcloneStagingSwap:
         sid = _create_session()
         # Seed main table with a row from a previous run so we can verify
         # the swap actually replaces it.
-        db_mod.db_replace_rclone_inventory(
+        db_replace_rclone_inventory(
             [self._entry("OLD-001", "/old/a")],
         )
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             assert conn.execute(
                 "SELECT COUNT(*) AS n FROM RcloneInventory"
             ).fetchone()["n"] == 1
 
-        staging = db_mod.db_open_rclone_staging(sid)
+        staging = db_open_rclone_staging(sid)
         assert staging is not None
         # The staging name suffix sanitizes `.` / `-` from the TEXT
         # snowflake to `_` so it stays a valid SQL identifier.
-        assert staging.endswith(db_mod._session_id_to_identifier_suffix(sid))
+        assert staging.endswith(_session_id_to_identifier_suffix(sid))
 
-        db_mod.db_append_rclone_staging(
+        db_append_rclone_staging(
             [
                 self._entry("NEW-001", "/new/a"),
                 self._entry("NEW-002", "/new/b"),
@@ -523,10 +536,10 @@ class TestRcloneStagingSwap:
             session_id=sid,
         )
 
-        n = db_mod.db_swap_rclone_inventory(session_id=sid)
+        n = db_swap_rclone_inventory(session_id=sid)
         assert n == 2
 
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             codes = sorted(
                 r["VideoCode"] for r in conn.execute(
                     "SELECT VideoCode FROM RcloneInventory ORDER BY VideoCode"
@@ -541,15 +554,15 @@ class TestRcloneStagingSwap:
 
     def test_merge_staging_refreshes_only_selected_years(self):
         sid = _create_session()
-        db_mod.db_replace_rclone_inventory(
+        db_replace_rclone_inventory(
             [
                 self._entry("KEEP-001", "2025/actor/KEEP-001"),
                 self._entry("OLD-001", "2026/actor/OLD-001"),
             ],
         )
 
-        staging = db_mod.db_open_rclone_staging(sid)
-        db_mod.db_append_rclone_staging(
+        staging = db_open_rclone_staging(sid)
+        db_append_rclone_staging(
             [
                 self._entry("NEW-001", "2026/actor/NEW-001"),
                 self._entry("SKIP-001", "2025/actor/SKIP-001"),
@@ -557,12 +570,12 @@ class TestRcloneStagingSwap:
             session_id=sid,
         )
 
-        n = db_mod.db_merge_rclone_inventory_from_stage(
+        n = db_merge_rclone_inventory_from_stage(
             session_id=sid,
             years=["2026"],
         )
 
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             rows = conn.execute(
                 "SELECT VideoCode FROM RcloneInventory ORDER BY VideoCode"
             ).fetchall()
@@ -575,18 +588,18 @@ class TestRcloneStagingSwap:
 
     def test_drop_staging_leaves_main_untouched(self):
         sid = _create_session()
-        db_mod.db_replace_rclone_inventory(
+        db_replace_rclone_inventory(
             [self._entry("KEEP-001", "/old/a")],
         )
 
-        staging = db_mod.db_open_rclone_staging(sid)
-        db_mod.db_append_rclone_staging(
+        staging = db_open_rclone_staging(sid)
+        db_append_rclone_staging(
             [self._entry("LOST-001", "/lost/a")],
             session_id=sid,
         )
-        db_mod.db_drop_rclone_staging(sid)
+        db_drop_rclone_staging(sid)
 
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             codes = [r["VideoCode"] for r in conn.execute(
                 "SELECT VideoCode FROM RcloneInventory"
             ).fetchall()]
@@ -598,15 +611,15 @@ class TestRcloneStagingSwap:
 
     def test_rollback_drops_orphan_staging(self):
         sid = _create_session()
-        db_mod.db_open_rclone_staging(sid)
+        db_open_rclone_staging(sid)
         # Mid-run crash before swap → rollback should DROP the staging.
-        result = db_mod.db_rollback_session(sid, scope="operations")
+        result = db_rollback_session(sid, scope="operations")
         staging_name = (
             f"RcloneInventoryStaging_"
-            f"{db_mod._session_id_to_identifier_suffix(sid)}"
+            f"{_session_id_to_identifier_suffix(sid)}"
         )
         assert result["operations"][staging_name] == 1
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             assert conn.execute(
                 "SELECT name FROM sqlite_master WHERE name=?", (staging_name,),
             ).fetchone() is None
@@ -617,19 +630,19 @@ class TestRcloneStagingSwap:
 
 class TestApplicationGeneratedSessionId:
     def test_db_create_report_session_returns_application_id(self):
-        sid = db_mod.db_create_report_session(
+        sid = db_create_report_session(
             report_type="DailyReport",
             report_date="2026-05-08",
             csv_filename="phase2.csv",
         )
         # The id must match the canonical TEXT snowflake shape (post
         # 2026-05-13). AUTOINCREMENT would have produced None / "1" / etc.
-        assert isinstance(sid, str) and db_mod._SESSION_ID_PATTERN.match(sid), (
+        assert isinstance(sid, str) and _SESSION_ID_PATTERN.match(sid), (
             f"Application-generated id should match the ISO-like snowflake "
             f"shape, got {sid!r}."
         )
 
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             row = conn.execute(
                 "SELECT Id FROM ReportSessions WHERE CsvFilename=?",
                 ("phase2.csv",),
@@ -638,12 +651,12 @@ class TestApplicationGeneratedSessionId:
         assert row["Id"] == sid
 
     def test_consecutive_session_ids_are_strictly_increasing(self):
-        a = db_mod.db_create_report_session(
+        a = db_create_report_session(
             report_type="DailyReport",
             report_date="2026-05-08",
             csv_filename="phase2-a.csv",
         )
-        b = db_mod.db_create_report_session(
+        b = db_create_report_session(
             report_type="DailyReport",
             report_date="2026-05-08",
             csv_filename="phase2-b.csv",
@@ -651,14 +664,14 @@ class TestApplicationGeneratedSessionId:
         assert b > a
 
     def test_run_identity_columns_are_persisted(self):
-        sid = db_mod.db_create_report_session(
+        sid = db_create_report_session(
             report_type="DailyReport",
             report_date="2026-05-08",
             csv_filename="phase2-runid.csv",
             run_id="123456789",
             run_attempt=2,
         )
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             row = conn.execute(
                 "SELECT RunId, RunAttempt FROM ReportSessions WHERE Id=?",
                 (sid,),
@@ -667,21 +680,21 @@ class TestApplicationGeneratedSessionId:
         assert row["RunAttempt"] == 2
 
     def test_db_count_in_progress_sessions_for_run(self):
-        db_mod.db_create_report_session(
+        db_create_report_session(
             report_type="DailyReport",
             report_date="2026-05-08",
             csv_filename="phase2-count-1.csv",
             run_id="rid-A",
             run_attempt=1,
         )
-        db_mod.db_create_report_session(
+        db_create_report_session(
             report_type="DailyReport",
             report_date="2026-05-08",
             csv_filename="phase2-count-2.csv",
             run_id="rid-A",
             run_attempt=1,
         )
-        db_mod.db_create_report_session(
+        db_create_report_session(
             report_type="DailyReport",
             report_date="2026-05-08",
             csv_filename="phase2-count-3.csv",
@@ -689,19 +702,19 @@ class TestApplicationGeneratedSessionId:
             run_attempt=1,
         )
 
-        assert db_mod.db_count_in_progress_sessions_for_run("rid-A", 1) == 2
-        assert db_mod.db_count_in_progress_sessions_for_run("rid-A", 2) == 0
-        assert db_mod.db_count_in_progress_sessions_for_run("rid-B", 1) == 1
+        assert db_count_in_progress_sessions_for_run("rid-A", 1) == 2
+        assert db_count_in_progress_sessions_for_run("rid-A", 2) == 0
+        assert db_count_in_progress_sessions_for_run("rid-B", 1) == 1
 
     def test_db_find_sessions_by_run(self):
-        sid = db_mod.db_create_report_session(
+        sid = db_create_report_session(
             report_type="DailyReport",
             report_date="2026-05-08",
             csv_filename="phase2-by-run.csv",
             run_id="rid-find",
             run_attempt=3,
         )
-        ids = db_mod.db_find_sessions_by_run("rid-find", 3)
+        ids = db_find_sessions_by_run("rid-find", 3)
         assert ids == [sid]
 
 
@@ -711,14 +724,14 @@ class TestApplicationGeneratedSessionId:
 class TestFailureReason:
     def test_rollback_persists_failure_reason(self):
         sid = _create_session()
-        db_mod.db_rollback_session(
+        db_rollback_session(
             sid, scope="reports", failure_reason="workflow_cancel",
         )
         # ReportSessions row was deleted (reports scope), so a fresh
         # mark_failed call exercises the same column path on a new row.
         sid2 = _create_session()
-        db_mod.db_mark_session_failed(sid2, reason="runtime_error")
-        with db_mod.get_db() as conn:
+        db_mark_session_failed(sid2, reason="runtime_error")
+        with get_db() as conn:
             row = conn.execute(
                 "SELECT FailureReason FROM ReportSessions WHERE Id=?",
                 (sid2,),
@@ -732,18 +745,18 @@ class TestFailureReason:
 class TestRollbackScopeFiltering:
     def test_reports_scope_only_touches_reports(self):
         sid = _create_session()
-        db_mod.db_append_pikpak_history(
+        db_append_pikpak_history(
             {"torrent_hash": "h1", "torrent_name": "n1"},
             session_id=sid,
         )
 
-        result = db_mod.db_rollback_session(sid, scope="reports")
+        result = db_rollback_session(sid, scope="reports")
         assert "reports" in result
         assert "operations" not in result
         assert "history" not in result
 
         # PikpakHistory row must survive a reports-only rollback.
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             n = conn.execute(
                 "SELECT COUNT(*) AS n FROM PikpakHistory WHERE SessionId=?",
                 (sid,),
@@ -752,17 +765,17 @@ class TestRollbackScopeFiltering:
 
     def test_operations_scope_only_touches_operations(self):
         sid = _create_session()
-        db_mod.db_append_pikpak_history(
+        db_append_pikpak_history(
             {"torrent_hash": "h1", "torrent_name": "n1"},
             session_id=sid,
         )
 
-        result = db_mod.db_rollback_session(sid, scope="operations")
+        result = db_rollback_session(sid, scope="operations")
         assert "operations" in result
         assert "reports" not in result
 
         # ReportSessions row must survive an operations-only rollback.
-        with db_mod.get_db() as conn:
+        with get_db() as conn:
             row = conn.execute(
                 "SELECT Status FROM ReportSessions WHERE Id=?", (sid,),
             ).fetchone()

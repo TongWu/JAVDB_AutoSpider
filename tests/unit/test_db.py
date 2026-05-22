@@ -8,14 +8,40 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 sys.path.insert(0, project_root)
 
 import pytest
-import javdb.storage.db.db as db_mod
+from javdb.storage.db.db_connection import (
+    get_db, close_db, HISTORY_DB_PATH, REPORTS_DB_PATH, OPERATIONS_DB_PATH,
+    SCHEMA_VERSION, _DB_OPERATIONAL_ERRORS, _DB_INTEGRITY_ERRORS,
+)
+from javdb.storage.db.db_migrations import (
+    init_db, _init_single_db, _init_single_legacy_db, _REPORTS_DDL,
+    moviehistory_actor_layout_ok, _normalize_moviehistory_actor_column_order,
+)
+from javdb.storage.db.db_session import SESSION_ID_PATTERN as _SESSION_ID_PATTERN
+from javdb.storage.db.db_reports import (
+    db_create_report_session, db_insert_report_rows, db_get_report_rows,
+    db_get_latest_session, db_get_sessions_by_date, db_find_in_progress_sessions,
+)
+from javdb.storage.db.db_history_read import db_load_history
+from javdb.storage.db.db_history_write import db_stage_history_write
+from javdb.storage.db.db_operations import (
+    db_replace_rclone_inventory, db_load_rclone_inventory,
+    db_append_dedup_record, db_load_dedup_records, db_save_dedup_records,
+    db_mark_records_deleted, db_cleanup_deleted_records, db_mark_orphan_records,
+    db_delete_rclone_inventory_paths, db_append_pikpak_history,
+)
+from javdb.storage.db.db_stats import (
+    db_save_spider_stats, db_get_spider_stats,
+    db_save_uploader_stats, db_get_uploader_stats,
+    db_save_pikpak_stats, db_get_pikpak_stats,
+)
+import javdb.storage.db as _db_pkg
 
 
 # ── init / schema ─────────────────────────────────────────────────────────
 
 class TestInitDb:
     def test_creates_tables(self, _isolate_sqlite):
-        with db_mod.get_db(_isolate_sqlite) as conn:
+        with get_db(_isolate_sqlite) as conn:
             tables = [r[0] for r in conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
             ).fetchall()]
@@ -28,13 +54,13 @@ class TestInitDb:
         assert expected.issubset(set(tables))
 
     def test_wal_mode(self, _isolate_sqlite):
-        with db_mod.get_db(_isolate_sqlite) as conn:
+        with get_db(_isolate_sqlite) as conn:
             mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
         assert mode == 'wal'
 
     def test_idempotent(self, _isolate_sqlite):
-        db_mod.init_db(_isolate_sqlite)
-        db_mod.init_db(_isolate_sqlite)
+        init_db(_isolate_sqlite)
+        init_db(_isolate_sqlite)
 
     def test_moviehistory_actor_column_order_normalize(self, tmp_path):
         """Legacy ALTER order Name→Link→Gender is rebuilt as Name→Gender→Link→Supporting."""
@@ -70,16 +96,16 @@ class TestInitDb:
 
         c2 = sqlite3.connect(p)
         try:
-            assert not db_mod.moviehistory_actor_layout_ok(c2)
+            assert not moviehistory_actor_layout_ok(c2)
         finally:
             c2.close()
 
-        with db_mod.get_db(p) as gconn:
-            db_mod._normalize_moviehistory_actor_column_order(gconn)
+        with get_db(p) as gconn:
+            _normalize_moviehistory_actor_column_order(gconn)
 
         c3 = sqlite3.connect(p)
         try:
-            assert db_mod.moviehistory_actor_layout_ok(c3)
+            assert moviehistory_actor_layout_ok(c3)
             names = [r[1] for r in c3.execute("PRAGMA table_info(MovieHistory)").fetchall()]
             i_n = names.index("ActorName")
             i_g = names.index("ActorGender")
@@ -107,7 +133,7 @@ class TestInitDb:
     def test_init_db_noop_in_csv_mode(self, tmp_path, storage_mode_csv):
         """init_db should be a no-op when STORAGE_MODE='csv'."""
         fresh_db = str(tmp_path / "should_not_exist.db")
-        db_mod.init_db(fresh_db)
+        init_db(fresh_db)
         assert not os.path.exists(fresh_db)
 
     def test_split_db_init(self, tmp_path):
@@ -120,7 +146,7 @@ class TestInitDb:
 
         # Path constants are read by db_migrations (canonical) and also
         # re-exported via db.py / db_connection.py — patch all namespaces.
-        modules = [db_mod, _db_mig, _db_conn]
+        modules = [_db_pkg, _db_mig, _db_conn]
         path_names = ['DB_PATH', 'HISTORY_DB_PATH', 'REPORTS_DB_PATH',
                        'OPERATIONS_DB_PATH']
         originals = {(m, n): getattr(m, n) for m in modules for n in path_names
@@ -137,11 +163,11 @@ class TestInitDb:
                     setattr(m, n, v)
 
         try:
-            db_mod.init_db(force=True)
+            init_db(force=True)
 
-            assert os.path.exists(db_mod.HISTORY_DB_PATH)
-            assert os.path.exists(db_mod.REPORTS_DB_PATH)
-            assert os.path.exists(db_mod.OPERATIONS_DB_PATH)
+            assert os.path.exists(HISTORY_DB_PATH)
+            assert os.path.exists(REPORTS_DB_PATH)
+            assert os.path.exists(OPERATIONS_DB_PATH)
 
             def _tables(path):
                 conn = sqlite3.connect(path)
@@ -151,22 +177,22 @@ class TestInitDb:
                 conn.close()
                 return t
 
-            h_tables = _tables(db_mod.HISTORY_DB_PATH)
+            h_tables = _tables(HISTORY_DB_PATH)
             assert 'MovieHistory' in h_tables
             assert 'TorrentHistory' in h_tables
             assert 'ReportSessions' not in h_tables
 
-            r_tables = _tables(db_mod.REPORTS_DB_PATH)
+            r_tables = _tables(REPORTS_DB_PATH)
             assert 'ReportSessions' in r_tables
             assert 'SpiderStats' in r_tables
             assert 'MovieHistory' not in r_tables
 
-            o_tables = _tables(db_mod.OPERATIONS_DB_PATH)
+            o_tables = _tables(OPERATIONS_DB_PATH)
             assert 'RcloneInventory' in o_tables
             assert 'DedupRecords' in o_tables
             assert 'MovieHistory' not in o_tables
         finally:
-            db_mod.close_db()
+            close_db()
             for (m, n), v in originals.items():
                 setattr(m, n, v)
             _cfg_mod._storage_mode_override = orig_override
@@ -192,7 +218,7 @@ class TestInitDb:
         reports_path = str(tmp_path / 'reports.db')
         operations_path = str(tmp_path / 'operations.db')
 
-        modules = [db_mod, _db_mig, _db_conn]
+        modules = [_db_pkg, _db_mig, _db_conn]
         path_names = ['DB_PATH', 'HISTORY_DB_PATH', 'REPORTS_DB_PATH',
                        'OPERATIONS_DB_PATH']
         originals = {(m, n): getattr(m, n) for m in modules for n in path_names
@@ -306,7 +332,7 @@ class TestInitDb:
                 conn.close()
 
             # Must not raise "no such column: SessionId"
-            db_mod.init_db(force=True)
+            init_db(force=True)
 
             # Verify rollback columns / indexes were added by _ensure_rollback_columns.
             def _columns(path, table):
@@ -342,7 +368,7 @@ class TestInitDb:
                 reports_path, 'ReportSessions')
 
         finally:
-            db_mod.close_db()
+            close_db()
             for (m, n), v in originals.items():
                 setattr(m, n, v)
             _cfg_mod._storage_mode_override = orig_override
@@ -378,16 +404,16 @@ class TestInitDb:
         finally:
             conn.close()
 
-        db_mod._init_single_legacy_db(db_path, force=True)
+        _init_single_legacy_db(db_path, force=True)
 
-        with db_mod.get_db(db_path) as migrated:
+        with get_db(db_path) as migrated:
             row = migrated.execute(
                 "SELECT Status FROM ReportSessions LIMIT 1"
             ).fetchone()
         assert row["Status"] == "in_progress"
         # ReportSessions.Id is TEXT post-2026-05-13; the legacy v5 integer id
         # (1) is preserved as the string "1" by the migration's CAST.
-        assert db_mod.db_find_in_progress_sessions(db_path=db_path) == ["1"]
+        assert db_find_in_progress_sessions(db_path=db_path) == ["1"]
 
     def test_unversioned_legacy_single_db_runs_v5_to_v6_migration(self, tmp_path):
         db_path = str(tmp_path / 'legacy_unversioned.db')
@@ -418,9 +444,9 @@ class TestInitDb:
         finally:
             conn.close()
 
-        db_mod._init_single_legacy_db(db_path, force=True)
+        _init_single_legacy_db(db_path, force=True)
 
-        with db_mod.get_db(db_path) as migrated:
+        with get_db(db_path) as migrated:
             row = migrated.execute(
                 "SELECT ReportType, Status FROM ReportSessions LIMIT 1"
             ).fetchone()
@@ -428,7 +454,7 @@ class TestInitDb:
                 "SELECT Version FROM SchemaVersion LIMIT 1"
             ).fetchone()
         assert dict(row) == {"ReportType": "daily", "Status": "in_progress"}
-        assert version["Version"] == db_mod.SCHEMA_VERSION
+        assert version["Version"] == SCHEMA_VERSION
 
     def test_init_single_db_materializes_added_report_status(self, tmp_path):
         db_path = str(tmp_path / 'reports_v6.db')
@@ -461,9 +487,9 @@ class TestInitDb:
         finally:
             conn.close()
 
-        db_mod._init_single_db(db_path, db_mod._REPORTS_DDL, force=True)
+        _init_single_db(db_path, _REPORTS_DDL, force=True)
 
-        with db_mod.get_db(db_path) as migrated:
+        with get_db(db_path) as migrated:
             status = migrated.execute(
                 "SELECT Status FROM ReportSessions LIMIT 1"
             ).fetchone()["Status"]
@@ -478,7 +504,7 @@ class TestInitDb:
         _cfg_mod._storage_mode_override = 'db'
 
         single_db = str(tmp_path / 'javdb_autospider.db')
-        modules = [db_mod, _db_mig, _db_conn]
+        modules = [_db_pkg, _db_mig, _db_conn]
         path_names = ['DB_PATH', 'HISTORY_DB_PATH', 'REPORTS_DB_PATH',
                        'OPERATIONS_DB_PATH']
         originals = {(m, n): getattr(m, n) for m in modules for n in path_names
@@ -496,7 +522,7 @@ class TestInitDb:
 
         try:
             # Create v6 single DB with some data
-            db_mod.init_db(single_db, force=True)
+            init_db(single_db, force=True)
             import sqlite3 as _sqlite3
             _conn = _sqlite3.connect(single_db)
             _conn.execute(
@@ -515,33 +541,33 @@ class TestInitDb:
             )
             _conn.commit()
             _conn.close()
-            sid = db_mod.db_create_report_session(
+            sid = db_create_report_session(
                 'daily', '20240101', 'test.csv', db_path=single_db)
-            db_mod.db_append_dedup_record(
+            db_append_dedup_record(
                 {'video_code': 'T1', 'existing_gdrive_path': 'p'},
                 db_path=single_db)
-            db_mod.close_db()
+            close_db()
 
             # Now init_db() without db_path should detect + split
-            db_mod.init_db(force=True)
+            init_db(force=True)
 
-            assert os.path.exists(db_mod.HISTORY_DB_PATH)
-            assert os.path.exists(db_mod.REPORTS_DB_PATH)
-            assert os.path.exists(db_mod.OPERATIONS_DB_PATH)
+            assert os.path.exists(HISTORY_DB_PATH)
+            assert os.path.exists(REPORTS_DB_PATH)
+            assert os.path.exists(OPERATIONS_DB_PATH)
             assert not os.path.exists(single_db)
             assert os.path.exists(single_db + '.v6.bak')
 
             # Verify data made it into the correct DBs
-            history = db_mod.db_load_history()
+            history = db_load_history()
             assert '/v/T1' in history
 
-            latest = db_mod.db_get_latest_session()
+            latest = db_get_latest_session()
             assert latest is not None
 
-            dedup = db_mod.db_load_dedup_records()
+            dedup = db_load_dedup_records()
             assert len(dedup) >= 1
         finally:
-            db_mod.close_db()
+            close_db()
             for (m, n), v in originals.items():
                 setattr(m, n, v)
             _cfg_mod._storage_mode_override = orig_override
@@ -561,15 +587,15 @@ class TestRcloneInventory:
 
     def test_replace_and_load(self, _isolate_sqlite):
         entries = [self._entry('A'), self._entry('B')]
-        db_mod.db_replace_rclone_inventory(entries)
-        inv = db_mod.db_load_rclone_inventory()
+        db_replace_rclone_inventory(entries)
+        inv = db_load_rclone_inventory()
         assert 'A' in inv
         assert 'B' in inv
 
     def test_replace_clears_old(self, _isolate_sqlite):
-        db_mod.db_replace_rclone_inventory([self._entry('OLD')])
-        db_mod.db_replace_rclone_inventory([self._entry('NEW')])
-        inv = db_mod.db_load_rclone_inventory()
+        db_replace_rclone_inventory([self._entry('OLD')])
+        db_replace_rclone_inventory([self._entry('NEW')])
+        inv = db_load_rclone_inventory()
         assert 'OLD' not in inv
         assert 'NEW' in inv
 
@@ -578,8 +604,8 @@ class TestRcloneInventory:
             self._entry('SAME', folder_path='remote:/copy1'),
             self._entry('SAME', folder_path='remote:/copy2'),
         ]
-        db_mod.db_replace_rclone_inventory(entries)
-        inv = db_mod.db_load_rclone_inventory()
+        db_replace_rclone_inventory(entries)
+        inv = db_load_rclone_inventory()
         assert len(inv['SAME']) == 2
 
 
@@ -598,22 +624,22 @@ class TestDedupRecords:
         return row
 
     def test_append_and_load(self, _isolate_sqlite):
-        db_mod.db_append_dedup_record(self._rec())
-        rows = db_mod.db_load_dedup_records()
+        db_append_dedup_record(self._rec())
+        rows = db_load_dedup_records()
         assert len(rows) == 1
         assert rows[0]['VideoCode'] == 'DUP-001'
 
     def test_save_overwrites(self, _isolate_sqlite):
-        db_mod.db_append_dedup_record(self._rec('A'))
-        db_mod.db_append_dedup_record(self._rec('B'))
-        rows = db_mod.db_load_dedup_records()
+        db_append_dedup_record(self._rec('A'))
+        db_append_dedup_record(self._rec('B'))
+        rows = db_load_dedup_records()
         assert len(rows) == 2
 
         rows[0]['IsDeleted'] = 1
         rows[0]['DateTimeDeleted'] = '2024-06-01'
-        db_mod.db_save_dedup_records(rows)
+        db_save_dedup_records(rows)
 
-        reloaded = db_mod.db_load_dedup_records()
+        reloaded = db_load_dedup_records()
         assert len(reloaded) == 2
         deleted = [r for r in reloaded if r.get('IsDeleted') in (1, True)]
         assert len(deleted) == 1
@@ -621,26 +647,26 @@ class TestDedupRecords:
     def test_append_skips_duplicate_pending(self, _isolate_sqlite):
         """Same existing_gdrive_path with is_deleted=0 should be rejected."""
         r = self._rec('A', existing_gdrive_path='remote:/dup_path')
-        assert db_mod.db_append_dedup_record(r) > 0
-        assert db_mod.db_append_dedup_record(r) == -1
-        assert len(db_mod.db_load_dedup_records()) == 1
+        assert db_append_dedup_record(r) > 0
+        assert db_append_dedup_record(r) == -1
+        assert len(db_load_dedup_records()) == 1
 
     def test_append_allows_after_deleted(self, _isolate_sqlite):
         """A deleted record should not block re-append of the same path."""
         r = self._rec('A', existing_gdrive_path='remote:/path')
-        db_mod.db_append_dedup_record(r)
-        db_mod.db_mark_records_deleted([('remote:/path', '2024-06-01 00:00:00')])
-        assert db_mod.db_append_dedup_record(r) > 0
-        assert len(db_mod.db_load_dedup_records()) == 2
+        db_append_dedup_record(r)
+        db_mark_records_deleted([('remote:/path', '2024-06-01 00:00:00')])
+        assert db_append_dedup_record(r) > 0
+        assert len(db_load_dedup_records()) == 2
 
     def test_mark_records_deleted(self, _isolate_sqlite):
-        db_mod.db_append_dedup_record(self._rec('A'))
-        db_mod.db_append_dedup_record(self._rec('B'))
-        updated = db_mod.db_mark_records_deleted([
+        db_append_dedup_record(self._rec('A'))
+        db_append_dedup_record(self._rec('B'))
+        updated = db_mark_records_deleted([
             ('remote:/A', '2024-06-01 10:00:00'),
         ])
         assert updated == 1
-        rows = db_mod.db_load_dedup_records()
+        rows = db_load_dedup_records()
         a_row = [r for r in rows if r['VideoCode'] == 'A'][0]
         b_row = [r for r in rows if r['VideoCode'] == 'B'][0]
         assert a_row['IsDeleted'] == 1
@@ -650,31 +676,31 @@ class TestDedupRecords:
     def test_mark_multiple_pending_same_path(self, _isolate_sqlite):
         """Edge 1a: multiple pending records with the same path."""
         r1 = self._rec('A', existing_gdrive_path='remote:/same')
-        db_mod.db_append_dedup_record(r1)
+        db_append_dedup_record(r1)
         # Force a second record with the same path by marking the first deleted first
-        db_mod.db_mark_records_deleted([('remote:/same', '2024-01-01 00:00:00')])
-        db_mod.db_append_dedup_record(r1)
+        db_mark_records_deleted([('remote:/same', '2024-01-01 00:00:00')])
+        db_append_dedup_record(r1)
         # Now re-mark: only the second (pending) row should update
-        updated = db_mod.db_mark_records_deleted([('remote:/same', '2024-06-01 00:00:00')])
+        updated = db_mark_records_deleted([('remote:/same', '2024-06-01 00:00:00')])
         assert updated == 1
 
     def test_mark_idempotent(self, _isolate_sqlite):
         """Marking an already-deleted record should not update again."""
-        db_mod.db_append_dedup_record(self._rec('A'))
-        db_mod.db_mark_records_deleted([('remote:/A', '2024-06-01 00:00:00')])
-        updated = db_mod.db_mark_records_deleted([('remote:/A', '2024-07-01 00:00:00')])
+        db_append_dedup_record(self._rec('A'))
+        db_mark_records_deleted([('remote:/A', '2024-06-01 00:00:00')])
+        updated = db_mark_records_deleted([('remote:/A', '2024-07-01 00:00:00')])
         assert updated == 0
 
     def test_cleanup_deleted_records(self, _isolate_sqlite):
-        db_mod.db_append_dedup_record(self._rec('OLD'))
-        db_mod.db_mark_records_deleted([('remote:/OLD', '2020-01-01 00:00:00')])
-        db_mod.db_append_dedup_record(self._rec('FRESH'))
-        db_mod.db_mark_records_deleted([('remote:/FRESH', '2099-01-01 00:00:00')])
-        db_mod.db_append_dedup_record(self._rec('PENDING'))
+        db_append_dedup_record(self._rec('OLD'))
+        db_mark_records_deleted([('remote:/OLD', '2020-01-01 00:00:00')])
+        db_append_dedup_record(self._rec('FRESH'))
+        db_mark_records_deleted([('remote:/FRESH', '2099-01-01 00:00:00')])
+        db_append_dedup_record(self._rec('PENDING'))
 
-        removed = db_mod.db_cleanup_deleted_records(older_than_days=30)
+        removed = db_cleanup_deleted_records(older_than_days=30)
         assert removed == 1
-        rows = db_mod.db_load_dedup_records()
+        rows = db_load_dedup_records()
         codes = {r['VideoCode'] for r in rows}
         assert 'OLD' not in codes
         assert 'FRESH' in codes
@@ -683,26 +709,26 @@ class TestDedupRecords:
     def test_cleanup_skips_empty_delete_datetime(self, _isolate_sqlite):
         """Edge 3a: is_deleted=1 but delete_datetime=NULL should be kept."""
         r = self._rec('ANOMALY', is_deleted=1, delete_datetime=None)
-        db_mod.db_append_dedup_record(r)
-        removed = db_mod.db_cleanup_deleted_records(older_than_days=0)
+        db_append_dedup_record(r)
+        removed = db_cleanup_deleted_records(older_than_days=0)
         assert removed == 0
-        assert len(db_mod.db_load_dedup_records()) == 1
+        assert len(db_load_dedup_records()) == 1
 
     def test_cleanup_zero_retention(self, _isolate_sqlite):
         """Edge 3b: retention_days=0 removes all with valid timestamps."""
-        db_mod.db_append_dedup_record(self._rec('A'))
-        db_mod.db_mark_records_deleted([('remote:/A', '2024-06-01 00:00:00')])
-        removed = db_mod.db_cleanup_deleted_records(older_than_days=0)
+        db_append_dedup_record(self._rec('A'))
+        db_mark_records_deleted([('remote:/A', '2024-06-01 00:00:00')])
+        removed = db_cleanup_deleted_records(older_than_days=0)
         assert removed == 1
-        assert len(db_mod.db_load_dedup_records()) == 0
+        assert len(db_load_dedup_records()) == 0
 
     def test_mark_orphan_records_appends_reason(self, _isolate_sqlite):
-        db_mod.db_append_dedup_record(self._rec('A'))
-        updated = db_mod.db_mark_orphan_records(
+        db_append_dedup_record(self._rec('A'))
+        updated = db_mark_orphan_records(
             ['remote:/A'], '[orphan: missing in inventory]', '2024-06-01 12:00:00',
         )
         assert updated == 1
-        rows = db_mod.db_load_dedup_records()
+        rows = db_load_dedup_records()
         a_row = [r for r in rows if r['VideoCode'] == 'A'][0]
         assert a_row['IsDeleted'] == 1
         assert a_row['DateTimeDeleted'] == '2024-06-01 12:00:00'
@@ -710,15 +736,15 @@ class TestDedupRecords:
         assert 'Subtitle upgrade' in a_row['DeletionReason']
 
     def test_mark_orphan_records_skips_already_deleted(self, _isolate_sqlite):
-        db_mod.db_append_dedup_record(self._rec('A'))
-        db_mod.db_mark_records_deleted([('remote:/A', '2024-06-01 00:00:00')])
-        updated = db_mod.db_mark_orphan_records(
+        db_append_dedup_record(self._rec('A'))
+        db_mark_records_deleted([('remote:/A', '2024-06-01 00:00:00')])
+        updated = db_mark_orphan_records(
             ['remote:/A'], '[orphan]', '2024-07-01 00:00:00',
         )
         assert updated == 0
 
     def test_mark_orphan_records_empty_input(self, _isolate_sqlite):
-        assert db_mod.db_mark_orphan_records([], '[orphan]', '2024-01-01') == 0
+        assert db_mark_orphan_records([], '[orphan]', '2024-01-01') == 0
 
 
 # ── rclone_inventory orphan deletion ──────────────────────────────────────
@@ -733,26 +759,26 @@ class TestDeleteRcloneInventoryPaths:
         }
 
     def test_delete_subset(self, _isolate_sqlite):
-        db_mod.db_replace_rclone_inventory([
+        db_replace_rclone_inventory([
             self._entry('A', '2025/Actor/A/有码-中字'),
             self._entry('B', '2025/Actor/B/有码-中字'),
             self._entry('C', '2025/Actor/C/有码-中字'),
         ])
-        deleted = db_mod.db_delete_rclone_inventory_paths([
+        deleted = db_delete_rclone_inventory_paths([
             '2025/Actor/B/有码-中字',
             '2025/Actor/C/有码-中字',
         ])
         assert deleted == 2
-        inv = db_mod.db_load_rclone_inventory()
+        inv = db_load_rclone_inventory()
         assert 'A' in inv
         assert 'B' not in inv and 'C' not in inv
 
     def test_delete_missing_path_is_noop(self, _isolate_sqlite):
-        db_mod.db_replace_rclone_inventory([self._entry('A', 'p/a')])
-        assert db_mod.db_delete_rclone_inventory_paths(['p/missing']) == 0
+        db_replace_rclone_inventory([self._entry('A', 'p/a')])
+        assert db_delete_rclone_inventory_paths(['p/missing']) == 0
 
     def test_delete_empty_input(self, _isolate_sqlite):
-        assert db_mod.db_delete_rclone_inventory_paths([]) == 0
+        assert db_delete_rclone_inventory_paths([]) == 0
 
     def test_delete_chunks_above_chunk_size(self, _isolate_sqlite, monkeypatch):
         """Delete CHUNK+1 paths to force multiple IN(...) DELETE batches."""
@@ -764,11 +790,11 @@ class TestDeleteRcloneInventoryPaths:
             self._entry(f'C{i:03d}', f'2025/Actor/C{i:03d}/有码-中字')
             for i in range(batch_size + extra_entries)
         ]
-        db_mod.db_replace_rclone_inventory(entries)
+        db_replace_rclone_inventory(entries)
         targets = [e['folder_path'] for e in entries[:target_count]]
-        deleted = db_mod.db_delete_rclone_inventory_paths(targets)
+        deleted = db_delete_rclone_inventory_paths(targets)
         assert deleted == target_count
-        inv = db_mod.db_load_rclone_inventory()
+        inv = db_load_rclone_inventory()
         remaining_codes = set(inv.keys())
         assert remaining_codes == {
             f'C{i:03d}' for i in range(target_count, batch_size + extra_entries)
@@ -793,14 +819,14 @@ class TestMarkRecordsDeletedBatching:
     def test_mark_distinct_datetimes_per_pair(self, _isolate_sqlite):
         """Each path gets its own distinct DateTimeDeleted value."""
         for c in ('A', 'B', 'C'):
-            db_mod.db_append_dedup_record(self._rec(c, f'remote:/{c}'))
-        updated = db_mod.db_mark_records_deleted([
+            db_append_dedup_record(self._rec(c, f'remote:/{c}'))
+        updated = db_mark_records_deleted([
             ('remote:/A', '2024-06-01 10:00:00'),
             ('remote:/B', '2024-06-02 11:00:00'),
             ('remote:/C', '2024-06-03 12:00:00'),
         ])
         assert updated == 3
-        rows = {r['ExistingGdrivePath']: r for r in db_mod.db_load_dedup_records()}
+        rows = {r['ExistingGdrivePath']: r for r in db_load_dedup_records()}
         assert rows['remote:/A']['DateTimeDeleted'] == '2024-06-01 10:00:00'
         assert rows['remote:/B']['DateTimeDeleted'] == '2024-06-02 11:00:00'
         assert rows['remote:/C']['DateTimeDeleted'] == '2024-06-03 12:00:00'
@@ -810,19 +836,19 @@ class TestMarkRecordsDeletedBatching:
         must still hit every record regardless of how many >90 are passed."""
         codes = [f'B{i:03d}' for i in range(120)]
         for c in codes:
-            db_mod.db_append_dedup_record(self._rec(c, f'remote:/{c}'))
+            db_append_dedup_record(self._rec(c, f'remote:/{c}'))
         shared_dt = '2024-09-15 09:00:00'
         pairs = [(f'remote:/{c}', shared_dt) for c in codes]
-        updated = db_mod.db_mark_records_deleted(pairs)
+        updated = db_mark_records_deleted(pairs)
         assert updated == 120
-        rows = db_mod.db_load_dedup_records()
+        rows = db_load_dedup_records()
         assert all(r['DateTimeDeleted'] == shared_dt for r in rows)
         assert all(r['IsDeleted'] in (1, True) for r in rows)
 
     def test_mark_skips_blank_paths(self, _isolate_sqlite):
         """Empty path strings must not produce a degenerate ``... IN ()`` query."""
-        db_mod.db_append_dedup_record(self._rec('A', 'remote:/A'))
-        updated = db_mod.db_mark_records_deleted([
+        db_append_dedup_record(self._rec('A', 'remote:/A'))
+        updated = db_mark_records_deleted([
             ('', '2024-06-01 10:00:00'),
             ('remote:/A', '2024-06-01 10:00:00'),
         ])
@@ -840,9 +866,9 @@ class TestPikpakHistory:
             'uploaded_to_pikpak_date': '', 'transfer_status': 'success',
             'error_message': '',
         }
-        db_mod.db_append_pikpak_history(rec)
+        db_append_pikpak_history(rec)
 
-        with db_mod.get_db(_isolate_sqlite) as conn:
+        with get_db(_isolate_sqlite) as conn:
             rows = conn.execute("SELECT * FROM PikpakHistory").fetchall()
         assert len(rows) == 1
         assert dict(rows[0])['TorrentHash'] == 'abc123'
@@ -854,27 +880,27 @@ class TestPikpakHistory:
 
 class TestReportSessions:
     def test_create_session(self, _isolate_sqlite):
-        sid = db_mod.db_create_report_session(
+        sid = db_create_report_session(
             report_type='daily', report_date='20240101',
             csv_filename='test.csv', db_path=_isolate_sqlite,
         )
         assert sid is not None
         assert isinstance(sid, str)
-        assert db_mod._SESSION_ID_PATTERN.match(sid)
+        assert _SESSION_ID_PATTERN.match(sid)
 
     def test_duplicate_csv_filename_allowed(self, _isolate_sqlite):
-        sid1 = db_mod.db_create_report_session(
+        sid1 = db_create_report_session(
             report_type='daily', report_date='20240101',
             csv_filename='same.csv', db_path=_isolate_sqlite,
         )
-        sid2 = db_mod.db_create_report_session(
+        sid2 = db_create_report_session(
             report_type='daily', report_date='20240102',
             csv_filename='same.csv', db_path=_isolate_sqlite,
         )
         assert sid1 != sid2
 
     def test_insert_and_get_rows(self, _isolate_sqlite):
-        sid = db_mod.db_create_report_session(
+        sid = db_create_report_session(
             report_type='daily', report_date='20240101',
             csv_filename='rows_test.csv', db_path=_isolate_sqlite,
         )
@@ -884,39 +910,39 @@ class TestReportSessions:
             {'href': '/v/B', 'video_code': 'B', 'page': '2', 'actor': 'Actor2',
              'rate': '', 'comment_number': ''},
         ]
-        count = db_mod.db_insert_report_rows(sid, rows, db_path=_isolate_sqlite)
+        count = db_insert_report_rows(sid, rows, db_path=_isolate_sqlite)
         assert count == 2
 
-        loaded = db_mod.db_get_report_rows(sid, db_path=_isolate_sqlite)
+        loaded = db_get_report_rows(sid, db_path=_isolate_sqlite)
         assert len(loaded) == 2
         assert loaded[0]['video_code'] == 'A'
         assert loaded[1]['video_code'] == 'B'
 
     def test_get_latest_session(self, _isolate_sqlite):
-        db_mod.db_create_report_session(
+        db_create_report_session(
             report_type='daily', report_date='20240101',
             csv_filename='first.csv', db_path=_isolate_sqlite,
         )
-        sid2 = db_mod.db_create_report_session(
+        sid2 = db_create_report_session(
             report_type='adhoc', report_date='20240102',
             csv_filename='second.csv', db_path=_isolate_sqlite,
         )
-        latest = db_mod.db_get_latest_session(db_path=_isolate_sqlite)
+        latest = db_get_latest_session(db_path=_isolate_sqlite)
         assert latest['Id'] == sid2
 
-        latest_daily = db_mod.db_get_latest_session(report_type='daily', db_path=_isolate_sqlite)
+        latest_daily = db_get_latest_session(report_type='daily', db_path=_isolate_sqlite)
         assert latest_daily['CsvFilename'] == 'first.csv'
 
     def test_get_sessions_by_date(self, _isolate_sqlite):
-        db_mod.db_create_report_session(
+        db_create_report_session(
             report_type='daily', report_date='20240101',
             csv_filename='d1.csv', db_path=_isolate_sqlite,
         )
-        db_mod.db_create_report_session(
+        db_create_report_session(
             report_type='adhoc', report_date='20240101',
             csv_filename='a1.csv', db_path=_isolate_sqlite,
         )
-        sessions = db_mod.db_get_sessions_by_date('20240101', db_path=_isolate_sqlite)
+        sessions = db_get_sessions_by_date('20240101', db_path=_isolate_sqlite)
         assert len(sessions) == 2
 
 
@@ -925,7 +951,7 @@ class TestReportSessions:
 class TestStats:
     @pytest.fixture
     def session_id(self, _isolate_sqlite):
-        return db_mod.db_create_report_session(
+        return db_create_report_session(
             report_type='daily', report_date='20240101',
             csv_filename='stats_test.csv', db_path=_isolate_sqlite,
         )
@@ -939,8 +965,8 @@ class TestStats:
             'total_discovered': 80, 'total_processed': 65,
             'total_skipped': 8, 'total_no_new': 4, 'total_failed': 3,
         }
-        db_mod.db_save_spider_stats(session_id, stats)
-        loaded = db_mod.db_get_spider_stats(session_id)
+        db_save_spider_stats(session_id, stats)
+        loaded = db_get_spider_stats(session_id)
         assert loaded is not None
         assert loaded['Phase1Discovered'] == 50
         assert loaded['TotalFailed'] == 3
@@ -953,8 +979,8 @@ class TestStats:
             'hacked_nosub': 15, 'subtitle_count': 30,
             'no_subtitle_count': 25, 'success_rate': 94.4,
         }
-        db_mod.db_save_uploader_stats(session_id, stats)
-        loaded = db_mod.db_get_uploader_stats(session_id)
+        db_save_uploader_stats(session_id, stats)
+        loaded = db_get_uploader_stats(session_id)
         assert loaded is not None
         assert loaded['TotalTorrents'] == 100
         assert loaded['SuccessRate'] == pytest.approx(94.4, rel=0.01)
@@ -965,17 +991,17 @@ class TestStats:
             'filtered_old': 20, 'successful_count': 15, 'failed_count': 2,
             'uploaded_count': 18, 'delete_failed_count': 3,
         }
-        db_mod.db_save_pikpak_stats(session_id, stats)
-        loaded = db_mod.db_get_pikpak_stats(session_id)
+        db_save_pikpak_stats(session_id, stats)
+        loaded = db_get_pikpak_stats(session_id)
         assert loaded is not None
         assert loaded['SuccessfulCount'] == 15
         assert loaded['UploadedCount'] == 18
         assert loaded['DeleteFailedCount'] == 3
 
     def test_stats_missing_session(self, _isolate_sqlite):
-        assert db_mod.db_get_spider_stats(9999) is None
-        assert db_mod.db_get_uploader_stats(9999) is None
-        assert db_mod.db_get_pikpak_stats(9999) is None
+        assert db_get_spider_stats(9999) is None
+        assert db_get_uploader_stats(9999) is None
+        assert db_get_pikpak_stats(9999) is None
 
 
 # ── session_id extraction (logic from pipeline.py) ────────────────────────
@@ -1054,7 +1080,7 @@ class TestReportMigration:
         assert result['session_id'] is not None
         assert result['row_count'] == 2
 
-        rows = db_mod.db_get_report_rows(result['session_id'], db_path=_isolate_sqlite)
+        rows = db_get_report_rows(result['session_id'], db_path=_isolate_sqlite)
         assert len(rows) == 2
         assert rows[0]['video_code'] == 'A-001'
 
@@ -1086,13 +1112,13 @@ class TestBackendAgnosticErrorTuples:
 
     def test_operational_errors_tuple_includes_d1_permanent(self):
         from javdb.storage.d1_client import D1PermanentError
-        assert sqlite3.OperationalError in db_mod._DB_OPERATIONAL_ERRORS
-        assert D1PermanentError in db_mod._DB_OPERATIONAL_ERRORS
+        assert sqlite3.OperationalError in _DB_OPERATIONAL_ERRORS
+        assert D1PermanentError in _DB_OPERATIONAL_ERRORS
 
     def test_integrity_errors_tuple_includes_d1_permanent(self):
         from javdb.storage.d1_client import D1PermanentError
-        assert sqlite3.IntegrityError in db_mod._DB_INTEGRITY_ERRORS
-        assert D1PermanentError in db_mod._DB_INTEGRITY_ERRORS
+        assert sqlite3.IntegrityError in _DB_INTEGRITY_ERRORS
+        assert D1PermanentError in _DB_INTEGRITY_ERRORS
 
     def test_d1_transient_error_is_NOT_swallowed(self):
         """D1TransientError must NOT be in either tuple — by the time it
@@ -1100,8 +1126,8 @@ class TestBackendAgnosticErrorTuples:
         silently treating it as 'legacy schema' / 'concurrent run' would
         lose data on a genuine network failure."""
         from javdb.storage.d1_client import D1TransientError
-        assert D1TransientError not in db_mod._DB_OPERATIONAL_ERRORS
-        assert D1TransientError not in db_mod._DB_INTEGRITY_ERRORS
+        assert D1TransientError not in _DB_OPERATIONAL_ERRORS
+        assert D1TransientError not in _DB_INTEGRITY_ERRORS
 
     def test_d1_permanent_error_is_caught_by_operational_tuple(self):
         """A raised D1PermanentError is actually caught by the tuple —
@@ -1111,7 +1137,7 @@ class TestBackendAgnosticErrorTuples:
         caught = False
         try:
             raise D1PermanentError("D1 API returned HTTP 400: no such table: X")
-        except db_mod._DB_OPERATIONAL_ERRORS:
+        except _DB_OPERATIONAL_ERRORS:
             caught = True
         assert caught, "D1PermanentError should be caught by _DB_OPERATIONAL_ERRORS"
 
