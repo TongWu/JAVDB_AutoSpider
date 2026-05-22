@@ -81,6 +81,7 @@ Note: `db_batch_update_last_visited` lives in `db_history_read.py` (delegates to
 **Goal:** Rewrite all `from javdb.storage.db.db_X import Y` and `import javdb.storage.db.db_X as Z` in production code to use `from javdb.storage.db import Y`. Non-breaking.
 
 **Pattern A** — symbol imports:
+
 ```python
 # Before
 from javdb.storage.db.db_operations import db_replace_rclone_inventory
@@ -89,6 +90,7 @@ from javdb.storage.db import db_replace_rclone_inventory
 ```
 
 **Pattern B** — module-as-namespace (function calls only, no monkeypatching):
+
 ```python
 # Before
 import javdb.storage.db.db_connection as _db_conn
@@ -155,6 +157,7 @@ These files need the actual module object for `setattr` — defer to Task 5 (ren
 **Goal:** Rewrite all test imports to use `from javdb.storage.db import Y`. For monkeypatch targets that need the module object, use string-based `monkeypatch.setattr("javdb.storage.db._db_X.func", mock)` or note for Task 5.
 
 **Symbol imports** (Pattern A — straightforward rewrite):
+
 ```python
 # Before
 from javdb.storage.db.db_connection import get_db
@@ -254,6 +257,7 @@ Change all `from .db_X import` to `from ._db_X import`.
 - `from javdb.storage.db.db_connection import (` → `from javdb.storage.db._db_connection import (`
 
 **4c — Update `tests/conftest.py` (8 module imports):**
+
 ```python
 # Before
 import javdb.storage.db.db_connection as _db_conn_mod
