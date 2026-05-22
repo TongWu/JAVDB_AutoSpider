@@ -184,14 +184,11 @@ CREATE TABLE IF NOT EXISTS ReportSessions (
     RunId TEXT,
     RunAttempt INTEGER,
     FailureReason TEXT,
-    -- Ingestion Perfect Rollback (Phase 0): ``audit`` keeps the
-    -- legacy X3 audit-replay rollback path; ``pending`` stages
-    -- writes into PendingMovie/TorrentHistoryWrites and drains
-    -- them via ``db_commit_session_history`` /
-    -- ``db_resume_finalizing_session``.  Defaults to ``audit`` so
-    -- the new tables ship dark until ``JAVDB_HISTORY_WRITE_MODE``
-    -- (read by ``db_create_report_session``) is flipped per-workflow.
-    WriteMode TEXT DEFAULT 'audit'
+    -- Ingestion Perfect Rollback: only ``pending`` is supported after
+    -- ADR-005 retired the legacy audit-replay path.  Keep the schema
+    -- default aligned with ``db_session._resolve_write_mode()`` so
+    -- direct SQL / old tools do not silently create audit sessions.
+    WriteMode TEXT DEFAULT 'pending'
 );
 CREATE INDEX IF NOT EXISTS idx_report_sessions_type_date ON ReportSessions(ReportType, ReportDate);
 CREATE INDEX IF NOT EXISTS idx_report_sessions_write_mode ON ReportSessions(WriteMode, Status);
@@ -737,7 +734,7 @@ def _ensure_rollback_columns(conn: sqlite3.Connection) -> None:
         ('InventoryAlignNoExactMatch', 'SessionId', 'TEXT'),
         # Ingestion Perfect Rollback (Phase 0): WriteMode column on
         # ReportSessions, gating the pending dispatch.
-        ('ReportSessions', 'WriteMode', "TEXT DEFAULT 'audit'"),
+        ('ReportSessions', 'WriteMode', "TEXT DEFAULT 'pending'"),
     ]
     for table, column, ddl in add_column_specs:
         if not _has_table(conn, table):
@@ -859,7 +856,7 @@ def _materialize_report_session_status_default(conn: sqlite3.Connection) -> None
         if 'WriteMode' in columns:
             conn.execute(
                 "UPDATE ReportSessions "
-                "SET WriteMode='audit' WHERE WriteMode IS NULL"
+                "SET WriteMode='pending' WHERE WriteMode IS NULL"
             )
     except sqlite3.OperationalError:
         pass
