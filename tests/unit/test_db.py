@@ -494,7 +494,7 @@ class TestInitDb:
             row = migrated.execute(
                 "SELECT Status, WriteMode FROM ReportSessions LIMIT 1"
             ).fetchone()
-        assert dict(row) == {"Status": "in_progress", "WriteMode": "audit"}
+        assert dict(row) == {"Status": "in_progress", "WriteMode": "pending"}
 
     def test_split_migration_from_single_db(self, tmp_path):
         """Placing a v6 single DB at DB_PATH triggers automatic split."""
