@@ -196,11 +196,19 @@ class TestDryRunNoOp:
             report_date="2026-05-08",
             csv_filename="dryrun.csv",
         )
-        db_mod.db_upsert_history(
-            href="/v/SYNC-001",
-            video_code="SYNC-001",
-            session_id=sid,
+        db_mod.db_stage_history_write(
+            sid, "movie",
+            {"Href": "/v/SYNC-001", "VideoCode": "SYNC-001",
+             "DateTimeVisited": "2026-05-08 00:00:00"},
         )
+        db_mod.db_stage_history_write(
+            sid, "torrent",
+            {"Href": "/v/SYNC-001", "VideoCode": "SYNC-001",
+             "Category": "no_subtitle", "MagnetUri": "",
+             "Size": "", "FileCount": 0,
+             "DateTimeVisited": "2026-05-08 00:00:00"},
+        )
+        db_mod.db_commit_session_history(sid)
 
         # Stub out D1 so the script can pretend D1 has a different row.
         monkeypatch.setenv("STORAGE_BACKEND", "sqlite")

@@ -325,16 +325,6 @@ class TestInitDb:
             assert 'idx_report_sessions_status' in _indexes(
                 reports_path, 'ReportSessions')
 
-            # Audit tables auto-created by _ensure_rollback_columns.
-            conn = sqlite3.connect(history_path)
-            try:
-                tables = {r[0] for r in conn.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table'"
-                ).fetchall()}
-                assert 'MovieHistoryAudit' in tables
-                assert 'TorrentHistoryAudit' in tables
-            finally:
-                conn.close()
         finally:
             db_mod.close_db()
             db_mod.DB_PATH = orig_db
@@ -485,9 +475,24 @@ class TestInitDb:
         try:
             # Create v6 single DB with some data
             db_mod.init_db(single_db, force=True)
-            db_mod.db_upsert_history('/v/T1', 'T1',
-                                     magnet_links={'subtitle': 'magnet:?xt=urn:btih:test1'},
-                                     db_path=single_db)
+            import sqlite3 as _sqlite3
+            _conn = _sqlite3.connect(single_db)
+            _conn.execute(
+                "INSERT INTO MovieHistory (Href, VideoCode, DateTimeCreated, "
+                "DateTimeUpdated, PerfectMatchIndicator, HiResIndicator) "
+                "VALUES ('/v/T1', 'T1', '2026-01-01', '2026-01-01', 0, 0)"
+            )
+            _mid = _conn.execute(
+                "SELECT Id FROM MovieHistory WHERE Href='/v/T1'"
+            ).fetchone()[0]
+            _conn.execute(
+                "INSERT INTO TorrentHistory (MovieHistoryId, MagnetUri, "
+                "SubtitleIndicator, CensorIndicator, DateTimeCreated, "
+                "DateTimeUpdated) VALUES (?, 'magnet:?xt=urn:btih:test1', "
+                "1, 1, '2026-01-01', '2026-01-01')", (_mid,)
+            )
+            _conn.commit()
+            _conn.close()
             sid = db_mod.db_create_report_session(
                 'daily', '20240101', 'test.csv', db_path=single_db)
             db_mod.db_append_dedup_record(
@@ -520,146 +525,6 @@ class TestInitDb:
             db_mod.REPORTS_DB_PATH = orig_r
             db_mod.OPERATIONS_DB_PATH = orig_o
             _cfg_mod._storage_mode_override = orig_override
-
-
-# ── parsed_movies_history ─────────────────────────────────────────────────
-
-class TestHistory:
-    def _upsert(self, href='/v/ABC-123', code='ABC-123', magnets=None,
-                actor_name=None, actor_gender=None, actor_link=None,
-                supporting_actors=None):
-        db_mod.db_upsert_history(
-            href, code, magnet_links=magnets,
-            actor_name=actor_name, actor_gender=actor_gender,
-            actor_link=actor_link, supporting_actors=supporting_actors,
-        )
-
-    def test_upsert_and_load(self, _isolate_sqlite):
-        self._upsert()
-        history = db_mod.db_load_history()
-        assert '/v/ABC-123' in history
-        assert history['/v/ABC-123']['VideoCode'] == 'ABC-123'
-
-    def test_upsert_updates_existing(self, _isolate_sqlite):
-        self._upsert()
-        self._upsert(magnets={'subtitle': 'magnet:new'})
-        history = db_mod.db_load_history()
-        assert len(history) == 1
-        assert any('magnet:new' in t.get('MagnetUri', '') for t in history['/v/ABC-123'].get('torrents', {}).values())
-
-    def test_multiple_records(self, _isolate_sqlite):
-        self._upsert(href='/v/A', code='A')
-        self._upsert(href='/v/B', code='B')
-        history = db_mod.db_load_history()
-        assert len(history) == 2
-
-    def test_check_torrent_in_history(self, _isolate_sqlite):
-        self._upsert(magnets={'subtitle': 'magnet:?xt=urn:btih:test123'})
-        assert db_mod.db_check_torrent_in_history('/v/ABC-123', 'subtitle') is True
-        assert db_mod.db_check_torrent_in_history('/v/ABC-123', 'hacked_subtitle') is False
-        assert db_mod.db_check_torrent_in_history('/v/XXX-999', 'subtitle') is False
-
-    def test_batch_update_last_visited(self, _isolate_sqlite):
-        self._upsert(href='/v/A', code='A')
-        self._upsert(href='/v/B', code='B')
-        db_mod.db_batch_update_last_visited(['/v/A'])
-        history = db_mod.db_load_history()
-        assert history['/v/A']['DateTimeVisited'] != ''
-
-    def test_upsert_sets_actor_columns(self, _isolate_sqlite):
-        self._upsert(
-            actor_name='Actor One', actor_gender='female', actor_link='/actors/xyz',
-            supporting_actors='[]',
-        )
-        history = db_mod.db_load_history()
-        assert history['/v/ABC-123']['ActorName'] == 'Actor One'
-        assert history['/v/ABC-123']['ActorGender'] == 'female'
-        assert history['/v/ABC-123']['ActorLink'] == 'https://javdb.com/actors/xyz'
-        assert history['/v/ABC-123']['SupportingActors'] == '[]'
-
-    def test_batch_update_movie_actors(self, _isolate_sqlite):
-        self._upsert(href='/v/A', code='A')
-        assert db_mod.db_batch_update_movie_actors([
-            ('/v/A', 'N1', 'male', '/actors/1', '[{"name":"X","gender":"","link":"/actors/x"}]'),
-        ]) == 1
-        history = db_mod.db_load_history()
-        assert history['/v/A']['ActorName'] == 'N1'
-        assert history['/v/A']['ActorGender'] == 'male'
-        assert history['/v/A']['ActorLink'] == 'https://javdb.com/actors/1'
-        assert 'X' in history['/v/A']['SupportingActors']
-        assert 'https://javdb.com/actors/x' in history['/v/A']['SupportingActors']
-
-    def test_get_all_history_records(self, _isolate_sqlite):
-        self._upsert(href='/v/A', code='A')
-        all_recs = db_mod.db_get_all_history_records()
-        assert len(all_recs) == 1
-
-
-class TestUpsertHistoryBatch:
-    """db_upsert_history_batch must be observationally equivalent to N
-    sequential db_upsert_history calls — the win is connection / WAL /
-    DualConnection-transaction reuse, not different semantics.
-    """
-
-    def test_empty_input_noop(self, _isolate_sqlite):
-        db_mod.db_upsert_history_batch([])
-        assert db_mod.db_load_history() == {}
-
-    def test_batch_inserts_match_serial(self, _isolate_sqlite):
-        rows = [
-            {
-                'href': f'/v/CODE-{i}', 'video_code': f'CODE-{i}',
-                'magnet_links': {'subtitle': f'magnet:test-{i}'},
-                'actor_name': f'Actor {i}',
-            }
-            for i in range(5)
-        ]
-        db_mod.db_upsert_history_batch(rows)
-        history = db_mod.db_load_history()
-        assert len(history) == 5
-        for i in range(5):
-            href = f'/v/CODE-{i}'
-            assert href in history
-            assert history[href]['VideoCode'] == f'CODE-{i}'
-            assert history[href]['ActorName'] == f'Actor {i}'
-
-    def test_batch_updates_existing(self, _isolate_sqlite):
-        db_mod.db_upsert_history(
-            '/v/EXISTING', 'EXISTING',
-            magnet_links={'subtitle': 'magnet:old'},
-        )
-        db_mod.db_upsert_history_batch([
-            {
-                'href': '/v/EXISTING', 'video_code': 'EXISTING',
-                'magnet_links': {'subtitle': 'magnet:new'},
-            },
-            {
-                'href': '/v/NEW', 'video_code': 'NEW',
-                'magnet_links': {'subtitle': 'magnet:new2'},
-            },
-        ])
-        history = db_mod.db_load_history()
-        assert len(history) == 2
-        torrents = history['/v/EXISTING'].get('torrents', {})
-        assert any('magnet:new' in t.get('MagnetUri', '') for t in torrents.values())
-
-    def test_batch_uses_single_connection(self, _isolate_sqlite, monkeypatch):
-        """A 3-row batch should open ``get_db`` exactly once."""
-        call_count = {'n': 0}
-        real_get_db = db_mod.get_db
-
-        def counting_get_db(*args, **kwargs):
-            call_count['n'] += 1
-            return real_get_db(*args, **kwargs)
-
-        monkeypatch.setattr(db_mod, 'get_db', counting_get_db)
-        db_mod.db_upsert_history_batch([
-            {'href': f'/v/X{i}', 'video_code': f'X{i}'} for i in range(3)
-        ])
-        assert call_count['n'] == 1, (
-            "Expected one get_db() call for the batch; got "
-            f"{call_count['n']} — connection reuse regressed."
-        )
 
 
 # ── rclone_inventory ──────────────────────────────────────────────────────

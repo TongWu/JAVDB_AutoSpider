@@ -8,9 +8,6 @@ Covers:
   * `db_rollback_session` operations-scope deletes session-tagged rows in
     PikpakHistory / DedupRecords / InventoryAlignNoExactMatch and drops
     the per-session RcloneInventory staging table
-  * `db_rollback_session` history-scope replays MovieHistoryAudit /
-    TorrentHistoryAudit (INSERT → DELETE, UPDATE → restore from OldRowJson,
-    DELETE → re-INSERT) and detects concurrent-run drift
   * Rclone staging-then-swap atomicity (open / append / swap / drop)
   * Refusal to roll back ``Status='committed'`` sessions without ``force=True``
   * Dry-run mode reports counts without mutating any table
@@ -46,18 +43,6 @@ def _create_session(status: str = "in_progress", *, when: str | None = None) -> 
             )
     return sid
 
-
-def _insert_movie(href: str, video_code: str, session_id: int) -> int:
-    """Create a MovieHistory row + companion MovieHistoryAudit INSERT row."""
-    db_mod.db_upsert_history(
-        href=href, video_code=video_code, session_id=session_id,
-    )
-    with db_mod.get_db() as conn:
-        row = conn.execute(
-            "SELECT Id FROM MovieHistory WHERE VideoCode=?",
-            (video_code,),
-        ).fetchone()
-    return row["Id"] if row else -1
 
 
 # ── Status lifecycle ─────────────────────────────────────────────────────
@@ -627,165 +612,6 @@ class TestRcloneStagingSwap:
             ).fetchone() is None
 
 
-# ── History audit replay ─────────────────────────────────────────────────
-
-
-class TestRollbackHistoryAudit:
-    def test_insert_audit_replays_as_delete(self):
-        sid = _create_session()
-        movie_id = _insert_movie("/v/AAA-001", "AAA-001", sid)
-        assert movie_id > 0
-
-        # Audit row should exist.
-        with db_mod.get_db() as conn:
-            audit = conn.execute(
-                "SELECT TargetId, Action FROM MovieHistoryAudit "
-                "WHERE SessionId=?",
-                (sid,),
-            ).fetchall()
-        assert any(a["Action"] == "INSERT" and a["TargetId"] == movie_id
-                   for a in audit)
-
-        result = db_mod.db_rollback_session(sid, scope="history")
-        assert result["history"]["MovieHistoryAudit"] >= 1
-        assert result["history"]["MovieHistory.deleted"] >= 1
-
-        with db_mod.get_db() as conn:
-            still = conn.execute(
-                "SELECT COUNT(*) AS n FROM MovieHistory WHERE Id=?",
-                (movie_id,),
-            ).fetchone()["n"]
-            audit_left = conn.execute(
-                "SELECT COUNT(*) AS n FROM MovieHistoryAudit WHERE SessionId=?",
-                (sid,),
-            ).fetchone()["n"]
-        assert still == 0
-        assert audit_left == 0  # consumed audit rows are tidied up
-
-    def test_insert_audit_deletes_torrents_before_parent_movie(self):
-        sid = _create_session()
-        db_mod.db_upsert_history(
-            href="/v/PARENT-001",
-            video_code="PARENT-001",
-            magnet_links={"subtitle": "magnet:?xt=urn:btih:parent001"},
-            session_id=sid,
-        )
-
-        result = db_mod.db_rollback_session(sid, scope="history")
-
-        assert result["history"]["TorrentHistory.deleted"] >= 1
-        assert result["history"]["MovieHistory.deleted"] >= 1
-        assert result["history"].get("drift_skipped", 0) == 0
-        with db_mod.get_db() as conn:
-            movie_count = conn.execute(
-                "SELECT COUNT(*) AS n FROM MovieHistory "
-                "WHERE VideoCode='PARENT-001'"
-            ).fetchone()["n"]
-            torrent_count = conn.execute(
-                "SELECT COUNT(*) AS n FROM TorrentHistory"
-            ).fetchone()["n"]
-        assert movie_count == 0
-        assert torrent_count == 0
-
-    def test_update_audit_restores_old_row(self):
-        # Run #1 creates a movie with actor "OldActor".
-        sid_old = _create_session()
-        _insert_movie("/v/BBB-001", "BBB-001", sid_old)
-        db_mod.db_upsert_history(
-            href="/v/BBB-001",
-            video_code="BBB-001",
-            actor_name="OldActor",
-            session_id=sid_old,
-        )
-        db_mod.db_mark_session_committed(sid_old)
-
-        # Run #2 (failed) updates the same movie with new actor "NewActor".
-        sid_new = _create_session()
-        db_mod.db_upsert_history(
-            href="/v/BBB-001",
-            video_code="BBB-001",
-            actor_name="NewActor",
-            session_id=sid_new,
-        )
-
-        with db_mod.get_db() as conn:
-            row = conn.execute(
-                "SELECT Id, ActorName, SessionId FROM MovieHistory "
-                "WHERE VideoCode='BBB-001'"
-            ).fetchone()
-            assert row["ActorName"] == "NewActor"
-            assert row["SessionId"] == sid_new
-
-        # Now roll back the failed run → ActorName should snap back to OldActor.
-        result = db_mod.db_rollback_session(sid_new, scope="history")
-        assert "history" in result
-
-        with db_mod.get_db() as conn:
-            row = conn.execute(
-                "SELECT ActorName FROM MovieHistory WHERE VideoCode='BBB-001'"
-            ).fetchone()
-        assert row is not None
-        assert result["history"].get("drift_skipped", 0) == 0
-        assert row["ActorName"] == "OldActor"
-
-    def test_drift_skipped_when_concurrent_run_owns_row(self):
-        """Audit row's TargetId no longer matches `SessionId` → drift, no overwrite."""
-        sid_failed = _create_session()
-        movie_id = _insert_movie("/v/CCC-001", "CCC-001", sid_failed)
-        assert movie_id > 0
-
-        # Simulate a parallel run claiming the row by changing its
-        # SessionId without going through db_upsert_history (so we don't
-        # overwrite the audit chain).
-        sid_other = _create_session()
-        with db_mod.get_db() as conn:
-            conn.execute(
-                "UPDATE MovieHistory SET SessionId=? WHERE Id=?",
-                (sid_other, movie_id),
-            )
-
-        result = db_mod.db_rollback_session(sid_failed, scope="history")
-        assert result["history"]["drift_skipped"] >= 1
-
-        with db_mod.get_db() as conn:
-            still = conn.execute(
-                "SELECT COUNT(*) AS n FROM MovieHistory WHERE Id=?",
-                (movie_id,),
-            ).fetchone()["n"]
-        assert still == 1  # other run's data must survive
-
-    def test_successful_audit_rows_are_cleaned_when_later_row_drifts(self):
-        sid_failed = _create_session()
-        applied_id = _insert_movie("/v/DDD-001", "DDD-001", sid_failed)
-        drift_id = _insert_movie("/v/DDD-002", "DDD-002", sid_failed)
-
-        sid_other = _create_session()
-        with db_mod.get_db() as conn:
-            conn.execute(
-                "UPDATE MovieHistory SET SessionId=? WHERE Id=?",
-                (sid_other, drift_id),
-            )
-
-        result = db_mod.db_rollback_session(sid_failed, scope="history")
-        assert result["history"]["MovieHistory.deleted"] >= 1
-        assert result["history"]["drift_skipped"] >= 1
-
-        with db_mod.get_db() as conn:
-            applied_left = conn.execute(
-                "SELECT COUNT(*) AS n FROM MovieHistoryAudit "
-                "WHERE SessionId=? AND TargetId=?",
-                (sid_failed, applied_id),
-            ).fetchone()["n"]
-            drift_left = conn.execute(
-                "SELECT COUNT(*) AS n FROM MovieHistoryAudit "
-                "WHERE SessionId=? AND TargetId=?",
-                (sid_failed, drift_id),
-            ).fetchone()["n"]
-
-        assert applied_left == 0
-        assert drift_left == 1
-
-
 # ── Application-generated session id (Phase 2) ───────────────────────────
 
 
@@ -867,7 +693,7 @@ class TestApplicationGeneratedSessionId:
         assert db_mod.db_count_in_progress_sessions_for_run("rid-A", 2) == 0
         assert db_mod.db_count_in_progress_sessions_for_run("rid-B", 1) == 1
 
-    def test_db_find_sessions_by_run_unions_audit_and_reports(self):
+    def test_db_find_sessions_by_run(self):
         sid = db_mod.db_create_report_session(
             report_type="DailyReport",
             report_date="2026-05-08",
@@ -875,161 +701,8 @@ class TestApplicationGeneratedSessionId:
             run_id="rid-find",
             run_attempt=3,
         )
-        # Generate a MovieHistoryAudit row tagged with the same RunId so
-        # we exercise the union-from-audit branch as well.
-        db_mod.set_active_run_identity("rid-find", 3)
-        try:
-            _insert_movie("/v/PH2-001", "PH2-001", sid)
-        finally:
-            db_mod.set_active_run_identity(None, None)
-
         ids = db_mod.db_find_sessions_by_run("rid-find", 3)
         assert ids == [sid]
-
-        # Removing the ReportSessions row but leaving the audit trail
-        # behind still surfaces the SessionId via the audit-table union.
-        with db_mod.get_db() as conn:
-            conn.execute("DELETE FROM ReportSessions WHERE Id=?", (sid,))
-        ids = db_mod.db_find_sessions_by_run("rid-find", 3)
-        assert ids == [sid]
-
-
-# ── Audit retention on commit (Phase 6) ──────────────────────────────────
-
-
-class TestAuditRetentionOnCommit:
-    def test_commit_prunes_audit_rows(self):
-        sid = _create_session()
-        _insert_movie("/v/PRN-001", "PRN-001", sid)
-
-        with db_mod.get_db() as conn:
-            before = conn.execute(
-                "SELECT COUNT(*) AS n FROM MovieHistoryAudit WHERE SessionId=?",
-                (sid,),
-            ).fetchone()["n"]
-        assert before >= 1
-
-        db_mod.db_mark_session_committed(sid)
-
-        with db_mod.get_db() as conn:
-            after = conn.execute(
-                "SELECT COUNT(*) AS n FROM MovieHistoryAudit WHERE SessionId=?",
-                (sid,),
-            ).fetchone()["n"]
-        assert after == 0
-
-
-# ── Orphan pruning (Phase 4) ─────────────────────────────────────────────
-
-
-class TestOrphanPruning:
-    def test_orphan_audit_pruned_when_target_missing_and_old(self):
-        # Set up: an audit row whose target row no longer exists, dated
-        # well before run_started_at - 24h.
-        sid = _create_session(when="2026-04-01 00:00:00")
-        movie_id = _insert_movie("/v/ORP-001", "ORP-001", sid)
-        # Delete the underlying movie so the audit's TargetId is dangling.
-        with db_mod.get_db() as conn:
-            conn.execute("DELETE FROM MovieHistory WHERE Id=?", (movie_id,))
-            # Force the audit row's DateTimeCreated to look ancient.
-            conn.execute(
-                "UPDATE MovieHistoryAudit SET DateTimeCreated=? "
-                "WHERE SessionId=?",
-                ("2026-04-01 00:00:01", sid),
-            )
-
-        result = db_mod.db_rollback_session(
-            sid,
-            scope="history",
-            run_started_at="2026-05-08 00:00:00",
-        )
-        history = result["history"]
-        # Orphan branch fires; drift_skipped doesn't (it would on a
-        # recent audit row).
-        assert history.get("orphan_pruned", 0) >= 1
-        assert history.get("drift_skipped", 0) == 0
-
-        with db_mod.get_db() as conn:
-            left = conn.execute(
-                "SELECT COUNT(*) AS n FROM MovieHistoryAudit "
-                "WHERE SessionId=?",
-                (sid,),
-            ).fetchone()["n"]
-        assert left == 0
-
-    def test_recent_drift_is_not_pruned_as_orphan(self):
-        sid = _create_session()
-        movie_id = _insert_movie("/v/ORP-002", "ORP-002", sid)
-        with db_mod.get_db() as conn:
-            conn.execute("DELETE FROM MovieHistory WHERE Id=?", (movie_id,))
-
-        # No run_started_at supplied → orphan window is disabled, so
-        # the row remains as drift.
-        result = db_mod.db_rollback_session(sid, scope="history")
-        history = result["history"]
-        assert history.get("drift_skipped", 0) >= 1
-        assert history.get("orphan_pruned", 0) == 0
-
-
-# ── _rollback_history idempotency (Phase 4) ─────────────────────────────
-
-
-class TestRollbackIdempotency:
-    def test_replaying_rollback_is_a_noop(self):
-        """Successful rollback drains its audit rows row-by-row, so a
-        second invocation has nothing to do."""
-        sid = _create_session()
-        _insert_movie("/v/IDM-001", "IDM-001", sid)
-        _insert_movie("/v/IDM-002", "IDM-002", sid)
-
-        first = db_mod.db_rollback_session(sid, scope="history")
-        assert first["history"]["MovieHistory.deleted"] >= 1
-
-        # After the first run, all audit rows for this session must be
-        # gone — that's the new row-by-row idempotent behaviour.
-        with db_mod.get_db() as conn:
-            n = conn.execute(
-                "SELECT COUNT(*) AS n FROM MovieHistoryAudit "
-                "WHERE SessionId=?",
-                (sid,),
-            ).fetchone()["n"]
-        assert n == 0
-
-    def test_drift_does_not_block_other_audits_from_being_drained(self):
-        """An audit row that drifts must NOT be deleted, but the rest
-        still get pruned individually."""
-        sid_failed = _create_session()
-        applied_id = _insert_movie("/v/IDM-DRT-001", "IDM-DRT-001", sid_failed)
-        drift_id = _insert_movie("/v/IDM-DRT-002", "IDM-DRT-002", sid_failed)
-
-        # Make drift_id be owned by a sibling session so the rollback's
-        # SessionId guard refuses to touch it.
-        sid_other = _create_session()
-        with db_mod.get_db() as conn:
-            conn.execute(
-                "UPDATE MovieHistory SET SessionId=? WHERE Id=?",
-                (sid_other, drift_id),
-            )
-
-        result = db_mod.db_rollback_session(sid_failed, scope="history")
-        assert result["history"]["MovieHistory.deleted"] >= 1
-        assert result["history"]["drift_skipped"] >= 1
-
-        with db_mod.get_db() as conn:
-            applied_left = conn.execute(
-                "SELECT COUNT(*) AS n FROM MovieHistoryAudit "
-                "WHERE SessionId=? AND TargetId=?",
-                (sid_failed, applied_id),
-            ).fetchone()["n"]
-            drift_left = conn.execute(
-                "SELECT COUNT(*) AS n FROM MovieHistoryAudit "
-                "WHERE SessionId=? AND TargetId=?",
-                (sid_failed, drift_id),
-            ).fetchone()["n"]
-        # Successful row had its audit pruned individually.
-        assert applied_left == 0
-        # Drifted row's audit is preserved for manual review.
-        assert drift_left == 1
 
 
 # ── FailureReason persistence ────────────────────────────────────────────

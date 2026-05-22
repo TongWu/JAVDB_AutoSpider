@@ -25,12 +25,10 @@ def test_request_dataclass_has_expected_fields():
         session_id="20260516T000000.000000Z-0001-0001",
         dry_run=True,
         include_pending=True,
-        restore_from_audit=False,
     )
     assert req.session_id == "20260516T000000.000000Z-0001-0001"
     assert req.dry_run is True
     assert req.include_pending is True
-    assert req.restore_from_audit is False
 
 
 def test_request_defaults_match_cli_defaults():
@@ -47,9 +45,6 @@ def test_request_defaults_match_cli_defaults():
     # Pending sessions are processed by default (matches
     # ``--auto-resume-finalizing``).
     assert req.include_pending is True
-    # Audit replay is on by default (matches the CLI: scope='all' restores
-    # from audit unless ``--scope`` narrows it).
-    assert req.restore_from_audit is True
 
 
 def test_plan_returns_lookup_error_for_unknown_session():
