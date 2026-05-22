@@ -75,7 +75,7 @@ Lift the audit-retirement prerequisites out of ADR-005 into this dedicated ADR. 
 ### D1: Change the code default to pending
 
 Changes:
-- `packages/python/javdb_platform/db_session.py:188` `return "audit"` → `return "pending"`
+- `javdb/storage/db/db_session.py:188` `return "audit"` → `return "pending"` (path updated per amendment 2)
 - Add a unit test that pins the new resolution order
 
 **Note**: The original D1 also included "change the SQLite schema `WriteMode` column DEFAULT to `'pending'`", which is cancelled in amendment 1. See the amendment above for rationale — the schema DEFAULT only serves historical migration paths, where `'audit'` is semantically correct. The runtime default is now controlled by the Python fallback alone.
@@ -198,5 +198,5 @@ Each PR is independently revertable. PR-A / PR-C / PR-D are the core; PR-E went 
   SELECT WriteMode, COUNT(*) FROM ReportSessions
   WHERE DateTimeCreated > datetime('now','-30 days') GROUP BY WriteMode;
   ```
-- Existing auto-fallback implementation: [`.github/workflows/DailyIngestion.yml:1075-1110`](../../../.github/workflows/DailyIngestion.yml), `scripts/pending_mode_auto_fallback.py`
-- Existing default implementation: [`packages/python/javdb_platform/db_session.py:185-188`](../../../javdb/storage/db/db_session.py)
+- Retired auto-fallback (replaced by D3 alert+pause): [`.github/workflows/DailyIngestion.yml`](../../../.github/workflows/DailyIngestion.yml), `apps/cli/db/pending_alert.py` (path updated per amendment 2)
+- Default implementation: [`javdb/storage/db/db_session.py`](../../../javdb/storage/db/db_session.py) (path updated per amendment 2)
