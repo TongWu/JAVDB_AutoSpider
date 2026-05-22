@@ -51,6 +51,8 @@ def _reset_globals(monkeypatch):
     monkeypatch.setattr(state, "_runner_heartbeat_thread", None, raising=False)
     monkeypatch.setattr(state, "_runner_unregistered", False, raising=False)
     monkeypatch.setattr(state, "_runner_session", None, raising=False)
+    monkeypatch.setattr(state, "_movie_claim_mode", "off", raising=False)
+    monkeypatch.setattr(state, "_movie_claim_last_recommended", False, raising=False)
     state._runner_heartbeat_stop.clear()
     yield
     # Stop any daemon the test left running, defensively.
