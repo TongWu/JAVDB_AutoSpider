@@ -19,7 +19,7 @@ from apps.api.schemas.capabilities_payloads import (
     SessionRollbackPayload,
     SessionRollbackResponse,
 )
-from javdb.storage.db.db_connection import get_db, REPORTS_DB_PATH
+from javdb.storage.db import get_db, REPORTS_DB_PATH
 from javdb.storage.repos.sessions_repo import SessionsRepo
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])

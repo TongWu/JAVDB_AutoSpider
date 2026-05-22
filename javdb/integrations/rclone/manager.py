@@ -274,7 +274,7 @@ def scan_inventory(
 
 def export_db_to_csv(output_path: str) -> int:
     """Export the rclone_inventory table from SQLite to a CSV file."""
-    from javdb.storage.db.db_connection import get_db, OPERATIONS_DB_PATH
+    from javdb.storage.db import get_db, OPERATIONS_DB_PATH
 
     with get_db(OPERATIONS_DB_PATH) as conn:
         rows = conn.execute(
@@ -839,7 +839,7 @@ def migrate_strip_drive_names() -> int:
     are updated; paths like ``dir/file:name`` are left unchanged.
     Returns the total number of rows updated across both tables.
     """
-    from javdb.storage.db.db_connection import get_db, OPERATIONS_DB_PATH
+    from javdb.storage.db import get_db, OPERATIONS_DB_PATH
 
     updated = 0
     with get_db(OPERATIONS_DB_PATH) as conn:
@@ -1355,20 +1355,18 @@ def main() -> int:
         _created_local_staging_session = False
         if _use_sqlite():
             try:
-                from javdb.storage.db.db_migrations import init_db
-                from javdb.storage.db.db_reports import (
+                from javdb.storage.db import (
+                    init_db,
                     db_create_report_session,
                     db_mark_session_committed,
                     db_mark_session_failed,
-                )
-                from javdb.storage.db.db_operations import (
                     db_open_rclone_staging,
                     db_append_rclone_staging,
                     db_swap_rclone_inventory,
                     db_merge_rclone_inventory_from_stage,
                     db_drop_rclone_staging,
+                    get_active_session_id,
                 )
-                from javdb.storage.db.db_session import get_active_session_id
                 init_db()
                 _staging_session_id = get_active_session_id()
                 if _staging_session_id is None:

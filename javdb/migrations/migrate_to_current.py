@@ -320,7 +320,7 @@ def main() -> int:
             "Use --align-no-proxy to disable proxy.",
         )
 
-    from javdb.storage.db.db_connection import HISTORY_DB_PATH, REPORTS_DB_PATH, OPERATIONS_DB_PATH
+    from javdb.storage.db import HISTORY_DB_PATH, REPORTS_DB_PATH, OPERATIONS_DB_PATH
     from javdb.infra.config import use_sqlite, cfg
 
     from javdb.migrations.tools.migrate_v6_to_v7_split import _normalize_three_dbs

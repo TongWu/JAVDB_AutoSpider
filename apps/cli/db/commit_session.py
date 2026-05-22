@@ -165,7 +165,7 @@ def _shadow_audit_drift(
     drift=0 with the error captured in ``derived_drift_error`` so the
     metric still emits.
     """
-    from javdb.storage.db.db_connection import (
+    from javdb.storage.db import (
         get_db,
         HISTORY_DB_PATH,
     )

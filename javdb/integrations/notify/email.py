@@ -2098,7 +2098,7 @@ def main():
         session_start_time = None
         if _sid is not None:
             try:
-                from javdb.storage.db.db_connection import get_db, REPORTS_DB_PATH
+                from javdb.storage.db import get_db, REPORTS_DB_PATH
                 with get_db(REPORTS_DB_PATH) as _conn:
                     _row = _conn.execute(
                         "SELECT DateTimeCreated FROM ReportSessions WHERE Id = ?", (_sid,)

@@ -163,8 +163,7 @@ def run_schema_migration(
     dry_run: bool,
     verify: bool,
 ) -> int:
-    from javdb.storage.db.db_connection import HISTORY_DB_PATH, REPORTS_DB_PATH, OPERATIONS_DB_PATH
-    from javdb.storage.db.db_migrations import init_db
+    from javdb.storage.db import HISTORY_DB_PATH, REPORTS_DB_PATH, OPERATIONS_DB_PATH, init_db
     from javdb.infra.config import use_sqlite
 
     if not use_sqlite():
@@ -696,7 +695,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    from javdb.storage.db.db_connection import HISTORY_DB_PATH as _HIST_DB
+    from javdb.storage.db import HISTORY_DB_PATH as _HIST_DB
 
     history_db = args.history_db or _HIST_DB
 

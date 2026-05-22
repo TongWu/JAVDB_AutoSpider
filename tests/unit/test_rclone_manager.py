@@ -252,6 +252,7 @@ def test_scan_sqlite_uses_staging_when_no_active_session(
 
 def _patch_rclone_db_mocks(monkeypatch, order, overrides=None):
     """Patch the split modules the rclone manager imports from."""
+    import javdb.storage.db as _db_pkg
     import javdb.storage.db.db_migrations as _mig
     import javdb.storage.db.db_reports as _rep
     import javdb.storage.db.db_operations as _ops
@@ -273,16 +274,16 @@ def _patch_rclone_db_mocks(monkeypatch, order, overrides=None):
         defaults.update(overrides)
 
     module_map = {
-        "init_db": [(_mig, "init_db")],
-        "get_active_session_id": [(_sess, "get_active_session_id")],
-        "db_create_report_session": [(_rep, "db_create_report_session")],
-        "db_mark_session_committed": [(_rep, "db_mark_session_committed")],
-        "db_mark_session_failed": [(_rep, "db_mark_session_failed")],
-        "db_open_rclone_staging": [(_ops, "db_open_rclone_staging")],
-        "db_append_rclone_staging": [(_ops, "db_append_rclone_staging")],
-        "db_swap_rclone_inventory": [(_ops, "db_swap_rclone_inventory")],
-        "db_merge_rclone_inventory_from_stage": [(_ops, "db_merge_rclone_inventory_from_stage")],
-        "db_drop_rclone_staging": [(_ops, "db_drop_rclone_staging")],
+        "init_db": [(_mig, "init_db"), (_db_pkg, "init_db")],
+        "get_active_session_id": [(_sess, "get_active_session_id"), (_db_pkg, "get_active_session_id")],
+        "db_create_report_session": [(_rep, "db_create_report_session"), (_db_pkg, "db_create_report_session")],
+        "db_mark_session_committed": [(_rep, "db_mark_session_committed"), (_db_pkg, "db_mark_session_committed")],
+        "db_mark_session_failed": [(_rep, "db_mark_session_failed"), (_db_pkg, "db_mark_session_failed")],
+        "db_open_rclone_staging": [(_ops, "db_open_rclone_staging"), (_db_pkg, "db_open_rclone_staging")],
+        "db_append_rclone_staging": [(_ops, "db_append_rclone_staging"), (_db_pkg, "db_append_rclone_staging")],
+        "db_swap_rclone_inventory": [(_ops, "db_swap_rclone_inventory"), (_db_pkg, "db_swap_rclone_inventory")],
+        "db_merge_rclone_inventory_from_stage": [(_ops, "db_merge_rclone_inventory_from_stage"), (_db_pkg, "db_merge_rclone_inventory_from_stage")],
+        "db_drop_rclone_staging": [(_ops, "db_drop_rclone_staging"), (_db_pkg, "db_drop_rclone_staging")],
     }
 
     for name, mock_fn in defaults.items():
