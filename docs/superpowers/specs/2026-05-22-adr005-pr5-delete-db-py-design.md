@@ -71,6 +71,7 @@ Move from db.py:
 ### __init__.py ← Package Public API
 
 Transform empty `__init__.py` into a thin re-export layer:
+
 ```python
 from .db_connection import get_db, get_local_sqlite_db, close_db, current_backend
 from .db_connection import HISTORY_DB_PATH, REPORTS_DB_PATH, OPERATIONS_DB_PATH

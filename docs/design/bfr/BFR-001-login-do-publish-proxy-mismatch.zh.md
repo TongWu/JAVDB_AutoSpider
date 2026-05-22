@@ -12,7 +12,7 @@
 
 当 spider 在多 proxy 登录流程中回退到另一个 proxy 时，跨 runner 的 cookie 广播失败，返回 HTTP 409：
 
-```
+```text
 13:59:21  ⚠ Session  Failed to publish login state to DO (proxy=Singapore-ARM1): HTTP 409:
   {"error":"proxy_name_mismatch_with_lease","lease_target_proxy_name":"Miraculous Fortress"}
 ```
