@@ -24,9 +24,7 @@ from javdb.storage.history_manager import (
     check_torrent_in_history,
     is_downloaded_torrent,
 )
-from javdb.storage.db.db_reports import db_create_report_session
-from javdb.storage.db.db_history_write import db_stage_history_write, db_commit_session_history
-from javdb.storage.db.db_history_read import db_load_history
+from javdb.storage.db import db_create_report_session, db_stage_history_write, db_commit_session_history, db_load_history
 import javdb.storage.db.db_session as _db_session
 from contextlib import contextmanager
 

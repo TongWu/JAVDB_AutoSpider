@@ -8,7 +8,7 @@ import pytest
 @pytest.fixture(autouse=True, scope="module")
 def _ensure_operations_schema():
     """Ensure the operations.db schema (including system_state) is initialised."""
-    from javdb.storage.db.db_migrations import init_db
+    from javdb.storage.db import init_db
     init_db()
 
 
