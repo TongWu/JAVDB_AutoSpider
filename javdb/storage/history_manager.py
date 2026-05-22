@@ -140,10 +140,7 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code,
     if use_sqlite():
         _ensure_db()
     if use_sqlite():
-        from javdb.storage.db.db_session import (
-            get_active_session_id,
-            get_active_write_mode,
-        )
+        from javdb.storage.db.db_session import get_active_session_id
 
         history_repo = HistoryRepo()
         filtered = {}
@@ -171,17 +168,12 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code,
             filtered_fc['no_subtitle'] = file_count_links.get('no_subtitle', 0)
             filtered_res['no_subtitle'] = resolution_links.get('no_subtitle')
 
-        # Ingestion Perfect Rollback (Phase 2): when this process is
-        # running under WriteMode='pending' the writes go to the staging
-        # tables instead of the live MovieHistory / TorrentHistory
-        # tables.  ``db_commit_session_history`` (called by
-        # ``apps.cli.db.commit_session`` once the run succeeds) drains the
-        # staged rows into live; on failure the rollback CLI deletes
-        # them with no audit-replay drift.  Audit mode (default) keeps
-        # the legacy in-place upsert with X3 audit logging.
         active_sid = get_active_session_id()
-        write_mode = get_active_write_mode()
-        if write_mode == 'pending' and active_sid is not None:
+        if active_sid is None:
+            logger.warning(
+                "No active session id set; skipping history save for %s", href,
+            )
+        else:
             history_repo.stage_movie(
                 active_sid,
                 {
@@ -210,23 +202,8 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code,
                 )
             logger.debug(
                 "Staged pending history for %s with magnet links: %s "
-                "(session=%s, mode=pending)",
+                "(session=%s)",
                 href, list(filtered.keys()), active_sid,
-            )
-        else:
-            history_repo.upsert_history(
-                href, video_code, filtered,
-                size_links=filtered_sizes,
-                file_count_links=filtered_fc,
-                resolution_links=filtered_res,
-                actor_name=actor_name,
-                actor_gender=actor_gender,
-                actor_link=actor_link,
-                supporting_actors=supporting_actors,
-            )
-            logger.debug(
-                "Saved history for %s with magnet links: %s (mode=%s)",
-                href, list(magnet_links.keys()), write_mode,
             )
 
     if use_csv():
