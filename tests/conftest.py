@@ -29,6 +29,7 @@ import javdb.storage.db.db_history_write as _db_history_write_mod
 import javdb.storage.db.db_reports as _db_reports_mod
 import javdb.storage.db.db_migrations as _db_migrations_mod
 import javdb.storage.db.db_operations as _db_operations_mod
+import javdb.storage.db.db_rollback as _db_rollback_mod
 import javdb.storage.db.db_stats as _db_stats_mod
 
 
@@ -74,6 +75,7 @@ def _isolate_sqlite(tmp_path):
     _db_reports_mod._get_db = None
     _db_migrations_mod._get_db = None
     _db_operations_mod._get_db = None
+    _db_rollback_mod._get_db = None
     _db_stats_mod._get_db = None
 
     # Reset dedup_checker module-level state
