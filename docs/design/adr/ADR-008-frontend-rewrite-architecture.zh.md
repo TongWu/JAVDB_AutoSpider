@@ -3,13 +3,13 @@
 **状态**: 已接受 —— Phase 1 已交付；Phase 2 计划中、Phase 3 推迟（截至 2026-05-19）
 **日期**: 2026-05-17（2026-05-18 修订）
 **决策者**: 头脑风暴会议（设计规范：`docs/superpowers/specs/2026-05-16-frontend-rewrite-design.md`）
-**关联实现计划 (Related Implementation Plans)**: [IMP-001](../impl/IMP-001-frontend-phase1-backend-prerequisites.md)（BE 前置——2026-05-16 完成）、[IMP-009](../impl/IMP-009-frontend-phase1-completion.md)（Phase 1 收尾——功能完整，cutover 待落地）、[IMP-010](../impl/IMP-010-frontend-phase2-full-cli-coverage.md)（Phase 2——计划中，未启动）、[IMP-011](../impl/IMP-011-frontend-phase3-power-user.md)（Phase 3——推迟，待 Phase 2 dogfooding 后定）
+**关联实现计划 (Related Implementation Plans)**: [IMP-ADR008-01](../impl/archive/IMP-ADR008-01-frontend-phase1-backend-prerequisites.md)（BE 前置——2026-05-16 完成）、[IMP-ADR008-02](../impl/IMP-ADR008-02-frontend-phase1-completion.md)（Phase 1 收尾——功能完整，cutover 待落地）、[IMP-ADR008-03](../impl/IMP-ADR008-03-frontend-phase2-full-cli-coverage.md)（Phase 2——计划中，未启动）、[IMP-ADR008-04](../impl/IMP-ADR008-04-frontend-phase3-power-user.md)（Phase 3——推迟，待 Phase 2 dogfooding 后定）
 
 ## 待办 (Outstanding Work)
 
-- IMP-009 cutover 残留：E2E fixtures、2 条剩余用户旅程、BE 清理、从已删除的 `apps/web/` 切换至独立 `javdb-autospider-web` 仓库。
-- IMP-010（Phase 2 —— 全 CLI 表面覆盖）：未启动。
-- IMP-011（Phase 3 —— 高级用户特性与分析）：推迟；具体范围待 Phase 2 dogfooding 累积数据后定。
+- IMP-ADR008-02 cutover 残留：E2E fixtures、2 条剩余用户旅程、BE 清理、从已删除的 `apps/web/` 切换至独立 `javdb-autospider-web` 仓库。
+- IMP-ADR008-03（Phase 2 —— 全 CLI 表面覆盖）：未启动。
+- IMP-ADR008-04（Phase 3 —— 高级用户特性与分析）：推迟；具体范围待 Phase 2 dogfooding 累积数据后定。
 
 ---
 
@@ -251,16 +251,16 @@ Token 复用 `config.py` 中已有的 `GIT_PASSWORD` PAT。除非操作者反馈
 - **后端版本偏差**: 当 `capabilities.build.backend_version` < 最低版本时前端拒绝启动。启动门渲染"请升级"页面。
 - **后端错误的 i18n**: 后端错误码映射到前端翻译。日志字符串保持英文。
 - **回滚库分层反转（2026-05-20 更新）**: 原始的 `javdb/storage/rollback/core.py` -> `apps.cli.db._session_helpers` 导入已经移除。当前过渡 helper path 是 `javdb.storage.rollback.session_helpers`，而 `apps.cli.db._session_helpers` 仍是 shim。[ADR-014](ADR-014-storage-cli-layering.zh.md) 跟踪最终收敛到 `javdb.storage.sessions.lifecycle_helpers`，以及删除两个 legacy wrappers。
-- **Commit 端点副作用一致性**: `javdb/storage/sessions/commit.py` 已有 `fanout_claims` 和 `emit_metrics` 标志；HTTP 端点默认为 `False`。修复方案：API 请求体默认为 `True` 以保持 CLI 一致性。跟踪于 [IMP-009](../impl/IMP-009-frontend-phase1-completion.md) Task 5。
+- **Commit 端点副作用一致性**: `javdb/storage/sessions/commit.py` 已有 `fanout_claims` 和 `emit_metrics` 标志；HTTP 端点默认为 `False`。修复方案：API 请求体默认为 `True` 以保持 CLI 一致性。跟踪于 [IMP-ADR008-02](../impl/IMP-ADR008-02-frontend-phase1-completion.md) Task 5。
 - **PikPak 端点粒度**: 仅暴露批量模式（`POST /api/ops/pikpak/transfer { days, dry_run }`）。单种子转移推迟。
 - **Rclone 端点粒度**: 单端点 + 标志（`POST /api/ops/rclone/run { scan, report, execute, dry_run }`）。前端提供"快速去重"和"高级"模式预设。
 
 ## 开放问题
 
-- **多标签页行为**: 两个标签页会双倍请求量。建议 BroadcastChannel 共享轮询，推迟到 Phase 3。见 [IMP-011](../impl/IMP-011-frontend-phase3-power-user.md) Task 6。
+- **多标签页行为**: 两个标签页会双倍请求量。建议 BroadcastChannel 共享轮询，推迟到 Phase 3。见 [IMP-ADR008-04](../impl/IMP-ADR008-04-frontend-phase3-power-user.md) Task 6。
 - **D1 状态缓存 TTL**: 建议服务端约 10 秒 / 客户端会话级。需在 Phase 2 后的实际 Browse-Lists 使用中验证。
-- **全局日志搜索存储**: 日志持久化策略（DB 表 vs 文件系统 vs 结构化行）未决定。取决于 Phase 2 日志量观察。推迟到 Phase 3 设计会议 → ADR-009。见 [IMP-011](../impl/IMP-011-frontend-phase3-power-user.md) Task 4。
-- **统计仪表盘范围**: 已确定候选指标（运行成功率、历史增长、去重释放量），但范围和图表库未最终确定。推迟到 Phase 3 设计会议 → ADR-010。见 [IMP-011](../impl/IMP-011-frontend-phase3-power-user.md) Task 5。
+- **全局日志搜索存储**: 日志持久化策略（DB 表 vs 文件系统 vs 结构化行）未决定。取决于 Phase 2 日志量观察。推迟到 Phase 3 设计会议 → ADR-009。见 [IMP-ADR008-04](../impl/IMP-ADR008-04-frontend-phase3-power-user.md) Task 4。
+- **统计仪表盘范围**: 已确定候选指标（运行成功率、历史增长、去重释放量），但范围和图表库未最终确定。推迟到 Phase 3 设计会议 → ADR-010。见 [IMP-ADR008-04](../impl/IMP-ADR008-04-frontend-phase3-power-user.md) Task 5。
 
 ---
 

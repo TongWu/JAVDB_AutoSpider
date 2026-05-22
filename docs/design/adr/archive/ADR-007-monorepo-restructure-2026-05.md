@@ -4,7 +4,7 @@
 **Date**: 2026-05-17
 **Deciders**: Architecture depth-pass round 3 (succeeds the incomplete Python core reorg recorded in [docs/design/architecture/python-core-mapping.md](../../architecture/python-core-mapping.md) and [spider-module-reorg.md](../../architecture/spider-module-reorg.md))
 **Supersedes**: `docs/design/architecture/python-core-mapping.md`, `docs/design/architecture/spider-module-reorg.md` (both marked superseded at Phase 3)
-**Related Implementation Plans**: [IMP-006](../../impl/IMP-006-restructure-phase1-javdb-tree.md) (Phase 1 — build `javdb/` tree, completed), [IMP-007](../../impl/IMP-007-restructure-phase2-scripts-to-cli.md) (Phase 2 — migrate `scripts/` to `apps/cli/`, completed), [IMP-008](../../impl/IMP-008-restructure-phase3-delete-compat.md) (Phase 3 — execute deletion manifest, completed); see also [ADR-007 deletion manifest](ADR-007-deletion-manifest.md) for the Phase 1 deliverable consumed by Phase 3.
+**Related Implementation Plans**: [IMP-ADR007-01](../../impl/archive/IMP-ADR007-01-restructure-phase1-javdb-tree.md) (Phase 1 — build `javdb/` tree, completed), [IMP-ADR007-02](../../impl/archive/IMP-ADR007-02-restructure-phase2-scripts-to-cli.md) (Phase 2 — migrate `scripts/` to `apps/cli/`, completed), [IMP-ADR007-03](../../impl/archive/IMP-ADR007-03-restructure-phase3-delete-compat.md) (Phase 3 — execute deletion manifest, completed); see also [ADR-007 deletion manifest](ADR-007-deletion-manifest.md) for the Phase 1 deliverable consumed by Phase 3.
 
 ---
 

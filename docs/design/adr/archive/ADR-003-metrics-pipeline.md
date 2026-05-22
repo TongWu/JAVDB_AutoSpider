@@ -3,7 +3,7 @@
 **Status**: Completed 2026-05-17 — `MetricsState` DO + 1-minute scheduled cron (`* * * * *`) + idle suppression (`is_transition_marker` / `is_heartbeat_anchor` columns) + 5-second bucketed JSON snapshot all shipped per the decision matrix.
 **Date**: 2026-05-16
 **Deciders**: Proxy Coordinator Dashboard redesign
-**Related Implementation Plans**: [IMP-003](../../impl/IMP-003-dashboard-phase2-worker-backend.md) (worker backend — pipeline shipped), [IMP-004](../../impl/IMP-004-dashboard-phase3-ui.md) (main dashboard UI consumer — planned)
+**Related Implementation Plans**: [IMP-ADR003-01](../../impl/IMP-ADR003-01-dashboard-phase2-worker-backend.md) (worker backend — pipeline shipped), [IMP-ADR003-02](../../impl/IMP-ADR003-02-dashboard-phase3-ui.md) (main dashboard UI consumer — planned)
 
 ---
 
