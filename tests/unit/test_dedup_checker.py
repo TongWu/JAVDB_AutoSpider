@@ -25,7 +25,7 @@ from javdb.spider.services.dedup import (
     cleanup_deleted_records,
     _raw_csv_read,
 )
-import javdb.storage.db.db as db_mod
+from javdb.storage.db.db_operations import db_replace_rclone_inventory, db_load_dedup_records
 
 
 # ============================================================================
@@ -34,7 +34,7 @@ import javdb.storage.db.db as db_mod
 
 def _seed_inventory(rows):
     """Seed SQLite rclone_inventory with the given list-of-dicts."""
-    db_mod.db_replace_rclone_inventory(rows)
+    db_replace_rclone_inventory(rows)
 
 
 def _inventory_row(code, sensor='有码', subtitle='中字', path='gdrive:/r/2025/a/f', size=1000, count=2):
@@ -405,7 +405,7 @@ class TestStorageModeNonDbMirrors:
 
         append_dedup_record(csv_path, record)
 
-        rows = db_mod.db_load_dedup_records()
+        rows = db_load_dedup_records()
         assert any(row.get('VideoCode', row.get('video_code')) == video_code for row in rows)
         assert not os.path.exists(csv_path)
 
