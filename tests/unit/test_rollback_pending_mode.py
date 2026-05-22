@@ -1,6 +1,6 @@
 """Pending-mode end-to-end tests (Ingestion Perfect Rollback, Phase 2).
 
-Covers the six categories enumerated in the plan:
+Covers the core pending-mode categories:
 
 1. **Concurrent**: daily stages ``subtitle``, adhoc stages **and**
    commits ``hacked_subtitle``.  When daily later rolls back, live
@@ -16,20 +16,12 @@ Covers the six categories enumerated in the plan:
    ``db_begin_finalize_session`` + a partial commit, resume; KILL
    again, resume; the live tables match a single uninterrupted
    ``db_commit_session_history`` byte-for-byte.
-5. **IO 阈值**: counting wrapper around the SQLite cursor verifies
-   that the pending path issues at most 2.0× the audit-mode statement
-   count for the same logical workload (here we use a small N=12
-   movies; the production threshold of N=100 is enforced by the
-   ratio, not the absolute count).
-6. **Mixed mode**: same RunId / RunAttempt with one daily session in
-   ``audit`` mode and one adhoc session in ``pending`` mode.  Each
-   side's cleanup path executes independently — audit replays its
-   audit log, pending deletes its pending rows — and neither
-   disturbs the other's writes.
-
-The pre-existing ``audit`` mode tests in ``test_rollback.py`` /
-``test_rollback_full_fidelity.py`` continue to be the source of truth
-for the legacy X3 path and are not re-implemented here.
+5. **Write-mode resolution**: pending is the only mode (ADR-005 PR-4
+   retired audit mode); the resolver falls back gracefully.
+6. **Spider write path**: ``save_parsed_movie_to_history`` stages into
+   pending tables, never touching live until commit.
+7. **Batch updates**: visit-timestamp and actor batch updates go through
+   pending staging when an active pending session exists.
 """
 
 from __future__ import annotations
@@ -111,7 +103,7 @@ def _stage_torrent(
 
 
 def _href_variants(href: str) -> List[str]:
-    """Mirror db_upsert_history's lookup pair (path + absolute URL form).
+    """Mirror the lookup pair (path + absolute URL form).
 
     The pending commit normalises Href to the absolute URL on INSERT so
     direct equality lookup by the raw path-style ``/v/...`` href misses
@@ -480,216 +472,7 @@ class TestFinalizingResumeIdempotency:
 # ──────────────────────────────────────────────────────────────────────
 
 
-@pytest.fixture
-def io_count(monkeypatch):
-    """Instrument every execute() / executemany() call across all connections.
 
-    Both the pending and audit paths reuse thread-local connections from
-    ``_get_connection``; we drain the cache before measuring so prior
-    fixtures can't taint the counter, then patch each newly-opened
-    connection's execute methods in place so we don't have to wrap the
-    sqlite3.Connection class (which uses C-level slots and rejects
-    arbitrary attribute proxies).
-    """
-    counter = {"calls": 0}
-    real = db_mod._open_sqlite_connection
-
-    def factory(path):
-        conn = real(path)
-        real_execute = conn.execute
-        real_executemany = conn.executemany
-        real_executescript = conn.executescript
-
-        def _exec(sql, params=()):
-            counter["calls"] += 1
-            return real_execute(sql, params)
-
-        def _many(sql, seq):
-            seq_list = list(seq)
-            counter["calls"] += len(seq_list)
-            return real_executemany(sql, seq_list)
-
-        def _script(script):
-            counter["calls"] += 1
-            return real_executescript(script)
-
-        try:
-            conn.execute = _exec  # type: ignore[assignment]
-            conn.executemany = _many  # type: ignore[assignment]
-            conn.executescript = _script  # type: ignore[assignment]
-        except (AttributeError, TypeError):
-            # sqlite3.Connection rejects monkeypatching on some Python
-            # builds; fall back to a thin proxy that exposes the methods
-            # we care about and forwards everything else via __getattr__.
-            return _ConnProxy(conn, counter)
-        return conn
-
-    db_mod.close_db()
-    monkeypatch.setattr(db_mod, "_open_sqlite_connection", factory)
-    yield counter
-    db_mod.close_db()
-
-
-class _ConnProxy:
-    """Fallback proxy used only when sqlite3.Connection rejects patching."""
-
-    def __init__(self, conn, counter):
-        object.__setattr__(self, "_conn", conn)
-        object.__setattr__(self, "_counter", counter)
-
-    def execute(self, sql, params=()):
-        self._counter["calls"] += 1
-        return self._conn.execute(sql, params)
-
-    def executemany(self, sql, seq):
-        seq_list = list(seq)
-        self._counter["calls"] += len(seq_list)
-        return self._conn.executemany(sql, seq_list)
-
-    def executescript(self, script):
-        self._counter["calls"] += 1
-        return self._conn.executescript(script)
-
-    def __getattr__(self, name):
-        return getattr(self._conn, name)
-
-    def __setattr__(self, name, value):
-        setattr(self._conn, name, value)
-
-
-def _measure_audit(n: int) -> int:
-    counter_before = 0
-    db_mod.close_db()
-    # Audit baseline: write through db_upsert_history.
-    sid = _create_session(write_mode="audit", csv_filename="audit-io.csv")
-    db_mod.set_active_session_id(sid)
-    try:
-        for i in range(n):
-            href = f"/v/IO-A-{i:03d}"
-            db_mod.db_upsert_history(
-                href=href,
-                video_code=f"IO-A-{i:03d}",
-                magnet_links={"subtitle": f"magnet:io-a-{i}"},
-            )
-    finally:
-        db_mod.set_active_session_id(None)
-    return counter_before
-
-
-class TestIOThreshold:
-    def test_pending_path_within_2x_audit(self, io_count):
-        n = 12
-
-        # ── Audit baseline ────────────────────────────────────────
-        sid_audit = _create_session(
-            write_mode="audit", csv_filename="audit-io.csv",
-        )
-        db_mod.set_active_session_id(sid_audit)
-        try:
-            io_count["calls"] = 0
-            for i in range(n):
-                db_mod.db_upsert_history(
-                    href=f"/v/IO-A-{i:03d}",
-                    video_code=f"IO-A-{i:03d}",
-                    magnet_links={"subtitle": f"magnet:io-a-{i}"},
-                )
-            audit_calls = io_count["calls"]
-        finally:
-            db_mod.set_active_session_id(None)
-
-        # ── Pending path ──────────────────────────────────────────
-        sid_pending = _create_session(
-            write_mode="pending", csv_filename="pending-io.csv",
-        )
-        io_count["calls"] = 0
-        for i in range(n):
-            href = f"/v/IO-P-{i:03d}"
-            _stage_movie(sid_pending, href, f"IO-P-{i:03d}")
-            _stage_torrent(
-                sid_pending, href, f"IO-P-{i:03d}", "subtitle",
-                magnet=f"magnet:io-p-{i}",
-            )
-        db_mod.db_commit_session_history(sid_pending)
-        pending_calls = io_count["calls"]
-
-        assert audit_calls > 0
-        assert pending_calls > 0
-        ratio = pending_calls / max(1, audit_calls)
-        # Hard threshold from the plan: pending must stay within 2.0×.
-        assert ratio <= 2.0, (
-            f"pending path issued {pending_calls} statements vs "
-            f"{audit_calls} for audit (ratio={ratio:.2f}); plan caps at 2.0"
-        )
-
-
-# ──────────────────────────────────────────────────────────────────────
-# 6. Mixed mode — daily=audit + adhoc=pending coexist under one RunId
-# ──────────────────────────────────────────────────────────────────────
-
-
-class TestMixedModeCleanup:
-    def test_audit_and_pending_rollbacks_are_independent(self):
-        run_id = "rid-mixed"
-        run_attempt = 1
-
-        # Daily session — audit mode.
-        daily = _create_session(
-            write_mode="audit",
-            csv_filename="daily-mixed.csv",
-            run_id=run_id,
-            run_attempt=run_attempt,
-        )
-        # An audit-mode write through db_upsert_history populates
-        # MovieHistory + the audit log.
-        db_mod.set_active_session_id(daily)
-        db_mod.set_active_run_identity(run_id, run_attempt)
-        try:
-            db_mod.db_upsert_history(
-                href="/v/MIX-D-001",
-                video_code="MIX-D-001",
-                magnet_links={"subtitle": "magnet:mix-d-sub"},
-            )
-        finally:
-            db_mod.set_active_session_id(None)
-            db_mod.set_active_run_identity(None, None)
-
-        # Adhoc session — pending mode.
-        adhoc = _create_session(
-            write_mode="pending",
-            csv_filename="adhoc-mixed.csv",
-            run_id=run_id,
-            run_attempt=run_attempt,
-        )
-        _stage_movie(adhoc, "/v/MIX-P-001", "MIX-P-001")
-        _stage_torrent(adhoc, "/v/MIX-P-001", "MIX-P-001", "subtitle")
-
-        # Roll back BOTH sessions — same call signature the workflow uses.
-        for sid in (daily, adhoc):
-            result = db_mod.db_rollback_session(sid, scope="all")
-            history = result.get("history", {})
-            mode = history.get("mode")
-            if sid == daily:
-                # Audit replay path.
-                assert mode == "audit_replay", history
-            else:
-                assert mode == "rollback_pending", history
-
-        # Daily's MovieHistory row was unwound via audit replay.
-        with db_mod.get_db() as conn:
-            n_daily = conn.execute(
-                "SELECT COUNT(*) AS n FROM MovieHistory WHERE Href=?",
-                ("/v/MIX-D-001",),
-            ).fetchone()["n"]
-        assert n_daily == 0, "daily audit row must be deleted on rollback"
-
-        # Adhoc never wrote to MovieHistory; its pending rows are gone.
-        assert _pending_counts(adhoc) == (0, 0)
-        with db_mod.get_db() as conn:
-            n_adhoc = conn.execute(
-                "SELECT COUNT(*) AS n FROM MovieHistory WHERE Href=?",
-                ("/v/MIX-P-001",),
-            ).fetchone()["n"]
-        assert n_adhoc == 0
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -714,7 +497,7 @@ class TestWriteModeResolution:
         state = db_mod.db_get_session_status(sid)
         assert state == ("pending", "in_progress")
 
-    def test_env_var_can_select_audit(self, monkeypatch):
+    def test_env_var_audit_falls_back_to_pending(self, monkeypatch):
         monkeypatch.setenv("JAVDB_HISTORY_WRITE_MODE", "audit")
         sid = db_mod.db_create_report_session(
             report_type="DailyReport",
@@ -722,7 +505,7 @@ class TestWriteModeResolution:
             csv_filename="env-audit.csv",
         )
         state = db_mod.db_get_session_status(sid)
-        assert state == ("audit", "in_progress")
+        assert state == ("pending", "in_progress")
 
     def test_invalid_write_mode_raises(self):
         with pytest.raises(ValueError, match="WriteMode"):
@@ -742,20 +525,12 @@ class TestWriteModeResolution:
 class TestSpiderWritePathRoutesToPending:
     """Once ``set_active_write_mode('pending')`` is set,
     ``save_parsed_movie_to_history`` must stage rows into the pending
-    tables and leave the live + audit tables untouched.  Audit mode
-    keeps the legacy in-place upsert.  These two tests are the
-    minimum guard that Phase 2's plumbing is wired all the way from
-    the public history API down to the new tables.
+    tables and leave the live tables untouched.
     """
 
     def _live_counts(
-        self, href: str, *, session_id: int,
-    ) -> Tuple[int, int, int, int]:
-        # MovieHistoryAudit / TorrentHistoryAudit don't carry the Href
-        # column directly (they reference the live row via TargetId);
-        # filter audit by SessionId, which uniquely identifies our test
-        # session here.
-        from tests.unit.test_rollback_pending_mode import _href_variants
+        self, href: str,
+    ) -> Tuple[int, int]:
         variants = _href_variants(href)
         placeholders = ",".join("?" for _ in variants)
         with db_mod.get_db() as conn:
@@ -764,23 +539,13 @@ class TestSpiderWritePathRoutesToPending:
                 f"WHERE Href IN ({placeholders})",
                 variants,
             ).fetchone()["n"]
-            mha = conn.execute(
-                "SELECT COUNT(*) AS n FROM MovieHistoryAudit "
-                "WHERE SessionId=?",
-                (session_id,),
-            ).fetchone()["n"]
             th = conn.execute(
                 f"SELECT COUNT(*) AS n FROM TorrentHistory th "
                 f"JOIN MovieHistory mh ON mh.Id=th.MovieHistoryId "
                 f"WHERE mh.Href IN ({placeholders})",
                 variants,
             ).fetchone()["n"]
-            tha = conn.execute(
-                "SELECT COUNT(*) AS n FROM TorrentHistoryAudit "
-                "WHERE SessionId=?",
-                (session_id,),
-            ).fetchone()["n"]
-        return mh, mha, th, tha
+        return mh, th
 
     def test_pending_active_mode_stages_into_pending_tables(
         self, monkeypatch,
@@ -788,7 +553,6 @@ class TestSpiderWritePathRoutesToPending:
         from javdb.storage.history_manager import (
             save_parsed_movie_to_history,
         )
-        # Reset any stale active state from earlier tests.
         db_mod.set_active_session_id(None)
         db_mod.set_active_run_identity(None, None)
         db_mod.set_active_write_mode(None)
@@ -824,120 +588,14 @@ class TestSpiderWritePathRoutesToPending:
             db_mod.set_active_run_identity(None, None)
             db_mod.set_active_write_mode(None)
 
-        # Pending tables hold the writes; live + audit are pristine.
+        # Pending tables hold the writes; live tables are pristine.
         movie_pending, torrent_pending = _pending_counts(sid)
         assert movie_pending == 1
         assert torrent_pending >= 1
-        mh, mha, th, tha = self._live_counts("/v/WIRE-001", session_id=sid)
-        assert (mh, mha, th, tha) == (0, 0, 0, 0)
-
-    def test_audit_active_mode_keeps_in_place_upsert(self, monkeypatch):
-        # ADR-006 made 'pending' the default, so audit mode must be
-        # selected explicitly to exercise the legacy in-place path.
-        monkeypatch.setenv("JAVDB_HISTORY_WRITE_MODE", "audit")
-        from javdb.storage.history_manager import (
-            save_parsed_movie_to_history,
-        )
-        db_mod.set_active_session_id(None)
-        db_mod.set_active_run_identity(None, None)
-        db_mod.set_active_write_mode(None)
-        sid = db_mod.db_create_report_session(
-            report_type="DailyReport",
-            report_date="2026-05-09",
-            csv_filename="wire-audit.csv",
-        )
-        db_mod.set_active_session_id(sid)
-        db_mod.set_active_run_identity("rid-audit", 1)
-        try:
-            save_parsed_movie_to_history(
-                history_file=None,
-                href="/v/AUDIT-001",
-                phase=1,
-                video_code="AUDIT-001",
-                magnet_links={"subtitle": "magnet:?xt=urn:btih:audit-sub"},
-            )
-        finally:
-            db_mod.set_active_session_id(None)
-            db_mod.set_active_run_identity(None, None)
-            db_mod.set_active_write_mode(None)
-
-        # Live + audit get the row; pending stays empty.
-        mh, mha, th, tha = self._live_counts("/v/AUDIT-001", session_id=sid)
-        assert mh == 1
-        assert mha >= 1
-        assert th >= 1
-        assert tha >= 1
-        movie_pending, torrent_pending = _pending_counts(sid)
-        assert (movie_pending, torrent_pending) == (0, 0)
+        mh, th = self._live_counts("/v/WIRE-001")
+        assert (mh, th) == (0, 0)
 
 
-# ──────────────────────────────────────────────────────────────────────
-# 8. Rollback safety net — pending dispatcher catches stray audit rows
-# ──────────────────────────────────────────────────────────────────────
-
-
-class TestPendingRollbackSafetyNet:
-    """If a half-migrated callsite still calls ``db_upsert_history``
-    while the session is in pending mode, the pending rollback path
-    must replay the stray audit rows so the live tables stay clean.
-    """
-
-    def test_pending_rollback_replays_legacy_audit_rows(self):
-        sid = db_mod.db_create_report_session(
-            report_type="DailyReport",
-            report_date="2026-05-09",
-            csv_filename="safety-net.csv",
-            write_mode="pending",
-        )
-        db_mod.set_active_session_id(sid)
-        db_mod.set_active_run_identity("rid-safety", 1)
-        try:
-            # Simulate a legacy callsite: write directly via
-            # db_upsert_history under the pending session.
-            db_mod.db_upsert_history(
-                href="/v/SAFE-001",
-                video_code="SAFE-001",
-                magnet_links={"subtitle": "magnet:safe-sub"},
-            )
-        finally:
-            db_mod.set_active_session_id(None)
-            db_mod.set_active_run_identity(None, None)
-
-        from tests.unit.test_rollback_pending_mode import _href_variants
-        variants = _href_variants("/v/SAFE-001")
-        placeholders = ",".join("?" for _ in variants)
-        with db_mod.get_db() as conn:
-            n_live = conn.execute(
-                f"SELECT COUNT(*) AS n FROM MovieHistory "
-                f"WHERE Href IN ({placeholders})",
-                variants,
-            ).fetchone()["n"]
-            n_audit = conn.execute(
-                "SELECT COUNT(*) AS n FROM MovieHistoryAudit "
-                "WHERE SessionId=?",
-                (sid,),
-            ).fetchone()["n"]
-        assert n_live == 1, "legacy upsert should have written live row"
-        assert n_audit >= 1, "legacy upsert should have written audit row"
-
-        # Pending dispatcher (Status='in_progress', WriteMode='pending')
-        # must replay the audit row and leave live tables clean.
-        result = db_mod.db_rollback_session(sid, scope="all")
-        assert result["history"]["mode"] == "rollback_pending"
-
-        with db_mod.get_db() as conn:
-            n_live_after = conn.execute(
-                f"SELECT COUNT(*) AS n FROM MovieHistory "
-                f"WHERE Href IN ({placeholders})",
-                variants,
-            ).fetchone()["n"]
-            n_audit_after = conn.execute(
-                "SELECT COUNT(*) AS n FROM MovieHistoryAudit "
-                "WHERE SessionId=?",
-                (sid,),
-            ).fetchone()["n"]
-        assert n_live_after == 0, "safety net failed to delete live row"
-        assert n_audit_after == 0, "safety net failed to drain audit row"
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -1074,7 +732,6 @@ class TestBatchUpdatesRouteToPending:
             self._teardown()
 
         # Live tables must be untouched.
-        from tests.unit.test_rollback_pending_mode import _href_variants
         variants = _href_variants("/v/BAT-001")
         placeholders = ",".join("?" for _ in variants)
         with db_mod.get_db() as conn:
@@ -1083,13 +740,7 @@ class TestBatchUpdatesRouteToPending:
                 f"WHERE Href IN ({placeholders})",
                 variants,
             ).fetchone()["n"]
-            n_audit = conn.execute(
-                "SELECT COUNT(*) AS n FROM MovieHistoryAudit "
-                "WHERE SessionId=?",
-                (sid,),
-            ).fetchone()["n"]
         assert n_live == 0
-        assert n_audit == 0
 
         # Two pending movie rows: the actor stage + the visit stage.
         with db_mod.get_db() as conn:
@@ -1120,7 +771,6 @@ class TestBatchUpdatesRouteToPending:
             ).fetchone()["n"]
         assert live is not None
         assert live["ActorName"] == "Bat Actor"
-        # DateTimeVisited should be the visit-stage timestamp (latest).
         assert live["DateTimeVisited"] == rows[1]["DateTimeVisited"]
         assert pending_left == 0, (
             "sparse-stage rows must all be drained on commit"
@@ -1136,7 +786,6 @@ class TestBatchUpdatesRouteToPending:
         finally:
             self._teardown()
 
-        from tests.unit.test_rollback_pending_mode import _href_variants
         variants = _href_variants("/v/ACT-001")
         placeholders = ",".join("?" for _ in variants)
         with db_mod.get_db() as conn:
@@ -1145,18 +794,12 @@ class TestBatchUpdatesRouteToPending:
                 f"WHERE Href IN ({placeholders})",
                 variants,
             ).fetchone()["n"]
-            n_audit = conn.execute(
-                "SELECT COUNT(*) AS n FROM MovieHistoryAudit "
-                "WHERE SessionId=?",
-                (sid,),
-            ).fetchone()["n"]
             n_pending = conn.execute(
                 "SELECT COUNT(*) AS n FROM PendingMovieHistoryWrites "
                 "WHERE SessionId=?",
                 (sid,),
             ).fetchone()["n"]
         assert n_live == 0
-        assert n_audit == 0
         assert n_pending == 1
 
     def test_history_repo_actor_batch_preserves_pending_staging(self):
@@ -1172,7 +815,6 @@ class TestBatchUpdatesRouteToPending:
         finally:
             self._teardown()
 
-        from tests.unit.test_rollback_pending_mode import _href_variants
         variants = _href_variants("/v/R-ACT-001")
         placeholders = ",".join("?" for _ in variants)
         with db_mod.get_db() as conn:
@@ -1181,57 +823,10 @@ class TestBatchUpdatesRouteToPending:
                 f"WHERE Href IN ({placeholders})",
                 variants,
             ).fetchone()["n"]
-            n_audit = conn.execute(
-                "SELECT COUNT(*) AS n FROM MovieHistoryAudit "
-                "WHERE SessionId=?",
-                (sid,),
-            ).fetchone()["n"]
             n_pending = conn.execute(
                 "SELECT COUNT(*) AS n FROM PendingMovieHistoryWrites "
                 "WHERE SessionId=?",
                 (sid,),
             ).fetchone()["n"]
         assert n_live == 0
-        assert n_audit == 0
         assert n_pending == 1
-
-    def test_audit_session_keeps_in_place_batch_update(self, monkeypatch):
-        # ADR-006 made 'pending' the default; select audit explicitly
-        # to keep exercising the legacy in-place UPDATE path.
-        monkeypatch.setenv("JAVDB_HISTORY_WRITE_MODE", "audit")
-        db_mod.set_active_session_id(None)
-        db_mod.set_active_run_identity(None, None)
-        db_mod.set_active_write_mode(None)
-        sid = db_mod.db_create_report_session(
-            report_type="DailyReport",
-            report_date="2026-05-09",
-            csv_filename="batch-audit.csv",
-        )
-        db_mod.set_active_session_id(sid)
-        db_mod.set_active_run_identity("rid-bauda", 1)
-        try:
-            db_mod.db_upsert_history(
-                href="/v/BAUD-001",
-                video_code="BAUD-001",
-                magnet_links={"subtitle": "magnet:baud-sub"},
-            )
-            db_mod.db_batch_update_last_visited(["/v/BAUD-001"])
-        finally:
-            self._teardown()
-
-        with db_mod.get_db() as conn:
-            audit_n = conn.execute(
-                "SELECT COUNT(*) AS n FROM MovieHistoryAudit "
-                "WHERE SessionId=?",
-                (sid,),
-            ).fetchone()["n"]
-            pending_n = conn.execute(
-                "SELECT COUNT(*) AS n FROM PendingMovieHistoryWrites "
-                "WHERE SessionId=?",
-                (sid,),
-            ).fetchone()["n"]
-        # Audit rows from the upsert + the visit batch UPDATE.
-        assert audit_n >= 2
-        assert pending_n == 0, (
-            "audit-mode batch must not touch pending tables"
-        )
