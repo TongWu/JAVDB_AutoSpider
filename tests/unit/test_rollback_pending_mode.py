@@ -431,7 +431,22 @@ class TestFinalizingResumeIdempotency:
         assert _live_torrent_categories(href) == [(1, 1)]
         assert _pending_counts(sid) == (0, 0)
 
-    def test_commit_atomicity_crash_after_status_flip_recovers(self):
+    def test_resume_via_rollback_all_preserves_reports_until_resume(self):
+        sid = _create_session(csv_filename="dispatched-all.csv")
+        href = "/v/DISP-ALL-001"
+        _stage_movie(sid, href, "DISP-ALL-001")
+        _stage_torrent(sid, href, "DISP-ALL-001", "subtitle")
+
+        assert db_begin_finalize_session(sid) == 1
+
+        result = db_rollback_session(sid, scope="all")
+
+        assert result["history"]["mode"] == "resume_commit"
+        assert db_get_session_status(sid) == ("pending", "committed")
+        assert _live_torrent_categories(href) == [(1, 1)]
+        assert _pending_counts(sid) == (0, 0)
+
+    def test_commit_atomicity_crash_after_status_flip_recovers(self, monkeypatch):
         """C1 regression — crash between Status='committed' flip and the
         final DELETE of applied pending rows must be recoverable.
 
@@ -472,6 +487,12 @@ class TestFinalizingResumeIdempotency:
 
         # Resume must clean up the residual applied rows without
         # re-running _commit_one_movie (live tables already correct).
+        import javdb.storage.db.db_history_write as write_mod
+
+        def _fail_commit_one_movie(*_args, **_kwargs):
+            raise AssertionError("_commit_one_movie must not run for committed resume")
+
+        monkeypatch.setattr(write_mod, "_commit_one_movie", _fail_commit_one_movie)
         counts = db_resume_finalizing_session(sid)
         assert counts["pending_deleted"] >= 1
 

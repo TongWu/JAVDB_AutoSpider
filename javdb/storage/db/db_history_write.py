@@ -1443,6 +1443,27 @@ def db_commit_session_history(
             f"finalizing / committed"
         )
 
+    if status == "committed":
+        with _get_db(history_db_path or _HISTORY_DB_PATH) as conn:
+            counts["hrefs_processed"] = len(
+                _pending_distinct_hrefs(conn, session_id)
+            )
+            cur_m = conn.execute(
+                "DELETE FROM PendingMovieHistoryWrites "
+                "WHERE SessionId=? AND ApplyState IN ('pending','applied')",
+                (session_id,),
+            )
+            cur_t = conn.execute(
+                "DELETE FROM PendingTorrentHistoryWrites "
+                "WHERE SessionId=? AND ApplyState IN ('pending','applied')",
+                (session_id,),
+            )
+            counts["pending_deleted"] = (
+                (cur_m.rowcount or 0) + (cur_t.rowcount or 0)
+            )
+        _d1_retry_pending_cleanup(session_id)
+        return counts
+
     if status == "in_progress":
         db_begin_finalize_session(session_id, db_path=reports_db_path)
 
@@ -1540,9 +1561,8 @@ def db_commit_session_history(
     #     reaches this point, flips, deletes.
     #   * crash after flip, before delete → Status='committed' + applied
     #     rows.  Resume re-enters via ``db_resume_finalizing_session`` which
-    #     accepts 'committed', re-runs the loop (idempotent on already-
-    #     applied rows since ``_pending_*_overlay`` reads both states),
-    #     reaches the no-op flip, deletes.
+    #     accepts 'committed' and deletes pending-table residue without
+    #     re-running the upsert loop.
     # The reverse order (delete first, flip last) was monitoring-hostile:
     # a crash mid-flip left ``Status='finalizing'`` with zero pending rows,
     # which any "stuck session" alert misreads as a hung commit.
@@ -1576,9 +1596,9 @@ def db_resume_finalizing_session(
 
     Identical to :func:`db_commit_session_history` aside from the
     pre-condition: the session must already be in ``finalizing`` (or
-    ``committed`` — then the call is a no-op).  Used by the rollback CLI
-    to drive a crashed-mid-commit session to ``committed`` instead of
-    rewinding it.
+    ``committed`` — then the call only cleans pending-table residue).
+    Used by the rollback CLI to drive a crashed-mid-commit session to
+    ``committed`` instead of rewinding it.
     """
     _ensure_imports()
     from javdb.storage.db.db_reports import db_get_session_status
