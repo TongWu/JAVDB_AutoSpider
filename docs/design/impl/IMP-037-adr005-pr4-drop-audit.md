@@ -408,7 +408,7 @@ git commit -m "test(db): remove audit-mode tests, keep pending-mode coverage (AD
 - Modify: `javdb/storage/db/db.py` (add migration)
 - Modify: `CLAUDE.md`
 
-- [ ] **Step 1: Add v14 migration to drop audit tables**
+- [x] **Step 1: Add v14 migration to drop audit tables**
 
 In `javdb/storage/db/db.py`, find the migration chain (the `_initialize_history_db` or equivalent function that runs schema migrations in sequence). Add a v14 migration step:
 
@@ -421,7 +421,7 @@ def _migrate_v14_drop_audit_tables(conn):
 
 Wire it into the migration dispatcher so it runs after v13. Update the schema version constant if applicable.
 
-- [ ] **Step 2: Update CLAUDE.md**
+- [x] **Step 2: Update CLAUDE.md**
 
 In `CLAUDE.md`, make these changes:
 
@@ -440,7 +440,7 @@ In `CLAUDE.md`, make these changes:
 
 5. Remove any remaining references to `JAVDB_AUDIT_WRITES_DISABLED`.
 
-- [ ] **Step 3: Run the full test suite one final time**
+- [x] **Step 3: Run the full test suite one final time**
 
 ```bash
 pytest tests/unit/ -v --timeout=60
@@ -448,7 +448,7 @@ pytest tests/unit/ -v --timeout=60
 
 Expected: All tests pass.
 
-- [ ] **Step 4: Verify no remaining audit table references in production code**
+- [x] **Step 4: Verify no remaining audit table references in production code**
 
 ```bash
 grep -rn "MovieHistoryAudit\|TorrentHistoryAudit" javdb/ apps/ --include="*.py" | grep -v "__pycache__\|test_check_bake"
@@ -456,15 +456,15 @@ grep -rn "MovieHistoryAudit\|TorrentHistoryAudit" javdb/ apps/ --include="*.py" 
 
 Expected: 0 hits in production code. The only remaining references should be in `apps/cli/ops/check_bake_metrics.py` (which handles missing tables gracefully) and its test file.
 
-- [ ] **Step 5: Verify no remaining `_audit_` function references**
+- [x] **Step 5: Verify no remaining `_audit_` function references**
 
 ```bash
 grep -rn "_audit_writes_disabled\|_audit_old_json\|_movie_audit_statement\|_torrent_audit_statement\|_rollback_history\|_is_orphan_audit\|db_upsert_history_batch\|AUDIT_WRITES_DISABLED" javdb/ apps/ --include="*.py" | grep -v "__pycache__\|test_\|\.pyc"
 ```
 
-Expected: 0 hits.
+Expected: 0 hits. (`align_inventory_with_moviehistory.py` hit is known PR-5 scope.)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add javdb/storage/db/db.py CLAUDE.md
