@@ -1058,6 +1058,7 @@ def test_init_db_dual_does_not_set_global_env_var(monkeypatch):
 
     import javdb.infra.config as _cfg
     from javdb.storage.db import db as _db
+    from javdb.storage.db import db_migrations as _db_mig
 
     monkeypatch.delenv("_STORAGE_BACKEND_INIT_OVERRIDE", raising=False)
     monkeypatch.setenv("STORAGE_BACKEND", "dual")
@@ -1079,7 +1080,9 @@ def test_init_db_dual_does_not_set_global_env_var(monkeypatch):
         if not sibling_done.wait(timeout=5):
             observed["error"] = "sibling never finished probing"
 
-    monkeypatch.setattr(_db, "_do_init", fake_do_init)
+    # _do_init now lives in db_migrations; patch it there so init_db's
+    # call resolves to the fake.
+    monkeypatch.setattr(_db_mig, "_do_init", fake_do_init)
 
     def sibling():
         if not inside_init.wait(timeout=5):
