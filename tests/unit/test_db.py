@@ -113,18 +113,28 @@ class TestInitDb:
     def test_split_db_init(self, tmp_path):
         """init_db() without db_path should create three separate DB files."""
         import javdb.infra.config as _cfg_mod
+        from javdb.storage.db import db_migrations as _db_mig
+        from javdb.storage.db import db_connection as _db_conn
         orig_override = _cfg_mod._storage_mode_override
         _cfg_mod._storage_mode_override = 'db'
 
-        orig_db = db_mod.DB_PATH
-        orig_h = db_mod.HISTORY_DB_PATH
-        orig_r = db_mod.REPORTS_DB_PATH
-        orig_o = db_mod.OPERATIONS_DB_PATH
-
-        db_mod.DB_PATH = str(tmp_path / 'old.db')
-        db_mod.HISTORY_DB_PATH = str(tmp_path / 'history.db')
-        db_mod.REPORTS_DB_PATH = str(tmp_path / 'reports.db')
-        db_mod.OPERATIONS_DB_PATH = str(tmp_path / 'operations.db')
+        # Path constants are read by db_migrations (canonical) and also
+        # re-exported via db.py / db_connection.py — patch all namespaces.
+        modules = [db_mod, _db_mig, _db_conn]
+        path_names = ['DB_PATH', 'HISTORY_DB_PATH', 'REPORTS_DB_PATH',
+                       'OPERATIONS_DB_PATH']
+        originals = {(m, n): getattr(m, n) for m in modules for n in path_names
+                      if hasattr(m, n)}
+        tmp_paths = {
+            'DB_PATH': str(tmp_path / 'old.db'),
+            'HISTORY_DB_PATH': str(tmp_path / 'history.db'),
+            'REPORTS_DB_PATH': str(tmp_path / 'reports.db'),
+            'OPERATIONS_DB_PATH': str(tmp_path / 'operations.db'),
+        }
+        for m in modules:
+            for n, v in tmp_paths.items():
+                if hasattr(m, n):
+                    setattr(m, n, v)
 
         try:
             db_mod.init_db(force=True)
@@ -157,10 +167,8 @@ class TestInitDb:
             assert 'MovieHistory' not in o_tables
         finally:
             db_mod.close_db()
-            db_mod.DB_PATH = orig_db
-            db_mod.HISTORY_DB_PATH = orig_h
-            db_mod.REPORTS_DB_PATH = orig_r
-            db_mod.OPERATIONS_DB_PATH = orig_o
+            for (m, n), v in originals.items():
+                setattr(m, n, v)
             _cfg_mod._storage_mode_override = orig_override
 
     def test_init_with_pre_rollback_schema_does_not_raise(self, tmp_path):
@@ -175,22 +183,30 @@ class TestInitDb:
         DDL, so the columns exist when the index DDL is evaluated.
         """
         import javdb.infra.config as _cfg_mod
+        from javdb.storage.db import db_migrations as _db_mig
+        from javdb.storage.db import db_connection as _db_conn
         orig_override = _cfg_mod._storage_mode_override
         _cfg_mod._storage_mode_override = 'db'
-
-        orig_db = db_mod.DB_PATH
-        orig_h = db_mod.HISTORY_DB_PATH
-        orig_r = db_mod.REPORTS_DB_PATH
-        orig_o = db_mod.OPERATIONS_DB_PATH
 
         history_path = str(tmp_path / 'history.db')
         reports_path = str(tmp_path / 'reports.db')
         operations_path = str(tmp_path / 'operations.db')
 
-        db_mod.DB_PATH = str(tmp_path / 'old.db')
-        db_mod.HISTORY_DB_PATH = history_path
-        db_mod.REPORTS_DB_PATH = reports_path
-        db_mod.OPERATIONS_DB_PATH = operations_path
+        modules = [db_mod, _db_mig, _db_conn]
+        path_names = ['DB_PATH', 'HISTORY_DB_PATH', 'REPORTS_DB_PATH',
+                       'OPERATIONS_DB_PATH']
+        originals = {(m, n): getattr(m, n) for m in modules for n in path_names
+                      if hasattr(m, n)}
+        tmp_paths = {
+            'DB_PATH': str(tmp_path / 'old.db'),
+            'HISTORY_DB_PATH': history_path,
+            'REPORTS_DB_PATH': reports_path,
+            'OPERATIONS_DB_PATH': operations_path,
+        }
+        for m in modules:
+            for n, v in tmp_paths.items():
+                if hasattr(m, n):
+                    setattr(m, n, v)
 
         try:
             # Hand-craft pre-rollback schema (no SessionId / Status columns,
@@ -327,10 +343,8 @@ class TestInitDb:
 
         finally:
             db_mod.close_db()
-            db_mod.DB_PATH = orig_db
-            db_mod.HISTORY_DB_PATH = orig_h
-            db_mod.REPORTS_DB_PATH = orig_r
-            db_mod.OPERATIONS_DB_PATH = orig_o
+            for (m, n), v in originals.items():
+                setattr(m, n, v)
             _cfg_mod._storage_mode_override = orig_override
 
     def test_legacy_single_db_v5_sessions_keep_in_progress_status(self, tmp_path):
@@ -458,19 +472,27 @@ class TestInitDb:
     def test_split_migration_from_single_db(self, tmp_path):
         """Placing a v6 single DB at DB_PATH triggers automatic split."""
         import javdb.infra.config as _cfg_mod
+        from javdb.storage.db import db_migrations as _db_mig
+        from javdb.storage.db import db_connection as _db_conn
         orig_override = _cfg_mod._storage_mode_override
         _cfg_mod._storage_mode_override = 'db'
 
-        orig_db = db_mod.DB_PATH
-        orig_h = db_mod.HISTORY_DB_PATH
-        orig_r = db_mod.REPORTS_DB_PATH
-        orig_o = db_mod.OPERATIONS_DB_PATH
-
         single_db = str(tmp_path / 'javdb_autospider.db')
-        db_mod.DB_PATH = single_db
-        db_mod.HISTORY_DB_PATH = str(tmp_path / 'history.db')
-        db_mod.REPORTS_DB_PATH = str(tmp_path / 'reports.db')
-        db_mod.OPERATIONS_DB_PATH = str(tmp_path / 'operations.db')
+        modules = [db_mod, _db_mig, _db_conn]
+        path_names = ['DB_PATH', 'HISTORY_DB_PATH', 'REPORTS_DB_PATH',
+                       'OPERATIONS_DB_PATH']
+        originals = {(m, n): getattr(m, n) for m in modules for n in path_names
+                      if hasattr(m, n)}
+        tmp_paths = {
+            'DB_PATH': single_db,
+            'HISTORY_DB_PATH': str(tmp_path / 'history.db'),
+            'REPORTS_DB_PATH': str(tmp_path / 'reports.db'),
+            'OPERATIONS_DB_PATH': str(tmp_path / 'operations.db'),
+        }
+        for m in modules:
+            for n, v in tmp_paths.items():
+                if hasattr(m, n):
+                    setattr(m, n, v)
 
         try:
             # Create v6 single DB with some data
@@ -520,10 +542,8 @@ class TestInitDb:
             assert len(dedup) >= 1
         finally:
             db_mod.close_db()
-            db_mod.DB_PATH = orig_db
-            db_mod.HISTORY_DB_PATH = orig_h
-            db_mod.REPORTS_DB_PATH = orig_r
-            db_mod.OPERATIONS_DB_PATH = orig_o
+            for (m, n), v in originals.items():
+                setattr(m, n, v)
             _cfg_mod._storage_mode_override = orig_override
 
 
