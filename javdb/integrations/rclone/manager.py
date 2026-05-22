@@ -1224,7 +1224,11 @@ def run_rclone_manager(
         # rather than stale rows. A partial scan drops staging and leaves the
         # live RcloneInventory untouched.
         from javdb.storage.db.db_migrations import init_db
-        from javdb.storage.db.db_reports import db_create_report_session
+        from javdb.storage.db.db_reports import (
+            db_create_report_session,
+            db_mark_session_committed,
+            db_mark_session_failed,
+        )
         from javdb.storage.db.db_operations import (
             db_open_rclone_staging,
             db_append_rclone_staging,
@@ -1235,24 +1239,40 @@ def run_rclone_manager(
 
         init_db()
         staging_sid = get_active_session_id()
-        if staging_sid is None:
+        # Only finalize (commit/fail) a session we created ourselves — an
+        # inherited active session is owned by the caller.
+        created_local_session = staging_sid is None
+        if created_local_session:
             staging_sid = db_create_report_session(
                 report_type="rclone_inventory",
                 report_date=datetime.now().strftime("%Y%m%d"),
                 csv_filename=RCLONE_INVENTORY_CSV,
             )
         db_open_rclone_staging(staging_sid)
-        total_rows, error_count = scan_inventory(
-            remote_name,
-            root_folder,
-            row_callback=lambda rows: db_append_rclone_staging(
-                rows, session_id=staging_sid
-            ),
-        )
-        if error_count == 0:
-            db_swap_rclone_inventory(session_id=staging_sid)
-        else:
+        try:
+            total_rows, error_count = scan_inventory(
+                remote_name,
+                root_folder,
+                row_callback=lambda rows: db_append_rclone_staging(
+                    rows, session_id=staging_sid
+                ),
+            )
+            if error_count == 0:
+                db_swap_rclone_inventory(session_id=staging_sid)
+                if created_local_session:
+                    db_mark_session_committed(staging_sid)
+            else:
+                # Partial scan — drop staging, leave live inventory untouched.
+                db_drop_rclone_staging(staging_sid)
+                if created_local_session:
+                    db_mark_session_failed(staging_sid)
+        except Exception:
+            # scan_inventory / swap raised — never leave the staging table or
+            # the report session dangling in an in-progress state.
             db_drop_rclone_staging(staging_sid)
+            if created_local_session:
+                db_mark_session_failed(staging_sid)
+            raise
         phase_results["scan"] = {
             "exit_code": 0 if error_count == 0 else 1,
             "total_rows": total_rows,
