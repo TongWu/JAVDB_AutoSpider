@@ -350,14 +350,22 @@ def rclone_last(
                 if last_scan_time is None or ts > last_scan_time:
                     last_scan_time = ts
 
-    dedup_pending = sum(1 for r in dedup if not r.get("IsDeleted"))
-    dedup_completed = sum(1 for r in dedup if r.get("IsDeleted"))
+    def _is_deleted(value) -> bool:
+        # IsDeleted may arrive as int 0/1 or string '0'/'1' depending on the
+        # backend — a plain truthy check would miscount the string '0'.
+        try:
+            return int(value or 0) == 1
+        except (TypeError, ValueError):
+            return str(value).strip().lower() in {"true", "t", "yes", "y"}
+
+    dedup_pending = sum(1 for r in dedup if not _is_deleted(r.get("IsDeleted")))
+    dedup_completed = sum(1 for r in dedup if _is_deleted(r.get("IsDeleted")))
     # Sum ExistingFolderSize for completed (deleted) records as the proxy
     # for freed bytes — this is the closest per-row size column available.
     total_freed_bytes = sum(
         int(r.get("ExistingFolderSize") or 0)
         for r in dedup
-        if r.get("IsDeleted")
+        if _is_deleted(r.get("IsDeleted"))
     )
 
     return RcloneLastResponse(

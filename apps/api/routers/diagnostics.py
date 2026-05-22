@@ -50,7 +50,9 @@ def _is_refresh_recent(last_refresh_time: str | None, max_age_hours: int = 24) -
     try:
         dt = datetime.fromisoformat(last_refresh_time.replace("Z", "+00:00"))
         now = datetime.now(timezone.utc)
-        return (now - dt) < timedelta(hours=max_age_hours)
+        age = now - dt
+        # A future timestamp (clock drift / dirty data) is not "recent".
+        return timedelta(0) <= age < timedelta(hours=max_age_hours)
     except Exception:
         return False
 
@@ -96,22 +98,26 @@ async def refresh_javdb_session_diag(
                 detail="cookie_value is required when method='cookie_paste'",
             )
 
-        # Persist the cookie via config_service (same mechanism as the existing
-        # login/refresh endpoint) and record the refresh timestamp.
+        # Persisting the cookie is the critical step — a failure here is a real
+        # error. Recording the refresh timestamp is best-effort: if it fails the
+        # cookie is still saved, so it must not flip the response to success=False.
         try:
             from apps.api.services import config_service  # noqa: PLC0415
 
             config_service.update_config_payload(
                 {"JAVDB_SESSION_COOKIE": cookie_value}, current["sub"]
             )
-            ts = datetime.now(timezone.utc).isoformat()
-            _set_last_refresh_time(ts)
         except Exception as exc:
             return JavdbSessionRefreshResponse(
                 success=False,
                 method=method,
                 error=f"Failed to persist cookie: {exc}",
             )
+
+        try:
+            _set_last_refresh_time(datetime.now(timezone.utc).isoformat())
+        except Exception as exc:
+            logger.warning("Failed to persist last_javdb_refresh: %s", exc)
 
         return JavdbSessionRefreshResponse(
             success=True,
@@ -161,10 +167,9 @@ async def refresh_javdb_session_diag(
             )
 
     else:
-        return JavdbSessionRefreshResponse(
-            success=False,
-            method=method,
-            error=f"Unknown method: {method!r}. Must be 'headless' or 'cookie_paste'.",
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown method: {method!r}. Must be 'headless' or 'cookie_paste'.",
         )
 
 

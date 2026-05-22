@@ -258,6 +258,8 @@ __all__ = [
     "health_check",
     "history_router",
     "operations_router",
+    "diagnostics_router",
+    "gh_actions_router",
     "list_tasks",
     "login",
     "logout",

@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import csv
 import io
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Iterator, List, Optional, Tuple
 
 from apps.api.parsers.common import (
@@ -41,23 +41,19 @@ def _normalize_date_bound(value: str, *, is_end: bool) -> str:
             return dt.strftime("%Y-%m-%d 00:00:00")
         except ValueError:
             pass
-    # Strip trailing Z before fromisoformat (Python <3.11 doesn't accept it)
-    if v.endswith("Z"):
-        v = v[:-1]
-    # Replace T separator so fromisoformat handles both styles
-    v = v.replace("T", " ")
-    # Drop timezone offset (e.g. +05:30) — keep only the datetime portion
-    # A '+' or '-' after position 10 indicates a timezone offset.
-    for sep in ("+", "-"):
-        pos = v.find(sep, 10)
-        if pos != -1:
-            v = v[:pos]
-            break
+    # Normalize a trailing 'Z' to an explicit UTC offset. datetime.fromisoformat
+    # (3.11+) accepts both the 'T' and space separators and a timezone offset.
+    iso = (v[:-1] + "+00:00") if v.endswith("Z") else v
     try:
-        dt = datetime.fromisoformat(v)
-        return dt.strftime("%Y-%m-%d %H:%M:%S")
+        dt = datetime.fromisoformat(iso)
     except ValueError:
         raise ValueError(f"invalid date: {value!r}")
+    # A timezone-aware input is converted to UTC and made naive so the SQL
+    # comparison matches the DB's UTC-naive datetime strings — truncating the
+    # offset (the previous behaviour) silently mis-shifted cross-timezone input.
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt.strftime("%Y-%m-%d %H:%M:%S")
 
 
 def load_history_joined(conn) -> Dict[str, dict]:
