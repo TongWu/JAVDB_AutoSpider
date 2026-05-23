@@ -6,10 +6,12 @@ import hmac
 import json
 import os
 import secrets
+import sys
 import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import ModuleType
 from typing import Any, Dict, Optional
 
 import jwt
@@ -23,6 +25,17 @@ PASSWORD_CTX = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 _RUNTIME_ENV = os.getenv("ENVIRONMENT", os.getenv("FLASK_ENV", "")).strip().lower()
 _IS_PRODUCTION_ENV = _RUNTIME_ENV == "production"
+_AUTH_RUNTIME_STATE_MODULE = "apps.api.infra._auth_runtime_state"
+
+
+def _auth_runtime_state() -> ModuleType:
+    state = sys.modules.get(_AUTH_RUNTIME_STATE_MODULE)
+    if isinstance(state, ModuleType):
+        return state
+    state = ModuleType(_AUTH_RUNTIME_STATE_MODULE)
+    state.ephemeral_api_secret = ""
+    sys.modules[_AUTH_RUNTIME_STATE_MODULE] = state
+    return state
 
 # Path to the API config override store (reports/api_config_store.json).
 # This is the same file written by config_service.save_store() — kept as a
@@ -85,7 +98,11 @@ API_SECRET_KEY = _resolve("API_SECRET_KEY", "")
 if not API_SECRET_KEY:
     if _IS_PRODUCTION_ENV:
         raise RuntimeError("API_SECRET_KEY is required.")
-    API_SECRET_KEY = secrets.token_urlsafe(48)
+    _state = _auth_runtime_state()
+    API_SECRET_KEY = str(getattr(_state, "ephemeral_api_secret", "") or "")
+    if not API_SECRET_KEY:
+        API_SECRET_KEY = secrets.token_urlsafe(48)
+        _state.ephemeral_api_secret = API_SECRET_KEY
     context.logger.warning(
         "API_SECRET_KEY missing in non-production; generated ephemeral secret for this process."
     )
