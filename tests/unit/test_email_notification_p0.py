@@ -143,7 +143,7 @@ def test_local_stats_getter_uses_sqlite_regardless_of_backend(monkeypatch, tmp_p
     import sqlite3
 
     monkeypatch.setenv("STORAGE_BACKEND", "sqlite")
-    from javdb.storage.db.db_stats import db_get_spider_stats_local
+    from javdb.storage.db import db_get_spider_stats_local
 
     test_db = tmp_path / "reports.db"
     # Lay down just enough schema for the read path under test. Using

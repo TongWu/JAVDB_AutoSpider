@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from javdb.storage.db import db_session
+from javdb.storage.db import _db_session as db_session
 
 
 @pytest.fixture(autouse=True)

@@ -32,13 +32,14 @@ import sys
 from datetime import datetime, timezone
 from typing import List, Optional
 
-import javdb.storage.db.db_connection as _db_conn
-from javdb.storage.db.db_connection import close_db, get_db
-from javdb.storage.db.db_rollback import (
+import javdb.storage.db as _db
+from javdb.storage.db import (
+    close_db,
+    get_db,
     db_resume_finalizing_session,
     db_rollback_session,
 )
-from javdb.storage.db import db_migrations as _db_mig
+import javdb.storage.db._db_migrations as _db_mig
 from javdb.storage.repos.sessions_repo import SessionsRepo
 from javdb.infra.logging import (
     get_logger,
@@ -50,10 +51,19 @@ logger = get_logger(__name__)
 
 
 def _sync_db_migration_paths() -> None:
-    for name in (
-        "DB_PATH", "HISTORY_DB_PATH", "REPORTS_DB_PATH", "OPERATIONS_DB_PATH",
+    from javdb.storage.db import (
+        DB_PATH as _DB_PATH,
+        HISTORY_DB_PATH as _HISTORY_DB_PATH,
+        REPORTS_DB_PATH as _REPORTS_DB_PATH,
+        OPERATIONS_DB_PATH as _OPERATIONS_DB_PATH,
+    )
+    for name, val in (
+        ("DB_PATH", _DB_PATH),
+        ("HISTORY_DB_PATH", _HISTORY_DB_PATH),
+        ("REPORTS_DB_PATH", _REPORTS_DB_PATH),
+        ("OPERATIONS_DB_PATH", _OPERATIONS_DB_PATH),
     ):
-        setattr(_db_mig, name, getattr(_db_conn, name))
+        setattr(_db_mig, name, val)
 
 
 def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
@@ -110,7 +120,7 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
 
 
 def _read_session_meta(session_id: str) -> dict:
-    with get_db(_db_conn.REPORTS_DB_PATH) as conn:
+    with get_db(_db.REPORTS_DB_PATH) as conn:
         row = SessionsRepo(conn).get_cleanup_meta(session_id)
     if row is None:
         return {"Id": session_id}
@@ -143,7 +153,9 @@ def run_stale_cleanup(
         raise RuntimeError(f"Failed to init DB: {e}") from e
 
     try:
-        from javdb.storage.db.db_reports import db_find_stale_pending_sessions
+        from javdb.storage.db import (
+            db_find_stale_pending_sessions,
+        )
         rows = db_find_stale_pending_sessions(
             max_age_hours=max_age_hours,
             require_run_identity=not include_legacy,

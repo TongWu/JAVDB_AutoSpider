@@ -8,29 +8,21 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 sys.path.insert(0, project_root)
 
 import pytest
-import javdb.storage.db.db_connection as _db_conn
-from javdb.storage.db.db_connection import (
+import javdb.storage.db._db_connection as _db_conn
+from javdb.storage.db import (
     get_db, close_db, SCHEMA_VERSION, _DB_OPERATIONAL_ERRORS,
     _DB_INTEGRITY_ERRORS,
-)
-from javdb.storage.db.db_migrations import (
     init_db, _init_single_db, _init_single_legacy_db, _REPORTS_DDL,
     moviehistory_actor_layout_ok, _normalize_moviehistory_actor_column_order,
-)
-from javdb.storage.db.db_session import SESSION_ID_PATTERN as _SESSION_ID_PATTERN
-from javdb.storage.db.db_reports import (
+    SESSION_ID_PATTERN as _SESSION_ID_PATTERN,
     db_create_report_session, db_insert_report_rows, db_get_report_rows,
     db_get_latest_session, db_get_sessions_by_date, db_find_in_progress_sessions,
-)
-from javdb.storage.db.db_history_read import db_load_history
-from javdb.storage.db.db_history_write import db_stage_history_write
-from javdb.storage.db.db_operations import (
+    db_load_history,
+    db_stage_history_write,
     db_replace_rclone_inventory, db_load_rclone_inventory,
     db_append_dedup_record, db_load_dedup_records, db_save_dedup_records,
     db_mark_records_deleted, db_cleanup_deleted_records, db_mark_orphan_records,
     db_delete_rclone_inventory_paths, db_append_pikpak_history,
-)
-from javdb.storage.db.db_stats import (
     db_save_spider_stats, db_get_spider_stats,
     db_save_uploader_stats, db_get_uploader_stats,
     db_save_pikpak_stats, db_get_pikpak_stats,
@@ -140,8 +132,8 @@ class TestInitDb:
     def test_split_db_init(self, tmp_path):
         """init_db() without db_path should create three separate DB files."""
         import javdb.infra.config as _cfg_mod
-        from javdb.storage.db import db_migrations as _db_mig
-        from javdb.storage.db import db_connection as _db_conn
+        from javdb.storage.db import _db_migrations as _db_mig
+        from javdb.storage.db import _db_connection as _db_conn
         orig_override = _cfg_mod._storage_mode_override
         _cfg_mod._storage_mode_override = 'db'
 
@@ -210,8 +202,8 @@ class TestInitDb:
         DDL, so the columns exist when the index DDL is evaluated.
         """
         import javdb.infra.config as _cfg_mod
-        from javdb.storage.db import db_migrations as _db_mig
-        from javdb.storage.db import db_connection as _db_conn
+        from javdb.storage.db import _db_migrations as _db_mig
+        from javdb.storage.db import _db_connection as _db_conn
         orig_override = _cfg_mod._storage_mode_override
         _cfg_mod._storage_mode_override = 'db'
 
@@ -499,8 +491,8 @@ class TestInitDb:
     def test_split_migration_from_single_db(self, tmp_path):
         """Placing a v6 single DB at DB_PATH triggers automatic split."""
         import javdb.infra.config as _cfg_mod
-        from javdb.storage.db import db_migrations as _db_mig
-        from javdb.storage.db import db_connection as _db_conn
+        from javdb.storage.db import _db_migrations as _db_mig
+        from javdb.storage.db import _db_connection as _db_conn
         orig_override = _cfg_mod._storage_mode_override
         _cfg_mod._storage_mode_override = 'db'
 
@@ -1154,7 +1146,7 @@ class TestSnowflakeProcessTag:
     """
 
     def test_ids_within_one_process_are_monotonic(self):
-        from javdb.storage.db.db_session import generate_session_id
+        from javdb.storage.db import generate_session_id
         ids = [generate_session_id() for _ in range(50)]
         assert ids == sorted(ids), "snowflake Ids must be monotonic"
         assert len(set(ids)) == len(ids), "snowflake Ids must be unique"
@@ -1163,7 +1155,7 @@ class TestSnowflakeProcessTag:
         """Tag is fixed at import time, so every Id from one process
         shares the same hex tag segment (the second ``-``-delimited block).
         """
-        from javdb.storage.db.db_session import generate_session_id
+        from javdb.storage.db import generate_session_id
         ids = [generate_session_id() for _ in range(30)]
         tags = {sid.split("-")[1] for sid in ids}
         assert len(tags) == 1, (
@@ -1175,7 +1167,7 @@ class TestSnowflakeProcessTag:
         sibling Python process that drew a different ``secrets.randbits``)
         and confirm the two Id streams are disjoint.
         """
-        from javdb.storage.db import db_session as _sess_mod
+        from javdb.storage.db import _db_session as _sess_mod
 
         ids_a = [_sess_mod.generate_session_id() for _ in range(3)]
 

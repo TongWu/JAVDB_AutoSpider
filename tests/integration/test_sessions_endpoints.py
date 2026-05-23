@@ -12,7 +12,7 @@ import pytest
 
 @pytest.fixture(autouse=True, scope="module")
 def _ensure_db_initialized():
-    from javdb.storage.db.db_migrations import init_db
+    from javdb.storage.db import init_db
     init_db()
 
 
@@ -27,7 +27,7 @@ def seeded_session_id():
     """
     import sqlite3 as _sqlite3
     # Import dynamically so we get the patched temp path set by _isolate_sqlite.
-    from javdb.storage.db.db_connection import REPORTS_DB_PATH
+    from javdb.storage.db import REPORTS_DB_PATH
     sid = "20260516T120000.000000Z-TEST-0001"
     with _sqlite3.connect(str(REPORTS_DB_PATH)) as conn:
         conn.execute(
@@ -81,7 +81,7 @@ def test_detail_returns_shape_for_known_id(admin_client, seeded_session_id):
 def test_commit_force_works_on_in_progress(admin_client):
     """Seed an in_progress session and force-commit it."""
     import sqlite3 as _sqlite3
-    from javdb.storage.db.db_connection import REPORTS_DB_PATH
+    from javdb.storage.db import REPORTS_DB_PATH
     fin_sid = "20260516T130000.000000Z-TEST-FIN1"
     with _sqlite3.connect(str(REPORTS_DB_PATH)) as conn:
         conn.execute(
@@ -114,7 +114,7 @@ def test_commit_endpoint_emits_metrics_by_default_on_pending(admin_client, tmp_p
     import json
     import sqlite3 as _sqlite3
     from pathlib import Path
-    from javdb.storage.db.db_connection import REPORTS_DB_PATH
+    from javdb.storage.db import REPORTS_DB_PATH
 
     monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
     sid = "20260516T140000.000000Z-TEST-PEND"
@@ -151,7 +151,7 @@ def test_commit_endpoint_opts_out_of_metrics(admin_client, tmp_path, monkeypatch
     """Explicit emit_metrics=False suppresses the JSONL record."""
     import sqlite3 as _sqlite3
     from pathlib import Path
-    from javdb.storage.db.db_connection import REPORTS_DB_PATH
+    from javdb.storage.db import REPORTS_DB_PATH
 
     monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
     sid = "20260516T140500.000000Z-TEST-OPTOUT"

@@ -947,7 +947,7 @@ def test_uncommitted_writes_reset_after_commit(monkeypatch, sqlite_conn, tmp_pat
 
 def test_current_backend_reflects_env(monkeypatch):
     """``current_backend()`` should reflect the active STORAGE_BACKEND."""
-    from javdb.storage.db.db_connection import current_backend
+    from javdb.storage.db import current_backend
 
     monkeypatch.delenv("_STORAGE_BACKEND_INIT_OVERRIDE", raising=False)
 
@@ -997,7 +997,7 @@ def test_backend_mode_thread_local_invisible_to_siblings(monkeypatch):
     """
     import threading
 
-    from javdb.storage.db import db_connection as _db_conn
+    from javdb.storage.db import _db_connection as _db_conn
 
     monkeypatch.delenv("_STORAGE_BACKEND_INIT_OVERRIDE", raising=False)
     monkeypatch.setenv("STORAGE_BACKEND", "dual")
@@ -1057,8 +1057,8 @@ def test_init_db_dual_does_not_set_global_env_var(monkeypatch):
     import threading
 
     import javdb.infra.config as _cfg
-    from javdb.storage.db import db_connection as _db_conn
-    from javdb.storage.db import db_migrations as _db_mig
+    from javdb.storage.db import _db_connection as _db_conn
+    from javdb.storage.db import _db_migrations as _db_mig
 
     monkeypatch.delenv("_STORAGE_BACKEND_INIT_OVERRIDE", raising=False)
     monkeypatch.setenv("STORAGE_BACKEND", "dual")
@@ -1566,10 +1566,7 @@ def test_db_stage_history_write_supplies_explicit_seq():
     because production writes go back through AUTOINCREMENT (and that's
     exactly the silent-residual scenario R2 was filed against).
     """
-    from javdb.storage.db.db_connection import get_db, HISTORY_DB_PATH
-    from javdb.storage.db.db_history_write import db_stage_history_write
-    from javdb.storage.db.db_reports import db_create_report_session
-    from javdb.storage.db.db_session import SESSION_ID_PATTERN
+    from javdb.storage.db import get_db, HISTORY_DB_PATH, db_stage_history_write, db_create_report_session, SESSION_ID_PATTERN
 
     # The autouse `_isolate_sqlite` conftest fixture has already pointed
     # HISTORY_DB_PATH at a temp file and run init_db.  Stage one
@@ -1604,10 +1601,7 @@ def test_db_stage_history_write_supplies_explicit_seq():
 
 def test_db_stage_history_write_torrent_supplies_explicit_seq():
     """Same as above for the torrent staging path."""
-    from javdb.storage.db.db_connection import get_db, HISTORY_DB_PATH
-    from javdb.storage.db.db_history_write import db_stage_history_write
-    from javdb.storage.db.db_reports import db_create_report_session
-    from javdb.storage.db.db_session import SESSION_ID_PATTERN
+    from javdb.storage.db import get_db, HISTORY_DB_PATH, db_stage_history_write, db_create_report_session, SESSION_ID_PATTERN
 
     db_create_report_session(
         report_type="DailyReport",

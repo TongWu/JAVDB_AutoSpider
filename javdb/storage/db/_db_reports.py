@@ -39,13 +39,13 @@ def _ensure_imports():
     global _get_db, _get_local_sqlite_db, _REPORTS_DB_PATH, _HISTORY_DB_PATH
     global _generate_session_id, _resolve_write_mode, _DB_OPERATIONAL_ERRORS
     if _get_db is None:
-        from javdb.storage.db.db_connection import (
+        from javdb.storage.db._db_connection import (
             get_db,
             get_local_sqlite_db,
             REPORTS_DB_PATH,
             HISTORY_DB_PATH,
         )
-        from javdb.storage.db.db_session import (
+        from javdb.storage.db._db_session import (
             generate_session_id,
             _resolve_write_mode as resolve_wm,
         )

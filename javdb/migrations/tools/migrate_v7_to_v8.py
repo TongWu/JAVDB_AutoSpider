@@ -53,7 +53,7 @@ from javdb.infra.logging import setup_logging, get_logger  # noqa: E402
 setup_logging()
 logger = get_logger(__name__)
 
-from javdb.storage.db.db_migrations import moviehistory_actor_layout_ok  # noqa: E402
+from javdb.storage.db import moviehistory_actor_layout_ok  # noqa: E402
 
 EXPECTED_VERSION = 9
 
@@ -163,8 +163,7 @@ def run_schema_migration(
     dry_run: bool,
     verify: bool,
 ) -> int:
-    from javdb.storage.db.db_connection import HISTORY_DB_PATH, REPORTS_DB_PATH, OPERATIONS_DB_PATH
-    from javdb.storage.db.db_migrations import init_db
+    from javdb.storage.db import HISTORY_DB_PATH, REPORTS_DB_PATH, OPERATIONS_DB_PATH, init_db
     from javdb.infra.config import use_sqlite
 
     if not use_sqlite():
@@ -408,7 +407,7 @@ def run_actor_backfill(
     use_cf_bypass: bool,
 ) -> int:
     from javdb.infra.config import use_sqlite
-    from javdb.storage.db.db_migrations import init_db
+    from javdb.storage.db import init_db
 
     if not use_sqlite():
         logger.error("SQLite storage mode required.")
@@ -696,7 +695,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    from javdb.storage.db.db_connection import HISTORY_DB_PATH as _HIST_DB
+    from javdb.storage.db import HISTORY_DB_PATH as _HIST_DB
 
     history_db = args.history_db or _HIST_DB
 
