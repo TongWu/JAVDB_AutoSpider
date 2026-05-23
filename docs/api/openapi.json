@@ -210,6 +210,129 @@
         "title": "ChangePasswordPayload",
         "type": "object"
       },
+      "CleanupClaimStagesRequest": {
+        "properties": {
+          "older_than_hours": {
+            "default": 6.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Older Than Hours",
+            "type": "number"
+          },
+          "shard_dates": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shard Dates"
+          }
+        },
+        "title": "CleanupClaimStagesRequest",
+        "type": "object"
+      },
+      "CleanupClaimStagesResponse": {
+        "properties": {
+          "details": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Details",
+            "type": "array"
+          },
+          "shards_processed": {
+            "title": "Shards Processed",
+            "type": "integer"
+          },
+          "stages_reaped": {
+            "title": "Stages Reaped",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "shards_processed",
+          "stages_reaped",
+          "details"
+        ],
+        "title": "CleanupClaimStagesResponse",
+        "type": "object"
+      },
+      "CleanupStaleRequest": {
+        "properties": {
+          "dry_run": {
+            "default": true,
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "include_legacy": {
+            "default": false,
+            "title": "Include Legacy",
+            "type": "boolean"
+          },
+          "older_than_hours": {
+            "default": 48.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Older Than Hours",
+            "type": "number"
+          },
+          "scope": {
+            "default": "all",
+            "enum": [
+              "reports",
+              "operations",
+              "history",
+              "all"
+            ],
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "title": "CleanupStaleRequest",
+        "type": "object"
+      },
+      "CleanupStaleResponse": {
+        "properties": {
+          "details": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Details",
+            "type": "array"
+          },
+          "dry_run": {
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "sessions_cleaned": {
+            "title": "Sessions Cleaned",
+            "type": "integer"
+          },
+          "sessions_failed": {
+            "title": "Sessions Failed",
+            "type": "integer"
+          },
+          "sessions_found": {
+            "title": "Sessions Found",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sessions_found",
+          "sessions_cleaned",
+          "sessions_failed",
+          "dry_run",
+          "details"
+        ],
+        "title": "CleanupStaleResponse",
+        "type": "object"
+      },
       "ConfigResponse": {
         "additionalProperties": true,
         "description": "GET /api/config returns the masked runtime config dict verbatim.",
@@ -390,6 +513,191 @@
           "hint_id"
         ],
         "title": "DismissHintPayload",
+        "type": "object"
+      },
+      "DispatchRequest": {
+        "properties": {
+          "inputs": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inputs"
+          },
+          "ref": {
+            "default": "main",
+            "title": "Ref",
+            "type": "string"
+          },
+          "workflow_id": {
+            "title": "Workflow Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "workflow_id"
+        ],
+        "title": "DispatchRequest",
+        "type": "object"
+      },
+      "DispatchResponse": {
+        "properties": {
+          "dispatched": {
+            "title": "Dispatched",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "dispatched"
+        ],
+        "title": "DispatchResponse",
+        "type": "object"
+      },
+      "EmailHistoryItem": {
+        "properties": {
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "recipient": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipient"
+          },
+          "resent_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resent At"
+          },
+          "sent_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sent At"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          }
+        },
+        "required": [
+          "id",
+          "session_id",
+          "recipient",
+          "subject",
+          "status",
+          "error_message",
+          "sent_at",
+          "resent_at"
+        ],
+        "title": "EmailHistoryItem",
+        "type": "object"
+      },
+      "EmailHistoryResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EmailHistoryItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "EmailHistoryResponse",
+        "type": "object"
+      },
+      "EmailTestRequest": {
+        "properties": {
+          "recipient": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipient"
+          }
+        },
+        "title": "EmailTestRequest",
         "type": "object"
       },
       "ExploreCookiePayload": {
@@ -919,6 +1227,125 @@
         "title": "JavdbLoginRefreshResponseV2",
         "type": "object"
       },
+      "JavdbSessionRefreshRequest": {
+        "description": "Request body for POST /api/diag/javdb-session/refresh.",
+        "properties": {
+          "cookie_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cookie Value"
+          },
+          "method": {
+            "default": "headless",
+            "title": "Method",
+            "type": "string"
+          }
+        },
+        "title": "JavdbSessionRefreshRequest",
+        "type": "object"
+      },
+      "JavdbSessionRefreshResponse": {
+        "description": "Response for POST /api/diag/javdb-session/refresh.",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "method": {
+            "title": "Method",
+            "type": "string"
+          },
+          "new_cookie_preview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New Cookie Preview"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "method"
+        ],
+        "title": "JavdbSessionRefreshResponse",
+        "type": "object"
+      },
+      "JavdbSessionStatus": {
+        "description": "Status of the current JavDB session cookie.",
+        "properties": {
+          "cookie_present": {
+            "title": "Cookie Present",
+            "type": "boolean"
+          },
+          "cookie_value_preview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cookie Value Preview"
+          },
+          "estimated_expiry": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Expiry"
+          },
+          "is_likely_valid": {
+            "title": "Is Likely Valid",
+            "type": "boolean"
+          },
+          "last_refresh_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Refresh Time"
+          }
+        },
+        "required": [
+          "cookie_present",
+          "cookie_value_preview",
+          "last_refresh_time",
+          "estimated_expiry",
+          "is_likely_valid"
+        ],
+        "title": "JavdbSessionStatus",
+        "type": "object"
+      },
       "JobSummaryResponse": {
         "additionalProperties": true,
         "description": "Per-job summary returned by /api/tasks endpoints.",
@@ -1128,6 +1555,144 @@
         "title": "LoginResponse",
         "type": "object"
       },
+      "MovieSearchItem": {
+        "description": "A single MovieHistory row in the search response.",
+        "properties": {
+          "actor_gender": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Gender"
+          },
+          "actor_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Name"
+          },
+          "datetime_created": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Datetime Created"
+          },
+          "datetime_updated": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Datetime Updated"
+          },
+          "hi_res": {
+            "title": "Hi Res",
+            "type": "boolean"
+          },
+          "href": {
+            "title": "Href",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "perfect_match": {
+            "title": "Perfect Match",
+            "type": "boolean"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "supporting_actors": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supporting Actors"
+          },
+          "torrent_count": {
+            "title": "Torrent Count",
+            "type": "integer"
+          },
+          "video_code": {
+            "title": "Video Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "video_code",
+          "href",
+          "perfect_match",
+          "hi_res",
+          "torrent_count"
+        ],
+        "title": "MovieSearchItem",
+        "type": "object"
+      },
+      "MovieSearchResponse": {
+        "description": "Paginated response for GET /api/history/movies.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MovieSearchItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "total_estimate": {
+            "title": "Total Estimate",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total_estimate"
+        ],
+        "title": "MovieSearchResponse",
+        "type": "object"
+      },
       "NextScheduleInfo": {
         "additionalProperties": true,
         "properties": {
@@ -1235,6 +1800,413 @@
         "title": "OnboardingTestResponse",
         "type": "object"
       },
+      "PikPakQueueItem": {
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "datetime_added_to_qb": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Datetime Added To Qb"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "torrent_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Torrent Hash"
+          },
+          "torrent_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Torrent Name"
+          },
+          "transfer_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transfer Status"
+          }
+        },
+        "required": [
+          "id",
+          "torrent_hash",
+          "torrent_name",
+          "category",
+          "transfer_status",
+          "error_message",
+          "datetime_added_to_qb"
+        ],
+        "title": "PikPakQueueItem",
+        "type": "object"
+      },
+      "PikPakQueueResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PikPakQueueItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "PikPakQueueResponse",
+        "type": "object"
+      },
+      "PikPakTransferRequest": {
+        "properties": {
+          "days": {
+            "default": 7,
+            "title": "Days",
+            "type": "integer"
+          },
+          "dry_run": {
+            "default": true,
+            "title": "Dry Run",
+            "type": "boolean"
+          }
+        },
+        "title": "PikPakTransferRequest",
+        "type": "object"
+      },
+      "PikPakTransferResponse": {
+        "properties": {
+          "details": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Details",
+            "type": "array"
+          },
+          "dry_run": {
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "failed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failed"
+          },
+          "skipped": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skipped"
+          },
+          "transferred": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transferred"
+          }
+        },
+        "required": [
+          "transferred",
+          "failed",
+          "skipped",
+          "dry_run",
+          "details"
+        ],
+        "title": "PikPakTransferResponse",
+        "type": "object"
+      },
+      "QbFilterSmallRequest": {
+        "properties": {
+          "categories": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Categories"
+          },
+          "days": {
+            "default": 2,
+            "title": "Days",
+            "type": "integer"
+          },
+          "delete_local_files": {
+            "default": false,
+            "title": "Delete Local Files",
+            "type": "boolean"
+          },
+          "dry_run": {
+            "default": true,
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "min_size_mb": {
+            "default": 100.0,
+            "title": "Min Size Mb",
+            "type": "number"
+          }
+        },
+        "title": "QbFilterSmallRequest",
+        "type": "object"
+      },
+      "QbFilterSmallResponse": {
+        "properties": {
+          "details": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Details",
+            "type": "array"
+          },
+          "dry_run": {
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "filtered_count": {
+            "title": "Filtered Count",
+            "type": "integer"
+          },
+          "torrents_scanned": {
+            "title": "Torrents Scanned",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "filtered_count",
+          "torrents_scanned",
+          "dry_run",
+          "details"
+        ],
+        "title": "QbFilterSmallResponse",
+        "type": "object"
+      },
+      "QbTorrentItem": {
+        "properties": {
+          "added_on": {
+            "title": "Added On",
+            "type": "integer"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "completion_on": {
+            "title": "Completion On",
+            "type": "integer"
+          },
+          "hash": {
+            "title": "Hash",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "progress": {
+            "title": "Progress",
+            "type": "number"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "hash",
+          "name",
+          "size",
+          "progress",
+          "state",
+          "category",
+          "added_on",
+          "completion_on"
+        ],
+        "title": "QbTorrentItem",
+        "type": "object"
+      },
+      "QbTorrentsResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QbTorrentItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "QbTorrentsResponse",
+        "type": "object"
+      },
+      "RcloneLastResponse": {
+        "properties": {
+          "dedup_completed": {
+            "title": "Dedup Completed",
+            "type": "integer"
+          },
+          "dedup_pending": {
+            "title": "Dedup Pending",
+            "type": "integer"
+          },
+          "inventory_count": {
+            "title": "Inventory Count",
+            "type": "integer"
+          },
+          "last_scan_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Scan Time"
+          },
+          "total_freed_bytes": {
+            "description": "Estimated bytes reclaimed by dedup, summed from the pre-deletion ExistingFolderSize of completed records. Approximate, not exact.",
+            "title": "Total Freed Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "inventory_count",
+          "last_scan_time",
+          "dedup_pending",
+          "dedup_completed",
+          "total_freed_bytes"
+        ],
+        "title": "RcloneLastResponse",
+        "type": "object"
+      },
+      "RcloneRunRequest": {
+        "properties": {
+          "dry_run": {
+            "default": true,
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "execute": {
+            "default": false,
+            "title": "Execute",
+            "type": "boolean"
+          },
+          "report": {
+            "default": true,
+            "title": "Report",
+            "type": "boolean"
+          },
+          "scan": {
+            "default": true,
+            "title": "Scan",
+            "type": "boolean"
+          }
+        },
+        "title": "RcloneRunRequest",
+        "type": "object"
+      },
+      "RcloneRunResponse": {
+        "properties": {
+          "dry_run": {
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "phase_results": {
+            "additionalProperties": true,
+            "title": "Phase Results",
+            "type": "object"
+          }
+        },
+        "required": [
+          "phase_results",
+          "dry_run"
+        ],
+        "title": "RcloneRunResponse",
+        "type": "object"
+      },
       "RefreshTokenResponse": {
         "additionalProperties": true,
         "properties": {
@@ -1257,6 +2229,147 @@
           "expires_in"
         ],
         "title": "RefreshTokenResponse",
+        "type": "object"
+      },
+      "RunItem": {
+        "properties": {
+          "conclusion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conclusion"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "display_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Title"
+          },
+          "event": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event"
+          },
+          "head_sha": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Head Sha"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "run_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Number"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "RunItem",
+        "type": "object"
+      },
+      "RunLogsResponse": {
+        "properties": {
+          "logs_url": {
+            "title": "Logs Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "logs_url"
+        ],
+        "title": "RunLogsResponse",
+        "type": "object"
+      },
+      "RunsResponse": {
+        "properties": {
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/RunItem"
+            },
+            "title": "Runs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "runs"
+        ],
+        "title": "RunsResponse",
         "type": "object"
       },
       "SessionCommitPayload": {
@@ -1839,6 +2952,139 @@
         "title": "TaskStatsResponse",
         "type": "object"
       },
+      "TorrentSearchItem": {
+        "description": "A single TorrentHistory row (with joined movie data) in the search response.",
+        "properties": {
+          "censor_indicator": {
+            "title": "Censor Indicator",
+            "type": "integer"
+          },
+          "datetime_created": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Datetime Created"
+          },
+          "file_count": {
+            "title": "File Count",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "magnet_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Magnet Uri"
+          },
+          "movie_href": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Movie Href"
+          },
+          "movie_video_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Movie Video Code"
+          },
+          "resolution_type": {
+            "title": "Resolution Type",
+            "type": "integer"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          },
+          "subtitle_indicator": {
+            "title": "Subtitle Indicator",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "subtitle_indicator",
+          "censor_indicator",
+          "resolution_type",
+          "file_count"
+        ],
+        "title": "TorrentSearchItem",
+        "type": "object"
+      },
+      "TorrentSearchResponse": {
+        "description": "Paginated response for GET /api/history/torrents.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TorrentSearchItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "total_estimate": {
+            "title": "Total Estimate",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total_estimate"
+        ],
+        "title": "TorrentSearchResponse",
+        "type": "object"
+      },
       "TriggerTaskResponse": {
         "additionalProperties": true,
         "description": "Returned by POST /api/tasks/daily and POST /api/tasks/adhoc.",
@@ -2013,6 +3259,61 @@
           "letter_suffix_fallback_searched"
         ],
         "title": "VideoCodeSearchResponse",
+        "type": "object"
+      },
+      "WorkflowItem": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "last_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunItem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "WorkflowItem",
+        "type": "object"
+      },
+      "WorkflowsResponse": {
+        "properties": {
+          "workflows": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowItem"
+            },
+            "title": "Workflows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "workflows"
+        ],
+        "title": "WorkflowsResponse",
         "type": "object"
       }
     }
@@ -2325,6 +3626,70 @@
         "summary": "Api Detect Page Type"
       }
     },
+    "/api/diag/javdb-session": {
+      "get": {
+        "description": "Return current JavDB session cookie status.",
+        "operationId": "get_javdb_session_status_api_diag_javdb_session_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JavdbSessionStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Javdb Session Status",
+        "tags": [
+          "diagnostics"
+        ]
+      }
+    },
+    "/api/diag/javdb-session/refresh": {
+      "post": {
+        "description": "Refresh the JavDB session via headless login or cookie paste.",
+        "operationId": "refresh_javdb_session_diag_api_diag_javdb_session_refresh_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JavdbSessionRefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JavdbSessionRefreshResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Refresh Javdb Session Diag",
+        "tags": [
+          "diagnostics"
+        ]
+      }
+    },
     "/api/explore/download-magnet": {
       "post": {
         "operationId": "explore_download_magnet_api_explore_download_magnet_post",
@@ -2592,6 +3957,163 @@
         "summary": "Explore Sync Cookie"
       }
     },
+    "/api/gh-actions/runs": {
+      "get": {
+        "description": "List workflow runs, optionally filtered by workflow ID.",
+        "operationId": "list_runs_api_gh_actions_runs_get",
+        "parameters": [
+          {
+            "description": "Workflow ID to filter by",
+            "in": "query",
+            "name": "workflow",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Workflow ID to filter by",
+              "title": "Workflow"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Runs",
+        "tags": [
+          "gh-actions"
+        ]
+      },
+      "post": {
+        "description": "Dispatch a workflow run (admin only).",
+        "operationId": "dispatch_run_api_gh_actions_runs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DispatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DispatchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Dispatch Run",
+        "tags": [
+          "gh-actions"
+        ]
+      }
+    },
+    "/api/gh-actions/runs/{run_id}/logs": {
+      "get": {
+        "description": "Return the logs download URL for a run.",
+        "operationId": "get_run_logs_api_gh_actions_runs__run_id__logs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunLogsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Run Logs",
+        "tags": [
+          "gh-actions"
+        ]
+      }
+    },
+    "/api/gh-actions/workflows": {
+      "get": {
+        "description": "List workflows, each enriched with its latest run.",
+        "operationId": "list_workflows_api_gh_actions_workflows_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Workflows",
+        "tags": [
+          "gh-actions"
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "operationId": "health_check_api_health_get",
@@ -2644,6 +4166,694 @@
           }
         },
         "summary": "Run Health Check"
+      }
+    },
+    "/api/history/movies": {
+      "get": {
+        "operationId": "search_movies_api_history_movies_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Actor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "perfect_match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Perfect Match"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hi_res",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hi Res"
+            }
+          },
+          {
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date_from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date From"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date To"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MovieSearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search Movies",
+        "tags": [
+          "history"
+        ]
+      }
+    },
+    "/api/history/movies/export": {
+      "get": {
+        "operationId": "export_movies_csv_api_history_movies_export_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Actor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "perfect_match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Perfect Match"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hi_res",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hi Res"
+            }
+          },
+          {
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date_from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date From"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date To"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Movies Csv",
+        "tags": [
+          "history"
+        ]
+      }
+    },
+    "/api/history/torrents": {
+      "get": {
+        "operationId": "search_torrents_api_history_torrents_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "resolution_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Resolution Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "has_subtitle",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Has Subtitle"
+            }
+          },
+          {
+            "in": "query",
+            "name": "uncensored",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Uncensored"
+            }
+          },
+          {
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date_from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date From"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date To"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TorrentSearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search Torrents",
+        "tags": [
+          "history"
+        ]
+      }
+    },
+    "/api/history/torrents/export": {
+      "get": {
+        "operationId": "export_torrents_csv_api_history_torrents_export_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "resolution_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Resolution Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "has_subtitle",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Has Subtitle"
+            }
+          },
+          {
+            "in": "query",
+            "name": "uncensored",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Uncensored"
+            }
+          },
+          {
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date_from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date From"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date To"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Torrents Csv",
+        "tags": [
+          "history"
+        ]
       }
     },
     "/api/jobs/spider": {
@@ -2883,6 +5093,489 @@
         "summary": "Test Component",
         "tags": [
           "onboarding"
+        ]
+      }
+    },
+    "/api/ops/cleanup/claim-stages": {
+      "post": {
+        "description": "Sweep orphaned MovieClaim staged completions.",
+        "operationId": "cleanup_claim_stages_api_ops_cleanup_claim_stages_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CleanupClaimStagesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleanupClaimStagesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cleanup Claim Stages",
+        "tags": [
+          "operations"
+        ]
+      }
+    },
+    "/api/ops/cleanup/stale-sessions": {
+      "post": {
+        "description": "Roll back or resume stale in-progress/finalizing sessions.",
+        "operationId": "cleanup_stale_sessions_api_ops_cleanup_stale_sessions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CleanupStaleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleanupStaleResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cleanup Stale Sessions",
+        "tags": [
+          "operations"
+        ]
+      }
+    },
+    "/api/ops/email/history": {
+      "get": {
+        "description": "List EmailNotificationHistory, newest first.",
+        "operationId": "email_history_api_ops_email_history_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailHistoryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Email History",
+        "tags": [
+          "operations"
+        ]
+      }
+    },
+    "/api/ops/email/test": {
+      "post": {
+        "description": "Send a test email to the configured recipient.\n\n``body.recipient`` is accepted for forward-compatibility but is currently\nignored \u2014 ``send_email`` targets the module-level ``EMAIL_TO`` constant and\nhas no per-call recipient override.  If a custom recipient is provided, the\nemail still goes to the configured address and the response notes this.",
+        "operationId": "email_test_api_ops_email_test_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailTestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Email Test Api Ops Email Test Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Email Test",
+        "tags": [
+          "operations"
+        ]
+      }
+    },
+    "/api/ops/email/{record_id}/resend": {
+      "post": {
+        "description": "Resend a previously failed email notification.",
+        "operationId": "email_resend_api_ops_email__record_id__resend_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Email Resend Api Ops Email  Record Id  Resend Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Email Resend",
+        "tags": [
+          "operations"
+        ]
+      }
+    },
+    "/api/ops/pikpak/queue": {
+      "get": {
+        "description": "Return PikPak transfer queue from PikpakHistory.",
+        "operationId": "get_pikpak_queue_api_ops_pikpak_queue_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PikPakQueueResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Pikpak Queue",
+        "tags": [
+          "operations"
+        ]
+      }
+    },
+    "/api/ops/pikpak/transfer": {
+      "post": {
+        "description": "Trigger a batch PikPak transfer run.",
+        "operationId": "pikpak_transfer_api_ops_pikpak_transfer_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PikPakTransferRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PikPakTransferResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pikpak Transfer",
+        "tags": [
+          "operations"
+        ]
+      }
+    },
+    "/api/ops/qb/filter-small": {
+      "post": {
+        "description": "Trigger the qBittorrent file-size filter via ``run_file_filter``.",
+        "operationId": "qb_filter_small_api_ops_qb_filter_small_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QbFilterSmallRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QbFilterSmallResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Qb Filter Small",
+        "tags": [
+          "operations"
+        ]
+      }
+    },
+    "/api/ops/qb/torrents": {
+      "get": {
+        "description": "List torrents from qBittorrent (proxied through the API).",
+        "operationId": "list_qb_torrents_api_ops_qb_torrents_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QbTorrentsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Qb Torrents",
+        "tags": [
+          "operations"
+        ]
+      }
+    },
+    "/api/ops/rclone/last": {
+      "get": {
+        "description": "Return last RcloneInventory scan stats and DedupRecords summary.",
+        "operationId": "rclone_last_api_ops_rclone_last_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RcloneLastResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Rclone Last",
+        "tags": [
+          "operations"
+        ]
+      }
+    },
+    "/api/ops/rclone/run": {
+      "post": {
+        "description": "Run rclone manager with the given phase flags.",
+        "operationId": "rclone_run_api_ops_rclone_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RcloneRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RcloneRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rclone Run",
+        "tags": [
+          "operations"
         ]
       }
     },

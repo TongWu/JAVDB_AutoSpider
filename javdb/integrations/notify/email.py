@@ -1869,6 +1869,35 @@ def send_email(subject, body, attachments=None, dry_run=False):
                 logger.info(f'Attached: {file_name} ({file_size} bytes)')
 
     logger.info(f'Connecting to SMTP server {mask_server(SMTP_SERVER)}:{SMTP_PORT}...')
+
+    # Resolve session id and attachment basenames once, before the SMTP block.
+    try:
+        from javdb.storage.db.db_session import get_active_session_id
+        _active_session_id = get_active_session_id()
+    except Exception:
+        _active_session_id = None
+    # Record only filenames actually attached to the message — attachment
+    # processing above skips missing / empty files.
+    _attachment_names = [
+        name for part in msg.iter_attachments()
+        if (name := part.get_filename())
+    ] or None
+
+    def _record_email_history(status: str, error: str = None) -> None:
+        """Defensively write an email history row; never raises."""
+        try:
+            from javdb.storage.repos.operations_repo import OperationsRepo
+            OperationsRepo().append_email_history(
+                _active_session_id,
+                EMAIL_TO,
+                subject,
+                status,
+                error=error,
+                attachments=_attachment_names,
+            )
+        except Exception as _he:
+            logger.warning("Failed to record email history: %s", _he)
+
     try:
         # ``timeout=30`` so a hung / unreachable SMTP server can't pin the
         # GH Actions job until the workflow-level ceiling. ``smtplib.SMTP``
@@ -1879,9 +1908,11 @@ def send_email(subject, body, attachments=None, dry_run=False):
             server.login(SMTP_USER, SMTP_PASSWORD)
             server.send_message(msg)
         logger.info(f'Email sent successfully to {mask_email(EMAIL_TO)}.')
+        _record_email_history('sent')
         return True
     except Exception as e:
         logger.error(f'Failed to send email: {e}')
+        _record_email_history('failed', error=str(e))
         return False
 
 
