@@ -10,7 +10,9 @@
 - Phase 1 - add architecture guards with allowlists and introduce `javdb.workflow` adapters for artifact inputs, stats sinks, and git side effects.
 - Phase 2 - migrate qB uploader and file filter into command packages with typed options/results and real `apps.cli.qb.*` adapters.
 - Phase 3 - migrate PikPak bridge into a command package with typed options/result and real `apps.cli.pikpak.bridge` adapter.
-- Phase 4 - split rclone manager into a command package and keep a short bake wrapper.
+- Phase 4 - split rclone manager into a command package, route its scan
+  persistence/session lifecycle DB writes through storage Repos, and keep a
+  short bake wrapper.
 - Phase 5 - delete the rclone bake wrapper and remove rclone from allowlists.
 - Phase 6 - split notify email into command package plus `log_analysis`, `report_builder`, and `delivery`, keeping a short bake wrapper.
 - Phase 7 - delete the notify bake wrapper and remove notify from allowlists.
