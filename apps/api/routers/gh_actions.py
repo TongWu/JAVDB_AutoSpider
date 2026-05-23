@@ -1,13 +1,19 @@
 """GitHub Actions endpoints.
 
-GET  /api/gh-actions/workflows          — list workflows, each enriched with latest run
-GET  /api/gh-actions/runs               — list runs, optional ?workflow=<id> filter
-POST /api/gh-actions/runs               — dispatch a workflow run (admin only)
-GET  /api/gh-actions/runs/{run_id}/logs — return the run's logs download URL
+GET  /api/gh-actions/workflows              — list workflows, each enriched with latest run
+GET  /api/gh-actions/runs                   — list runs, optional ?workflow=<id> filter
+POST /api/gh-actions/runs                   — dispatch a workflow run (admin only)
+GET  /api/gh-actions/runs/{run_id}/logs     — return the run's logs download URL
+GET  /api/gh-actions/workflows/{name}       — return workflow YAML content (edit tier)
+PUT  /api/gh-actions/workflows/{name}       — validate & commit workflow YAML (edit tier, admin)
 
-All four endpoints require:
+Monitor-tier endpoints (first four) require:
   1. A valid auth token (_require_auth / require_role)
   2. capabilities.gh_actions.tier != "none" (monitor-tier gate)
+
+Edit-tier endpoints (last two) require:
+  1. A valid auth token (_require_auth / require_role("admin") for PUT)
+  2. capabilities.gh_actions.tier in ("edit", "admin") (edit-tier gate)
 """
 
 from __future__ import annotations
@@ -15,6 +21,7 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 import httpx
+import yaml
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from apps.api.infra.auth import _require_auth, require_role
@@ -25,8 +32,11 @@ from apps.api.schemas.gh_actions import (
     RunItem,
     RunLogsResponse,
     RunsResponse,
+    WorkflowContentResponse,
     WorkflowItem,
     WorkflowsResponse,
+    WorkflowUpdateRequest,
+    WorkflowUpdateResponse,
 )
 from javdb.integrations.gh_actions.client import (
     GitHubActionsClient,
@@ -51,6 +61,26 @@ def _require_gh_monitor() -> None:
                 "error": {
                     "code": "gh_actions.not_configured",
                     "message": "GitHub Actions integration not configured",
+                }
+            },
+        )
+
+
+# ---------------------------------------------------------------------------
+# Edit-tier gate
+# ---------------------------------------------------------------------------
+
+
+def _require_gh_edit() -> None:
+    """Raise 403 if gh_actions.tier not in ('edit', 'admin')."""
+    caps = build_capabilities()
+    if caps.gh_actions.tier not in ("edit", "admin"):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": {
+                    "code": "gh_actions.edit_not_allowed",
+                    "message": "GH Actions edit tier required",
                 }
             },
         )
@@ -234,10 +264,91 @@ def get_run_logs(
         client.close()
 
 
+# ---------------------------------------------------------------------------
+# Workflow YAML editor endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/workflows/{name}",
+    response_model=WorkflowContentResponse,
+    dependencies=[Depends(_require_gh_edit)],
+)
+def get_workflow_content(
+    name: str,
+    _user: Dict[str, Any] = Depends(_require_auth),
+) -> WorkflowContentResponse:
+    """Return the decoded content of a workflow YAML file."""
+    client = _get_gh_client()
+    try:
+        data = client.get_workflow_content(name)
+        return WorkflowContentResponse(
+            content=data["content"],
+            sha=data["sha"],
+            path=data["path"],
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _wrap_gh_error(exc) from exc
+    finally:
+        client.close()
+
+
+@router.put(
+    "/workflows/{name}",
+    response_model=WorkflowUpdateResponse,
+    dependencies=[Depends(_require_gh_edit)],
+)
+def update_workflow_content(
+    name: str,
+    body: WorkflowUpdateRequest,
+    _user: Dict[str, Any] = Depends(require_role("admin")),
+) -> WorkflowUpdateResponse:
+    """Validate and commit an updated workflow YAML file (admin only)."""
+    # Validate YAML syntax
+    try:
+        yaml.safe_load(body.content)
+    except yaml.YAMLError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": {
+                    "code": "gh_actions.invalid_yaml",
+                    "message": f"Invalid YAML: {exc}",
+                }
+            },
+        )
+
+    client = _get_gh_client()
+    try:
+        current = client.get_workflow_content(name)
+        result = client.update_workflow_content(
+            name,
+            body.content,
+            current["sha"],
+            body.commit_message,
+            body.branch,
+        )
+        return WorkflowUpdateResponse(
+            updated=True,
+            commit_sha=result["commit_sha"],
+            validation_warnings=[],
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _wrap_gh_error(exc) from exc
+    finally:
+        client.close()
+
+
 __all__ = [
     "dispatch_run",
     "get_run_logs",
+    "get_workflow_content",
     "list_runs",
     "list_workflows",
     "router",
+    "update_workflow_content",
 ]

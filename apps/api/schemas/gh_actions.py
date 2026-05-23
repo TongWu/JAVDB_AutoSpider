@@ -59,12 +59,38 @@ class DispatchResponse(BaseModel):
     dispatched: bool
 
 
+# ---------------------------------------------------------------------------
+# Workflow YAML editor schemas
+# ---------------------------------------------------------------------------
+
+
+class WorkflowUpdateRequest(BaseModel):
+    content: str
+    commit_message: str
+    branch: str = "main"
+
+
+class WorkflowContentResponse(BaseModel):
+    content: str
+    sha: str
+    path: str
+
+
+class WorkflowUpdateResponse(BaseModel):
+    updated: bool
+    commit_sha: str
+    validation_warnings: list[str]
+
+
 __all__ = [
     "DispatchRequest",
     "DispatchResponse",
     "RunItem",
     "RunLogsResponse",
     "RunsResponse",
+    "WorkflowContentResponse",
     "WorkflowItem",
+    "WorkflowUpdateRequest",
+    "WorkflowUpdateResponse",
     "WorkflowsResponse",
 ]
