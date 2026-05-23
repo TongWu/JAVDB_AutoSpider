@@ -14,6 +14,7 @@ Token + repo resolution (ADR-008 D18):
 
 from __future__ import annotations
 
+import base64
 import os
 import re
 from typing import Optional
@@ -155,6 +156,40 @@ class GitHubActionsClient:
             return location
         resp.raise_for_status()
         return ""
+
+    def get_workflow_content(self, filename: str) -> dict:
+        """Return { content: str (decoded), sha: str, path: str }."""
+        resp = self._client.get(
+            f"/repos/{self.repo}/contents/.github/workflows/{filename}"
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return {
+            "content": base64.b64decode(data["content"]).decode("utf-8"),
+            "sha": data["sha"],
+            "path": data["path"],
+        }
+
+    def update_workflow_content(
+        self,
+        filename: str,
+        content: str,
+        sha: str,
+        message: str,
+        branch: str = "main",
+    ) -> dict:
+        """Commit updated workflow file. Returns { commit_sha }."""
+        resp = self._client.put(
+            f"/repos/{self.repo}/contents/.github/workflows/{filename}",
+            json={
+                "message": message,
+                "content": base64.b64encode(content.encode("utf-8")).decode("ascii"),
+                "sha": sha,
+                "branch": branch,
+            },
+        )
+        resp.raise_for_status()
+        return {"commit_sha": resp.json()["commit"]["sha"]}
 
     def close(self) -> None:
         """Close the underlying httpx client."""
