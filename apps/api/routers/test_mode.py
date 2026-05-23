@@ -30,14 +30,16 @@ def reset_state() -> dict[str, bool]:
     from apps.api.infra import auth as auth_infra
 
     root = _reports_root()
+    root.mkdir(parents=True, exist_ok=True)
     for db_name, tables in _TRUNCATE_TARGETS.items():
         db_path = root / db_name
-        if not db_path.exists():
-            continue
         with sqlite3.connect(str(db_path)) as conn:
+            if db_name == "operations.db":
+                conn.execute(
+                    "CREATE TABLE IF NOT EXISTS system_state"
+                    " (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT)"
+                )
             for table in tables:
-                # Use TRY to avoid hard-failing on a table that doesn't
-                # exist yet (e.g. system_state on a pre-migration DB).
                 try:
                     conn.execute(f"DELETE FROM {table}")
                 except sqlite3.OperationalError:
