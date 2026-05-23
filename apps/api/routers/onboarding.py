@@ -43,8 +43,11 @@ router = APIRouter(prefix="/api/onboarding", tags=["onboarding"])
 
 
 def _read_onboarded() -> bool:
-    with _db.get_db(_db.OPERATIONS_DB_PATH) as conn:
-        return SystemStateRepo(conn).get("onboarded") == "true"
+    try:
+        with _db.get_db(_db.OPERATIONS_DB_PATH) as conn:
+            return SystemStateRepo(conn).get("onboarded") == "true"
+    except Exception:
+        return False
 
 
 def _test_javdb() -> tuple[bool, str, dict | None]:
