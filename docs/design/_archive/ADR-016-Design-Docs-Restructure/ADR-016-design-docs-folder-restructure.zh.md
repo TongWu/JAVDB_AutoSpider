@@ -1,6 +1,6 @@
 # ADR-016: docs/design/ 文件夹重构
 
-**状态 (Status):** Accepted
+**状态 (Status):** Completed
 **日期 (Date):** 2026-05-22
 **作者 (Author):** Ted
 **关联实现计划 (Related Implementation Plans):** [IMP-ADR016-01](IMP-ADR016-01-design-docs-folder-restructure.md)（单阶段重构）
@@ -31,7 +31,7 @@ D5. **模板目录** — `_templates/` 存放 `ADR-TEMPLATE.md`、`ADR-TEMPLATE.
 
 D6. **架构文档不变** — `docs/design/architecture/` 不受此次重构影响。
 
-D7. **活跃 vs 归档分类** — ADR-001 至 007 已归档。ADR-008 至 016 为活跃状态。BFR-001 为活跃状态。ADR-016 本身将在重构完成后归档。
+D7. **活跃 vs 归档分类** — ADR-001 至 007 已归档。ADR-008 至 015 为活跃状态。BFR-001 为活跃状态。ADR-016 在此次重构完成后归档。
 
 ### 目标结构 (Target Structure)
 
@@ -51,7 +51,6 @@ docs/design/
 ├── ADR-013-Runner-Runtime-State/
 ├── ADR-014-Storage-Cli-Layering/
 ├── ADR-015-Integrations-Interface/
-├── ADR-016-Design-Docs-Restructure/
 ├── BFR-001-Login-Proxy-Mismatch/
 ├── _archive/
 │   ├── ADR-001-Split-Db-Module/
@@ -60,7 +59,8 @@ docs/design/
 │   ├── ADR-004-Proxy-Discovery/
 │   ├── ADR-005-Db-Py-Retirement/
 │   ├── ADR-006-Pending-Mode-Rollout/
-│   └── ADR-007-Monorepo-Restructure/
+│   ├── ADR-007-Monorepo-Restructure/
+│   └── ADR-016-Design-Docs-Restructure/
 ├── _templates/
 │   ├── ADR-TEMPLATE.md
 │   ├── ADR-TEMPLATE.zh.md
@@ -107,3 +107,4 @@ docs/design/
 ## 状态日志 (Status Log)
 
 - 2026-05-22: 在 brainstorming 会话中提出并接受
+- 2026-05-24: 完成最终文档清理、旧链接验证，并按整文件夹归档规则收尾。
