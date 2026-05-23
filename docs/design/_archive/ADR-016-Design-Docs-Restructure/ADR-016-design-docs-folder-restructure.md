@@ -1,6 +1,6 @@
 # ADR-016: docs/design/ Folder Restructure
 
-**Status:** Accepted
+**Status:** Completed
 **Date:** 2026-05-22
 **Author:** Ted
 **Related Implementation Plans:** [IMP-ADR016-01](IMP-ADR016-01-design-docs-folder-restructure.md) (single-phase restructure)
@@ -31,7 +31,7 @@ D5. **Templates directory** — `_templates/` holds `ADR-TEMPLATE.md`, `ADR-TEMP
 
 D6. **Architecture unchanged** — `docs/design/architecture/` is not affected by this restructure.
 
-D7. **Active vs Archived classification** — ADR-001 through 007 are archived. ADR-008 through 016 are active. BFR-001 is active. ADR-016 itself will be archived after this restructure completes.
+D7. **Active vs Archived classification** — ADR-001 through 007 are archived. ADR-008 through 015 are active. BFR-001 is active. ADR-016 is archived after this restructure completes.
 
 ### Target Structure
 
@@ -51,7 +51,6 @@ docs/design/
 ├── ADR-013-Runner-Runtime-State/
 ├── ADR-014-Storage-Cli-Layering/
 ├── ADR-015-Integrations-Interface/
-├── ADR-016-Design-Docs-Restructure/
 ├── BFR-001-Login-Proxy-Mismatch/
 ├── _archive/
 │   ├── ADR-001-Split-Db-Module/
@@ -60,7 +59,8 @@ docs/design/
 │   ├── ADR-004-Proxy-Discovery/
 │   ├── ADR-005-Db-Py-Retirement/
 │   ├── ADR-006-Pending-Mode-Rollout/
-│   └── ADR-007-Monorepo-Restructure/
+│   ├── ADR-007-Monorepo-Restructure/
+│   └── ADR-016-Design-Docs-Restructure/
 ├── _templates/
 │   ├── ADR-TEMPLATE.md
 │   ├── ADR-TEMPLATE.zh.md
@@ -107,3 +107,4 @@ docs/design/
 ## Status Log
 
 - 2026-05-22: Proposed and accepted during brainstorming session
+- 2026-05-24: Completed after final documentation cleanup, stale-link verification, and whole-folder archival.

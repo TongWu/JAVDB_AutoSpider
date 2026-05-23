@@ -92,7 +92,7 @@ ADR-005 obsoletes this approach: the Pending write path recomputes derived field
 
 ### SessionId generation (2026-05-08+)
 
-`ReportSessions.Id` is **no longer** allocated by the per-backend AUTOINCREMENT counter. The application generates the id itself via [`generate_session_id()`](../../../../javdb/storage/db/db_session.py):
+`ReportSessions.Id` is **no longer** allocated by the per-backend AUTOINCREMENT counter. The application generates the id itself via [`generate_session_id()`](../../../../javdb/storage/db/_db_session.py):
 
 ```python
 # Format: YYYYMMDDTHHMMSS.ffffffZ-TTTT-SSSS
@@ -321,7 +321,7 @@ python3 -m apps.cli.commit_session --session-id 123
 
 ## Audit table forensics *(read-only since Phase 4, 2026-05-13)*
 
-> Phase 4 contract: the audit tables are **historical-session forensics only**. No new sessions append rows to them — the Pending write path is the default. Until the sunset date in [Appendix A](#appendix-a-legacy-audit-fallback-sunset-2026-08), rows for any committed/failed session linger long enough for operators to query them; the [`apps/cli/db/audit_archive.py`](../../../../apps/cli/db/audit_archive.py) cron prunes anything > 30 days old every Monday.
+> Phase 4 contract: the audit tables are **historical-session forensics only**. No new sessions append rows to them — the Pending write path is the default. Until the sunset date in [Appendix A](#appendix-a-legacy-audit-fallback-sunset-2026-08), rows for any committed/failed session linger long enough for operators to query them; the retired `apps/cli/db/audit_archive.py` cron pruned anything > 30 days old every Monday.
 
 The `MovieHistoryAudit` and `TorrentHistoryAudit` tables are scratch storage — `db_rollback_session` deletes their rows after a successful replay. Until then, they're a useful diagnostic trail.
 
@@ -393,7 +393,7 @@ After migration, `db.SCHEMA_VERSION == 11`. The `_ensure_rollback_columns` helpe
 
 ## Pending mode (current default)
 
-`ReportSessions.WriteMode` (added 2026-05-09) selects the dispatch path for cleanup-on-failure and the stale-session cron. The default is **`pending`**, and ADR-005 retired the legacy audit path. `JAVDB_HISTORY_WRITE_MODE=audit` is treated as a legacy request and falls back to pending. See [ADR-006](../../../design/adr/ADR-006-pending-mode-default-rollout.md) for the design rationale.
+`ReportSessions.WriteMode` (added 2026-05-09) selects the dispatch path for cleanup-on-failure and the stale-session cron. The default is **`pending`**, and ADR-005 retired the legacy audit path. `JAVDB_HISTORY_WRITE_MODE=audit` is treated as a legacy request and falls back to pending. See [ADR-006](../../../design/_archive/ADR-006-Pending-Mode-Rollout/ADR-006-pending-mode-default-rollout.md) for the design rationale.
 
 ### Pending state machine
 
@@ -456,7 +456,7 @@ pipeline_paused_reason: 'DailyIngestion run 12345: pending_residual_count=2 sess
 
 into `.publish-config.yml`, then commits + pushes the change. The **next** scheduled or manually-dispatched ingestion run hits the new `Pipeline pause gate (ADR-006)` step in the `setup` job, sees the marker is still in the future, and short-circuits: every downstream job (`run-pipeline`, `cleanup-on-failure`, `email-notification`, `commit-results`) gates on `needs.setup.outputs.paused != 'true'` and is skipped. The workflow exits cleanly so cron doesn't perma-flag it as failing.
 
-**Why pause instead of fallback?** Per [ADR-006](../../../design/adr/ADR-006-pending-mode-default-rollout.md) §D3, the legacy audit auto-fallback silently degraded Pending Mode failures into a working-but-different state, removing pressure to fix the underlying bug. Pausing forces an operator to acknowledge and investigate before the pipeline resumes — incidents stay visible.
+**Why pause instead of fallback?** Per [ADR-006](../../../design/_archive/ADR-006-Pending-Mode-Rollout/ADR-006-pending-mode-default-rollout.md) §D3, the legacy audit auto-fallback silently degraded Pending Mode failures into a working-but-different state, removing pressure to fix the underlying bug. Pausing forces an operator to acknowledge and investigate before the pipeline resumes — incidents stay visible.
 
 The window is 24h. To resume:
 
@@ -514,7 +514,7 @@ If any of these six steps deviates from the expected outcome, **do not** promote
 ## File pointers
 
 - CLI: [`apps/cli/db/rollback.py`](../../../../apps/cli/db/rollback.py), [`apps/cli/db/commit_session.py`](../../../../apps/cli/db/commit_session.py), [`apps/cli/db/cleanup_stale_in_progress.py`](../../../../apps/cli/db/cleanup_stale_in_progress.py)
-- Core helpers: [`javdb/storage/db/__init__.py`](../../../../javdb/storage/db/__init__.py), [`db_history_write.py`](../../../../javdb/storage/db/db_history_write.py), [`db_rollback.py`](../../../../javdb/storage/db/db_rollback.py), [`db_reports.py`](../../../../javdb/storage/db/db_reports.py), [`db_session.py`](../../../../javdb/storage/db/db_session.py)
+- Core helpers: [`javdb/storage/db/__init__.py`](../../../../javdb/storage/db/__init__.py), [`_db_history_write.py`](../../../../javdb/storage/db/_db_history_write.py), [`_db_rollback.py`](../../../../javdb/storage/db/_db_rollback.py), [`_db_reports.py`](../../../../javdb/storage/db/_db_reports.py), [`_db_session.py`](../../../../javdb/storage/db/_db_session.py)
 - Phase 3 scripts: [`apps/cli/db/pending_health.py`](../../../../apps/cli/db/pending_health.py), [`apps/cli/db/pending_alert.py`](../../../../apps/cli/db/pending_alert.py) *(replaced the retired `pending_mode_auto_fallback.py` in ADR-006 PR-D)*
 - Email integration: [`javdb/integrations/notify/email.py`](../../../../javdb/integrations/notify/email.py) (`_format_pending_verify_section`, `_evaluate_pending_alerts`, `_format_health_snapshot_section`)
 - Workflows: [`.github/workflows/DailyIngestion.yml`](../../../../.github/workflows/DailyIngestion.yml), [`.github/workflows/AdHocIngestion.yml`](../../../../.github/workflows/AdHocIngestion.yml), [`.github/workflows/RollbackD1.yml`](../../../../.github/workflows/RollbackD1.yml), [`.github/workflows/StaleSessionCleanup.yml`](../../../../.github/workflows/StaleSessionCleanup.yml)
@@ -525,7 +525,7 @@ If any of these six steps deviates from the expected outcome, **do not** promote
 
 ## Appendix A — Retired legacy audit fallback
 
-> **Status** — retired by [ADR-005](../../../design/adr/ADR-005-db-py-retirement-and-repo-pattern.md) PR-4/PR-5 on 2026-05-22. `JAVDB_HISTORY_WRITE_MODE=audit` falls back to pending, the audit replay path is gone, and `MovieHistoryAudit` / `TorrentHistoryAudit` are no longer part of the current schema.
+> **Status** — retired by [ADR-005](../../../design/_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md) PR-4/PR-5 on 2026-05-22. `JAVDB_HISTORY_WRITE_MODE=audit` falls back to pending, the audit replay path is gone, and `MovieHistoryAudit` / `TorrentHistoryAudit` are no longer part of the current schema.
 
 ### A.1 Timeline
 
@@ -542,11 +542,11 @@ If any of these six steps deviates from the expected outcome, **do not** promote
 ### A.2 What "deprecated" means in practice
 
 - `db_upsert_history()` emits `DeprecationWarning` on every call. The function still works (audit-fallback rollback depends on it for legacy sessions) — direct callers must migrate to `save_parsed_movie_to_history` (which auto-stages under `WriteMode='pending'` and only reaches `db_upsert_history` for explicit audit fallbacks).
-- The `JAVDB_AUDIT_WRITES_DISABLED=1` env var (added 2026-05-13, [`javdb/storage/db/db.py`](../../../../javdb/storage/db/db.py)) turns every audit-row INSERT into a no-op while still letting `MovieHistory` / `TorrentHistory` UPSERTs land. Default is `0` because the audit fallback still needs audit rows during the deprecation window; flip to `1` once every workflow has been verified to run pending-only.
+- The `JAVDB_AUDIT_WRITES_DISABLED=1` env var (added 2026-05-13 in the retired `javdb/storage/db/db.py`) turns every audit-row INSERT into a no-op while still letting `MovieHistory` / `TorrentHistory` UPSERTs land. Default is `0` because the audit fallback still needs audit rows during the deprecation window; flip to `1` once every workflow has been verified to run pending-only.
 - `MovieHistoryAudit` / `TorrentHistoryAudit` rows remain queryable for forensics — manual rollback via `apps.cli.rollback --scope history --session-id <id>` still works for any legacy session that has audit rows. The expectation is that no *new* sessions land in this branch.
 - The destructive cleanup helper `apps/cli/db/cleanup_stale_session_audits.py` is now strictly read-only — passing `--apply` logs a deprecation warning and silently degrades to dry-run.
 
-### A.3 Audit-archive cron ([`AuditArchive.yml`](../../../../.github/workflows/AuditArchive.yml))
+### A.3 Audit-archive cron (`AuditArchive.yml`, retired)
 
 Runs every Monday at 04:00 UTC (12:00 Asia/Singapore). Default mode is dry-run; an operator promotes to `apply=true` through `workflow_dispatch` once a week's worth of dry-run reports look sane.
 
