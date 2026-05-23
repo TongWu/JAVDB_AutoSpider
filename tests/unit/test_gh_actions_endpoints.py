@@ -491,6 +491,28 @@ class TestGetWorkflowContent:
             resp = readonly_client.get("/api/gh-actions/workflows/ci.yml")
         assert resp.status_code == 200
 
+    def test_invalid_filename_blocked(self, admin_client, monkeypatch):
+        monkeypatch.setenv("GH_ACTIONS_TIER", "edit")
+        resp = admin_client.get("/api/gh-actions/workflows/secret.txt")
+        assert resp.status_code == 400
+        assert resp.json()["detail"]["error"]["code"] == "gh_actions.invalid_filename"
+
+    def test_gh_api_error_returns_502(self, admin_client, monkeypatch):
+        monkeypatch.setenv("GH_ACTIONS_TIER", "edit")
+
+        def err_handler(req):
+            return httpx.Response(500)
+
+        bad_client = GitHubActionsClient(
+            token="t", repo="o/r", transport=httpx.MockTransport(err_handler)
+        )
+        with patch(
+            "apps.api.routers.gh_actions._get_gh_client",
+            return_value=bad_client,
+        ):
+            resp = admin_client.get("/api/gh-actions/workflows/ci.yml")
+        assert resp.status_code == 502
+
 
 # ---------------------------------------------------------------------------
 # PUT /api/gh-actions/workflows/{name}  (workflow update)
@@ -508,6 +530,7 @@ class TestUpdateWorkflowContent:
                 "/api/gh-actions/workflows/ci.yml",
                 json={
                     "content": "name: CI\non: push\n",
+                    "sha": "abc123sha",
                     "commit_message": "update ci",
                 },
             )
@@ -523,6 +546,7 @@ class TestUpdateWorkflowContent:
             "/api/gh-actions/workflows/ci.yml",
             json={
                 "content": "name: CI\n  bad:\nindent: [",
+                "sha": "abc123sha",
                 "commit_message": "broken yaml",
             },
         )
@@ -536,6 +560,7 @@ class TestUpdateWorkflowContent:
             "/api/gh-actions/workflows/ci.yml",
             json={
                 "content": "name: CI\non: push\n",
+                "sha": "abc123sha",
                 "commit_message": "update ci",
             },
         )
@@ -547,6 +572,7 @@ class TestUpdateWorkflowContent:
             "/api/gh-actions/workflows/ci.yml",
             json={
                 "content": "name: CI\non: push\n",
+                "sha": "abc123sha",
                 "commit_message": "update ci",
             },
         )
@@ -559,6 +585,7 @@ class TestUpdateWorkflowContent:
             "/api/gh-actions/workflows/ci.yml",
             json={
                 "content": "name: CI\non: push\n",
+                "sha": "abc123sha",
                 "commit_message": "update ci",
             },
         )
@@ -574,6 +601,7 @@ class TestUpdateWorkflowContent:
                 "/api/gh-actions/workflows/ci.yml",
                 json={
                     "content": "name: CI\non: push\n",
+                    "sha": "abc123sha",
                     "commit_message": "update ci",
                 },
             )
@@ -590,6 +618,7 @@ class TestUpdateWorkflowContent:
                 "/api/gh-actions/workflows/ci.yml",
                 json={
                     "content": "name: CI\non: push\n",
+                    "sha": "abc123sha",
                     "commit_message": "update ci",
                     "branch": "develop",
                 },
@@ -602,7 +631,44 @@ class TestUpdateWorkflowContent:
             "/api/gh-actions/workflows/ci.yml",
             json={
                 "content": "name: CI\non: push\n",
+                "sha": "abc123sha",
                 "commit_message": "update ci",
             },
         )
         assert resp.status_code in (401, 403)
+
+    def test_invalid_filename_blocked(self, admin_client, monkeypatch):
+        monkeypatch.setenv("GH_ACTIONS_TIER", "edit")
+        resp = admin_client.put(
+            "/api/gh-actions/workflows/secret.txt",
+            json={
+                "content": "name: CI\non: push\n",
+                "sha": "abc123sha",
+                "commit_message": "update ci",
+            },
+        )
+        assert resp.status_code == 400
+        assert resp.json()["detail"]["error"]["code"] == "gh_actions.invalid_filename"
+
+    def test_gh_api_error_returns_502(self, admin_client, monkeypatch):
+        monkeypatch.setenv("GH_ACTIONS_TIER", "edit")
+
+        def err_handler(req):
+            return httpx.Response(500)
+
+        bad_client = GitHubActionsClient(
+            token="t", repo="o/r", transport=httpx.MockTransport(err_handler)
+        )
+        with patch(
+            "apps.api.routers.gh_actions._get_gh_client",
+            return_value=bad_client,
+        ):
+            resp = admin_client.put(
+                "/api/gh-actions/workflows/ci.yml",
+                json={
+                    "content": "name: CI\non: push\n",
+                    "sha": "abc123sha",
+                    "commit_message": "update ci",
+                },
+            )
+        assert resp.status_code == 502
