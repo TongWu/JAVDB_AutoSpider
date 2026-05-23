@@ -18,7 +18,7 @@ from apps.api.schemas.diagnostics import (
     JavdbSessionStatus,
 )
 from javdb.infra.config import cfg
-from javdb.storage.db import db_connection
+from javdb.storage.db import OPERATIONS_DB_PATH, get_db
 from javdb.storage.repos.system_state_repo import SystemStateRepo
 
 router = APIRouter(prefix="/api/diag", tags=["diagnostics"])
@@ -31,7 +31,7 @@ _KEY_LAST_REFRESH = "last_javdb_refresh"
 def _get_last_refresh_time() -> str | None:
     """Read last_javdb_refresh from system_state KV, return None on any failure."""
     try:
-        with db_connection.get_db(db_connection.OPERATIONS_DB_PATH) as conn:
+        with get_db(OPERATIONS_DB_PATH) as conn:
             return SystemStateRepo(conn).get(_KEY_LAST_REFRESH)
     except Exception:
         return None
@@ -39,7 +39,7 @@ def _get_last_refresh_time() -> str | None:
 
 def _set_last_refresh_time(ts: str) -> None:
     """Write last_javdb_refresh to system_state KV."""
-    with db_connection.get_db(db_connection.OPERATIONS_DB_PATH) as conn:
+    with get_db(OPERATIONS_DB_PATH) as conn:
         SystemStateRepo(conn).put(_KEY_LAST_REFRESH, ts)
 
 
