@@ -455,7 +455,7 @@ class HistoryRepo:
         Raises:
             ValueError: On malformed cursor or unparseable date bounds.
         """
-        from javdb.storage.db.db_connection import get_db, HISTORY_DB_PATH
+        from javdb.storage.db import get_db, HISTORY_DB_PATH
 
         cursor_id: Optional[int] = None
         if cursor is not None:
@@ -534,7 +534,7 @@ class HistoryRepo:
         Raises:
             ValueError: On malformed cursor or unparseable date bounds.
         """
-        from javdb.storage.db.db_connection import get_db, HISTORY_DB_PATH
+        from javdb.storage.db import get_db, HISTORY_DB_PATH
 
         cursor_id: Optional[int] = None
         if cursor is not None:
@@ -615,7 +615,7 @@ class HistoryRepo:
         Raises:
             ValueError: On unparseable date bounds.
         """
-        from javdb.storage.db.db_connection import get_db, HISTORY_DB_PATH
+        from javdb.storage.db import get_db, HISTORY_DB_PATH
 
         where_clause, params = _build_movie_filters(
             q=q,
@@ -685,7 +685,7 @@ class HistoryRepo:
         Raises:
             ValueError: On unparseable date bounds.
         """
-        from javdb.storage.db.db_connection import get_db, HISTORY_DB_PATH
+        from javdb.storage.db import get_db, HISTORY_DB_PATH
 
         where_clause, params = _build_torrent_filters(
             q=q,
