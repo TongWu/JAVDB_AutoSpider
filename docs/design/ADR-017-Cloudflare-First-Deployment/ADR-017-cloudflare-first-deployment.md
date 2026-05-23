@@ -25,14 +25,14 @@ The frontend (`javdb-autospider-web`) is already a standalone Vue 3 SPA (per ADR
 
 ## Decision
 
-Deploy the full-stack application (Vue 3 frontend + API backend) on **Cloudflare Pages** as a unified project, while **preserving the existing Docker deployment** as an alternative.
+Deploy the full-stack application (Vue 3 frontend + API backend) as a single **Cloudflare Worker with Assets**, while **preserving the existing Docker deployment** as an alternative.
 
 ### Architecture
 
 ```
-Cloudflare Pages (javdb-autospider-web repo)
-├── Vue 3 SPA (Static Assets, Global CDN)
-└── Pages Functions (/api/*)
+Cloudflare Workers + Assets (javdb-autospider-web repo)
+├── Vue 3 SPA (Static Assets via ASSETS binding)
+└── Worker (server/worker.ts)
     ├── Hono Framework (TypeScript)
     ├── D1 Binding (native, zero-latency)
     ├── DO Binding (Proxy Coordinator, via Service Binding)
@@ -75,17 +75,15 @@ Workers have CPU time limits (10-30ms per request on Free/Pro plans). Long-runni
 
 The API endpoint triggers the dispatch and returns immediately. The frontend polls the GitHub Actions API for run status.
 
-#### D3: `javdb-autospider-web` evolves from pure FE to full-stack Pages project
+#### D3: `javdb-autospider-web` evolves from pure FE to full-stack Workers project
 
-Per ADR-008, the frontend lives in a separate repository. This ADR extends that repo to include Cloudflare Pages Functions (Hono API), making it a full-stack project:
+Per ADR-008, the frontend lives in a separate repository. This ADR extends that repo to include a Cloudflare Worker (Hono API) with static assets, making it a full-stack project:
 
 ```
 javdb-autospider-web/
 ├── src/                          # Vue 3 frontend (existing, unchanged)
-├── functions/                    # Cloudflare Pages Functions
-│   └── api/
-│       └── [[route]].ts          # Hono catch-all router
-├── server/                       # API business code
+├── server/                       # Worker + API business code
+│   ├── worker.ts                 # Worker entry point (routing: API vs assets)
 │   ├── app.ts                    # Hono app + route mounting
 │   ├── routes/                   # Route handlers (12 modules)
 │   │   ├── auth.ts
@@ -108,7 +106,7 @@ javdb-autospider-web/
 │   │   ├── gh-dispatch.ts        # GitHub Actions workflow dispatch
 │   │   └── config-store.ts       # D1-backed config store
 │   └── types/                    # Generated from OpenAPI schema
-├── wrangler.toml                 # D1 + DO bindings
+├── wrangler.toml                 # Worker config: main, [assets], D1 bindings
 ├── package.json
 └── vite.config.ts
 ```
@@ -117,9 +115,9 @@ javdb-autospider-web/
 
 The Python FastAPI backend in `JAVDB_AutoSpider_CICD` is not modified. Both deployment modes coexist:
 
-| Dimension | Cloudflare Pages | Docker |
-| --------- | ---------------- | ------ |
-| Frontend | Vue SPA (CDN) | nginx container |
+| Dimension | Cloudflare Workers | Docker |
+| --------- | ------------------ | ------ |
+| Frontend | Vue SPA (Workers Assets) | nginx container |
 | API | Hono + D1 Binding (TS) | FastAPI + D1 HTTP API (Python) |
 | Database | D1 (native binding) | D1 (HTTP API) or SQLite |
 | Heavy tasks | GH Actions dispatch | subprocess local execution |
