@@ -733,3 +733,87 @@ class HistoryRepo:
                 writer = csv.writer(buf)
                 writer.writerow([dict(row).get(c) for c in columns])
                 yield buf.getvalue()
+
+    # ── Drift diagnostics (ADR-009) ────────────────────────────────
+
+    @staticmethod
+    def count_pending_movie_writes(conn, session_id: str) -> int:
+        """Count active pending movie-history writes for *session_id*."""
+        row = conn.execute(
+            "SELECT COUNT(*) AS cnt FROM PendingMovieHistoryWrites "
+            "WHERE SessionId = ? AND ApplyState = 'pending'",
+            [session_id],
+        ).fetchone()
+        if row is None:
+            return 0
+        return int(row["cnt"] if not isinstance(row, dict) else row.get("cnt", 0))
+
+    @staticmethod
+    def count_pending_torrent_writes(conn, session_id: str) -> int:
+        """Count active pending torrent-history writes for *session_id*."""
+        row = conn.execute(
+            "SELECT COUNT(*) AS cnt FROM PendingTorrentHistoryWrites "
+            "WHERE SessionId = ? AND ApplyState = 'pending'",
+            [session_id],
+        ).fetchone()
+        if row is None:
+            return 0
+        return int(row["cnt"] if not isinstance(row, dict) else row.get("cnt", 0))
+
+    @staticmethod
+    def list_pending_movie_writes(conn, session_id: str) -> list[dict]:
+        """Return active pending movie-history rows for *session_id*."""
+        rows = conn.execute(
+            "SELECT * FROM PendingMovieHistoryWrites "
+            "WHERE SessionId = ? AND ApplyState = 'pending'",
+            [session_id],
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    @staticmethod
+    def list_pending_torrent_writes(conn, session_id: str) -> list[dict]:
+        """Return active pending torrent-history rows for *session_id*."""
+        rows = conn.execute(
+            "SELECT * FROM PendingTorrentHistoryWrites "
+            "WHERE SessionId = ? AND ApplyState = 'pending'",
+            [session_id],
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    @staticmethod
+    def get_movie_by_href(conn, href: str) -> dict | None:
+        """Return a MovieHistory row by href."""
+        row = conn.execute(
+            "SELECT * FROM MovieHistory WHERE Href = ?",
+            [href],
+        ).fetchone()
+        return dict(row) if row is not None else None
+
+    @staticmethod
+    def list_torrents_for_movie(conn, movie_id) -> list[dict]:
+        """Return TorrentHistory rows for *movie_id*."""
+        rows = conn.execute(
+            "SELECT * FROM TorrentHistory WHERE MovieHistoryId = ?",
+            [movie_id],
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    @staticmethod
+    def delete_pending_movie_writes(conn, session_id: str) -> int:
+        """Delete D1 orphan pending movie-history rows for *session_id*."""
+        cur = conn.execute(
+            "DELETE FROM PendingMovieHistoryWrites "
+            "WHERE SessionId = ? AND ApplyState = 'pending'",
+            [session_id],
+        )
+        return int(cur.rowcount or 0)
+
+    @staticmethod
+    def delete_pending_torrent_writes(conn, session_id: str) -> int:
+        """Delete D1 orphan pending torrent-history rows for *session_id*."""
+        cur = conn.execute(
+            "DELETE FROM PendingTorrentHistoryWrites "
+            "WHERE SessionId = ? AND ApplyState = 'pending'",
+            [session_id],
+        )
+        return int(cur.rowcount or 0)
