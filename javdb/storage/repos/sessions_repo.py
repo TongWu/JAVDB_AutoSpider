@@ -108,6 +108,29 @@ class SessionsRepo:
             return None
         return _row_to_session(row)
 
+    def get_status(self, session_id: str) -> str | None:
+        """Return ``ReportSessions.Status`` for *session_id* or ``None``.
+
+        Used by safety-sensitive maintenance tools that need to verify a
+        session lifecycle state without hydrating the full API row shape.
+        """
+        row = self._conn.execute(
+            "SELECT Status FROM ReportSessions WHERE Id = ?",
+            [session_id],
+        ).fetchone()
+        if row is None:
+            return None
+        return row["Status"]
+
+    def get_committed_sessions_since(self, created_at: str) -> list[dict]:
+        """Return committed ReportSessions rows created at or after *created_at*."""
+        rows = self._conn.execute(
+            "SELECT Id, Status, DateTimeCreated FROM ReportSessions "
+            "WHERE Status = 'committed' AND DateTimeCreated >= ?",
+            [created_at],
+        ).fetchall()
+        return [dict(row) for row in rows]
+
     def get_cleanup_meta(self, session_id: str) -> dict | None:
         row = self._conn.execute(
             "SELECT Id, ReportType, ReportDate, DisplayName, Status, "
