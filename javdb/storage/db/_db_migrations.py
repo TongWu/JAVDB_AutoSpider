@@ -363,6 +363,21 @@ CREATE TABLE IF NOT EXISTS system_state (
 );
 
 CREATE INDEX IF NOT EXISTS idx_system_state_updated_at ON system_state(updated_at);
+
+CREATE TABLE IF NOT EXISTS EmailNotificationHistory (
+    Id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    SessionId       TEXT,
+    Recipient       TEXT NOT NULL,
+    Subject         TEXT NOT NULL,
+    Status          TEXT NOT NULL DEFAULT 'sent' CHECK (Status IN ('sent', 'failed', 'resent')),
+    ErrorMessage    TEXT,
+    AttachmentNames TEXT,
+    SentAt          TEXT NOT NULL,
+    ResentAt        TEXT,
+    CreatedBy       TEXT DEFAULT 'pipeline' CHECK (CreatedBy IN ('pipeline', 'manual', 'resend'))
+);
+CREATE INDEX IF NOT EXISTS idx_email_history_session ON EmailNotificationHistory(SessionId);
+CREATE INDEX IF NOT EXISTS idx_email_history_status ON EmailNotificationHistory(Status);
 """
 
 # Combined DDL for single-DB mode (backward compat, csv_to_sqlite, testing)
@@ -1390,7 +1405,7 @@ def _migrate_single_to_split():
         ]),
         (OPERATIONS_DB_PATH, _OPERATIONS_DDL, [
             'RcloneInventory', 'DedupRecords', 'PikpakHistory',
-            'InventoryAlignNoExactMatch',
+            'InventoryAlignNoExactMatch', 'EmailNotificationHistory',
         ]),
     ]
 
