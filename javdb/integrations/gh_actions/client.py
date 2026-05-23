@@ -5,6 +5,7 @@ Wraps the subset of GitHub Actions endpoints needed by the web UI:
 - List runs (optionally filtered by workflow)
 - Dispatch a workflow run
 - Get the logs download URL for a run
+- Get/update workflow file content (Contents API)
 
 Token + repo resolution (ADR-008 D18):
 - token: GIT_PASSWORD from config.py via cfg()
