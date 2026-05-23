@@ -6,7 +6,7 @@
 
 **Architecture:** See [ADR-008](ADR-008-frontend-rewrite-architecture.md) for all architectural decisions.
 
-**Tech Stack:** Same as Phase 2. Chart library TBD (see Task 5).
+**Tech Stack:** Same as Phase 2. Charts: `vue-chartjs` (Chart.js wrapper), lazy-loaded on statistics route.
 
 **Source spec:** `docs/superpowers/specs/2026-05-16-frontend-rewrite-design.md` §6.2 Phase 3, §8.4 Phase 3
 
@@ -22,34 +22,37 @@
 
 | Feature | Design status | Notes |
 |---------|--------------|-------|
-| GH Actions `edit` tier | Specified (§8.4) | YAML editor + `actionlint` dry-run |
-| GH Actions `admin` tier | Specified (§8.4) | Secrets CRUD (values opaque) |
-| Migrations UI | Specified (§8.4) | List + run single migration |
-| Global log search | **Deferred** | Storage strategy TBD — depends on Phase 2 log volume observations |
-| Statistics dashboard | **Deferred** | Scope + chart library TBD — depends on Phase 2 data accumulation |
+| GH Actions `edit` tier | **BE done** / FE specified | YAML editor endpoint implemented + tested |
+| GH Actions `admin` tier | **BE done** / FE specified | Secrets CRUD endpoints implemented + tested |
+| Migrations UI | **BE done** / FE specified | List + dry-run endpoints implemented + tested |
+| Global log search | **Specified** | File grep over `logs/jobs/*.log` — see Task 4 |
+| Statistics dashboard | **Specified** | 8 metrics, two endpoints, vue-chartjs — see Task 5 |
 
-Tasks 1–3 are fully specified. Tasks 4–5 require a design brainstorming session after Phase 2 dogfooding before implementation begins.
+Tasks 1–3 backend is complete (endpoints + unit tests committed). Tasks 1–3 FE, Tasks 4–5 full stack are specified and ready for implementation.
 
 ---
 
 ## Endpoints
 
-### Fully specified (6 endpoints)
+### Implemented (7 endpoints — BE done, FE pending)
 
 | Method | Path | Purpose | Tier required |
 |--------|------|---------|--------------|
+| `GET` | `/api/gh-actions/workflows/{name}` | Get workflow YAML content + SHA | `edit` |
 | `PUT` | `/api/gh-actions/workflows/{name}` | Edit workflow YAML | `edit` |
 | `GET` | `/api/gh-actions/secrets` | List secret names + updated_at (values opaque) | `admin` |
 | `POST` | `/api/gh-actions/secrets` | Create or update a secret | `admin` |
 | `DELETE` | `/api/gh-actions/secrets/{name}` | Delete a secret | `admin` |
-| `GET` | `/api/migrations` | List migrations + applied state | `admin` |
-| `POST` | `/api/migrations/{id}/run` | Run a single migration | `admin` |
+| `GET` | `/api/migrations/` | List migrations + applied state | `admin` |
+| `POST` | `/api/migrations/{id}/run` | Preview or run a single migration | `admin` |
 
-### Design deferred (1 endpoint)
+### Specified (3 endpoints — full stack pending)
 
-| Method | Path | Purpose | Blocker |
-|--------|------|---------|---------|
-| `GET` | `/api/logs/search?q=` | Global log search | Log persistence strategy not decided |
+| Method | Path | Purpose | Auth |
+|--------|------|---------|------|
+| `GET` | `/api/logs/search?q=&job_id=&date_from=&date_to=&limit=100` | Search task logs via file grep | `admin` |
+| `GET` | `/api/stats/summary` | Aggregated metrics snapshot | any authenticated |
+| `GET` | `/api/stats/trend?metric=&period=7d\|30d\|90d` | Time-series data for a single metric | any authenticated |
 
 ---
 
@@ -87,92 +90,87 @@ Response:
 - BE writes via GitHub Contents API: `PUT /repos/{repo}/contents/.github/workflows/{name}` with base64-encoded content + SHA of current file (optimistic concurrency)
 - Branch protection may reject — surface the GitHub API error clearly
 
-- [ ] **Step 1: Add GitHub Contents API methods to client.**
+- [x] **Step 1: Add GitHub Contents API methods to client.** _(Done)_
 
-  ```python
-  # javdb/integrations/gh_actions/client.py — new methods
-  def get_workflow_content(self, filename: str) -> dict:
-      """Return { content: str (decoded), sha: str, path: str }."""
-      resp = self._client.get(f"/repos/{self._repo}/contents/.github/workflows/{filename}")
-      resp.raise_for_status()
-      data = resp.json()
-      import base64
-      return {
-          "content": base64.b64decode(data["content"]).decode("utf-8"),
-          "sha": data["sha"],
-          "path": data["path"],
-      }
+  Implemented in `javdb/integrations/gh_actions/client.py`: `get_workflow_content()` and `update_workflow_content()`.
 
-  def update_workflow_content(self, filename: str, content: str, sha: str,
-                               message: str, branch: str = "main") -> dict:
-      """Commit updated workflow file. Returns { commit_sha }."""
-      import base64
-      resp = self._client.put(
-          f"/repos/{self._repo}/contents/.github/workflows/{filename}",
-          json={
-              "message": message,
-              "content": base64.b64encode(content.encode("utf-8")).decode("ascii"),
-              "sha": sha,
-              "branch": branch,
-          },
-      )
-      resp.raise_for_status()
-      return {"commit_sha": resp.json()["content"]["sha"]}
+- [x] **Step 2: Implement PUT endpoint + GET content endpoint with YAML validation.** _(Done)_
+
+  Implemented in `apps/api/routers/gh_actions.py`:
+  - `GET /api/gh-actions/workflows/{name}` — returns decoded YAML content + SHA (tier `edit`)
+  - `PUT /api/gh-actions/workflows/{name}` — validates YAML, commits via GitHub Contents API (tier `edit`)
+  - Workflow name validated against `_SAFE_WORKFLOW_NAME_RE = re.compile(r"^[\w\-\.]+\.ya?ml$")`
+
+- [x] **Step 3: Write unit tests.** _(Done)_
+
+  Tests in `tests/unit/test_gh_actions_client.py` and `tests/unit/test_gh_actions_endpoints.py`.
+
+- [ ] **Step 4: Build FE WorkflowEditorPage.**
+
+  **File:** `src/pages/gh-actions/WorkflowEditorPage.vue` (web repo, new)
+
+  **Route:** Add to `src/router/routes.ts`:
+  ```typescript
+  {
+    path: '/gh-actions/workflows',
+    name: 'gh-actions-workflows',
+    component: () => import('@/pages/gh-actions/WorkflowEditorPage.vue'),
+    meta: { requiresAuth: true },
+  }
   ```
 
-- [ ] **Step 2: Implement PUT endpoint with YAML validation.**
+  **Sidebar:** Add to `routeMap` in `src/components/layout/Sidebar.vue`:
+  ```typescript
+  workflows: '/gh-actions/workflows',
+  ```
+  (Menu item `workflows` already exists in sidebar options under GitHub Actions group.)
 
-  ```python
-  @router.put("/workflows/{name}", dependencies=[Depends(_require_gh_edit)])
-  async def update_workflow(name: str, body: WorkflowUpdateRequest, user=Depends(_require_admin)):
-      import yaml
-      try:
-          yaml.safe_load(body.content)
-      except yaml.YAMLError as e:
-          raise HTTPException(422, f"Invalid YAML: {e}")
+  **API:** Add to `src/api/gh-actions.ts`:
+  ```typescript
+  export interface WorkflowContentResponse {
+    content: string
+    sha: string
+    path: string
+  }
+  export interface WorkflowUpdateRequest {
+    content: string
+    sha: string
+    commit_message: string
+    branch?: string
+  }
+  export interface WorkflowUpdateResponse {
+    updated: boolean
+    commit_sha: string
+    validation_warnings: string[]
+  }
 
-      client = _get_gh_client()
-      current = client.get_workflow_content(name)
-      result = client.update_workflow_content(
-          name, body.content, current["sha"], body.commit_message, body.branch
-      )
-      return {"updated": True, "commit_sha": result["commit_sha"], "validation_warnings": []}
+  export async function getWorkflowContent(name: string): Promise<WorkflowContentResponse> {
+    const { data } = await http.get<WorkflowContentResponse>(
+      `/api/gh-actions/workflows/${encodeURIComponent(name)}`
+    )
+    return data
+  }
+
+  export async function updateWorkflow(
+    name: string, body: WorkflowUpdateRequest
+  ): Promise<WorkflowUpdateResponse> {
+    const { data } = await http.put<WorkflowUpdateResponse>(
+      `/api/gh-actions/workflows/${encodeURIComponent(name)}`, body
+    )
+    return data
+  }
   ```
 
-- [ ] **Step 3: Build FE WorkflowEditorPage.**
+  **Layout:**
+  - Left panel: workflow file list (reuse `listWorkflows()`, show `filename` column). Click selects a workflow.
+  - Center: `<NInput type="textarea">` with monospace font, loaded from `getWorkflowContent(name)`. No Monaco — keep bundle small.
+  - Bottom bar: `<NInput>` for commit message (placeholder: `ci: update <filename>`) + `<NButton>` "Save". On save, call `updateWorkflow()` with current SHA for optimistic concurrency.
+  - Error handling: 409 (SHA conflict) → show "File changed since loading, please reload". 422 (invalid YAML) → inline error message.
+  - Visibility: only render when `ghTier` is `edit` or `admin`. Redirect to `/403` otherwise.
 
-  Layout:
-  - Left: workflow file list (from `GET /api/gh-actions/workflows`, filtered to show filenames)
-  - Center: textarea or code editor (Monaco editor via `@monaco-editor/vue` — only if bundle budget allows, otherwise plain `<textarea>` with monospace font) showing YAML content loaded from `GET /api/gh-actions/workflows/{name}`
-  - Bottom bar: commit message input + branch selector + "Save" button
-  - Validation: client-side YAML syntax check on keystroke (debounced), red gutter for invalid lines
-
-- [ ] **Step 4: Write unit + integration tests.**
-
-  ```python
-  def test_update_workflow_invalid_yaml(test_client, httpx_mock):
-      resp = test_client.put("/api/gh-actions/workflows/ci.yml", json={
-          "content": "invalid: yaml: [",
-          "commit_message": "test",
-      })
-      assert resp.status_code == 422
-
-  def test_update_workflow_success(test_client, httpx_mock):
-      httpx_mock.add_response(...)  # Mock GitHub Contents API
-      resp = test_client.put("/api/gh-actions/workflows/ci.yml", json={
-          "content": "name: CI\non: push\njobs:\n  build:\n    runs-on: ubuntu-latest\n",
-          "commit_message": "ci: test update",
-      })
-      assert resp.status_code == 200
-      assert resp.json()["updated"] is True
-  ```
-
-- [ ] **Step 5: Run tests + commit (both repos).**
+- [ ] **Step 5: Commit web repo.**
 
   ```bash
-  # Main repo
-  git commit -m "feat(api): add workflow YAML editor endpoint (GH Actions tier edit)"
-  # Web repo
   git commit -m "feat(fe): add Workflow YAML editor page (GH Actions tier edit)"
   ```
 
@@ -200,57 +198,92 @@ Response:
 
 Python library: `PyNaCl` (`nacl.public.SealedBox`).
 
-- [ ] **Step 1: Add secrets methods to GitHub client.**
+- [x] **Step 1: Add secrets methods to GitHub client.** _(Done)_
 
-  ```python
-  def list_secrets(self) -> list[dict]:
-      resp = self._client.get(f"/repos/{self._repo}/actions/secrets")
-      resp.raise_for_status()
-      return resp.json()["secrets"]  # [{ name, created_at, updated_at }]
+  Implemented in `javdb/integrations/gh_actions/client.py`: `list_secrets()`, `create_or_update_secret()` (NaCl sealed box encryption via `PyNaCl`), `delete_secret()`.
 
-  def create_or_update_secret(self, name: str, value: str) -> None:
-      # Fetch repo public key
-      key_resp = self._client.get(f"/repos/{self._repo}/actions/secrets/public-key")
-      key_resp.raise_for_status()
-      key_data = key_resp.json()
+- [x] **Step 2: Implement router endpoints.** _(Done)_
 
-      # Encrypt with NaCl sealed box
-      from nacl.public import SealedBox, PublicKey
-      import base64
-      public_key = PublicKey(base64.b64decode(key_data["key"]))
-      sealed = SealedBox(public_key).encrypt(value.encode("utf-8"))
-      encrypted_value = base64.b64encode(sealed).decode("ascii")
+  Implemented in `apps/api/routers/gh_actions.py`:
+  - `GET /api/gh-actions/secrets` — list secret names + timestamps (tier `admin`)
+  - `POST /api/gh-actions/secrets` — create/update with NaCl encryption (tier `admin`)
+  - `DELETE /api/gh-actions/secrets/{name}` — delete a secret (tier `admin`)
+  - Secret name validated against `_SAFE_SECRET_NAME_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")`
 
-      # Upsert secret
-      resp = self._client.put(
-          f"/repos/{self._repo}/actions/secrets/{name}",
-          json={"encrypted_value": encrypted_value, "key_id": key_data["key_id"]},
-      )
-      resp.raise_for_status()
+- [x] **Step 3: Write unit tests.** _(Done)_
 
-  def delete_secret(self, name: str) -> None:
-      resp = self._client.delete(f"/repos/{self._repo}/actions/secrets/{name}")
-      resp.raise_for_status()
+  Tests in `tests/unit/test_gh_actions_client.py` (NaCl encrypt/decrypt round-trip) and `tests/unit/test_gh_actions_endpoints.py` (all tier/role/CRUD/error scenarios).
+
+- [ ] **Step 4: Build FE SecretsPage.**
+
+  **File:** `src/pages/gh-actions/SecretsPage.vue` (web repo, new)
+
+  **Route:** Add to `src/router/routes.ts`:
+  ```typescript
+  {
+    path: '/gh-actions/secrets',
+    name: 'gh-actions-secrets',
+    component: () => import('@/pages/gh-actions/SecretsPage.vue'),
+    meta: { requiresAuth: true },
+  }
   ```
 
-- [ ] **Step 2: Implement router endpoints.**
+  **Sidebar:** Add to `routeMap` in `src/components/layout/Sidebar.vue`:
+  ```typescript
+  secrets: '/gh-actions/secrets',
+  ```
+  (Menu item `secrets` already exists in sidebar options under GitHub Actions group.)
 
-  All three gated on `_require_gh_admin` (tier `admin`).
+  **API:** Add to `src/api/gh-actions.ts`:
+  ```typescript
+  export interface SecretItem {
+    name: string
+    created_at: string
+    updated_at: string
+  }
+  export interface SecretsResponse {
+    secrets: SecretItem[]
+  }
+  export interface CreateSecretRequest {
+    name: string
+    value: string
+  }
+  export interface CreateSecretResponse {
+    created: boolean
+  }
+  export interface DeleteSecretResponse {
+    deleted: boolean
+  }
 
-- [ ] **Step 3: Build FE SecretsPage.**
+  export async function listSecrets(): Promise<SecretsResponse> {
+    const { data } = await http.get<SecretsResponse>('/api/gh-actions/secrets')
+    return data
+  }
 
-  Layout:
-  - Table: secret name, created_at, updated_at. **No value column** (values are opaque — GitHub never returns them).
-  - "Add Secret" button → modal with name + value (textarea, masked by default with show/hide toggle). Submit → POST.
-  - Row actions: "Update" (same modal, name readonly) + "Delete" (confirmation dialog).
-  - Warning banner: "Secret values cannot be retrieved after saving. Only the name and timestamps are visible."
+  export async function createOrUpdateSecret(body: CreateSecretRequest): Promise<CreateSecretResponse> {
+    const { data } = await http.post<CreateSecretResponse>('/api/gh-actions/secrets', body)
+    return data
+  }
 
-- [ ] **Step 4: Write tests + commit (both repos).**
+  export async function deleteSecret(name: string): Promise<DeleteSecretResponse> {
+    const { data } = await http.delete<DeleteSecretResponse>(
+      `/api/gh-actions/secrets/${encodeURIComponent(name)}`
+    )
+    return data
+  }
+  ```
+
+  **Layout:**
+  - `<NAlert type="warning">` banner at top: "Secret values cannot be retrieved after saving. Only the name and timestamps are visible."
+  - `<NDataTable>` with columns: Name, Created, Updated, Actions.
+  - "Add Secret" `<NButton>` → `<NModal>` with `<NForm>`: name (`<NInput>`, `A-Z0-9_` pattern, uppercase), value (`<NInput type="textarea">` with `show-password-on="click"` for masking). On submit → `createOrUpdateSecret()`.
+  - Row actions: "Update" (same modal, name field readonly) + "Delete" (`<NPopconfirm>` → `deleteSecret()`).
+  - Visibility: only render when `ghTier` is `admin`. Redirect to `/403` otherwise.
+  - On success: `useMessage().success(...)` + reload table.
+
+- [ ] **Step 5: Commit web repo.**
 
   ```bash
-  # Main repo
-  git commit -m "feat(api): add GH Actions secrets CRUD endpoints (tier admin)"
-  # Web repo
   git commit -m "feat(fe): add GitHub Actions Secrets management page (tier admin)"
   ```
 
@@ -277,130 +310,516 @@ Python library: `PyNaCl` (`nacl.public.SealedBox`).
 - `GET /api/migrations` scans the directory, cross-references with applied state, returns: `[{ id: "0018", filename, applied: bool, applied_at }]`
 - `POST /api/migrations/{id}/run` executes the SQL file against the active storage backend. **Safety gate**: require `dry_run=true` by default, show the SQL preview, then re-submit with `dry_run=false`.
 
-- [ ] **Step 1: Implement migration list endpoint.**
+- [x] **Step 1: Implement migration list endpoint.** _(Done)_
 
-  ```python
-  # apps/api/routers/migrations.py
-  @router.get("/migrations", response_model=MigrationListResponse)
-  async def list_migrations(user=Depends(_require_admin)):
-      migration_dir = Path("javdb/migrations/d1")
-      files = sorted(migration_dir.glob("*.sql"))
-      applied = _get_applied_migrations()  # Query D1/SQLite for applied list
-      return {
-          "migrations": [
-              {
-                  "id": f.stem.split("_")[0],  # "0018"
-                  "filename": f.name,
-                  "applied": f.stem.split("_")[0] in applied,
-                  "applied_at": applied.get(f.stem.split("_")[0]),
-              }
-              for f in files
-          ]
-      }
+  Implemented in `apps/api/routers/migrations.py`:
+  - `GET /api/migrations/` — scans `javdb/migrations/d1/*.sql`, cross-references with `system_state` table in `operations.db` for applied state
+  - Migration ID is the full stem (e.g. `0042_system_state_table`), not just the prefix number
+  - Gated on `require_role("admin")`
+
+- [x] **Step 2: Implement run migration endpoint.** _(Done)_
+
+  Implemented in `apps/api/routers/migrations.py`:
+  - `POST /api/migrations/{migration_id}/run` — path traversal blocked via `resolve().relative_to()`
+  - `dry_run=true` (default) returns SQL preview + statement count
+  - `dry_run=false` returns 501 with instruction to use Wrangler CLI (remote execution deferred)
+  - Schemas in `apps/api/schemas/migrations.py`
+
+- [x] **Step 3: Write unit tests.** _(Done)_
+
+  12 tests in `tests/unit/test_migrations_endpoints.py` covering admin/readonly/anon access, listing, applied state, dry-run preview, 501 for non-dry-run, 404, path traversal.
+
+- [ ] **Step 4: Build FE MigrationsPage.**
+
+  **File:** `src/pages/migrations/MigrationsPage.vue` (web repo, new)
+
+  **Route:** Add to `src/router/routes.ts`:
+  ```typescript
+  {
+    path: '/migrations',
+    name: 'migrations',
+    component: () => import('@/pages/migrations/MigrationsPage.vue'),
+    meta: { requiresAuth: true, roles: ['admin'] },
+  }
   ```
 
-- [ ] **Step 2: Implement run migration endpoint.**
+  **Sidebar:** Add new group to `options` in `src/components/layout/Sidebar.vue` (after Diagnostics, before Settings):
+  ```typescript
+  items.push({
+    label: t('nav.migrations'),
+    key: 'migrations',
+    icon: () => '🗄️',
+  })
+  ```
+  Add to `routeMap`:
+  ```typescript
+  migrations: '/migrations',
+  ```
+  Add i18n key `nav.migrations` to locale files.
 
-  ```python
-  @router.post("/migrations/{migration_id}/run")
-  async def run_migration(migration_id: str, body: RunMigrationRequest, user=Depends(_require_admin)):
-      migration_file = _find_migration_file(migration_id)
-      if not migration_file:
-          raise HTTPException(404, f"Migration {migration_id} not found")
+  **API:** Create `src/api/migrations.ts` (web repo, new):
+  ```typescript
+  import { http } from './client'
 
-      sql = migration_file.read_text()
+  export interface MigrationItem {
+    id: string
+    filename: string
+    applied: boolean
+    applied_at: string | null
+  }
+  export interface MigrationsResponse {
+    migrations: MigrationItem[]
+  }
+  export interface RunMigrationResponse {
+    migration_id: string
+    dry_run: boolean
+    sql_preview: string
+    statements: number
+    applied?: boolean
+  }
 
-      if body.dry_run:
-          return {"dry_run": True, "sql_preview": sql, "statements": sql.count(";")}
+  export async function listMigrations(): Promise<MigrationsResponse> {
+    const { data } = await http.get<MigrationsResponse>('/api/migrations/')
+    return data
+  }
 
-      # Execute
-      conn = get_db("history")  # or appropriate DB based on migration content
-      conn.executescript(sql)
-      _mark_migration_applied(migration_id)
-      return {"dry_run": False, "applied": True, "migration_id": migration_id}
+  export async function runMigration(
+    id: string, dryRun: boolean = true
+  ): Promise<RunMigrationResponse> {
+    const { data } = await http.post<RunMigrationResponse>(
+      `/api/migrations/${encodeURIComponent(id)}/run`, { dry_run: dryRun }
+    )
+    return data
+  }
   ```
 
-- [ ] **Step 3: Build FE MigrationsPage.**
+  **Layout:**
+  - Header: "Migrations" title + `<NBadge>` showing count of unapplied migrations.
+  - `<NDataTable>` columns: Filename, Status (`<NTag type="success">Applied</NTag>` or `<NTag type="default">Pending</NTag>`), Applied At (formatted date or "—").
+  - Row action for unapplied: "Preview" `<NButton>` → `<NDrawer>` showing SQL content in `<NCode>` or `<pre style="font-family: monospace">`. Drawer footer has "Apply" button (disabled — shows tooltip "Remote execution not yet supported. Use Wrangler CLI.").
+  - Applied rows: no actions, read-only.
+  - Admin-only page: redirect to `/403` if user role is not `admin`.
 
-  Layout:
-  - Table: migration ID, filename, applied (green check / gray dash), applied_at.
-  - "Pending" badge count at top.
-  - Row action for unapplied migrations: "Preview" button → drawer showing SQL content (syntax-highlighted via `<pre>` with monospace). "Apply" button → confirmation dialog → POST with `dry_run=false`.
-  - Applied migrations are read-only rows (no actions).
-
-- [ ] **Step 4: Write tests + commit (both repos).**
+- [ ] **Step 5: Commit web repo.**
 
   ```bash
-  # Main repo
-  git commit -m "feat(api): add migrations list + run endpoints (Phase 3)"
-  # Web repo
   git commit -m "feat(fe): add Migrations management page"
   ```
 
 ---
 
-## Task 4: Global Log Search (Design TBD)
+## Task 4: Global Log Search
 
-**Status:** Deferred. Design depends on Phase 2 dogfooding observations.
+**Design decisions (resolved 2026-05-23):**
+1. **Storage:** File-system — logs already exist at `logs/jobs/{job_id}.log` with paired `.meta.json` metadata files. No database needed.
+2. **Search mechanism:** File grep via Python `subprocess` or in-process line scan. Scopes to task logs only (not system/infra logs).
+3. **Volume:** ~50-200KB per log × ~10 jobs/day = manageable. Files are already there.
+4. **Retention:** No automatic cleanup for now. Files persist until manually removed.
 
-**Open questions to resolve before implementation:**
-1. **Log persistence strategy** — Where are completed task logs stored long-term? Options: (a) new `TaskLogs` table in D1 with log content as TEXT, (b) file-system logs at `reports/logs/{task_id}.log`, (c) structured log entries in a dedicated table (one row per log line with timestamp + level + message).
-2. **Search mechanism** — SQL LIKE (simple, slow for large volumes), SQLite FTS5 (fast but D1 lacks FTS), or file-system grep (not available in D1-only deployments).
-3. **Log volume** — How much log data per task run? If <50KB average × 10 runs/day = 500KB/day = ~180MB/year. If stored as TEXT blobs in D1, this is manageable. If stored line-by-line, row count explodes.
-4. **Retention policy** — How long should logs be searchable? 30 days? 90 days? Configurable?
+**Scope:** Task job logs only (`logs/jobs/*.log`). System logs, infra logs, and other log sources are out of scope.
 
-**Prerequisite:** After Phase 2 dogfooding (~4 weeks), run a brainstorming session to decide the above. File: `docs/design/adr/ADR-009-log-search-design.md`.
+**Files:**
+- Create: `apps/api/routers/logs.py` (main repo)
+- Create: `apps/api/schemas/logs.py` (main repo)
+- Modify: `apps/api/services/runtime.py` (main repo — register router)
+- Create: `src/pages/logs/LogSearchPage.vue` (web repo)
+- Create: `src/api/logs.ts` (web repo)
 
-**Endpoint (tentative):**
+**Endpoint: `GET /api/logs/search`**
+
+Query parameters:
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `q` | string | _(required)_ | Search text (case-insensitive substring match) |
+| `job_id` | string | `null` | Filter to a specific job |
+| `date_from` | string (ISO date) | `null` | Only search logs created on or after this date |
+| `date_to` | string (ISO date) | `null` | Only search logs created on or before this date |
+| `limit` | int | `100` | Max results returned (hard cap: 500) |
+
+Response:
+```json
+{
+  "results": [
+    {
+      "job_id": "daily-20260523-092547-391a",
+      "line_number": 42,
+      "text": "18:20:36    Pipeline      STARTING JAVDB PIPELINE",
+      "kind": "daily",
+      "created_at": "2026-05-23T09:25:47+00:00"
+    }
+  ],
+  "total_matched": 157,
+  "truncated": false
+}
 ```
-GET /api/logs/search?q=<text>&date_from=&date_to=&task_id=&level=
-→ { items: [{ task_id, timestamp, level, message, context }], next_cursor }
-```
 
-**Placeholder task list** (to be expanded after design decision):
-- [ ] Brainstorming session → ADR-009
-- [ ] D1 migration for log storage table
-- [ ] BE search endpoint
-- [ ] FE log search page (search bar + results list + task-ID deep link)
-- [ ] E2E journey
+- [ ] **Step 1: Implement log search endpoint (BE).**
+
+  **File:** `apps/api/routers/logs.py`
+
+  ```python
+  import json
+  from pathlib import Path
+  from fastapi import APIRouter, Depends, HTTPException, Query
+  from apps.api.infra.auth import require_role
+  from apps.api.schemas.logs import LogSearchResponse, LogSearchItem
+
+  router = APIRouter(prefix="/api/logs", tags=["logs"])
+  _LOGS_DIR = Path("logs/jobs")
+  _HARD_CAP = 500
+
+  @router.get("/search", response_model=LogSearchResponse)
+  def search_logs(
+      q: str = Query(..., min_length=1, max_length=200),
+      job_id: str | None = Query(None),
+      date_from: str | None = Query(None),
+      date_to: str | None = Query(None),
+      limit: int = Query(100, ge=1, le=_HARD_CAP),
+      _user=Depends(require_role("admin")),
+  ):
+      if not _LOGS_DIR.exists():
+          return LogSearchResponse(results=[], total_matched=0, truncated=False)
+
+      # Collect candidate log files
+      candidates = []
+      for meta_path in sorted(_LOGS_DIR.glob("*.meta.json"), reverse=True):
+          meta = json.loads(meta_path.read_text())
+          jid = meta.get("job_id", meta_path.stem.removesuffix(".meta"))
+          if job_id and jid != job_id:
+              continue
+          created = meta.get("created_at", "")
+          if date_from and created < date_from:
+              continue
+          if date_to and created > date_to + "T23:59:59Z":
+              continue
+          log_path = meta_path.with_suffix("").with_suffix(".log")
+          if log_path.exists():
+              candidates.append((jid, log_path, meta))
+
+      # Search through files
+      results = []
+      total = 0
+      q_lower = q.lower()
+      for jid, log_path, meta in candidates:
+          for i, line in enumerate(log_path.read_text().splitlines(), 1):
+              if q_lower in line.lower():
+                  total += 1
+                  if len(results) < limit:
+                      results.append(LogSearchItem(
+                          job_id=jid, line_number=i, text=line,
+                          kind=meta.get("kind", ""),
+                          created_at=meta.get("created_at", ""),
+                      ))
+
+      return LogSearchResponse(
+          results=results, total_matched=total, truncated=total > limit,
+      )
+  ```
+
+  **File:** `apps/api/schemas/logs.py`
+
+  ```python
+  from pydantic import BaseModel
+
+  class LogSearchItem(BaseModel):
+      job_id: str
+      line_number: int
+      text: str
+      kind: str
+      created_at: str
+
+  class LogSearchResponse(BaseModel):
+      results: list[LogSearchItem]
+      total_matched: int
+      truncated: bool
+  ```
+
+  Register in `apps/api/services/runtime.py`.
+
+- [ ] **Step 2: Write unit tests for log search endpoint.**
+
+  Use `tmp_path` to create fake log files + `.meta.json`, monkeypatch `_LOGS_DIR`. Test cases:
+  - Search with match → returns results with correct line numbers
+  - Search with `job_id` filter → only searches that job
+  - Search with `date_from`/`date_to` → filters by metadata timestamp
+  - No match → empty results
+  - Results exceed limit → `truncated=true`, `total_matched` > len(results)
+  - Empty `logs/jobs/` dir → empty results
+  - Admin-only access (readonly → 403, anon → 401)
+
+- [ ] **Step 3: Build FE LogSearchPage.**
+
+  **File:** `src/pages/logs/LogSearchPage.vue` (web repo, new)
+
+  **Route:** Add to `src/router/routes.ts`:
+  ```typescript
+  {
+    path: '/logs',
+    name: 'logs',
+    component: () => import('@/pages/logs/LogSearchPage.vue'),
+    meta: { requiresAuth: true, roles: ['admin'] },
+  }
+  ```
+
+  **Sidebar:** Add to `options` (after Migrations, before Settings):
+  ```typescript
+  items.push({
+    label: t('nav.logs'),
+    key: 'logs',
+    icon: () => '📜',
+  })
+  ```
+  Add to `routeMap`: `logs: '/logs'`. Add i18n key `nav.logs`.
+
+  **API:** Create `src/api/logs.ts`:
+  ```typescript
+  import { http } from './client'
+
+  export interface LogSearchItem {
+    job_id: string
+    line_number: number
+    text: string
+    kind: string
+    created_at: string
+  }
+  export interface LogSearchResponse {
+    results: LogSearchItem[]
+    total_matched: number
+    truncated: boolean
+  }
+  export interface LogSearchParams {
+    q: string
+    job_id?: string
+    date_from?: string
+    date_to?: string
+    limit?: number
+  }
+
+  export async function searchLogs(params: LogSearchParams): Promise<LogSearchResponse> {
+    const { data } = await http.get<LogSearchResponse>('/api/logs/search', { params })
+    return data
+  }
+  ```
+
+  **Layout:**
+  - Search bar: `<NInput>` for query text + `<NSelect>` for job_id (optional, populated from recent jobs) + `<NDatePicker>` range for date filter + "Search" `<NButton>`.
+  - Results: `<NDataTable>` with columns: Job ID (`<NTag>`), Line #, Log Text (monospace, full width). Highlight matched substring in yellow.
+  - Footer: "Showing X of Y matches" + truncation warning if applicable.
+  - Empty state: "Enter a search term to search task logs."
+  - Admin-only page.
+
+- [ ] **Step 4: Commit (both repos).**
+
+  ```bash
+  # Main repo
+  git commit -m "feat(api): add log search endpoint — file grep over logs/jobs/"
+  # Web repo
+  git commit -m "feat(fe): add Log Search page"
+  ```
 
 ---
 
-## Task 5: Statistics Dashboard (Design TBD)
+## Task 5: Statistics Dashboard
 
-**Status:** Deferred. Scope and chart library to be decided after Phase 2 data accumulation.
+**Design decisions (resolved 2026-05-23):**
+- **Scope:** All 8 metrics (see table below).
+- **Chart library:** `vue-chartjs` (Chart.js wrapper, ~65KB gzip). Lazy-loaded on the statistics route to avoid impacting initial bundle.
+- **Endpoints:** Two — `GET /api/stats/summary` (snapshot) + `GET /api/stats/trend` (time-series).
 
-**Candidate metrics (to be confirmed):**
+**Metrics:**
 
-| Category | Metric | Data source |
-|----------|--------|-------------|
-| **Run metrics** | Daily/weekly success/failure rate | `ReportSessions` |
-| **Run metrics** | Average run duration | `ReportSessions` (StartedAt → CompletedAt) |
-| **Run metrics** | Movies/torrents extracted per run | `ReportMovies`, `ReportTorrents` |
-| **Storage metrics** | MovieHistory/TorrentHistory growth curve | `MovieHistory` COUNT by DateTimeCreated buckets |
-| **Storage metrics** | PikPak transfer volume | `PikpakHistory` |
-| **Storage metrics** | Rclone dedup freed bytes | `DedupRecords` SUM(ExistingFolderSize) |
-| **System metrics** | Proxy pool ban frequency | Task logs (requires log search) |
-| **System metrics** | D1 request volume | External (Cloudflare dashboard — not fetchable via API) |
+| # | Metric | Data source | Chart type |
+|---|--------|-------------|------------|
+| 1 | Success/failure rate | `ReportSessions` (Status column) | Donut |
+| 2 | Average run duration | `ReportSessions` (StartedAt → CompletedAt) | Line |
+| 3 | Movies extracted per run | `ReportMovies` COUNT grouped by SessionId | Bar |
+| 4 | Torrents extracted per run | `ReportTorrents` COUNT grouped by SessionId | Bar |
+| 5 | MovieHistory growth | `MovieHistory` COUNT by date bucket | Line |
+| 6 | PikPak transfer volume | `PikpakHistory` COUNT by date bucket | Line |
+| 7 | Rclone dedup freed | `DedupRecords` SUM(ExistingFolderSize) by date | Bar |
+| 8 | Proxy ban frequency | Scan `logs/jobs/*.log` for "ban" keyword, count per day | Line |
 
-**Chart library candidates:**
+Metric 8 (proxy bans) is derived from log files, not DB. If `logs/jobs/` is empty, return zero.
 
-| Library | Bundle size (gzip) | Pros | Cons |
-|---------|-------------------|------|------|
-| Chart.js | ~60 KB | Simple, well-documented | Limited chart types |
-| ECharts | ~250 KB | Rich, powerful | Blows bundle budget |
-| Lightweight custom (SVG) | ~5 KB | Tiny | Manual work for each chart |
-| `vue-chartjs` (Chart.js wrapper) | ~65 KB | Vue-native API | Extra wrapper layer |
+**Files:**
+- Create: `apps/api/routers/stats.py` (main repo)
+- Create: `apps/api/schemas/stats.py` (main repo)
+- Modify: `apps/api/services/runtime.py` (main repo — register router)
+- Create: `src/pages/stats/StatsPage.vue` (web repo)
+- Create: `src/api/stats.ts` (web repo)
 
-**Recommendation:** Chart.js via `vue-chartjs` for the 3-4 chart types needed (line, bar, donut). Lazy-loaded on the statistics route to avoid impacting initial bundle.
+**Endpoint 1: `GET /api/stats/summary`**
 
-**Prerequisite:** After Phase 2 dogfooding, run a brainstorming session to finalize scope and chart selection. File: `docs/design/adr/ADR-010-statistics-dashboard-design.md`.
+Response:
+```json
+{
+  "total_runs": 142,
+  "success_rate": 0.92,
+  "avg_duration_seconds": 345,
+  "total_movies": 12450,
+  "total_torrents": 34200,
+  "total_pikpak": 8900,
+  "total_dedup_freed_bytes": 1073741824,
+  "proxy_bans_last_7d": 5
+}
+```
 
-**Placeholder task list** (to be expanded after design decision):
-- [ ] Brainstorming session → ADR-010
-- [ ] BE aggregation endpoints (`GET /api/stats/summary`, `GET /api/stats/trend?metric=&period=`)
-- [ ] FE statistics page with chart components (lazy-loaded)
-- [ ] E2E journey
+**Endpoint 2: `GET /api/stats/trend?metric=success_rate&period=30d`**
+
+Query parameters:
+| Param | Type | Values | Default |
+|-------|------|--------|---------|
+| `metric` | string | `success_rate`, `duration`, `movies`, `torrents`, `history_growth`, `pikpak`, `dedup`, `proxy_bans` | _(required)_ |
+| `period` | string | `7d`, `30d`, `90d` | `30d` |
+
+Response:
+```json
+{
+  "metric": "success_rate",
+  "period": "30d",
+  "data_points": [
+    { "date": "2026-05-01", "value": 0.95 },
+    { "date": "2026-05-02", "value": 1.0 },
+    { "date": "2026-05-03", "value": 0.5 }
+  ]
+}
+```
+
+- [ ] **Step 1: Implement stats summary endpoint (BE).**
+
+  **File:** `apps/api/routers/stats.py`
+
+  Queries across multiple databases:
+  - `ReportSessions` from reports DB (success/failure counts, avg duration)
+  - `MovieHistory` / `TorrentHistory` from history DB (total counts)
+  - `PikpakHistory` / `DedupRecords` from operations DB
+  - `logs/jobs/*.log` file scan for proxy ban count (grep "ban" in last 7 days' logs)
+
+  Auth: `_require_auth` (any authenticated user). Read-only aggregation, no admin gate needed.
+
+  Implementation note: each data source query is a simple SQL `COUNT(*)` / `AVG()` / `SUM()`. Wrap each in try/except to return `null` if a table doesn't exist yet (graceful degradation).
+
+- [ ] **Step 2: Implement stats trend endpoint (BE).**
+
+  Same file. For each metric, query the relevant table grouped by date bucket (e.g. `DATE(StartedAt)` for sessions). Period maps to `WHERE date >= date('now', '-30 days')`.
+
+  For `proxy_bans` metric: scan log files within the period, count lines containing "ban" (case-insensitive), group by file's `created_at` date from `.meta.json`.
+
+  **File:** `apps/api/schemas/stats.py`
+
+  ```python
+  from pydantic import BaseModel
+
+  class StatsSummary(BaseModel):
+      total_runs: int
+      success_rate: float | None
+      avg_duration_seconds: float | None
+      total_movies: int
+      total_torrents: int
+      total_pikpak: int
+      total_dedup_freed_bytes: int
+      proxy_bans_last_7d: int
+
+  class TrendDataPoint(BaseModel):
+      date: str
+      value: float
+
+  class TrendResponse(BaseModel):
+      metric: str
+      period: str
+      data_points: list[TrendDataPoint]
+  ```
+
+- [ ] **Step 3: Write unit tests for stats endpoints.**
+
+  Use in-memory SQLite with pre-populated test data. Test cases:
+  - Summary returns all 8 fields with correct aggregation
+  - Summary with empty tables → zeroes / nulls (graceful degradation)
+  - Trend with `metric=success_rate&period=7d` → correct data points
+  - Trend with invalid metric → 422
+  - Trend with invalid period → 422
+  - Auth: any authenticated user can access (not admin-only)
+
+- [ ] **Step 4: Build FE StatsPage with vue-chartjs.**
+
+  **File:** `src/pages/stats/StatsPage.vue` (web repo, new)
+
+  **Route:** Add to `src/router/routes.ts`:
+  ```typescript
+  {
+    path: '/stats',
+    name: 'stats',
+    component: () => import('@/pages/stats/StatsPage.vue'),
+    meta: { requiresAuth: true },
+  }
+  ```
+
+  **Sidebar:** Add to `options` (after Home, before Run — stats is a top-level dashboard):
+  ```typescript
+  { label: t('nav.stats'), key: 'stats', icon: () => '📊' }
+  ```
+  Add to `routeMap`: `stats: '/stats'`. Add i18n key `nav.stats`.
+
+  **API:** Create `src/api/stats.ts`:
+  ```typescript
+  import { http } from './client'
+
+  export interface StatsSummary {
+    total_runs: number
+    success_rate: number | null
+    avg_duration_seconds: number | null
+    total_movies: number
+    total_torrents: number
+    total_pikpak: number
+    total_dedup_freed_bytes: number
+    proxy_bans_last_7d: number
+  }
+  export interface TrendDataPoint {
+    date: string
+    value: number
+  }
+  export interface TrendResponse {
+    metric: string
+    period: string
+    data_points: TrendDataPoint[]
+  }
+
+  export async function getStatsSummary(): Promise<StatsSummary> {
+    const { data } = await http.get<StatsSummary>('/api/stats/summary')
+    return data
+  }
+
+  export async function getStatsTrend(
+    metric: string, period: string = '30d'
+  ): Promise<TrendResponse> {
+    const { data } = await http.get<TrendResponse>('/api/stats/trend', {
+      params: { metric, period },
+    })
+    return data
+  }
+  ```
+
+  **Dependencies:** `npm install vue-chartjs chart.js`
+
+  **Layout:**
+  - Top row: 4 summary cards (`<NCard>`) — Total Runs + Success Rate (donut), Avg Duration, Total Movies, Total Torrents. Use `<NStatistic>` for numbers.
+  - Second row: 2 summary cards — PikPak Volume, Dedup Freed (formatted as human-readable bytes).
+  - Charts section: `<NTabs>` with period selector (`7d` / `30d` / `90d`).
+    - Tab "Run Metrics": Line chart (duration trend) + Bar chart (movies/torrents per run)
+    - Tab "Growth": Line chart (MovieHistory growth + PikPak volume)
+    - Tab "System": Line chart (proxy bans) + Bar chart (dedup freed)
+  - Each chart uses `<Line>` / `<Bar>` / `<Doughnut>` from `vue-chartjs`, wrapped in `defineAsyncComponent()` for lazy loading.
+  - Loading state: `<NSpin>` while fetching.
+  - Error state: `<NEmpty description="Failed to load statistics">` with retry button.
+
+- [ ] **Step 5: Commit (both repos).**
+
+  ```bash
+  # Main repo
+  git commit -m "feat(api): add statistics summary + trend endpoints"
+  # Web repo
+  git commit -m "feat(fe): add Statistics Dashboard with vue-chartjs"
+  ```
 
 ---
 
@@ -435,24 +854,23 @@ GET /api/logs/search?q=<text>&date_from=&date_to=&task_id=&level=
 |---|---------|---------------|
 | 18 | GH Actions: edit workflow YAML | Load workflow → edit content → save → verify commit SHA returned |
 | 19 | GH Actions: secrets CRUD | List secrets → add new secret → verify appears in list → delete → verify removed |
-| 20 | Migrations: run a migration | List migrations → find pending → preview SQL → apply → verify applied state |
+| 20 | Migrations: run a migration | List migrations → find pending → preview SQL → verify SQL preview shown |
+| 21 | Log search | Enter search term → verify results appear with job_id + line number → filter by job_id → verify filtered |
+| 22 | Statistics dashboard | Load page → verify summary cards populated → switch period → verify chart updates |
 
-**Note:** Journeys for log search and statistics will be added after their respective design sessions.
-
-- [ ] **Step 1: Write journey 18 — workflow YAML editor.**
-- [ ] **Step 2: Write journey 19 — secrets CRUD.**
-- [ ] **Step 3: Write journey 20 — migrations.**
-- [ ] **Step 4: Run full E2E suite (all phases).**
+- [ ] **Step 1: Write journeys 18–22.**
+- [ ] **Step 2: Run full E2E suite (all phases).**
 
   ```bash
   npx playwright test --project=chromium
   ```
-  Expected: all 26 journeys pass (13 Phase 1 + 10 Phase 2 + 3 Phase 3).
 
-- [ ] **Step 5: Commit.**
+  Expected: all 28 journeys pass (13 Phase 1 + 10 Phase 2 + 5 Phase 3).
+
+- [ ] **Step 3: Commit.**
 
   ```bash
-  git commit -m "test(e2e): add Phase 3 journeys 18-20 — workflow editor, secrets, migrations"
+  git commit -m "test(e2e): add Phase 3 journeys 18-22 — editor, secrets, migrations, logs, stats"
   ```
 
 ---
@@ -460,12 +878,13 @@ GET /api/logs/search?q=<text>&date_from=&date_to=&task_id=&level=
 ## Suggested Execution Order
 
 ```
-1. Task 1 (GH Actions YAML editor)   — fully specified, can start immediately
-2. Task 2 (GH Actions secrets)       — fully specified, independent of Task 1
-3. Task 3 (Migrations UI)            — fully specified, independent
-4. Task 6 (Multi-tab optimization)   — optional, can be done anytime
-5. Task 4 (Log search)               — BLOCKED on design brainstorming (ADR-009)
-6. Task 5 (Statistics)               — BLOCKED on design brainstorming (ADR-010)
+1. Task 1 FE (WorkflowEditorPage)    — BE done, FE ready to build
+2. Task 2 FE (SecretsPage)           — BE done, FE ready to build
+3. Task 3 FE (MigrationsPage)        — BE done, FE ready to build
+4. Task 4 (Log search)               — full stack, specified
+5. Task 5 (Statistics dashboard)     — full stack, specified (install vue-chartjs)
+6. Task 6 (Multi-tab optimization)   — optional, can be done anytime
+7. E2E journeys 18–22               — after all FE pages are built
 ```
 
-Tasks 1–3 and 6 are implementable. Tasks 4–5 require design sessions after Phase 2 dogfooding.
+Tasks 1–3 BE is complete. All tasks are fully specified and ready for implementation.
