@@ -2,7 +2,7 @@
 
 | Field       | Value                                      |
 | ----------- | ------------------------------------------ |
-| **Status**  | Proposed                                   |
+| **Status**  | Completed                                  |
 | **Date**    | 2026-05-23                                 |
 | **Authors** | Ted                                        |
 | **Related** | [ADR-008](../ADR-008-Frontend-Rewrite/ADR-008-frontend-rewrite-architecture.md), [ADR-010](../ADR-010-D1-Access-Port/) |

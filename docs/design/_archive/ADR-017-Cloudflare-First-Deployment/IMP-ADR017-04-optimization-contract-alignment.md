@@ -4,7 +4,7 @@
 
 | Field       | Value                                                    |
 | ----------- | -------------------------------------------------------- |
-| **Status**  | Draft                                                    |
+| **Status**  | Completed                                                |
 | **Date**    | 2026-05-24                                               |
 | **Related** | [ADR-017](ADR-017-cloudflare-first-deployment.md), [IMP-ADR017-03](IMP-ADR017-03-execution-gh-actions-bridge.md) |
 

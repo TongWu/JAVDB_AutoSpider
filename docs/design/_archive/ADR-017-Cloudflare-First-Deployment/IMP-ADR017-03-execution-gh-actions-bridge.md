@@ -4,7 +4,7 @@
 
 | Field       | Value                                                    |
 | ----------- | -------------------------------------------------------- |
-| **Status**  | Draft                                                    |
+| **Status**  | Completed                                                |
 | **Date**    | 2026-05-24                                               |
 | **Related** | [ADR-017](ADR-017-cloudflare-first-deployment.md), [IMP-ADR017-01](IMP-ADR017-01-cloudflare-pages-setup.md), [IMP-ADR017-02](IMP-ADR017-02-config-diagnostics-explore.md) |
 
