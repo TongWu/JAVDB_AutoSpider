@@ -182,6 +182,22 @@ class TestBuildDriftDiagnosisSection:
         assert suspects == []
 
     @patch("javdb.integrations.notify.email.subprocess.run")
+    def test_subprocess_unexpected_exit_code_returns_fallback(self, mock_run):
+        """Only drift_diagnose exit codes 0/1/2 are valid diagnose results."""
+        mock_run.return_value = MagicMock(
+            returncode=3,
+            stdout=_make_diagnose_json([_safe_suspect()], "SAFE_TO_APPLY"),
+            stderr="",
+        )
+
+        section, suspects = _build_drift_diagnosis_section()
+
+        assert "Automated diagnosis unavailable" in section
+        assert "unexpected exit code 3" in section
+        assert "apps.cli.db.drift_diagnose" in section
+        assert suspects == []
+
+    @patch("javdb.integrations.notify.email.subprocess.run")
     def test_subprocess_invalid_json_schema_returns_fallback(self, mock_run):
         for stdout in ("[]", "null"):
             mock_run.return_value = MagicMock(

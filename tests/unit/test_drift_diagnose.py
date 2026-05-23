@@ -412,6 +412,26 @@ class TestDiscoverFromD1Sweep:
         )
         assert suspects == {}
 
+    def test_pending_count_failure_marks_session_suspect(self, drift_mod):
+        """A failed pending-table count must not be treated as zero rows."""
+        session_id = "20260517T121617.445400Z-ea87-0000"
+        d1_reports = FakeD1Connection({
+            "select id": [{"Id": session_id, "Status": "committed",
+                           "DateTimeCreated": _hours_ago_iso(2)}],
+        })
+        d1_history = RaisingD1Connection(["pendingmoviehistorywrites"], {
+            "select count(*) as cnt from pendingtorrenthistorywri": [{"cnt": 0}],
+        })
+
+        suspects = drift_mod.discover_suspects_from_d1_sweep(
+            d1_reports, d1_history, since_hours=24,
+        )
+
+        assert session_id in suspects
+        assert suspects[session_id]["d1_pending_movie_count"] is None
+        assert suspects[session_id]["d1_pending_torrent_count"] == 0
+        assert "pending count query failed" in suspects[session_id]["note"]
+
 
 # ===========================================================================
 # Test: D3 — merge suspects with provenance tagging
@@ -1371,7 +1391,7 @@ class TestApplyPath:
     # ── Happy path: SAFE_TO_APPLY → deletes + audit + exit 0 ─────────
 
     def test_apply_safe_to_apply_success(self, drift_mod, drift_cli, tmp_path,
-                                          monkeypatch):
+                                          monkeypatch, capsys):
         """Full happy path: SAFE_TO_APPLY → DELETEs + audit record + exit 0."""
         session_id = "20260520T100000.000000Z-eeee-0000"
         monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
@@ -1408,6 +1428,7 @@ class TestApplyPath:
             "--history-db", db_path,
         ])
         assert rc == 0
+        assert "Applied:" not in capsys.readouterr().out
 
         # Verify connections were closed
         assert d1_history.closed
