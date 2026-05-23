@@ -1,17 +1,22 @@
 # ADR-009：D1 瞬时错误分类器修复 + Drift 诊断工具
 
-**状态**：已接受 —— 实现待启动（截至 2026-05-19 尚无 PR）
+**状态**：部分实现 —— P0 已完成；P1-P3 待实施（2026-05-24 已验证）
 **日期**：2026-05-17
+**最后验证**：2026-05-24
+**配套 IMP**：[IMP-ADR009-01](IMP-ADR009-01-drift-diagnose-completion.md)
 **决策者**：bake 期 drift 响应（承接 2026-05-17T14:00 UTC 记录在 `reports/D1/d1_drift.jsonl` 中 `kind: drift_resolution` 的手动 forensic 修复）
 **前置**：无——按 [ADR-006](../_archive/ADR-006-Pending-Mode-Rollout/ADR-006-pending-mode-default-rollout.md) amendment 3 属 bake 安全。"bake 安全"准确含义是：**对 D10 gate 输入无影响**（不写 D1/SQLite、不改 schema、不改 `WriteMode` 解析、不动 `.publish-config.yml` pause 机制、不发 `pending_session_verify` 行）。Layer 1 的 D6 *确实*修改 `email-notification` job，但修改内容是带 60 秒 timeout 的只读 subprocess 调用，被调工具自身只在操作员手动 `--apply` 路径才会触碰 D10 监控状态（workflow 内**绝不**触发 `--apply`）。
 
-## 待办 (Outstanding Work)
+## 实施状态
 
-- **D1 (Layer 0)** —— 在 [`javdb/storage/d1_client.py`](../../../javdb/storage/d1_client.py) 的 `_TRANSIENT_ERROR_KEYWORDS` 中加入 `"connection lost"` + 回归用例。**尚未应用** —— 当前关键字元组不含该子串。
-- **D2 (Layer 1)** —— `drift_diagnose` CLI（位于 `apps/cli/db/drift_diagnose.py`）。**尚未创建** —— `apps/cli/db/` 目录下没有该模块。
-- **D6** —— email job subprocess 集成，依赖 D2。
+2026-05-24 的新鲜验证结果：
 
-本 ADR 没有配套 IMP（按 D7 划分，工作量适合小型 PR 序列直接落地）。
+- **P0 / D1 分类器修复** —— 已完成。[`javdb/storage/d1_client.py`](../../../javdb/storage/d1_client.py) 的 `_TRANSIENT_ERROR_KEYWORDS` 已包含 `"connection lost"`，且 `pytest tests/unit/test_d1_dual.py::test_400_network_connection_lost_treated_as_transient -v` 通过（`1 passed in 0.03s`）。
+- **P1 / 诊断模式 CLI** —— 待实施。`python3 -m apps.cli.db.drift_diagnose --help` 以 `No module named apps.cli.db.drift_diagnose` 退出；[`apps/cli/db/drift_diagnose.py`](../../../apps/cli/db/drift_diagnose.py) 尚不存在。
+- **P2 / 带安全栏的 `--apply` 路径** —— 待实施。它依赖 P1；`apps/`、`javdb/`、`tests/` 中没有 `SAFE_TO_APPLY` / 受保护 DELETE 的实现。
+- **P3 / 邮件集成** —— 待实施。[`javdb/integrations/notify/email.py`](../../../javdb/integrations/notify/email.py) 与 `.github/workflows/` 中没有 `drift_diagnose` subprocess 调用、`Drift Diagnosis` 正文块，或 `[DRIFT-FIX-READY]` / `[DRIFT-ESCALATE]` 主题标签。
+
+本 ADR 现在有配套 IMP：[IMP-ADR009-01](IMP-ADR009-01-drift-diagnose-completion.md)。该 IMP 从当前状态继续：除非 P0 回归测试失败，否则不要重做 P0；P1-P3 在该 IMP 中实施和验证。
 
 ---
 
