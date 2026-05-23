@@ -63,54 +63,29 @@ def _safe_query_one(db_path: str, sql: str, params: tuple = ()) -> Optional[Any]
         return None
 
 
+def _extract_row_pair(row: Any) -> tuple:
+    """Extract a (col0, col1) pair from either a tuple/sqlite3.Row or a D1 dict row."""
+    if isinstance(row, dict):
+        vals = list(row.values())
+        return (vals[0], vals[1])
+    return (row[0], row[1])
+
+
 def _safe_query_all(db_path: str, sql: str, params: tuple = ()) -> List[tuple]:
     """Execute a multi-row query, returning [] on any error."""
     try:
         with get_db(db_path) as conn:
             rows = conn.execute(sql, params).fetchall()
-            return [(row[0], row[1]) for row in rows]
+            return [_extract_row_pair(row) for row in rows]
     except Exception:
         logger.debug("safe_query_all failed for %s", sql, exc_info=True)
         return []
 
 
-def _count_proxy_bans_in_logs(days: int) -> int:
-    """Count lines containing 'ban' (case-insensitive) in recent log files."""
+def _proxy_bans_by_date(days: int) -> Dict[str, int]:
+    """Scan log files within *days* and return a {date_str: ban_count} dict."""
     if not _LOGS_DIR.exists():
-        return 0
-
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-    count = 0
-
-    for meta_path in _LOGS_DIR.glob("*.meta.json"):
-        try:
-            meta = json.loads(meta_path.read_text(encoding="utf-8", errors="ignore"))
-        except (json.JSONDecodeError, OSError):
-            continue
-
-        created_at = meta.get("created_at", "")
-        if not created_at or created_at < cutoff.isoformat():
-            continue
-
-        log_path = meta_path.with_suffix("").with_suffix(".log")
-        if not log_path.exists():
-            continue
-
-        try:
-            text = log_path.read_text(encoding="utf-8", errors="ignore")
-            for line in text.splitlines():
-                if "ban" in line.lower():
-                    count += 1
-        except OSError:
-            continue
-
-    return count
-
-
-def _count_proxy_bans_by_date(days: int) -> List[tuple]:
-    """Count 'ban' lines per day from log files within the period."""
-    if not _LOGS_DIR.exists():
-        return []
+        return {}
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     counts: Dict[str, int] = {}
@@ -139,7 +114,17 @@ def _count_proxy_bans_by_date(days: int) -> List[tuple]:
         except OSError:
             continue
 
-    return sorted(counts.items())
+    return counts
+
+
+def _count_proxy_bans_in_logs(days: int) -> int:
+    """Count lines containing 'ban' (case-insensitive) in recent log files."""
+    return sum(_proxy_bans_by_date(days).values())
+
+
+def _count_proxy_bans_by_date(days: int) -> List[tuple]:
+    """Count 'ban' lines per day from log files within the period."""
+    return sorted(_proxy_bans_by_date(days).items())
 
 
 # ---------------------------------------------------------------------------
@@ -181,7 +166,7 @@ def stats_summary(
 
     total_dedup_freed_bytes = _safe_query_one(
         OPERATIONS_DB_PATH,
-        "SELECT COALESCE(SUM(ExistingFolderSize), 0) FROM DedupRecords",
+        "SELECT COALESCE(SUM(ExistingFolderSize), 0) FROM DedupRecords WHERE IsDeleted=1",
     ) or 0
 
     proxy_bans_last_7d = _count_proxy_bans_in_logs(7)
@@ -288,7 +273,7 @@ def stats_trend(
         rows = _safe_query_all(
             OPERATIONS_DB_PATH,
             "SELECT DATE(DateTimeDetected), COALESCE(SUM(ExistingFolderSize), 0) "
-            "FROM DedupRecords WHERE DateTimeDetected >= ? "
+            "FROM DedupRecords WHERE IsDeleted=1 AND DateTimeDetected >= ? "
             "GROUP BY DATE(DateTimeDetected) ORDER BY DATE(DateTimeDetected)",
             (cutoff,),
         )
