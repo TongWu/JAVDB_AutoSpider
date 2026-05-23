@@ -1,19 +1,26 @@
 """GitHub Actions endpoints.
 
-GET  /api/gh-actions/workflows              — list workflows, each enriched with latest run
-GET  /api/gh-actions/runs                   — list runs, optional ?workflow=<id> filter
-POST /api/gh-actions/runs                   — dispatch a workflow run (admin only)
-GET  /api/gh-actions/runs/{run_id}/logs     — return the run's logs download URL
-GET  /api/gh-actions/workflows/{name}       — return workflow YAML content (edit tier)
-PUT  /api/gh-actions/workflows/{name}       — validate & commit workflow YAML (edit tier, admin)
+GET    /api/gh-actions/workflows              — list workflows, each enriched with latest run
+GET    /api/gh-actions/runs                   — list runs, optional ?workflow=<id> filter
+POST   /api/gh-actions/runs                   — dispatch a workflow run (admin only)
+GET    /api/gh-actions/runs/{run_id}/logs     — return the run's logs download URL
+GET    /api/gh-actions/workflows/{name}       — return workflow YAML content (edit tier)
+PUT    /api/gh-actions/workflows/{name}       — validate & commit workflow YAML (edit tier, admin)
+GET    /api/gh-actions/secrets                — list repo secrets metadata (admin tier)
+POST   /api/gh-actions/secrets                — create or update a secret (admin tier, admin role)
+DELETE /api/gh-actions/secrets/{name}         — delete a secret (admin tier, admin role)
 
 Monitor-tier endpoints (first four) require:
   1. A valid auth token (_require_auth / require_role)
   2. capabilities.gh_actions.tier != "none" (monitor-tier gate)
 
-Edit-tier endpoints (last two) require:
+Edit-tier endpoints (next two) require:
   1. A valid auth token (_require_auth / require_role("admin") for PUT)
   2. capabilities.gh_actions.tier in ("edit", "admin") (edit-tier gate)
+
+Admin-tier endpoints (last three) require:
+  1. A valid auth token (_require_auth / require_role("admin") for POST/DELETE)
+  2. capabilities.gh_actions.tier == "admin" (admin-tier gate)
 """
 
 from __future__ import annotations
@@ -26,15 +33,21 @@ import yaml
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 _SAFE_WORKFLOW_NAME_RE = re.compile(r"^[\w\-\.]+\.ya?ml$")
+_SAFE_SECRET_NAME_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
 from apps.api.infra.auth import _require_auth, require_role
 from apps.api.routers.capabilities import build_capabilities
 from apps.api.schemas.gh_actions import (
+    CreateSecretRequest,
+    CreateSecretResponse,
+    DeleteSecretResponse,
     DispatchRequest,
     DispatchResponse,
     RunItem,
     RunLogsResponse,
     RunsResponse,
+    SecretItem,
+    SecretsResponse,
     WorkflowContentResponse,
     WorkflowItem,
     WorkflowsResponse,
@@ -84,6 +97,26 @@ def _require_gh_edit() -> None:
                 "error": {
                     "code": "gh_actions.edit_not_allowed",
                     "message": "GH Actions edit tier required",
+                }
+            },
+        )
+
+
+# ---------------------------------------------------------------------------
+# Admin-tier gate
+# ---------------------------------------------------------------------------
+
+
+def _require_gh_admin() -> None:
+    """Raise 403 if gh_actions.tier != 'admin'."""
+    caps = build_capabilities()
+    if caps.gh_actions.tier != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": {
+                    "code": "gh_actions.admin_required",
+                    "message": "GH Actions admin tier required",
                 }
             },
         )
@@ -360,11 +393,116 @@ def update_workflow_content(
         client.close()
 
 
+# ---------------------------------------------------------------------------
+# Secrets endpoints (admin tier)
+# ---------------------------------------------------------------------------
+
+
+def _validate_secret_name(name: str) -> None:
+    """Raise 400 if name is not a valid GitHub Actions secret name.
+
+    GitHub secret names must be uppercase alphanumeric + underscores,
+    starting with a letter.
+    """
+    if not _SAFE_SECRET_NAME_RE.match(name):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": {
+                    "code": "gh_actions.invalid_secret_name",
+                    "message": (
+                        "Secret name must be uppercase letters, digits, and underscores, "
+                        "starting with a letter"
+                    ),
+                }
+            },
+        )
+
+
+@router.get(
+    "/secrets",
+    response_model=SecretsResponse,
+    dependencies=[Depends(_require_gh_admin)],
+)
+def list_secrets(
+    _user: Dict[str, Any] = Depends(_require_auth),
+) -> SecretsResponse:
+    """List repository Actions secrets metadata (admin tier)."""
+    client = _get_gh_client()
+    try:
+        raw = client.list_secrets()
+        return SecretsResponse(
+            secrets=[
+                SecretItem(
+                    name=s["name"],
+                    created_at=s["created_at"],
+                    updated_at=s["updated_at"],
+                )
+                for s in raw
+            ]
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _wrap_gh_error(exc) from exc
+    finally:
+        client.close()
+
+
+@router.post(
+    "/secrets",
+    response_model=CreateSecretResponse,
+    dependencies=[Depends(_require_gh_admin)],
+)
+def create_secret(
+    body: CreateSecretRequest,
+    _user: Dict[str, Any] = Depends(require_role("admin")),
+) -> CreateSecretResponse:
+    """Create or update a repository Actions secret (admin tier, admin role)."""
+    _validate_secret_name(body.name)
+    client = _get_gh_client()
+    try:
+        client.create_or_update_secret(body.name, body.value)
+        return CreateSecretResponse(created=True)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _wrap_gh_error(exc) from exc
+    finally:
+        client.close()
+
+
+@router.delete(
+    "/secrets/{name}",
+    response_model=DeleteSecretResponse,
+    dependencies=[Depends(_require_gh_admin)],
+)
+def delete_secret(
+    name: str,
+    _user: Dict[str, Any] = Depends(require_role("admin")),
+) -> DeleteSecretResponse:
+    """Delete a repository Actions secret (admin tier, admin role)."""
+    _validate_secret_name(name)
+    client = _get_gh_client()
+    try:
+        client.delete_secret(name)
+        return DeleteSecretResponse(deleted=True)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _wrap_gh_error(exc) from exc
+    finally:
+        client.close()
+
+
 __all__ = [
+    "create_secret",
+    "delete_secret",
     "dispatch_run",
     "get_run_logs",
     "get_workflow_content",
     "list_runs",
+    "list_secrets",
     "list_workflows",
     "router",
     "update_workflow_content",
