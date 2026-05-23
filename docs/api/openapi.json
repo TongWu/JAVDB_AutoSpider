@@ -1533,6 +1533,65 @@
         "title": "ListTasksResponse",
         "type": "object"
       },
+      "LogSearchItem": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "line_number": {
+            "title": "Line Number",
+            "type": "integer"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "line_number",
+          "text",
+          "kind",
+          "created_at"
+        ],
+        "title": "LogSearchItem",
+        "type": "object"
+      },
+      "LogSearchResponse": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/LogSearchItem"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "total_matched": {
+            "title": "Total Matched",
+            "type": "integer"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "results",
+          "total_matched",
+          "truncated"
+        ],
+        "title": "LogSearchResponse",
+        "type": "object"
+      },
       "LoginPayload": {
         "properties": {
           "password": {
@@ -5427,6 +5486,110 @@
           }
         },
         "summary": "Refresh Javdb Session"
+      }
+    },
+    "/api/logs/search": {
+      "get": {
+        "operationId": "search_logs_api_logs_search_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "job_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Job Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date_from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date From"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date To"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogSearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search Logs",
+        "tags": [
+          "logs"
+        ]
       }
     },
     "/api/migrations/": {
