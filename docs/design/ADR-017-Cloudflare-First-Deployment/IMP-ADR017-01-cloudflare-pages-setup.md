@@ -43,6 +43,7 @@
 | `server/__tests__/history-routes.test.ts` | Integration tests for history routes |
 | `server/__tests__/sessions-routes.test.ts` | Integration tests for sessions routes |
 | `vitest.server.config.ts` | Vitest config for server tests (Workers pool) |
+| `.dev.vars.example` | Enumerates all required/optional secrets with descriptions (D7) |
 
 ### Modified Files
 
@@ -50,7 +51,8 @@
 | ---- | ------ |
 | `package.json` | Add Hono, `@cloudflare/workers-types`, vitest workers pool deps |
 | `vite.config.ts` | Add Cloudflare Pages plugin (if needed for dev) |
-| `.gitignore` | Add `.wrangler/` |
+| `.gitignore` | Add `.wrangler/`, `.dev.vars` |
+| `README.md` | Add "Deploy to Cloudflare" section with step-by-step guide (D7) |
 
 ---
 
@@ -2015,7 +2017,175 @@ git commit -m "chore: add local dev setup instructions and gitignore .dev.vars"
 
 ---
 
-## Task 11: Cloudflare Pages Deployment
+## Task 11: Deployment Guide + `.dev.vars.example`
+
+**Files:**
+
+- Create: `.dev.vars.example`
+- Modify: `README.md`
+
+Per [ADR-017 D7](ADR-017-cloudflare-first-deployment.md), [Cloudflare Deploy Buttons](https://developers.cloudflare.com/workers/platform/deploy-buttons/) do not support Pages projects and auto-provision new D1 databases (we need existing ones). This task adds a comprehensive deployment guide to README and a `.dev.vars.example` for secret self-documentation.
+
+- [ ] **Step 1: Create `.dev.vars.example`**
+
+```dotenv
+# Required — JWT signing key (min 32 characters)
+API_SECRET_KEY=change-me-to-a-random-string-at-least-32-chars
+
+# Required — Admin credentials
+ADMIN_USERNAME=admin
+# For local dev, use "plain:<password>" (e.g. "plain:admin123")
+# For production, use a bcrypt hash (e.g. "$2b$12$...")
+# Generate with: python3 -c "from passlib.hash import bcrypt; print(bcrypt.hash('yourpassword'))"
+ADMIN_PASSWORD_HASH=plain:admin123
+
+# Optional — Read-only user
+# READONLY_USERNAME=viewer
+# READONLY_PASSWORD_HASH=plain:viewer123
+
+# Optional — Token expiry (seconds)
+# ACCESS_TOKEN_EXPIRE_SECONDS=1800
+# REFRESH_TOKEN_EXPIRE_SECONDS=604800
+
+# Optional — Feature flags
+# INGESTION_MODE=github
+# BACKEND_VERSION=2.0.0
+# GH_ACTIONS_TIER=pro
+# GH_ACTIONS_REPO=owner/repo
+# GH_ACTIONS_TOKEN=ghp_xxxx
+# FEATURE_PIKPAK=true
+# FEATURE_RCLONE=true
+# SMTP_HOST=smtp.example.com
+# JAVDB_USERNAME=user@example.com
+```
+
+- [ ] **Step 2: Add deployment section to `README.md`**
+
+Add the following section to the existing README (after the project description / development section):
+
+````markdown
+## Deploy to Cloudflare
+
+<!-- Cloudflare Deploy Buttons do not support Pages projects yet.
+     When support is added, replace the link below with:
+     [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/user/javdb-autospider-web) -->
+
+> **Note:** One-click Deploy Buttons are [not yet supported for Pages](https://developers.cloudflare.com/workers/platform/deploy-buttons/). Follow the manual steps below.
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) >= 20
+- A [Cloudflare account](https://dash.cloudflare.com/sign-up) (Free plan is sufficient)
+- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/) installed (`npm i -g wrangler`)
+- Three existing D1 databases: `javdb-history`, `javdb-reports`, `javdb-operations`
+
+### Step 1 — Clone & install
+
+```bash
+git clone https://github.com/<your-fork>/javdb-autospider-web.git
+cd javdb-autospider-web
+npm install
+```
+
+### Step 2 — Look up your D1 database IDs
+
+```bash
+wrangler d1 list
+```
+
+Find the IDs for `javdb-history`, `javdb-reports`, `javdb-operations`.
+
+If you don't have these databases yet, create them:
+
+```bash
+wrangler d1 create javdb-history
+wrangler d1 create javdb-reports
+wrangler d1 create javdb-operations
+```
+
+### Step 3 — Configure `wrangler.toml`
+
+Open `wrangler.toml` and replace the placeholder database IDs:
+
+```toml
+[[d1_databases]]
+binding = "HISTORY_DB"
+database_name = "javdb-history"
+database_id = "<paste your javdb-history ID here>"
+
+[[d1_databases]]
+binding = "REPORTS_DB"
+database_name = "javdb-reports"
+database_id = "<paste your javdb-reports ID here>"
+
+[[d1_databases]]
+binding = "OPERATIONS_DB"
+database_name = "javdb-operations"
+database_id = "<paste your javdb-operations ID here>"
+```
+
+### Step 4 — Set production secrets
+
+```bash
+wrangler pages secret put API_SECRET_KEY      # JWT signing key, min 32 chars
+wrangler pages secret put ADMIN_USERNAME       # e.g. "admin"
+wrangler pages secret put ADMIN_PASSWORD_HASH  # bcrypt hash of your password
+```
+
+Generate a bcrypt hash:
+
+```bash
+python3 -c "from passlib.hash import bcrypt; print(bcrypt.hash('yourpassword'))"
+# or use: npx bcryptjs-cli hash yourpassword
+```
+
+See `.dev.vars.example` for all available environment variables.
+
+### Step 5 — Build & deploy
+
+```bash
+npm run build
+wrangler pages deploy dist
+```
+
+The deployment URL will be printed (e.g. `https://javdb-autospider-web.pages.dev`).
+
+### Step 6 — Verify
+
+```bash
+PROD_URL=https://javdb-autospider-web.pages.dev
+
+# Test login
+curl -s -X POST $PROD_URL/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"<your-password>"}' | jq .
+
+# Test capabilities (use the access_token from login)
+curl -s $PROD_URL/api/capabilities \
+  -H "Authorization: Bearer <access_token>" | jq .
+```
+
+Open the production URL in a browser and verify: login, history page, sessions page.
+
+### Local development
+
+```bash
+cp .dev.vars.example .dev.vars   # Edit with your local settings
+npm run build
+npm run dev:api                  # Starts on http://localhost:8788
+```
+````
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add .dev.vars.example README.md
+git commit -m "docs: add Cloudflare Pages deployment guide and .dev.vars.example"
+```
+
+---
+
+## Task 12: Cloudflare Pages Deployment
 
 **Files:** No new source files. Deployment verification.
 
@@ -2096,3 +2266,5 @@ Before marking Phase 1 complete, verify:
 - [ ] `GET /api/sessions/:id` returns session detail with movies/torrents
 - [ ] CSV export works for movies and torrents
 - [ ] Docker deployment (Python FastAPI) still works unchanged
+- [ ] `.dev.vars.example` committed with all secret descriptions
+- [ ] README deployment guide covers all manual steps
