@@ -3,7 +3,11 @@
 **Status**: Partially implemented — P0 complete; P1-P3 pending (verified 2026-05-24)
 **Date**: 2026-05-17
 **Last verified**: 2026-05-24
-**Paired IMP**: [IMP-ADR009-01](IMP-ADR009-01-drift-diagnose-completion.md)
+**Paired IMPs**:
+- [IMP-ADR009-01](IMP-ADR009-01-d1-transient-classifier-fix.md) — P0 / D1 classifier fix.
+- [IMP-ADR009-02](IMP-ADR009-02-drift-diagnose-readonly-cli.md) — P1 / read-only diagnose CLI.
+- [IMP-ADR009-03](IMP-ADR009-03-drift-diagnose-guarded-apply.md) — P2 / guarded `--apply` path.
+- [IMP-ADR009-04](IMP-ADR009-04-drift-diagnose-email-integration.md) — P3 / email diagnosis integration.
 
 ## Implementation Status
 
@@ -14,7 +18,8 @@ Fresh verification on 2026-05-24 found:
 - **P2 / guarded `--apply` path** — pending. It depends on P1 and no `SAFE_TO_APPLY` / guarded-delete implementation exists in `apps/`, `javdb/`, or `tests/`.
 - **P3 / email integration** — pending. No `drift_diagnose` subprocess invocation, `Drift Diagnosis` body block, or `[DRIFT-FIX-READY]` / `[DRIFT-ESCALATE]` subject tagging exists in [`javdb/integrations/notify/email.py`](../../../javdb/integrations/notify/email.py) or `.github/workflows/`.
 
-This ADR now has a paired IMP: [IMP-ADR009-01](IMP-ADR009-01-drift-diagnose-completion.md). That IMP starts from the current state: do not rework P0 unless its regression test fails; implement and verify P1-P3 there.
+This ADR now has phase-specific IMPs: [IMP-ADR009-01](IMP-ADR009-01-d1-transient-classifier-fix.md), [IMP-ADR009-02](IMP-ADR009-02-drift-diagnose-readonly-cli.md), [IMP-ADR009-03](IMP-ADR009-03-drift-diagnose-guarded-apply.md), and [IMP-ADR009-04](IMP-ADR009-04-drift-diagnose-email-integration.md). Each phase tracks its own status and verification evidence; do not combine multiple phase checklists into one IMP.
+
 **Deciders**: Bake-period drift response (succeeds the manual forensic fix recorded as `kind: drift_resolution` in `reports/D1/d1_drift.jsonl` at 2026-05-17T14:00 UTC)
 **Prerequisites**: None — bake-safe per [ADR-006](../_archive/ADR-006-Pending-Mode-Rollout/ADR-006-pending-mode-default-rollout.md) amendment 3. The "bake-safe" claim is precise: **no effect on the D10 gate inputs** (no writes to D1/SQLite, no schema change, no `WriteMode` resolution change, no `.publish-config.yml` pause-mechanism change, no `pending_session_verify` emission). Layer 1 D6 *does* modify the `email-notification` job, but the modification is a read-only subprocess call with a 60-second timeout to a tool that itself only touches D10-monitored state via the operator-gated `--apply` path (which is **never** invoked from the workflow).
 
