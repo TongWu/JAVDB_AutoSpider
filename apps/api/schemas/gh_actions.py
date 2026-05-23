@@ -83,12 +83,45 @@ class WorkflowUpdateResponse(BaseModel):
     validation_warnings: list[str]
 
 
+# ---------------------------------------------------------------------------
+# Secrets schemas
+# ---------------------------------------------------------------------------
+
+
+class SecretItem(BaseModel):
+    name: str
+    created_at: str
+    updated_at: str
+
+
+class SecretsResponse(BaseModel):
+    secrets: list[SecretItem]
+
+
+class CreateSecretRequest(BaseModel):
+    name: str
+    value: str
+
+
+class CreateSecretResponse(BaseModel):
+    created: bool
+
+
+class DeleteSecretResponse(BaseModel):
+    deleted: bool
+
+
 __all__ = [
+    "CreateSecretRequest",
+    "CreateSecretResponse",
+    "DeleteSecretResponse",
     "DispatchRequest",
     "DispatchResponse",
     "RunItem",
     "RunLogsResponse",
     "RunsResponse",
+    "SecretItem",
+    "SecretsResponse",
     "WorkflowContentResponse",
     "WorkflowItem",
     "WorkflowUpdateRequest",

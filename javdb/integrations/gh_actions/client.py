@@ -6,6 +6,7 @@ Wraps the subset of GitHub Actions endpoints needed by the web UI:
 - Dispatch a workflow run
 - Get the logs download URL for a run
 - Get/update workflow file content (Contents API)
+- List / create-or-update / delete repository Actions secrets (Secrets API)
 
 Token + repo resolution (ADR-008 D18):
 - token: GIT_PASSWORD from config.py via cfg()
@@ -191,6 +192,39 @@ class GitHubActionsClient:
         )
         resp.raise_for_status()
         return {"commit_sha": resp.json()["commit"]["sha"]}
+
+    def list_secrets(self) -> list[dict]:
+        """GET /repos/{repo}/actions/secrets → list of secret metadata dicts."""
+        resp = self._client.get(f"/repos/{self.repo}/actions/secrets")
+        resp.raise_for_status()
+        return resp.json().get("secrets", [])
+
+    def create_or_update_secret(self, name: str, value: str) -> None:
+        """PUT /repos/{repo}/actions/secrets/{name} with NaCl-encrypted value.
+
+        Fetches the repo's public key, encrypts the value using a NaCl SealedBox,
+        and upserts the secret via the GitHub Secrets API.
+        """
+        # 1. Fetch repo public key
+        key_resp = self._client.get(f"/repos/{self.repo}/actions/secrets/public-key")
+        key_resp.raise_for_status()
+        key_data = key_resp.json()
+        # 2. Encrypt with NaCl sealed box (lazy import: PyNaCl only required when encrypting)
+        from nacl.public import SealedBox, PublicKey
+        public_key = PublicKey(base64.b64decode(key_data["key"]))
+        sealed = SealedBox(public_key).encrypt(value.encode("utf-8"))
+        encrypted_value = base64.b64encode(sealed).decode("ascii")
+        # 3. Upsert
+        resp = self._client.put(
+            f"/repos/{self.repo}/actions/secrets/{name}",
+            json={"encrypted_value": encrypted_value, "key_id": key_data["key_id"]},
+        )
+        resp.raise_for_status()
+
+    def delete_secret(self, name: str) -> None:
+        """DELETE /repos/{repo}/actions/secrets/{name}."""
+        resp = self._client.delete(f"/repos/{self.repo}/actions/secrets/{name}")
+        resp.raise_for_status()
 
     def close(self) -> None:
         """Close the underlying httpx client."""

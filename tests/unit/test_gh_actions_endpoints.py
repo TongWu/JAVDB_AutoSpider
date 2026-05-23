@@ -8,6 +8,10 @@ Tests cover:
 - Edit-tier gate for workflow YAML editor endpoints
 - GET /workflows/{name} returns content for edit tier
 - PUT /workflows/{name} validates YAML and commits
+- Admin-tier gate for secrets endpoints
+- GET /secrets lists secrets metadata
+- POST /secrets creates/updates a secret
+- DELETE /secrets/{name} deletes a secret
 """
 
 from __future__ import annotations
@@ -19,8 +23,13 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+from nacl.public import PrivateKey
 
 from javdb.integrations.gh_actions.client import GitHubActionsClient
+
+# NaCl key pair for secrets endpoint tests
+_TEST_PRIVATE_KEY = PrivateKey.generate()
+_TEST_PUBLIC_KEY_B64 = base64.b64encode(bytes(_TEST_PRIVATE_KEY.public_key)).decode("ascii")
 
 
 # ---------------------------------------------------------------------------
@@ -142,6 +151,32 @@ def _make_mock_transport():
                     "commit": {"sha": "new-commit-sha"},
                 },
             )
+        # Secrets API — public key
+        if path.endswith("/actions/secrets/public-key"):
+            return httpx.Response(
+                200,
+                json={"key_id": "key123", "key": _TEST_PUBLIC_KEY_B64},
+            )
+        # Secrets API — list secrets
+        if path.endswith("/actions/secrets") and request.method == "GET":
+            return httpx.Response(
+                200,
+                json={
+                    "secrets": [
+                        {
+                            "name": "MY_SECRET",
+                            "created_at": "2024-01-01T00:00:00Z",
+                            "updated_at": "2024-01-01T00:00:00Z",
+                        }
+                    ]
+                },
+            )
+        # Secrets API — upsert secret
+        if "/actions/secrets/" in path and request.method == "PUT":
+            return httpx.Response(204)
+        # Secrets API — delete secret
+        if "/actions/secrets/" in path and request.method == "DELETE":
+            return httpx.Response(204)
         return httpx.Response(404, json={"message": "not found"})
 
     return httpx.MockTransport(handler)
@@ -671,4 +706,202 @@ class TestUpdateWorkflowContent:
                     "commit_message": "update ci",
                 },
             )
+        assert resp.status_code == 502
+
+
+# ---------------------------------------------------------------------------
+# GET /api/gh-actions/secrets  (list secrets)
+# ---------------------------------------------------------------------------
+
+
+class TestListSecrets:
+    def test_admin_tier_allows(self, admin_client, monkeypatch):
+        monkeypatch.setenv("GH_ACTIONS_TIER", "admin")
+        with patch(
+            "apps.api.routers.gh_actions._get_gh_client",
+            return_value=_patched_client(),
+        ):
+            resp = admin_client.get("/api/gh-actions/secrets")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "secrets" in data
+        assert data["secrets"][0]["name"] == "MY_SECRET"
+
+    def test_edit_tier_blocks(self, admin_client, monkeypatch):
+        monkeypatch.setenv("GH_ACTIONS_TIER", "edit")
+        resp = admin_client.get("/api/gh-actions/secrets")
+        assert resp.status_code == 403
+        assert resp.json()["detail"]["error"]["code"] == "gh_actions.admin_required"
+
+    def test_monitor_tier_blocks(self, admin_client, monkeypatch):
+        monkeypatch.setenv("GH_ACTIONS_TIER", "monitor")
+        resp = admin_client.get("/api/gh-actions/secrets")
+        assert resp.status_code == 403
+
+    def test_none_tier_blocks(self, admin_client, monkeypatch):
+        monkeypatch.setenv("GH_ACTIONS_TIER", "none")
+        resp = admin_client.get("/api/gh-actions/secrets")
+        assert resp.status_code == 403
+
+    def test_anon_401(self, anon_client, monkeypatch):
+        monkeypatch.setenv("GH_ACTIONS_TIER", "admin")
+        resp = anon_client.get("/api/gh-actions/secrets")
+        assert resp.status_code == 401
+
+    def test_readonly_can_list(self, readonly_client, monkeypatch):
+        monkeypatch.setenv("GH_ACTIONS_TIER", "admin")
+        with patch(
+            "apps.api.routers.gh_actions._get_gh_client",
+            return_value=_patched_client(),
+        ):
+            resp = readonly_client.get("/api/gh-actions/secrets")
+        assert resp.status_code == 200
+
+    def test_gh_api_error_returns_502(self, admin_client, monkeypatch):
+        monkeypatch.setenv("GH_ACTIONS_TIER", "admin")
+
+        def err_handler(req):
+            return httpx.Response(500)
+
+        bad_client = GitHubActionsClient(
+            token="t", repo="o/r", transport=httpx.MockTransport(err_handler)
+        )
+        with patch(
+            "apps.api.routers.gh_actions._get_gh_client",
+            return_value=bad_client,
+        ):
+            resp = admin_client.get("/api/gh-actions/secrets")
+        assert resp.status_code == 502
+        assert resp.json()["detail"]["error"]["code"] == "gh_actions.api_error"
+
+
+# ---------------------------------------------------------------------------
+# POST /api/gh-actions/secrets  (create/update secret)
+# ---------------------------------------------------------------------------
+
+
+class TestCreateSecret:
+    def test_admin_can_create(self, admin_client, monkeypatch):
+        monkeypatch.setenv("GH_ACTIONS_TIER", "admin")
+        with patch(
+            "apps.api.routers.gh_actions._get_gh_client",
+            return_value=_patched_client(),
+        ):
+            resp = admin_client.post(
+                "/api/gh-actions/secrets",
+                json={"name": "MY_SECRET", "value": "s3cr3t"},
+            )
+        assert resp.status_code == 200
+        assert resp.json()["created"] is True
+
+    def test_readonly_403(self, readonly_client, monkeypatch):
+        monkeypatch.setenv("GH_ACTIONS_TIER", "admin")
+        resp = readonly_client.post(
+            "/api/gh-actions/secrets",
+            json={"name": "MY_SECRET", "value": "s3cr3t"},
+        )
+        assert resp.status_code == 403
+
+    def test_anon_401(self, anon_client, monkeypatch):
+        monkeypatch.setenv("GH_ACTIONS_TIER", "admin")
+        resp = anon_client.post(
+            "/api/gh-actions/secrets",
+            json={"name": "MY_SECRET", "value": "s3cr3t"},
+        )
+        assert resp.status_code in (401, 403)
+
+    def test_invalid_name_400(self, admin_client, monkeypatch):
+        monkeypatch.setenv("GH_ACTIONS_TIER", "admin")
+        resp = admin_client.post(
+            "/api/gh-actions/secrets",
+            json={"name": "invalid-name", "value": "val"},
+        )
+        assert resp.status_code == 400
+        assert resp.json()["detail"]["error"]["code"] == "gh_actions.invalid_secret_name"
+
+    def test_edit_tier_blocks(self, admin_client, monkeypatch):
+        monkeypatch.setenv("GH_ACTIONS_TIER", "edit")
+        resp = admin_client.post(
+            "/api/gh-actions/secrets",
+            json={"name": "MY_SECRET", "value": "val"},
+        )
+        assert resp.status_code == 403
+        assert resp.json()["detail"]["error"]["code"] == "gh_actions.admin_required"
+
+    def test_gh_api_error_returns_502(self, admin_client, monkeypatch):
+        monkeypatch.setenv("GH_ACTIONS_TIER", "admin")
+
+        def err_handler(req):
+            if req.url.path.endswith("/actions/secrets/public-key"):
+                return httpx.Response(
+                    200, json={"key_id": "key123", "key": _TEST_PUBLIC_KEY_B64}
+                )
+            return httpx.Response(500)
+
+        bad_client = GitHubActionsClient(
+            token="t", repo="o/r", transport=httpx.MockTransport(err_handler)
+        )
+        with patch(
+            "apps.api.routers.gh_actions._get_gh_client",
+            return_value=bad_client,
+        ):
+            resp = admin_client.post(
+                "/api/gh-actions/secrets",
+                json={"name": "MY_SECRET", "value": "val"},
+            )
+        assert resp.status_code == 502
+
+
+# ---------------------------------------------------------------------------
+# DELETE /api/gh-actions/secrets/{name}  (delete secret)
+# ---------------------------------------------------------------------------
+
+
+class TestDeleteSecret:
+    def test_admin_can_delete(self, admin_client, monkeypatch):
+        monkeypatch.setenv("GH_ACTIONS_TIER", "admin")
+        with patch(
+            "apps.api.routers.gh_actions._get_gh_client",
+            return_value=_patched_client(),
+        ):
+            resp = admin_client.delete("/api/gh-actions/secrets/MY_SECRET")
+        assert resp.status_code == 200
+        assert resp.json()["deleted"] is True
+
+    def test_readonly_403(self, readonly_client, monkeypatch):
+        monkeypatch.setenv("GH_ACTIONS_TIER", "admin")
+        resp = readonly_client.delete("/api/gh-actions/secrets/MY_SECRET")
+        assert resp.status_code == 403
+
+    def test_anon_401(self, anon_client, monkeypatch):
+        monkeypatch.setenv("GH_ACTIONS_TIER", "admin")
+        resp = anon_client.delete("/api/gh-actions/secrets/MY_SECRET")
+        assert resp.status_code in (401, 403)
+
+    def test_invalid_name_400(self, admin_client, monkeypatch):
+        monkeypatch.setenv("GH_ACTIONS_TIER", "admin")
+        resp = admin_client.delete("/api/gh-actions/secrets/invalid-name")
+        assert resp.status_code == 400
+        assert resp.json()["detail"]["error"]["code"] == "gh_actions.invalid_secret_name"
+
+    def test_edit_tier_blocks(self, admin_client, monkeypatch):
+        monkeypatch.setenv("GH_ACTIONS_TIER", "edit")
+        resp = admin_client.delete("/api/gh-actions/secrets/MY_SECRET")
+        assert resp.status_code == 403
+        assert resp.json()["detail"]["error"]["code"] == "gh_actions.admin_required"
+
+    def test_gh_api_error_returns_502(self, admin_client, monkeypatch):
+        monkeypatch.setenv("GH_ACTIONS_TIER", "admin")
+
+        def err_handler(req):
+            return httpx.Response(500)
+
+        bad_client = GitHubActionsClient(
+            token="t", repo="o/r", transport=httpx.MockTransport(err_handler)
+        )
+        with patch(
+            "apps.api.routers.gh_actions._get_gh_client",
+            return_value=bad_client,
+        ):
+            resp = admin_client.delete("/api/gh-actions/secrets/MY_SECRET")
         assert resp.status_code == 502
