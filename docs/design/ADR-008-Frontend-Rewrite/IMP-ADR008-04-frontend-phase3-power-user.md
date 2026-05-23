@@ -25,19 +25,19 @@
 | GH Actions `edit` tier | **BE done** / FE specified | YAML editor endpoint implemented + tested |
 | GH Actions `admin` tier | **BE done** / FE specified | Secrets CRUD endpoints implemented + tested |
 | Migrations UI | **BE done** / FE specified | List + dry-run endpoints implemented + tested |
-| Global log search | **Specified** | File grep over `logs/jobs/*.log` — see Task 4 |
-| Statistics dashboard | **Specified** | 8 metrics, two endpoints, vue-chartjs — see Task 5 |
+| Global log search | **BE done** / FE specified | File grep endpoint + 20 tests — see Task 4 |
+| Statistics dashboard | **BE done** / FE specified | Summary + trend endpoints + 27 tests — see Task 5 |
 
-Tasks 1–3 backend is complete (endpoints + unit tests committed). Tasks 1–3 FE, Tasks 4–5 full stack are specified and ready for implementation.
+Tasks 1–5 backend is complete (endpoints + unit tests committed). All FE tasks are specified and ready for implementation in the web repo.
 
 ---
 
 ## Endpoints
 
-### Implemented (7 endpoints — BE done, FE pending)
+### Implemented (10 endpoints — BE done, FE pending)
 
-| Method | Path | Purpose | Tier required |
-|--------|------|---------|--------------|
+| Method | Path | Purpose | Auth |
+|--------|------|---------|------|
 | `GET` | `/api/gh-actions/workflows/{name}` | Get workflow YAML content + SHA | `edit` |
 | `PUT` | `/api/gh-actions/workflows/{name}` | Edit workflow YAML | `edit` |
 | `GET` | `/api/gh-actions/secrets` | List secret names + updated_at (values opaque) | `admin` |
@@ -45,11 +45,6 @@ Tasks 1–3 backend is complete (endpoints + unit tests committed). Tasks 1–3 
 | `DELETE` | `/api/gh-actions/secrets/{name}` | Delete a secret | `admin` |
 | `GET` | `/api/migrations/` | List migrations + applied state | `admin` |
 | `POST` | `/api/migrations/{id}/run` | Preview or run a single migration | `admin` |
-
-### Specified (3 endpoints — full stack pending)
-
-| Method | Path | Purpose | Auth |
-|--------|------|---------|------|
 | `GET` | `/api/logs/search?q=&job_id=&date_from=&date_to=&limit=100` | Search task logs via file grep | `admin` |
 | `GET` | `/api/stats/summary` | Aggregated metrics snapshot | any authenticated |
 | `GET` | `/api/stats/trend?metric=&period=7d\|30d\|90d` | Time-series data for a single metric | any authenticated |
@@ -453,7 +448,9 @@ Response:
 }
 ```
 
-- [ ] **Step 1: Implement log search endpoint (BE).**
+- [x] **Step 1: Implement log search endpoint (BE).** _(Done)_
+
+  Implemented in `apps/api/routers/logs.py`. Hardened: corrupt `.meta.json` handling, UTF-8 encoding with `errors="ignore"`, uses `context.RESOLVED_JOB_LOG_DIR` instead of relative path. Schema in `apps/api/schemas/logs.py`. Registered in `apps/api/services/runtime.py`.
 
   **File:** `apps/api/routers/logs.py`
 
@@ -536,9 +533,9 @@ Response:
 
   Register in `apps/api/services/runtime.py`.
 
-- [ ] **Step 2: Write unit tests for log search endpoint.**
+- [x] **Step 2: Write unit tests for log search endpoint.** _(Done)_
 
-  Use `tmp_path` to create fake log files + `.meta.json`, monkeypatch `_LOGS_DIR`. Test cases:
+  20 tests in `tests/unit/test_logs_endpoints.py`. Uses `tmp_path` + monkeypatch `_LOGS_DIR`. Test cases:
   - Search with match → returns results with correct line numbers
   - Search with `job_id` filter → only searches that job
   - Search with `date_from`/`date_to` → filters by metadata timestamp
@@ -685,7 +682,9 @@ Response:
 }
 ```
 
-- [ ] **Step 1: Implement stats summary endpoint (BE).**
+- [x] **Step 1: Implement stats summary endpoint (BE).** _(Done)_
+
+  Implemented in `apps/api/routers/stats.py`. Queries across 3 databases + log file scan. Auth: `_require_auth` (any authenticated user). Each query wrapped in `_safe_query_one` / `_safe_query_all` for graceful degradation. D1 dict-row compatibility via `_extract_row_pair()`. `total_dedup_freed_bytes` filters to `IsDeleted=1` only. Registered in `apps/api/services/runtime.py`.
 
   **File:** `apps/api/routers/stats.py`
 
@@ -699,11 +698,9 @@ Response:
 
   Implementation note: each data source query is a simple SQL `COUNT(*)` / `AVG()` / `SUM()`. Wrap each in try/except to return `null` if a table doesn't exist yet (graceful degradation).
 
-- [ ] **Step 2: Implement stats trend endpoint (BE).**
+- [x] **Step 2: Implement stats trend endpoint (BE).** _(Done)_
 
-  Same file. For each metric, query the relevant table grouped by date bucket (e.g. `DATE(StartedAt)` for sessions). Period maps to `WHERE date >= date('now', '-30 days')`.
-
-  For `proxy_bans` metric: scan log files within the period, count lines containing "ban" (case-insensitive), group by file's `created_at` date from `.meta.json`.
+  Same file. All 8 metrics implemented. `proxy_bans` uses shared `_proxy_bans_by_date()` helper (no duplication with summary). `duration` returns empty (no CompletedAt column yet). Invalid metric/period → 422 with structured error.
 
   **File:** `apps/api/schemas/stats.py`
 
@@ -730,15 +727,9 @@ Response:
       data_points: list[TrendDataPoint]
   ```
 
-- [ ] **Step 3: Write unit tests for stats endpoints.**
+- [x] **Step 3: Write unit tests for stats endpoints.** _(Done)_
 
-  Use in-memory SQLite with pre-populated test data. Test cases:
-  - Summary returns all 8 fields with correct aggregation
-  - Summary with empty tables → zeroes / nulls (graceful degradation)
-  - Trend with `metric=success_rate&period=7d` → correct data points
-  - Trend with invalid metric → 422
-  - Trend with invalid period → 422
-  - Auth: any authenticated user can access (not admin-only)
+  27 tests in `tests/unit/test_stats_endpoints.py`. Uses in-memory SQLite with pre-populated test data, handles `_isolate_sqlite` path collapse. Includes concrete value assertions for success_rate and movies trends, period cutoff exclusion, dedup only-deleted-records filter. Test cases:
 
 - [ ] **Step 4: Build FE StatsPage with vue-chartjs.**
 
