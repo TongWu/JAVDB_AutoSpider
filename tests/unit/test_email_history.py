@@ -37,9 +37,9 @@ class TestEmailHistoryTableExists:
     """The table must be present in a freshly-initialised DB."""
 
     def test_table_exists(self, _isolate_sqlite):
-        import javdb.storage.db._db_connection as db_mod
+        from javdb.storage.db import get_db, OPERATIONS_DB_PATH
 
-        with db_mod.get_db(db_mod.OPERATIONS_DB_PATH) as conn:
+        with get_db(OPERATIONS_DB_PATH) as conn:
             row = conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='EmailNotificationHistory'"
             ).fetchone()
