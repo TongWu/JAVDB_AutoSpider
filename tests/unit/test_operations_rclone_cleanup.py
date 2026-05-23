@@ -69,7 +69,7 @@ class TestRcloneLast:
 
     def test_returns_seeded_inventory_count(self, admin_client):
         """Seeded RcloneInventory rows appear in inventory_count."""
-        import javdb.storage.db.db_connection as _conn_mod
+        import javdb.storage.db._db_connection as _conn_mod
 
         with _conn_mod.get_db(_conn_mod.OPERATIONS_DB_PATH) as conn:
             conn.execute(
@@ -101,7 +101,7 @@ class TestRcloneLast:
 
     def test_dedup_counts_and_freed_bytes(self, admin_client):
         """Seeded DedupRecords are counted correctly."""
-        import javdb.storage.db.db_connection as _conn_mod
+        import javdb.storage.db._db_connection as _conn_mod
 
         with _conn_mod.get_db(_conn_mod.OPERATIONS_DB_PATH) as conn:
             # pending (IsDeleted=0)
