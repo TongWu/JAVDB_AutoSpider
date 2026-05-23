@@ -46,6 +46,7 @@ from apps.api.routers.history import router as history_router
 from apps.api.routers.sessions import router as sessions_router
 from apps.api.routers.diagnostics import router as diagnostics_router
 from apps.api.routers.gh_actions import router as gh_actions_router
+from apps.api.routers.migrations import router as migrations_router
 from apps.api.routers.operations import router as operations_router
 from apps.api.routers.system_state import router as system_state_router
 from apps.api.routers.config import (
@@ -177,6 +178,7 @@ for router in (
     operations_router,
     diagnostics_router,
     gh_actions_router,
+    migrations_router,
 ):
     app.include_router(router)
 
@@ -260,6 +262,7 @@ __all__ = [
     "operations_router",
     "diagnostics_router",
     "gh_actions_router",
+    "migrations_router",
     "list_tasks",
     "login",
     "logout",
