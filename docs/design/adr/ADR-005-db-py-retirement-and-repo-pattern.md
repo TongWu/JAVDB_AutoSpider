@@ -15,6 +15,7 @@ PR-1 (Repo classes) ✅ shipped: `HistoryRepo`, `OperationsRepo`, `StatsRepo`, `
 - **PR-3** ✅ shipped (#71, 2026-05-21): migrated spider/history_manager callers off the function family.
 - **PR-4** ✅ shipped (2026-05-22): dropped Audit Mode tables and removed audit write / rollback branches.
 - **PR-5** ✅ shipped (2026-05-22): deleted `javdb/storage/db/db.py`; the ADR-001 modules remain as the canonical implementation modules, not shell facades.
+- **PR-6** ✅ shipped (2026-05-22): renamed 9 shell modules to `_db_*.py`; `__init__.py` re-exports 65 public symbols; 254 import statements migrated to package-level imports.
 - **Parser-helper relocation** remains outside ADR-005 and is tracked by [ADR-011](ADR-011-javdb-parsing-module.md). There is no remaining ADR-005 implementation work.
 
 ## Amendments

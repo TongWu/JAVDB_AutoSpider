@@ -20,8 +20,7 @@ import os
 
 import pytest
 
-from javdb.storage.db.db_session import SESSION_ID_PATTERN as _SESSION_ID_PATTERN
-from javdb.storage.db.db_reports import db_create_report_session
+from javdb.storage.db import SESSION_ID_PATTERN as _SESSION_ID_PATTERN, db_create_report_session
 import javdb.infra.config as config_helper
 
 

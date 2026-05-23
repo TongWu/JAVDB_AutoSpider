@@ -190,9 +190,9 @@ class TestDryRunNoOp:
     ):
         # Build a real local sqlite mirror with one MovieHistory row that
         # we'll verify is preserved across the dry-run.
-        from javdb.storage.db.db_connection import get_db as _get_db
-        from javdb.storage.db.db_reports import db_create_report_session as _db_crs
-        from javdb.storage.db.db_history_write import (
+        from javdb.storage.db import get_db as _get_db
+        from javdb.storage.db import db_create_report_session as _db_crs
+        from javdb.storage.db import (
             db_stage_history_write as _db_shw,
             db_commit_session_history as _db_csh,
         )

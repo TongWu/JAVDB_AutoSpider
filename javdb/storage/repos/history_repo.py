@@ -366,14 +366,14 @@ class HistoryRepo:
         self, *, phase: Optional[int] = None,
     ) -> Dict[str, dict]:
         """Load full MovieHistory + TorrentHistory state, keyed by Href."""
-        from javdb.storage.db.db_history_read import db_load_history
+        from javdb.storage.db import db_load_history
         return db_load_history(db_path=self._db_path, phase=phase)
 
     def load_history_snapshot(
         self, session_id: Optional[str],
     ) -> Dict[str, dict]:
         """Load history + this session's Pending overlay (for spider reads)."""
-        from javdb.storage.db.db_history_read import db_load_history_snapshot
+        from javdb.storage.db import db_load_history_snapshot
         return db_load_history_snapshot(
             session_id=session_id, db_path=self._db_path,
         )
@@ -382,14 +382,14 @@ class HistoryRepo:
         self, href: str, torrent_type: str,
     ) -> bool:
         """True iff ``(href, torrent_type)`` already lives in TorrentHistory."""
-        from javdb.storage.db.db_history_read import db_check_torrent_in_history
+        from javdb.storage.db import db_check_torrent_in_history
         return db_check_torrent_in_history(
             href=href, torrent_type=torrent_type, db_path=self._db_path,
         )
 
     def get_all_history_records(self) -> list:
         """All MovieHistory rows as plain dicts (forensic / export use)."""
-        from javdb.storage.db.db_history_read import db_get_all_history_records
+        from javdb.storage.db import db_get_all_history_records
         return db_get_all_history_records(db_path=self._db_path)
 
     # ── Writes (session_id required) ──────────────────────────────
@@ -398,7 +398,7 @@ class HistoryRepo:
         self, session_id: str, kind: str, payload: Dict,
     ) -> str:
         """Append a pending movie/torrent history row. Returns Seq."""
-        from javdb.storage.db.db_history_write import db_stage_history_write
+        from javdb.storage.db import db_stage_history_write
         return db_stage_history_write(
             session_id=session_id, kind=kind, payload=payload,
             db_path=self._db_path,
@@ -414,12 +414,12 @@ class HistoryRepo:
 
     def commit_session(self, session_id: str, **kwargs) -> dict:
         """Drain Pending* tables into live MovieHistory / TorrentHistory."""
-        from javdb.storage.db.db_history_write import db_commit_session_history
+        from javdb.storage.db import db_commit_session_history
         return db_commit_session_history(session_id, **kwargs)
 
     def batch_update_last_visited(self, hrefs: List[str]) -> int:
         """Bump LastVisited on each href; staging-aware under pending mode."""
-        from javdb.storage.db.db_history_read import db_batch_update_last_visited
+        from javdb.storage.db import db_batch_update_last_visited
         return db_batch_update_last_visited(hrefs, db_path=self._db_path)
 
     def batch_update_movie_actors(
@@ -427,7 +427,7 @@ class HistoryRepo:
     ) -> int:
         """Bulk overwrite actor fields, preserving pending-mode staging."""
         # The db.py facade owns pending-mode staging for actor-only writes.
-        from javdb.storage.db.db_history_write import db_batch_update_movie_actors
+        from javdb.storage.db import db_batch_update_movie_actors
         return db_batch_update_movie_actors(updates, db_path=self._db_path)
 
     # ── Search / export (Phase 2, Task 1) ────────────────────────────

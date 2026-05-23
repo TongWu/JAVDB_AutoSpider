@@ -20,7 +20,7 @@ from typing import List, Optional
 
 from javdb.infra.logging import get_logger
 
-from .db_connection import (
+from ._db_connection import (
     HISTORY_DB_PATH,
     REPORTS_DB_PATH,
     OPERATIONS_DB_PATH,

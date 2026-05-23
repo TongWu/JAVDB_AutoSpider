@@ -15,6 +15,7 @@ PR-1（Repo 类）✅ 已交付：`HistoryRepo`、`OperationsRepo`、`StatsRepo`
 - **PR-3** ✅ 已交付（#71, 2026-05-21）：spider/history_manager 调用方迁移完成。
 - **PR-4** ✅ 已交付（2026-05-22）：删除 Audit Mode 表并移除 audit 写入 / rollback 分支。
 - **PR-5** ✅ 已交付（2026-05-22）：删除 `javdb/storage/db/db.py`；ADR-001 拆出的模块已成为 canonical implementation modules，不再是空壳 facade。
+- **PR-6** ✅ 已交付（2026-05-22）：9 个 shell 模块重命名为 `_db_*.py`；`__init__.py` 再导出 65 个公共符号；254 条导入语句迁移至包级导入。
 - **Parser helper relocation** 仍在 ADR-005 之外，由 [ADR-011](ADR-011-javdb-parsing-module.md) 追踪。ADR-005 已无剩余实施工作。
 
 ## 修订记录 (Amendments)

@@ -22,14 +22,15 @@ import tempfile
 import shutil
 import javdb.infra.config as _cfg_mod
 import javdb.spider.services.dedup as _dedup_mod
-import javdb.storage.db.db_connection as _db_conn_mod
-import javdb.storage.db.db_history_read as _db_history_read_mod
-import javdb.storage.db.db_history_write as _db_history_write_mod
-import javdb.storage.db.db_reports as _db_reports_mod
-import javdb.storage.db.db_migrations as _db_migrations_mod
-import javdb.storage.db.db_operations as _db_operations_mod
-import javdb.storage.db.db_rollback as _db_rollback_mod
-import javdb.storage.db.db_stats as _db_stats_mod
+import javdb.storage.db as _db_pkg
+import javdb.storage.db._db_connection as _db_conn_mod
+import javdb.storage.db._db_history_read as _db_history_read_mod
+import javdb.storage.db._db_history_write as _db_history_write_mod
+import javdb.storage.db._db_reports as _db_reports_mod
+import javdb.storage.db._db_migrations as _db_migrations_mod
+import javdb.storage.db._db_operations as _db_operations_mod
+import javdb.storage.db._db_rollback as _db_rollback_mod
+import javdb.storage.db._db_stats as _db_stats_mod
 
 
 @pytest.fixture(autouse=True)
@@ -65,6 +66,13 @@ def _isolate_sqlite(tmp_path):
     _db_conn_mod.REPORTS_DB_PATH = test_db
     _db_conn_mod.OPERATIONS_DB_PATH = test_db
 
+    # Also patch package-level re-exports so callers using
+    # ``from javdb.storage.db import HISTORY_DB_PATH`` see the test path.
+    _db_pkg.DB_PATH = test_db
+    _db_pkg.HISTORY_DB_PATH = test_db
+    _db_pkg.REPORTS_DB_PATH = test_db
+    _db_pkg.OPERATIONS_DB_PATH = test_db
+
     # Reset lazy-init sentinels so _ensure_imports() re-caches paths
     _db_history_read_mod._get_db = None
     _db_history_write_mod._get_db = None
@@ -90,6 +98,10 @@ def _isolate_sqlite(tmp_path):
     _db_conn_mod.HISTORY_DB_PATH = orig_conn_history
     _db_conn_mod.REPORTS_DB_PATH = orig_conn_reports
     _db_conn_mod.OPERATIONS_DB_PATH = orig_conn_operations
+    _db_pkg.DB_PATH = orig_db_path
+    _db_pkg.HISTORY_DB_PATH = orig_conn_history
+    _db_pkg.REPORTS_DB_PATH = orig_conn_reports
+    _db_pkg.OPERATIONS_DB_PATH = orig_conn_operations
     _cfg_mod._storage_mode_override = orig_override
     if orig_storage_backend is None:
         os.environ.pop("STORAGE_BACKEND", None)

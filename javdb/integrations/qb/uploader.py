@@ -530,7 +530,7 @@ def initialize_proxy_helper(proxy_override):
 
 def main():
     import atexit
-    from javdb.storage.db.db_connection import close_db
+    from javdb.storage.db import close_db
     atexit.register(close_db)
 
     args = parse_arguments()
@@ -694,8 +694,7 @@ def main():
         try:
             from javdb.infra.config import use_sqlite as _use_sqlite
             if _use_sqlite():
-                from javdb.storage.db.db_migrations import init_db
-                from javdb.storage.db.db_stats import db_save_uploader_stats
+                from javdb.storage.db import init_db, db_save_uploader_stats
                 init_db()
                 _rate = (successfully_added / attempted * 100) if attempted > 0 else 0.0
                 db_save_uploader_stats(_session_id, {
@@ -710,7 +709,7 @@ def main():
                     'no_subtitle_count': no_subtitle_count,
                     'success_rate': _rate,
                 })
-                from javdb.storage.db.db_connection import current_backend
+                from javdb.storage.db import current_backend
                 logger.info(f"Uploader stats saved to {current_backend()} backend (session_id={_session_id})")
         except Exception as e:
             logger.warning(f"Failed to save uploader stats to db backend: {e}")

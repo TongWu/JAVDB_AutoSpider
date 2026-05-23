@@ -22,9 +22,8 @@ from __future__ import annotations
 
 import pytest
 
-from javdb.storage.db.db_connection import get_db
-from javdb.storage.db.db_reports import db_create_report_session
-from javdb.storage.db.db_history_write import (
+from javdb.storage.db import (
+    get_db, db_create_report_session,
     db_stage_history_write, _pending_torrent_overlay, _commit_one_movie,
 )
 
