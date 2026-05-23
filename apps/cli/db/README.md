@@ -14,6 +14,7 @@ Session-lifecycle and database-maintenance CLIs — rollback, commit, audit clea
 | `cleanup_stale_session_audits.py` | Read-only forensics tool that flags phantom audit / history rows (orphan-session, cross-day, committed-with-audit). Writes a JSON report; mutation path retired in Phase 4. |
 | `sweep_claim_stages.py` | Cron-friendly wrapper around the MovieClaim DO `sweep_orphan_stages` route. Reaps staged completions left behind by crashed runners. |
 | `sync_d1_to_sqlite.py` | One-shot reconciliation tool that pulls every business table from D1 down into the local sqlite mirror. Default mode is dry-run; never deletes SQLite rows without `--prune-local-only`. |
+| `drift_diagnose.py` | ADR-009 pending-write drift diagnose/apply CLI. Read-only by default; `--apply --session-id` deletes only verified safe D1 orphan pending rows. Core logic lives in `javdb.storage.drift_diagnose`. |
 | `pending_health.py` | Phase-3 email pre-step. Aggregates the last 24h of `pending_session_verify` records from `reports/D1/d1_drift.jsonl` into `reports/D1/pending_health_24h.json`. |
 | `pending_alert.py` | ADR-006 pause-on-alert: injects `pipeline_paused_until: <ISO>` into `.publish-config.yml` when the email pipeline detects a critical pending-mode alert. Idempotent — extends the timer rather than shortening it. |
 | `_session_helpers.py` | Internal scaffolding shared by `rollback` and `commit_session`: ISO-timestamp normalisation, session lookups, pre-state reads, MovieClaim DO fan-out, JSONL emission. Not a CLI entry point. |
