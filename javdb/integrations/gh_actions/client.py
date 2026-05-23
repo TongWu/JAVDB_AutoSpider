@@ -5,6 +5,8 @@ Wraps the subset of GitHub Actions endpoints needed by the web UI:
 - List runs (optionally filtered by workflow)
 - Dispatch a workflow run
 - Get the logs download URL for a run
+- Get/update workflow file content (Contents API)
+- List / create-or-update / delete repository Actions secrets (Secrets API)
 
 Token + repo resolution (ADR-008 D18):
 - token: GIT_PASSWORD from config.py via cfg()
@@ -14,6 +16,7 @@ Token + repo resolution (ADR-008 D18):
 
 from __future__ import annotations
 
+import base64
 import os
 import re
 from typing import Optional
@@ -155,6 +158,73 @@ class GitHubActionsClient:
             return location
         resp.raise_for_status()
         return ""
+
+    def get_workflow_content(self, filename: str) -> dict:
+        """Return { content: str (decoded), sha: str, path: str }."""
+        resp = self._client.get(
+            f"/repos/{self.repo}/contents/.github/workflows/{filename}"
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return {
+            "content": base64.b64decode(data["content"]).decode("utf-8"),
+            "sha": data["sha"],
+            "path": data["path"],
+        }
+
+    def update_workflow_content(
+        self,
+        filename: str,
+        content: str,
+        sha: str,
+        message: str,
+        branch: str = "main",
+    ) -> dict:
+        """Commit updated workflow file. Returns { commit_sha }."""
+        resp = self._client.put(
+            f"/repos/{self.repo}/contents/.github/workflows/{filename}",
+            json={
+                "message": message,
+                "content": base64.b64encode(content.encode("utf-8")).decode("ascii"),
+                "sha": sha,
+                "branch": branch,
+            },
+        )
+        resp.raise_for_status()
+        return {"commit_sha": resp.json()["commit"]["sha"]}
+
+    def list_secrets(self) -> list[dict]:
+        """GET /repos/{repo}/actions/secrets → list of secret metadata dicts."""
+        resp = self._client.get(f"/repos/{self.repo}/actions/secrets")
+        resp.raise_for_status()
+        return resp.json().get("secrets", [])
+
+    def create_or_update_secret(self, name: str, value: str) -> None:
+        """PUT /repos/{repo}/actions/secrets/{name} with NaCl-encrypted value.
+
+        Fetches the repo's public key, encrypts the value using a NaCl SealedBox,
+        and upserts the secret via the GitHub Secrets API.
+        """
+        # 1. Fetch repo public key
+        key_resp = self._client.get(f"/repos/{self.repo}/actions/secrets/public-key")
+        key_resp.raise_for_status()
+        key_data = key_resp.json()
+        # 2. Encrypt with NaCl sealed box (lazy import: PyNaCl only required when encrypting)
+        from nacl.public import SealedBox, PublicKey
+        public_key = PublicKey(base64.b64decode(key_data["key"]))
+        sealed = SealedBox(public_key).encrypt(value.encode("utf-8"))
+        encrypted_value = base64.b64encode(sealed).decode("ascii")
+        # 3. Upsert
+        resp = self._client.put(
+            f"/repos/{self.repo}/actions/secrets/{name}",
+            json={"encrypted_value": encrypted_value, "key_id": key_data["key_id"]},
+        )
+        resp.raise_for_status()
+
+    def delete_secret(self, name: str) -> None:
+        """DELETE /repos/{repo}/actions/secrets/{name}."""
+        resp = self._client.delete(f"/repos/{self.repo}/actions/secrets/{name}")
+        resp.raise_for_status()
 
     def close(self) -> None:
         """Close the underlying httpx client."""

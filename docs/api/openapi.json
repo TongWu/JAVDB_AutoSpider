@@ -398,6 +398,37 @@
         "title": "CrawlIndexPayload",
         "type": "object"
       },
+      "CreateSecretRequest": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "value"
+        ],
+        "title": "CreateSecretRequest",
+        "type": "object"
+      },
+      "CreateSecretResponse": {
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "created"
+        ],
+        "title": "CreateSecretResponse",
+        "type": "object"
+      },
       "DailyTaskPayload": {
         "properties": {
           "all": {
@@ -498,6 +529,19 @@
           }
         },
         "title": "DailyTaskPayload",
+        "type": "object"
+      },
+      "DeleteSecretResponse": {
+        "properties": {
+          "deleted": {
+            "title": "Deleted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "deleted"
+        ],
+        "title": "DeleteSecretResponse",
         "type": "object"
       },
       "DismissHintPayload": {
@@ -1489,6 +1533,65 @@
         "title": "ListTasksResponse",
         "type": "object"
       },
+      "LogSearchItem": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "line_number": {
+            "title": "Line Number",
+            "type": "integer"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "line_number",
+          "text",
+          "kind",
+          "created_at"
+        ],
+        "title": "LogSearchItem",
+        "type": "object"
+      },
+      "LogSearchResponse": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/LogSearchItem"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "total_matched": {
+            "title": "Total Matched",
+            "type": "integer"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "results",
+          "total_matched",
+          "truncated"
+        ],
+        "title": "LogSearchResponse",
+        "type": "object"
+      },
       "LoginPayload": {
         "properties": {
           "password": {
@@ -1553,6 +1656,56 @@
           "username"
         ],
         "title": "LoginResponse",
+        "type": "object"
+      },
+      "MigrationItem": {
+        "properties": {
+          "applied": {
+            "title": "Applied",
+            "type": "boolean"
+          },
+          "applied_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applied At"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "filename",
+          "applied"
+        ],
+        "title": "MigrationItem",
+        "type": "object"
+      },
+      "MigrationListResponse": {
+        "properties": {
+          "migrations": {
+            "items": {
+              "$ref": "#/components/schemas/MigrationItem"
+            },
+            "title": "Migrations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "migrations"
+        ],
+        "title": "MigrationListResponse",
         "type": "object"
       },
       "MovieSearchItem": {
@@ -2356,6 +2509,56 @@
         "title": "RunLogsResponse",
         "type": "object"
       },
+      "RunMigrationRequest": {
+        "properties": {
+          "dry_run": {
+            "default": true,
+            "title": "Dry Run",
+            "type": "boolean"
+          }
+        },
+        "title": "RunMigrationRequest",
+        "type": "object"
+      },
+      "RunMigrationResponse": {
+        "properties": {
+          "applied": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applied"
+          },
+          "dry_run": {
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "migration_id": {
+            "title": "Migration Id",
+            "type": "string"
+          },
+          "sql_preview": {
+            "title": "Sql Preview",
+            "type": "string"
+          },
+          "statements": {
+            "title": "Statements",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "migration_id",
+          "dry_run",
+          "sql_preview",
+          "statements"
+        ],
+        "title": "RunMigrationResponse",
+        "type": "object"
+      },
       "RunsResponse": {
         "properties": {
           "runs": {
@@ -2370,6 +2573,45 @@
           "runs"
         ],
         "title": "RunsResponse",
+        "type": "object"
+      },
+      "SecretItem": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "SecretItem",
+        "type": "object"
+      },
+      "SecretsResponse": {
+        "properties": {
+          "secrets": {
+            "items": {
+              "$ref": "#/components/schemas/SecretItem"
+            },
+            "title": "Secrets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "secrets"
+        ],
+        "title": "SecretsResponse",
         "type": "object"
       },
       "SessionCommitPayload": {
@@ -2867,6 +3109,66 @@
         "title": "SpiderJobSubmitResponse",
         "type": "object"
       },
+      "StatsSummary": {
+        "properties": {
+          "avg_duration_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Duration Seconds"
+          },
+          "proxy_bans_last_7d": {
+            "title": "Proxy Bans Last 7D",
+            "type": "integer"
+          },
+          "success_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Success Rate"
+          },
+          "total_dedup_freed_bytes": {
+            "title": "Total Dedup Freed Bytes",
+            "type": "integer"
+          },
+          "total_movies": {
+            "title": "Total Movies",
+            "type": "integer"
+          },
+          "total_pikpak": {
+            "title": "Total Pikpak",
+            "type": "integer"
+          },
+          "total_runs": {
+            "title": "Total Runs",
+            "type": "integer"
+          },
+          "total_torrents": {
+            "title": "Total Torrents",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_runs",
+          "total_movies",
+          "total_torrents",
+          "total_pikpak",
+          "total_dedup_freed_bytes",
+          "proxy_bans_last_7d"
+        ],
+        "title": "StatsSummary",
+        "type": "object"
+      },
       "StatusOkResponse": {
         "properties": {
           "status": {
@@ -3085,6 +3387,50 @@
         "title": "TorrentSearchResponse",
         "type": "object"
       },
+      "TrendDataPoint": {
+        "properties": {
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "date",
+          "value"
+        ],
+        "title": "TrendDataPoint",
+        "type": "object"
+      },
+      "TrendResponse": {
+        "properties": {
+          "data_points": {
+            "items": {
+              "$ref": "#/components/schemas/TrendDataPoint"
+            },
+            "title": "Data Points",
+            "type": "array"
+          },
+          "metric": {
+            "title": "Metric",
+            "type": "string"
+          },
+          "period": {
+            "title": "Period",
+            "type": "string"
+          }
+        },
+        "required": [
+          "metric",
+          "period",
+          "data_points"
+        ],
+        "title": "TrendResponse",
+        "type": "object"
+      },
       "TriggerTaskResponse": {
         "additionalProperties": true,
         "description": "Returned by POST /api/tasks/daily and POST /api/tasks/adhoc.",
@@ -3261,6 +3607,29 @@
         "title": "VideoCodeSearchResponse",
         "type": "object"
       },
+      "WorkflowContentResponse": {
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "sha": {
+            "title": "Sha",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content",
+          "sha",
+          "path"
+        ],
+        "title": "WorkflowContentResponse",
+        "type": "object"
+      },
       "WorkflowItem": {
         "properties": {
           "id": {
@@ -3298,6 +3667,60 @@
           "name"
         ],
         "title": "WorkflowItem",
+        "type": "object"
+      },
+      "WorkflowUpdateRequest": {
+        "properties": {
+          "branch": {
+            "default": "main",
+            "title": "Branch",
+            "type": "string"
+          },
+          "commit_message": {
+            "title": "Commit Message",
+            "type": "string"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "sha": {
+            "title": "Sha",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content",
+          "sha",
+          "commit_message"
+        ],
+        "title": "WorkflowUpdateRequest",
+        "type": "object"
+      },
+      "WorkflowUpdateResponse": {
+        "properties": {
+          "commit_sha": {
+            "title": "Commit Sha",
+            "type": "string"
+          },
+          "updated": {
+            "title": "Updated",
+            "type": "boolean"
+          },
+          "validation_warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Validation Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "updated",
+          "commit_sha",
+          "validation_warnings"
+        ],
+        "title": "WorkflowUpdateResponse",
         "type": "object"
       },
       "WorkflowsResponse": {
@@ -4092,6 +4515,111 @@
         ]
       }
     },
+    "/api/gh-actions/secrets": {
+      "get": {
+        "description": "List repository Actions secrets metadata (admin tier).",
+        "operationId": "list_secrets_api_gh_actions_secrets_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecretsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Secrets",
+        "tags": [
+          "gh-actions"
+        ]
+      },
+      "post": {
+        "description": "Create or update a repository Actions secret (admin tier, admin role).",
+        "operationId": "create_secret_api_gh_actions_secrets_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSecretRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateSecretResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Secret",
+        "tags": [
+          "gh-actions"
+        ]
+      }
+    },
+    "/api/gh-actions/secrets/{name}": {
+      "delete": {
+        "description": "Delete a repository Actions secret (admin tier, admin role).",
+        "operationId": "delete_secret_api_gh_actions_secrets__name__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteSecretResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Secret",
+        "tags": [
+          "gh-actions"
+        ]
+      }
+    },
     "/api/gh-actions/workflows": {
       "get": {
         "description": "List workflows, each enriched with its latest run.",
@@ -4109,6 +4637,100 @@
           }
         },
         "summary": "List Workflows",
+        "tags": [
+          "gh-actions"
+        ]
+      }
+    },
+    "/api/gh-actions/workflows/{name}": {
+      "get": {
+        "description": "Return the decoded content of a workflow YAML file.",
+        "operationId": "get_workflow_content_api_gh_actions_workflows__name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowContentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Workflow Content",
+        "tags": [
+          "gh-actions"
+        ]
+      },
+      "put": {
+        "description": "Validate and commit an updated workflow YAML file (admin only).",
+        "operationId": "update_workflow_content_api_gh_actions_workflows__name__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowUpdateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Workflow Content",
         "tags": [
           "gh-actions"
         ]
@@ -4968,6 +5590,185 @@
           }
         },
         "summary": "Refresh Javdb Session"
+      }
+    },
+    "/api/logs/search": {
+      "get": {
+        "operationId": "search_logs_api_logs_search_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "job_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Job Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date_from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date From"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date To"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogSearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search Logs",
+        "tags": [
+          "logs"
+        ]
+      }
+    },
+    "/api/migrations/": {
+      "get": {
+        "description": "List all D1 SQL migration files with their applied state.",
+        "operationId": "list_migrations_api_migrations__get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MigrationListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Migrations",
+        "tags": [
+          "migrations"
+        ]
+      }
+    },
+    "/api/migrations/{migration_id}/run": {
+      "post": {
+        "description": "Preview or run a migration.",
+        "operationId": "run_migration_api_migrations__migration_id__run_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "migration_id",
+            "required": true,
+            "schema": {
+              "title": "Migration Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunMigrationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunMigrationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Migration",
+        "tags": [
+          "migrations"
+        ]
       }
     },
     "/api/onboarding/complete": {
@@ -6015,6 +6816,81 @@
         "summary": "Post Rollback",
         "tags": [
           "sessions"
+        ]
+      }
+    },
+    "/api/stats/summary": {
+      "get": {
+        "description": "Aggregate statistics across all databases.",
+        "operationId": "stats_summary_api_stats_summary_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatsSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Stats Summary",
+        "tags": [
+          "stats"
+        ]
+      }
+    },
+    "/api/stats/trend": {
+      "get": {
+        "description": "Time-series data for a given metric over the requested period.",
+        "operationId": "stats_trend_api_stats_trend_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "metric",
+            "required": true,
+            "schema": {
+              "title": "Metric",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "period",
+            "required": false,
+            "schema": {
+              "default": "30d",
+              "title": "Period",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrendResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stats Trend",
+        "tags": [
+          "stats"
         ]
       }
     },

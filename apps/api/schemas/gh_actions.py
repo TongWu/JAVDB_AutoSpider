@@ -59,12 +59,72 @@ class DispatchResponse(BaseModel):
     dispatched: bool
 
 
+# ---------------------------------------------------------------------------
+# Workflow YAML editor schemas
+# ---------------------------------------------------------------------------
+
+
+class WorkflowUpdateRequest(BaseModel):
+    content: str
+    sha: str
+    commit_message: str
+    branch: str = "main"
+
+
+class WorkflowContentResponse(BaseModel):
+    content: str
+    sha: str
+    path: str
+
+
+class WorkflowUpdateResponse(BaseModel):
+    updated: bool
+    commit_sha: str
+    validation_warnings: list[str]
+
+
+# ---------------------------------------------------------------------------
+# Secrets schemas
+# ---------------------------------------------------------------------------
+
+
+class SecretItem(BaseModel):
+    name: str
+    created_at: str
+    updated_at: str
+
+
+class SecretsResponse(BaseModel):
+    secrets: list[SecretItem]
+
+
+class CreateSecretRequest(BaseModel):
+    name: str
+    value: str
+
+
+class CreateSecretResponse(BaseModel):
+    created: bool
+
+
+class DeleteSecretResponse(BaseModel):
+    deleted: bool
+
+
 __all__ = [
+    "CreateSecretRequest",
+    "CreateSecretResponse",
+    "DeleteSecretResponse",
     "DispatchRequest",
     "DispatchResponse",
     "RunItem",
     "RunLogsResponse",
     "RunsResponse",
+    "SecretItem",
+    "SecretsResponse",
+    "WorkflowContentResponse",
     "WorkflowItem",
+    "WorkflowUpdateRequest",
+    "WorkflowUpdateResponse",
     "WorkflowsResponse",
 ]
