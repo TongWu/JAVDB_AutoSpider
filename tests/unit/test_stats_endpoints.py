@@ -156,7 +156,7 @@ def _build_populated_db_map() -> Dict[str, sqlite3.Connection]:
                 ("INSERT INTO PikpakHistory VALUES (?, ?, ?, ?)",
                  (2, "hash2", "torrent2", "2026-05-21T10:00:00Z")),
                 ("INSERT INTO DedupRecords VALUES (?, ?, ?, ?)",
-                 (1, 1073741824, "2026-05-20T10:00:00Z", 0)),
+                 (1, 1073741824, "2026-05-20T10:00:00Z", 1)),
                 ("INSERT INTO DedupRecords VALUES (?, ?, ?, ?)",
                  (2, 536870912, "2026-05-21T10:00:00Z", 0)),
             ],
@@ -231,7 +231,7 @@ def _build_populated_db_map() -> Dict[str, sqlite3.Connection]:
             ("INSERT INTO PikpakHistory VALUES (?, ?, ?, ?)",
              (2, "hash2", "torrent2", "2026-05-21T10:00:00Z")),
             ("INSERT INTO DedupRecords VALUES (?, ?, ?, ?)",
-             (1, 1073741824, "2026-05-20T10:00:00Z", 0)),
+             (1, 1073741824, "2026-05-20T10:00:00Z", 1)),
             ("INSERT INTO DedupRecords VALUES (?, ?, ?, ?)",
              (2, 536870912, "2026-05-21T10:00:00Z", 0)),
         ],
@@ -330,7 +330,7 @@ class TestStatsSummary:
         assert data["total_movies"] == 3
         assert data["total_torrents"] == 4
         assert data["total_pikpak"] == 2
-        assert data["total_dedup_freed_bytes"] == 1073741824 + 536870912
+        assert data["total_dedup_freed_bytes"] == 1073741824  # only IsDeleted=1 record counts
         assert data["proxy_bans_last_7d"] == 0
 
     def test_summary_with_proxy_bans(self, admin_client, tmp_path, monkeypatch):
@@ -419,10 +419,13 @@ class TestStatsTrend:
         data = resp.json()
         assert data["metric"] == "success_rate"
         assert data["period"] == "30d"
-        assert len(data["data_points"]) > 0
-        for dp in data["data_points"]:
-            assert "date" in dp
-            assert "value" in dp
+        # Test data: s1→committed (2026-05-20), s2→committed (2026-05-21), s3→failed (2026-05-22)
+        # Each day has one session; success_rate per day is 1.0 for s1/s2, 0.0 for s3.
+        assert len(data["data_points"]) == 3
+        by_date = {dp["date"]: dp["value"] for dp in data["data_points"]}
+        assert abs(by_date["2026-05-20"] - 1.0) < 0.001
+        assert abs(by_date["2026-05-21"] - 1.0) < 0.001
+        assert abs(by_date["2026-05-22"] - 0.0) < 0.001
 
     def test_trend_movies(self, admin_client, tmp_path, monkeypatch):
         import apps.api.routers.stats as stats_module
@@ -436,7 +439,12 @@ class TestStatsTrend:
         assert resp.status_code == 200
         data = resp.json()
         assert data["metric"] == "movies"
-        assert len(data["data_points"]) > 0
+        # Test data: s1 has 2 movies (2026-05-20), s2 has 1 movie (2026-05-21), s3 has 0 movies (2026-05-22).
+        assert len(data["data_points"]) == 3
+        by_date = {dp["date"]: dp["value"] for dp in data["data_points"]}
+        assert by_date["2026-05-20"] == 2
+        assert by_date["2026-05-21"] == 1
+        assert by_date["2026-05-22"] == 0
 
     def test_trend_torrents(self, admin_client, tmp_path, monkeypatch):
         import apps.api.routers.stats as stats_module
@@ -580,6 +588,48 @@ class TestStatsTrend:
         assert resp.status_code == 200
         data = resp.json()
         assert data["data_points"] == []
+
+    def test_trend_period_cutoff_excludes_old_data(self, admin_client, tmp_path, monkeypatch):
+        """Data older than the requested period must not appear in trend results."""
+        import apps.api.routers.stats as stats_module
+
+        # Build a DB with one recent session and one session far in the past.
+        db_map = _build_populated_db_map()
+        # Insert an old session dated 2025-01-01 — well outside any period window.
+        conn = db_map[stats_module.REPORTS_DB_PATH]
+        conn.execute(
+            "INSERT INTO ReportSessions VALUES (?, ?, ?, ?, ?, ?)",
+            ("s_old", "daily", "2025-01-01", "old.csv", "2025-01-01T10:00:00Z", "committed"),
+        )
+        conn.commit()
+        _patch_stats_db(monkeypatch, db_map)
+        monkeypatch.setattr(stats_module, "_LOGS_DIR", tmp_path)
+
+        resp = admin_client.get("/api/stats/trend", params={"metric": "success_rate", "period": "7d"})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        # The 2025-01-01 session must not appear in the 7d window.
+        dates = {dp["date"] for dp in data["data_points"]}
+        assert "2025-01-01" not in dates
+
+    def test_trend_dedup_only_counts_deleted_records(self, admin_client, tmp_path, monkeypatch):
+        """The dedup trend must only sum ExistingFolderSize for IsDeleted=1 rows."""
+        import apps.api.routers.stats as stats_module
+
+        db_map = _build_populated_db_map()
+        _patch_stats_db(monkeypatch, db_map)
+        monkeypatch.setattr(stats_module, "_LOGS_DIR", tmp_path)
+
+        resp = admin_client.get("/api/stats/trend", params={"metric": "dedup", "period": "30d"})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        # Test data: record 1 has IsDeleted=1 (2026-05-20, 1073741824 bytes),
+        #            record 2 has IsDeleted=0 (2026-05-21, 536870912 bytes — must be excluded).
+        assert len(data["data_points"]) == 1
+        assert data["data_points"][0]["date"] == "2026-05-20"
+        assert data["data_points"][0]["value"] == 1073741824
 
 
 # ---------------------------------------------------------------------------
