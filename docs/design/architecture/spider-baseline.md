@@ -1,6 +1,12 @@
-# Spider Current Layout And Legacy Mapping
+# Spider Current Layout And Legacy Mapping (SUPERSEDED)
 
-## Current Snapshot
+> **SUPERSEDED by [ADR-007](../_archive/ADR-007-Monorepo-Restructure/ADR-007-monorepo-restructure-2026-05.md) on 2026-05-17.**
+>
+> All `scripts/spider/` paths listed below were retired in ADR-007. The current canonical layout is recorded in [`python-tree-2026-05.md`](python-tree-2026-05.md).
+>
+> This document is retained for historical context only. Do NOT use the path mappings here for new work.
+
+## Current Snapshot (STALE)
 
 - Public package entry remains `python3 scripts/spider` via `scripts/spider/__main__.py`
 - App entrypoints live under `scripts/spider/app/`
