@@ -2,6 +2,13 @@
 
 **状态**：已接受 —— 全部阶段已实现（2026-05-23）
 **日期**：2026-05-17
+**最后验证**：2026-05-24
+**配套 IMPs**：
+- [IMP-ADR009-01](IMP-ADR009-01-d1-transient-classifier-fix.md) —— P0 / D1 分类器修复。
+- [IMP-ADR009-02](IMP-ADR009-02-drift-diagnose-readonly-cli.md) —— P1 / 只读诊断 CLI。
+- [IMP-ADR009-03](IMP-ADR009-03-drift-diagnose-guarded-apply.md) —— P2 / 带安全栏的 `--apply` 路径。
+- [IMP-ADR009-04](IMP-ADR009-04-drift-diagnose-email-integration.md) —— P3 / 邮件诊断集成。
+
 **决策者**：bake 期 drift 响应（承接 2026-05-17T14:00 UTC 记录在 `reports/D1/d1_drift.jsonl` 中 `kind: drift_resolution` 的手动 forensic 修复）
 **前置**：无——按 [ADR-006](../_archive/ADR-006-Pending-Mode-Rollout/ADR-006-pending-mode-default-rollout.md) amendment 3 属 bake 安全。"bake 安全"准确含义是：**对 D10 gate 输入无影响**（不写 D1/SQLite、不改 schema、不改 `WriteMode` 解析、不动 `.publish-config.yml` pause 机制、不发 `pending_session_verify` 行）。Layer 1 的 D6 *确实*修改 `email-notification` job，但修改内容是带 60 秒 timeout 的只读 subprocess 调用，被调工具自身只在操作员手动 `--apply` 路径才会触碰 D10 监控状态（workflow 内**绝不**触发 `--apply`）。
 
@@ -12,7 +19,7 @@
 - **P2 (D5 — Layer 1 apply)** —— `--apply --session-id` 路径，含五项硬安全护栏、D1 DELETE 执行、审计记录写入 `d1_drift.jsonl`。由 `tests/unit/test_drift_diagnose.py` 覆盖。✅ 完成。
 - **P3 (D6 — 邮件集成)** —— 在邮件通知 job 中 subprocess 调用 `drift_diagnose --since 1 --json`，`[DRIFT-FIX-READY]`/`[DRIFT-ESCALATE]` 主题前缀标签，60 秒超时及 fallback。由 `tests/unit/test_email_drift_integration.py` 覆盖（20 个单元测试）。✅ 完成。
 
-本 ADR 没有配套 IMP（按 D7 划分，工作量适合小型 PR 序列直接落地）。
+本 ADR 现在拆成按 phase 独立追踪的 IMP：[IMP-ADR009-01](IMP-ADR009-01-d1-transient-classifier-fix.md)、[IMP-ADR009-02](IMP-ADR009-02-drift-diagnose-readonly-cli.md)、[IMP-ADR009-03](IMP-ADR009-03-drift-diagnose-guarded-apply.md) 和 [IMP-ADR009-04](IMP-ADR009-04-drift-diagnose-email-integration.md)。每个 phase 独立记录状态和验证证据；不要把多个 phase 的 checklist 合并到一个 IMP 文件中。
 
 ---
 

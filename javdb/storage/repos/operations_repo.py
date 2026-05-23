@@ -379,7 +379,7 @@ class OperationsRepo:
         Returns:
             (items, next_cursor) — next_cursor is None when no more pages.
         """
-        from javdb.storage.db.db_connection import get_db, OPERATIONS_DB_PATH
+        from javdb.storage.db import get_db, OPERATIONS_DB_PATH
 
         cursor_id: Optional[int] = None
         if cursor is not None:
@@ -559,7 +559,7 @@ class OperationsRepo:
             raise ValueError(f"invalid email status: {status!r}")
         if created_by not in self._EMAIL_CREATED_BY:
             raise ValueError(f"invalid created_by: {created_by!r}")
-        from javdb.storage.db.db_connection import get_db, OPERATIONS_DB_PATH
+        from javdb.storage.db import get_db, OPERATIONS_DB_PATH
         now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
         attachment_names = json.dumps(attachments) if attachments is not None else None
         with get_db(self._db_path or OPERATIONS_DB_PATH) as conn:
@@ -593,7 +593,7 @@ class OperationsRepo:
         Returns:
             (items, next_cursor) — next_cursor is None when no more pages.
         """
-        from javdb.storage.db.db_connection import get_db, OPERATIONS_DB_PATH
+        from javdb.storage.db import get_db, OPERATIONS_DB_PATH
 
         cursor_id: Optional[int] = None
         if cursor is not None:
@@ -641,7 +641,7 @@ class OperationsRepo:
 
         Returns the row as a dict, or None if not found.
         """
-        from javdb.storage.db.db_connection import get_db, OPERATIONS_DB_PATH
+        from javdb.storage.db import get_db, OPERATIONS_DB_PATH
         with get_db(self._db_path or OPERATIONS_DB_PATH) as conn:
             row = conn.execute(
                 """
@@ -660,7 +660,7 @@ class OperationsRepo:
         Args:
             record_id: The Id of the EmailNotificationHistory row to update.
         """
-        from javdb.storage.db.db_connection import get_db, OPERATIONS_DB_PATH
+        from javdb.storage.db import get_db, OPERATIONS_DB_PATH
         now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
         with get_db(self._db_path or OPERATIONS_DB_PATH) as conn:
             cur = conn.execute(

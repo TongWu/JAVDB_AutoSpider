@@ -8,9 +8,9 @@ Architecture decision records, implementation plans, bug fix records, and archit
 
 - [CONTEXT.md](design/CONTEXT.md) — Domain language glossary
 - [architecture/](design/architecture/) — Module mappings and reorganization plans
-- [adr/](design/adr/) — Architecture Decision Records (bilingual `.md` + `.zh.md`)
-- [impl/](design/impl/) — Implementation plans (English only)
-- [bfr/](design/bfr/) — Bug Fix Records (bilingual `.md` + `.zh.md`)
+- [design/](design/) — Design records organized by ADR/BFR folder, with IMPs co-located inside parent ADR folders
+- [_archive/](design/_archive/) — Completed or superseded ADR/BFR folders
+- [_templates/](design/_templates/) — ADR and BFR templates
 
 ## For Self-Hosters (`handbook/en/self-hoster/` | `handbook/zh/self-hoster/`)
 

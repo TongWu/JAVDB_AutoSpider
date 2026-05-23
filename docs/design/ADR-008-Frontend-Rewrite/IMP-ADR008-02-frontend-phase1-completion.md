@@ -12,7 +12,7 @@
 
 **Related:** [IMP-ADR008-03](IMP-ADR008-03-frontend-phase2-full-cli-coverage.md) (Phase 2), [IMP-ADR008-04](IMP-ADR008-04-frontend-phase3-power-user.md) (Phase 3)
 
-**Status:** Phase 1 feature-complete. Plans A–E shipped. Remaining: E2E fixtures, 2 journeys, BE cleanups, cutover.
+**Status:** Completed (2026-05-23). All 6 tasks shipped: E2E fixtures (mock-based), journeys 8/8a, BE cleanups (rollback layering → ADR-014, commit parity), cutover.
 
 ---
 

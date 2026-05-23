@@ -28,6 +28,9 @@ _TRUNCATE_TARGETS = {
 @router.post("/reset")
 def reset_state() -> dict[str, bool]:
     from apps.api.infra import auth as auth_infra
+    import javdb.storage.db as _db
+
+    _db.close_db()
 
     root = _reports_root()
     root.mkdir(parents=True, exist_ok=True)

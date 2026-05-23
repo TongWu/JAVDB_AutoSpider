@@ -2,6 +2,12 @@
 
 **Status**: Accepted — all phases implemented (2026-05-23)
 **Date**: 2026-05-17
+**Last verified**: 2026-05-24
+**Paired IMPs**:
+- [IMP-ADR009-01](IMP-ADR009-01-d1-transient-classifier-fix.md) — P0 / D1 classifier fix.
+- [IMP-ADR009-02](IMP-ADR009-02-drift-diagnose-readonly-cli.md) — P1 / read-only diagnose CLI.
+- [IMP-ADR009-03](IMP-ADR009-03-drift-diagnose-guarded-apply.md) — P2 / guarded `--apply` path.
+- [IMP-ADR009-04](IMP-ADR009-04-drift-diagnose-email-integration.md) — P3 / email diagnosis integration.
 
 ## Implementation Status
 
@@ -10,7 +16,6 @@
 - **P2 (D5 — Layer 1 apply)** — `--apply --session-id` path with five hard safety rails, D1 DELETE execution, audit record to `d1_drift.jsonl`. Covered by `tests/unit/test_drift_diagnose.py`. ✅ Done.
 - **P3 (D6 — email integration)** — subprocess invocation of `drift_diagnose --since 1 --json` in the email notification job, `[DRIFT-FIX-READY]`/`[DRIFT-ESCALATE]` subject prefix tagging, 60s timeout with fallback. Covered by `tests/unit/test_email_drift_integration.py` (20 unit tests). ✅ Done.
 
-This ADR has no paired IMP file (the work fits inside a small PR sequence per D7).
 **Deciders**: Bake-period drift response (succeeds the manual forensic fix recorded as `kind: drift_resolution` in `reports/D1/d1_drift.jsonl` at 2026-05-17T14:00 UTC)
 **Prerequisites**: None — bake-safe per [ADR-006](../_archive/ADR-006-Pending-Mode-Rollout/ADR-006-pending-mode-default-rollout.md) amendment 3. The "bake-safe" claim is precise: **no effect on the D10 gate inputs** (no writes to D1/SQLite, no schema change, no `WriteMode` resolution change, no `.publish-config.yml` pause-mechanism change, no `pending_session_verify` emission). Layer 1 D6 *does* modify the `email-notification` job, but the modification is a read-only subprocess call with a 60-second timeout to a tool that itself only touches D10-monitored state via the operator-gated `--apply` path (which is **never** invoked from the workflow).
 

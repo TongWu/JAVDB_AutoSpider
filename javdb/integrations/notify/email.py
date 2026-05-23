@@ -1986,7 +1986,7 @@ def send_email(subject, body, attachments=None, dry_run=False):
 
     # Resolve session id and attachment basenames once, before the SMTP block.
     try:
-        from javdb.storage.db.db_session import get_active_session_id
+        from javdb.storage.db import get_active_session_id
         _active_session_id = get_active_session_id()
     except Exception:
         _active_session_id = None
