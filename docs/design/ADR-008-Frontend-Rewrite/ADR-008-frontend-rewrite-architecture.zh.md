@@ -1,13 +1,13 @@
 # ADR-008: 前端重写 — 独立 `javdb-autospider-web` 仓库
 
-**状态**: 已接受 —— Phase 1 已交付；Phase 2 计划中、Phase 3 推迟（截至 2026-05-19）
+**状态**: 已接受 —— Phase 1 完成（2026-05-23）；Phase 2 计划中、Phase 3 推迟
 **日期**: 2026-05-17（2026-05-18 修订）
 **决策者**: 头脑风暴会议（设计规范：`docs/superpowers/specs/2026-05-16-frontend-rewrite-design.md`）
-**关联实现计划 (Related Implementation Plans)**: [IMP-ADR008-01](IMP-ADR008-01-frontend-phase1-backend-prerequisites.md)（BE 前置——2026-05-16 完成）、[IMP-ADR008-02](IMP-ADR008-02-frontend-phase1-completion.md)（Phase 1 收尾——功能完整，cutover 待落地）、[IMP-ADR008-03](IMP-ADR008-03-frontend-phase2-full-cli-coverage.md)（Phase 2——计划中，未启动）、[IMP-ADR008-04](IMP-ADR008-04-frontend-phase3-power-user.md)（Phase 3——推迟，待 Phase 2 dogfooding 后定）
+**关联实现计划 (Related Implementation Plans)**: [IMP-ADR008-01](IMP-ADR008-01-frontend-phase1-backend-prerequisites.md)（BE 前置——2026-05-16 完成）、[IMP-ADR008-02](IMP-ADR008-02-frontend-phase1-completion.md)（Phase 1 收尾——2026-05-23 完成）、[IMP-ADR008-03](IMP-ADR008-03-frontend-phase2-full-cli-coverage.md)（Phase 2——计划中，未启动）、[IMP-ADR008-04](IMP-ADR008-04-frontend-phase3-power-user.md)（Phase 3——推迟，待 Phase 2 dogfooding 后定）
 
 ## 待办 (Outstanding Work)
 
-- IMP-ADR008-02 cutover 残留：E2E fixtures、2 条剩余用户旅程、BE 清理、从已删除的 `apps/web/` 切换至独立 `javdb-autospider-web` 仓库。
+- ~~IMP-ADR008-02 cutover 残留~~ —— 2026-05-23 完成。Rollback 分层反转推迟至 [ADR-014](../ADR-014-Storage-Cli-Layering/ADR-014-storage-cli-layering.md)。
 - IMP-ADR008-03（Phase 2 —— 全 CLI 表面覆盖）：未启动。
 - IMP-ADR008-04（Phase 3 —— 高级用户特性与分析）：推迟；具体范围待 Phase 2 dogfooding 累积数据后定。
 

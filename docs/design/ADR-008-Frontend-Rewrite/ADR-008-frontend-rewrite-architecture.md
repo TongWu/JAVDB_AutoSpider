@@ -1,13 +1,13 @@
 # ADR-008: Frontend Rewrite — Standalone `javdb-autospider-web` Repository
 
-**Status**: Accepted — Phase 1 shipped; Phase 2 planned, Phase 3 deferred (as of 2026-05-19)
+**Status**: Accepted — Phase 1 completed (2026-05-23); Phase 2 planned, Phase 3 deferred
 **Date**: 2026-05-17 (amended 2026-05-18)
 **Deciders**: Brainstorming session (design spec: `docs/superpowers/specs/2026-05-16-frontend-rewrite-design.md`)
-**Related Implementation Plans**: [IMP-ADR008-01](IMP-ADR008-01-frontend-phase1-backend-prerequisites.md) (BE prerequisites — completed 2026-05-16), [IMP-ADR008-02](IMP-ADR008-02-frontend-phase1-completion.md) (Phase 1 completion — feature-complete; cutover pending), [IMP-ADR008-03](IMP-ADR008-03-frontend-phase2-full-cli-coverage.md) (Phase 2 — planned, not started), [IMP-ADR008-04](IMP-ADR008-04-frontend-phase3-power-user.md) (Phase 3 — deferred, depends on Phase 2 dogfooding)
+**Related Implementation Plans**: [IMP-ADR008-01](IMP-ADR008-01-frontend-phase1-backend-prerequisites.md) (BE prerequisites — completed 2026-05-16), [IMP-ADR008-02](IMP-ADR008-02-frontend-phase1-completion.md) (Phase 1 completion — completed 2026-05-23), [IMP-ADR008-03](IMP-ADR008-03-frontend-phase2-full-cli-coverage.md) (Phase 2 — planned, not started), [IMP-ADR008-04](IMP-ADR008-04-frontend-phase3-power-user.md) (Phase 3 — deferred, depends on Phase 2 dogfooding)
 
 ## Outstanding Work
 
-- IMP-ADR008-02 cutover items: E2E fixtures, 2 remaining user journeys, BE cleanups, production cutover from `apps/web/` (deleted) to standalone `javdb-autospider-web` repo.
+- ~~IMP-ADR008-02 cutover items~~ — completed 2026-05-23. Rollback layering deferred to [ADR-014](../ADR-014-Storage-Cli-Layering/ADR-014-storage-cli-layering.md).
 - IMP-ADR008-03 (Phase 2 — full CLI surface coverage): not yet started.
 - IMP-ADR008-04 (Phase 3 — power-user features and analytics): deferred; scope to be decided after Phase 2 dogfooding.
 
