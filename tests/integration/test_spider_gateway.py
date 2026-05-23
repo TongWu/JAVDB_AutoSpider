@@ -284,7 +284,10 @@ class TestApiParseUrl:
             "X-CSRF-Token": csrf,
         }
 
-        with patch('apps.api.server.create_gateway') as mock_create:
+        with (
+            patch('apps.api.services.system_service._validate_target_url', lambda url: None),
+            patch('apps.api.services.runtime.create_gateway') as mock_create,
+        ):
             mock_gw = MagicMock()
             mock_gw.fetch_and_parse.return_value = GatewayResult(
                 ok=True, page_type='index', url='u', html_len=10, result={},
@@ -292,13 +295,14 @@ class TestApiParseUrl:
             mock_create.return_value = mock_gw
 
             client = TestClient(app, cookies={"csrf_token": csrf})
-            client.post('/api/parse/url', json={
+            response = client.post('/api/parse/url', json={
                 'url': 'https://javdb.com/',
                 'use_proxy': False,
                 'use_cf_bypass': False,
                 'use_cookie': True,
             }, headers=headers)
 
+            assert response.status_code == 200
             mock_create.assert_called_once_with(
                 use_proxy=False,
                 use_cf_bypass=False,
