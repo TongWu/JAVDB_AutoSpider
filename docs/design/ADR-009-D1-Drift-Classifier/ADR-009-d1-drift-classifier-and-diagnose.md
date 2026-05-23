@@ -1,6 +1,6 @@
 # ADR-009: D1 Transient-Error Classifier Fix + Drift Diagnostic Tool
 
-**Status**: Partially implemented — P0 complete; P1-P3 pending (verified 2026-05-24)
+**Status**: Accepted — all phases implemented (2026-05-23)
 **Date**: 2026-05-17
 **Last verified**: 2026-05-24
 **Paired IMPs**:
@@ -11,14 +11,10 @@
 
 ## Implementation Status
 
-Fresh verification on 2026-05-24 found:
-
-- **P0 / D1 classifier fix** — complete. [`javdb/storage/d1_client.py`](../../../javdb/storage/d1_client.py) includes `"connection lost"` in `_TRANSIENT_ERROR_KEYWORDS`, and `pytest tests/unit/test_d1_dual.py::test_400_network_connection_lost_treated_as_transient -v` passed (`1 passed in 0.03s`).
-- **P1 / diagnose-mode CLI** — pending. `python3 -m apps.cli.db.drift_diagnose --help` exits with `No module named apps.cli.db.drift_diagnose`; there is no [`apps/cli/db/drift_diagnose.py`](../../../apps/cli/db/drift_diagnose.py).
-- **P2 / guarded `--apply` path** — pending. It depends on P1 and no `SAFE_TO_APPLY` / guarded-delete implementation exists in `apps/`, `javdb/`, or `tests/`.
-- **P3 / email integration** — pending. No `drift_diagnose` subprocess invocation, `Drift Diagnosis` body block, or `[DRIFT-FIX-READY]` / `[DRIFT-ESCALATE]` subject tagging exists in [`javdb/integrations/notify/email.py`](../../../javdb/integrations/notify/email.py) or `.github/workflows/`.
-
-This ADR now has phase-specific IMPs: [IMP-ADR009-01](IMP-ADR009-01-d1-transient-classifier-fix.md), [IMP-ADR009-02](IMP-ADR009-02-drift-diagnose-readonly-cli.md), [IMP-ADR009-03](IMP-ADR009-03-drift-diagnose-guarded-apply.md), and [IMP-ADR009-04](IMP-ADR009-04-drift-diagnose-email-integration.md). Each phase tracks its own status and verification evidence; do not combine multiple phase checklists into one IMP.
+- **P0 (D1 — Layer 0)** — `"connection lost"` added to `_TRANSIENT_ERROR_KEYWORDS` in [`javdb/storage/d1_client.py`](../../../javdb/storage/d1_client.py) + regression test `test_400_network_connection_lost_treated_as_transient`. ✅ Done.
+- **P1 (D2, D3, D4 — Layer 1 diagnose)** — `drift_diagnose` CLI at [`apps/cli/db/drift_diagnose.py`](../../../apps/cli/db/drift_diagnose.py), delegating D1/SQLite diagnosis logic to [`javdb/storage/drift_diagnose.py`](../../../javdb/storage/drift_diagnose.py). Read-only diagnose mode with suspect discovery (verify-metric + D1-sweep), verdict classification (CLEAN/SAFE_TO_APPLY/ESCALATE/UNEXPECTED), JSON output, exit codes. Covered by `tests/unit/test_drift_diagnose.py` (64 unit tests across diagnose + apply). ✅ Done.
+- **P2 (D5 — Layer 1 apply)** — `--apply --session-id` path with five hard safety rails, D1 DELETE execution, audit record to `d1_drift.jsonl`. Covered by `tests/unit/test_drift_diagnose.py`. ✅ Done.
+- **P3 (D6 — email integration)** — subprocess invocation of `drift_diagnose --since 1 --json` in the email notification job, `[DRIFT-FIX-READY]`/`[DRIFT-ESCALATE]` subject prefix tagging, 60s timeout with fallback. Covered by `tests/unit/test_email_drift_integration.py` (20 unit tests). ✅ Done.
 
 **Deciders**: Bake-period drift response (succeeds the manual forensic fix recorded as `kind: drift_resolution` in `reports/D1/d1_drift.jsonl` at 2026-05-17T14:00 UTC)
 **Prerequisites**: None — bake-safe per [ADR-006](../_archive/ADR-006-Pending-Mode-Rollout/ADR-006-pending-mode-default-rollout.md) amendment 3. The "bake-safe" claim is precise: **no effect on the D10 gate inputs** (no writes to D1/SQLite, no schema change, no `WriteMode` resolution change, no `.publish-config.yml` pause-mechanism change, no `pending_session_verify` emission). Layer 1 D6 *does* modify the `email-notification` job, but the modification is a read-only subprocess call with a 60-second timeout to a tool that itself only touches D10-monitored state via the operator-gated `--apply` path (which is **never** invoked from the workflow).
@@ -90,7 +86,7 @@ This is the **root-cause fix**. Once landed, today's exact class of drift become
 
 ### D2 — Layer 1: `drift_diagnose` CLI
 
-New CLI at `apps/cli/db/drift_diagnose.py` with two modes:
+New CLI at `apps/cli/db/drift_diagnose.py` with two modes. The CLI boundary handles argument parsing, output formatting, and exit-code orchestration; the D1/SQLite discovery, classification, deletion, and audit writes live in `javdb/storage/drift_diagnose.py`.
 
 **Diagnose (default)** — read-only. Scans recent drift indicators, classifies each suspect session, and prints a report. Suggested fix commands are emitted for any session classified as safely-recoverable.
 
@@ -99,7 +95,7 @@ New CLI at `apps/cli/db/drift_diagnose.py` with two modes:
 ### D3 — Suspect discovery (union of two signals)
 
 - **Verify-metric path (q)**: read `reports/D1/d1_drift.jsonl`, extract `pending_session_verify` records with `pending_residual_count > 0` within the configured time window.
-- **D1-sweep path (r)**: query D1 for `ReportSessions` with `Status='committed'` in the window; for each, query D1 `Pending{Movie,Torrent}HistoryWrites` row count; sessions with any non-zero count are suspect.
+- **D1-sweep path (r)**: query D1 for `ReportSessions` with `Status='committed'` in the window; for each, query D1 `Pending{Movie,Torrent}HistoryWrites` rows with `ApplyState='pending'`; sessions with any non-zero count are suspect.
 
 Union both signals; tag each suspect with provenance (`verify-tagged` / `sweep-only` / `both`). The asymmetric subset matters operationally — `sweep-only` (residual on D1 but no verify-line trail) indicates the verify emission path itself is broken and warrants escalation.
 
@@ -110,7 +106,7 @@ Union both signals; tag each suspect with provenance (`verify-tagged` / `sweep-o
 | `CLEAN` | No actual orphan despite suspect tag | None (verify metric stale) | 0 |
 | `SAFE_TO_APPLY` | D1 orphan + SQLite clean + live tables byte-identical on both sides | Emit `--apply --session-id <id>` command | 1 |
 | `ESCALATE_LIVE_DIVERGENCE` | Live `MovieHistory` / `TorrentHistory` differs between sides | Manual investigation; do NOT auto-fix | 2 |
-| `UNEXPECTED_PATTERN` | Anything else (in-progress session in suspect list, SQLite-side orphan, mixed) | Manual investigation | 2 |
+| `UNEXPECTED_PATTERN` | Anything else (in-progress / missing / unverifiable `ReportSessions` row, D1 pending-table read failure, SQLite-side orphan, mixed) | Manual investigation | 2 |
 
 Process exit code = `max(verdicts)` across all suspects. Allows shell-level branching on severity.
 

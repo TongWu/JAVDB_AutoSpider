@@ -14,6 +14,7 @@ Features:
 import smtplib
 import logging
 import os
+import subprocess
 import sys
 import re
 import json
@@ -1550,6 +1551,119 @@ def _build_dual_drift_advisory(reports_dir: str) -> str:
     return '\n'.join(lines) + '\n\n'
 
 
+def _build_drift_diagnosis_section():
+    """Run ``drift_diagnose --since 1 --json`` and return a formatted section.
+
+    ADR-009 D6: invoked when ``_build_dual_drift_advisory()`` already
+    returned a non-empty advisory.  Runs the diagnose CLI as a
+    subprocess (read-only, NEVER with ``--apply``) and renders the
+    results as a plain-text section to append to the email body.
+
+    Returns ``(section_text, suspects_list)`` where *section_text* is
+    empty when the subprocess produces no suspects, and *suspects_list*
+    is the raw list for use by ``_drift_diagnosis_subject_prefix``.
+    Returns a fallback message on any subprocess failure so that email
+    delivery is never blocked; in that case *suspects_list* is empty.
+    """
+    _MANUAL_CMD = 'python3 -m apps.cli.db.drift_diagnose --since 1 --json'
+
+    try:
+        result = subprocess.run(
+            [sys.executable, '-m', 'apps.cli.db.drift_diagnose',
+             '--since', '1', '--json'],
+            capture_output=True, text=True, timeout=60,
+        )
+        stdout = result.stdout.strip()
+    except subprocess.TimeoutExpired:
+        return (
+            '─── Drift Diagnosis ───\n'
+            'Automated diagnosis unavailable: subprocess timed out after 60s.\n'
+            f'Run manually: {_MANUAL_CMD}\n\n'
+        ), []
+    except Exception as exc:
+        return (
+            '─── Drift Diagnosis ───\n'
+            f'Automated diagnosis unavailable: {exc}\n'
+            f'Run manually: {_MANUAL_CMD}\n\n'
+        ), []
+
+    if result.returncode not in (0, 1, 2):
+        return (
+            '─── Drift Diagnosis ───\n'
+            f'Automated diagnosis unavailable: unexpected exit code {result.returncode}.\n'
+            f'Run manually: {_MANUAL_CMD}\n\n'
+        ), []
+
+    try:
+        data = json.loads(stdout)
+    except (ValueError, TypeError):
+        return (
+            '─── Drift Diagnosis ───\n'
+            'Automated diagnosis unavailable: non-JSON output from subprocess.\n'
+            f'Run manually: {_MANUAL_CMD}\n\n'
+        ), []
+    if not isinstance(data, dict):
+        return (
+            '─── Drift Diagnosis ───\n'
+            'Automated diagnosis unavailable: invalid JSON schema from subprocess.\n'
+            f'Run manually: {_MANUAL_CMD}\n\n'
+        ), []
+
+    suspects = data.get('suspects', [])
+    if not isinstance(suspects, list):
+        return (
+            '─── Drift Diagnosis ───\n'
+            'Automated diagnosis unavailable: invalid suspects payload.\n'
+            f'Run manually: {_MANUAL_CMD}\n\n'
+        ), []
+    if not suspects:
+        return '', []
+
+    lines = ['─── Drift Diagnosis ───']
+    for s in suspects:
+        sid = s.get('session_id', '?')
+        verdict = s.get('verdict', '?')
+        orphan_m = s.get('d1_orphan_movie_count', 0)
+        orphan_t = s.get('d1_orphan_torrent_count', 0)
+        lines.append(f'  Session: {sid}')
+        lines.append(f'    verdict: {verdict}')
+        lines.append(f'    orphan movies: {orphan_m}, orphan torrents: {orphan_t}')
+        if s.get('suggested_command'):
+            lines.append(f'    suggested fix: {s["suggested_command"]}')
+        if s.get('note'):
+            lines.append(f'    note: {s["note"]}')
+    lines.append('')
+    return '\n'.join(lines) + '\n', suspects
+
+
+def _drift_diagnosis_subject_prefix(suspects):
+    """Return a subject-line prefix tag based on drift diagnosis verdicts.
+
+    * ``[DRIFT-ESCALATE] `` when any suspect is ``ESCALATE_LIVE_DIVERGENCE``
+      or ``UNEXPECTED_PATTERN`` (takes priority).
+    * ``[DRIFT-FIX-READY] `` when at least one is ``SAFE_TO_APPLY`` and
+      none escalate.
+    * ``''`` when all suspects are ``CLEAN`` or the list is empty.
+    """
+    if not suspects:
+        return ''
+
+    has_escalate = False
+    has_safe = False
+    for s in suspects:
+        verdict = s.get('verdict', '')
+        if verdict in ('ESCALATE_LIVE_DIVERGENCE', 'UNEXPECTED_PATTERN'):
+            has_escalate = True
+        elif verdict == 'SAFE_TO_APPLY':
+            has_safe = True
+
+    if has_escalate:
+        return '[DRIFT-ESCALATE] '
+    if has_safe:
+        return '[DRIFT-FIX-READY] '
+    return ''
+
+
 def _build_pending_subject_prefix(records, alerts, has_critical, mode):
     """Return the subject-line prefix for pending-mode results.
 
@@ -2372,12 +2486,19 @@ Check attached logs for details.
         reports_dir_for_advisory = os.environ.get('REPORTS_DIR', _EMAIL_REPORTS_DIR)
         advisory = _build_dual_drift_advisory(reports_dir_for_advisory)
         if advisory:
+            # ADR-009 D6: run drift_diagnose subprocess and append results
+            diagnosis_section, diag_suspects = _build_drift_diagnosis_section()
+            if diagnosis_section:
+                advisory = advisory + diagnosis_section
             body = advisory + body
             logger.warning(
                 "Prepended D1 drift advisory to email body — see "
                 "%s/D1/d1_drift.jsonl",
                 reports_dir_for_advisory,
             )
+            # ADR-009 D6: tag subject with drift verdict
+            drift_prefix = _drift_diagnosis_subject_prefix(diag_suspects)
+            subject = f'{drift_prefix}{subject}'
 
     # Send email
     email_sent = send_email(subject, body, attachments, args.dry_run)
