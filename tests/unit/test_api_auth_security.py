@@ -16,6 +16,17 @@ def _reload_auth_module():
     return importlib.reload(module)
 
 
+def _hide_api_config_store(monkeypatch):
+    real_exists = Path.exists
+
+    def exists_without_api_store(path: Path) -> bool:
+        if path == _CONFIG_STORE:
+            return False
+        return real_exists(path)
+
+    monkeypatch.setattr(Path, "exists", exists_without_api_store)
+
+
 def test_missing_api_secret_generates_ephemeral_secret_in_non_production(monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "development")
     monkeypatch.delenv("FLASK_ENV", raising=False)
@@ -24,6 +35,37 @@ def test_missing_api_secret_generates_ephemeral_secret_in_non_production(monkeyp
     auth_module = _reload_auth_module()
 
     assert len(auth_module.API_SECRET_KEY) >= 32
+
+
+def test_generated_api_secret_is_stable_across_auth_reimports(monkeypatch):
+    """A test-only auth reimport must not strand already-wired API routers.
+
+    FastAPI dependencies capture the auth functions present when routers are
+    registered. If a later test deletes/reimports ``apps.api.infra.auth`` and
+    gets a new generated secret, tokens minted from the fresh module fail
+    against those already-captured dependencies with 401.
+    """
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.delenv("FLASK_ENV", raising=False)
+    monkeypatch.delenv("API_SECRET_KEY", raising=False)
+    sys.modules.pop("apps.api.infra._auth_runtime_state", None)
+
+    from javdb.infra.config import cfg as _real_cfg
+
+    def _cfg_no_secret(name, default=""):
+        if name == "API_SECRET_KEY":
+            return default
+        return _real_cfg(name, default)
+
+    monkeypatch.setattr("javdb.infra.config.cfg", _cfg_no_secret)
+
+    _hide_api_config_store(monkeypatch)
+
+    first = _reload_auth_module().API_SECRET_KEY
+    sys.modules.pop("apps.api.infra.auth", None)
+    second = importlib.import_module("apps.api.infra.auth").API_SECRET_KEY
+
+    assert second == first
 
 
 def test_missing_api_secret_raises_in_production(monkeypatch):
@@ -41,18 +83,12 @@ def test_missing_api_secret_raises_in_production(monkeypatch):
     monkeypatch.setattr("javdb.infra.config.cfg", _cfg_no_secret)
 
     # _read_store_value reads from the on-disk config store which may
-    # also carry API_SECRET_KEY.  Temporarily hide the file so _resolve
-    # sees all three sources as empty.
-    backup = _CONFIG_STORE.with_suffix(".json.test_bak")
-    existed = _CONFIG_STORE.exists()
-    if existed:
-        _CONFIG_STORE.rename(backup)
-    try:
-        with pytest.raises(RuntimeError, match="API_SECRET_KEY is required"):
-            _reload_auth_module()
-    finally:
-        if existed:
-            backup.rename(_CONFIG_STORE)
+    # also carry API_SECRET_KEY. Temporarily hide it so _resolve sees all
+    # three sources as empty.
+    _hide_api_config_store(monkeypatch)
+
+    with pytest.raises(RuntimeError, match="API_SECRET_KEY is required"):
+        _reload_auth_module()
 
 
 class _StubURL:
