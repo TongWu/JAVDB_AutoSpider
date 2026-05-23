@@ -136,6 +136,19 @@ Workers cannot use raw SMTP (no TCP sockets). Email notifications are either:
 - Sent via an email API service (Resend, Mailgun, or Cloudflare Email Workers)
 - Dispatched through existing GH Actions workflows that already handle email
 
+#### D7: README deployment guide with `.dev.vars.example`, not Deploy Button
+
+[Cloudflare Deploy Buttons](https://developers.cloudflare.com/workers/platform/deploy-buttons/) were evaluated for one-click deployment but are **not usable** for this project:
+
+1. **Pages not supported** — Deploy Buttons only support Workers, not Pages projects
+2. **Existing D1 databases** — Deploy Buttons auto-provision new D1 databases; this project needs to connect to existing ones (`javdb-history`, `javdb-reports`, `javdb-operations`)
+
+Instead, the `javdb-autospider-web` README includes:
+
+- **`.dev.vars.example`** — Enumerates all required secrets with descriptions, following Cloudflare's convention for self-documenting deployment. Users copy to `.dev.vars` for local dev or set via `wrangler pages secret put` for production.
+- **Step-by-step deployment guide** — Covers prerequisites, D1 database ID lookup, `wrangler.toml` configuration, secret provisioning, build & deploy, and verification.
+- **Deploy to Cloudflare badge** (non-functional placeholder) — Links to the deployment guide section within the README. If Cloudflare extends Deploy Buttons to support Pages in the future, the badge can be updated to point to `deploy.workers.cloudflare.com`.
+
 ### D1 Repository Layer
 
 SQL statements are copied directly from the Python repository layer — D1 is SQLite, so the SQL is identical. Only the binding API differs:
