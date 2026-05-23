@@ -17,6 +17,20 @@ import sys
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _restore_auth_module():
+    """Preserve the original auth module in sys.modules across tests that
+    do del+reimport.  Without this, later test files that reload
+    apps.api.services.runtime pick up a stale auth module with a different
+    API_SECRET_KEY, causing JWT verification failures."""
+    original = sys.modules.get("apps.api.infra.auth")
+    yield
+    if original is not None:
+        sys.modules["apps.api.infra.auth"] = original
+    elif "apps.api.infra.auth" in sys.modules:
+        del sys.modules["apps.api.infra.auth"]
+
+
 def _reload_auth_module():
     """Force-reimport so module-level constants are re-evaluated against
     the current env + config.py state."""
