@@ -38,13 +38,18 @@ class FakeD1Connection:
     ``query_results`` is a dict mapping SQL-prefix → list-of-dicts returned by
     ``execute``. The prefix is matched against the first 40 chars (lowercased)
     of the SQL string for easy test wiring.
+
+    Also tracks all executed SQL statements with their params in
+    ``executed_statements`` for asserting DELETE predicates, etc.
     """
 
     def __init__(self, query_results: Optional[Dict[str, List[dict]]] = None):
         self._results: Dict[str, List[dict]] = query_results or {}
         self.closed = False
+        self.executed_statements: List[tuple] = []  # [(sql, params), ...]
 
     def execute(self, sql: str, params: Any = None) -> FakeD1Cursor:
+        self.executed_statements.append((sql, params))
         key = sql.strip().lower()[:60]
         for prefix, rows in self._results.items():
             if key.startswith(prefix.lower()):
@@ -831,3 +836,475 @@ class TestReadJsonlMalformed:
         assert records[0] == {"a": 1}
         assert records[1] == {"b": 2}
         assert records[2] == {"c": 3}
+
+
+# ===========================================================================
+# Test: --apply path (ADR-009 D5 safety rails)
+# ===========================================================================
+
+
+class HrefAwareFakeD1Connection(FakeD1Connection):
+    """Extended fake that returns href-specific rows for MovieHistory queries.
+
+    For ``SELECT * FROM MovieHistory WHERE Href = ?`` queries, it looks up
+    the href param in ``_movie_by_href`` to return the correct row.
+    """
+
+    def __init__(self, query_results=None, *, movie_by_href=None):
+        super().__init__(query_results)
+        self._movie_by_href: Dict[str, dict] = movie_by_href or {}
+
+    def execute(self, sql: str, params: Any = None) -> FakeD1Cursor:
+        self.executed_statements.append((sql, params))
+        key = sql.strip().lower()[:60]
+
+        # Special handling for href-specific MovieHistory queries
+        if "moviehistory where href" in key and params:
+            href = params[0] if isinstance(params, list) else params
+            row = self._movie_by_href.get(href)
+            return FakeD1Cursor([row] if row else [])
+
+        for prefix, rows in self._results.items():
+            if key.startswith(prefix.lower()):
+                return FakeD1Cursor(rows)
+        return FakeD1Cursor([])
+
+
+def _make_safe_to_apply_fakes(session_id, *, movie_orphan_count=2,
+                               torrent_orphan_count=1):
+    """Build FakeD1Connection pair where classify_verdict yields SAFE_TO_APPLY.
+
+    The d1_history fake is configured so that:
+    - Pending orphan rows exist for the session
+    - Live MovieHistory/TorrentHistory rows exist (for classify_verdict)
+    - DELETE statements return the expected rowcount
+    """
+    orphan_movies = [
+        {"Seq": f"seq-m-{i}", "SessionId": session_id,
+         "Href": f"/v/movie{i}", "ApplyState": "pending"}
+        for i in range(movie_orphan_count)
+    ]
+    orphan_torrents = [
+        {"Seq": f"seq-t-{i}", "SessionId": session_id,
+         "Href": f"/v/movie0", "ApplyState": "pending"}
+        for i in range(torrent_orphan_count)
+    ]
+    # For live-table comparison — each orphan href needs a matching movie
+    movie_by_href = {
+        f"/v/movie{i}": {
+            "Href": f"/v/movie{i}", "VideoCode": f"M-{i:03d}",
+            "ActorName": "Actor", "DateTimeCreated": "2026-01-01 00:00:00",
+            "Id": i + 1,
+        }
+        for i in range(movie_orphan_count)
+    }
+
+    d1_history = HrefAwareFakeD1Connection(
+        {
+            # For classify_verdict — orphan discovery
+            "select * from pendingmoviehistorywrites where sessionid":
+                orphan_movies,
+            "select * from pendingtorrenthistorywrites where sessionid":
+                orphan_torrents,
+            # For live-table comparison (torrent children)
+            "select * from torrenthistory where moviehistoryid": [],
+            # DELETE statements — FakeD1Cursor.rowcount = len(rows)
+            "delete from pendingmoviehistorywrites": orphan_movies,
+            "delete from pendingtorrenthistorywrites": orphan_torrents,
+        },
+        movie_by_href=movie_by_href,
+    )
+    d1_reports = FakeD1Connection({
+        "select status from reportsessions where id":
+            [{"Status": "committed"}],
+    })
+    return d1_history, d1_reports
+
+
+class TestApplyPath:
+    """Tests for ``apply_fix()`` and CLI ``--apply --session-id`` integration."""
+
+    # ── Safety Rail 1: --apply requires --session-id ───────────────────
+
+    def test_apply_without_session_id_exits_2(self, drift_mod, monkeypatch):
+        """Rail 1: --apply without --session-id → exit 2."""
+        monkeypatch.setenv("REPORTS_DIR", "/tmp/test_drift")
+        rc = drift_mod.main(["--apply"])
+        assert rc == 2
+
+    # ── Safety Rail 2: verdict must be SAFE_TO_APPLY ──────────────────
+
+    def test_apply_verdict_clean_exits_1(self, drift_mod, tmp_path, monkeypatch):
+        """Rail 2: verdict CLEAN (no orphans) → exit 1 (not SAFE_TO_APPLY)."""
+        session_id = "20260520T100000.000000Z-aaaa-0000"
+        monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+
+        # No orphan rows → classify_verdict returns CLEAN
+        d1_history = FakeD1Connection({
+            "select * from pendingmoviehistorywrites where sessionid": [],
+            "select * from pendingtorrenthistorywrites where sessionid": [],
+        })
+        d1_reports = FakeD1Connection({
+            "select status from reportsessions where id":
+                [{"Status": "committed"}],
+        })
+
+        def fake_make_d1(name):
+            if name == "reports":
+                return d1_reports
+            return d1_history
+
+        monkeypatch.setattr(drift_mod, "make_d1_connection", fake_make_d1)
+
+        # Need a SQLite db for classify_verdict
+        db_path = str(tmp_path / "history.db")
+        _make_sqlite_history(db_path)
+
+        rc = drift_mod.main([
+            "--apply", "--session-id", session_id,
+            "--history-db", db_path,
+        ])
+        assert rc == 1
+
+    # ── Safety Rail 3: session must be committed ──────────────────────
+
+    def test_apply_session_not_committed_exits_2(self, drift_mod, tmp_path,
+                                                  monkeypatch):
+        """Rail 3: session status is 'in_progress' → exit 2."""
+        session_id = "20260520T100000.000000Z-bbbb-0000"
+        monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+
+        d1_history = FakeD1Connection({
+            "select * from pendingmoviehistorywrites where sessionid": [
+                {"Seq": "s1", "SessionId": session_id,
+                 "Href": "/v/x", "ApplyState": "pending"},
+            ],
+            "select * from pendingtorrenthistorywrites where sessionid": [],
+        })
+        d1_reports = FakeD1Connection({
+            "select status from reportsessions where id":
+                [{"Status": "in_progress"}],
+        })
+
+        def fake_make_d1(name):
+            if name == "reports":
+                return d1_reports
+            return d1_history
+
+        monkeypatch.setattr(drift_mod, "make_d1_connection", fake_make_d1)
+
+        db_path = str(tmp_path / "history.db")
+        _make_sqlite_history(db_path)
+
+        rc = drift_mod.main([
+            "--apply", "--session-id", session_id,
+            "--history-db", db_path,
+        ])
+        assert rc == 2
+
+    # ── Safety Rail 4: orphan count ≤ --max-deletes ───────────────────
+
+    def test_apply_exceeds_max_deletes_exits_2(self, drift_mod, tmp_path,
+                                                monkeypatch):
+        """Rail 4: orphan count > --max-deletes → exit 2."""
+        session_id = "20260520T100000.000000Z-cccc-0000"
+        monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+
+        # 5 orphan movies, but --max-deletes 3
+        d1_history, d1_reports = _make_safe_to_apply_fakes(
+            session_id, movie_orphan_count=5, torrent_orphan_count=0,
+        )
+
+        def fake_make_d1(name):
+            if name == "reports":
+                return d1_reports
+            return d1_history
+
+        monkeypatch.setattr(drift_mod, "make_d1_connection", fake_make_d1)
+
+        db_path = str(tmp_path / "history.db")
+        _make_sqlite_history(db_path, movies=[
+            {"Href": f"/v/movie{i}", "VideoCode": f"M-{i:03d}",
+             "ActorName": "Actor", "DateTimeCreated": "2026-01-01 00:00:00"}
+            for i in range(5)
+        ])
+
+        rc = drift_mod.main([
+            "--apply", "--session-id", session_id,
+            "--max-deletes", "3",
+            "--history-db", db_path,
+        ])
+        assert rc == 2
+
+    # ── Safety Rail 5: DELETE SQL must include SessionId + ApplyState ──
+
+    def test_apply_delete_sql_includes_sessionid_and_applystate(
+        self, drift_mod, tmp_path, monkeypatch,
+    ):
+        """Rail 5: DELETE must have both SessionId=? and ApplyState='pending'."""
+        session_id = "20260520T100000.000000Z-dddd-0000"
+        monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+
+        d1_history, d1_reports = _make_safe_to_apply_fakes(
+            session_id, movie_orphan_count=1, torrent_orphan_count=1,
+        )
+
+        def fake_make_d1(name):
+            if name == "reports":
+                return d1_reports
+            return d1_history
+
+        monkeypatch.setattr(drift_mod, "make_d1_connection", fake_make_d1)
+
+        # Patch append_jsonl_record to avoid file I/O
+        monkeypatch.setattr(
+            drift_mod, "append_jsonl_record", lambda record, **kw: None,
+        )
+
+        db_path = str(tmp_path / "history.db")
+        _make_sqlite_history(db_path, movies=[
+            {"Href": "/v/movie0", "VideoCode": "M-000",
+             "ActorName": "Actor", "DateTimeCreated": "2026-01-01 00:00:00"},
+        ])
+
+        rc = drift_mod.main([
+            "--apply", "--session-id", session_id,
+            "--history-db", db_path,
+        ])
+        assert rc == 0
+
+        # Verify DELETE statements include both predicates
+        delete_stmts = [
+            (sql, params)
+            for sql, params in d1_history.executed_statements
+            if sql.strip().upper().startswith("DELETE")
+        ]
+        assert len(delete_stmts) == 2, (
+            f"Expected 2 DELETE statements, got {len(delete_stmts)}"
+        )
+        for sql, params in delete_stmts:
+            assert "SessionId = ?" in sql, (
+                f"DELETE missing SessionId predicate: {sql}"
+            )
+            assert "ApplyState = 'pending'" in sql, (
+                f"DELETE missing ApplyState predicate: {sql}"
+            )
+            assert params == [session_id], (
+                f"DELETE params should be [session_id], got {params}"
+            )
+
+    # ── Happy path: SAFE_TO_APPLY → deletes + audit + exit 0 ─────────
+
+    def test_apply_safe_to_apply_success(self, drift_mod, tmp_path,
+                                          monkeypatch):
+        """Full happy path: SAFE_TO_APPLY → DELETEs + audit record + exit 0."""
+        session_id = "20260520T100000.000000Z-eeee-0000"
+        monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+
+        d1_history, d1_reports = _make_safe_to_apply_fakes(
+            session_id, movie_orphan_count=2, torrent_orphan_count=1,
+        )
+
+        def fake_make_d1(name):
+            if name == "reports":
+                return d1_reports
+            return d1_history
+
+        monkeypatch.setattr(drift_mod, "make_d1_connection", fake_make_d1)
+
+        # Capture the audit record
+        audit_records: list = []
+
+        def capture_append(record, **kw):
+            audit_records.append(record)
+
+        monkeypatch.setattr(drift_mod, "append_jsonl_record", capture_append)
+
+        db_path = str(tmp_path / "history.db")
+        _make_sqlite_history(db_path, movies=[
+            {"Href": "/v/movie0", "VideoCode": "M-000",
+             "ActorName": "Actor", "DateTimeCreated": "2026-01-01 00:00:00"},
+            {"Href": "/v/movie1", "VideoCode": "M-001",
+             "ActorName": "Actor", "DateTimeCreated": "2026-01-01 00:00:00"},
+        ])
+
+        rc = drift_mod.main([
+            "--apply", "--session-id", session_id,
+            "--history-db", db_path,
+        ])
+        assert rc == 0
+
+        # Verify connections were closed
+        assert d1_history.closed
+        assert d1_reports.closed
+
+    # ── Audit record format verification ──────────────────────────────
+
+    def test_apply_audit_record_format(self, drift_mod, tmp_path,
+                                        monkeypatch):
+        """Audit record has the correct structure and fields."""
+        session_id = "20260520T100000.000000Z-ffff-0000"
+        monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+
+        d1_history, d1_reports = _make_safe_to_apply_fakes(
+            session_id, movie_orphan_count=3, torrent_orphan_count=2,
+        )
+
+        def fake_make_d1(name):
+            if name == "reports":
+                return d1_reports
+            return d1_history
+
+        monkeypatch.setattr(drift_mod, "make_d1_connection", fake_make_d1)
+
+        audit_records: list = []
+        monkeypatch.setattr(
+            drift_mod, "append_jsonl_record",
+            lambda record, **kw: audit_records.append(record),
+        )
+
+        db_path = str(tmp_path / "history.db")
+        _make_sqlite_history(db_path, movies=[
+            {"Href": f"/v/movie{i}", "VideoCode": f"M-{i:03d}",
+             "ActorName": "Actor", "DateTimeCreated": "2026-01-01 00:00:00"}
+            for i in range(3)
+        ])
+
+        rc = drift_mod.main([
+            "--apply", "--session-id", session_id,
+            "--history-db", db_path,
+        ])
+        assert rc == 0
+        assert len(audit_records) == 1
+
+        rec = audit_records[0]
+        assert rec["kind"] == "drift_resolution"
+        assert rec["session_id"] == session_id
+        assert rec["source"] == "drift_diagnose_apply"
+        assert rec["deleted_movie_orphans"] == 3
+        assert rec["deleted_torrent_orphans"] == 2
+        assert rec["verdict_at_apply"] == "SAFE_TO_APPLY"
+        # ts must be ISO 8601 with trailing Z
+        assert rec["ts"].endswith("Z")
+        # Verify it parses as a valid datetime
+        ts_str = rec["ts"].replace("Z", "+00:00")
+        dt = datetime.fromisoformat(ts_str)
+        assert dt.tzinfo is not None
+
+    # ── apply_fix() unit tests (direct function calls) ────────────────
+
+    def test_apply_fix_direct_safe_to_apply(self, drift_mod, tmp_path,
+                                             monkeypatch):
+        """Directly call apply_fix() for a SAFE_TO_APPLY session."""
+        session_id = "20260520T100000.000000Z-gggg-0000"
+        monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+
+        d1_history, d1_reports = _make_safe_to_apply_fakes(
+            session_id, movie_orphan_count=1, torrent_orphan_count=0,
+        )
+
+        def fake_make_d1(name):
+            if name == "reports":
+                return d1_reports
+            return d1_history
+
+        monkeypatch.setattr(drift_mod, "make_d1_connection", fake_make_d1)
+        monkeypatch.setattr(
+            drift_mod, "append_jsonl_record", lambda record, **kw: None,
+        )
+
+        db_path = str(tmp_path / "history.db")
+        _make_sqlite_history(db_path, movies=[
+            {"Href": "/v/movie0", "VideoCode": "M-000",
+             "ActorName": "Actor", "DateTimeCreated": "2026-01-01 00:00:00"},
+        ])
+
+        rc = drift_mod.apply_fix(
+            session_id=session_id,
+            sqlite_history_path=db_path,
+            max_deletes=100,
+        )
+        assert rc == 0
+
+    def test_apply_fix_direct_not_safe(self, drift_mod, tmp_path,
+                                        monkeypatch):
+        """Directly call apply_fix() when verdict is CLEAN → exit 1."""
+        session_id = "20260520T100000.000000Z-hhhh-0000"
+        monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+
+        # No orphans → CLEAN verdict
+        d1_history = FakeD1Connection({
+            "select * from pendingmoviehistorywrites where sessionid": [],
+            "select * from pendingtorrenthistorywrites where sessionid": [],
+        })
+        d1_reports = FakeD1Connection({
+            "select status from reportsessions where id":
+                [{"Status": "committed"}],
+        })
+
+        def fake_make_d1(name):
+            if name == "reports":
+                return d1_reports
+            return d1_history
+
+        monkeypatch.setattr(drift_mod, "make_d1_connection", fake_make_d1)
+
+        db_path = str(tmp_path / "history.db")
+        _make_sqlite_history(db_path)
+
+        rc = drift_mod.apply_fix(
+            session_id=session_id,
+            sqlite_history_path=db_path,
+            max_deletes=100,
+        )
+        assert rc == 1
+
+    # ── --max-deletes argument is accepted ────────────────────────────
+
+    def test_max_deletes_default_is_100(self, drift_mod):
+        """--max-deletes defaults to 100."""
+        parser = drift_mod._build_arg_parser()
+        args = parser.parse_args([])
+        assert args.max_deletes == 100
+
+    def test_max_deletes_custom_value(self, drift_mod):
+        """--max-deletes accepts a custom integer value."""
+        parser = drift_mod._build_arg_parser()
+        args = parser.parse_args(["--max-deletes", "50"])
+        assert args.max_deletes == 50
+
+    # ── Rail 3: session status 'failed' also exits 2 ─────────────────
+
+    def test_apply_session_failed_exits_2(self, drift_mod, tmp_path,
+                                           monkeypatch):
+        """Rail 3: session status is 'failed' → exit 2."""
+        session_id = "20260520T100000.000000Z-iiii-0000"
+        monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+
+        d1_history = FakeD1Connection({
+            "select * from pendingmoviehistorywrites where sessionid": [
+                {"Seq": "s1", "SessionId": session_id,
+                 "Href": "/v/x", "ApplyState": "pending"},
+            ],
+            "select * from pendingtorrenthistorywrites where sessionid": [],
+        })
+        d1_reports = FakeD1Connection({
+            "select status from reportsessions where id":
+                [{"Status": "failed"}],
+        })
+
+        def fake_make_d1(name):
+            if name == "reports":
+                return d1_reports
+            return d1_history
+
+        monkeypatch.setattr(drift_mod, "make_d1_connection", fake_make_d1)
+
+        db_path = str(tmp_path / "history.db")
+        _make_sqlite_history(db_path)
+
+        rc = drift_mod.main([
+            "--apply", "--session-id", session_id,
+            "--history-db", db_path,
+        ])
+        assert rc == 2

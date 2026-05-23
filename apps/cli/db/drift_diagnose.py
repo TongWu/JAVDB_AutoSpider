@@ -1,17 +1,27 @@
-"""Diagnose pending-write drift between D1 and local SQLite.
+"""Diagnose and fix pending-write drift between D1 and local SQLite.
 
-Read-only tool that discovers suspect sessions (committed but still carrying
-orphan ``Pending*HistoryWrites`` rows) and classifies each as CLEAN,
+Discovers suspect sessions (committed but still carrying orphan
+``Pending*HistoryWrites`` rows) and classifies each as CLEAN,
 SAFE_TO_APPLY, ESCALATE_LIVE_DIVERGENCE, or UNEXPECTED_PATTERN.
 
-This implements ADR-009 steps D2–D4 (diagnose mode).  The ``--apply`` path
-(D5) will be added in a separate task.
+This implements ADR-009 steps D2–D5:
 
-Exit codes
-----------
+* **Diagnose mode** (default, read-only): D3 suspect discovery + D4 verdict
+  classification.
+* **Apply mode** (``--apply --session-id <id>``): D5 safe deletion of orphan
+  pending rows for a single committed session, guarded by five safety rails.
+
+Exit codes (diagnose mode)
+--------------------------
 * 0 — all suspects classified CLEAN (or no suspects found)
 * 1 — at least one SAFE_TO_APPLY (auto-fixable, but action required)
 * 2 — ESCALATE_LIVE_DIVERGENCE or UNEXPECTED_PATTERN detected
+
+Exit codes (apply mode)
+-----------------------
+* 0 — apply succeeded
+* 1 — verdict was not SAFE_TO_APPLY (safety rail 2)
+* 2 — argument error, session not committed (rail 3), or exceeds --max-deletes (rail 4)
 
 Usage
 -----
@@ -21,6 +31,8 @@ Usage
     python3 -m apps.cli.db.drift_diagnose --since 48         # 48h lookback
     python3 -m apps.cli.db.drift_diagnose --json             # JSON output
     python3 -m apps.cli.db.drift_diagnose --log-level DEBUG  # verbose logging
+    python3 -m apps.cli.db.drift_diagnose --apply --session-id <id>  # fix orphans
+    python3 -m apps.cli.db.drift_diagnose --apply --session-id <id> --max-deletes 50
 """
 
 from __future__ import annotations
@@ -41,6 +53,7 @@ if str(REPO_ROOT) not in sys.path:
 from javdb.infra.config import cfg  # noqa: E402
 from javdb.infra.logging import get_logger, setup_logging  # noqa: E402
 from javdb.storage.d1_client import make_d1_connection  # noqa: E402
+from javdb.storage.rollback.session_helpers import append_jsonl_record  # noqa: E402
 
 logger = get_logger(__name__)
 
@@ -698,6 +711,160 @@ def diagnose(
     return results, exit_code
 
 
+# ── D5: Apply fix (delete orphan pending rows) ─────────────────────────
+
+
+def apply_fix(
+    *,
+    session_id: str,
+    sqlite_history_path: Optional[str],
+    max_deletes: int = 100,
+) -> int:
+    """Delete orphan pending rows for a single committed session.
+
+    Implements ADR-009 D5 with five safety rails:
+
+    1. ``session_id`` must be provided (enforced by caller / argparse).
+    2. Verdict must be ``SAFE_TO_APPLY`` at apply time.
+    3. Session must have ``Status='committed'`` in ``ReportSessions``.
+    4. Total orphan count must be ≤ *max_deletes*.
+    5. DELETE SQL must include both ``SessionId=?`` and
+       ``ApplyState='pending'`` predicates.
+
+    Returns exit code: 0 = success, 1 = verdict not SAFE_TO_APPLY,
+    2 = session not committed or orphan count exceeds max_deletes.
+    """
+    d1_reports = make_d1_connection("reports")
+    d1_history = make_d1_connection("history")
+    try:
+        return _apply_fix_inner(
+            session_id=session_id,
+            d1_reports=d1_reports,
+            d1_history=d1_history,
+            sqlite_history_path=sqlite_history_path,
+            max_deletes=max_deletes,
+        )
+    finally:
+        d1_reports.close()
+        d1_history.close()
+
+
+def _apply_fix_inner(
+    *,
+    session_id: str,
+    d1_reports,
+    d1_history,
+    sqlite_history_path: Optional[str],
+    max_deletes: int,
+) -> int:
+    """Inner implementation of apply_fix with injected connections."""
+
+    # ── Step 1: Re-run classification (safety rail 2) ─────────────────
+    sqlite_conn = None
+    if sqlite_history_path and os.path.exists(sqlite_history_path):
+        try:
+            sqlite_conn = _open_sqlite_readonly(sqlite_history_path)
+        except Exception as exc:
+            logger.warning(
+                "apply_fix: could not open SQLite history (%s): %s",
+                sqlite_history_path, exc,
+            )
+
+    suspect = {"session_id": session_id, "provenance": "apply-target"}
+    try:
+        verdict_result = classify_verdict(
+            suspect, d1_history,
+            d1_reports=d1_reports, sqlite_conn=sqlite_conn,
+        )
+    finally:
+        if sqlite_conn is not None:
+            sqlite_conn.close()
+
+    verdict = verdict_result.get("verdict", "")
+    movie_orphan_count = verdict_result.get("d1_orphan_movie_count", 0)
+    torrent_orphan_count = verdict_result.get("d1_orphan_torrent_count", 0)
+    total_orphans = movie_orphan_count + torrent_orphan_count
+
+    logger.info(
+        "apply_fix: session=%s verdict=%s orphans=%d+%d",
+        session_id, verdict, movie_orphan_count, torrent_orphan_count,
+    )
+
+    # ── Safety rail 3: session must be committed ──────────────────────
+    # classify_verdict already returns UNEXPECTED_PATTERN for non-committed
+    # sessions, but we check explicitly so we can emit the right exit code.
+    if verdict == VERDICT_UNEXPECTED:
+        note = verdict_result.get("note", "")
+        if "expected 'committed'" in note:
+            logger.error(
+                "SAFETY_RAIL_3_SESSION_NOT_COMMITTED: session=%s note=%s",
+                session_id, note,
+            )
+            return 2
+
+    # ── Safety rail 2: verdict must be SAFE_TO_APPLY ──────────────────
+    if verdict != VERDICT_SAFE_TO_APPLY:
+        logger.error(
+            "SAFETY_RAIL_2_VERDICT_NOT_SAFE: session=%s verdict=%s",
+            session_id, verdict,
+        )
+        return 1
+
+    # ── Safety rail 4: orphan count ≤ max_deletes ─────────────────────
+    if total_orphans > max_deletes:
+        logger.error(
+            "SAFETY_RAIL_4_EXCEEDS_MAX_DELETES: session=%s "
+            "orphans=%d max_deletes=%d",
+            session_id, total_orphans, max_deletes,
+        )
+        return 2
+
+    # ── Safety rail 5: DELETE with SessionId + ApplyState predicates ──
+    logger.info(
+        "apply_fix: proceeding with DELETE for session=%s "
+        "(movie_orphans=%d, torrent_orphans=%d)",
+        session_id, movie_orphan_count, torrent_orphan_count,
+    )
+
+    cur = d1_history.execute(
+        "DELETE FROM PendingMovieHistoryWrites "
+        "WHERE SessionId = ? AND ApplyState = 'pending'",
+        [session_id],
+    )
+    deleted_movies = cur.rowcount
+
+    cur = d1_history.execute(
+        "DELETE FROM PendingTorrentHistoryWrites "
+        "WHERE SessionId = ? AND ApplyState = 'pending'",
+        [session_id],
+    )
+    deleted_torrents = cur.rowcount
+
+    logger.info(
+        "apply_fix: deleted %d movie orphans, %d torrent orphans "
+        "for session=%s",
+        deleted_movies, deleted_torrents, session_id,
+    )
+
+    # ── Audit record ──────────────────────────────────────────────────
+    record = {
+        "kind": "drift_resolution",
+        "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "session_id": session_id,
+        "source": "drift_diagnose_apply",
+        "deleted_movie_orphans": deleted_movies,
+        "deleted_torrent_orphans": deleted_torrents,
+        "verdict_at_apply": VERDICT_SAFE_TO_APPLY,
+    }
+    append_jsonl_record(record)
+
+    print(
+        f"Applied: deleted {deleted_movies} movie orphan(s) and "
+        f"{deleted_torrents} torrent orphan(s) for session {session_id}."
+    )
+    return 0
+
+
 # ── Argument parsing ─────────────────────────────────────────────────────
 
 
@@ -706,7 +873,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         prog="apps.cli.db.drift_diagnose",
         description=(
             "Diagnose pending-write drift between D1 and local SQLite. "
-            "Read-only by default; use --apply to fix (not yet implemented)."
+            "Read-only by default; use --apply --session-id to fix orphans."
         ),
     )
 
@@ -743,20 +910,31 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         ),
     )
 
-    # ── Apply options (placeholder for future task) ──────────────────
-    apply_group = parser.add_argument_group(
-        "apply options (not yet implemented)",
-    )
+    # ── Apply options (ADR-009 D5) ────────────────────────────────────
+    apply_group = parser.add_argument_group("apply options")
     apply_group.add_argument(
         "--apply",
         action="store_true",
-        help="Apply safe fixes (SAFE_TO_APPLY sessions). NOT YET IMPLEMENTED.",
+        help=(
+            "Delete orphan Pending*HistoryWrites rows for a committed "
+            "session whose verdict is SAFE_TO_APPLY. Requires --session-id."
+        ),
     )
     apply_group.add_argument(
         "--session-id",
         default=None,
         metavar="SESSION_ID",
-        help="Target a specific session for --apply. NOT YET IMPLEMENTED.",
+        help="Target session for --apply.",
+    )
+    apply_group.add_argument(
+        "--max-deletes",
+        type=int,
+        default=100,
+        metavar="N",
+        help=(
+            "Maximum total orphan rows allowed for --apply (default: 100). "
+            "Protects against accidental bulk DELETEs."
+        ),
     )
 
     # ── General options ──────────────────────────────────────────────
@@ -779,12 +957,25 @@ def main(argv: Optional[List[str]] = None) -> int:
     setup_logging(log_level=args.log_level)
 
     if args.apply:
-        print(
-            "ERROR: --apply is not yet implemented. "
-            "This will be added in a separate task.",
-            file=sys.stderr,
+        # Safety rail 1: --apply requires --session-id
+        if not args.session_id:
+            print(
+                "ERROR: --apply requires --session-id. "
+                "Specify the session to fix.",
+                file=sys.stderr,
+            )
+            return 2
+
+        reports_dir = os.environ.get("REPORTS_DIR", "reports")
+        history_db_path = args.history_db
+        if history_db_path is None:
+            history_db_path = os.path.join(reports_dir, "history.db")
+
+        return apply_fix(
+            session_id=args.session_id,
+            sqlite_history_path=history_db_path,
+            max_deletes=args.max_deletes,
         )
-        return 2
 
     reports_dir = os.environ.get("REPORTS_DIR", "reports")
     drift_log_path = args.drift_log or os.path.join(
