@@ -182,6 +182,21 @@ class TestBuildDriftDiagnosisSection:
         assert suspects == []
 
     @patch("javdb.integrations.notify.email.subprocess.run")
+    def test_subprocess_invalid_json_schema_returns_fallback(self, mock_run):
+        for stdout in ("[]", "null"):
+            mock_run.return_value = MagicMock(
+                returncode=0,
+                stdout=stdout,
+                stderr="",
+            )
+
+            section, suspects = _build_drift_diagnosis_section()
+
+            assert "Automated diagnosis unavailable" in section
+            assert "apps.cli.db.drift_diagnose" in section
+            assert suspects == []
+
+    @patch("javdb.integrations.notify.email.subprocess.run")
     def test_subprocess_crash_returns_fallback(self, mock_run):
         mock_run.side_effect = OSError("No such file or directory")
 

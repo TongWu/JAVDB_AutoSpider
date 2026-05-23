@@ -8,9 +8,9 @@
 ## 实现状态
 
 - **P0 (D1 — Layer 0)** —— 在 [`javdb/storage/d1_client.py`](../../../javdb/storage/d1_client.py) 的 `_TRANSIENT_ERROR_KEYWORDS` 中加入 `"connection lost"` + 回归测试 `test_400_network_connection_lost_treated_as_transient`。✅ 完成。
-- **P1 (D2, D3, D4 — Layer 1 诊断)** —— `drift_diagnose` CLI（位于 [`apps/cli/db/drift_diagnose.py`](../../../apps/cli/db/drift_diagnose.py)）。只读诊断模式，含嫌疑发现（verify-metric + D1-sweep）、判定分类（CLEAN/SAFE_TO_APPLY/ESCALATE/UNEXPECTED）、JSON 输出、退出码。44 个单元测试。✅ 完成。
-- **P2 (D5 — Layer 1 apply)** —— `--apply --session-id` 路径，含五项硬安全护栏、D1 DELETE 执行、审计记录写入 `d1_drift.jsonl`。12 个额外单元测试。✅ 完成。
-- **P3 (D6 — 邮件集成)** —— 在邮件通知 job 中 subprocess 调用 `drift_diagnose --since 1 --json`，`[DRIFT-FIX-READY]`/`[DRIFT-ESCALATE]` 主题前缀标签，60 秒超时及 fallback。19 个单元测试。✅ 完成。
+- **P1 (D2, D3, D4 — Layer 1 诊断)** —— `drift_diagnose` CLI（位于 [`apps/cli/db/drift_diagnose.py`](../../../apps/cli/db/drift_diagnose.py)），D1/SQLite 诊断逻辑下沉到 [`javdb/storage/drift_diagnose.py`](../../../javdb/storage/drift_diagnose.py)。只读诊断模式，含嫌疑发现（verify-metric + D1-sweep）、判定分类（CLEAN/SAFE_TO_APPLY/ESCALATE/UNEXPECTED）、JSON 输出、退出码。由 `tests/unit/test_drift_diagnose.py` 覆盖（诊断 + apply 共 64 个单元测试）。✅ 完成。
+- **P2 (D5 — Layer 1 apply)** —— `--apply --session-id` 路径，含五项硬安全护栏、D1 DELETE 执行、审计记录写入 `d1_drift.jsonl`。由 `tests/unit/test_drift_diagnose.py` 覆盖。✅ 完成。
+- **P3 (D6 — 邮件集成)** —— 在邮件通知 job 中 subprocess 调用 `drift_diagnose --since 1 --json`，`[DRIFT-FIX-READY]`/`[DRIFT-ESCALATE]` 主题前缀标签，60 秒超时及 fallback。由 `tests/unit/test_email_drift_integration.py` 覆盖（20 个单元测试）。✅ 完成。
 
 本 ADR 没有配套 IMP（按 D7 划分，工作量适合小型 PR 序列直接落地）。
 
@@ -82,7 +82,7 @@ drift 被现有 `pending_session_verify` 指标（`pending_residual_count: 2`）
 
 ### D2 — Layer 1：`drift_diagnose` CLI
 
-新 CLI `apps/cli/db/drift_diagnose.py`，两种模式：
+新 CLI `apps/cli/db/drift_diagnose.py`，两种模式。CLI 边界只负责参数解析、输出格式和退出码编排；D1/SQLite 发现、分类、删除和审计写入逻辑位于 `javdb/storage/drift_diagnose.py`。
 
 **诊断模式（默认）**——只读。扫描最近的 drift 指标，对每个嫌疑 session 分类，打印报告。被分类为"可安全恢复"的 session 会输出建议的修复命令。
 
@@ -91,7 +91,7 @@ drift 被现有 `pending_session_verify` 指标（`pending_residual_count: 2`）
 ### D3 — 嫌疑发现（双信号并集）
 
 - **Verify 指标路径 (q)**：读 `reports/D1/d1_drift.jsonl`，过滤窗口内 `pending_session_verify` 且 `pending_residual_count > 0` 的记录。
-- **D1 主动扫描路径 (r)**：查 D1 端 `ReportSessions` 中 `Status='committed'` 且在窗口内的；逐 session 查 D1 端 `Pending{Movie,Torrent}HistoryWrites` 行数；任何非零计数即为嫌疑。
+- **D1 主动扫描路径 (r)**：查 D1 端 `ReportSessions` 中 `Status='committed'` 且在窗口内的；逐 session 查 D1 端 `Pending{Movie,Torrent}HistoryWrites` 中 `ApplyState='pending'` 的行；任何非零计数即为嫌疑。
 
 两者并集；标记每个嫌疑的来源（`verify-tagged` / `sweep-only` / `both`）。不对称子集运维意义重大——`sweep-only`（D1 有残留但 jsonl 里没 verify 行痕迹）表示 verify 发送链路本身坏了，需要升级。
 
@@ -102,7 +102,7 @@ drift 被现有 `pending_session_verify` 指标（`pending_residual_count: 2`）
 | `CLEAN` | 嫌疑标记但实际无孤儿 | 无（verify 指标 stale） | 0 |
 | `SAFE_TO_APPLY` | D1 有孤儿 + SQLite 已清理 + live 表两侧逐字一致 | 发出 `--apply --session-id <id>` 命令 | 1 |
 | `ESCALATE_LIVE_DIVERGENCE` | live `MovieHistory` / `TorrentHistory` 两侧不同 | 手动调查；**不**自动修 | 2 |
-| `UNEXPECTED_PATTERN` | 其他（in_progress session 误入嫌疑、SQLite 端孤儿、混合状态等） | 手动调查 | 2 |
+| `UNEXPECTED_PATTERN` | 其他（in_progress / 缺失 / 不可验证的 `ReportSessions` 行、D1 pending 表读取失败、SQLite 端孤儿、混合状态等） | 手动调查 | 2 |
 
 进程退出码 = 所有嫌疑 verdict 的 `max`。允许 shell 层按严重度分支处理。
 

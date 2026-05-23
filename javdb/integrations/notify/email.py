@@ -1595,8 +1595,20 @@ def _build_drift_diagnosis_section():
             'Automated diagnosis unavailable: non-JSON output from subprocess.\n'
             f'Run manually: {_MANUAL_CMD}\n\n'
         ), []
+    if not isinstance(data, dict):
+        return (
+            '─── Drift Diagnosis ───\n'
+            'Automated diagnosis unavailable: invalid JSON schema from subprocess.\n'
+            f'Run manually: {_MANUAL_CMD}\n\n'
+        ), []
 
     suspects = data.get('suspects', [])
+    if not isinstance(suspects, list):
+        return (
+            '─── Drift Diagnosis ───\n'
+            'Automated diagnosis unavailable: invalid suspects payload.\n'
+            f'Run manually: {_MANUAL_CMD}\n\n'
+        ), []
     if not suspects:
         return '', []
 
