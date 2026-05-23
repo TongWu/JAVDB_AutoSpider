@@ -133,43 +133,54 @@ def _emit_metric(record: dict) -> None:
         )
 
 
-def main(argv: Optional[List[str]] = None) -> int:
-    args = _parse_args(argv)
-    setup_logging(log_level=args.log_level)
+def run_claim_stage_sweep(
+    shard_dates: Optional[List[str]] = None,
+    older_than_hours: float = _DEFAULT_OLDER_THAN_MS / (3600 * 1000),
+) -> dict:
+    """Programmatic entry point for the MovieClaim orphan stage sweep.
 
-    shard_dates = args.shard_date or _default_shard_dates()
-    older_than_ms = (
-        int(args.older_than_hours * 3600 * 1000)
-        if args.older_than_hours is not None
-        else _DEFAULT_OLDER_THAN_MS
-    )
+    When the MovieClaim coordinator is not configured this is a no-op success
+    — returns zeroed counts rather than raising.
 
-    logger.info(
-        "Movie-claim sweep CLI invoked: shards=%s older_than_ms=%s",
-        shard_dates, older_than_ms,
-    )
+    Returns:
+        dict with keys:
+            shards_processed (int): Number of shards that succeeded.
+            stages_reaped (int): Total orphan stages removed across all shards.
+            details (list[dict]): Per-shard results (successes + failures).
+            successes (list[dict]): Per-shard success entries with shard_date,
+                removed, cutoff_ms.
+            failures (list[dict]): Per-shard failure entries with shard_date,
+                error, and unexpected (bool) flag.
+            older_than_ms (int): The sweep horizon in milliseconds.
+            coordinator_configured (bool): False when no coordinator is
+                available (no-op path).
+    """
+    # Distinguish None (use defaults) from an explicit empty list (sweep
+    # nothing) — an API caller serializing an unselected list as [] must not
+    # accidentally trigger a default-shard sweep that deletes stages.
+    dates = _default_shard_dates() if shard_dates is None else shard_dates
+    older_than_ms = int(older_than_hours * 3600 * 1000)
 
     client = create_movie_claim_client_from_env()
     if client is None:
-        logger.info(
-            "MovieClaim coordinator not configured — nothing to sweep "
-            "(this is a no-op success path for clusters running with "
-            "MOVIE_CLAIM_ENABLED=off)",
-        )
-        return 0
+        return {
+            "shards_processed": 0,
+            "stages_reaped": 0,
+            "details": [],
+            "successes": [],
+            "failures": [],
+            "older_than_ms": older_than_ms,
+            "coordinator_configured": False,
+        }
 
     successes: List[dict] = []
     failures: List[dict] = []
     try:
-        for shard in shard_dates:
+        for shard in dates:
             try:
                 result = client.sweep_orphan_stages(
                     older_than_ms=older_than_ms,
                     date=shard,
-                )
-                logger.info(
-                    "Movie-claim sweep: shard=%s removed=%s cutoff_ms=%s",
-                    shard, result.removed, result.cutoff_ms,
                 )
                 successes.append({
                     "shard_date": shard,
@@ -177,25 +188,80 @@ def main(argv: Optional[List[str]] = None) -> int:
                     "cutoff_ms": result.cutoff_ms,
                 })
             except MovieClaimUnavailable as exc:
-                logger.warning(
-                    "Movie-claim sweep unavailable for shard=%s: %s",
-                    shard, exc,
-                )
                 failures.append({
                     "shard_date": shard,
                     "error": str(exc),
+                    "unexpected": False,
                 })
             except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "Unexpected movie-claim sweep error for shard=%s",
-                    shard, exc_info=True,
-                )
                 failures.append({
                     "shard_date": shard,
                     "error": str(exc),
+                    "unexpected": True,
                 })
     finally:
         client.close()
+
+    return {
+        "shards_processed": len(successes),
+        "stages_reaped": sum(s.get("removed", 0) for s in successes),
+        "details": successes + failures,
+        "successes": successes,
+        "failures": failures,
+        "older_than_ms": older_than_ms,
+        "coordinator_configured": True,
+    }
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    args = _parse_args(argv)
+    setup_logging(log_level=args.log_level)
+
+    shard_dates = args.shard_date or _default_shard_dates()
+    older_than_hours = (
+        args.older_than_hours
+        if args.older_than_hours is not None
+        else _DEFAULT_OLDER_THAN_MS / (3600 * 1000)
+    )
+    older_than_ms = int(older_than_hours * 3600 * 1000)
+
+    logger.info(
+        "Movie-claim sweep CLI invoked: shards=%s older_than_ms=%s",
+        shard_dates, older_than_ms,
+    )
+
+    result = run_claim_stage_sweep(
+        shard_dates=shard_dates,
+        older_than_hours=older_than_hours,
+    )
+
+    if not result["coordinator_configured"]:
+        logger.info(
+            "MovieClaim coordinator not configured — nothing to sweep "
+            "(this is a no-op success path for clusters running with "
+            "MOVIE_CLAIM_ENABLED=off)",
+        )
+        return 0
+
+    successes = result["successes"]
+    failures = result["failures"]
+
+    for s in successes:
+        logger.info(
+            "Movie-claim sweep: shard=%s removed=%s cutoff_ms=%s",
+            s["shard_date"], s["removed"], s["cutoff_ms"],
+        )
+    for f in failures:
+        if f.get("unexpected"):
+            logger.warning(
+                "Unexpected movie-claim sweep error for shard=%s",
+                f["shard_date"], exc_info=False,
+            )
+        else:
+            logger.warning(
+                "Movie-claim sweep unavailable for shard=%s: %s",
+                f["shard_date"], f["error"],
+            )
 
     summary = {
         "shards": shard_dates,
