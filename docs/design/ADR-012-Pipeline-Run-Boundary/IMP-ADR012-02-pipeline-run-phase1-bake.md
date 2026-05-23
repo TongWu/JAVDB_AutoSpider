@@ -16,7 +16,7 @@
 
 | Path | Responsibility |
 |---|---|
-| `docs/design/impl/IMP-ADR012-02-pipeline-run-phase1-bake.md` | Bake checklist and evidence record. |
+| `docs/design/ADR-012-Pipeline-Run-Boundary/IMP-ADR012-02-pipeline-run-phase1-bake.md` | Bake checklist and evidence record. |
 | `reports/` | Runtime result JSON and workflow artifacts inspected during bake. |
 | `logs/` | Runtime pipeline/job logs inspected during bake. |
 | GitHub Actions DailyIngestion run | Real daily workflow evidence. |
@@ -55,7 +55,7 @@ Add an evidence entry under "Bake Evidence" in this file:
 - [ ] **Step 4: Commit evidence update**
 
 ```bash
-git add docs/design/impl/IMP-ADR012-02-pipeline-run-phase1-bake.md
+git add docs/design/ADR-012-Pipeline-Run-Boundary/IMP-ADR012-02-pipeline-run-phase1-bake.md
 git commit -m "docs(pipeline): record phase1 local bake evidence"
 ```
 
@@ -84,7 +84,7 @@ Record the same evidence fields as DailyIngestion.
 - [ ] **Step 4: Commit workflow evidence**
 
 ```bash
-git add docs/design/impl/IMP-ADR012-02-pipeline-run-phase1-bake.md
+git add docs/design/ADR-012-Pipeline-Run-Boundary/IMP-ADR012-02-pipeline-run-phase1-bake.md
 git commit -m "docs(pipeline): record phase1 workflow bake evidence"
 ```
 
@@ -125,7 +125,7 @@ Expected:
 - [ ] **Step 4: Commit frontend/API evidence**
 
 ```bash
-git add docs/design/impl/IMP-ADR012-02-pipeline-run-phase1-bake.md
+git add docs/design/ADR-012-Pipeline-Run-Boundary/IMP-ADR012-02-pipeline-run-phase1-bake.md
 git commit -m "docs(pipeline): record phase1 task-stream bake evidence"
 ```
 
@@ -163,7 +163,7 @@ Check pipeline/email logs. Expected:
 - [ ] **Step 4: Commit failure-path evidence**
 
 ```bash
-git add docs/design/impl/IMP-ADR012-02-pipeline-run-phase1-bake.md
+git add docs/design/ADR-012-Pipeline-Run-Boundary/IMP-ADR012-02-pipeline-run-phase1-bake.md
 git commit -m "docs(pipeline): record phase1 failure-path bake evidence"
 ```
 
@@ -198,7 +198,7 @@ The bake passes only if all are true:
 - [ ] **Step 4: Commit final bake sign-off**
 
 ```bash
-git add docs/design/impl/IMP-ADR012-02-pipeline-run-phase1-bake.md
+git add docs/design/ADR-012-Pipeline-Run-Boundary/IMP-ADR012-02-pipeline-run-phase1-bake.md
 git commit -m "docs(pipeline): sign off phase1 bake"
 ```
 

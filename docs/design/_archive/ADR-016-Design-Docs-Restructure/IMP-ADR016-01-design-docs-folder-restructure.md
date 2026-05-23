@@ -49,7 +49,7 @@
 **Files:**
 - Create: `_restructure_design.py`
 
-- [ ] **Step 1: Create the migration script**
+- [x] **Step 1: Create the migration script**
 
 Save to `_restructure_design.py` at the repository root:
 
@@ -296,12 +296,12 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 2: Verify the script compiles**
+- [x] **Step 2: Verify the script compiles**
 
 Run: `python3 -c "import py_compile; py_compile.compile('_restructure_design.py', doraise=True)"`
 Expected: No output (success).
 
-- [ ] **Step 3: Commit the script**
+- [x] **Step 3: Commit the script**
 
 ```bash
 git add _restructure_design.py
@@ -312,12 +312,12 @@ git commit -m "chore: add docs/design/ restructure migration script"
 
 ### Task 2: Dry-run and review
 
-- [ ] **Step 1: Run the script in dry-run mode**
+- [x] **Step 1: Run the script in dry-run mode**
 
 Run: `python3 _restructure_design.py --dry-run`
 Expected: List of ~77 file move mappings. No files changed on disk.
 
-- [ ] **Step 2: Verify key classifications**
+- [x] **Step 2: Verify key classifications**
 
 Check the dry-run output for:
 - **Active ADR folders**: ADR-008, 009, 010, 011, 012, 013, 014, 015, 016
@@ -332,16 +332,16 @@ Check the dry-run output for:
 
 ### Task 3: Execute migration and verify
 
-- [ ] **Step 1: Execute the migration**
+- [x] **Step 1: Execute the migration**
 
 Run: `python3 _restructure_design.py`
 
-- [ ] **Step 2: Verify git status**
+- [x] **Step 2: Verify git status**
 
 Run: `git status`
 Expected: ~77 renames. Old `adr/`, `impl/`, `bfr/` directories removed. No untracked files.
 
-- [ ] **Step 3: Spot-check cross-references**
+- [x] **Step 3: Spot-check cross-references**
 
 Run each command and verify the output matches the expected pattern:
 
@@ -375,7 +375,7 @@ grep 'IMP-ADR016' docs/design/ADR-016-Design-Docs-Restructure/ADR-016-design-doc
 # Expected: [IMP-ADR016-01](IMP-ADR016-01-design-docs-folder-restructure.md)
 ```
 
-- [ ] **Step 4: Commit the migration**
+- [x] **Step 4: Commit the migration**
 
 ```bash
 git add -A
@@ -390,7 +390,7 @@ git commit -m "refactor(docs): restructure design/ into per-ADR folders with co-
 - Create: `docs/design/_templates/ADR-TEMPLATE.md`
 - Create: `docs/design/_templates/ADR-TEMPLATE.zh.md`
 
-- [ ] **Step 1: Create the English ADR template**
+- [x] **Step 1: Create the English ADR template**
 
 Write to `docs/design/_templates/ADR-TEMPLATE.md`:
 
@@ -439,7 +439,7 @@ D1. **Decision title** — Description and rationale.
 - YYYY-MM-DD: Proposed
 ```
 
-- [ ] **Step 2: Create the Chinese ADR template**
+- [x] **Step 2: Create the Chinese ADR template**
 
 Write to `docs/design/_templates/ADR-TEMPLATE.zh.md`:
 
@@ -488,7 +488,7 @@ D1. **决策标题** — 描述和理由。
 - YYYY-MM-DD: Proposed
 ```
 
-- [ ] **Step 3: Review BFR templates for stale path patterns**
+- [x] **Step 3: Review BFR templates for stale path patterns**
 
 Run:
 ```bash
@@ -508,7 +508,7 @@ with:
 
 Apply the same change in `BFR-TEMPLATE.zh.md`.
 
-- [ ] **Step 4: Commit templates**
+- [x] **Step 4: Commit templates**
 
 ```bash
 git add docs/design/_templates/ADR-TEMPLATE.md docs/design/_templates/ADR-TEMPLATE.zh.md docs/design/_templates/BFR-TEMPLATE.md docs/design/_templates/BFR-TEMPLATE.zh.md
@@ -522,9 +522,9 @@ git commit -m "docs: add ADR templates and fix BFR template paths in _templates/
 **Files:**
 - Modify: `CLAUDE.md:572-574,600,614-617,625,630-632,639-643,665-666,669`
 
-The migration script already updated markdown link URLs (e.g. `[ADR-007](docs/design/adr/archive/...)` → `[ADR-007](docs/design/_archive/ADR-007-Monorepo-Restructure/...)`). This task handles structural content: tree diagrams, tables, prose rules, and directory link targets that the script couldn't update.
+The migration script already updated markdown link URLs from old path prefixes such as `docs/design/adr/archive/...` to new path prefixes such as `docs/design/_archive/ADR-007-Monorepo-Restructure/...`. This task handles structural content: tree diagrams, tables, prose rules, and directory link targets that the script couldn't update.
 
-- [ ] **Step 1: Update the Related Documentation section**
+- [x] **Step 1: Update the Related Documentation section**
 
 Replace (lines 572-574):
 ```markdown
@@ -538,7 +538,7 @@ With:
 - [docs/design/](docs/design/) — Design records: each ADR and BFR has its own folder (e.g. `ADR-010-D1-Access-Port/`), with IMPs co-located inside. Completed ADRs/BFRs in `_archive/`. Templates in `_templates/`.
 ```
 
-- [ ] **Step 2: Update the Audience-First Layout tree**
+- [x] **Step 2: Update the Audience-First Layout tree**
 
 Replace (line 600):
 ```
@@ -550,7 +550,7 @@ With:
 ├── design/                    Design records (ADR-NNN-Foo/, _archive/, _templates/, architecture/)
 ```
 
-- [ ] **Step 3: Update the Rules section**
+- [x] **Step 3: Update the Rules section**
 
 Replace (lines 614-617):
 ```markdown
@@ -568,7 +568,7 @@ With:
 - Step-by-step execution checklists (the HOW) go in `docs/design/ADR-NNN-Foo/IMP-ADRNNN-PP-<topic>.md` (English only, co-located with parent ADR)
 ```
 
-- [ ] **Step 4: Update the Design Docs table — Location row**
+- [x] **Step 4: Update the Design Docs table — Location row**
 
 Replace (line 625):
 ```
@@ -580,7 +580,7 @@ With:
 | Location | `docs/design/ADR-NNN-Foo/ADR-NNN-<topic>.md` | `docs/design/ADR-NNN-Foo/IMP-ADRNNN-PP-<topic>.md` | `docs/design/BFR-NNN-Foo/BFR-NNN-<topic>.md` |
 ```
 
-- [ ] **Step 5: Update the Cross-link rows**
+- [x] **Step 5: Update the Cross-link rows**
 
 Replace (lines 630-631):
 ```
@@ -594,7 +594,7 @@ With:
 | Cross-link (other folder) | `[ADR-012](../ADR-012-Foo/ADR-012-bar.md)` | `[IMP-ADR012-01](../ADR-012-Foo/IMP-ADR012-01-bar.md)` | `[ADR-009](../ADR-009-Foo/ADR-009-bar.md)` |
 ```
 
-- [ ] **Step 6: Update the Archival row**
+- [x] **Step 6: Update the Archival row**
 
 Replace (line 632):
 ```
@@ -606,7 +606,7 @@ With:
 | Archival | Whole folder → `docs/design/_archive/ADR-NNN-Foo/` (ADR completed + all IMPs done) | Stays with parent ADR; archives when ADR archives | Whole folder → `docs/design/_archive/BFR-NNN-Foo/` |
 ```
 
-- [ ] **Step 7: Replace the IMP archival paragraph**
+- [x] **Step 7: Replace the IMP archival paragraph**
 
 Replace (lines 639-643):
 ```markdown
@@ -624,7 +624,7 @@ With:
 **Completed IMPs in active ADRs:** Completed IMPs stay in their parent ADR folder. Completion is tracked by the `Status:` field inside the file, not by directory location.
 ```
 
-- [ ] **Step 8: Update the skill output routing table**
+- [x] **Step 8: Update the skill output routing table**
 
 Replace (lines 665-666):
 ```
@@ -638,7 +638,7 @@ With:
 | `superpowers:writing-plans` | `docs/superpowers/plans/` | `docs/design/ADR-NNN-Foo/IMP-ADRNNN-PP-<topic>.md` |
 ```
 
-- [ ] **Step 9: Update the skill output routing rule**
+- [x] **Step 9: Update the skill output routing rule**
 
 Replace (line 669):
 ```
@@ -650,7 +650,7 @@ With:
 - `docs/superpowers/specs/` may hold in-progress drafts, but any finalized output **must** land in the appropriate `docs/design/ADR-NNN-Foo/` folder.
 ```
 
-- [ ] **Step 10: Commit CLAUDE.md changes**
+- [x] **Step 10: Commit CLAUDE.md changes**
 
 ```bash
 git add CLAUDE.md
@@ -661,25 +661,36 @@ git commit -m "docs(claude): update CLAUDE.md for per-ADR folder structure"
 
 ### Task 6: Final verification and clean up
 
-- [ ] **Step 1: Search for stale full-path references**
+Archived historical ADR/IMP files may still mention retired `docs/design/adr/`,
+`docs/design/impl/`, or `docs/design/bfr/` paths when documenting old commands
+or migration examples. The final gate is that active design docs and user-facing
+handbook/index docs have no live links to removed directories.
+
+- [x] **Step 1: Search for stale full-path references**
 
 Run:
 ```bash
-grep -rn 'docs/design/adr/\|docs/design/impl/\|docs/design/bfr/' --include='*.md' . | grep -v '.claude/worktrees' | grep -v '_restructure_design'
+grep -rn 'docs/design/adr/\|docs/design/impl/\|docs/design/bfr/' --include='*.md' . \
+  | grep -v '.claude/worktrees' \
+  | grep -v '_restructure_design' \
+  | grep -v 'docs/design/_archive/'
 ```
 
-Expected: No matches. If any found, update them.
+Expected: No matches outside archived historical docs. If user-facing or active
+design docs match, update them.
 
-- [ ] **Step 2: Search for stale relative-path patterns in design docs**
+- [x] **Step 2: Search for stale relative-path patterns in design docs**
 
 Run:
 ```bash
-grep -rn '\.\./adr/\|\.\.\/impl/\|\.\.\/bfr/' docs/design/ --include='*.md'
+grep -rn '\.\./adr/\|\.\.\/impl/\|\.\.\/bfr/' docs/design/ --include='*.md' \
+  | grep -v 'docs/design/_archive/'
 ```
 
-Expected: No matches. If any found, update them.
+Expected: No matches outside archived historical docs. If active design docs
+match, update them.
 
-- [ ] **Step 3: Verify directory structure**
+- [x] **Step 3: Verify directory structure**
 
 Run:
 ```bash
@@ -696,7 +707,6 @@ docs/design/ADR-012-Pipeline-Run-Boundary/
 docs/design/ADR-013-Runner-Runtime-State/
 docs/design/ADR-014-Storage-Cli-Layering/
 docs/design/ADR-015-Integrations-Interface/
-docs/design/ADR-016-Design-Docs-Restructure/
 docs/design/BFR-001-Login-Proxy-Mismatch/
 docs/design/_archive/
 docs/design/_templates/
@@ -705,7 +715,7 @@ docs/design/architecture/
 
 No `adr/`, `impl/`, or `bfr/` directories.
 
-- [ ] **Step 4: Verify _archive contents**
+- [x] **Step 4: Verify _archive contents**
 
 Run:
 ```bash
@@ -721,9 +731,10 @@ ADR-004-Proxy-Discovery/
 ADR-005-Db-Py-Retirement/
 ADR-006-Pending-Mode-Rollout/
 ADR-007-Monorepo-Restructure/
+ADR-016-Design-Docs-Restructure/
 ```
 
-- [ ] **Step 5: Delete the migration script**
+- [x] **Step 5: Delete the migration script**
 
 ```bash
 rm _restructure_design.py
