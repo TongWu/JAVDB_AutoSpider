@@ -87,7 +87,7 @@ def _ensure_db():
     """
     global _db_initialised
     if not _db_initialised:
-        from javdb.storage.db.db_migrations import init_db
+        from javdb.storage.db import init_db
         init_db(force=True)
         _db_initialised = True
 
@@ -148,7 +148,7 @@ def load_rclone_inventory(csv_path: str) -> Dict[str, List[RcloneEntry]]:
     if use_sqlite():
         _ensure_db()
     if use_sqlite():
-        from javdb.storage.db.db_connection import current_backend
+        from javdb.storage.db import current_backend
         raw = OperationsRepo().load_rclone_inventory()
         inventory: Dict[str, List[RcloneEntry]] = {}
         for code, entries in raw.items():

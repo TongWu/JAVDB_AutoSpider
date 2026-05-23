@@ -28,7 +28,7 @@ def _ensure_imports():
     """Lazy import to avoid circular dependency."""
     global _get_db, _HISTORY_DB_PATH, _REPORTS_DB_PATH, _OPERATIONS_DB_PATH
     if _get_db is None:
-        from javdb.storage.db.db_connection import (
+        from javdb.storage.db._db_connection import (
             get_db,
             HISTORY_DB_PATH,
             REPORTS_DB_PATH,
@@ -382,11 +382,11 @@ def db_rollback_session(
     for logging or dry-run output.
     """
     _ensure_imports()
-    from javdb.storage.db.db_reports import (
+    from javdb.storage.db._db_reports import (
         db_get_session_status,
         db_mark_session_failed,
     )
-    from javdb.storage.db.db_history_write import db_resume_finalizing_session
+    from javdb.storage.db._db_history_write import db_resume_finalizing_session
 
     if scope not in ('reports', 'operations', 'history', 'all'):
         raise ValueError(
@@ -505,5 +505,5 @@ def db_rollback_session(
 
 def db_resume_finalizing_session(session_id, **kwargs):
     """Resume a session stuck in 'finalizing' status. Delegates to db_history_write."""
-    from javdb.storage.db.db_history_write import db_resume_finalizing_session as _f
+    from javdb.storage.db._db_history_write import db_resume_finalizing_session as _f
     return _f(session_id, **kwargs)

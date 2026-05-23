@@ -48,13 +48,13 @@ def _ensure_imports():
     global _has_meaningful_actor_data, _batch_update_movie_actors_repo
     global _generate_integer_id
     if _get_db is None:
-        from javdb.storage.db.db_connection import (
+        from javdb.storage.db._db_connection import (
             get_db,
             HISTORY_DB_PATH,
             REPORTS_DB_PATH,
             _execute_backend_batch as ebb,
         )
-        from javdb.storage.db.db_session import (
+        from javdb.storage.db._db_session import (
             generate_session_id,
             get_active_run_identity,
             SESSION_ID_PATTERN,
@@ -70,7 +70,7 @@ def _ensure_imports():
             _has_meaningful_actor_data as hmad,
             batch_update_movie_actors as buam,
         )
-        from javdb.storage.db.db_session import generate_integer_id as gii
+        from javdb.storage.db._db_session import generate_integer_id as gii
         _get_db = get_db
         _HISTORY_DB_PATH = HISTORY_DB_PATH
         _REPORTS_DB_PATH = REPORTS_DB_PATH
@@ -514,7 +514,7 @@ def db_batch_update_last_visited(
     row per href) and applied to live in :func:`db_commit_session_history`.
     """
     _ensure_imports()
-    from javdb.storage.db.db_session import _SESSION_ID_SENTINEL
+    from javdb.storage.db._db_session import _SESSION_ID_SENTINEL
     if session_id is None:
         session_id = _SESSION_ID_SENTINEL
     if not hrefs:
@@ -596,7 +596,7 @@ def db_batch_update_movie_actors(
     session.
     """
     _ensure_imports()
-    from javdb.storage.db.db_session import _SESSION_ID_SENTINEL
+    from javdb.storage.db._db_session import _SESSION_ID_SENTINEL
     if session_id is None:
         session_id = _SESSION_ID_SENTINEL
     if not updates:
@@ -701,7 +701,7 @@ def _chunked(seq, size: int):
 
 def _merge_movie_overlay_rows(rows: Iterable[Any]) -> Dict[str, dict]:
     """Merge pending-movie rows (Seq-ascending order) into a sparse overlay."""
-    from javdb.storage.db.db_history_read import (
+    from javdb.storage.db._db_history_read import (
         _merge_movie_overlay_rows as _f,
     )
     return _f(rows)
@@ -715,7 +715,7 @@ def _pending_movie_overlay(
     include_states: Tuple[str, ...] = ("pending",),
 ) -> Dict[str, dict]:
     """Return ``{href: merged_pending_movie_row}`` for *session_id*."""
-    from javdb.storage.db.db_history_read import (
+    from javdb.storage.db._db_history_read import (
         _pending_movie_overlay_impl,
     )
     return _pending_movie_overlay_impl(
@@ -727,7 +727,7 @@ def _merge_torrent_overlay_rows(
     rows: Iterable[Any],
 ) -> Dict[Tuple[str, int, int], dict]:
     """Merge pending-torrent rows (Seq-ascending) into a sparse overlay."""
-    from javdb.storage.db.db_history_read import (
+    from javdb.storage.db._db_history_read import (
         _merge_torrent_overlay_rows as _f,
     )
     return _f(rows)
@@ -741,7 +741,7 @@ def _pending_torrent_overlay(
     include_states: Tuple[str, ...] = ("pending",),
 ) -> Dict[Tuple[str, int, int], dict]:
     """Return ``{(href, sub, cen): merged_pending_torrent_row}`` for *session_id*."""
-    from javdb.storage.db.db_history_read import (
+    from javdb.storage.db._db_history_read import (
         _pending_torrent_overlay_impl,
     )
     return _pending_torrent_overlay_impl(
@@ -1354,7 +1354,7 @@ def _d1_retry_pending_cleanup(session_id: str) -> None:
     tables are consistent, we can safely mark remaining pending rows as
     applied and delete them directly on D1.
     """
-    from javdb.storage.db.db_connection import current_backend
+    from javdb.storage.db._db_connection import current_backend
     if current_backend() not in ('d1', 'dual'):
         return
     try:
@@ -1409,7 +1409,7 @@ def db_commit_session_history(
     from a crash midway through is via :func:`db_resume_finalizing_session`.
     """
     _ensure_imports()
-    from javdb.storage.db.db_reports import (
+    from javdb.storage.db._db_reports import (
         db_get_session_status,
         db_begin_finalize_session,
         db_finish_commit_session,
@@ -1601,7 +1601,7 @@ def db_resume_finalizing_session(
     ``committed`` instead of rewinding it.
     """
     _ensure_imports()
-    from javdb.storage.db.db_reports import db_get_session_status
+    from javdb.storage.db._db_reports import db_get_session_status
 
     state = db_get_session_status(
         session_id, db_path=reports_db_path,

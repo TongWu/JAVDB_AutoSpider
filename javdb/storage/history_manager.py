@@ -52,7 +52,7 @@ def _ensure_db():
     with _db_init_lock:
         if _db_initialised:
             return
-        from javdb.storage.db.db_migrations import init_db
+        from javdb.storage.db import init_db
         init_db()
         _db_initialised = True
 
@@ -140,7 +140,7 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code,
     if use_sqlite():
         _ensure_db()
     if use_sqlite():
-        from javdb.storage.db.db_session import get_active_session_id
+        from javdb.storage.db import get_active_session_id
 
         history_repo = HistoryRepo()
         filtered = {}

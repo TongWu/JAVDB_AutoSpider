@@ -290,33 +290,33 @@ class OperationsRepo:
 
     def load_rclone_inventory(self) -> Dict[str, list]:
         """Return RcloneInventory rows grouped by video code."""
-        from javdb.storage.db.db_operations import db_load_rclone_inventory
+        from javdb.storage.db import db_load_rclone_inventory
         return db_load_rclone_inventory(db_path=self._db_path)
 
     def replace_rclone_inventory(self, entries: List[dict]) -> int:
         """Replace the full RcloneInventory atomically. Returns row count."""
-        from javdb.storage.db.db_operations import db_replace_rclone_inventory
+        from javdb.storage.db import db_replace_rclone_inventory
         return db_replace_rclone_inventory(
             entries=entries, db_path=self._db_path,
         )
 
     def swap_rclone_inventory(self, session_id: str) -> int:
         """Promote this session's staging table into RcloneInventory."""
-        from javdb.storage.db.db_operations import db_swap_rclone_inventory
+        from javdb.storage.db import db_swap_rclone_inventory
         return db_swap_rclone_inventory(
             session_id=session_id, db_path=self._db_path,
         )
 
     def clear_rclone_inventory(self) -> None:
         """Truncate RcloneInventory. Forensic / reset use only."""
-        from javdb.storage.db.db_operations import db_clear_rclone_inventory
+        from javdb.storage.db import db_clear_rclone_inventory
         db_clear_rclone_inventory(db_path=self._db_path)
 
     def append_rclone_inventory(
         self, entries: List[dict], *, session_id: str,
     ) -> int:
         """Append rows directly to RcloneInventory (rare; prefer swap)."""
-        from javdb.storage.db.db_operations import db_append_rclone_inventory
+        from javdb.storage.db import db_append_rclone_inventory
         return db_append_rclone_inventory(
             entries=entries, session_id=session_id, db_path=self._db_path,
         )
@@ -325,12 +325,12 @@ class OperationsRepo:
 
     def load_dedup_records(self) -> List[dict]:
         """Return every DedupRecords row as a list of dicts."""
-        from javdb.storage.db.db_operations import db_load_dedup_records
+        from javdb.storage.db import db_load_dedup_records
         return db_load_dedup_records(db_path=self._db_path)
 
     def save_dedup_records(self, rows: List[dict]) -> None:
         """Bulk-replace DedupRecords with ``rows`` (post-dedup commit)."""
-        from javdb.storage.db.db_operations import db_save_dedup_records
+        from javdb.storage.db import db_save_dedup_records
         db_save_dedup_records(rows=rows, db_path=self._db_path)
 
     def append_dedup_record(
@@ -341,7 +341,7 @@ class OperationsRepo:
         payload: Optional[dict] = None,
     ) -> int:
         """Append a single DedupRecords row tagged with ``session_id``."""
-        from javdb.storage.db.db_operations import db_append_dedup_record
+        from javdb.storage.db import db_append_dedup_record
         row = record if record is not None else payload
         if row is None:
             raise TypeError("append_dedup_record requires record or payload")
@@ -359,7 +359,7 @@ class OperationsRepo:
         payload: Optional[dict] = None,
     ) -> int:
         """Append one PikpakHistory row tagged with ``session_id``."""
-        from javdb.storage.db.db_operations import db_append_pikpak_history
+        from javdb.storage.db import db_append_pikpak_history
         row = record if record is not None else payload
         if row is None:
             raise TypeError("append_pikpak_history requires record or payload")
@@ -428,7 +428,7 @@ class OperationsRepo:
         session_id: Optional[str] = None,
     ) -> int:
         """Mark dedup records as deleted by gdrive path."""
-        from javdb.storage.db.db_operations import db_mark_records_deleted
+        from javdb.storage.db import db_mark_records_deleted
         return db_mark_records_deleted(
             path_datetime_pairs,
             db_path=self._db_path,
@@ -437,7 +437,7 @@ class OperationsRepo:
 
     def cleanup_deleted_records(self, older_than_days: int = 30) -> int:
         """Remove dedup records deleted more than *older_than_days* ago."""
-        from javdb.storage.db.db_operations import db_cleanup_deleted_records
+        from javdb.storage.db import db_cleanup_deleted_records
         return db_cleanup_deleted_records(
             older_than_days=older_than_days, db_path=self._db_path,
         )
@@ -451,7 +451,7 @@ class OperationsRepo:
         session_id: Optional[str] = None,
     ) -> int:
         """Mark dedup pending rows as deleted with custom reason suffix."""
-        from javdb.storage.db.db_operations import db_mark_orphan_records
+        from javdb.storage.db import db_mark_orphan_records
         return db_mark_orphan_records(
             paths,
             reason_suffix=reason_suffix,
@@ -464,7 +464,7 @@ class OperationsRepo:
 
     def open_rclone_staging(self, session_id: str) -> Optional[str]:
         """Initialise this session's staging table. Returns table name."""
-        from javdb.storage.db.db_operations import db_open_rclone_staging
+        from javdb.storage.db import db_open_rclone_staging
         return db_open_rclone_staging(
             session_id=session_id, db_path=self._db_path,
         )
@@ -473,7 +473,7 @@ class OperationsRepo:
         self, entries: List[dict], session_id: str,
     ) -> int:
         """Append rows to this session's staging table."""
-        from javdb.storage.db.db_operations import db_append_rclone_staging
+        from javdb.storage.db import db_append_rclone_staging
         return db_append_rclone_staging(
             entries, session_id=session_id, db_path=self._db_path,
         )
@@ -482,7 +482,7 @@ class OperationsRepo:
         self, session_id: str, years: Iterable[str],
     ) -> int:
         """Merge staging rows into selected RcloneInventory year prefixes."""
-        from javdb.storage.db.db_operations import (
+        from javdb.storage.db import (
             db_merge_rclone_inventory_from_stage,
         )
         return db_merge_rclone_inventory_from_stage(
@@ -491,12 +491,12 @@ class OperationsRepo:
 
     def drop_rclone_staging(self, session_id: str) -> None:
         """Drop this session's staging table (idempotent)."""
-        from javdb.storage.db.db_operations import db_drop_rclone_staging
+        from javdb.storage.db import db_drop_rclone_staging
         db_drop_rclone_staging(session_id=session_id, db_path=self._db_path)
 
     def delete_rclone_inventory_paths(self, paths: Iterable[str]) -> int:
         """Bulk delete RcloneInventory rows by FolderPath."""
-        from javdb.storage.db.db_operations import db_delete_rclone_inventory_paths
+        from javdb.storage.db import db_delete_rclone_inventory_paths
         return db_delete_rclone_inventory_paths(
             paths, db_path=self._db_path,
         )
@@ -511,7 +511,7 @@ class OperationsRepo:
         session_id: Optional[str] = None,
     ) -> None:
         """Record a video code that had no exact match on JavDB search."""
-        from javdb.storage.db.db_operations import db_upsert_align_no_exact_match
+        from javdb.storage.db import db_upsert_align_no_exact_match
         db_upsert_align_no_exact_match(
             video_code,
             reason=reason,
@@ -521,14 +521,14 @@ class OperationsRepo:
 
     def load_align_no_exact_match_codes(self) -> set:
         """Return normalised video codes previously marked as no-exact-match."""
-        from javdb.storage.db.db_operations import (
+        from javdb.storage.db import (
             db_load_align_no_exact_match_codes,
         )
         return db_load_align_no_exact_match_codes(db_path=self._db_path)
 
     def delete_align_no_exact_match(self, video_code: str) -> None:
         """Remove a video code from the no-exact-match table."""
-        from javdb.storage.db.db_operations import db_delete_align_no_exact_match
+        from javdb.storage.db import db_delete_align_no_exact_match
         db_delete_align_no_exact_match(video_code, db_path=self._db_path)
 
     # ── EmailNotificationHistory ──────────────────────────────────

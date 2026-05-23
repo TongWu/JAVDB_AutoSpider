@@ -19,8 +19,7 @@ from typing import List
 import pytest
 
 import apps.cli.db.rollback as rollback_cli
-from javdb.storage.db.db_connection import get_db
-from javdb.storage.db.db_reports import db_create_report_session
+from javdb.storage.db import get_db, db_create_report_session
 
 
 # ── helpers ──────────────────────────────────────────────────────────────

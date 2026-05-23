@@ -19,7 +19,7 @@ class TestHistoryRepoConstruction:
 class TestHistoryRepoReads:
 
     @patch(
-        "javdb.storage.db.db_history_read.db_load_history",
+        "javdb.storage.db.db_load_history",
         return_value={"/movies/abc": {"VideoCode": "ABC-123"}},
     )
     def test_load_history_delegates(self, mock_fn):
@@ -29,7 +29,7 @@ class TestHistoryRepoReads:
         mock_fn.assert_called_once_with(db_path="/tmp/h.db", phase=1)
 
     @patch(
-        "javdb.storage.db.db_history_read.db_load_history",
+        "javdb.storage.db.db_load_history",
         return_value={},
     )
     def test_load_history_default_phase_none(self, mock_fn):
@@ -38,7 +38,7 @@ class TestHistoryRepoReads:
         mock_fn.assert_called_once_with(db_path=None, phase=None)
 
     @patch(
-        "javdb.storage.db.db_history_read.db_load_history_snapshot",
+        "javdb.storage.db.db_load_history_snapshot",
         return_value={"snap": True},
     )
     def test_load_history_snapshot_delegates(self, mock_fn):
@@ -50,7 +50,7 @@ class TestHistoryRepoReads:
         )
 
     @patch(
-        "javdb.storage.db.db_history_read.db_check_torrent_in_history",
+        "javdb.storage.db.db_check_torrent_in_history",
         return_value=True,
     )
     def test_check_torrent_in_history_delegates(self, mock_fn):
@@ -61,7 +61,7 @@ class TestHistoryRepoReads:
         )
 
     @patch(
-        "javdb.storage.db.db_history_read.db_get_all_history_records",
+        "javdb.storage.db.db_get_all_history_records",
         return_value=[{"Id": 1}],
     )
     def test_get_all_history_records_delegates(self, mock_fn):
@@ -73,7 +73,7 @@ class TestHistoryRepoReads:
 class TestHistoryRepoWrites:
 
     @patch(
-        "javdb.storage.db.db_history_write.db_stage_history_write",
+        "javdb.storage.db.db_stage_history_write",
         return_value="SEQ-000",
     )
     def test_stage_history_write_delegates(self, mock_fn):
@@ -87,7 +87,7 @@ class TestHistoryRepoWrites:
         )
 
     @patch(
-        "javdb.storage.db.db_history_write.db_stage_history_write",
+        "javdb.storage.db.db_stage_history_write",
         return_value="SEQ-001",
     )
     def test_stage_movie_delegates(self, mock_fn):
@@ -101,7 +101,7 @@ class TestHistoryRepoWrites:
         )
 
     @patch(
-        "javdb.storage.db.db_history_write.db_stage_history_write",
+        "javdb.storage.db.db_stage_history_write",
         return_value="SEQ-002",
     )
     def test_stage_torrent_delegates(self, mock_fn):
@@ -115,7 +115,7 @@ class TestHistoryRepoWrites:
         )
 
     @patch(
-        "javdb.storage.db.db_history_write.db_commit_session_history",
+        "javdb.storage.db.db_commit_session_history",
         return_value={"movies": 3, "torrents": 5},
     )
     def test_commit_session_delegates(self, mock_fn):
@@ -125,7 +125,7 @@ class TestHistoryRepoWrites:
         mock_fn.assert_called_once_with("sess-3", dry_run=True)
 
     @patch(
-        "javdb.storage.db.db_history_read.db_batch_update_last_visited",
+        "javdb.storage.db.db_batch_update_last_visited",
         return_value=2,
     )
     def test_batch_update_last_visited_delegates(self, mock_fn):
@@ -135,7 +135,7 @@ class TestHistoryRepoWrites:
         mock_fn.assert_called_once_with(["/a", "/b"], db_path="/tmp/h.db")
 
     @patch(
-        "javdb.storage.db.db_history_write.db_batch_update_movie_actors",
+        "javdb.storage.db.db_batch_update_movie_actors",
         return_value=1,
     )
     def test_batch_update_movie_actors_delegates(self, mock_fn):

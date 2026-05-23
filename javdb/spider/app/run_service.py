@@ -322,9 +322,9 @@ def _main():
 
     if db_storage_enabled:
         try:
-            from javdb.storage.db.db_migrations import init_db
-            from javdb.storage.db.db_connection import verify_d1_schema_versions
-            from javdb.storage.db.db_reports import (
+            from javdb.storage.db import (
+                init_db,
+                verify_d1_schema_versions,
                 db_create_report_session,
                 db_find_in_progress_session_ids_for_run_csv,
             )
@@ -393,7 +393,7 @@ def _main():
             # (`save_parsed_movie_to_history`, etc.) consult.  Falling
             # back to ``_resolve_write_mode`` keeps the env-var/default
             # behaviour aligned with ``db_create_report_session``.
-            from javdb.storage.db.db_session import (
+            from javdb.storage.db import (
                 _resolve_write_mode as _resolve_wm,
             )
             requested_write_mode = _resolve_wm(None)
@@ -421,10 +421,8 @@ def _main():
             # surgically undo just our rows (X3 hybrid strategy).
             effective_write_mode = requested_write_mode
             try:
-                from javdb.storage.db.db_reports import (
+                from javdb.storage.db import (
                     db_get_session_status as _db_get_session_status,
-                )
-                from javdb.storage.db.db_session import (
                     set_active_run_identity as _set_active_run_identity,
                     set_active_session_id as _set_active_session_id,
                     set_active_write_mode as _set_active_write_mode,
@@ -620,7 +618,7 @@ def _main():
     # Save spider stats and end_page to SQLite (when session exists)
     if _session_id is not None:
         try:
-            from javdb.storage.db.db_connection import get_db, REPORTS_DB_PATH
+            from javdb.storage.db import get_db, REPORTS_DB_PATH
             p1_discovered = len(all_index_results_phase1) if phase_mode in ('1', 'all') else 0
             p1_processed = len(phase1_rows)
             _p1 = p1_result if 'p1_result' in locals() else {}
@@ -703,7 +701,7 @@ def main():
         # is treated as success — only non-zero exits transition to failed.
         try:
             from javdb.spider.runtime import state as _runtime_state
-            from javdb.storage.db.db_session import (
+            from javdb.storage.db import (
                 get_active_session_id as _get_active_session_id,
             )
             should_mark_failed = True
@@ -724,7 +722,7 @@ def main():
         raise
     finally:
         try:
-            from javdb.storage.db.db_session import (
+            from javdb.storage.db import (
                 set_active_session_id as _set_active_session_id,
                 set_active_run_identity as _set_active_run_identity,
             )
