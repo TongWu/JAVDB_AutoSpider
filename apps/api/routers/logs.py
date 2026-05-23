@@ -13,10 +13,11 @@ from fastapi import APIRouter, Depends, Query
 
 from apps.api.infra.auth import require_role
 from apps.api.schemas.logs import LogSearchItem, LogSearchResponse
+from apps.api.services import context
 
 router = APIRouter(prefix="/api/logs", tags=["logs"])
 
-_LOGS_DIR = Path("logs/jobs")
+_LOGS_DIR = context.RESOLVED_JOB_LOG_DIR
 _HARD_CAP = 500
 
 
@@ -34,7 +35,10 @@ def search_logs(
 
     candidates = []
     for meta_path in sorted(_LOGS_DIR.glob("*.meta.json"), reverse=True):
-        meta = json.loads(meta_path.read_text())
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8", errors="ignore"))
+        except json.JSONDecodeError:
+            continue
         jid = meta.get("job_id", meta_path.stem.removesuffix(".meta"))
         if job_id and jid != job_id:
             continue
@@ -51,7 +55,7 @@ def search_logs(
     total = 0
     q_lower = q.lower()
     for jid, log_path, meta in candidates:
-        for i, line in enumerate(log_path.read_text().splitlines(), 1):
+        for i, line in enumerate(log_path.read_text(encoding="utf-8", errors="ignore").splitlines(), 1):
             if q_lower in line.lower():
                 total += 1
                 if len(results) < limit:
@@ -74,5 +78,4 @@ def search_logs(
 
 __all__ = [
     "router",
-    "search_logs",
 ]
