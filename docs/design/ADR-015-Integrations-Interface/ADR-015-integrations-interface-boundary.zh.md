@@ -10,7 +10,8 @@
 - Phase 1 - 增加带 allowlist 的 architecture guards，并引入 `javdb.workflow` adapters：artifact inputs、stats sinks、git side effects。
 - Phase 2 - 将 qB uploader 和 file filter 迁成 command packages，使用 typed options/results 和真正的 `apps.cli.qb.*` adapters。
 - Phase 3 - 将 PikPak bridge 迁成 command package，使用 typed options/result 和真正的 `apps.cli.pikpak.bridge` adapter。
-- Phase 4 - 拆分 rclone manager command package，并保留短期 bake wrapper。
+- Phase 4 - 拆分 rclone manager command package，将其 scan persistence/session
+  lifecycle DB 写入收敛到 storage Repos，并保留短期 bake wrapper。
 - Phase 5 - 删除 rclone bake wrapper，并从 allowlists 中移除 rclone。
 - Phase 6 - 将 notify email 拆成 command package，以及 `log_analysis`、`report_builder`、`delivery`，并保留短期 bake wrapper。
 - Phase 7 - 删除 notify bake wrapper，并从 allowlists 中移除 notify。

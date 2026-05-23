@@ -2,10 +2,21 @@
 
 from __future__ import annotations
 
+import base64
+import json
+
 import httpx
 import pytest
+from nacl.public import PrivateKey
 
 from javdb.integrations.gh_actions.client import GitHubActionsClient, _parse_repo_from_url
+
+# ---------------------------------------------------------------------------
+# NaCl test key pair (used by secrets tests)
+# ---------------------------------------------------------------------------
+
+_TEST_PRIVATE_KEY = PrivateKey.generate()
+_TEST_PUBLIC_KEY_B64 = base64.b64encode(bytes(_TEST_PRIVATE_KEY.public_key)).decode("ascii")
 
 
 # ---------------------------------------------------------------------------
@@ -58,13 +69,17 @@ SAMPLE_RUNS = [
 ]
 
 
+SAMPLE_WORKFLOW_YAML = "name: CI\non: push\njobs:\n  build:\n    runs-on: ubuntu-latest\n"
+SAMPLE_WORKFLOW_B64 = base64.b64encode(SAMPLE_WORKFLOW_YAML.encode("utf-8")).decode("ascii")
+
+
 def _make_handler(workflow_runs=None, dispatch_status=204):
     """Return a MockTransport handler with canned responses."""
 
     def handler(request: httpx.Request) -> httpx.Response:
         path = request.url.path
         # List all workflows
-        if path.endswith("/actions/workflows") and not "/workflows/" in path:
+        if path.endswith("/actions/workflows") and "/workflows/" not in path:
             return httpx.Response(200, json={"workflows": SAMPLE_WORKFLOWS})
         # List runs for a specific workflow
         if "/workflows/" in path and path.endswith("/runs"):
@@ -82,6 +97,51 @@ def _make_handler(workflow_runs=None, dispatch_status=204):
         # Dispatch
         if "/dispatches" in path:
             return httpx.Response(dispatch_status)
+        # Contents API — GET workflow file
+        if "/contents/.github/workflows/" in path and request.method == "GET":
+            return httpx.Response(
+                200,
+                json={
+                    "content": SAMPLE_WORKFLOW_B64,
+                    "sha": "abc123sha",
+                    "path": ".github/workflows/ci.yml",
+                },
+            )
+        # Contents API — PUT workflow file
+        if "/contents/.github/workflows/" in path and request.method == "PUT":
+            return httpx.Response(
+                200,
+                json={
+                    "content": {"sha": "blob-sha-abc"},
+                    "commit": {"sha": "new-commit-sha"},
+                },
+            )
+        # Secrets API — public key
+        if path.endswith("/actions/secrets/public-key"):
+            return httpx.Response(
+                200,
+                json={"key_id": "key123", "key": _TEST_PUBLIC_KEY_B64},
+            )
+        # Secrets API — list secrets
+        if path.endswith("/actions/secrets") and request.method == "GET":
+            return httpx.Response(
+                200,
+                json={
+                    "secrets": [
+                        {
+                            "name": "MY_SECRET",
+                            "created_at": "2024-01-01T00:00:00Z",
+                            "updated_at": "2024-01-01T00:00:00Z",
+                        }
+                    ]
+                },
+            )
+        # Secrets API — upsert secret
+        if "/actions/secrets/" in path and request.method == "PUT":
+            return httpx.Response(204)
+        # Secrets API — delete secret
+        if "/actions/secrets/" in path and request.method == "DELETE":
+            return httpx.Response(204)
         return httpx.Response(404, json={"message": "Not found"})
 
     return handler
@@ -276,3 +336,182 @@ class TestContextManager:
         with GitHubActionsClient(token="t", repo="o/r", transport=transport) as c:
             wfs = c.list_workflows()
         assert len(wfs) == 2
+
+
+# ---------------------------------------------------------------------------
+# get_workflow_content
+# ---------------------------------------------------------------------------
+
+
+class TestGetWorkflowContent:
+    def test_returns_decoded_content_sha_path(self, client):
+        result = client.get_workflow_content("ci.yml")
+        assert result["content"] == SAMPLE_WORKFLOW_YAML
+        assert result["sha"] == "abc123sha"
+        assert result["path"] == ".github/workflows/ci.yml"
+
+    def test_http_error_raises(self):
+        def err_handler(req):
+            return httpx.Response(404, json={"message": "Not Found"})
+
+        c = GitHubActionsClient(
+            token="t", repo="o/r", transport=httpx.MockTransport(err_handler)
+        )
+        with pytest.raises(httpx.HTTPStatusError):
+            c.get_workflow_content("nonexistent.yml")
+        c.close()
+
+
+# ---------------------------------------------------------------------------
+# update_workflow_content
+# ---------------------------------------------------------------------------
+
+
+class TestUpdateWorkflowContent:
+    def test_returns_commit_sha(self, client):
+        result = client.update_workflow_content(
+            "ci.yml",
+            "name: Updated\n",
+            "old-sha",
+            "update ci",
+        )
+        assert result["commit_sha"] == "new-commit-sha"
+
+    def test_sends_correct_base64_body(self):
+        sent_bodies = []
+
+        def recording_handler(req):
+            if "/contents/" in req.url.path and req.method == "PUT":
+                sent_bodies.append(json.loads(req.content))
+                return httpx.Response(
+                    200,
+                    json={"content": {"sha": "s"}, "commit": {"sha": "s"}},
+                )
+            return httpx.Response(404)
+
+        c = GitHubActionsClient(
+            token="t", repo="o/r", transport=httpx.MockTransport(recording_handler)
+        )
+        new_content = "name: Test\non: push\n"
+        c.update_workflow_content("ci.yml", new_content, "sha1", "msg", "dev")
+        c.close()
+
+        body = sent_bodies[0]
+        assert body["message"] == "msg"
+        assert body["sha"] == "sha1"
+        assert body["branch"] == "dev"
+        decoded = base64.b64decode(body["content"]).decode("utf-8")
+        assert decoded == new_content
+
+    def test_http_error_raises(self):
+        def err_handler(req):
+            return httpx.Response(422, json={"message": "Validation Failed"})
+
+        c = GitHubActionsClient(
+            token="t", repo="o/r", transport=httpx.MockTransport(err_handler)
+        )
+        with pytest.raises(httpx.HTTPStatusError):
+            c.update_workflow_content("ci.yml", "x", "sha", "msg")
+        c.close()
+
+
+# ---------------------------------------------------------------------------
+# list_secrets
+# ---------------------------------------------------------------------------
+
+
+class TestListSecrets:
+    def test_returns_list(self, client):
+        secrets = client.list_secrets()
+        assert isinstance(secrets, list)
+        assert len(secrets) == 1
+        assert secrets[0]["name"] == "MY_SECRET"
+
+    def test_http_error_raises(self):
+        def err_handler(req):
+            return httpx.Response(403, json={"message": "Forbidden"})
+
+        c = GitHubActionsClient(
+            token="t", repo="o/r", transport=httpx.MockTransport(err_handler)
+        )
+        with pytest.raises(httpx.HTTPStatusError):
+            c.list_secrets()
+        c.close()
+
+
+# ---------------------------------------------------------------------------
+# create_or_update_secret
+# ---------------------------------------------------------------------------
+
+
+class TestCreateOrUpdateSecret:
+    def test_no_exception_on_success(self, client):
+        # Should not raise
+        client.create_or_update_secret("MY_SECRET", "super-secret-value")
+
+    def test_sends_encrypted_value_and_key_id(self):
+        put_bodies: list[dict] = []
+
+        def recording_handler(req):
+            path = req.url.path
+            if path.endswith("/actions/secrets/public-key"):
+                return httpx.Response(
+                    200, json={"key_id": "key123", "key": _TEST_PUBLIC_KEY_B64}
+                )
+            if "/actions/secrets/" in path and req.method == "PUT":
+                put_bodies.append(json.loads(req.content))
+                return httpx.Response(204)
+            return httpx.Response(404)
+
+        c = GitHubActionsClient(
+            token="t", repo="o/r", transport=httpx.MockTransport(recording_handler)
+        )
+        c.create_or_update_secret("MY_SECRET", "the-value")
+        c.close()
+
+        assert len(put_bodies) == 1
+        body = put_bodies[0]
+        assert "encrypted_value" in body
+        assert body["key_id"] == "key123"
+        # Verify the encrypted value can be decrypted with the corresponding private key
+        from nacl.public import SealedBox
+        decoded = base64.b64decode(body["encrypted_value"])
+        decrypted = SealedBox(_TEST_PRIVATE_KEY).decrypt(decoded)
+        assert decrypted == b"the-value"
+
+    def test_http_error_raises(self):
+        def err_handler(req):
+            if req.url.path.endswith("/actions/secrets/public-key"):
+                return httpx.Response(
+                    200, json={"key_id": "key123", "key": _TEST_PUBLIC_KEY_B64}
+                )
+            return httpx.Response(422, json={"message": "Unprocessable"})
+
+        c = GitHubActionsClient(
+            token="t", repo="o/r", transport=httpx.MockTransport(err_handler)
+        )
+        with pytest.raises(httpx.HTTPStatusError):
+            c.create_or_update_secret("MY_SECRET", "value")
+        c.close()
+
+
+# ---------------------------------------------------------------------------
+# delete_secret
+# ---------------------------------------------------------------------------
+
+
+class TestDeleteSecret:
+    def test_no_exception_on_success(self, client):
+        # Should not raise
+        client.delete_secret("MY_SECRET")
+
+    def test_http_error_raises(self):
+        def err_handler(req):
+            return httpx.Response(404, json={"message": "Not Found"})
+
+        c = GitHubActionsClient(
+            token="t", repo="o/r", transport=httpx.MockTransport(err_handler)
+        )
+        with pytest.raises(httpx.HTTPStatusError):
+            c.delete_secret("NONEXISTENT")
+        c.close()

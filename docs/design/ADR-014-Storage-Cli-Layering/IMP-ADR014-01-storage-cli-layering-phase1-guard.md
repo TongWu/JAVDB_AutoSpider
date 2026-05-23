@@ -20,9 +20,9 @@
 |---|---|
 | `tests/architecture/test_storage_cli_layering.py` | New import-direction guard for storage modules. |
 | `apps/cli/db/commit_session.py` | Import shared helpers from storage instead of the CLI shim. |
-| `docs/design/adr/ADR-008-frontend-rewrite-architecture.md` | Add updated note for the historical rollback layering item. |
-| `docs/design/adr/ADR-008-frontend-rewrite-architecture.zh.md` | Chinese version of the same updated note. |
-| `docs/design/impl/IMP-ADR008-02-frontend-phase1-completion.md` | Add updated note for Task 4. |
+| `docs/design/ADR-008-Frontend-Rewrite/ADR-008-frontend-rewrite-architecture.md` | Add updated note for the historical rollback layering item. |
+| `docs/design/ADR-008-Frontend-Rewrite/ADR-008-frontend-rewrite-architecture.zh.md` | Chinese version of the same updated note. |
+| `docs/design/ADR-008-Frontend-Rewrite/IMP-ADR008-02-frontend-phase1-completion.md` | Add updated note for Task 4. |
 | `tests/unit/test_session_helpers.py` | Existing behavior coverage for shared helpers. |
 | `tests/unit/test_rollback_core_library.py` | Existing rollback library coverage. |
 | `tests/unit/test_rollback_cli.py` | Existing rollback CLI coverage. |
@@ -140,9 +140,9 @@ target.
 ## Task 3: Update Historical Docs
 
 **Files:**
-- Modify: `docs/design/adr/ADR-008-frontend-rewrite-architecture.md`
-- Modify: `docs/design/adr/ADR-008-frontend-rewrite-architecture.zh.md`
-- Modify: `docs/design/impl/IMP-ADR008-02-frontend-phase1-completion.md`
+- Modify: `docs/design/ADR-008-Frontend-Rewrite/ADR-008-frontend-rewrite-architecture.md`
+- Modify: `docs/design/ADR-008-Frontend-Rewrite/ADR-008-frontend-rewrite-architecture.zh.md`
+- Modify: `docs/design/ADR-008-Frontend-Rewrite/IMP-ADR008-02-frontend-phase1-completion.md`
 
 - [ ] **Step 1: Add the ADR-008 updated note.**
 
@@ -200,8 +200,8 @@ confirm no usage text changes are required.
 ```bash
 git add tests/architecture/test_storage_cli_layering.py \
         apps/cli/db/commit_session.py \
-        docs/design/adr/ADR-008-frontend-rewrite-architecture.md \
-        docs/design/adr/ADR-008-frontend-rewrite-architecture.zh.md \
-        docs/design/impl/IMP-ADR008-02-frontend-phase1-completion.md
+        docs/design/ADR-008-Frontend-Rewrite/ADR-008-frontend-rewrite-architecture.md \
+        docs/design/ADR-008-Frontend-Rewrite/ADR-008-frontend-rewrite-architecture.zh.md \
+        docs/design/ADR-008-Frontend-Rewrite/IMP-ADR008-02-frontend-phase1-completion.md
 git commit -m "refactor(storage): guard CLI layering"
 ```
