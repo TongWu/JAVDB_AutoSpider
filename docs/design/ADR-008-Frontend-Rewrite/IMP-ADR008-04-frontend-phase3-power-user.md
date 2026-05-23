@@ -22,13 +22,13 @@
 
 | Feature | Design status | Notes |
 |---------|--------------|-------|
-| GH Actions `edit` tier | **BE done** / FE specified | YAML editor endpoint implemented + tested |
-| GH Actions `admin` tier | **BE done** / FE specified | Secrets CRUD endpoints implemented + tested |
-| Migrations UI | **BE done** / FE specified | List + dry-run endpoints implemented + tested |
-| Global log search | **BE done** / FE specified | File grep endpoint + 20 tests — see Task 4 |
-| Statistics dashboard | **BE done** / FE specified | Summary + trend endpoints + 27 tests — see Task 5 |
+| GH Actions `edit` tier | **Done** (BE + FE) | YAML editor endpoint + WorkflowEditorPage |
+| GH Actions `admin` tier | **Done** (BE + FE) | Secrets CRUD endpoints + SecretsPage |
+| Migrations UI | **Done** (BE + FE) | List + dry-run endpoints + MigrationsPage |
+| Global log search | **Done** (BE + FE) | File grep endpoint + LogSearchPage |
+| Statistics dashboard | **Done** (BE + FE) | Summary + trend endpoints + StatsPage with vue-chartjs |
 
-Tasks 1–5 backend is complete (endpoints + unit tests committed). All FE tasks are specified and ready for implementation in the web repo.
+Tasks 1–5 fully implemented (BE + FE). Task 6 (Multi-Tab Optimization) is optional. E2E journeys pending.
 
 ---
 
@@ -100,7 +100,7 @@ Response:
 
   Tests in `tests/unit/test_gh_actions_client.py` and `tests/unit/test_gh_actions_endpoints.py`.
 
-- [ ] **Step 4: Build FE WorkflowEditorPage.**
+- [x] **Step 4: Build FE WorkflowEditorPage.** _(Done — web repo commit 9cc318b)_
 
   **File:** `src/pages/gh-actions/WorkflowEditorPage.vue` (web repo, new)
 
@@ -163,11 +163,7 @@ Response:
   - Error handling: 409 (SHA conflict) → show "File changed since loading, please reload". 422 (invalid YAML) → inline error message.
   - Visibility: only render when `ghTier` is `edit` or `admin`. Redirect to `/403` otherwise.
 
-- [ ] **Step 5: Commit web repo.**
-
-  ```bash
-  git commit -m "feat(fe): add Workflow YAML editor page (GH Actions tier edit)"
-  ```
+- [x] **Step 5: Commit web repo.** _(Done — included in 9cc318b)_
 
 ---
 
@@ -209,7 +205,7 @@ Python library: `PyNaCl` (`nacl.public.SealedBox`).
 
   Tests in `tests/unit/test_gh_actions_client.py` (NaCl encrypt/decrypt round-trip) and `tests/unit/test_gh_actions_endpoints.py` (all tier/role/CRUD/error scenarios).
 
-- [ ] **Step 4: Build FE SecretsPage.**
+- [x] **Step 4: Build FE SecretsPage.** _(Done — web repo commit 9cc318b)_
 
   **File:** `src/pages/gh-actions/SecretsPage.vue` (web repo, new)
 
@@ -276,11 +272,7 @@ Python library: `PyNaCl` (`nacl.public.SealedBox`).
   - Visibility: only render when `ghTier` is `admin`. Redirect to `/403` otherwise.
   - On success: `useMessage().success(...)` + reload table.
 
-- [ ] **Step 5: Commit web repo.**
-
-  ```bash
-  git commit -m "feat(fe): add GitHub Actions Secrets management page (tier admin)"
-  ```
+- [x] **Step 5: Commit web repo.** _(Done — included in 9cc318b)_
 
 ---
 
@@ -324,7 +316,7 @@ Python library: `PyNaCl` (`nacl.public.SealedBox`).
 
   12 tests in `tests/unit/test_migrations_endpoints.py` covering admin/readonly/anon access, listing, applied state, dry-run preview, 501 for non-dry-run, 404, path traversal.
 
-- [ ] **Step 4: Build FE MigrationsPage.**
+- [x] **Step 4: Build FE MigrationsPage.** _(Done — web repo commit 9cc318b)_
 
   **File:** `src/pages/migrations/MigrationsPage.vue` (web repo, new)
 
@@ -395,11 +387,7 @@ Python library: `PyNaCl` (`nacl.public.SealedBox`).
   - Applied rows: no actions, read-only.
   - Admin-only page: redirect to `/403` if user role is not `admin`.
 
-- [ ] **Step 5: Commit web repo.**
-
-  ```bash
-  git commit -m "feat(fe): add Migrations management page"
-  ```
+- [x] **Step 5: Commit web repo.** _(Done — included in 9cc318b)_
 
 ---
 
@@ -544,7 +532,7 @@ Response:
   - Empty `logs/jobs/` dir → empty results
   - Admin-only access (readonly → 403, anon → 401)
 
-- [ ] **Step 3: Build FE LogSearchPage.**
+- [x] **Step 3: Build FE LogSearchPage.** _(Done — web repo commit 9cc318b)_
 
   **File:** `src/pages/logs/LogSearchPage.vue` (web repo, new)
 
@@ -605,14 +593,7 @@ Response:
   - Empty state: "Enter a search term to search task logs."
   - Admin-only page.
 
-- [ ] **Step 4: Commit (both repos).**
-
-  ```bash
-  # Main repo
-  git commit -m "feat(api): add log search endpoint — file grep over logs/jobs/"
-  # Web repo
-  git commit -m "feat(fe): add Log Search page"
-  ```
+- [x] **Step 4: Commit (both repos).** _(Done — BE committed earlier, FE in 9cc318b)_
 
 ---
 
@@ -731,7 +712,7 @@ Response:
 
   27 tests in `tests/unit/test_stats_endpoints.py`. Uses in-memory SQLite with pre-populated test data, handles `_isolate_sqlite` path collapse. Includes concrete value assertions for success_rate and movies trends, period cutoff exclusion, dedup only-deleted-records filter. Test cases:
 
-- [ ] **Step 4: Build FE StatsPage with vue-chartjs.**
+- [x] **Step 4: Build FE StatsPage with vue-chartjs.** _(Done — web repo commit 9cc318b)_
 
   **File:** `src/pages/stats/StatsPage.vue` (web repo, new)
 
@@ -803,14 +784,7 @@ Response:
   - Loading state: `<NSpin>` while fetching.
   - Error state: `<NEmpty description="Failed to load statistics">` with retry button.
 
-- [ ] **Step 5: Commit (both repos).**
-
-  ```bash
-  # Main repo
-  git commit -m "feat(api): add statistics summary + trend endpoints"
-  # Web repo
-  git commit -m "feat(fe): add Statistics Dashboard with vue-chartjs"
-  ```
+- [x] **Step 5: Commit (both repos).** _(Done — BE committed earlier, FE in 9cc318b)_
 
 ---
 
