@@ -18,11 +18,14 @@ Edit-tier endpoints (last two) require:
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, Optional
 
 import httpx
 import yaml
 from fastapi import APIRouter, Depends, HTTPException, Query
+
+_SAFE_WORKFLOW_NAME_RE = re.compile(r"^[\w\-\.]+\.ya?ml$")
 
 from apps.api.infra.auth import _require_auth, require_role
 from apps.api.routers.capabilities import build_capabilities
@@ -269,6 +272,20 @@ def get_run_logs(
 # ---------------------------------------------------------------------------
 
 
+def _validate_workflow_name(name: str) -> None:
+    """Raise 400 if name contains path traversal or is not a YAML filename."""
+    if not _SAFE_WORKFLOW_NAME_RE.match(name):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": {
+                    "code": "gh_actions.invalid_filename",
+                    "message": "Workflow name must be a simple .yml/.yaml filename",
+                }
+            },
+        )
+
+
 @router.get(
     "/workflows/{name}",
     response_model=WorkflowContentResponse,
@@ -279,6 +296,7 @@ def get_workflow_content(
     _user: Dict[str, Any] = Depends(_require_auth),
 ) -> WorkflowContentResponse:
     """Return the decoded content of a workflow YAML file."""
+    _validate_workflow_name(name)
     client = _get_gh_client()
     try:
         data = client.get_workflow_content(name)
@@ -306,7 +324,7 @@ def update_workflow_content(
     _user: Dict[str, Any] = Depends(require_role("admin")),
 ) -> WorkflowUpdateResponse:
     """Validate and commit an updated workflow YAML file (admin only)."""
-    # Validate YAML syntax
+    _validate_workflow_name(name)
     try:
         yaml.safe_load(body.content)
     except yaml.YAMLError as exc:
@@ -322,11 +340,10 @@ def update_workflow_content(
 
     client = _get_gh_client()
     try:
-        current = client.get_workflow_content(name)
         result = client.update_workflow_content(
             name,
             body.content,
-            current["sha"],
+            body.sha,
             body.commit_message,
             body.branch,
         )

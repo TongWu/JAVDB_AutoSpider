@@ -66,6 +66,7 @@ class DispatchResponse(BaseModel):
 
 class WorkflowUpdateRequest(BaseModel):
     content: str
+    sha: str
     commit_message: str
     branch: str = "main"
 
