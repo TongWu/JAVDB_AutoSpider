@@ -8,9 +8,7 @@ This is the current canonical layout, established by [ADR-007](../_archive/ADR-0
 JAVDB_AutoSpider_CICD/
 ├── apps/
 │   ├── api/                  # FastAPI service
-│   ├── cli/                  # All Python CLI entries
-│   ├── web/                  # FE (being replaced; see javdb-autospider-web)
-│   └── desktop/              # Electron shell (MVP)
+│   └── cli/                  # All Python CLI entries
 ├── javdb/                    # Python namespace (PEP 420; no __init__.py)
 │   ├── spider/
 │   ├── pipeline/
@@ -42,11 +40,6 @@ JAVDB_AutoSpider_CICD/
 Core: `spider`, `pipeline`, `login`.
 
 Subdirectories: `db/`, `qb/`, `pikpak/`, `rclone/`, `notify/`, `ops/`. Invoke via `python -m apps.cli.<subdir>.<name>`.
-
-## Replaces
-
-- `docs/design/architecture/python-core-mapping.md` — Old partial-reorg mapping (SUPERSEDED)
-- `docs/design/architecture/spider-module-reorg.md` — Old spider-only reorg status (SUPERSEDED)
 
 ## See also
 
