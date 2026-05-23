@@ -1,4 +1,4 @@
-"""Unit tests for ``apps.cli.db.drift_diagnose``."""
+"""Unit tests for ``javdb.storage.drift_diagnose`` and its CLI wrapper."""
 
 from __future__ import annotations
 
@@ -58,6 +58,43 @@ class FakeD1Connection:
 
     def close(self):
         self.closed = True
+
+
+class RaisingD1Connection(FakeD1Connection):
+    """Fake D1 connection that raises when SQL contains selected markers."""
+
+    def __init__(
+        self,
+        fail_on: List[str],
+        query_results: Optional[Dict[str, List[dict]]] = None,
+    ):
+        super().__init__(query_results)
+        self._fail_on = [marker.lower() for marker in fail_on]
+
+    def execute(self, sql: str, params: Any = None) -> FakeD1Cursor:
+        self.executed_statements.append((sql, params))
+        normalized = sql.strip().lower()
+        if any(marker in normalized for marker in self._fail_on):
+            raise RuntimeError("simulated D1 query failure")
+
+        key = normalized[:60]
+        for prefix, rows in self._results.items():
+            if key.startswith(prefix.lower()):
+                return FakeD1Cursor(rows)
+        return FakeD1Cursor([])
+
+
+class RowLike:
+    """Mapping-style row without ``dict.get()``, like some DB cursor rows."""
+
+    def __init__(self, **values):
+        self._values = values
+
+    def keys(self):
+        return self._values.keys()
+
+    def __getitem__(self, key):
+        return self._values[key]
 
 
 # ---------------------------------------------------------------------------
@@ -162,8 +199,14 @@ def _make_sqlite_history(db_path: str, *, movies=None, torrents=None,
 
 @pytest.fixture
 def drift_mod(monkeypatch):
-    """Import drift_diagnose with REPORTS_DIR pointed at a temp location."""
-    # Ensure the module can be imported cleanly
+    """Import the drift diagnosis service module."""
+    import javdb.storage.drift_diagnose as mod
+    return mod
+
+
+@pytest.fixture
+def drift_cli():
+    """Import the thin CLI wrapper."""
     import apps.cli.db.drift_diagnose as mod
     return mod
 
@@ -329,6 +372,29 @@ class TestDiscoverFromD1Sweep:
         assert session_id in suspects
         assert suspects[session_id]["d1_pending_movie_count"] == 2
         assert suspects[session_id]["d1_pending_torrent_count"] == 1
+
+    def test_sweep_counts_only_pending_apply_state(self, drift_mod):
+        """Sweep COUNT queries must match apply_fix pending-only semantics."""
+        session_id = "20260517T121617.445400Z-ea87-0000"
+        d1_reports = FakeD1Connection({
+            "select id": [{"Id": session_id, "Status": "committed",
+                           "DateTimeCreated": _hours_ago_iso(2)}],
+        })
+        d1_history = FakeD1Connection({
+            "select count(*) as cnt from pendingmoviehistorywrite": [{"cnt": 2}],
+            "select count(*) as cnt from pendingtorrenthistorywri": [{"cnt": 1}],
+        })
+        drift_mod.discover_suspects_from_d1_sweep(
+            d1_reports, d1_history, since_hours=24,
+        )
+
+        count_sql = [
+            sql for sql, _params in d1_history.executed_statements
+            if "COUNT(*)" in sql
+        ]
+        assert count_sql
+        for sql in count_sql:
+            assert "ApplyState = 'pending'" in sql
 
     def test_committed_no_orphans(self, drift_mod):
         """Committed session with zero pending rows → not a suspect."""
@@ -570,6 +636,136 @@ class TestClassifyVerdict:
         assert result["verdict"] == "UNEXPECTED_PATTERN"
         assert "failed" in result["note"]
 
+    def test_unexpected_missing_report_session(self, drift_mod):
+        """Missing ReportSessions row must not be treated as CLEAN."""
+        d1_history = FakeD1Connection({
+            "select * from pendingmoviehistorywrites": [],
+            "select * from pendingtorrenthistorywrites": [],
+        })
+        d1_reports = FakeD1Connection({
+            "select status from reportsessions": [],
+        })
+        suspect = {"session_id": "s-missing", "provenance": "apply-target"}
+        result = drift_mod.classify_verdict(
+            suspect, d1_history, d1_reports=d1_reports, sqlite_conn=None,
+        )
+        assert result["verdict"] == "UNEXPECTED_PATTERN"
+        assert "ReportSessions" in result["note"]
+
+    def test_unexpected_when_report_session_status_query_fails(
+        self, drift_mod, tmp_path,
+    ):
+        """A failed status check cannot fall through to SAFE_TO_APPLY."""
+        session_id = "s-status-query-fails"
+        d1_history = FakeD1Connection({
+            "select * from pendingmoviehistorywrites": [
+                {"Seq": "seq1", "SessionId": session_id, "Href": "/v/status",
+                 "ApplyState": "pending"},
+            ],
+            "select * from pendingtorrenthistorywrites": [],
+            "select * from moviehistory where href": [
+                {"Href": "/v/status", "VideoCode": "STAT-001",
+                 "ActorName": "Actor",
+                 "DateTimeCreated": "2026-01-01 00:00:00"},
+            ],
+            "select * from torrenthistory where moviehistoryid": [],
+        })
+        d1_reports = RaisingD1Connection(["from reportsessions"])
+
+        db_path = str(tmp_path / "history.db")
+        _make_sqlite_history(db_path, movies=[
+            {"Href": "/v/status", "VideoCode": "STAT-001",
+             "ActorName": "Actor", "DateTimeCreated": "2026-01-01 00:00:00"},
+        ])
+        sqlite_conn = sqlite3.connect(db_path)
+        sqlite_conn.row_factory = sqlite3.Row
+
+        suspect = {"session_id": session_id, "provenance": "apply-target"}
+        result = drift_mod.classify_verdict(
+            suspect, d1_history, d1_reports=d1_reports, sqlite_conn=sqlite_conn,
+        )
+        assert result["verdict"] == "UNEXPECTED_PATTERN"
+        assert "ReportSessions" in result["note"]
+        sqlite_conn.close()
+
+    def test_unexpected_when_d1_pending_query_fails(self, drift_mod):
+        """D1 pending read failures must not be reported as CLEAN."""
+        session_id = "s-d1-query-fails"
+        d1_history = RaisingD1Connection(["pendingmoviehistorywrites"])
+        d1_reports = self._committed_reports(session_id)
+        suspect = {"session_id": session_id, "provenance": "verify-tagged"}
+        result = drift_mod.classify_verdict(
+            suspect, d1_history, d1_reports=d1_reports, sqlite_conn=None,
+        )
+        assert result["verdict"] == "UNEXPECTED_PATTERN"
+        assert "D1 pending" in result["note"]
+
+    def test_classify_selects_only_pending_apply_state(self, drift_mod):
+        """Classification orphan SELECTs must ignore applied leftovers."""
+        session_id = "s-applied-leftovers"
+        d1_history = FakeD1Connection({
+            "select * from pendingmoviehistorywrites": [],
+            "select * from pendingtorrenthistorywrites": [],
+        })
+        d1_reports = self._committed_reports(session_id)
+        suspect = {"session_id": session_id, "provenance": "verify-tagged"}
+        drift_mod.classify_verdict(
+            suspect, d1_history, d1_reports=d1_reports, sqlite_conn=None,
+        )
+
+        pending_selects = [
+            sql for sql, _params in d1_history.executed_statements
+            if sql.strip().lower().startswith(
+                "select * from pending"
+            )
+        ]
+        assert pending_selects
+        for sql in pending_selects:
+            assert "ApplyState = 'pending'" in sql
+
+    def test_sqlite_applied_pending_rows_do_not_block_safe_apply(
+        self, drift_mod, tmp_path,
+    ):
+        """SQLite ApplyState='applied' leftovers are not active orphans."""
+        session_id = "s-sqlite-applied"
+        d1_history = FakeD1Connection({
+            "select * from pendingmoviehistorywrites": [
+                {"Seq": "seq1", "SessionId": session_id, "Href": "/v/applied",
+                 "ApplyState": "pending"},
+            ],
+            "select * from pendingtorrenthistorywrites": [],
+            "select * from moviehistory where href": [
+                {"Href": "/v/applied", "VideoCode": "APP-001",
+                 "ActorName": "Actor",
+                 "DateTimeCreated": "2026-01-01 00:00:00"},
+            ],
+            "select * from torrenthistory where moviehistoryid": [],
+        })
+        d1_reports = self._committed_reports(session_id)
+
+        db_path = str(tmp_path / "history.db")
+        _make_sqlite_history(
+            db_path,
+            movies=[
+                {"Href": "/v/applied", "VideoCode": "APP-001",
+                 "ActorName": "Actor",
+                 "DateTimeCreated": "2026-01-01 00:00:00"},
+            ],
+            pending_movies=[
+                {"Seq": "seq-applied", "SessionId": session_id,
+                 "Href": "/v/applied", "ApplyState": "applied"},
+            ],
+        )
+        sqlite_conn = sqlite3.connect(db_path)
+        sqlite_conn.row_factory = sqlite3.Row
+
+        suspect = {"session_id": session_id, "provenance": "sweep-only"}
+        result = drift_mod.classify_verdict(
+            suspect, d1_history, d1_reports=d1_reports, sqlite_conn=sqlite_conn,
+        )
+        assert result["verdict"] == "SAFE_TO_APPLY"
+        sqlite_conn.close()
+
     def test_no_d1_reports_skips_status_check(self, drift_mod):
         """When d1_reports is None, status check is skipped (backward compat)."""
         d1_history = FakeD1Connection({
@@ -582,6 +778,49 @@ class TestClassifyVerdict:
         )
         # No orphans → CLEAN, regardless of missing d1_reports
         assert result["verdict"] == "CLEAN"
+
+    def test_live_rows_normalizes_d1_torrent_rows(self, drift_mod, tmp_path):
+        """D1 torrent row-like objects must be converted before .get() calls."""
+        d1_history = FakeD1Connection({
+            "select * from moviehistory where href": [
+                {"Id": 1, "Href": "/v/rowlike", "VideoCode": "ROW-001",
+                 "ActorName": "Actor",
+                 "DateTimeCreated": "2026-01-01 00:00:00"},
+            ],
+            "select * from torrenthistory where moviehistoryid": [
+                RowLike(
+                    MovieHistoryId=1,
+                    SubtitleIndicator=1,
+                    CensorIndicator=0,
+                    MagnetUri="magnet:?xt=urn:btih:rowlike",
+                    Size="1GB",
+                    DateTimeCreated="2026-01-01 00:00:00",
+                ),
+            ],
+        })
+        db_path = str(tmp_path / "history.db")
+        _make_sqlite_history(
+            db_path,
+            movies=[
+                {"Href": "/v/rowlike", "VideoCode": "ROW-001",
+                 "ActorName": "Actor",
+                 "DateTimeCreated": "2026-01-01 00:00:00"},
+            ],
+            torrents=[
+                {"MovieHistoryId": 1, "SubtitleIndicator": 1,
+                 "CensorIndicator": 0,
+                 "MagnetUri": "magnet:?xt=urn:btih:rowlike",
+                 "Size": "1GB",
+                 "DateTimeCreated": "2026-01-01 00:00:00"},
+            ],
+        )
+        sqlite_conn = sqlite3.connect(db_path)
+        sqlite_conn.row_factory = sqlite3.Row
+
+        assert drift_mod._live_rows_diverge(
+            "/v/rowlike", d1_history, sqlite_conn,
+        ) is False
+        sqlite_conn.close()
 
 
 # ===========================================================================
@@ -616,7 +855,7 @@ class TestExitCode:
 
 
 class TestJsonOutput:
-    def test_format_output_json(self, drift_mod):
+    def test_format_output_json(self, drift_cli):
         results = [
             {
                 "session_id": "s1",
@@ -634,14 +873,14 @@ class TestJsonOutput:
                 "suggested_command": "python3 -m apps.cli.db.drift_diagnose --apply --session-id s2",
             },
         ]
-        output = drift_mod.format_output(results, as_json=True)
+        output = drift_cli.format_output(results, as_json=True)
         parsed = json.loads(output)
         assert "suspects" in parsed
         assert "max_verdict" in parsed
         assert len(parsed["suspects"]) == 2
         assert parsed["max_verdict"] == "SAFE_TO_APPLY"
 
-    def test_format_output_text(self, drift_mod):
+    def test_format_output_text(self, drift_cli):
         results = [
             {
                 "session_id": "s1",
@@ -651,12 +890,12 @@ class TestJsonOutput:
                 "d1_orphan_torrent_count": 0,
             },
         ]
-        output = drift_mod.format_output(results, as_json=False)
+        output = drift_cli.format_output(results, as_json=False)
         assert "s1" in output
         assert "CLEAN" in output
 
-    def test_format_output_empty(self, drift_mod):
-        output = drift_mod.format_output([], as_json=True)
+    def test_format_output_empty(self, drift_cli):
+        output = drift_cli.format_output([], as_json=True)
         parsed = json.loads(output)
         assert parsed["suspects"] == []
         assert parsed["max_verdict"] == "CLEAN"
@@ -786,13 +1025,14 @@ class TestDiagnoseFlow:
 
 
 class TestMainCli:
-    def test_main_help(self, drift_mod):
+    def test_main_help(self, drift_cli):
         """--help should exit with 0."""
         with pytest.raises(SystemExit) as exc_info:
-            drift_mod.main(["--help"])
+            drift_cli.main(["--help"])
         assert exc_info.value.code == 0
 
-    def test_main_no_drift_log(self, drift_mod, tmp_path, monkeypatch):
+    def test_main_no_drift_log(self, drift_mod, drift_cli, tmp_path,
+                               monkeypatch):
         """When drift log doesn't exist and D1 sweep finds nothing → exit 0."""
         monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
 
@@ -807,12 +1047,12 @@ class TestMainCli:
 
         monkeypatch.setattr(drift_mod, "make_d1_connection", fake_make_d1)
 
-        rc = drift_mod.main(["--since", "24"])
+        rc = drift_cli.main(["--since", "24"])
         assert rc == 0
 
-    def test_main_apply_returns_2(self, drift_mod):
+    def test_main_apply_returns_2(self, drift_cli):
         """--apply is not yet implemented and should return exit code 2."""
-        rc = drift_mod.main(["--apply"])
+        rc = drift_cli.main(["--apply"])
         assert rc == 2
 
 
@@ -886,7 +1126,7 @@ def _make_safe_to_apply_fakes(session_id, *, movie_orphan_count=2,
     ]
     orphan_torrents = [
         {"Seq": f"seq-t-{i}", "SessionId": session_id,
-         "Href": f"/v/movie0", "ApplyState": "pending"}
+         "Href": "/v/movie0", "ApplyState": "pending"}
         for i in range(torrent_orphan_count)
     ]
     # For live-table comparison — each orphan href needs a matching movie
@@ -926,15 +1166,17 @@ class TestApplyPath:
 
     # ── Safety Rail 1: --apply requires --session-id ───────────────────
 
-    def test_apply_without_session_id_exits_2(self, drift_mod, monkeypatch):
+    def test_apply_without_session_id_exits_2(self, drift_cli, tmp_path,
+                                               monkeypatch):
         """Rail 1: --apply without --session-id → exit 2."""
-        monkeypatch.setenv("REPORTS_DIR", "/tmp/test_drift")
-        rc = drift_mod.main(["--apply"])
+        monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+        rc = drift_cli.main(["--apply"])
         assert rc == 2
 
     # ── Safety Rail 2: verdict must be SAFE_TO_APPLY ──────────────────
 
-    def test_apply_verdict_clean_exits_1(self, drift_mod, tmp_path, monkeypatch):
+    def test_apply_verdict_clean_exits_1(self, drift_mod, drift_cli, tmp_path,
+                                          monkeypatch):
         """Rail 2: verdict CLEAN (no orphans) → exit 1 (not SAFE_TO_APPLY)."""
         session_id = "20260520T100000.000000Z-aaaa-0000"
         monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
@@ -960,7 +1202,7 @@ class TestApplyPath:
         db_path = str(tmp_path / "history.db")
         _make_sqlite_history(db_path)
 
-        rc = drift_mod.main([
+        rc = drift_cli.main([
             "--apply", "--session-id", session_id,
             "--history-db", db_path,
         ])
@@ -968,8 +1210,8 @@ class TestApplyPath:
 
     # ── Safety Rail 3: session must be committed ──────────────────────
 
-    def test_apply_session_not_committed_exits_2(self, drift_mod, tmp_path,
-                                                  monkeypatch):
+    def test_apply_session_not_committed_exits_2(self, drift_mod, drift_cli,
+                                                  tmp_path, monkeypatch):
         """Rail 3: session status is 'in_progress' → exit 2."""
         session_id = "20260520T100000.000000Z-bbbb-0000"
         monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
@@ -996,7 +1238,40 @@ class TestApplyPath:
         db_path = str(tmp_path / "history.db")
         _make_sqlite_history(db_path)
 
-        rc = drift_mod.main([
+        rc = drift_cli.main([
+            "--apply", "--session-id", session_id,
+            "--history-db", db_path,
+        ])
+        assert rc == 2
+
+    def test_apply_missing_report_session_exits_2(self, drift_mod, drift_cli,
+                                                   tmp_path, monkeypatch):
+        """Rail 3: missing ReportSessions row → exit 2."""
+        session_id = "20260520T100000.000000Z-miss-0000"
+        monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+
+        d1_history = FakeD1Connection({
+            "select * from pendingmoviehistorywrites where sessionid": [
+                {"Seq": "s1", "SessionId": session_id,
+                 "Href": "/v/x", "ApplyState": "pending"},
+            ],
+            "select * from pendingtorrenthistorywrites where sessionid": [],
+        })
+        d1_reports = FakeD1Connection({
+            "select status from reportsessions where id": [],
+        })
+
+        def fake_make_d1(name):
+            if name == "reports":
+                return d1_reports
+            return d1_history
+
+        monkeypatch.setattr(drift_mod, "make_d1_connection", fake_make_d1)
+
+        db_path = str(tmp_path / "history.db")
+        _make_sqlite_history(db_path)
+
+        rc = drift_cli.main([
             "--apply", "--session-id", session_id,
             "--history-db", db_path,
         ])
@@ -1004,8 +1279,8 @@ class TestApplyPath:
 
     # ── Safety Rail 4: orphan count ≤ --max-deletes ───────────────────
 
-    def test_apply_exceeds_max_deletes_exits_2(self, drift_mod, tmp_path,
-                                                monkeypatch):
+    def test_apply_exceeds_max_deletes_exits_2(self, drift_mod, drift_cli,
+                                                tmp_path, monkeypatch):
         """Rail 4: orphan count > --max-deletes → exit 2."""
         session_id = "20260520T100000.000000Z-cccc-0000"
         monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
@@ -1029,7 +1304,7 @@ class TestApplyPath:
             for i in range(5)
         ])
 
-        rc = drift_mod.main([
+        rc = drift_cli.main([
             "--apply", "--session-id", session_id,
             "--max-deletes", "3",
             "--history-db", db_path,
@@ -1039,7 +1314,7 @@ class TestApplyPath:
     # ── Safety Rail 5: DELETE SQL must include SessionId + ApplyState ──
 
     def test_apply_delete_sql_includes_sessionid_and_applystate(
-        self, drift_mod, tmp_path, monkeypatch,
+        self, drift_mod, drift_cli, tmp_path, monkeypatch,
     ):
         """Rail 5: DELETE must have both SessionId=? and ApplyState='pending'."""
         session_id = "20260520T100000.000000Z-dddd-0000"
@@ -1067,7 +1342,7 @@ class TestApplyPath:
              "ActorName": "Actor", "DateTimeCreated": "2026-01-01 00:00:00"},
         ])
 
-        rc = drift_mod.main([
+        rc = drift_cli.main([
             "--apply", "--session-id", session_id,
             "--history-db", db_path,
         ])
@@ -1095,7 +1370,7 @@ class TestApplyPath:
 
     # ── Happy path: SAFE_TO_APPLY → deletes + audit + exit 0 ─────────
 
-    def test_apply_safe_to_apply_success(self, drift_mod, tmp_path,
+    def test_apply_safe_to_apply_success(self, drift_mod, drift_cli, tmp_path,
                                           monkeypatch):
         """Full happy path: SAFE_TO_APPLY → DELETEs + audit record + exit 0."""
         session_id = "20260520T100000.000000Z-eeee-0000"
@@ -1128,7 +1403,7 @@ class TestApplyPath:
              "ActorName": "Actor", "DateTimeCreated": "2026-01-01 00:00:00"},
         ])
 
-        rc = drift_mod.main([
+        rc = drift_cli.main([
             "--apply", "--session-id", session_id,
             "--history-db", db_path,
         ])
@@ -1140,7 +1415,7 @@ class TestApplyPath:
 
     # ── Audit record format verification ──────────────────────────────
 
-    def test_apply_audit_record_format(self, drift_mod, tmp_path,
+    def test_apply_audit_record_format(self, drift_mod, drift_cli, tmp_path,
                                         monkeypatch):
         """Audit record has the correct structure and fields."""
         session_id = "20260520T100000.000000Z-ffff-0000"
@@ -1170,7 +1445,7 @@ class TestApplyPath:
             for i in range(3)
         ])
 
-        rc = drift_mod.main([
+        rc = drift_cli.main([
             "--apply", "--session-id", session_id,
             "--history-db", db_path,
         ])
@@ -1261,21 +1536,21 @@ class TestApplyPath:
 
     # ── --max-deletes argument is accepted ────────────────────────────
 
-    def test_max_deletes_default_is_100(self, drift_mod):
+    def test_max_deletes_default_is_100(self, drift_cli):
         """--max-deletes defaults to 100."""
-        parser = drift_mod._build_arg_parser()
+        parser = drift_cli._build_arg_parser()
         args = parser.parse_args([])
         assert args.max_deletes == 100
 
-    def test_max_deletes_custom_value(self, drift_mod):
+    def test_max_deletes_custom_value(self, drift_cli):
         """--max-deletes accepts a custom integer value."""
-        parser = drift_mod._build_arg_parser()
+        parser = drift_cli._build_arg_parser()
         args = parser.parse_args(["--max-deletes", "50"])
         assert args.max_deletes == 50
 
     # ── Rail 3: session status 'failed' also exits 2 ─────────────────
 
-    def test_apply_session_failed_exits_2(self, drift_mod, tmp_path,
+    def test_apply_session_failed_exits_2(self, drift_mod, drift_cli, tmp_path,
                                            monkeypatch):
         """Rail 3: session status is 'failed' → exit 2."""
         session_id = "20260520T100000.000000Z-iiii-0000"
@@ -1303,7 +1578,7 @@ class TestApplyPath:
         db_path = str(tmp_path / "history.db")
         _make_sqlite_history(db_path)
 
-        rc = drift_mod.main([
+        rc = drift_cli.main([
             "--apply", "--session-id", session_id,
             "--history-db", db_path,
         ])
