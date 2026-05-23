@@ -38,6 +38,8 @@ from typing import Dict, List, Optional
 from javdb.infra.logging import get_logger
 from javdb.storage.d1_client import make_d1_connection
 from javdb.storage.rollback.session_helpers import append_jsonl_record
+from javdb.storage.repos.history_repo import HistoryRepo
+from javdb.storage.repos.sessions_repo import SessionsRepo
 
 logger = get_logger(__name__)
 
@@ -203,14 +205,11 @@ def discover_suspects_from_d1_sweep(
     window_start = now - timedelta(hours=since_hours)
     window_start_text = window_start.strftime("%Y-%m-%d %H:%M:%S")
 
+    reports_repo = SessionsRepo(d1_reports)
+
     # Fetch committed sessions within the window
     try:
-        cur = d1_reports.execute(
-            "SELECT Id, Status, DateTimeCreated FROM ReportSessions "
-            "WHERE Status = 'committed' AND DateTimeCreated >= ?",
-            [window_start_text],
-        )
-        sessions = cur.fetchall()
+        sessions = reports_repo.get_committed_sessions_since(window_start_text)
     except Exception as exc:
         logger.warning("D1 sweep: failed to query ReportSessions: %s", exc)
         return {}
@@ -226,40 +225,41 @@ def discover_suspects_from_d1_sweep(
         if not session_id:
             continue
 
-        # Count orphan pending rows for this session
-        movie_count = 0
-        torrent_count = 0
+        # Count orphan pending rows for this session. A failed count is
+        # unknown, not zero: keep the session suspect so diagnosis fails closed.
+        movie_count: Optional[int] = 0
+        torrent_count: Optional[int] = 0
+        query_failed = False
         try:
-            cur = d1_history.execute(
-                "SELECT COUNT(*) AS cnt FROM PendingMovieHistoryWrites "
-                "WHERE SessionId = ? AND ApplyState = 'pending'",
-                [session_id],
+            movie_count = HistoryRepo.count_pending_movie_writes(
+                d1_history, session_id,
             )
-            row = cur.fetchone()
-            if row:
-                movie_count = int(row.get("cnt", 0) if isinstance(row, dict) else row["cnt"])
         except Exception as exc:
             logger.warning("D1 sweep: PendingMovieHistoryWrites query failed for %s: %s",
                            session_id, exc)
+            movie_count = None
+            query_failed = True
 
         try:
-            cur = d1_history.execute(
-                "SELECT COUNT(*) AS cnt FROM PendingTorrentHistoryWrites "
-                "WHERE SessionId = ? AND ApplyState = 'pending'",
-                [session_id],
+            torrent_count = HistoryRepo.count_pending_torrent_writes(
+                d1_history, session_id,
             )
-            row = cur.fetchone()
-            if row:
-                torrent_count = int(row.get("cnt", 0) if isinstance(row, dict) else row["cnt"])
         except Exception as exc:
             logger.warning("D1 sweep: PendingTorrentHistoryWrites query failed for %s: %s",
                            session_id, exc)
+            torrent_count = None
+            query_failed = True
 
-        if movie_count > 0 or torrent_count > 0:
+        if query_failed or (movie_count or 0) > 0 or (torrent_count or 0) > 0:
             suspects[session_id] = {
                 "d1_pending_movie_count": movie_count,
                 "d1_pending_torrent_count": torrent_count,
             }
+            if query_failed:
+                suspects[session_id]["note"] = (
+                    "D1 sweep pending count query failed; session kept as "
+                    "suspect because pending state is unknown."
+                )
 
     return suspects
 
@@ -330,22 +330,13 @@ def classify_verdict(
 
     # ADR-009 D4: reject sessions that are not committed
     if d1_reports is not None:
+        reports_repo = SessionsRepo(d1_reports)
         try:
-            cur = d1_reports.execute(
-                "SELECT Status FROM ReportSessions WHERE Id = ?",
-                [session_id],
-            )
-            status_row = cur.fetchone()
-            if status_row is None:
+            status = reports_repo.get_status(session_id)
+            if status is None:
                 result["verdict"] = VERDICT_UNEXPECTED
                 result["note"] = "Session not found in ReportSessions"
                 return result
-
-            status = (
-                status_row.get("Status", "")
-                if isinstance(status_row, dict)
-                else status_row["Status"]
-            )
             if status != "committed":
                 result["verdict"] = VERDICT_UNEXPECTED
                 result["note"] = (
@@ -367,24 +358,18 @@ def classify_verdict(
     d1_query_failed = False
 
     try:
-        cur = d1_history.execute(
-            "SELECT * FROM PendingMovieHistoryWrites "
-            "WHERE SessionId = ? AND ApplyState = 'pending'",
-            [session_id],
+        d1_orphan_movies = HistoryRepo.list_pending_movie_writes(
+            d1_history, session_id,
         )
-        d1_orphan_movies = [_row_to_dict(row) for row in cur.fetchall()]
     except Exception as exc:
         logger.warning("classify: PendingMovieHistoryWrites query failed for %s: %s",
                        session_id, exc)
         d1_query_failed = True
 
     try:
-        cur = d1_history.execute(
-            "SELECT * FROM PendingTorrentHistoryWrites "
-            "WHERE SessionId = ? AND ApplyState = 'pending'",
-            [session_id],
+        d1_orphan_torrents = HistoryRepo.list_pending_torrent_writes(
+            d1_history, session_id,
         )
-        d1_orphan_torrents = [_row_to_dict(row) for row in cur.fetchall()]
     except Exception as exc:
         logger.warning("classify: PendingTorrentHistoryWrites query failed for %s: %s",
                        session_id, exc)
@@ -415,24 +400,16 @@ def classify_verdict(
     # Check SQLite-side pending tables for this session
     sqlite_has_orphans = False
     try:
-        row = sqlite_conn.execute(
-            "SELECT COUNT(*) AS cnt FROM PendingMovieHistoryWrites "
-            "WHERE SessionId = ? AND ApplyState = 'pending'",
-            [session_id],
-        ).fetchone()
-        if row and (row["cnt"] if isinstance(row, sqlite3.Row) else row.get("cnt", 0)) > 0:
+        if HistoryRepo.count_pending_movie_writes(sqlite_conn, session_id) > 0:
             sqlite_has_orphans = True
     except sqlite3.OperationalError:
         pass
 
     if not sqlite_has_orphans:
         try:
-            row = sqlite_conn.execute(
-                "SELECT COUNT(*) AS cnt FROM PendingTorrentHistoryWrites "
-                "WHERE SessionId = ? AND ApplyState = 'pending'",
-                [session_id],
-            ).fetchone()
-            if row and (row["cnt"] if isinstance(row, sqlite3.Row) else row.get("cnt", 0)) > 0:
+            if HistoryRepo.count_pending_torrent_writes(
+                sqlite_conn, session_id,
+            ) > 0:
                 sqlite_has_orphans = True
         except sqlite3.OperationalError:
             pass
@@ -485,26 +462,18 @@ def _live_rows_diverge(
     """
     # Fetch D1 side
     try:
-        cur = d1_history.execute(
-            "SELECT * FROM MovieHistory WHERE Href = ?", [href],
-        )
-        d1_movie = cur.fetchone()
+        d1_movie = HistoryRepo.get_movie_by_href(d1_history, href)
     except Exception as exc:
         logger.warning("live_rows_diverge: D1 MovieHistory query failed for %s: %s", href, exc)
         return True  # Can't compare → treat as divergence
 
     # Fetch SQLite side
     try:
-        sqlite_row = sqlite_conn.execute(
-            "SELECT * FROM MovieHistory WHERE Href = ?", (href,),
-        ).fetchone()
-        sqlite_movie = _row_to_dict(sqlite_row) if sqlite_row else None
+        sqlite_movie = HistoryRepo.get_movie_by_href(sqlite_conn, href)
     except sqlite3.OperationalError:
         return True
 
-    d1_movie_dict = d1_movie if isinstance(d1_movie, dict) else (
-        _row_to_dict(d1_movie) if d1_movie else None
-    )
+    d1_movie_dict = d1_movie
 
     # Both missing is fine (movie deleted on both sides)
     if d1_movie_dict is None and sqlite_movie is None:
@@ -525,11 +494,9 @@ def _live_rows_diverge(
     d1_torrents: List[dict] = []
     if d1_movie_id is not None:
         try:
-            cur = d1_history.execute(
-                "SELECT * FROM TorrentHistory WHERE MovieHistoryId = ?",
-                [d1_movie_id],
+            d1_torrents = HistoryRepo.list_torrents_for_movie(
+                d1_history, d1_movie_id,
             )
-            d1_torrents = [_row_to_dict(row) for row in cur.fetchall()]
         except Exception as exc:
             logger.warning("live_rows_diverge: D1 TorrentHistory query failed for movie %s: %s", d1_movie_id, exc)
             return True
@@ -537,11 +504,9 @@ def _live_rows_diverge(
     sqlite_torrents: List[dict] = []
     if sqlite_movie_id is not None:
         try:
-            rows = sqlite_conn.execute(
-                "SELECT * FROM TorrentHistory WHERE MovieHistoryId = ?",
-                (sqlite_movie_id,),
-            ).fetchall()
-            sqlite_torrents = [_row_to_dict(r) for r in rows]
+            sqlite_torrents = HistoryRepo.list_torrents_for_movie(
+                sqlite_conn, sqlite_movie_id,
+            )
         except sqlite3.OperationalError:
             return True
 
@@ -778,24 +743,18 @@ def _apply_fix_inner(
         session_id, movie_orphan_count, torrent_orphan_count,
     )
 
-    cur = d1_history.execute(
-        "DELETE FROM PendingMovieHistoryWrites "
-        "WHERE SessionId = ? AND ApplyState = 'pending'",
-        [session_id],
+    deleted_movies = HistoryRepo.delete_pending_movie_writes(
+        d1_history, session_id,
     )
-    deleted_movies = cur.rowcount
 
-    cur = d1_history.execute(
-        "DELETE FROM PendingTorrentHistoryWrites "
-        "WHERE SessionId = ? AND ApplyState = 'pending'",
-        [session_id],
+    deleted_torrents = HistoryRepo.delete_pending_torrent_writes(
+        d1_history, session_id,
     )
-    deleted_torrents = cur.rowcount
 
     logger.info(
-        "apply_fix: deleted %d movie orphans, %d torrent orphans "
-        "for session=%s",
-        deleted_movies, deleted_torrents, session_id,
+        "Applied drift fix: session=%s deleted_movie_orphans=%d "
+        "deleted_torrent_orphans=%d",
+        session_id, deleted_movies, deleted_torrents,
     )
 
     # ── Audit record ──────────────────────────────────────────────────
@@ -810,8 +769,4 @@ def _apply_fix_inner(
     }
     append_jsonl_record(record)
 
-    print(
-        f"Applied: deleted {deleted_movies} movie orphan(s) and "
-        f"{deleted_torrents} torrent orphan(s) for session {session_id}."
-    )
     return 0

@@ -1587,6 +1587,13 @@ def _build_drift_diagnosis_section():
             f'Run manually: {_MANUAL_CMD}\n\n'
         ), []
 
+    if result.returncode not in (0, 1, 2):
+        return (
+            '─── Drift Diagnosis ───\n'
+            f'Automated diagnosis unavailable: unexpected exit code {result.returncode}.\n'
+            f'Run manually: {_MANUAL_CMD}\n\n'
+        ), []
+
     try:
         data = json.loads(stdout)
     except (ValueError, TypeError):
