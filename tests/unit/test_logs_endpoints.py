@@ -331,6 +331,24 @@ class TestLogSearchEdgeCases:
         resp = admin_client.get("/api/logs/search", params={"q": "x", "limit": 501})
         assert resp.status_code == 422
 
+    def test_corrupt_meta_json_is_skipped(self, admin_client, tmp_path, monkeypatch):
+        import apps.api.routers.logs as logs_module
+
+        # Write a corrupt .meta.json (invalid JSON)
+        (tmp_path / "corrupt-job.meta.json").write_text("{not valid json!!!", encoding="utf-8")
+        (tmp_path / "corrupt-job.log").write_text("needle in corrupt job", encoding="utf-8")
+
+        # Write a valid job alongside
+        _write_job(tmp_path, "valid-job", "daily", "2026-05-23T10:00:00+00:00", ["needle in valid job"])
+        monkeypatch.setattr(logs_module, "_LOGS_DIR", tmp_path)
+
+        resp = admin_client.get("/api/logs/search", params={"q": "needle"})
+        assert resp.status_code == 200
+        data = resp.json()
+        # Corrupt meta is skipped; only the valid job contributes results
+        assert data["total_matched"] == 1
+        assert data["results"][0]["job_id"] == "valid-job"
+
 
 # ---------------------------------------------------------------------------
 # TestLogSearchAuth
