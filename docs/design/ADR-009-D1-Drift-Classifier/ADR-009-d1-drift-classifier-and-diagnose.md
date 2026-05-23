@@ -1,13 +1,14 @@
 # ADR-009: D1 Transient-Error Classifier Fix + Drift Diagnostic Tool
 
-**Status**: Accepted — implementation pending (no PRs yet as of 2026-05-19)
+**Status**: Accepted — all phases implemented (2026-05-23)
 **Date**: 2026-05-17
 
-## Outstanding Work
+## Implementation Status
 
-- **D1 (Layer 0)** — add `"connection lost"` to `_TRANSIENT_ERROR_KEYWORDS` in [`javdb/storage/d1_client.py`](../../../javdb/storage/d1_client.py) + regression test. **Not yet applied** — current keyword tuple lacks the substring.
-- **D2 (Layer 1)** — `drift_diagnose` CLI at `apps/cli/db/drift_diagnose.py`. **Not yet created** — `apps/cli/db/` does not contain the module.
-- **D6** — email job subprocess integration. Depends on D2.
+- **P0 (D1 — Layer 0)** — `"connection lost"` added to `_TRANSIENT_ERROR_KEYWORDS` in [`javdb/storage/d1_client.py`](../../../javdb/storage/d1_client.py) + regression test `test_400_network_connection_lost_treated_as_transient`. ✅ Done.
+- **P1 (D2, D3, D4 — Layer 1 diagnose)** — `drift_diagnose` CLI at [`apps/cli/db/drift_diagnose.py`](../../../apps/cli/db/drift_diagnose.py). Read-only diagnose mode with suspect discovery (verify-metric + D1-sweep), verdict classification (CLEAN/SAFE_TO_APPLY/ESCALATE/UNEXPECTED), JSON output, exit codes. 44 unit tests. ✅ Done.
+- **P2 (D5 — Layer 1 apply)** — `--apply --session-id` path with five hard safety rails, D1 DELETE execution, audit record to `d1_drift.jsonl`. 12 additional unit tests. ✅ Done.
+- **P3 (D6 — email integration)** — subprocess invocation of `drift_diagnose --since 1 --json` in the email notification job, `[DRIFT-FIX-READY]`/`[DRIFT-ESCALATE]` subject prefix tagging, 60s timeout with fallback. 19 unit tests. ✅ Done.
 
 This ADR has no paired IMP file (the work fits inside a small PR sequence per D7).
 **Deciders**: Bake-period drift response (succeeds the manual forensic fix recorded as `kind: drift_resolution` in `reports/D1/d1_drift.jsonl` at 2026-05-17T14:00 UTC)
