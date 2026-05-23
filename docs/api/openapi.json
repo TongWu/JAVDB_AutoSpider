@@ -3109,6 +3109,66 @@
         "title": "SpiderJobSubmitResponse",
         "type": "object"
       },
+      "StatsSummary": {
+        "properties": {
+          "avg_duration_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Duration Seconds"
+          },
+          "proxy_bans_last_7d": {
+            "title": "Proxy Bans Last 7D",
+            "type": "integer"
+          },
+          "success_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Success Rate"
+          },
+          "total_dedup_freed_bytes": {
+            "title": "Total Dedup Freed Bytes",
+            "type": "integer"
+          },
+          "total_movies": {
+            "title": "Total Movies",
+            "type": "integer"
+          },
+          "total_pikpak": {
+            "title": "Total Pikpak",
+            "type": "integer"
+          },
+          "total_runs": {
+            "title": "Total Runs",
+            "type": "integer"
+          },
+          "total_torrents": {
+            "title": "Total Torrents",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_runs",
+          "total_movies",
+          "total_torrents",
+          "total_pikpak",
+          "total_dedup_freed_bytes",
+          "proxy_bans_last_7d"
+        ],
+        "title": "StatsSummary",
+        "type": "object"
+      },
       "StatusOkResponse": {
         "properties": {
           "status": {
@@ -3325,6 +3385,50 @@
           "total_estimate"
         ],
         "title": "TorrentSearchResponse",
+        "type": "object"
+      },
+      "TrendDataPoint": {
+        "properties": {
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "date",
+          "value"
+        ],
+        "title": "TrendDataPoint",
+        "type": "object"
+      },
+      "TrendResponse": {
+        "properties": {
+          "data_points": {
+            "items": {
+              "$ref": "#/components/schemas/TrendDataPoint"
+            },
+            "title": "Data Points",
+            "type": "array"
+          },
+          "metric": {
+            "title": "Metric",
+            "type": "string"
+          },
+          "period": {
+            "title": "Period",
+            "type": "string"
+          }
+        },
+        "required": [
+          "metric",
+          "period",
+          "data_points"
+        ],
+        "title": "TrendResponse",
         "type": "object"
       },
       "TriggerTaskResponse": {
@@ -6712,6 +6816,81 @@
         "summary": "Post Rollback",
         "tags": [
           "sessions"
+        ]
+      }
+    },
+    "/api/stats/summary": {
+      "get": {
+        "description": "Aggregate statistics across all databases.",
+        "operationId": "stats_summary_api_stats_summary_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatsSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Stats Summary",
+        "tags": [
+          "stats"
+        ]
+      }
+    },
+    "/api/stats/trend": {
+      "get": {
+        "description": "Time-series data for a given metric over the requested period.",
+        "operationId": "stats_trend_api_stats_trend_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "metric",
+            "required": true,
+            "schema": {
+              "title": "Metric",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "period",
+            "required": false,
+            "schema": {
+              "default": "30d",
+              "title": "Period",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrendResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stats Trend",
+        "tags": [
+          "stats"
         ]
       }
     },
