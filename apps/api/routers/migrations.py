@@ -30,9 +30,9 @@ def _get_applied_migrations() -> dict[str, str]:
     Returns {migration_id: applied_at_timestamp}.
     """
     try:
-        from javdb.storage.db._db_connection import get_db
+        from javdb.storage.db._db_connection import get_db, OPERATIONS_DB_PATH
 
-        with get_db() as conn:
+        with get_db(OPERATIONS_DB_PATH) as conn:
             rows = conn.execute(
                 "SELECT key, value FROM system_state WHERE key LIKE 'migration_applied:%'"
             ).fetchall()
