@@ -23,7 +23,7 @@ import requests
 
 # D1Connection must import D1AccessPort lazily at runtime to avoid a circular
 # import: this module intentionally reuses d1_client cursor/error helpers.
-import logging
+from javdb.infra.logging import get_logger
 
 from javdb.storage.d1_client import (
     D1Cursor,
@@ -37,7 +37,7 @@ from javdb.storage.d1_client import (
 )
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True)
