@@ -260,7 +260,7 @@ Token 复用 `config.py` 中已有的 `GIT_PASSWORD` PAT。除非操作者反馈
 ## 开放问题
 
 - ~~**多标签页行为**~~：已在 Phase 3 解决。`useSharedPolling` composable 使用 BroadcastChannel leader election，同一时间只有一个标签页轮询。见 [IMP-ADR008-04](IMP-ADR008-04-frontend-phase3-power-user.md) Task 6。
-- **D1 状态缓存 TTL**: 建议服务端约 10 秒 / 客户端会话级。需在实际 Browse-Lists 使用中验证。
+- ~~**D1 状态缓存 TTL**~~：已解决。服务端：`_downloaded_map_by_href` 使用 10 秒 TTL 缓存（`EXPLORE_DOWNLOADED_MAP_CACHE_TTL_SECONDS`）；`_has_uncensored_magnet` 使用 300 秒 TTL 缓存（`EXPLORE_INDEX_STATUS_CACHE_TTL_SECONDS`）。客户端：`useIndexStatus` composable 持有会话级 Map — 一旦 href 被解析即不再重复查询，直到页面刷新。
 - ~~**全局日志搜索存储**~~：已在 Phase 3 解决。基于文件的 grep，通过 `GET /api/logs/search` 端点实现。见 [IMP-ADR008-04](IMP-ADR008-04-frontend-phase3-power-user.md) Task 4。
 - ~~**统计仪表盘范围**~~：已在 Phase 3 解决。八个汇总指标 + 六个趋势图表，使用 `vue-chartjs`（Chart.js wrapper）。见 [IMP-ADR008-04](IMP-ADR008-04-frontend-phase3-power-user.md) Task 5。
 

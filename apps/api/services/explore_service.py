@@ -35,6 +35,7 @@ from javdb.infra.request import (
 )
 
 EXPLORE_DETAIL_CACHE: Dict[str, tuple[int, bool]] = {}
+_DOWNLOADED_MAP_CACHE: Dict[str, tuple[float, Dict[str, bool]]] = {}
 
 
 def _result_to_dict(result: Any) -> Dict[str, Any]:
@@ -406,8 +407,17 @@ def _resolved_history_csv_path(cfg: Dict[str, Any]) -> Path:
 
 def _downloaded_map_by_href(cfg: Dict[str, Any]) -> Dict[str, bool]:
     history_path = _resolved_history_csv_path(cfg)
+    cache_key = str(history_path)
+    now = time.time()
+    cached = _DOWNLOADED_MAP_CACHE.get(cache_key)
+    if cached is not None:
+        ts, data = cached
+        if (now - ts) < context.EXPLORE_DOWNLOADED_MAP_CACHE_TTL_SECONDS:
+            return data
+
     downloaded: Dict[str, bool] = {}
     if not history_path.exists():
+        _DOWNLOADED_MAP_CACHE[cache_key] = (now, downloaded)
         return downloaded
     try:
         with open(history_path, "r", encoding="utf-8-sig") as fp:
@@ -419,6 +429,7 @@ def _downloaded_map_by_href(cfg: Dict[str, Any]) -> Dict[str, bool]:
                 downloaded[href] = True
     except Exception:
         return {}
+    _DOWNLOADED_MAP_CACHE[cache_key] = (now, downloaded)
     return downloaded
 
 
@@ -838,6 +849,7 @@ async def index_status_payload(payload: Any, username: str) -> Dict[str, Any]:
 
 
 __all__ = [
+    "_DOWNLOADED_MAP_CACHE",
     "_downloaded_map_by_href",
     "_fetch_javdb_html",
     "_has_uncensored_magnet",
