@@ -93,3 +93,27 @@ def test_spider_partial_failure_result_preserves_unknowns_as_none(tmp_path):
     assert loaded.stats is None
     assert loaded.exit_code == 2
     assert loaded.failure_reason == "proxy ban detected"
+
+
+def test_spider_result_can_represent_failure_without_stats(tmp_path):
+    path = tmp_path / "failed-spider-result.json"
+    result = SpiderRunResult(
+        csv_path=None,
+        session_id=None,
+        dedup_csv_path=None,
+        stats=None,
+        mode="daily",
+        url=None,
+        phase="all",
+        page_range=None,
+        started_at="2026-05-20T01:00:00Z",
+        finished_at="2026-05-20T01:00:10Z",
+        exit_code=1,
+        failure_reason="boom",
+    )
+
+    write_spider_result_atomic(path, result)
+    loaded = read_spider_result(path)
+
+    assert loaded.exit_code == 1
+    assert loaded.failure_reason == "boom"
