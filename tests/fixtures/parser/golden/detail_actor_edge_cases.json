@@ -1,0 +1,81 @@
+{
+  "actors": [
+    {
+      "gender": "female",
+      "href": "/actors/lead",
+      "name": "Lead Actor"
+    },
+    {
+      "gender": "male",
+      "href": "https://mirror.example/actors/support",
+      "name": "Support Actor"
+    }
+  ],
+  "code_prefix_link": "/video_codes/EDGE",
+  "comment_count": "",
+  "directors": [
+    {
+      "href": "/directors/dir1",
+      "name": "Director One"
+    }
+  ],
+  "duration": "120 分鍾",
+  "fanart_urls": [
+    "/samples/edge-001-1.jpg",
+    "https://javdb.com/samples/edge-001-2.jpg"
+  ],
+  "magnets": [
+    {
+      "file_count": 2,
+      "href": "magnet:?xt=urn:btih:edge001subtitle",
+      "name": "EDGE-001-subtitle.torrent",
+      "size": "1.25GB",
+      "tags": [
+        "字幕",
+        "高清"
+      ],
+      "timestamp": "2026-02-04"
+    },
+    {
+      "file_count": 1,
+      "href": "magnet:?xt=urn:btih:edge001plain",
+      "name": "EDGE-001.torrent",
+      "size": "900MB",
+      "tags": [],
+      "timestamp": "2026-02-01"
+    }
+  ],
+  "maker": {
+    "href": "/makers/maker1",
+    "name": "Maker One"
+  },
+  "no_actor_listing": false,
+  "parse_success": true,
+  "poster_url": "/covers/edge-001.jpg",
+  "publisher": {
+    "href": "/publishers/pub1",
+    "name": "Publisher One"
+  },
+  "rate": "",
+  "release_date": "2026-02-03",
+  "review_count": 7,
+  "series": {
+    "href": "/series/series1",
+    "name": "Series One"
+  },
+  "tags": [
+    {
+      "href": "/tags?c10=2",
+      "name": "含字幕"
+    },
+    {
+      "href": "/tags?c7=28",
+      "name": "單體作品"
+    }
+  ],
+  "title": "EDGE-001 Parser Edge Detail",
+  "trailer_url": "/v/EDGE-001#preview-video",
+  "video_code": "EDGE-001",
+  "want_count": 42,
+  "watched_count": 13
+}

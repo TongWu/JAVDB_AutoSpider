@@ -3,21 +3,23 @@ Tests for api.parsers – using both inline HTML and real HTML test files.
 """
 import os
 import sys
+import importlib
+import types
 
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
 import pytest
 
-from apps.api.parsers.index_parser import (
+from javdb.parsing.fallback.index_parser import (
     parse_index_page,
     parse_category_page,
     parse_top_page,
     find_exact_video_code_match,
     derive_letter_suffix_fallback_video_code,
 )
-from apps.api.parsers.detail_parser import parse_detail_page
-from apps.api.parsers.common import (
+from javdb.parsing.fallback.detail_parser import parse_detail_page
+from javdb.parsing.common import (
     extract_rate_and_comments,
     extract_video_code,
     detect_page_type,
@@ -33,6 +35,145 @@ def _load_html(filename):
         pytest.skip(f'HTML test file not found: {filename}')
     with open(path, 'r', encoding='utf-8') as f:
         return f.read()
+
+
+# ===================================================================
+# Compatibility adapters
+# ===================================================================
+
+class TestParserCompatibilityAdapters:
+    def _fake_rust_core_module(self):
+        fake = types.ModuleType("javdb.rust_core")
+
+        def parse_index_page(html_content, page_num=1):
+            return ("rust-index", html_content, page_num)
+
+        def parse_category_page(html_content, page_num=1):
+            return ("rust-category", html_content, page_num)
+
+        def parse_top_page(html_content, page_num=1):
+            return ("rust-top", html_content, page_num)
+
+        def parse_detail_page(html_content):
+            return ("rust-detail", html_content)
+
+        def parse_tag_page(html_content, page_num=1):
+            return ("rust-tag", html_content, page_num)
+
+        def detect_page_type(html_content):
+            return ("rust-detect", html_content)
+
+        fake.parse_index_page = parse_index_page
+        fake.parse_category_page = parse_category_page
+        fake.parse_top_page = parse_top_page
+        fake.parse_detail_page = parse_detail_page
+        fake.parse_tag_page = parse_tag_page
+        fake.detect_page_type = detect_page_type
+        return fake
+
+    def _reload_parser_dispatch(self, rust_core_module):
+        original_rust_core = sys.modules.get("javdb.rust_core", None)
+        had_rust_core = "javdb.rust_core" in sys.modules
+        self._api_parser_modules = [
+            "apps.api.parsers",
+            "apps.api.parsers.detail_parser",
+            "apps.api.parsers.index_parser",
+            "apps.api.parsers.tag_parser",
+        ]
+        self._original_api_parser_modules = {
+            name: sys.modules.get(name, None)
+            for name in self._api_parser_modules
+        }
+        self._had_api_parser_modules = {
+            name: name in sys.modules
+            for name in self._api_parser_modules
+        }
+        try:
+            sys.modules["javdb.rust_core"] = rust_core_module
+            parsing = importlib.reload(importlib.import_module("javdb.parsing"))
+            for name in self._api_parser_modules:
+                sys.modules.pop(name, None)
+            return parsing
+        finally:
+            if had_rust_core:
+                sys.modules["javdb.rust_core"] = original_rust_core
+            else:
+                sys.modules.pop("javdb.rust_core", None)
+
+    def _restore_parser_dispatch(self):
+        importlib.reload(importlib.import_module("javdb.parsing"))
+        for name in self._api_parser_modules:
+            if self._had_api_parser_modules[name]:
+                sys.modules[name] = self._original_api_parser_modules[name]
+            else:
+                sys.modules.pop(name, None)
+
+    def test_canonical_dispatch_prefers_rust_core_when_available(self):
+        fake_rust_core = self._fake_rust_core_module()
+        try:
+            parsing = self._reload_parser_dispatch(fake_rust_core)
+
+            assert parsing.RUST_PARSERS_AVAILABLE is True
+            assert parsing.parse_index_page is fake_rust_core.parse_index_page
+            assert parsing.parse_index_page("<html></html>", page_num=7) == (
+                "rust-index",
+                "<html></html>",
+                7,
+            )
+        finally:
+            self._restore_parser_dispatch()
+
+    def test_canonical_dispatch_uses_fallback_when_rust_core_unavailable(self):
+        try:
+            parsing = self._reload_parser_dispatch(None)
+            fallback_index = importlib.import_module("javdb.parsing.fallback.index_parser")
+
+            assert parsing.RUST_PARSERS_AVAILABLE is False
+            assert parsing.parse_index_page is fallback_index.parse_index_page
+        finally:
+            self._restore_parser_dispatch()
+
+    def test_parser_package_adapter_reexports_canonical_dispatch_objects(self):
+        fake_rust_core = self._fake_rust_core_module()
+        try:
+            parsing = self._reload_parser_dispatch(fake_rust_core)
+            compat = importlib.import_module("apps.api.parsers")
+
+            assert compat.__all__ == parsing.__all__
+            for name in parsing.__all__:
+                assert getattr(compat, name) is getattr(parsing, name)
+        finally:
+            self._restore_parser_dispatch()
+
+    def test_index_parser_adapter_reexports_canonical_dispatch_and_fallback_helpers(self):
+        fake_rust_core = self._fake_rust_core_module()
+        try:
+            parsing = self._reload_parser_dispatch(fake_rust_core)
+            compat = importlib.import_module('apps.api.parsers.index_parser')
+            fallback = importlib.import_module('javdb.parsing.fallback.index_parser')
+
+            assert compat.__all__ == fallback.__all__
+            assert compat.parse_index_page is parsing.parse_index_page
+            assert compat.parse_category_page is parsing.parse_category_page
+            assert compat.parse_top_page is parsing.parse_top_page
+            assert compat.find_exact_video_code_match is fallback.find_exact_video_code_match
+            assert (
+                compat.derive_letter_suffix_fallback_video_code
+                is fallback.derive_letter_suffix_fallback_video_code
+            )
+        finally:
+            self._restore_parser_dispatch()
+
+    def test_detail_parser_adapter_reexports_canonical_dispatch(self):
+        fake_rust_core = self._fake_rust_core_module()
+        try:
+            parsing = self._reload_parser_dispatch(fake_rust_core)
+            compat = importlib.import_module('apps.api.parsers.detail_parser')
+
+            assert compat.__all__ == ['parse_detail_page']
+            assert compat.parse_detail_page is parsing.parse_detail_page
+        finally:
+            self._restore_parser_dispatch()
 
 
 # ===================================================================
@@ -99,6 +240,13 @@ class TestExtractVideoCode:
         soup = BeautifulSoup(html, 'html.parser')
         a = soup.find('a')
         assert extract_video_code(a) == ''
+
+    @pytest.mark.parametrize('invalid_tag', [None, 'not-a-tag'])
+    def test_invalid_tag_returns_empty_string(self, invalid_tag, caplog):
+        with caplog.at_level('DEBUG', logger='javdb.parsing.common'):
+            assert extract_video_code(invalid_tag) == ''
+
+        assert 'No valid <a> tag provided' in caplog.text
 
 
 class TestDetectPageType:
@@ -310,6 +458,70 @@ class TestParseDetailPageInline:
         assert detail.actors[0].href == '/actors/xyz'
         assert detail.actors[0].gender == 'female'
 
+    def test_actor_extraction_accepts_simplified_chinese_label(self):
+        html = '''
+        <html><body>
+        <div class="video-meta-panel">
+          <div class="panel-block">
+            <strong>演员:</strong>
+            &nbsp;<span class="value">
+                <a href="/actors/xyz">Sample Actor</a>
+                <strong class="symbol female">♀</strong>
+            </span>
+          </div>
+        </div>
+        <div id="magnets-content">
+            <div class="item columns is-desktop">
+                <div class="magnet-name">
+                    <a href="magnet:?xt=urn:btih:actorlabeltest">
+                        <span class="name">ABC-123.torrent</span>
+                        <span class="meta">1GB, 1個文件</span>
+                    </a>
+                </div>
+                <span class="time">2024-01-01</span>
+            </div>
+        </div>
+        </body></html>
+        '''
+        detail = parse_detail_page(html)
+        assert detail.parse_success is True
+        assert len(detail.actors) == 1
+        assert detail.actors[0].name == 'Sample Actor'
+        assert detail.actors[0].href == '/actors/xyz'
+        assert detail.actors[0].gender == 'female'
+
+    def test_no_actor_placeholder_accepts_simplified_chinese_label(self):
+        from javdb.parsing.models import NO_ACTOR_LISTING_ACTOR_NAME
+
+        html = '''
+        <html><body>
+        <div class="video-meta-panel">
+          <div class="panel-block">
+            <strong>演员:</strong>
+            &nbsp;<span class="value">
+                N/A
+            </span>
+          </div>
+        </div>
+        <div id="magnets-content">
+            <div class="item columns is-desktop">
+                <div class="magnet-name">
+                    <a href="magnet:?xt=urn:btih:simplifiedplaceholder">
+                        <span class="name">ABC-123.torrent</span>
+                        <span class="meta">1GB, 1個文件</span>
+                    </a>
+                </div>
+                <span class="time">2024-01-01</span>
+            </div>
+        </div>
+        </body></html>
+        '''
+        detail = parse_detail_page(html)
+        assert detail.parse_success is True
+        assert detail.actors == []
+        assert detail.no_actor_listing is True
+        assert detail.get_first_actor_name() == NO_ACTOR_LISTING_ACTOR_NAME
+
     def test_magnet_fields(self, sample_detail_html):
         detail = parse_detail_page(sample_detail_html)
         first = detail.magnets[0]
@@ -326,7 +538,7 @@ class TestParseDetailPageInline:
         assert detail.magnets == []
 
     def test_actors_panel_na_placeholder(self):
-        from apps.api.models import NO_ACTOR_LISTING_ACTOR_NAME, NO_ACTOR_LISTING_ACTOR_GENDER
+        from javdb.parsing.models import NO_ACTOR_LISTING_ACTOR_NAME, NO_ACTOR_LISTING_ACTOR_GENDER
 
         html = '''
         <html><body>

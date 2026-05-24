@@ -1,48 +1,18 @@
 """
-JAVDB HTML parsers – public API.
+Compatibility exports for JAVDB HTML parser dispatch.
 
-Usage::
-
-    from apps.api.parsers import parse_index_page, parse_detail_page
-    from apps.api.parsers import parse_category_page, parse_top_page
-
-Prefers the Rust implementation (``javdb.rust_core``) when available,
-falling back to the pure-Python parsers otherwise.
+The canonical parser API lives in ``javdb.parsing``. This module keeps the
+historical ``apps.api.parsers`` import path working during ADR-011 migration.
 """
 
-import logging
+import javdb.parsing as _parsing
 
-logger = logging.getLogger(__name__)
+parse_index_page = _parsing.parse_index_page
+parse_category_page = _parsing.parse_category_page
+parse_top_page = _parsing.parse_top_page
+parse_detail_page = _parsing.parse_detail_page
+parse_tag_page = _parsing.parse_tag_page
+detect_page_type = _parsing.detect_page_type
+RUST_PARSERS_AVAILABLE = _parsing.RUST_PARSERS_AVAILABLE
 
-try:
-    from javdb.rust_core import (
-        parse_index_page,
-        parse_detail_page,
-        parse_category_page,
-        parse_top_page,
-        parse_tag_page,
-        detect_page_type,
-    )
-    RUST_PARSERS_AVAILABLE = True
-    logger.debug("✅ Rust parsers loaded successfully - using high-performance Rust implementation")
-except ImportError as e:
-    from apps.api.parsers.index_parser import (
-        parse_index_page,
-        parse_category_page,
-        parse_top_page,
-    )
-    from apps.api.parsers.detail_parser import parse_detail_page
-    from apps.api.parsers.common import detect_page_type
-    from apps.api.parsers.tag_parser import parse_tag_page
-    RUST_PARSERS_AVAILABLE = False
-    logger.warning(f"⚠️  Rust parsers not available (ImportError: {e}) - falling back to pure-Python implementation")
-
-__all__ = [
-    'parse_index_page',
-    'parse_category_page',
-    'parse_top_page',
-    'parse_detail_page',
-    'parse_tag_page',
-    'detect_page_type',
-    'RUST_PARSERS_AVAILABLE',
-]
+__all__ = list(_parsing.__all__)

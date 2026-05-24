@@ -67,6 +67,10 @@ RUST_ADAPTER_GLOBS = (
     # crate itself is the canonical trigger now.
     f"{RUST_ROOT}/**",
 )
+PARSER_PARITY_RUST_WHEEL_GLOBS = (
+    "apps/api/parsers/**",
+    "javdb/parsing/**",
+)
 FALLBACK_TESTS = (
     "tests/unit/test_rust_adapters_fallback.py",
     "tests/unit/test_dedup_checker_rust_adapter.py",
@@ -97,6 +101,7 @@ IMPACT_RULES = (
         "parser-domain",
         (
             "apps/api/parsers/**",
+            "javdb/parsing/**",
             "javdb/spider/contracts.py",
             "javdb/spider/filename_helper.py",
             "javdb/spider/magnet_extractor.py",
@@ -114,6 +119,7 @@ IMPACT_RULES = (
             "tests/unit/test_magnet_extractor.py",
             "tests/unit/test_parser.py",
             "tests/unit/test_video_code_search.py",
+            "tests/parity/test_parser_parity.py",
             "tests/integration/test_spider_gateway.py",
         ),
     ),
@@ -706,7 +712,12 @@ def select_for_changed_files(
         run_full_python = True
         reason.append(f"unknown Python source path(s): {', '.join(unknown_python_sources)}")
 
-    build_rust_wheel = run_rust or run_full_python or any(matches_any(path, RUST_ADAPTER_GLOBS) for path in changed)
+    build_rust_wheel = (
+        run_rust
+        or run_full_python
+        or any(matches_any(path, RUST_ADAPTER_GLOBS) for path in changed)
+        or any(matches_any(path, PARSER_PARITY_RUST_WHEEL_GLOBS) for path in changed)
+    )
     selected_targets = sorted(path for path in selected_tests if (repo_root / path).exists())
 
     if run_full_python:

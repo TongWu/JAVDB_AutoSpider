@@ -1,19 +1,48 @@
 """
-Tests for api.parsers.common URL helper functions.
+Tests for canonical parser common helper functions.
 """
 
 import os
 import sys
 import json
+import importlib
 
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from apps.api.parsers.common import (  # noqa: E402
+from javdb.parsing import common as canonical_common  # noqa: E402
+from javdb.parsing.common import (  # noqa: E402
+    absolutize_supporting_actors_json,
     javdb_absolute_url,
     movie_href_lookup_values,
-    absolutize_supporting_actors_json,
+    normalize_javdb_href_path,
 )
+
+
+class TestCommonCompatibilityAdapter:
+    def test_old_import_path_reexports_canonical_helpers(self):
+        compat = importlib.import_module("apps.api.parsers.common")
+
+        assert compat.__all__ == canonical_common.__all__
+        for name in canonical_common.__all__:
+            assert getattr(compat, name) is getattr(canonical_common, name)
+
+    def test_old_import_path_reexports_movie_link(self):
+        compat = importlib.import_module("apps.api.parsers.common")
+
+        assert 'MovieLink' in canonical_common.__all__
+        assert compat.MovieLink is canonical_common.MovieLink
+
+
+class TestNormalizeJavdbHrefPath:
+    def test_relative_path_gets_leading_slash(self):
+        assert normalize_javdb_href_path('actors/35Mqw') == '/actors/35Mqw'
+
+    def test_absolute_url_keeps_path_only(self):
+        assert normalize_javdb_href_path('https://mirror.example/actors/35Mqw?x=1') == '/actors/35Mqw'
+
+    def test_empty_absolute_path_returns_empty(self):
+        assert normalize_javdb_href_path('https://mirror.example') == ''
 
 
 class TestJavdbAbsoluteUrl:
@@ -62,4 +91,8 @@ class TestAbsolutizeSupportingActorsJson:
 
     def test_invalid_json_returns_original(self):
         raw = '{"not":"a list"}'
+        assert absolutize_supporting_actors_json(raw, 'https://javdb.com') == raw
+
+    def test_malformed_json_returns_original(self):
+        raw = '[{"name":"A",]'
         assert absolutize_supporting_actors_json(raw, 'https://javdb.com') == raw
