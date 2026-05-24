@@ -100,6 +100,14 @@ class SpiderFailureStepRunner(FakeStepRunner):
         return super().run(policy, command, result_path=result_path)
 
 
+class DedupExceptionStepRunner(FakeStepRunner):
+    def run(self, policy, command, *, result_path=None):
+        if policy.name == "rclone_dedup":
+            self.calls.append((policy, tuple(command), result_path))
+            raise RuntimeError("failed to launch rclone")
+        return super().run(policy, command, result_path=result_path)
+
+
 def _make_args(**overrides):
     defaults = {
         'url': None,
@@ -163,6 +171,8 @@ def test_pipeline_main_uses_auto_proxy_by_default(monkeypatch):
     assert spider_call[2] == spider_call[1][spider_call[1].index('--result-json') + 1]
     assert '--session-id' in uploader_call[1]
     assert uploader_call[1][uploader_call[1].index('--session-id') + 1] == '273'
+    assert '--session-id' in pikpak_call[1]
+    assert pikpak_call[1][pikpak_call[1].index('--session-id') + 1] == '273'
 
 
 def test_pipeline_main_force_enables_proxy_for_all_steps(monkeypatch):
@@ -243,6 +253,11 @@ def test_pipeline_main_writes_success_result_json(monkeypatch, tmp_path):
         "pikpak_bridge",
         "email_notification",
     ]
+    email_call = _command_for(runner, 'apps.cli.notify.email')
+    assert '--csv-path' in email_call[1]
+    assert email_call[1][email_call[1].index('--csv-path') + 1] == (
+        "reports/DailyReport/2026/03/Javdb_Test.csv"
+    )
 
 
 def test_pipeline_main_writes_failure_result_json_after_required_step_failure(monkeypatch, tmp_path):
@@ -300,6 +315,51 @@ def test_pipeline_main_records_optional_dedup_failure_without_failing(monkeypatc
     dedup_step = next(step for step in result.steps if step.name == "rclone_dedup")
     assert dedup_step.required is False
     assert dedup_step.status == "failed"
+
+
+def test_pipeline_main_records_optional_dedup_exception_without_failing(monkeypatch, tmp_path):
+    runner = DedupExceptionStepRunner()
+    result_path = tmp_path / "pipeline-result.json"
+    _patch_runner(monkeypatch, runner)
+    monkeypatch.setattr(
+        pipeline_service,
+        'parse_arguments',
+        lambda: _make_args(enable_dedup=True, result_json=str(result_path)),
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        pipeline_service.main()
+
+    assert exc.value.code == 0
+    result = read_pipeline_result(result_path)
+    assert result.status == "success"
+    assert [step.name for step in result.steps] == [
+        "spider",
+        "qb_uploader",
+        "pikpak_bridge",
+        "rclone_dedup",
+        "email_notification",
+    ]
+    dedup_step = next(step for step in result.steps if step.name == "rclone_dedup")
+    assert dedup_step.required is False
+    assert dedup_step.status == "failed"
+    assert dedup_step.exit_code is None
+    assert dedup_step.failure_reason == "failed to launch rclone"
+
+
+def test_pipeline_main_forwards_dry_run_to_pikpak_and_email(monkeypatch):
+    runner = FakeStepRunner()
+    _patch_runner(monkeypatch, runner)
+    monkeypatch.setattr(pipeline_service, 'parse_arguments', lambda: _make_args(dry_run=True))
+
+    with pytest.raises(SystemExit) as exc:
+        pipeline_service.main()
+
+    assert exc.value.code == 0
+    pikpak_call = _command_for(runner, 'apps.cli.pikpak.bridge')
+    email_call = _command_for(runner, 'apps.cli.notify.email')
+    assert '--dry-run' in pikpak_call[1]
+    assert '--dry-run' in email_call[1]
 
 
 def test_pipeline_main_preserves_partial_spider_result_on_spider_failure(monkeypatch, tmp_path):
