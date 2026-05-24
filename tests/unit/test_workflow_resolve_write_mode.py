@@ -48,6 +48,10 @@ def _extract_run(workflow_path: Path, step_id: str) -> str:
     )
 
 
+def _workflow_text(workflow_path: Path) -> str:
+    return workflow_path.read_text(encoding="utf-8")
+
+
 def _inject_override(run_script: str, value: str) -> str:
     return run_script.replace("${{ inputs.write_mode_override }}", value)
 
@@ -209,6 +213,17 @@ def test_pause_gate_uses_heredoc_form(workflow):
             f"this re-introduces the YAML literal-block indent bug "
             f"(see ADR-006 §D3 history). Use `python3 - <<'PY'` heredoc."
         )
+
+
+@pytest.mark.parametrize("workflow", WORKFLOWS, ids=lambda p: p.name)
+def test_d1_port_summary_is_archived_and_staged(workflow):
+    text = _workflow_text(workflow)
+
+    assert "$REPORTS_DIR/D1/d1_port_summary.json" in text
+    assert (
+        'git add "$REPORTS_DIR/D1/d1_port_summary.json" 2>/dev/null || true'
+        in text
+    )
 
 
 def test_bash_available_for_runs():
