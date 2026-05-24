@@ -84,6 +84,7 @@ class GitHubActionsClient:
             "Authorization": f"Bearer {token}",
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": _GH_API_VERSION,
+            "User-Agent": "javdb-autospider",
         }
         client_kwargs: dict = {
             "base_url": _GH_API_BASE,

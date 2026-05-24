@@ -1,6 +1,6 @@
 # ADR-009: D1 Transient-Error Classifier Fix + Drift Diagnostic Tool
 
-**Status**: Accepted — all phases implemented (2026-05-23)
+**Status**: Completed (2026-05-24)
 **Date**: 2026-05-17
 **Last verified**: 2026-05-24
 **Paired IMPs**:

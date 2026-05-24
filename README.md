@@ -85,8 +85,13 @@ For the full configuration reference (60+ options), see [Configuration Guide](do
 |----------|---------|-------------|
 | `STORAGE_BACKEND` | `sqlite` | `sqlite`, `d1`, or `dual` |
 | `WRITE_MODE` | `pending` | `pending` only; legacy `audit` requests fall back to pending |
-| `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 | `STRICT_DUAL_WRITE` | unset | Set `1` to fail on D1 write errors |
+| `COMMIT_SESSION_BULK` | on | Pending session commits use the bulk path by default. Set `0`, `false`, `no`, `off`, or an empty value to fall back to the per-href path. |
+| `D1_RECOVERY_OUTBOX_ENABLED` | unset | Reserved for ADR-010 Phase 2. Set `1` to allow safe dual-mode D1 write failures to queue in `reports/D1/d1_recovery_outbox.jsonl`. |
+| `D1_BATCHING_ENABLED` | unset | Reserved for ADR-010 Phase 3 safe-path micro-batching. Ordinary SQL remains synchronous. |
+| `D1_FLUSH_INTERVAL_MS` | `250` | Maximum safe-batch wait window when D1 batching is enabled. |
+| `D1_STARTUP_REPLAY_ENABLED` | unset | Reserved for ADR-010 Phase 4 startup replay. |
+| `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 
 ## Common Commands
 

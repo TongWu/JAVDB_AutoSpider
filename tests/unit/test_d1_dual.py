@@ -290,7 +290,8 @@ class _FakeResponse:
 
 
 @pytest.fixture
-def d1_conn():
+def d1_conn(monkeypatch, tmp_path):
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
     return D1Connection(account_id="acct", database_id="db", api_token="tok")
 
 
@@ -320,6 +321,37 @@ def test_execute_sends_single_object_body(monkeypatch, d1_conn, no_sleep):
     d1_conn.execute("SELECT * FROM t WHERE id = ?", (1,))
     assert isinstance(captured["json"], dict)
     assert captured["json"] == {"sql": "SELECT * FROM t WHERE id = ?", "params": [1]}
+
+
+def test_d1_connection_delegates_execute_to_port():
+    calls = []
+
+    class FakePort:
+        def execute(self, sql, params=(), *, policy=None):
+            calls.append(("execute", sql, list(params), policy))
+            return [D1Cursor({"meta": {"changes": 0}, "results": [{"n": 1}]})]
+
+        def executemany(self, sql, seq_of_params, *, policy=None):
+            calls.append(("executemany", sql, [list(p) for p in seq_of_params], policy))
+            return [D1Cursor({"meta": {"changes": 1}, "results": []})]
+
+        def batch_execute(self, statements, *, policy=None):
+            calls.append(("batch_execute", list(statements), policy))
+            return [D1Cursor({"meta": {"changes": 0}, "results": []})]
+
+        def write_summary(self):
+            calls.append(("write_summary",))
+
+        def close(self):
+            calls.append(("close",))
+
+    conn = D1Connection("acct", "db", "token")
+    conn._port = FakePort()
+
+    row = conn.execute("SELECT 1 AS n").fetchone()
+
+    assert row == {"n": 1}
+    assert calls[0] == ("execute", "SELECT 1 AS n", [], None)
 
 
 def test_execute_stringifies_json_unsafe_integer_params(monkeypatch, d1_conn, no_sleep):
@@ -619,10 +651,11 @@ def test_export_lock_backoff_capped_by_max_sleep(monkeypatch, d1_conn, no_sleep)
     assert no_sleep[0] <= 5.5
 
 
-def test_d1_connection_uses_session_for_keepalive():
+def test_d1_connection_uses_session_for_keepalive(monkeypatch, tmp_path):
     """A real Session reuses the urllib3 connection pool across requests."""
     import requests as _requests
 
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
     conn = D1Connection(account_id="a", database_id="b", api_token="t")
     try:
         assert isinstance(conn._session, _requests.Session)
