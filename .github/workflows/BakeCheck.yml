@@ -23,24 +23,24 @@ permissions:
   contents: read
   actions: read  # for `gh run download` from prior DailyIngestion runs
 
-on:
-  schedule:
-    - cron: '0 4 * * *'
-  workflow_dispatch:
-    inputs:
-      since:
-        description: 'Anchor bake window start (YYYY-MM-DD). Default 2026-05-16 (ADR-006 PR-A merge).'
-        required: false
-        default: '2026-05-16'
-        type: string
-      runner:
-        description: 'Runner type.'
-        required: false
-        default: 'ubuntu-latest'
-        type: choice
-        options:
-          - ubuntu-latest
-          - self-hosted
+# on:  # DISABLED FOR PUBLIC REPO
+  # schedule:
+    # - cron: '0 4 * * *'
+  # workflow_dispatch:
+    # inputs:
+      # since:
+        # description: 'Anchor bake window start (YYYY-MM-DD). Default 2026-05-16 (ADR-006 PR-A merge).'
+        # required: false
+        # default: '2026-05-16'
+        # type: string
+      # runner:
+        # description: 'Runner type.'
+        # required: false
+        # default: 'ubuntu-latest'
+        # type: choice
+        # options:
+          # - ubuntu-latest
+          # - self-hosted
 
 concurrency:
   group: bake-metrics-check

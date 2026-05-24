@@ -1,24 +1,24 @@
 name: Publish to GitHub Container Registry
 
 on:
-  # push:  # DISABLED FOR PRIVATE REPO - enabled in public repo
-  #   branches:
-  #     - main
-  #     - master
-  #   tags:
-  #     - 'v*.*.*'
-  #   paths:
-  #     - '**/*.py'
-  #     - 'docker/**'
-  #     - '**/pyproject.toml'
-  #     - '**/Pipfile*'
-  #     - '**/poetry.lock'
-  #     - '**/requirements*.txt'
-  #     - '**/requirements.lock'
-  #     - '**/setup.cfg'
-  #     - '**/setup.py'
-  #     - '**/Cargo.toml'
-  #     - '**/Cargo.lock'
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*.*.*'
+    paths:
+      - '**/*.py'
+      - 'docker/**'
+      - '**/pyproject.toml'
+      - '**/Pipfile*'
+      - '**/poetry.lock'
+      - '**/requirements*.txt'
+      - '**/requirements.lock'
+      - '**/setup.cfg'
+      - '**/setup.py'
+      - '**/Cargo.toml'
+      - '**/Cargo.lock'
   workflow_dispatch:  # Allow manual trigger
 
 env:
