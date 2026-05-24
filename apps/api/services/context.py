@@ -128,6 +128,10 @@ def infer_cookie_secure(origins: list[str] | None = None) -> bool:
         return False
     if insecure_override in {"0", "false", "no"}:
         return True
+    # TEST_MODE runs over plain HTTP; WebKit refuses to send Secure cookies
+    # on non-HTTPS origins (unlike Chrome/Firefox which exempt localhost).
+    if os.getenv("TEST_MODE") == "1":
+        return False
     return True
 
 
