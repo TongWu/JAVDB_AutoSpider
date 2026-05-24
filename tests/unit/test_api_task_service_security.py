@@ -110,7 +110,26 @@ def test_validate_task_command_rejects_result_json_wrong_suffix():
         )
 
 
-def test_spawn_job_adds_pipeline_result_path_to_metadata(monkeypatch):
+def test_validate_task_command_rejects_duplicate_result_json_flags():
+    first_path = context.RESOLVED_JOB_LOG_DIR / "first.result.json"
+    second_path = context.RESOLVED_JOB_LOG_DIR / "second.result.json"
+
+    with pytest.raises(HTTPException, match="Invalid task command"):
+        task_service._validate_task_command(
+            [
+                "python3",
+                "-u",
+                "-m",
+                "apps.cli.pipeline",
+                "--result-json",
+                str(first_path),
+                "--result-json",
+                str(second_path),
+            ]
+        )
+
+
+def test_spawn_job_adds_pipeline_result_path_to_metadata(monkeypatch, tmp_path):
     class FakeProcess:
         pid = 12345
 
@@ -120,6 +139,10 @@ def test_spawn_job_adds_pipeline_result_path_to_metadata(monkeypatch):
     def fake_popen(command, **kwargs):
         return FakeProcess()
 
+    jobs_dir = tmp_path / "jobs"
+    jobs_dir.mkdir()
+    monkeypatch.setattr(task_service.context, "JOB_LOG_DIR", jobs_dir)
+    monkeypatch.setattr(task_service.context, "RESOLVED_JOB_LOG_DIR", jobs_dir.resolve())
     monkeypatch.setattr(task_service.subprocess, "Popen", fake_popen)
 
     job = task_service._spawn_job(
@@ -131,7 +154,7 @@ def test_spawn_job_adds_pipeline_result_path_to_metadata(monkeypatch):
         meta = task_service._read_job_meta(job["job_id"])
 
         assert result_path == str(
-            context.RESOLVED_JOB_LOG_DIR / f"{job['job_id']}.result.json"
+            jobs_dir.resolve() / f"{job['job_id']}.result.json"
         )
         assert task_service.JOBS[job["job_id"]]["command"][-2:] == [
             "--result-json",
@@ -139,5 +162,7 @@ def test_spawn_job_adds_pipeline_result_path_to_metadata(monkeypatch):
         ]
         assert meta["result_path"] == result_path
         assert meta["command"][-2:] == ["--result-json", result_path]
+        assert (jobs_dir / f"{job['job_id']}.log").exists()
+        assert (jobs_dir / f"{job['job_id']}.meta.json").exists()
     finally:
         task_service.JOBS.pop(job["job_id"], None)
