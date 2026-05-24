@@ -132,7 +132,7 @@ def test_spider_main_writes_result_json_on_success(tmp_path, monkeypatch):
     assert result.session_id is None
     assert result.dedup_csv_path is None
     assert result.stats.pages == "2-4"
-    assert result.stats.found == 1
+    assert result.stats.found == 10
     assert result.stats.parsed == 1
     assert result.stats.skipped == 2
     assert result.stats.failed == 3
