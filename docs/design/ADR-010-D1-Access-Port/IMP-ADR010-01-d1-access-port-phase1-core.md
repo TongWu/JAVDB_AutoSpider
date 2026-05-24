@@ -20,7 +20,7 @@
 | `javdb/storage/d1_client.py` | Delegate D1 HTTP execution to `D1AccessPort` while keeping the current facade. |
 | `javdb/storage/d1_recovery.py` | Define recovery outbox event/policy records and compact helpers; queueing remains disabled. |
 | `apps/cli/db/d1_recovery.py` | Read-only inspect + compact CLI for future outbox files. |
-| `javdb/storage/db/db.py` | Default `COMMIT_SESSION_BULK` on with opt-out. |
+| `javdb/storage/db/_db_history_write.py` | Default `COMMIT_SESSION_BULK` on with opt-out. |
 | `tests/unit/test_d1_port.py` | New tests for port retry, schema cache, and metrics. |
 | `tests/unit/test_d1_recovery.py` | New tests for outbox model and CLI inspect/compact. |
 | `tests/unit/test_d1_dual.py` | Tests proving `D1Connection` delegates through the port. |
@@ -652,7 +652,7 @@ git commit -m "test(storage): cover d1 port cache and summary"
 ## Task 4: Default Pending Commit Bulk Path On
 
 **Files:**
-- Modify: `javdb/storage/db/db.py`
+- Modify: `javdb/storage/db/_db_history_write.py`
 - Modify: `tests/unit/test_commit_session_bulk.py`
 
 - [ ] **Step 1: Add tests**
@@ -665,7 +665,7 @@ def test_commit_session_bulk_defaults_on(monkeypatch):
     assert db_mod._commit_session_bulk_enabled() is True
 
 
-@pytest.mark.parametrize("value", ["0", "false", "no", "off"])
+@pytest.mark.parametrize("value", ["0", "false", "no", "off", ""])
 def test_commit_session_bulk_can_be_disabled(monkeypatch, value):
     monkeypatch.setenv("COMMIT_SESSION_BULK", value)
     assert db_mod._commit_session_bulk_enabled() is False
@@ -687,7 +687,7 @@ Expected: FAIL with missing `_commit_session_bulk_enabled`.
 
 - [ ] **Step 3: Add helper and use it**
 
-In `javdb/storage/db/db.py`, near `db_commit_session_history`, add:
+In `javdb/storage/db/_db_history_write.py`, near `db_commit_session_history`, add:
 
 ```python
 def _commit_session_bulk_enabled() -> bool:
@@ -714,7 +714,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add javdb/storage/db/db.py tests/unit/test_commit_session_bulk.py
+git add javdb/storage/db/_db_history_write.py tests/unit/test_commit_session_bulk.py
 git commit -m "feat(storage): default pending commit bulk path on"
 ```
 
