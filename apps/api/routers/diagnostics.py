@@ -70,9 +70,10 @@ def get_javdb_session_status(
     cookie = cfg("JAVDB_SESSION_COOKIE", "") or ""
     last_refresh = _get_last_refresh_time()
 
+    is_admin = _user.get("role") == "admin"
     return JavdbSessionStatus(
         cookie_present=bool(cookie),
-        cookie_value_preview=_cookie_preview(cookie) if cookie else None,
+        cookie_value_preview=_cookie_preview(cookie) if cookie and is_admin else None,
         last_refresh_time=last_refresh,
         estimated_expiry=None,  # cannot derive real expiry from the cookie string
         # A recent refresh is only meaningful if a cookie is actually present;
