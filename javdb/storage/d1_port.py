@@ -20,6 +20,8 @@ from typing import Any, Callable, Iterable, Sequence
 
 import requests
 
+# D1Connection must import D1AccessPort lazily at runtime to avoid a circular
+# import: this module intentionally reuses d1_client cursor/error helpers.
 from javdb.storage.d1_client import (
     D1Cursor,
     D1PermanentError,
@@ -334,8 +336,8 @@ class D1AccessPort:
 
     @staticmethod
     def _is_schema_mutation(sql: str) -> bool:
-        normalized = sql.lstrip().lower()
-        return normalized.startswith(
+        normalized = _leading_sql_token(sql)
+        if normalized.startswith(
             (
                 "alter ",
                 "create ",
@@ -343,4 +345,37 @@ class D1AccessPort:
                 "reindex ",
                 "vacuum ",
             )
+        ):
+            return True
+        return normalized.startswith(
+            (
+                "update sqlite_master",
+                "delete from sqlite_master",
+                "insert into sqlite_master",
+            )
         )
+
+
+def _leading_sql_token(sql: str) -> str:
+    i = 0
+    length = len(sql)
+    while i < length:
+        while i < length and sql[i].isspace():
+            i += 1
+        if sql.startswith("--", i):
+            newline = sql.find("\n", i + 2)
+            if newline == -1:
+                return ""
+            i = newline + 1
+            continue
+        if sql.startswith("/*", i):
+            end = sql.find("*/", i + 2)
+            if end == -1:
+                return ""
+            i = end + 2
+            continue
+        if i < length and sql[i] == "(":
+            i += 1
+            continue
+        break
+    return sql[i:].lstrip().lower()
