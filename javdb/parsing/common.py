@@ -183,6 +183,10 @@ def extract_video_code(a_tag: Tag) -> str:
     """
     import unicodedata
 
+    if not a_tag or not isinstance(a_tag, Tag):
+        logger.debug("No valid <a> tag provided")
+        return ''
+
     video_title_div = a_tag.find('div', class_='video-title')
     if video_title_div:
         strong_tag = video_title_div.find('strong')
