@@ -86,3 +86,44 @@ def test_qb_login_missing_credentials_raises_422():
     with pytest.raises(HTTPException) as exc:
         explore_service._qb_login_session(_cfg(QB_USERNAME="", QB_PASSWORD=""))
     assert exc.value.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# _DOWNLOADED_MAP_CACHE LRU eviction
+# ---------------------------------------------------------------------------
+
+
+class TestDownloadedMapCacheEviction:
+    def setup_method(self):
+        explore_service._DOWNLOADED_MAP_CACHE.clear()
+
+    def teardown_method(self):
+        explore_service._DOWNLOADED_MAP_CACHE.clear()
+
+    def test_cache_evicts_oldest_when_exceeding_cap(self):
+        cap = explore_service._MAX_DOWNLOADED_MAP_CACHE_SIZE
+        for i in range(cap + 3):
+            explore_service._DOWNLOADED_MAP_CACHE[f"path-{i}"] = (
+                float(1000 + i),
+                {f"href-{i}": True},
+            )
+            if len(explore_service._DOWNLOADED_MAP_CACHE) > cap:
+                oldest_key = min(
+                    explore_service._DOWNLOADED_MAP_CACHE,
+                    key=lambda k: explore_service._DOWNLOADED_MAP_CACHE[k][0],
+                )
+                explore_service._DOWNLOADED_MAP_CACHE.pop(oldest_key, None)
+
+        assert len(explore_service._DOWNLOADED_MAP_CACHE) == cap
+        assert "path-0" not in explore_service._DOWNLOADED_MAP_CACHE
+        assert "path-1" not in explore_service._DOWNLOADED_MAP_CACHE
+        assert "path-2" not in explore_service._DOWNLOADED_MAP_CACHE
+        assert f"path-{cap + 2}" in explore_service._DOWNLOADED_MAP_CACHE
+
+    def test_cache_normal_operation_single_key(self):
+        explore_service._DOWNLOADED_MAP_CACHE["only-key"] = (
+            1000.0,
+            {"href": True},
+        )
+        assert len(explore_service._DOWNLOADED_MAP_CACHE) == 1
+        assert "only-key" in explore_service._DOWNLOADED_MAP_CACHE

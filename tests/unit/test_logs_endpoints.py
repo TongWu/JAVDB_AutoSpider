@@ -351,6 +351,61 @@ class TestLogSearchEdgeCases:
 
 
 # ---------------------------------------------------------------------------
+# TestLogScanCap
+# ---------------------------------------------------------------------------
+
+
+class TestLogScanCap:
+    def test_scanned_files_reported(self, admin_client, tmp_path, monkeypatch):
+        import apps.api.routers.logs as logs_module
+
+        _write_job(tmp_path, "job-a", "daily", "2026-05-23T10:00:00+00:00", ["needle"])
+        _write_job(tmp_path, "job-b", "daily", "2026-05-23T11:00:00+00:00", ["needle"])
+        monkeypatch.setattr(logs_module, "_LOGS_DIR", tmp_path)
+
+        resp = admin_client.get("/api/logs/search", params={"q": "needle"})
+        assert resp.status_code == 200
+        assert resp.json()["scanned_files"] == 2
+
+    def test_scan_cap_limits_files_scanned(self, admin_client, tmp_path, monkeypatch):
+        import apps.api.routers.logs as logs_module
+
+        for i in range(10):
+            _write_job(tmp_path, f"job-{i:03d}", "daily", f"2026-05-{10+i:02d}T00:00:00+00:00", ["needle"])
+        monkeypatch.setattr(logs_module, "_LOGS_DIR", tmp_path)
+        monkeypatch.setattr(logs_module, "_MAX_META_SCAN", 5)
+
+        resp = admin_client.get("/api/logs/search", params={"q": "needle"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["scanned_files"] == 5
+        assert data["total_matched"] == 5
+
+    def test_scan_cap_keeps_newest_files(self, admin_client, tmp_path, monkeypatch):
+        import apps.api.routers.logs as logs_module
+
+        _write_job(tmp_path, "aaa-old", "daily", "2026-05-01T00:00:00+00:00", ["needle"])
+        _write_job(tmp_path, "zzz-new", "daily", "2026-05-20T00:00:00+00:00", ["needle"])
+        monkeypatch.setattr(logs_module, "_LOGS_DIR", tmp_path)
+        monkeypatch.setattr(logs_module, "_MAX_META_SCAN", 1)
+
+        resp = admin_client.get("/api/logs/search", params={"q": "needle"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["scanned_files"] == 1
+        assert data["results"][0]["job_id"] == "zzz-new"
+
+    def test_scanned_files_zero_for_nonexistent_dir(self, admin_client, tmp_path, monkeypatch):
+        import apps.api.routers.logs as logs_module
+
+        monkeypatch.setattr(logs_module, "_LOGS_DIR", tmp_path / "nope")
+
+        resp = admin_client.get("/api/logs/search", params={"q": "anything"})
+        assert resp.status_code == 200
+        assert resp.json()["scanned_files"] == 0
+
+
+# ---------------------------------------------------------------------------
 # TestLogSearchAuth
 # ---------------------------------------------------------------------------
 
