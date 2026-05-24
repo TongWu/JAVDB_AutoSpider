@@ -443,6 +443,10 @@ runtime by various modules.
 | `STORAGE_BACKEND` | `str` | `'sqlite'` | Storage backend. `'sqlite'` -- local SQLite files. `'d1'` -- Cloudflare D1 (GitHub Actions). `'dual'` -- write to both, read from D1. |
 | `WRITE_MODE` | `str` | `'pending'` | Write mode for session management. Only `'pending'` is supported; legacy `'audit'` requests fall back to pending. |
 | `STRICT_DUAL_WRITE` | `str` | `''` | When set to `'1'`, fail the run if a D1 write fails in dual mode. |
+| `D1_RECOVERY_OUTBOX_ENABLED` | `str` | `''` | Reserved for ADR-010 Phase 2. Set `'1'` to allow safe dual-mode D1 write failures to queue in `reports/D1/d1_recovery_outbox.jsonl`. |
+| `D1_BATCHING_ENABLED` | `str` | `''` | Reserved for ADR-010 Phase 3 safe-path micro-batching. Ordinary SQL remains synchronous. |
+| `D1_FLUSH_INTERVAL_MS` | `int` | `250` | Maximum safe-batch wait window when D1 batching is enabled. |
+| `D1_STARTUP_REPLAY_ENABLED` | `str` | `''` | Reserved for ADR-010 Phase 4 startup replay. |
 | `LOG_LEVEL` | `str` | `'INFO'` | Overrides the `LOG_LEVEL` in `config.py` when set as an environment variable. |
 | `LOG_STYLE` | `str` | `'compact'` | Log output format. `'compact'` -- concise single-line. `'plain'` -- standard format. `'verbose'` -- full 4-field format. |
 | `LOG_GITHUB_GROUPS` | `str` | `'auto'` | GitHub Actions log grouping. `'on'` -- always emit `::group::` markers. `'off'` -- never. `'auto'` -- detect CI environment. |
