@@ -76,6 +76,69 @@ def test_spider_result_rejects_wrong_kind(tmp_path):
         read_spider_result(path)
 
 
+def test_spider_result_rejects_incompatible_schema_version(tmp_path):
+    path = tmp_path / "spider-result.json"
+    write_spider_result_atomic(path, _result())
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw["schema_version"] = "2.0"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Unsupported spider result schema_version"):
+        read_spider_result(path)
+
+
+def test_spider_result_rejects_missing_required_field(tmp_path):
+    path = tmp_path / "spider-result.json"
+    write_spider_result_atomic(path, _result())
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    del raw["mode"]
+    path.write_text(json.dumps(raw), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Missing spider result field\\(s\\): mode"):
+        read_spider_result(path)
+
+
+def test_spider_result_rejects_non_object_payload(tmp_path):
+    path = tmp_path / "spider-result.json"
+    path.write_text(json.dumps(["not", "an", "object"]), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Spider result must be a JSON object"):
+        read_spider_result(path)
+
+
+def test_spider_result_rejects_invalid_mode(tmp_path):
+    path = tmp_path / "spider-result.json"
+    write_spider_result_atomic(path, _result())
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw["mode"] = "weekly"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Invalid spider result mode"):
+        read_spider_result(path)
+
+
+def test_spider_result_rejects_invalid_stats_shape(tmp_path):
+    path = tmp_path / "spider-result.json"
+    write_spider_result_atomic(path, _result())
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw["stats"] = {"pages": "1-10"}
+    path.write_text(json.dumps(raw), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Missing spider result stats field"):
+        read_spider_result(path)
+
+
+def test_spider_result_rejects_invalid_exit_code(tmp_path):
+    path = tmp_path / "spider-result.json"
+    write_spider_result_atomic(path, _result())
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw["exit_code"] = None
+    path.write_text(json.dumps(raw), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Invalid spider result field exit_code"):
+        read_spider_result(path)
+
+
 def test_spider_partial_failure_result_preserves_unknowns_as_none(tmp_path):
     path = tmp_path / "spider-result.json"
     result = _result(

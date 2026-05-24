@@ -21,6 +21,7 @@ import tempfile
 from datetime import datetime
 from dataclasses import asdict
 from pathlib import Path
+from types import SimpleNamespace
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 os.chdir(_REPO_ROOT)
@@ -557,21 +558,27 @@ def main():
         pipeline_success = False
         
         # Still try to send email notification on failure
+        email_args = ['--from-pipeline']
+        if csv_path:
+            email_args.extend(['--csv-path', csv_path])
+        if args.dry_run:
+            email_args.append('--dry-run')
+        failure_email_command = email_cmd + email_args
+        failure_email_policy = SimpleNamespace(
+            name="email_notification_failure",
+            required=False,
+            run_on_failure=True,
+            timeout_sec=3600,
+        )
         try:
             logger.info("Attempting to send failure notification email...")
-            # Build email args for failure notification
-            email_args = ['--from-pipeline']
-            if csv_path:
-                email_args.extend(['--csv-path', csv_path])
-            if args.dry_run:
-                email_args.append('--dry-run')
+            # Keep the fallback above available if policy construction fails.
             failure_email_policy = StepPolicy(
                 name="email_notification_failure",
                 required=False,
                 run_on_failure=True,
                 timeout_sec=3600,
             )
-            failure_email_command = email_cmd + email_args
             failure_email_step = runner.run(
                 failure_email_policy,
                 failure_email_command,
