@@ -3,6 +3,8 @@ Unit tests for utils/parser.py functions.
 """
 import os
 import sys
+import builtins
+import importlib
 import pytest
 
 # Add project root to path
@@ -11,6 +13,70 @@ sys.path.insert(0, project_root)
 
 from javdb.spider.parser import extract_video_code, parse_index, parse_detail
 from bs4 import BeautifulSoup
+
+
+def test_spider_parser_adapter_uses_canonical_parsing_dispatch(
+    monkeypatch,
+    sample_index_html,
+    sample_detail_html,
+):
+    """Spider adapter must not depend on the old apps.api.parsers path."""
+    import javdb.spider.parser as parser_adapter
+
+    original_import = builtins.__import__
+
+    def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == 'apps.api.parsers' or name.startswith('apps.api.parsers.'):
+            raise AssertionError('javdb.spider.parser must import from javdb.parsing')
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, '__import__', guarded_import)
+    reloaded = importlib.reload(parser_adapter)
+
+    html = '''
+    <a class="box" href="/v/ABC-123">
+        <div class="video-title"><strong>ABC-123</strong></div>
+    </a>
+    '''
+    soup = BeautifulSoup(html, 'html.parser')
+    assert reloaded.extract_video_code(soup.find('a')) == 'ABC-123'
+
+    index_results = reloaded.parse_index(sample_index_html, page_num=5, phase=1)
+    assert index_results == [
+        {
+            'href': '/v/ABC-123',
+            'video_code': 'ABC-123',
+            'page': 5,
+            'actor': '',
+            'rate': '4.47',
+            'comment_number': '595',
+            'is_today_release': True,
+            'is_yesterday_release': False,
+        },
+        {
+            'href': '/v/GHI-789',
+            'video_code': 'GHI-789',
+            'page': 5,
+            'actor': '',
+            'rate': '3.85',
+            'comment_number': '50',
+            'is_today_release': False,
+            'is_yesterday_release': True,
+        },
+    ]
+
+    detail_result = reloaded.parse_detail(sample_detail_html, index=1, skip_sleep=True)
+    magnets, actor_info, actor_gender, actor_link, supporting, parse_success = detail_result
+    assert parse_success is True
+    assert actor_info == 'Sample Actor'
+    assert actor_gender == 'female'
+    assert actor_link == '/actors/xyz'
+    assert supporting == '[]'
+    assert [m['href'] for m in magnets] == [
+        'magnet:?xt=urn:btih:abc123subtitle',
+        'magnet:?xt=urn:btih:abc123hacked',
+        'magnet:?xt=urn:btih:abc123normal',
+    ]
 
 
 class TestExtractVideoCode:
@@ -276,4 +342,3 @@ class TestParseDetail:
         assert parse_success is True
         assert len(magnets) >= 1
         assert 'male' in supporting and 'マッスル澤野' in supporting
-

@@ -1,0 +1,33 @@
+{
+  "actors": [],
+  "code_prefix_link": "/video_codes/EDGE",
+  "comment_count": "",
+  "directors": [],
+  "duration": "",
+  "fanart_urls": [],
+  "magnets": [
+    {
+      "file_count": 3,
+      "href": "magnet:?xt=urn:btih:edgemissingactor",
+      "name": "EDGE-MISSING.torrent",
+      "size": "750MB",
+      "tags": [],
+      "timestamp": "2026-03-02"
+    }
+  ],
+  "maker": null,
+  "no_actor_listing": false,
+  "parse_success": true,
+  "poster_url": "",
+  "publisher": null,
+  "rate": "",
+  "release_date": "2026-03-01",
+  "review_count": 0,
+  "series": null,
+  "tags": [],
+  "title": "EDGE-MISSING Missing Actor Panel",
+  "trailer_url": null,
+  "video_code": "EDGE-MISSING",
+  "want_count": 0,
+  "watched_count": 0
+}

@@ -1,0 +1,49 @@
+{
+  "has_movie_list": true,
+  "movies": [
+    {
+      "comment_count": "595",
+      "cover_url": "/covers/abc-123.jpg",
+      "href": "/v/ABC-123",
+      "page": 2,
+      "ranking": null,
+      "rate": "4.47",
+      "release_date": "2026-01-02",
+      "tags": [
+        "含中字磁鏈",
+        "今日新種"
+      ],
+      "title": "Primary Title",
+      "video_code": "ABC-123"
+    },
+    {
+      "comment_count": "",
+      "cover_url": "/covers/rel-456.jpg",
+      "href": "https://javdb.com/v/REL-456",
+      "page": 2,
+      "ranking": null,
+      "rate": "",
+      "release_date": "2026-01-03",
+      "tags": [
+        "含磁鏈"
+      ],
+      "title": "Relative Cover",
+      "video_code": "REL-456"
+    },
+    {
+      "comment_count": "",
+      "cover_url": "/covers/no-code.jpg",
+      "href": "/v/NO-CODE",
+      "page": 2,
+      "ranking": null,
+      "rate": "",
+      "release_date": "",
+      "tags": [
+        "無磁鏈"
+      ],
+      "title": "No Video Code Fallback Title",
+      "video_code": ""
+    }
+  ],
+  "page_title": "Index Edge Cases | JavDB"
+}

@@ -50,6 +50,10 @@ def _isolate_sqlite(tmp_path):
     orig_history = _db_conn_mod.HISTORY_DB_PATH
     orig_reports = _db_conn_mod.REPORTS_DB_PATH
     orig_operations = _db_conn_mod.OPERATIONS_DB_PATH
+    orig_migrations_db_path = _db_migrations_mod.DB_PATH
+    orig_migrations_history = _db_migrations_mod.HISTORY_DB_PATH
+    orig_migrations_reports = _db_migrations_mod.REPORTS_DB_PATH
+    orig_migrations_operations = _db_migrations_mod.OPERATIONS_DB_PATH
     orig_override = _cfg_mod._storage_mode_override
     orig_storage_backend = os.environ.get("STORAGE_BACKEND")
 
@@ -65,6 +69,10 @@ def _isolate_sqlite(tmp_path):
     _db_conn_mod.HISTORY_DB_PATH = test_db
     _db_conn_mod.REPORTS_DB_PATH = test_db
     _db_conn_mod.OPERATIONS_DB_PATH = test_db
+    _db_migrations_mod.DB_PATH = test_db
+    _db_migrations_mod.HISTORY_DB_PATH = test_db
+    _db_migrations_mod.REPORTS_DB_PATH = test_db
+    _db_migrations_mod.OPERATIONS_DB_PATH = test_db
 
     # Also patch package-level re-exports so callers using
     # ``from javdb.storage.db import HISTORY_DB_PATH`` see the test path.
@@ -98,6 +106,10 @@ def _isolate_sqlite(tmp_path):
     _db_conn_mod.HISTORY_DB_PATH = orig_conn_history
     _db_conn_mod.REPORTS_DB_PATH = orig_conn_reports
     _db_conn_mod.OPERATIONS_DB_PATH = orig_conn_operations
+    _db_migrations_mod.DB_PATH = orig_migrations_db_path
+    _db_migrations_mod.HISTORY_DB_PATH = orig_migrations_history
+    _db_migrations_mod.REPORTS_DB_PATH = orig_migrations_reports
+    _db_migrations_mod.OPERATIONS_DB_PATH = orig_migrations_operations
     _db_pkg.DB_PATH = orig_db_path
     _db_pkg.HISTORY_DB_PATH = orig_conn_history
     _db_pkg.REPORTS_DB_PATH = orig_conn_reports

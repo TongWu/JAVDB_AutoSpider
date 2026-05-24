@@ -1,0 +1,97 @@
+{
+  "categories": [
+    {
+      "category_id": "10",
+      "name": "基本",
+      "options": [
+        {
+          "name": "含磁鏈",
+          "selected": false,
+          "tag_id": "1"
+        },
+        {
+          "name": "含字幕",
+          "selected": true,
+          "tag_id": "2"
+        }
+      ]
+    },
+    {
+      "category_id": "7",
+      "name": "類別",
+      "options": [
+        {
+          "name": "單體作品",
+          "selected": true,
+          "tag_id": "28"
+        },
+        {
+          "name": "首次亮相",
+          "selected": false,
+          "tag_id": "80"
+        },
+        {
+          "name": "VR",
+          "selected": true,
+          "tag_id": "212"
+        }
+      ]
+    },
+    {
+      "category_id": "4",
+      "name": "體型",
+      "options": [
+        {
+          "name": "熟女",
+          "selected": false,
+          "tag_id": "15"
+        },
+        {
+          "name": "巨乳",
+          "selected": false,
+          "tag_id": "17"
+        }
+      ]
+    },
+    {
+      "category_id": "9",
+      "name": "時長",
+      "options": [
+        {
+          "name": "45分鍾以內",
+          "selected": true,
+          "tag_id": "lt-45"
+        },
+        {
+          "name": "45-90分鍾",
+          "selected": false,
+          "tag_id": "45-90"
+        }
+      ]
+    }
+  ],
+  "current_selections": {
+    "10": "2",
+    "7": "28,212",
+    "9": "lt-45"
+  },
+  "has_movie_list": true,
+  "movies": [
+    {
+      "comment_count": "10",
+      "cover_url": "",
+      "href": "/v/TAG-001",
+      "page": 4,
+      "ranking": null,
+      "rate": "5",
+      "release_date": "",
+      "tags": [
+        "含中字磁鏈",
+        "今日新種"
+      ],
+      "title": "Tagged Title",
+      "video_code": "TAG-001"
+    }
+  ],
+  "page_title": "Tag Edge Cases | JavDB"
+}
