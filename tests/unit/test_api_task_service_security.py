@@ -219,3 +219,84 @@ def test_spawn_job_records_explicit_relative_result_path_from_repo_root(
         assert popen_calls[0][1]["cwd"] == repo_root
     finally:
         task_service.JOBS.pop(job["job_id"], None)
+
+
+def test_spawn_job_adds_spider_result_path_to_metadata(monkeypatch, tmp_path):
+    class FakeProcess:
+        pid = 12345
+
+        def poll(self):
+            return None
+
+    popen_calls = []
+
+    def fake_popen(command, **kwargs):
+        popen_calls.append((list(command), kwargs))
+        return FakeProcess()
+
+    jobs_dir = tmp_path / "jobs"
+    jobs_dir.mkdir()
+    monkeypatch.setattr(task_service.context, "JOB_LOG_DIR", jobs_dir)
+    monkeypatch.setattr(task_service.context, "RESOLVED_JOB_LOG_DIR", jobs_dir.resolve())
+    monkeypatch.setattr(task_service.subprocess, "Popen", fake_popen)
+
+    job = task_service._spawn_job(
+        "daily",
+        ["python3", "-u", "-m", "apps.cli.spider", "--from-pipeline"],
+    )
+    try:
+        result_path = task_service.JOBS[job["job_id"]]["result_path"]
+        meta = task_service._read_job_meta(job["job_id"])
+
+        assert result_path == str(
+            jobs_dir.resolve() / f"{job['job_id']}.result.json"
+        )
+        assert meta["result_path"] == result_path
+        assert popen_calls[0][0][-2:] == ["--result-json", result_path]
+    finally:
+        task_service.JOBS.pop(job["job_id"], None)
+
+
+def test_spawn_job_records_explicit_spider_result_path(monkeypatch, tmp_path):
+    class FakeProcess:
+        pid = 12345
+
+        def poll(self):
+            return None
+
+    popen_calls = []
+
+    def fake_popen(command, **kwargs):
+        popen_calls.append((list(command), kwargs))
+        return FakeProcess()
+
+    repo_root = tmp_path / "repo"
+    jobs_dir = repo_root / "logs" / "jobs"
+    jobs_dir.mkdir(parents=True)
+    monkeypatch.setattr(task_service.context, "REPO_ROOT", repo_root)
+    monkeypatch.setattr(task_service.context, "JOB_LOG_DIR", jobs_dir)
+    monkeypatch.setattr(task_service.context, "RESOLVED_JOB_LOG_DIR", jobs_dir.resolve())
+    monkeypatch.setattr(task_service.subprocess, "Popen", fake_popen)
+
+    explicit_result = "logs/jobs/spider-explicit.result.json"
+    job = task_service._spawn_job(
+        "daily",
+        [
+            "python3",
+            "-u",
+            "-m",
+            "apps.cli.spider",
+            "--from-pipeline",
+            "--result-json",
+            explicit_result,
+        ],
+    )
+    try:
+        expected_result_path = str((repo_root / explicit_result).resolve())
+        meta = task_service._read_job_meta(job["job_id"])
+
+        assert task_service.JOBS[job["job_id"]]["result_path"] == expected_result_path
+        assert meta["result_path"] == expected_result_path
+        assert popen_calls[0][0][-2:] == ["--result-json", explicit_result]
+    finally:
+        task_service.JOBS.pop(job["job_id"], None)

@@ -116,7 +116,10 @@ def read_pipeline_result(path: str | Path) -> PipelineRunResult:
         raise ValueError(f"Missing pipeline result field(s): {', '.join(missing)}")
     if raw["status"] not in ("success", "failed", "running"):
         raise ValueError(f"Invalid pipeline result status: {raw['status']!r}")
-    for field_name in ("mode", "started_at", "finished_at"):
+    _require_string(raw, "mode", "pipeline result")
+    if raw["mode"] not in ("daily", "adhoc"):
+        raise ValueError(f"Invalid pipeline result mode: {raw['mode']!r}")
+    for field_name in ("started_at", "finished_at"):
         _require_string(raw, field_name, "pipeline result")
     for field_name in ("url", "failure_reason"):
         _require_string_or_none(raw, field_name, "pipeline result")

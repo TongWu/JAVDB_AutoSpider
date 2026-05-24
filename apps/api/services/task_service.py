@@ -427,14 +427,14 @@ def _spawn_job(
     now = datetime.now(timezone.utc)
     job_id = f"{job_prefix}-{now.strftime('%Y%m%d-%H%M%S')}-{os.urandom(2).hex()}"
     result_path: Optional[Path] = None
-    if command[3] == "apps.cli.pipeline" and "--result-json" not in command:
-        result_path = _resolved_path_under_job_log_dir(job_id, ".result.json")
-        command.extend(["--result-json", str(result_path)])
-        command = _validate_task_command(command)
-    elif command[3] == "apps.cli.pipeline" and "--result-json" in command:
+    if "--result-json" in command:
         result_path = _resolve_job_result_file(
             command[command.index("--result-json") + 1],
         )
+    elif command[3] in {"apps.cli.pipeline", "apps.cli.spider"}:
+        result_path = _resolved_path_under_job_log_dir(job_id, ".result.json")
+        command.extend(["--result-json", str(result_path)])
+        command = _validate_task_command(command)
     log_path = _safe_log_path(job_id)
     with open(log_path, "w", encoding="utf-8") as fp:
         process = subprocess.Popen(

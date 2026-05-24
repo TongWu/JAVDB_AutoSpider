@@ -49,8 +49,13 @@ def _process_group_kwargs() -> dict[str, object]:
 
 
 def _taskkill_tree(pid: int) -> None:
+    taskkill_exe = os.path.join(
+        os.environ.get("SystemRoot", r"C:\Windows"),
+        "System32",
+        "taskkill.exe",
+    )
     subprocess.run(
-        ["taskkill", "/PID", str(pid), "/T", "/F"],
+        [taskkill_exe, "/PID", str(pid), "/T", "/F"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         check=False,

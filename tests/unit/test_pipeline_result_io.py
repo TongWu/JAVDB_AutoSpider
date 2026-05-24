@@ -107,6 +107,17 @@ def test_pipeline_result_rejects_invalid_status(tmp_path):
         read_pipeline_result(path)
 
 
+def test_pipeline_result_rejects_invalid_mode(tmp_path):
+    path = tmp_path / "pipeline-result.json"
+    write_pipeline_result_atomic(path, _pipeline_result())
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw["mode"] = "weekly"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Invalid pipeline result mode"):
+        read_pipeline_result(path)
+
+
 def test_pipeline_result_rejects_non_list_steps(tmp_path):
     path = tmp_path / "pipeline-result.json"
     write_pipeline_result_atomic(path, _pipeline_result())
