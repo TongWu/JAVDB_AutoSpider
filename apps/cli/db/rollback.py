@@ -58,8 +58,7 @@ import argparse
 import json
 from typing import List, Optional
 
-from javdb.storage.db.db_connection import close_db
-from javdb.storage.db.db_migrations import init_db
+from javdb.storage.db import close_db, init_db
 from javdb.storage.rollback.core import _drive_rollback
 from javdb.infra.logging import (
     get_logger,

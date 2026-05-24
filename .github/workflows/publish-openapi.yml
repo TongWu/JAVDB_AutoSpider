@@ -1,14 +1,14 @@
 name: Publish OpenAPI schema
 
-on:
-  push:
-    branches: [main]
-    paths:
-      - 'apps/api/**'
-      - 'apps/cli/**'
-      - 'javdb/**'
-      - 'scripts/dump_openapi.py'
-  workflow_dispatch:
+# on:  # DISABLED FOR PUBLIC REPO
+  # push:
+    # branches: [main]
+    # paths:
+      # - 'apps/api/**'
+      # - 'apps/cli/**'
+      # - 'javdb/**'
+      # - 'scripts/dump_openapi.py'
+  # workflow_dispatch:
 
 permissions:
   contents: write

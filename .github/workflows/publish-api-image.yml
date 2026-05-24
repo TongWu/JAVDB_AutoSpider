@@ -1,18 +1,18 @@
 name: Publish API image
 
-on:
-  push:
-    branches: [main]
-    paths:
-      - 'docker/Dockerfile.api'
-      - 'requirements.txt'
-      - 'apps/**'
-      - 'javdb/**'
-      - 'api/**'
-      - 'compat.py'
-      - 'config.py.example'
-      - 'pipeline.py'
-  workflow_dispatch:
+# on:  # DISABLED FOR PUBLIC REPO
+  # push:
+    # branches: [main]
+    # paths:
+      # - 'docker/Dockerfile.api'
+      # - 'requirements.txt'
+      # - 'apps/**'
+      # - 'javdb/**'
+      # - 'api/**'
+      # - 'compat.py'
+      # - 'config.py.example'
+      # - 'pipeline.py'
+  # workflow_dispatch:
 
 permissions:
   contents: read

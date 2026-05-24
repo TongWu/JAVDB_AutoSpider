@@ -23,24 +23,24 @@ permissions:
   contents: read
   actions: read  # for `gh run download` from prior DailyIngestion runs
 
-on:
-  schedule:
-    - cron: '0 4 * * *'
-  workflow_dispatch:
-    inputs:
-      since:
-        description: 'Anchor bake window start (YYYY-MM-DD). Default 2026-05-16 (ADR-006 PR-A merge).'
-        required: false
-        default: '2026-05-16'
-        type: string
-      runner:
-        description: 'Runner type.'
-        required: false
-        default: 'ubuntu-latest'
-        type: choice
-        options:
-          - ubuntu-latest
-          - self-hosted
+# on:  # DISABLED FOR PUBLIC REPO
+  # schedule:
+    # - cron: '0 4 * * *'
+  # workflow_dispatch:
+    # inputs:
+      # since:
+        # description: 'Anchor bake window start (YYYY-MM-DD). Default 2026-05-16 (ADR-006 PR-A merge).'
+        # required: false
+        # default: '2026-05-16'
+        # type: string
+      # runner:
+        # description: 'Runner type.'
+        # required: false
+        # default: 'ubuntu-latest'
+        # type: choice
+        # options:
+          # - ubuntu-latest
+          # - self-hosted
 
 concurrency:
   group: bake-metrics-check
@@ -176,7 +176,7 @@ jobs:
             else
               echo "**Result**: ❌ FAIL — one or more checks regressed."
               echo ""
-              echo "An operator must investigate before declaring the bake clean. See [\`docs/en/ops/d1-rollback.md\`](../blob/main/docs/en/ops/d1-rollback.md) Appendix A.1 for the ADR-005 D10 gate definition."
+              echo "An operator must investigate before declaring the bake clean. See [\`docs/handbook/en/ops/d1-rollback.md\`](../blob/main/docs/handbook/en/ops/d1-rollback.md) Appendix A.1 for the ADR-005 D10 gate definition."
             fi
             echo ""
             echo "## Detail"

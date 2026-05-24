@@ -92,7 +92,6 @@ class SessionDetailResponse(BaseModel):
 class SessionRollbackPayload(BaseModel):
     dry_run: bool = True
     include_pending: bool = True
-    restore_from_audit: bool = True
 
 
 class SessionRollbackResponse(BaseModel):
@@ -105,6 +104,11 @@ class SessionRollbackResponse(BaseModel):
 class SessionCommitPayload(BaseModel):
     force: bool = False
     drop_pending: bool = False
+    # Default True on the HTTP path so the API matches the CLI's behaviour
+    # (CLI sets both to True). The library's CommitRequest defaults them to
+    # False for safety; callers wanting a DB-only commit can opt out here.
+    fanout_claims: bool = True
+    emit_metrics: bool = True
 
 
 class SessionCommitResponse(BaseModel):

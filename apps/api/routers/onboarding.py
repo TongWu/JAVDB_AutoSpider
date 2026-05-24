@@ -12,7 +12,7 @@ from apps.api.schemas.capabilities_payloads import (
 from apps.api.infra.auth import _require_auth, require_role
 from apps.api.services import config_service
 from javdb.storage.repos.system_state_repo import SystemStateRepo
-from javdb.storage.db import db_connection
+import javdb.storage.db as _db
 
 
 REQUIRED_COMPONENTS = ("javdb_session", "qb")
@@ -43,8 +43,11 @@ router = APIRouter(prefix="/api/onboarding", tags=["onboarding"])
 
 
 def _read_onboarded() -> bool:
-    with db_connection.get_db(db_connection.OPERATIONS_DB_PATH) as conn:
-        return SystemStateRepo(conn).get("onboarded") == "true"
+    try:
+        with _db.get_db(_db.OPERATIONS_DB_PATH) as conn:
+            return SystemStateRepo(conn).get("onboarded") == "true"
+    except Exception:
+        return False
 
 
 def _test_javdb() -> tuple[bool, str, dict | None]:
@@ -189,14 +192,14 @@ def get_status(_user=Depends(_require_auth)) -> OnboardingStatusResponse:
 
 @router.post("/complete", response_model=OnboardingStatusResponse)
 def mark_complete(_user=Depends(require_role("admin"))) -> OnboardingStatusResponse:
-    with db_connection.get_db(db_connection.OPERATIONS_DB_PATH) as conn:
+    with _db.get_db(_db.OPERATIONS_DB_PATH) as conn:
         SystemStateRepo(conn).put("onboarded", "true")
     return get_status(_user=_user)
 
 
 @router.post("/dismiss-hint", response_model=dict)
 def dismiss_hint(payload: DismissHintPayload, _user=Depends(require_role("admin"))) -> dict:
-    with db_connection.get_db(db_connection.OPERATIONS_DB_PATH) as conn:
+    with _db.get_db(_db.OPERATIONS_DB_PATH) as conn:
         repo = SystemStateRepo(conn)
         hints: list[str] = repo.get_json("dismissed_hints", default=[]) or []
         if payload.hint_id not in hints:

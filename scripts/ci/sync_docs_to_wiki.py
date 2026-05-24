@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sync docs/en/ to the GitHub Wiki repository.
+"""Sync docs/handbook/en/ to the GitHub Wiki repository.
 
 Reads wiki_mapping.json, copies each mapped file into the wiki checkout,
 rewrites internal doc links to wiki-compatible [[Page-Name]] format,
@@ -77,7 +77,7 @@ def generate_sidebar(mappings: list[dict]) -> str:
     lines.append("")
     lines.append("**Other**")
     lines.append("")
-    lines.append("- [Chinese Docs (中文)](https://github.com/TongWu/JAVDB_AutoSpider_CICD/tree/main/docs/zh)")
+    lines.append("- [Chinese Docs (中文)](https://github.com/TongWu/JAVDB_AutoSpider_CICD/tree/main/docs/handbook/zh)")
     lines.append("- [CONTEXT.md](https://github.com/TongWu/JAVDB_AutoSpider_CICD/blob/main/CONTEXT.md)")
     lines.append("")
     return "\n".join(lines)
@@ -93,10 +93,10 @@ def generate_home(mappings: list[dict]) -> str:
         "",
         "Welcome to the JavDB AutoSpider documentation wiki.",
         "",
-        "> This wiki is auto-generated from [`docs/en/`](https://github.com/TongWu/JAVDB_AutoSpider_CICD/tree/main/docs/en). "
+        "> This wiki is auto-generated from [`docs/handbook/en/`](https://github.com/TongWu/JAVDB_AutoSpider_CICD/tree/main/docs/handbook/en). "
         "Edit the source files there — changes sync on every push to `main`.",
         "",
-        "For Chinese documentation, see [`docs/zh/`](https://github.com/TongWu/JAVDB_AutoSpider_CICD/tree/main/docs/zh).",
+        "For Chinese documentation, see [`docs/handbook/zh/`](https://github.com/TongWu/JAVDB_AutoSpider_CICD/tree/main/docs/handbook/zh).",
         "",
     ]
 

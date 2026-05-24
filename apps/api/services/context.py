@@ -107,6 +107,9 @@ EXPLORE_INDEX_STATUS_CACHE_TTL_SECONDS = int(
 EXPLORE_INDEX_STATUS_CACHE_MAX_ITEMS = int(
     os.getenv("EXPLORE_INDEX_STATUS_CACHE_MAX_ITEMS", "2000")
 )
+EXPLORE_DOWNLOADED_MAP_CACHE_TTL_SECONDS = int(
+    os.getenv("EXPLORE_DOWNLOADED_MAP_CACHE_TTL_SECONDS", "10")
+)
 
 CORS_ORIGINS = [
     item.strip()
@@ -128,6 +131,10 @@ def infer_cookie_secure(origins: list[str] | None = None) -> bool:
         return False
     if insecure_override in {"0", "false", "no"}:
         return True
+    # TEST_MODE runs over plain HTTP; WebKit refuses to send Secure cookies
+    # on non-HTTPS origins (unlike Chrome/Firefox which exempt localhost).
+    if os.getenv("TEST_MODE") == "1":
+        return False
     return True
 
 
@@ -141,6 +148,7 @@ __all__ = [
     "COOKIE_SECURE",
     "CORS_ORIGINS",
     "DEFAULT_TASK_LIST_LIMIT",
+    "EXPLORE_DOWNLOADED_MAP_CACHE_TTL_SECONDS",
     "EXPLORE_INDEX_STATUS_CACHE_MAX_ITEMS",
     "EXPLORE_INDEX_STATUS_CACHE_TTL_SECONDS",
     "EXPLORE_INDEX_STATUS_CONCURRENCY",

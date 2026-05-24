@@ -98,6 +98,34 @@ def test_drift_advisory_surfaces_todays_records(tmp_path):
     assert "ReportSessions" in advisory
 
 
+def test_drift_advisory_returns_empty_for_clean_pending_verify(tmp_path):
+    """A pending_session_verify record with zero residuals is informational, not drift."""
+    from javdb.integrations.notify.email import (
+        _build_dual_drift_advisory,
+    )
+
+    drift_dir = tmp_path / "D1"
+    drift_dir.mkdir()
+    jsonl = drift_dir / "d1_drift.jsonl"
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%dT12:00:00Z")
+    jsonl.write_text(
+        json.dumps({
+            "ts": today,
+            "kind": "pending_session_verify",
+            "session_id": "20260519T210553.000000Z-0000-0000",
+            "pending_residual_count": 0,
+            "failure_count": 0,
+            "uncommitted_d1_writes": 0,
+            "derived_recompute_drift": 0,
+        }) + "\n", encoding="utf-8",
+    )
+
+    advisory = _build_dual_drift_advisory(str(tmp_path))
+    assert advisory == "", (
+        "Clean pending_session_verify records must not trigger the drift advisory"
+    )
+
+
 # ── P0-6: SQLite-local stats readers ─────────────────────────────────────
 
 
@@ -115,7 +143,7 @@ def test_local_stats_getter_uses_sqlite_regardless_of_backend(monkeypatch, tmp_p
     import sqlite3
 
     monkeypatch.setenv("STORAGE_BACKEND", "sqlite")
-    from javdb.storage.db import db as db_mod
+    from javdb.storage.db import db_get_spider_stats_local
 
     test_db = tmp_path / "reports.db"
     # Lay down just enough schema for the read path under test. Using
@@ -137,7 +165,7 @@ def test_local_stats_getter_uses_sqlite_regardless_of_backend(monkeypatch, tmp_p
     # care: it must always open raw SQLite.
     monkeypatch.setenv("STORAGE_BACKEND", "dual")
 
-    out = db_mod.db_get_spider_stats_local(12345, db_path=str(test_db))
+    out = db_get_spider_stats_local(12345, db_path=str(test_db))
     assert out is not None
     assert out["TotalDiscovered"] == 999
 

@@ -76,11 +76,11 @@ def _emit_commit_metrics(
     """
     from datetime import datetime, timezone
 
-    from apps.cli.db._session_helpers import (
+    from javdb.storage.rollback.session_helpers import (
         append_jsonl_record,
         attach_run_identity,
     )
-    from javdb.storage.db.db_reports import db_pending_session_stats
+    from javdb.storage.db import db_pending_session_stats
 
     try:
         stats = db_pending_session_stats(session_id)
@@ -131,19 +131,18 @@ def commit_session(req: CommitRequest) -> CommitResult:
     RuntimeError
         If the commit DB call fails.
     """
-    import javdb.storage.db.db_connection as _db_conn
-    from javdb.storage.db.db_history_write import (
+    from javdb.storage.db import (
+        get_db,
+        REPORTS_DB_PATH,
         db_commit_session_history,
-    )
-    from javdb.storage.db.db_reports import (
         db_mark_session_committed,
     )
     from javdb.infra.logging import get_logger
 
     logger = get_logger(__name__)
 
-    reports_path = _db_conn.REPORTS_DB_PATH
-    with _db_conn.get_db(reports_path) as conn:
+    reports_path = REPORTS_DB_PATH
+    with get_db(reports_path) as conn:
         row = conn.execute(
             "SELECT Id, COALESCE(WriteMode,'audit') AS WriteMode, Status "
             "FROM ReportSessions WHERE Id = ?",
@@ -172,7 +171,7 @@ def commit_session(req: CommitRequest) -> CommitResult:
     if write_mode == "pending" and current_status != "committed":
         if req.drop_pending:
             # Drop pending writes without promoting them.
-            with _db_conn.get_db(reports_path) as conn:
+            with get_db(reports_path) as conn:
                 pending_dropped = sum([
                     conn.execute(
                         "DELETE FROM PendingMovieHistoryWrites WHERE SessionId = ?",
@@ -215,7 +214,7 @@ def commit_session(req: CommitRequest) -> CommitResult:
 
     claim_results: List[Dict[str, Any]] = []
     if req.fanout_claims:
-        from apps.cli.db._session_helpers import fanout_movie_claim
+        from javdb.storage.rollback.session_helpers import fanout_movie_claim
         claim_results = fanout_movie_claim(
             [req.session_id],
             operation="commit",

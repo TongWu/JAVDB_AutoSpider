@@ -42,7 +42,14 @@ from apps.api.parsers import RUST_PARSERS_AVAILABLE
 from apps.api.routers.auth import login, logout, refresh_token, router as auth_router
 from apps.api.routers.capabilities import router as capabilities_router
 from apps.api.routers.onboarding import router as onboarding_router
+from apps.api.routers.history import router as history_router
 from apps.api.routers.sessions import router as sessions_router
+from apps.api.routers.diagnostics import router as diagnostics_router
+from apps.api.routers.gh_actions import router as gh_actions_router
+from apps.api.routers.logs import router as logs_router
+from apps.api.routers.migrations import router as migrations_router
+from apps.api.routers.operations import router as operations_router
+from apps.api.routers.stats import router as stats_router
 from apps.api.routers.system_state import router as system_state_router
 from apps.api.routers.config import (
     get_config,
@@ -169,6 +176,13 @@ for router in (
     system_state_router,
     onboarding_router,
     sessions_router,
+    history_router,
+    operations_router,
+    diagnostics_router,
+    gh_actions_router,
+    migrations_router,
+    logs_router,
+    stats_router,
 ):
     app.include_router(router)
 
@@ -248,6 +262,13 @@ __all__ = [
     "get_task_stream",
     "global_exception_handler",
     "health_check",
+    "history_router",
+    "operations_router",
+    "diagnostics_router",
+    "gh_actions_router",
+    "logs_router",
+    "migrations_router",
+    "stats_router",
     "list_tasks",
     "login",
     "logout",

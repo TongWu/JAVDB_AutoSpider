@@ -14,6 +14,7 @@ Features:
 import smtplib
 import logging
 import os
+import subprocess
 import sys
 import re
 import json
@@ -1055,8 +1056,7 @@ def extract_dedup_statistics(dedup_csv_path, session_start_time=None):
     try:
         from javdb.infra.config import use_sqlite
         if use_sqlite():
-            from javdb.storage.db.db_migrations import init_db
-            from javdb.storage.db.db_operations import db_load_dedup_records
+            from javdb.storage.db import init_db, db_load_dedup_records
             init_db()
             db_rows = db_load_dedup_records()
             if db_rows:
@@ -1506,6 +1506,7 @@ def _build_dual_drift_advisory(reports_dir: str) -> str:
     sample_db = None
     rollback_drift_rows = 0
     failure_count_total = 0
+    pending_residual_total = 0
     try:
         with open(jsonl_path, 'r', encoding='utf-8') as f:
             for line in f:
@@ -1522,13 +1523,15 @@ def _build_dual_drift_advisory(reports_dir: str) -> str:
                 todays_records += 1
                 failure_count_total += int(rec.get('failure_count') or 0)
                 rollback_drift_rows += int(rec.get('uncommitted_d1_writes') or 0)
+                pending_residual_total += int(rec.get('pending_residual_count') or 0)
                 if sample_first_sql is None and rec.get('first_failed_sql'):
                     sample_first_sql = rec.get('first_failed_sql')
                     sample_db = rec.get('db')
     except OSError:
         return ''
 
-    if todays_records == 0:
+    has_drift = failure_count_total > 0 or rollback_drift_rows > 0 or pending_residual_total > 0
+    if todays_records == 0 or not has_drift:
         return ''
 
     lines = [
@@ -1546,6 +1549,119 @@ def _build_dual_drift_advisory(reports_dir: str) -> str:
         'D1 may be behind. Reconcile via scripts/sync_d1_to_sqlite.py.'
     )
     return '\n'.join(lines) + '\n\n'
+
+
+def _build_drift_diagnosis_section():
+    """Run ``drift_diagnose --since 1 --json`` and return a formatted section.
+
+    ADR-009 D6: invoked when ``_build_dual_drift_advisory()`` already
+    returned a non-empty advisory.  Runs the diagnose CLI as a
+    subprocess (read-only, NEVER with ``--apply``) and renders the
+    results as a plain-text section to append to the email body.
+
+    Returns ``(section_text, suspects_list)`` where *section_text* is
+    empty when the subprocess produces no suspects, and *suspects_list*
+    is the raw list for use by ``_drift_diagnosis_subject_prefix``.
+    Returns a fallback message on any subprocess failure so that email
+    delivery is never blocked; in that case *suspects_list* is empty.
+    """
+    _MANUAL_CMD = 'python3 -m apps.cli.db.drift_diagnose --since 1 --json'
+
+    try:
+        result = subprocess.run(
+            [sys.executable, '-m', 'apps.cli.db.drift_diagnose',
+             '--since', '1', '--json'],
+            capture_output=True, text=True, timeout=60,
+        )
+        stdout = result.stdout.strip()
+    except subprocess.TimeoutExpired:
+        return (
+            '─── Drift Diagnosis ───\n'
+            'Automated diagnosis unavailable: subprocess timed out after 60s.\n'
+            f'Run manually: {_MANUAL_CMD}\n\n'
+        ), []
+    except Exception as exc:
+        return (
+            '─── Drift Diagnosis ───\n'
+            f'Automated diagnosis unavailable: {exc}\n'
+            f'Run manually: {_MANUAL_CMD}\n\n'
+        ), []
+
+    if result.returncode not in (0, 1, 2):
+        return (
+            '─── Drift Diagnosis ───\n'
+            f'Automated diagnosis unavailable: unexpected exit code {result.returncode}.\n'
+            f'Run manually: {_MANUAL_CMD}\n\n'
+        ), []
+
+    try:
+        data = json.loads(stdout)
+    except (ValueError, TypeError):
+        return (
+            '─── Drift Diagnosis ───\n'
+            'Automated diagnosis unavailable: non-JSON output from subprocess.\n'
+            f'Run manually: {_MANUAL_CMD}\n\n'
+        ), []
+    if not isinstance(data, dict):
+        return (
+            '─── Drift Diagnosis ───\n'
+            'Automated diagnosis unavailable: invalid JSON schema from subprocess.\n'
+            f'Run manually: {_MANUAL_CMD}\n\n'
+        ), []
+
+    suspects = data.get('suspects', [])
+    if not isinstance(suspects, list):
+        return (
+            '─── Drift Diagnosis ───\n'
+            'Automated diagnosis unavailable: invalid suspects payload.\n'
+            f'Run manually: {_MANUAL_CMD}\n\n'
+        ), []
+    if not suspects:
+        return '', []
+
+    lines = ['─── Drift Diagnosis ───']
+    for s in suspects:
+        sid = s.get('session_id', '?')
+        verdict = s.get('verdict', '?')
+        orphan_m = s.get('d1_orphan_movie_count', 0)
+        orphan_t = s.get('d1_orphan_torrent_count', 0)
+        lines.append(f'  Session: {sid}')
+        lines.append(f'    verdict: {verdict}')
+        lines.append(f'    orphan movies: {orphan_m}, orphan torrents: {orphan_t}')
+        if s.get('suggested_command'):
+            lines.append(f'    suggested fix: {s["suggested_command"]}')
+        if s.get('note'):
+            lines.append(f'    note: {s["note"]}')
+    lines.append('')
+    return '\n'.join(lines) + '\n', suspects
+
+
+def _drift_diagnosis_subject_prefix(suspects):
+    """Return a subject-line prefix tag based on drift diagnosis verdicts.
+
+    * ``[DRIFT-ESCALATE] `` when any suspect is ``ESCALATE_LIVE_DIVERGENCE``
+      or ``UNEXPECTED_PATTERN`` (takes priority).
+    * ``[DRIFT-FIX-READY] `` when at least one is ``SAFE_TO_APPLY`` and
+      none escalate.
+    * ``''`` when all suspects are ``CLEAN`` or the list is empty.
+    """
+    if not suspects:
+        return ''
+
+    has_escalate = False
+    has_safe = False
+    for s in suspects:
+        verdict = s.get('verdict', '')
+        if verdict in ('ESCALATE_LIVE_DIVERGENCE', 'UNEXPECTED_PATTERN'):
+            has_escalate = True
+        elif verdict == 'SAFE_TO_APPLY':
+            has_safe = True
+
+    if has_escalate:
+        return '[DRIFT-ESCALATE] '
+    if has_safe:
+        return '[DRIFT-FIX-READY] '
+    return ''
 
 
 def _build_pending_subject_prefix(records, alerts, has_critical, mode):
@@ -1867,6 +1983,35 @@ def send_email(subject, body, attachments=None, dry_run=False):
                 logger.info(f'Attached: {file_name} ({file_size} bytes)')
 
     logger.info(f'Connecting to SMTP server {mask_server(SMTP_SERVER)}:{SMTP_PORT}...')
+
+    # Resolve session id and attachment basenames once, before the SMTP block.
+    try:
+        from javdb.storage.db import get_active_session_id
+        _active_session_id = get_active_session_id()
+    except Exception:
+        _active_session_id = None
+    # Record only filenames actually attached to the message — attachment
+    # processing above skips missing / empty files.
+    _attachment_names = [
+        name for part in msg.iter_attachments()
+        if (name := part.get_filename())
+    ] or None
+
+    def _record_email_history(status: str, error: str = None) -> None:
+        """Defensively write an email history row; never raises."""
+        try:
+            from javdb.storage.repos.operations_repo import OperationsRepo
+            OperationsRepo().append_email_history(
+                _active_session_id,
+                EMAIL_TO,
+                subject,
+                status,
+                error=error,
+                attachments=_attachment_names,
+            )
+        except Exception as _he:
+            logger.warning("Failed to record email history: %s", _he)
+
     try:
         # ``timeout=30`` so a hung / unreachable SMTP server can't pin the
         # GH Actions job until the workflow-level ceiling. ``smtplib.SMTP``
@@ -1877,9 +2022,11 @@ def send_email(subject, body, attachments=None, dry_run=False):
             server.login(SMTP_USER, SMTP_PASSWORD)
             server.send_message(msg)
         logger.info(f'Email sent successfully to {mask_email(EMAIL_TO)}.')
+        _record_email_history('sent')
         return True
     except Exception as e:
         logger.error(f'Failed to send email: {e}')
+        _record_email_history('failed', error=str(e))
         return False
 
 
@@ -1999,14 +2146,14 @@ def main():
     try:
         from javdb.infra.config import use_sqlite as _use_sqlite
         if _use_sqlite():
-            from javdb.storage.db.db_migrations import init_db
-            from javdb.storage.db.db_reports import db_get_latest_session_local
-            from javdb.storage.db.db_stats import (
+            from javdb.storage.db import (
+                init_db,
+                db_get_latest_session_local,
                 db_get_spider_stats_local,
                 db_get_uploader_stats_local,
                 db_get_pikpak_stats_local,
+                current_backend as _cur_be,
             )
-            from javdb.storage.db.db_connection import current_backend as _cur_be
             init_db()
             _stats_backend_label = f"{_cur_be()} (stats forced sqlite-local)"
             _sid = args.session_id
@@ -2096,7 +2243,7 @@ def main():
         session_start_time = None
         if _sid is not None:
             try:
-                from javdb.storage.db.db_connection import get_db, REPORTS_DB_PATH
+                from javdb.storage.db import get_db, REPORTS_DB_PATH
                 with get_db(REPORTS_DB_PATH) as _conn:
                     _row = _conn.execute(
                         "SELECT DateTimeCreated FROM ReportSessions WHERE Id = ?", (_sid,)
@@ -2339,12 +2486,19 @@ Check attached logs for details.
         reports_dir_for_advisory = os.environ.get('REPORTS_DIR', _EMAIL_REPORTS_DIR)
         advisory = _build_dual_drift_advisory(reports_dir_for_advisory)
         if advisory:
+            # ADR-009 D6: run drift_diagnose subprocess and append results
+            diagnosis_section, diag_suspects = _build_drift_diagnosis_section()
+            if diagnosis_section:
+                advisory = advisory + diagnosis_section
             body = advisory + body
             logger.warning(
                 "Prepended D1 drift advisory to email body — see "
                 "%s/D1/d1_drift.jsonl",
                 reports_dir_for_advisory,
             )
+            # ADR-009 D6: tag subject with drift verdict
+            drift_prefix = _drift_diagnosis_subject_prefix(diag_suspects)
+            subject = f'{drift_prefix}{subject}'
 
     # Send email
     email_sent = send_email(subject, body, attachments, args.dry_run)

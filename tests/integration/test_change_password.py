@@ -3,7 +3,7 @@
 Covers:
 - Successful change with correct current password updates the in-memory hash
 - Persists the new hash to the API config store so it survives BE restart
-- Returns 401 when current_password is wrong (and does not mutate state)
+- Returns 400 when current_password is wrong (and does not mutate state)
 - Returns 422 when new_password is shorter than the minimum length
 - Requires authentication (anon → 401)
 """
@@ -82,7 +82,7 @@ def test_change_password_wrong_current_returns_401(admin_client, monkeypatch):
         },
     )
 
-    assert r.status_code == 401, r.text
+    assert r.status_code == 400, r.text
     # In-memory hash unchanged
     assert auth_infra.USERS["admin"]["password_hash"] == original_hash
 

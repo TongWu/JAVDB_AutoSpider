@@ -274,7 +274,7 @@ def scan_inventory(
 
 def export_db_to_csv(output_path: str) -> int:
     """Export the rclone_inventory table from SQLite to a CSV file."""
-    from javdb.storage.db.db_connection import get_db, OPERATIONS_DB_PATH
+    from javdb.storage.db import get_db, OPERATIONS_DB_PATH
 
     with get_db(OPERATIONS_DB_PATH) as conn:
         rows = conn.execute(
@@ -317,8 +317,7 @@ def load_inventory_as_folder_structure(
 
     if use_sqlite():
         try:
-            from javdb.storage.db.db_operations import db_load_rclone_inventory
-            from javdb.storage.db.db_connection import current_backend
+            from javdb.storage.db import db_load_rclone_inventory, current_backend
             raw = db_load_rclone_inventory()
             for entries in raw.values():
                 rows.extend(entries)
@@ -559,7 +558,7 @@ def validate_dedup_records_against_inventory() -> Tuple[int, List[dict]]:
     Returns ``(orphan_count, orphan_rows)``. Zero remote calls are made.
     """
     try:
-        from javdb.storage.db.db_operations import (
+        from javdb.storage.db import (
             db_load_rclone_inventory,
             db_load_dedup_records,
             db_mark_orphan_records,
@@ -742,7 +741,7 @@ def run_validate_inventory(
 
     Returns 0 on success, 1 on failure.
     """
-    from javdb.storage.db.db_operations import (
+    from javdb.storage.db import (
         db_load_rclone_inventory,
         db_delete_rclone_inventory_paths,
     )
@@ -840,7 +839,7 @@ def migrate_strip_drive_names() -> int:
     are updated; paths like ``dir/file:name`` are left unchanged.
     Returns the total number of rows updated across both tables.
     """
-    from javdb.storage.db.db_connection import get_db, OPERATIONS_DB_PATH
+    from javdb.storage.db import get_db, OPERATIONS_DB_PATH
 
     updated = 0
     with get_db(OPERATIONS_DB_PATH) as conn:
@@ -1160,6 +1159,149 @@ def run_execute_inventory_purge_from_csv(
 
 
 # ============================================================================
+# Programmatic API
+# ============================================================================
+
+def run_rclone_manager(
+    scan: bool = True,
+    report: bool = True,
+    execute: bool = False,
+    dry_run: bool = True,
+) -> dict:
+    """Programmatic entry point for the rclone manager pipeline.
+
+    Mirrors the ``main()`` orchestration without argparse: set up the rclone
+    config, resolve the remote, then run whichever phases are requested.
+
+    Only the phases that actually ran appear in ``phase_results``.  Each
+    phase's value is a dict with at least ``{"exit_code": int}``.
+
+    Raises:
+        ValueError: Invalid flag combination (e.g. execute without report).
+        RuntimeError: Setup failure (no remote configured, rclone not
+            installed, remote not reachable).
+    """
+    if not scan and not report and not execute:
+        raise ValueError("At least one of scan/report/execute must be True")
+    if execute and not report:
+        # execute=True requires report=True regardless of scan — the endpoint
+        # contract is that execute always needs a fresh report phase.
+        raise ValueError(
+            "execute=True requires report=True (or scan=True + report=True)"
+        )
+
+    # Setup rclone config from base64 if available.
+    if RCLONE_CONFIG_BASE64:
+        ok = setup_rclone_config_from_base64(RCLONE_CONFIG_BASE64)
+        if not ok:
+            raise RuntimeError(
+                "Failed to write rclone config from RCLONE_CONFIG_BASE64"
+            )
+
+    phase_results: dict = {}
+
+    # ── Scan phase ────────────────────────────────────────────────────────
+    if scan:
+        resolved = resolve_rclone_root(None)
+        if not resolved:
+            raise RuntimeError(
+                "No remote configured — set RCLONE_FOLDER_PATH (e.g. "
+                "'gdrive:/folder') or RCLONE_DRIVE_NAME + RCLONE_ROOT_FOLDER"
+            )
+        remote_name, root_folder = resolved
+
+        ok, msg = check_rclone_installed()
+        if not ok:
+            raise RuntimeError(f"rclone not available: {msg}")
+        ok, msg = check_remote_exists(remote_name)
+        if not ok:
+            raise RuntimeError(f"Remote not reachable: {msg}")
+
+        os.makedirs(REPORTS_DIR, exist_ok=True)
+        # Persist the scan via the same staging-then-swap path the CLI main()
+        # uses, so a subsequent report/execute phase reads fresh inventory
+        # rather than stale rows. A partial scan drops staging and leaves the
+        # live RcloneInventory untouched.
+        from javdb.storage.db import (
+            init_db,
+            db_create_report_session,
+            db_mark_session_committed,
+            db_mark_session_failed,
+            db_open_rclone_staging,
+            db_append_rclone_staging,
+            db_swap_rclone_inventory,
+            db_drop_rclone_staging,
+            get_active_session_id,
+        )
+
+        init_db()
+        staging_sid = get_active_session_id()
+        # Only finalize (commit/fail) a session we created ourselves — an
+        # inherited active session is owned by the caller.
+        created_local_session = staging_sid is None
+        if created_local_session:
+            staging_sid = db_create_report_session(
+                report_type="rclone_inventory",
+                report_date=datetime.now().strftime("%Y%m%d"),
+                csv_filename=RCLONE_INVENTORY_CSV,
+            )
+        try:
+            # db_open_rclone_staging is inside the try so a failure here also
+            # triggers the drop-staging / mark-failed finalization below.
+            db_open_rclone_staging(staging_sid)
+            total_rows, error_count = scan_inventory(
+                remote_name,
+                root_folder,
+                row_callback=lambda rows: db_append_rclone_staging(
+                    rows, session_id=staging_sid
+                ),
+            )
+            if error_count == 0:
+                db_swap_rclone_inventory(session_id=staging_sid)
+                if created_local_session:
+                    db_mark_session_committed(staging_sid)
+            else:
+                # Partial scan — drop staging, leave live inventory untouched.
+                db_drop_rclone_staging(staging_sid)
+                if created_local_session:
+                    db_mark_session_failed(staging_sid)
+        except Exception:
+            # scan_inventory / swap raised — never leave the staging table or
+            # the report session dangling in an in-progress state.
+            db_drop_rclone_staging(staging_sid)
+            if created_local_session:
+                db_mark_session_failed(staging_sid)
+            raise
+        phase_results["scan"] = {
+            "exit_code": 0 if error_count == 0 else 1,
+            "total_rows": total_rows,
+            "error_count": error_count,
+        }
+        if error_count != 0:
+            # A failed scan dropped staging and left the live inventory
+            # unchanged — stop here rather than run report/execute against
+            # stale data.
+            return {"phase_results": phase_results, "dry_run": dry_run}
+
+    # ── Report phase ──────────────────────────────────────────────────────
+    if report:
+        if not scan:
+            # Report-only: resolve remote for CSV path but don't scan.
+            os.makedirs(REPORTS_DIR, exist_ok=True)
+        output_path = os.path.join(REPORTS_DIR, RCLONE_INVENTORY_CSV)
+        exit_code = run_report_from_inventory(output_path)
+        phase_results["report"] = {"exit_code": exit_code}
+
+    # ── Execute phase ─────────────────────────────────────────────────────
+    if execute:
+        dedup_csv = os.path.join(REPORTS_DIR, 'dedup_history.csv')
+        exit_code = run_execute_from_csv(dedup_csv, dry_run=dry_run)
+        phase_results["execute"] = {"exit_code": exit_code, "dry_run": dry_run}
+
+    return {"phase_results": phase_results, "dry_run": dry_run}
+
+
+# ============================================================================
 # CLI
 # ============================================================================
 
@@ -1356,20 +1498,18 @@ def main() -> int:
         _created_local_staging_session = False
         if _use_sqlite():
             try:
-                from javdb.storage.db.db_migrations import init_db
-                from javdb.storage.db.db_reports import (
+                from javdb.storage.db import (
+                    init_db,
                     db_create_report_session,
                     db_mark_session_committed,
                     db_mark_session_failed,
-                )
-                from javdb.storage.db.db_operations import (
                     db_open_rclone_staging,
                     db_append_rclone_staging,
                     db_swap_rclone_inventory,
                     db_merge_rclone_inventory_from_stage,
                     db_drop_rclone_staging,
+                    get_active_session_id,
                 )
-                from javdb.storage.db.db_session import get_active_session_id
                 init_db()
                 _staging_session_id = get_active_session_id()
                 if _staging_session_id is None:

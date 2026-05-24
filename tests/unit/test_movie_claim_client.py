@@ -692,7 +692,14 @@ def test_factory_returns_none_when_unconfigured(monkeypatch):
     monkeypatch.delenv("MOVIE_CLAIM_ENABLED", raising=False)
     monkeypatch.delenv("PROXY_COORDINATOR_URL", raising=False)
     monkeypatch.delenv("PROXY_COORDINATOR_TOKEN", raising=False)
-    assert create_movie_claim_client_from_env() is None
+    with patch(
+        "javdb.infra.config.cfg",
+        side_effect=_movie_claim_cfg_mapping(
+            PROXY_COORDINATOR_URL=None,
+            PROXY_COORDINATOR_TOKEN=None,
+        ),
+    ):
+        assert create_movie_claim_client_from_env() is None
 
 
 def test_factory_reads_proxy_credentials_from_config_only(monkeypatch):

@@ -22,7 +22,10 @@ from __future__ import annotations
 
 import pytest
 
-import javdb.storage.db.db as db_mod
+from javdb.storage.db import (
+    get_db, db_create_report_session,
+    db_stage_history_write, _pending_torrent_overlay, _commit_one_movie,
+)
 
 
 @pytest.fixture
@@ -31,7 +34,7 @@ def staged_duplicate_torrent_session():
 
     Returns ``(session_id, href, video_code, [seq_first, seq_second])``.
     """
-    db_mod.db_create_report_session(
+    db_create_report_session(
         report_type="DailyReport",
         report_date="2026-05-09",
         csv_filename="overlay-merge-test.csv",
@@ -42,7 +45,7 @@ def staged_duplicate_torrent_session():
     video_code = "DUPSTG-001"
 
     # First staging — initial best-effort scrape.
-    seq_first = db_mod.db_stage_history_write(
+    seq_first = db_stage_history_write(
         session_id, "torrent",
         {
             "Href": href,
@@ -56,7 +59,7 @@ def staged_duplicate_torrent_session():
     )
     # Second staging — re-fetch / retry path lands a second row that
     # overlaps on (href, sub=0, cen=0) but carries a richer payload.
-    seq_second = db_mod.db_stage_history_write(
+    seq_second = db_stage_history_write(
         session_id, "torrent",
         {
             "Href": href,
@@ -78,8 +81,8 @@ def test_pending_torrent_overlay_collects_merged_seqs(
     """Both Seqs land in ``_merged_seqs`` for the merged row."""
     session_id, href, _vc, seqs = staged_duplicate_torrent_session
 
-    with db_mod.get_db() as conn:
-        overlay = db_mod._pending_torrent_overlay(
+    with get_db() as conn:
+        overlay = _pending_torrent_overlay(
             conn, session_id, href=href,
         )
 
@@ -109,7 +112,7 @@ def test_commit_one_movie_clears_all_merged_pending_rows(
     # somewhere to attach the torrent. Without this, the commit path
     # short-circuits because there's no live MovieHistory row to upsert
     # against.
-    db_mod.db_stage_history_write(
+    db_stage_history_write(
         session_id, "movie",
         {
             "Href": href,
@@ -118,12 +121,12 @@ def test_commit_one_movie_clears_all_merged_pending_rows(
         },
     )
 
-    with db_mod.get_db() as conn:
-        db_mod._commit_one_movie(
+    with get_db() as conn:
+        _commit_one_movie(
             conn, session_id, href, when="2026-05-09 12:30:00",
         )
 
-    with db_mod.get_db() as conn:
+    with get_db() as conn:
         residual_pending = conn.execute(
             "SELECT COUNT(*) AS n FROM PendingTorrentHistoryWrites "
             "WHERE SessionId=? AND ApplyState='pending'",
