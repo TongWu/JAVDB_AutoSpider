@@ -37,6 +37,7 @@ This document is the operator's reference for rolling back partial Cloudflare D1
   - [Marking a session committed manually](#marking-a-session-committed-manually)
 - [Retired audit table forensics](#retired-audit-table-forensics)
 - [Drift handling](#drift-handling)
+  - [ADR-009 drift diagnosis and guarded apply](#adr-009-drift-diagnosis-and-guarded-apply)
 - [Schema migration](#schema-migration)
 - [Pending mode (current default)](#pending-mode-current-default)
   - [Pending state machine](#pending-state-machine)
@@ -364,6 +365,31 @@ When `drift_total > 0`:
 3. Optionally re-run `apps.cli.rollback --scope history --session-id <id> --apply` later if you decide the concurrent run was also wrong.
 
 The CLI exits with code `4` to surface partial failures so an operator notices.
+
+### ADR-009 drift diagnosis and guarded apply
+
+Use `drift_diagnose` when `pending_session_verify`, rollback logs, or email alerts report pending-table residue after a committed session. Diagnose mode is read-only by default:
+
+```bash
+python3 -m apps.cli.db.drift_diagnose --since 24
+python3 -m apps.cli.db.drift_diagnose --since 24 --json
+```
+
+Only a `SAFE_TO_APPLY` verdict allows manual apply. The apply path re-runs diagnosis at execution time, refuses every non-`SAFE_TO_APPLY` state, and is allowed to delete only orphan pending rows scoped by this predicate:
+
+```sql
+SessionId = ? AND ApplyState = 'pending'
+```
+
+After confirming the session id and current verdict, run:
+
+```bash
+python3 -m apps.cli.db.drift_diagnose --apply --session-id <SessionId>
+```
+
+- **Prohibition:** Do not invoke `--apply` automatically from GitHub Actions, email notification, or alert-handling code.
+- **Allowed behavior:** Actions and email may report the suggested operator command, but must not execute it.
+- **Gate conditions:** Require manual diagnosis and approval before any operator command mutates data.
 
 ---
 
