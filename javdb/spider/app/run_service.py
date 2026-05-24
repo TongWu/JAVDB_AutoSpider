@@ -1,5 +1,6 @@
 """Spider runtime orchestration service."""
 
+from dataclasses import dataclass
 import os
 import sys
 
@@ -51,8 +52,79 @@ from javdb.spider.detail.runner import process_detail_entries
 from javdb.spider.detail.sequential_mode import build_sequential_detail_backend
 from javdb.spider.runtime.report import generate_summary_report
 from javdb.spider.fetch.fallback import AdhocLoginFailedError
+from javdb.spider.app.result import (
+    SpiderRunResult,
+    SpiderRunStats,
+    utc_now_iso,
+    write_spider_result_atomic,
+)
 
 logger = get_logger(__name__)
+
+
+@dataclass
+class _SpiderResultContext:
+    result_json: str | None = None
+    started_at: str | None = None
+    csv_path: str | None = None
+    session_id: str | None = None
+    dedup_csv_path: str | None = None
+    mode: str = "daily"
+    url: str | None = None
+    phase: str = "all"
+    page_range: str | None = None
+
+
+_result_context = _SpiderResultContext()
+
+
+def _page_range(start_page: int, end_page: int, parse_all: bool) -> str:
+    return f"{start_page}-*" if parse_all else f"{start_page}-{end_page}"
+
+
+def _failure_exit_code(exc: BaseException) -> int | None:
+    if not isinstance(exc, SystemExit):
+        return 1
+    if exc.code is None:
+        return None
+    if isinstance(exc.code, int):
+        return exc.code if exc.code != 0 else None
+    return 1
+
+
+def _failure_reason(exc: BaseException, exit_code: int) -> str:
+    if isinstance(exc, SystemExit):
+        return f"exit code {exit_code}"
+    return str(exc)[:1000]
+
+
+def _write_result_sidecar(result: SpiderRunResult, result_json: str | None) -> None:
+    if result_json:
+        write_spider_result_atomic(result_json, result)
+
+
+def _write_failure_result_sidecar(exc: BaseException) -> None:
+    exit_code = _failure_exit_code(exc)
+    if exit_code is None:
+        return
+    ctx = _result_context
+    _write_result_sidecar(
+        SpiderRunResult(
+            csv_path=str(ctx.csv_path) if ctx.csv_path else None,
+            session_id=str(ctx.session_id) if ctx.session_id else None,
+            dedup_csv_path=str(ctx.dedup_csv_path) if ctx.dedup_csv_path else None,
+            stats=None,
+            mode="adhoc" if ctx.mode == "adhoc" else "daily",
+            url=ctx.url,
+            phase=str(ctx.phase),
+            page_range=ctx.page_range,
+            started_at=ctx.started_at,
+            finished_at=utc_now_iso(),
+            exit_code=exit_code,
+            failure_reason=_failure_reason(exc, exit_code),
+        ),
+        ctx.result_json,
+    )
 
 
 def create_detail_backend(
@@ -83,7 +155,10 @@ def create_detail_backend(
 
 
 def _main():
+    global _result_context
+    _result_context = _SpiderResultContext()
     args = parse_arguments()
+    started_at = utc_now_iso()
 
     start_page = args.start_page
     end_page = args.end_page
@@ -105,6 +180,14 @@ def _main():
     rclone_filter = not args.no_rclone_filter
     enable_redownload = args.enable_redownload or ENABLE_REDOWNLOAD
     redownload_threshold = args.redownload_threshold if args.redownload_threshold is not None else REDOWNLOAD_SIZE_THRESHOLD
+    page_range = _page_range(start_page, end_page, parse_all)
+    result_json = getattr(args, "result_json", None)
+    _result_context.result_json = result_json
+    _result_context.started_at = started_at
+    _result_context.mode = "adhoc" if custom_url else "daily"
+    _result_context.url = custom_url
+    _result_context.phase = str(phase_mode)
+    _result_context.page_range = page_range
 
     if always_bypass_time is not None and always_bypass_time < 0:
         logger.error("--always-bypass-time must be >= 0")
@@ -137,6 +220,7 @@ def _main():
         csv_path = os.path.join(output_dated_dir, output_csv)
         use_history_for_loading = not args.disable_all_filters
         use_history_for_saving = True
+    _result_context.csv_path = str(csv_path) if csv_path else None
 
     log_section(logger, "START · JavDB spider", emoji='▶')
     if args.disable_all_filters:
@@ -241,6 +325,7 @@ def _main():
         dedup_csv_path = os.path.join(dedup_dated_dir, dedup_filename)
     else:
         dedup_csv_path = os.path.join(REPORTS_DIR, DEDUP_CSV)
+    _result_context.dedup_csv_path = str(dedup_csv_path) if enable_dedup and dedup_csv_path else None
     rclone_inventory = {}
     if os.path.exists(rclone_inventory_path):
         rclone_inventory = load_rclone_inventory(rclone_inventory_path)
@@ -310,6 +395,7 @@ def _main():
     use_proxy = idx_result['use_proxy']
     use_cf_bypass = idx_result['use_cf_bypass']
     csv_path = idx_result['csv_path']
+    _result_context.csv_path = str(csv_path) if csv_path else None
 
     # Create a report session in DB-backed storage (when enabled)
     _session_id = None
@@ -415,6 +501,7 @@ def _main():
                 run_attempt=run_attempt,
                 write_mode=requested_write_mode,
             )
+            _result_context.session_id = str(_session_id) if _session_id else None
             set_active_session(_session_id)
             # Tag every history / dedup / align write that follows in this
             # process with this session id so a downstream rollback can
@@ -671,6 +758,35 @@ def _main():
         except Exception:
             logger.debug("Coordinator committed-status flush skipped", exc_info=True)
 
+    total_discovered = (
+        (len(all_index_results_phase1) if phase_mode in ('1', 'all') else 0)
+        + (len(all_index_results_phase2) if phase_mode in ('2', 'all') else 0)
+    )
+    _write_result_sidecar(
+        SpiderRunResult(
+            csv_path=str(csv_path) if csv_path else None,
+            session_id=str(_session_id) if _session_id else None,
+            dedup_csv_path=str(dedup_csv_path) if enable_dedup and dedup_csv_path else None,
+            stats=SpiderRunStats(
+                pages=page_range,
+                found=int(total_discovered),
+                parsed=int(len(rows)),
+                skipped=int(skipped_history_count),
+                failed=int(failed_count),
+                no_new=int(no_new_torrents_count),
+            ),
+            mode="adhoc" if args.url else "daily",
+            url=args.url,
+            phase=str(phase_mode),
+            page_range=page_range,
+            started_at=started_at,
+            finished_at=utc_now_iso(),
+            exit_code=0,
+            failure_reason=None,
+        ),
+        result_json,
+    )
+
     from_pipeline = args.from_pipeline if hasattr(args, 'from_pipeline') else False
 
     if not dry_run and has_git_credentials(GIT_USERNAME, GIT_PASSWORD):
@@ -695,6 +811,10 @@ def main():
     try:
         return _main()
     except BaseException as exc:
+        try:
+            _write_failure_result_sidecar(exc)
+        except Exception:
+            logger.debug("Spider result sidecar failure write skipped", exc_info=True)
         # Phase-1 ADR-008 — surface a `failed` session state to the Coordinator
         # before re-raising so the dashboard's Sessions panel + alert
         # webhook fires even when the spider crashes mid-run. SystemExit(0)
