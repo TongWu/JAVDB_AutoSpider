@@ -1,0 +1,34 @@
+{
+  "has_movie_list": true,
+  "movies": [
+    {
+      "comment_count": "12",
+      "cover_url": "/covers/top-001.jpg",
+      "href": "/v/TOP-001",
+      "page": 1,
+      "ranking": 1,
+      "rate": "4.9",
+      "release_date": "",
+      "tags": [
+        "含中字磁鏈"
+      ],
+      "title": "Ranked Title",
+      "video_code": "TOP-001"
+    },
+    {
+      "comment_count": "",
+      "cover_url": "",
+      "href": "/v/TOP-002",
+      "page": 1,
+      "ranking": null,
+      "rate": "",
+      "release_date": "",
+      "tags": [],
+      "title": "Invalid Rank",
+      "video_code": "TOP-002"
+    }
+  ],
+  "page_title": "Top Edge Cases | JavDB",
+  "period": "2026",
+  "top_type": "top250"
+}
