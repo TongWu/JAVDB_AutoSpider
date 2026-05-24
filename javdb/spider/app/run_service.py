@@ -758,10 +758,7 @@ def _main():
         except Exception:
             logger.debug("Coordinator committed-status flush skipped", exc_info=True)
 
-    total_discovered = (
-        (len(all_index_results_phase1) if phase_mode in ('1', 'all') else 0)
-        + (len(all_index_results_phase2) if phase_mode in ('2', 'all') else 0)
-    )
+    total_discovered = len(rows) + skipped_history_count + no_new_torrents_count + failed_count
     _write_result_sidecar(
         SpiderRunResult(
             csv_path=str(csv_path) if csv_path else None,
