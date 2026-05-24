@@ -181,15 +181,18 @@ def _safe_log_path(job_id: str) -> Path:
 
 def _validate_job_result_file(value: str) -> None:
     try:
-        raw_path = Path(value).expanduser()
-        candidate = (
-            raw_path if raw_path.is_absolute() else context.REPO_ROOT / raw_path
-        ).resolve()
+        candidate = _resolve_job_result_file(value)
         candidate.relative_to(context.RESOLVED_JOB_LOG_DIR)
     except (OSError, ValueError):
         raise HTTPException(status_code=400, detail="Invalid task command") from None
     if candidate.suffixes[-2:] != [".result", ".json"]:
         raise HTTPException(status_code=400, detail="Invalid task command")
+
+
+def _resolve_job_result_file(value: str) -> Path:
+    raw_path = Path(value).expanduser()
+    base_path = raw_path if raw_path.is_absolute() else context.REPO_ROOT / raw_path
+    return base_path.resolve()
 
 
 def _validate_task_command(command: list[str]) -> list[str]:
@@ -429,7 +432,9 @@ def _spawn_job(
         command.extend(["--result-json", str(result_path)])
         command = _validate_task_command(command)
     elif command[3] == "apps.cli.pipeline" and "--result-json" in command:
-        result_path = Path(command[command.index("--result-json") + 1]).resolve()
+        result_path = _resolve_job_result_file(
+            command[command.index("--result-json") + 1],
+        )
     log_path = _safe_log_path(job_id)
     with open(log_path, "w", encoding="utf-8") as fp:
         process = subprocess.Popen(

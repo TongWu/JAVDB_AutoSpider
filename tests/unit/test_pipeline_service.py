@@ -333,6 +333,47 @@ def test_pipeline_main_records_failure_email_exception_without_changing_exit(mon
     assert failure_email.finished_at.endswith("Z")
 
 
+def test_pipeline_main_records_failure_email_policy_exception(monkeypatch, tmp_path):
+    runner = FakeStepRunner(outcomes={"qb_uploader": ("failed", 2, "exit code 2")})
+    result_path = tmp_path / "pipeline-result.json"
+    original_step_policy = pipeline_service.StepPolicy
+
+    def step_policy_with_failure(*args, **kwargs):
+        name = kwargs.get("name")
+        if name is None and args:
+            name = args[0]
+        if name == "email_notification_failure":
+            raise RuntimeError("failed to build failure email policy")
+        return original_step_policy(*args, **kwargs)
+
+    _patch_runner(monkeypatch, runner)
+    monkeypatch.setattr(pipeline_service, "StepPolicy", step_policy_with_failure)
+    monkeypatch.setattr(
+        pipeline_service,
+        'parse_arguments',
+        lambda: _make_args(result_json=str(result_path)),
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        pipeline_service.main()
+
+    assert exc.value.code == 1
+    result = read_pipeline_result(result_path)
+    assert result.status == "failed"
+    assert [step.name for step in result.steps] == [
+        "spider",
+        "qb_uploader",
+        "email_notification_failure",
+    ]
+    failure_email = result.steps[-1]
+    assert failure_email.status == "failed"
+    assert failure_email.required is False
+    assert failure_email.run_on_failure is True
+    assert "apps.cli.notify.email" in failure_email.command
+    assert failure_email.exit_code is None
+    assert failure_email.failure_reason == "failed to build failure email policy"
+
+
 def test_pipeline_main_records_optional_dedup_failure_without_failing(monkeypatch, tmp_path):
     runner = FakeStepRunner(outcomes={"rclone_dedup": ("failed", 2, "exit code 2")})
     result_path = tmp_path / "pipeline-result.json"

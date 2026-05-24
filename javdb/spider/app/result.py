@@ -3,10 +3,10 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 import json
-import os
 from pathlib import Path
-import tempfile
 from typing import Any, Literal
+
+from javdb.infra.result_io import atomic_write_json
 
 SPIDER_RESULT_SCHEMA_VERSION = "1.0"
 SPIDER_RESULT_KIND = "spider_run_result"
@@ -48,30 +48,44 @@ class SpiderRunResult:
         return asdict(self)
 
 
-def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fp:
-            json.dump(payload, fp, ensure_ascii=False, indent=2, sort_keys=True)
-            fp.write("\n")
-            fp.flush()
-            os.fsync(fp.fileno())
-        os.replace(tmp_name, path)
-    except Exception:
-        try:
-            os.unlink(tmp_name)
-        except OSError:
-            pass
-        raise
-
-
 def write_spider_result_atomic(path: str | Path, result: SpiderRunResult) -> None:
-    _atomic_write_json(Path(path), result.to_json_dict())
+    atomic_write_json(Path(path), result.to_json_dict())
+
+
+def _require_string_or_none(raw: dict[str, Any], field_name: str) -> None:
+    value = raw[field_name]
+    if value is not None and not isinstance(value, str):
+        raise ValueError(f"Invalid spider result field {field_name}: expected string or null")
+
+
+def _validate_spider_stats(stats_raw: Any) -> SpiderRunStats | None:
+    if stats_raw is None:
+        return None
+    if not isinstance(stats_raw, dict):
+        raise ValueError("Invalid spider result field stats: expected object or null")
+    required = {"pages", "found", "parsed", "skipped", "failed", "no_new"}
+    missing = sorted(required - stats_raw.keys())
+    if missing:
+        raise ValueError(f"Missing spider result stats field(s): {', '.join(missing)}")
+    if not isinstance(stats_raw["pages"], str):
+        raise ValueError("Invalid spider result stats.pages: expected string")
+    for field_name in ("found", "parsed", "skipped", "failed", "no_new"):
+        if not isinstance(stats_raw[field_name], int) or isinstance(stats_raw[field_name], bool):
+            raise ValueError(f"Invalid spider result stats.{field_name}: expected int")
+    return SpiderRunStats(
+        pages=stats_raw["pages"],
+        found=stats_raw["found"],
+        parsed=stats_raw["parsed"],
+        skipped=stats_raw["skipped"],
+        failed=stats_raw["failed"],
+        no_new=stats_raw["no_new"],
+    )
 
 
 def read_spider_result(path: str | Path) -> SpiderRunResult:
     raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError("Spider result must be a JSON object")
     if raw.get("schema_version") != SPIDER_RESULT_SCHEMA_VERSION:
         raise ValueError(f"Unsupported spider result schema_version: {raw.get('schema_version')!r}")
     if raw.get("kind") != SPIDER_RESULT_KIND:
@@ -93,8 +107,26 @@ def read_spider_result(path: str | Path) -> SpiderRunResult:
     missing = sorted(required - raw.keys())
     if missing:
         raise ValueError(f"Missing spider result field(s): {', '.join(missing)}")
-    stats_raw = raw.get("stats")
-    stats = SpiderRunStats(**stats_raw) if isinstance(stats_raw, dict) else None
+    if raw["mode"] not in ("daily", "adhoc"):
+        raise ValueError(f"Invalid spider result mode: {raw['mode']!r}")
+    if raw["phase"] not in ("1", "2", "all"):
+        raise ValueError(f"Invalid spider result phase: {raw['phase']!r}")
+    for field_name in (
+        "csv_path",
+        "session_id",
+        "dedup_csv_path",
+        "url",
+        "page_range",
+        "started_at",
+        "finished_at",
+        "failure_reason",
+    ):
+        _require_string_or_none(raw, field_name)
+    if "generated_at" in raw and not isinstance(raw["generated_at"], str):
+        raise ValueError("Invalid spider result field generated_at: expected string")
+    if not isinstance(raw["exit_code"], int) or isinstance(raw["exit_code"], bool):
+        raise ValueError("Invalid spider result field exit_code: expected int")
+    stats = _validate_spider_stats(raw["stats"])
     return SpiderRunResult(
         csv_path=raw["csv_path"],
         session_id=raw["session_id"],
@@ -106,7 +138,7 @@ def read_spider_result(path: str | Path) -> SpiderRunResult:
         page_range=raw["page_range"],
         started_at=raw["started_at"],
         finished_at=raw["finished_at"],
-        exit_code=int(raw["exit_code"]),
+        exit_code=raw["exit_code"],
         failure_reason=raw["failure_reason"],
         schema_version=raw["schema_version"],
         kind=raw["kind"],
