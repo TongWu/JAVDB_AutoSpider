@@ -6,6 +6,7 @@ GET /api/logs/search — file grep over logs/jobs/*.log
 from __future__ import annotations
 
 import json
+from itertools import islice
 from pathlib import Path
 from typing import Any, Dict
 
@@ -19,6 +20,7 @@ router = APIRouter(prefix="/api/logs", tags=["logs"])
 
 _LOGS_DIR = context.RESOLVED_JOB_LOG_DIR
 _HARD_CAP = 500
+_MAX_META_SCAN = 200
 
 
 @router.get("/search", response_model=LogSearchResponse)
@@ -31,10 +33,12 @@ def search_logs(
     _user: Dict[str, Any] = Depends(require_role("admin")),
 ) -> LogSearchResponse:
     if not _LOGS_DIR.exists():
-        return LogSearchResponse(results=[], total_matched=0, truncated=False)
+        return LogSearchResponse(results=[], total_matched=0, truncated=False, scanned_files=0)
 
     candidates = []
-    for meta_path in sorted(_LOGS_DIR.glob("*.meta.json"), reverse=True):
+    scanned_files = 0
+    for meta_path in islice(sorted(_LOGS_DIR.glob("*.meta.json"), reverse=True), _MAX_META_SCAN):
+        scanned_files += 1
         try:
             meta = json.loads(meta_path.read_text(encoding="utf-8", errors="ignore"))
         except json.JSONDecodeError:
@@ -55,24 +59,27 @@ def search_logs(
     total = 0
     q_lower = q.lower()
     for jid, log_path, meta in candidates:
-        for i, line in enumerate(log_path.read_text(encoding="utf-8", errors="ignore").splitlines(), 1):
-            if q_lower in line.lower():
-                total += 1
-                if len(results) < limit:
-                    results.append(
-                        LogSearchItem(
-                            job_id=jid,
-                            line_number=i,
-                            text=line,
-                            kind=meta.get("kind", ""),
-                            created_at=meta.get("created_at", ""),
+        with open(log_path, encoding="utf-8", errors="ignore") as fh:
+            for i, line in enumerate(fh, 1):
+                line = line.rstrip("\n")
+                if q_lower in line.lower():
+                    total += 1
+                    if len(results) < limit:
+                        results.append(
+                            LogSearchItem(
+                                job_id=jid,
+                                line_number=i,
+                                text=line,
+                                kind=meta.get("kind", ""),
+                                created_at=meta.get("created_at", ""),
+                            )
                         )
-                    )
 
     return LogSearchResponse(
         results=results,
         total_matched=total,
         truncated=total > limit,
+        scanned_files=scanned_files,
     )
 
 
