@@ -72,6 +72,8 @@ class TorrentSearchParams(BaseModel):
     )
     resolution_type: Optional[int] = Field(
         default=None,
+        ge=0,
+        le=4,
         description="0=unknown, 1=SD, 2=HD, 3=FHD, 4=4K",
     )
     has_subtitle: Optional[bool] = Field(

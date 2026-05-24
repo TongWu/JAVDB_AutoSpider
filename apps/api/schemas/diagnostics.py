@@ -1,9 +1,9 @@
 """Schemas for /api/diag/* diagnostics endpoints."""
 from __future__ import annotations
 
-from typing import Optional
+from typing import Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 
 class JavdbSessionStatus(BaseModel):
@@ -19,8 +19,14 @@ class JavdbSessionStatus(BaseModel):
 class JavdbSessionRefreshRequest(BaseModel):
     """Request body for POST /api/diag/javdb-session/refresh."""
 
-    method: str = "headless"            # "headless" | "cookie_paste"
-    cookie_value: Optional[str] = None  # required when method="cookie_paste"
+    method: Literal["headless", "cookie_paste"] = "headless"
+    cookie_value: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _require_cookie_for_paste(self) -> "JavdbSessionRefreshRequest":
+        if self.method == "cookie_paste" and not self.cookie_value:
+            raise ValueError("cookie_value is required when method='cookie_paste'")
+        return self
 
 
 class JavdbSessionRefreshResponse(BaseModel):

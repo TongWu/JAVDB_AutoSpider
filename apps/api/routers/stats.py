@@ -97,7 +97,13 @@ def _proxy_bans_by_date(days: int) -> Dict[str, int]:
             continue
 
         created_at = meta.get("created_at", "")
-        if not created_at or created_at < cutoff.isoformat():
+        if not created_at:
+            continue
+        try:
+            created_dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            continue
+        if created_dt < cutoff:
             continue
 
         date_str = created_at[:10]
@@ -223,7 +229,10 @@ def stats_trend(
         data_points = [TrendDataPoint(date=r[0], value=r[1]) for r in rows]
 
     elif metric == "duration":
-        pass
+        raise HTTPException(
+            status_code=501,
+            detail={"error": {"code": "stats.not_implemented", "message": "duration metric not yet implemented"}},
+        )
 
     elif metric == "movies":
         rows = _safe_query_all(

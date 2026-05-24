@@ -81,8 +81,8 @@ def search_movies(
     except ValueError as exc:
         msg = str(exc)
         if "cursor" in msg:
-            raise HTTPException(status_code=400, detail=_INVALID_CURSOR)
-        raise HTTPException(status_code=400, detail=_INVALID_DATE)
+            raise HTTPException(status_code=400, detail=_INVALID_CURSOR) from exc
+        raise HTTPException(status_code=400, detail=_INVALID_DATE) from exc
     return MovieSearchResponse(
         items=[_movie_row_to_item(r) for r in items],
         next_cursor=next_cursor,
@@ -109,8 +109,8 @@ def export_movies_csv(
         # Consume the header eagerly so date-parse errors raise before we return 200.
         # The generator is then chained back for the data rows.
         header_chunk = next(rows)
-    except ValueError:
-        raise HTTPException(status_code=400, detail=_INVALID_DATE)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=_INVALID_DATE) from exc
 
     def _stream():
         yield header_chunk
@@ -144,8 +144,8 @@ def search_torrents(
     except ValueError as exc:
         msg = str(exc)
         if "cursor" in msg:
-            raise HTTPException(status_code=400, detail=_INVALID_CURSOR)
-        raise HTTPException(status_code=400, detail=_INVALID_DATE)
+            raise HTTPException(status_code=400, detail=_INVALID_CURSOR) from exc
+        raise HTTPException(status_code=400, detail=_INVALID_DATE) from exc
     return TorrentSearchResponse(
         items=[_torrent_row_to_item(r) for r in items],
         next_cursor=next_cursor,
@@ -170,8 +170,8 @@ def export_torrents_csv(
             date_to=params.date_to,
         )
         header_chunk = next(rows)
-    except ValueError:
-        raise HTTPException(status_code=400, detail=_INVALID_DATE)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=_INVALID_DATE) from exc
 
     def _stream():
         yield header_chunk
