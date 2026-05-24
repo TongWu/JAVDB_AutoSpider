@@ -154,12 +154,13 @@ class SubprocessStepRunner:
                 elif isinstance(item, str) and item:
                     self._log_sink.write_line(policy.name, item)
 
-                if time.monotonic() > deadline and not stdout_done:
+                process_done = process.poll() is not None
+                if time.monotonic() > deadline and (not process_done or not stdout_done):
                     break
-                if stdout_done and process.poll() is not None:
+                if stdout_done and process_done:
                     break
 
-            if time.monotonic() > deadline and not stdout_done:
+            if time.monotonic() > deadline and (process.poll() is None or not stdout_done):
                 _terminate_and_wait(wait_for_stdout=True)
                 _drain_available_output()
                 _drain_available_output()

@@ -120,3 +120,22 @@ def test_subprocess_step_runner_times_out_when_parent_exits_but_descendant_keeps
     assert elapsed < 2.5
     assert ("demo", "parent-done\n") in sink.lines
     assert ("demo", "child-start\n") in sink.lines
+
+
+def test_subprocess_step_runner_times_out_when_stdout_closes_before_process_exits():
+    sink = RecordingSink()
+    runner = SubprocessStepRunner(log_sink=sink)
+    policy = StepPolicy(name="demo", required=True, timeout_sec=1)
+    command = [
+        sys.executable,
+        "-c",
+        "import os, time; os.close(1); os.close(2); time.sleep(3)",
+    ]
+
+    started_at = time.monotonic()
+    result = runner.run(policy, command)
+    elapsed = time.monotonic() - started_at
+
+    assert result.status == "timed_out"
+    assert result.exit_code is None
+    assert elapsed < 2.5
