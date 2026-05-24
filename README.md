@@ -45,7 +45,7 @@ For complete setup instructions, see the [Local Setup Guide](docs/handbook/en/se
 
 ## Architecture
 
-```
+```text
 apps/
 ├── cli/          Canonical CLI entrypoints (spider, pipeline, db/, qb/, pikpak/, rclone/, notify/, ops/)
 └── api/          FastAPI REST API

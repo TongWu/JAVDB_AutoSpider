@@ -197,11 +197,11 @@ SPIDER_CMD+=(--result-json "$SPIDER_RESULT_JSON")
 Keep:
 
 ```bash
-SPIDER_OUTPUT=$("${SPIDER_CMD[@]}" | tee /dev/stderr) && SPIDER_EXIT=0 || SPIDER_EXIT=$?
+"${SPIDER_CMD[@]}" 2>&1 | tee "$RUNNER_TEMP/spider.log"; SPIDER_EXIT=${PIPESTATUS[0]}
 ```
 
-or replace it with an equivalent that still streams logs while the process runs.
-Do not wait until process exit to print captured logs.
+Do not buffer stdout into a shell variable — stream logs while the process runs
+and capture the exit code from the pipeline.
 
 - [ ] **Step 3: Replace grep extraction with JSON helper**
 

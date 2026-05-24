@@ -405,7 +405,9 @@ class InProcessSpiderStepRunner:
                 spider_result,
             )
         except SystemExit as exc:
-            code = exc.code if isinstance(exc.code, int) else 1
+            code = exc.code if exc.code is not None else 0
+            if not isinstance(code, int):
+                code = 1
             return (
                 StepResult(
                     name=policy.name,
