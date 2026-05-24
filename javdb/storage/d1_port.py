@@ -1,0 +1,346 @@
+"""Unified Cloudflare D1 access port.
+
+This module owns transport concerns only: HTTP POSTs, retry/backoff,
+schema metadata cache, metrics, and recovery hooks. Business SQL remains
+in the storage DB and Repo layers.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+import datetime as _datetime
+import email.utils as _email_utils
+import json
+import os
+from pathlib import Path
+import random
+import re
+import time
+from typing import Any, Callable, Iterable, Sequence
+
+import requests
+
+from javdb.storage.d1_client import (
+    D1Cursor,
+    D1PermanentError,
+    D1TransientError,
+    _EXPORT_LOCK_BACKOFF_FLOOR_SEC,
+    _EXPORT_LOCK_KEYWORDS,
+    _TRANSIENT_ERROR_KEYWORDS,
+    _matches_keyword,
+    _params_for_d1_json,
+)
+
+
+@dataclass(frozen=True)
+class D1PortConfig:
+    timeout: int
+    batch_limit: int
+    max_retries: int
+    retry_base_sec: float
+    retry_max_sleep_sec: float
+
+
+def d1_summary_path(reports_dir: str | None = None) -> Path:
+    root = reports_dir or os.environ.get("REPORTS_DIR", "reports")
+    return Path(root) / "D1" / "d1_port_summary.json"
+
+
+class D1AccessPort:
+    def __init__(
+        self,
+        *,
+        url: str,
+        headers: dict[str, str],
+        config: D1PortConfig,
+        post_request: Callable[..., Any] | None = None,
+        sleep: Callable[[float], None] = time.sleep,
+        jitter: Callable[[], float] = lambda: random.uniform(0, 0.5),
+    ):
+        self._url = url
+        self._headers = dict(headers)
+        self._config = config
+        self._session = requests.Session()
+        self._post_request = post_request or self._session.post
+        self._sleep = sleep
+        self._jitter = jitter
+        self._schema_cache: dict[tuple[str, tuple[Any, ...]], list[D1Cursor]] = {}
+        self._summary = {
+            "http_posts": 0,
+            "sql_statements": 0,
+            "batches": 0,
+            "batch_statements": 0,
+            "retries": 0,
+            "retry_successes": 0,
+            "transient_errors": 0,
+            "permanent_errors": 0,
+            "schema_cache_hits": 0,
+            "schema_cache_misses": 0,
+            "outbox_queued": 0,
+            "outbox_replayed": 0,
+            "outbox_dead_lettered": 0,
+        }
+
+    def execute(
+        self,
+        sql: str,
+        params: Iterable[Any] = (),
+        *,
+        policy=None,
+    ) -> list[D1Cursor]:
+        params_tuple = tuple(params)
+        key = self._schema_cache_key(sql, params_tuple)
+        if key is not None and key in self._schema_cache:
+            self._summary["schema_cache_hits"] += 1
+            return self._clone_cursors(self._schema_cache[key])
+        if key is not None:
+            self._summary["schema_cache_misses"] += 1
+
+        cursors = self._post_with_retry(
+            {"sql": sql, "params": _params_for_d1_json(params_tuple)}
+        )
+        self._summary["sql_statements"] += 1
+        if key is not None:
+            self._schema_cache[key] = self._clone_cursors(cursors)
+        elif self._is_schema_mutation(sql):
+            self._schema_cache.clear()
+        return cursors
+
+    def executemany(
+        self,
+        sql: str,
+        seq_of_params: Iterable[Iterable[Any]],
+        *,
+        policy=None,
+    ) -> list[D1Cursor]:
+        statements = [
+            {"sql": sql, "params": _params_for_d1_json(params)}
+            for params in seq_of_params
+        ]
+        if not statements:
+            return []
+
+        cursors: list[D1Cursor] = []
+        for chunk in self._split(statements, self._config.batch_limit):
+            cursors.extend(self._post_with_retry({"batch": chunk}))
+            self._record_batch_metrics(len(chunk))
+        if self._is_schema_mutation(sql):
+            self._schema_cache.clear()
+        return cursors
+
+    def batch_execute(
+        self,
+        statements: Sequence[tuple[str, Sequence[Any]]],
+        *,
+        policy=None,
+    ) -> list[D1Cursor]:
+        body_statements = [
+            {"sql": sql, "params": _params_for_d1_json(params)}
+            for sql, params in statements
+        ]
+        if not body_statements:
+            return []
+
+        cursors: list[D1Cursor] = []
+        for chunk in self._split(body_statements, self._config.batch_limit):
+            cursors.extend(self._post_with_retry({"batch": chunk}))
+            self._record_batch_metrics(len(chunk))
+        if any(self._is_schema_mutation(sql) for sql, _params in statements):
+            self._schema_cache.clear()
+        return cursors
+
+    def flush(self, *, ordering_key: str | None = None) -> None:
+        return None
+
+    def drain_recovery(
+        self,
+        *,
+        ordering_key: str | None = None,
+        max_batches: int | None = None,
+    ) -> dict[str, int]:
+        return {"replayed": 0, "dead_lettered": 0}
+
+    def summary(self) -> dict[str, int]:
+        return dict(self._summary)
+
+    def write_summary(self, path: str | os.PathLike[str] | None = None) -> None:
+        target = Path(path) if path is not None else d1_summary_path()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(
+            json.dumps(self.summary(), ensure_ascii=False, indent=2, sort_keys=True)
+            + "\n",
+            encoding="utf-8",
+        )
+
+    def close(self) -> None:
+        try:
+            self._session.close()
+        except Exception:
+            pass
+
+    def _post_with_retry(self, body: dict[str, Any]) -> list[D1Cursor]:
+        last_exc: D1TransientError | None = None
+        attempts = max(1, self._config.max_retries)
+        for attempt in range(attempts):
+            try:
+                result = self._post(body)
+                if attempt > 0:
+                    self._summary["retry_successes"] += 1
+                return result
+            except D1PermanentError:
+                self._summary["permanent_errors"] += 1
+                raise
+            except D1TransientError as exc:
+                self._summary["transient_errors"] += 1
+                last_exc = exc
+                if attempt >= attempts - 1:
+                    break
+                self._summary["retries"] += 1
+                self._sleep(self._compute_backoff(attempt, exc))
+        assert last_exc is not None
+        raise last_exc
+
+    def _post(self, body: dict[str, Any]) -> list[D1Cursor]:
+        self._summary["http_posts"] += 1
+        try:
+            response = self._post_request(
+                self._url,
+                headers=self._headers,
+                json=body,
+                timeout=self._config.timeout,
+            )
+        except (requests.Timeout, requests.ConnectionError) as exc:
+            raise D1TransientError(f"D1 network error: {exc}") from exc
+        except requests.RequestException as exc:
+            raise D1TransientError(f"D1 HTTP request failed: {exc}") from exc
+
+        status = response.status_code
+        if status == 429 or 500 <= status < 600:
+            err = D1TransientError(
+                f"D1 API returned HTTP {status}: {response.text[:500]}"
+            )
+            retry_after = response.headers.get("Retry-After")
+            if retry_after:
+                err.retry_after = retry_after  # type: ignore[attr-defined]
+            raise err
+        if 400 <= status < 500:
+            errors = self._extract_errors(response)
+            if errors is not None:
+                err_text = str(errors)
+                if _matches_keyword(err_text, _TRANSIENT_ERROR_KEYWORDS):
+                    transient = D1TransientError(
+                        f"D1 API returned HTTP {status} (transient): {errors}"
+                    )
+                    if _matches_keyword(err_text, _EXPORT_LOCK_KEYWORDS):
+                        transient.is_export_lock = True  # type: ignore[attr-defined]
+                    raise transient
+                raise D1PermanentError(f"D1 API returned HTTP {status}: {errors}")
+            raise D1PermanentError(
+                f"D1 API returned HTTP {status}: {response.text[:500]}"
+            )
+        if status != 200:
+            raise D1PermanentError(
+                f"D1 API returned unexpected HTTP {status}: {response.text[:500]}"
+            )
+
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise D1TransientError(
+                f"D1 returned non-JSON response: {response.text[:500]}"
+            ) from exc
+
+        if not payload.get("success"):
+            errors = payload.get("errors") or payload.get("messages") or []
+            err_text = str(errors)
+            if _matches_keyword(err_text, _TRANSIENT_ERROR_KEYWORDS):
+                transient = D1TransientError(f"D1 API transient error: {errors}")
+                if _matches_keyword(err_text, _EXPORT_LOCK_KEYWORDS):
+                    transient.is_export_lock = True  # type: ignore[attr-defined]
+                raise transient
+            raise D1PermanentError(f"D1 API error: {errors}")
+
+        return [D1Cursor(item) for item in payload.get("result") or []]
+
+    def _compute_backoff(self, attempt: int, exc: D1TransientError) -> float:
+        retry_after = getattr(exc, "retry_after", None)
+        if retry_after is not None:
+            try:
+                return max(0.0, float(retry_after))
+            except (TypeError, ValueError):
+                pass
+            try:
+                parsed = _email_utils.parsedate_to_datetime(str(retry_after))
+                delay = (
+                    parsed
+                    - _datetime.datetime.now(tz=_datetime.timezone.utc)
+                ).total_seconds()
+                return max(0.0, delay)
+            except Exception:
+                pass
+
+        base = self._config.retry_base_sec * (2**attempt)
+        if getattr(exc, "is_export_lock", False):
+            base = max(base, _EXPORT_LOCK_BACKOFF_FLOOR_SEC)
+        return min(base, self._config.retry_max_sleep_sec) + self._jitter()
+
+    @staticmethod
+    def _extract_errors(response) -> list[Any] | None:
+        try:
+            payload = response.json()
+        except ValueError:
+            return None
+        if not isinstance(payload, dict):
+            return None
+        return payload.get("errors") or payload.get("messages") or []
+
+    @staticmethod
+    def _split(seq: Sequence[Any], size: int):
+        if size <= 0:
+            raise ValueError("D1PortConfig.batch_limit must be positive")
+        for i in range(0, len(seq), size):
+            yield seq[i : i + size]
+
+    @staticmethod
+    def _schema_cache_key(
+        sql: str,
+        params: Iterable[Any],
+    ) -> tuple[str, tuple[Any, ...]] | None:
+        normalized = " ".join(sql.strip().lower().split())
+        if normalized.startswith("pragma table_info"):
+            return (normalized, tuple(params))
+        if normalized.startswith("select ") and re.search(
+            r"\bfrom\s+sqlite_master\b", normalized
+        ):
+            return (normalized, tuple(params))
+        return None
+
+    @staticmethod
+    def _clone_cursors(cursors: Sequence[D1Cursor]) -> list[D1Cursor]:
+        return [
+            D1Cursor(
+                {
+                    "meta": {"last_row_id": cur.lastrowid, "changes": cur.rowcount},
+                    "results": cur.fetchall(),
+                }
+            )
+            for cur in cursors
+        ]
+
+    def _record_batch_metrics(self, statement_count: int) -> None:
+        self._summary["batches"] += 1
+        self._summary["batch_statements"] += statement_count
+        self._summary["sql_statements"] += statement_count
+
+    @staticmethod
+    def _is_schema_mutation(sql: str) -> bool:
+        normalized = sql.lstrip().lower()
+        return normalized.startswith(
+            (
+                "alter ",
+                "create ",
+                "drop ",
+                "reindex ",
+                "vacuum ",
+            )
+        )
