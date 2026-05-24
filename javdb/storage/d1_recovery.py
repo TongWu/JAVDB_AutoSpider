@@ -11,11 +11,11 @@ import json
 from collections import OrderedDict
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
-import logging
+from javdb.infra.logging import get_logger
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple, Union
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 PathLike = Union[str, Path]
 
