@@ -25,6 +25,8 @@
 | `tests/unit/test_d1_recovery.py` | New tests for outbox model and CLI inspect/compact. |
 | `tests/unit/test_d1_dual.py` | Tests proving `D1Connection` delegates through the port. |
 | `tests/unit/test_commit_session_bulk.py` | Tests for bulk commit default-on and env opt-out. |
+| `.github/workflows/DailyIngestion.yml`, `.github/workflows/AdHocIngestion.yml` | Archive and stage `reports/D1/d1_port_summary.json` so D1 port metrics survive CI job boundaries. |
+| `tests/unit/test_workflow_resolve_write_mode.py` | Regression test that ingestion workflows preserve the D1 port summary file. |
 | `apps/cli/db/README.md` | Document the new D1 recovery CLI. |
 | `README.md`, `README_CN.md`, `docs/handbook/en/self-hoster/configuration.md`, `docs/handbook/zh/self-hoster/configuration.md` | Document Phase 1 controls and future-gated variables. |
 
@@ -861,6 +863,9 @@ git commit -m "feat(storage): add d1 recovery outbox tooling"
 ## Task 6: Phase 1 Docs
 
 **Files:**
+- Modify: `.github/workflows/DailyIngestion.yml`
+- Modify: `.github/workflows/AdHocIngestion.yml`
+- Modify: `tests/unit/test_workflow_resolve_write_mode.py`
 - Modify: `README.md`
 - Modify: `README_CN.md`
 - Modify: `docs/handbook/en/self-hoster/configuration.md`
@@ -871,6 +876,7 @@ git commit -m "feat(storage): add d1 recovery outbox tooling"
 Add these rows to English config tables:
 
 ```markdown
+| `COMMIT_SESSION_BULK` | on | Pending session commits use the bulk path by default. Set `0`, `false`, `no`, `off`, or an empty value to fall back to the per-href path. |
 | `D1_RECOVERY_OUTBOX_ENABLED` | unset | Reserved for ADR-010 Phase 2. Set `1` to allow safe dual-mode D1 write failures to queue in `reports/D1/d1_recovery_outbox.jsonl`. |
 | `D1_BATCHING_ENABLED` | unset | Reserved for ADR-010 Phase 3 safe-path micro-batching. Ordinary SQL remains synchronous. |
 | `D1_FLUSH_INTERVAL_MS` | `250` | Maximum safe-batch wait window when D1 batching is enabled. |
@@ -880,24 +886,36 @@ Add these rows to English config tables:
 Add Chinese equivalents:
 
 ```markdown
+| `COMMIT_SESSION_BULK` | 开启 | pending session commit 默认使用 bulk 路径。设为 `0`、`false`、`no`、`off` 或空值可回退到 per-href 路径。 |
 | `D1_RECOVERY_OUTBOX_ENABLED` | 未设置 | ADR-010 Phase 2 预留。设为 `1` 时，dual 模式下 safe D1 写失败可进入 `reports/D1/d1_recovery_outbox.jsonl`。 |
 | `D1_BATCHING_ENABLED` | 未设置 | ADR-010 Phase 3 safe-path micro-batching 预留。普通 SQL 仍同步。 |
 | `D1_FLUSH_INTERVAL_MS` | `250` | 启用 D1 batching 后 safe batch 的最大等待窗口。 |
 | `D1_STARTUP_REPLAY_ENABLED` | 未设置 | ADR-010 Phase 4 startup replay 预留。 |
 ```
 
-- [ ] **Step 2: Run doc grep**
+- [ ] **Step 2: Persist D1 port metrics in ingestion workflows**
+
+Add `reports/D1/d1_port_summary.json` to the encrypted report artifact file
+list and to the `commit-results` `git add` block in both DailyIngestion and
+AdHocIngestion. The port writes the summary in `run-pipeline`, while
+`commit-results` starts from a fresh checkout; without artifact persistence the
+metrics file is discarded.
+
+Add a regression assertion to `tests/unit/test_workflow_resolve_write_mode.py`
+that both ingestion workflows include and stage the summary path.
+
+- [ ] **Step 3: Run doc/workflow grep**
 
 ```bash
-rg -n "D1_RECOVERY_OUTBOX_ENABLED|D1_BATCHING_ENABLED|D1_STARTUP_REPLAY_ENABLED" README.md README_CN.md docs/handbook/en/self-hoster/configuration.md docs/handbook/zh/self-hoster/configuration.md
+rg -n "COMMIT_SESSION_BULK|D1_RECOVERY_OUTBOX_ENABLED|D1_BATCHING_ENABLED|D1_STARTUP_REPLAY_ENABLED|d1_port_summary" README.md README_CN.md docs/handbook/en/self-hoster/configuration.md docs/handbook/zh/self-hoster/configuration.md .github/workflows/DailyIngestion.yml .github/workflows/AdHocIngestion.yml
 ```
 
-Expected: hits in all four files.
+Expected: env-var hits in all four doc files and `d1_port_summary` hits in both ingestion workflows.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add README.md README_CN.md docs/handbook/en/self-hoster/configuration.md docs/handbook/zh/self-hoster/configuration.md
+git add .github/workflows/DailyIngestion.yml .github/workflows/AdHocIngestion.yml tests/unit/test_workflow_resolve_write_mode.py README.md README_CN.md docs/handbook/en/self-hoster/configuration.md docs/handbook/zh/self-hoster/configuration.md
 git commit -m "docs(d1): document access port phase controls"
 ```
 
@@ -921,7 +939,15 @@ pytest tests/unit/test_reconcile_d1_drift.py tests/unit/test_sync_d1_to_sqlite.p
 
 Expected: PASS.
 
-- [ ] **Step 3: Verify CLI empty-outbox behavior**
+- [ ] **Step 3: Run workflow guard tests**
+
+```bash
+pytest tests/unit/test_workflow_resolve_write_mode.py -v
+```
+
+Expected: PASS.
+
+- [ ] **Step 4: Verify CLI empty-outbox behavior**
 
 ```bash
 python3 -m apps.cli.db.d1_recovery inspect --json
@@ -929,7 +955,7 @@ python3 -m apps.cli.db.d1_recovery inspect --json
 
 Expected: exit `0` and JSON with `pending_count` equal to `0` when no outbox exists.
 
-- [ ] **Step 4: Final status**
+- [ ] **Step 5: Final status**
 
 ```bash
 git status --short

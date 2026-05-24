@@ -86,6 +86,7 @@ QB_PASSWORD = 'password'
 | `STORAGE_BACKEND` | `sqlite` | `sqlite`、`d1` 或 `dual` |
 | `WRITE_MODE` | `pending` | 仅支持 `pending`；遗留 `audit` 请求会降级为 pending |
 | `STRICT_DUAL_WRITE` | 未设置 | 设为 `1` 则 D1 写入失败时报错 |
+| `COMMIT_SESSION_BULK` | 开启 | pending session commit 默认使用 bulk 路径。设为 `0`、`false`、`no`、`off` 或空值可回退到 per-href 路径。 |
 | `D1_RECOVERY_OUTBOX_ENABLED` | 未设置 | ADR-010 Phase 2 预留；设为 `1` 时，dual 模式下 safe D1 写失败可进入 `reports/D1/d1_recovery_outbox.jsonl`。 |
 | `D1_BATCHING_ENABLED` | 未设置 | ADR-010 Phase 3 safe-path micro-batching 预留；普通 SQL 仍同步执行。 |
 | `D1_FLUSH_INTERVAL_MS` | `250` | 启用 D1 batching 后 safe batch 的最大等待窗口。 |
