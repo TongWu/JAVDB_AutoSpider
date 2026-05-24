@@ -171,6 +171,7 @@ def _purge_seed_rows(history_conn: sqlite3.Connection, reports_conn: sqlite3.Con
     # Drop torrent rows first (FK on MovieHistory.Id).
     for table in (
         "TorrentHistory",
+        "PendingTorrentHistoryWrites",
         "PendingMovieHistoryWrites",
         "MovieHistory",
     ):
