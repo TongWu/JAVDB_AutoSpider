@@ -202,12 +202,17 @@ def _validate_task_command(command: list[str]) -> list[str]:
     if command[3] not in _TASK_ALLOWED_MODULES:
         raise HTTPException(status_code=400, detail="Invalid task command")
 
+    seen_singleton_flags: set[str] = set()
     idx = 4
     while idx < len(command):
         flag = command[idx]
         value_type = _TASK_ALLOWED_FLAGS.get(flag)
         if value_type is None:
             raise HTTPException(status_code=400, detail="Invalid task command")
+        if flag == "--result-json":
+            if flag in seen_singleton_flags:
+                raise HTTPException(status_code=400, detail="Invalid task command")
+            seen_singleton_flags.add(flag)
         if value_type == "flag":
             idx += 1
             continue
