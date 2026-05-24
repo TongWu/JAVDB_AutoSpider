@@ -160,6 +160,7 @@ The `available: false` flag signals the frontend to render "N/A" instead of an e
 **New endpoint:** `POST /api/auth/change-password`
 
 **Request:**
+
 ```json
 {
   "old_password": "current-password",

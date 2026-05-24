@@ -22,10 +22,10 @@
 
 **P1 — 数据完整性问题（4 项）：**
 
-5. **跨数据库 commit 无原子性** — Session commit 的 `drop_pending=true` 操作跨 REPORTS_DB 和 HISTORY_DB 执行，无事务保护。部分失败导致不一致状态。
-6. **导出查询无上限** — `/movies/export` 和 `/torrents/export` 跳过分页，随数据增长（当前约 40,000 行）可能导致 Worker 超时/OOM。
-7. **Refresh 时不返回 CSRF token** — `/refresh` 端点响应体中缺少 CSRF token。长会话中 CSRF 可能失效，导致 mutation 请求返回 403。
-8. **缺少 D1 索引** — 外键和常用过滤列（`MovieHistoryId`、`SessionId`、`Status`）缺少索引，查询性能随数据增长下降。
+1. **跨数据库 commit 无原子性** — Session commit 的 `drop_pending=true` 操作跨 REPORTS_DB 和 HISTORY_DB 执行，无事务保护。部分失败导致不一致状态。
+2. **导出查询无上限** — `/movies/export` 和 `/torrents/export` 跳过分页，随数据增长（当前约 40,000 行）可能导致 Worker 超时/OOM。
+3. **Refresh 时不返回 CSRF token** — `/refresh` 端点响应体中缺少 CSRF token。长会话中 CSRF 可能失效，导致 mutation 请求返回 403。
+4. **缺少 D1 索引** — 外键和常用过滤列（`MovieHistoryId`、`SessionId`、`Status`）缺少索引，查询性能随数据增长下降。
 
 ## 决策
 

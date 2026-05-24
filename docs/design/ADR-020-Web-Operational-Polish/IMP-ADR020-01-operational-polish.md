@@ -1179,15 +1179,15 @@ git commit -m "perf(init): replace per-request ensureTable with cold-start-only 
 ## Self-Review Checklist
 
 **1. Spec coverage:**
-- [x] Workflow schema registry for 5 workflows (Task 3)
-- [x] Schema endpoint `GET /workflows/:name/schema` (Task 4)
-- [x] Dispatch input validation with safety gates (Task 4)
-- [x] Rollback full parameter forwarding (Task 5)
-- [x] Rollback safety gate (`confirm_production`) (Task 5)
-- [x] Onboarding test GH Actions dispatch (Task 6)
-- [x] Onboarding graceful degradation (Task 6)
-- [x] Unified cursor encoding (Tasks 1–2)
-- [x] `ensureTable()` init-once middleware (Task 7)
+- [ ] Workflow schema registry for 5 workflows (Task 3)
+- [ ] Schema endpoint `GET /workflows/:name/schema` (Task 4)
+- [ ] Dispatch input validation with safety gates (Task 4)
+- [ ] Rollback full parameter forwarding (Task 5)
+- [ ] Rollback safety gate (`confirm_production`) (Task 5)
+- [ ] Onboarding test GH Actions dispatch (Task 6)
+- [ ] Onboarding graceful degradation (Task 6)
+- [ ] Unified cursor encoding (Tasks 1–2)
+- [ ] `ensureTable()` init-once middleware (Task 7)
 
 **2. Placeholder scan:** No TBD, TODO, or "fill in later" found.
 

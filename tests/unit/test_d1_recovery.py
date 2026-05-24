@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 from javdb.storage.d1_recovery import (
@@ -173,7 +174,7 @@ def test_from_dict_parses_string_false_as_false():
     assert event.recovery_allowed is False
 
 
-def test_cli_inspect_outputs_counts(tmp_path, capsys):
+def test_cli_inspect_outputs_counts(tmp_path, caplog):
     from apps.cli.db import d1_recovery as cli
 
     path = tmp_path / "d1_recovery_outbox.jsonl"
@@ -188,10 +189,12 @@ def test_cli_inspect_outputs_counts(tmp_path, capsys):
         ),
     )
 
-    rc = cli.main(["inspect", "--outbox", str(path)])
+    with caplog.at_level(logging.INFO, logger="apps.cli.db.d1_recovery"):
+        rc = cli.main(["inspect", "--outbox", str(path)])
 
     assert rc == 1
-    assert "history:s1" in capsys.readouterr().out
+    log_output = caplog.text
+    assert "Pending events" in log_output
 
 
 def test_cli_inspect_dead_lettered_outputs_blocking_state(tmp_path, capsys):

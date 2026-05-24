@@ -23,6 +23,8 @@ import requests
 
 # D1Connection must import D1AccessPort lazily at runtime to avoid a circular
 # import: this module intentionally reuses d1_client cursor/error helpers.
+import logging
+
 from javdb.storage.d1_client import (
     D1Cursor,
     D1PermanentError,
@@ -33,6 +35,9 @@ from javdb.storage.d1_client import (
     _matches_keyword,
     _params_for_d1_json,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -234,7 +239,7 @@ class D1AccessPort:
         try:
             self._session.close()
         except Exception:
-            pass
+            logger.warning("Failed to close D1 port session", exc_info=True)
 
     def _post_with_retry(self, body: dict[str, Any]) -> list[D1Cursor]:
         last_exc: D1TransientError | None = None
@@ -379,7 +384,7 @@ class D1AccessPort:
             D1Cursor(
                 {
                     "meta": {"last_row_id": cur.lastrowid, "changes": cur.rowcount},
-                    "results": cur.fetchall(),
+                    "results": [dict(row) for row in cur.fetchall()],
                 }
             )
             for cur in cursors

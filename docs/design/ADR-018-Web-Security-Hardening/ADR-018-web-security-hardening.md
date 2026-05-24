@@ -22,10 +22,10 @@ A comprehensive audit of the `javdb-autospider-web` TypeScript backend (Hono on 
 
 **P1 — Data Integrity (4 issues):**
 
-5. **Cross-database commit without atomicity** — Session commit with `drop_pending=true` operates across REPORTS_DB and HISTORY_DB without transaction protection. Partial failure leaves inconsistent state.
-6. **Unbounded export queries** — `/movies/export` and `/torrents/export` skip pagination, risking Worker timeout/OOM as data grows (~40,000 rows currently).
-7. **CSRF token not returned on refresh** — `/refresh` endpoint omits CSRF token from response body. Long sessions may lose CSRF validity, causing 403 errors on mutations.
-8. **Missing D1 indexes** — Foreign keys and frequently-filtered columns (`MovieHistoryId`, `SessionId`, `Status`) lack indexes. Query performance degrades with data growth.
+1. **Cross-database commit without atomicity** — Session commit with `drop_pending=true` operates across REPORTS_DB and HISTORY_DB without transaction protection. Partial failure leaves inconsistent state.
+2. **Unbounded export queries** — `/movies/export` and `/torrents/export` skip pagination, risking Worker timeout/OOM as data grows (~40,000 rows currently).
+3. **CSRF token not returned on refresh** — `/refresh` endpoint omits CSRF token from response body. Long sessions may lose CSRF validity, causing 403 errors on mutations.
+4. **Missing D1 indexes** — Foreign keys and frequently-filtered columns (`MovieHistoryId`, `SessionId`, `Status`) lack indexes. Query performance degrades with data growth.
 
 ## Decision
 

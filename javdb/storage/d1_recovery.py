@@ -11,8 +11,11 @@ import json
 from collections import OrderedDict
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
+import logging
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple, Union
+
+logger = logging.getLogger(__name__)
 
 PathLike = Union[str, Path]
 
@@ -230,6 +233,9 @@ def _iter_events(path: PathLike) -> Iterable[RecoveryEvent]:
                 if isinstance(raw, Mapping):
                     events.append(RecoveryEvent.from_dict(raw))
             except Exception:
+                logger.warning(
+                    "Skipping malformed outbox line: %.120s", line, exc_info=True
+                )
                 continue
     return events
 
