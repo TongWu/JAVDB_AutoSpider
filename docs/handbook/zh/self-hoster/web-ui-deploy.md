@@ -76,4 +76,4 @@ docker compose -f docker/docker-compose.fullstack.yml up -d --build
 
 ## 架构设计
 
-详见 [ADR-008](../../../design/ADR-008-Frontend-Rewrite/ADR-008-frontend-rewrite-architecture.zh.md)（Vue 3 + Naive UI、Pinia 状态管理、i18n 国际化、E2E 测试策略）。
+详见 [ADR-008](../../../design/_archive/ADR-008-Frontend-Rewrite/ADR-008-frontend-rewrite-architecture.zh.md)（Vue 3 + Naive UI、Pinia 状态管理、i18n 国际化、E2E 测试策略）。
