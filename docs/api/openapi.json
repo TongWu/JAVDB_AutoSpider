@@ -1287,6 +1287,10 @@
           },
           "method": {
             "default": "headless",
+            "enum": [
+              "headless",
+              "cookie_paste"
+            ],
             "title": "Method",
             "type": "string"
           }
@@ -1575,6 +1579,10 @@
             "title": "Results",
             "type": "array"
           },
+          "scanned_files": {
+            "title": "Scanned Files",
+            "type": "integer"
+          },
           "total_matched": {
             "title": "Total Matched",
             "type": "integer"
@@ -1587,7 +1595,8 @@
         "required": [
           "results",
           "total_matched",
-          "truncated"
+          "truncated",
+          "scanned_files"
         ],
         "title": "LogSearchResponse",
         "type": "object"
@@ -2046,6 +2055,17 @@
             },
             "title": "Items",
             "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
           },
           "total": {
             "title": "Total",
@@ -5161,6 +5181,8 @@
             "schema": {
               "anyOf": [
                 {
+                  "maximum": 4,
+                  "minimum": 0,
                   "type": "integer"
                 },
                 {
@@ -5334,6 +5356,8 @@
             "schema": {
               "anyOf": [
                 {
+                  "maximum": 4,
+                  "minimum": 0,
                   "type": "integer"
                 },
                 {
