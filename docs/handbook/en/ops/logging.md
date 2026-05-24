@@ -83,6 +83,14 @@ With folding enabled, long but low-density blocks (per-proxy detail, dual-write 
 
 The ingestion workflows (`DailyIngestion` / `AdHocIngestion`) parse the spider's `SPIDER_STAT_*` stdout lines and write a Markdown table to `$GITHUB_STEP_SUMMARY`. This surfaces the run's key metrics (pages, found, parsed, skipped, failed counts, CSV filename, and session_id) in the Actions UI summary panel without expanding the spider log block.
 
+## Structured Run Results
+
+Pipeline and Spider CLIs can write versioned result JSON through
+`--result-json <path>`. These files are the machine-readable run contract.
+The `SPIDER_*` stdout lines remain compatibility output for existing workflows
+during ADR-012 Phase 1. Do not add new Pipeline internals that parse those
+stdout markers for business data.
+
 ## Log File Paths
 
 Default log file paths (configurable in config.py or via `VAR_*` environment variables in CI):

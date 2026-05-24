@@ -83,6 +83,13 @@ export LOG_GITHUB_GROUPS=off
 
 摄入工作流（`DailyIngestion` / `AdHocIngestion`）解析爬虫的 `SPIDER_STAT_*` 标准输出行，并将 Markdown 表格写入 `$GITHUB_STEP_SUMMARY`。这使得运行的关键指标（页数、发现数、解析数、跳过数、失败数、CSV 文件名和 session_id）直接显示在 Actions UI 摘要面板中，无需展开爬虫日志块。
 
+## 结构化运行结果
+
+Pipeline 和 Spider CLI 可以通过 `--result-json <path>` 写入带版本的结果
+JSON。这些文件是机器可读的运行契约。`SPIDER_*` 标准输出行在
+ADR-012 Phase 1 期间仍作为现有工作流的兼容输出。不要新增会解析这些
+标准输出标记来获取业务数据的 Pipeline 内部逻辑。
+
 ## 日志文件路径
 
 默认日志文件路径（可在 config.py 中配置，或通过 CI 中的 `VAR_*` 环境变量配置）：
