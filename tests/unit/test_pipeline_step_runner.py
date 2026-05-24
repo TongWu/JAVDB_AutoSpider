@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import sys
+import time
 
 from javdb.pipeline.models import StepPolicy
-from javdb.pipeline.step_runner import LogSink, SubprocessStepRunner
+from javdb.pipeline.step_runner import SubprocessStepRunner
 
 
 class RecordingSink:
@@ -58,3 +59,38 @@ def test_subprocess_step_runner_times_out():
     assert result.exit_code is None
     assert "timed out" in (result.failure_reason or "")
     assert ("demo", "start\n") in sink.lines
+
+
+def test_subprocess_step_runner_timeout_cleans_up_descendant_stdout(tmp_path):
+    sink = RecordingSink()
+    runner = SubprocessStepRunner(log_sink=sink)
+    policy = StepPolicy(name="demo", required=True, timeout_sec=1)
+    alive_marker = tmp_path / "descendant-alive"
+    command = [
+        sys.executable,
+        "-c",
+        (
+            "import pathlib, subprocess, sys, time; "
+            f"marker = {str(alive_marker)!r}; "
+            "child_code = "
+            "\"import pathlib, time; "
+            "print('child-start', flush=True); "
+            "time.sleep(2); "
+            "pathlib.Path(%r).write_text('alive', encoding='utf-8'); "
+            "time.sleep(30)\" % marker; "
+            "subprocess.Popen([sys.executable, '-c', child_code]); "
+            "print('parent-start', flush=True); "
+            "time.sleep(30)"
+        ),
+    ]
+
+    started_at = time.monotonic()
+    result = runner.run(policy, command)
+    elapsed = time.monotonic() - started_at
+
+    assert result.status == "timed_out"
+    assert elapsed < 5
+    assert ("demo", "parent-start\n") in sink.lines
+    assert ("demo", "child-start\n") in sink.lines
+    time.sleep(2.5)
+    assert not alive_marker.exists()
