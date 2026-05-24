@@ -262,7 +262,7 @@ def _rate_limit(
     accurate within a single process (cross-process scaling still requires
     moving the bucket state into a shared store; see batch E plan).
     """
-    if os.getenv("TEST_MODE") == "1":
+    if os.getenv("TEST_MODE") == "1" and not os.getenv("PYTEST_CURRENT_TEST"):
         return
     path = request.url.path
     if path in METHOD_LIMITS:
