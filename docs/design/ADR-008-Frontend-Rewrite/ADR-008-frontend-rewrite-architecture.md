@@ -1,15 +1,17 @@
 # ADR-008: Frontend Rewrite — Standalone `javdb-autospider-web` Repository
 
-**Status**: Accepted — Phase 1 completed (2026-05-23); Phase 2 planned, Phase 3 deferred
-**Date**: 2026-05-17 (amended 2026-05-18)
+**Status**: Completed — Phase 1 (2026-05-23), Phase 2 (2026-05-24), Phase 3 (2026-05-24)
+**Date**: 2026-05-17 (amended 2026-05-18, 2026-05-24)
 **Deciders**: Brainstorming session (design spec: `docs/superpowers/specs/2026-05-16-frontend-rewrite-design.md`)
-**Related Implementation Plans**: [IMP-ADR008-01](IMP-ADR008-01-frontend-phase1-backend-prerequisites.md) (BE prerequisites — completed 2026-05-16), [IMP-ADR008-02](IMP-ADR008-02-frontend-phase1-completion.md) (Phase 1 completion — completed 2026-05-23), [IMP-ADR008-03](IMP-ADR008-03-frontend-phase2-full-cli-coverage.md) (Phase 2 — planned, not started), [IMP-ADR008-04](IMP-ADR008-04-frontend-phase3-power-user.md) (Phase 3 — deferred, depends on Phase 2 dogfooding)
+**Related Implementation Plans**: [IMP-ADR008-01](IMP-ADR008-01-frontend-phase1-backend-prerequisites.md) (BE prerequisites — completed 2026-05-16), [IMP-ADR008-02](IMP-ADR008-02-frontend-phase1-completion.md) (Phase 1 completion — completed 2026-05-23), [IMP-ADR008-03](IMP-ADR008-03-frontend-phase2-full-cli-coverage.md) (Phase 2 — completed 2026-05-24), [IMP-ADR008-04](IMP-ADR008-04-frontend-phase3-power-user.md) (Phase 3 — completed 2026-05-24)
 
 ## Outstanding Work
 
 - ~~IMP-ADR008-02 cutover items~~ — completed 2026-05-23. Rollback layering deferred to [ADR-014](../ADR-014-Storage-Cli-Layering/ADR-014-storage-cli-layering.md).
-- IMP-ADR008-03 (Phase 2 — full CLI surface coverage): not yet started.
-- IMP-ADR008-04 (Phase 3 — power-user features and analytics): deferred; scope to be decided after Phase 2 dogfooding.
+- ~~IMP-ADR008-03 (Phase 2 — full CLI surface coverage)~~ — completed 2026-05-24. All 18 tasks (7 BE routers + 11 FE pages + sidebar nav + E2E journeys 9–17).
+- ~~IMP-ADR008-04 (Phase 3 — power-user features and analytics)~~ — completed 2026-05-24. All 6 tasks + E2E journeys 18–22.
+
+All four IMP files are complete. No outstanding work remains for ADR-008.
 
 ---
 
@@ -257,10 +259,10 @@ No Full-Text Search (FTS5). SQLite supports it but Cloudflare D1 does not. Maint
 
 ## Open Questions
 
-- **Multi-tab behavior**: Two tabs double request volume. BroadcastChannel-shared polling recommended but deferred to Phase 3. See [IMP-ADR008-04](IMP-ADR008-04-frontend-phase3-power-user.md) Task 6.
-- **D1 status caching TTL**: ~10 s server / session client proposed. Needs validation under realistic Browse-Lists usage post-Phase 2.
-- **Global log search storage**: Log persistence strategy (DB table vs. filesystem vs. structured rows) not decided. Depends on Phase 2 log volume observations. Deferred to Phase 3 design session → ADR-009. See [IMP-ADR008-04](IMP-ADR008-04-frontend-phase3-power-user.md) Task 4.
-- **Statistics dashboard scope**: Candidate metrics identified (run success rate, history growth, dedup freed bytes) but scope and chart library not finalized. Deferred to Phase 3 design session → ADR-010. See [IMP-ADR008-04](IMP-ADR008-04-frontend-phase3-power-user.md) Task 5.
+- ~~**Multi-tab behavior**~~: Resolved in Phase 3. `useSharedPolling` composable uses BroadcastChannel leader election; only one tab polls at a time. See [IMP-ADR008-04](IMP-ADR008-04-frontend-phase3-power-user.md) Task 6.
+- **D1 status caching TTL**: ~10 s server / session client proposed. Needs validation under realistic Browse-Lists usage.
+- ~~**Global log search storage**~~: Resolved in Phase 3. File-based grep via `GET /api/logs/search` endpoint. See [IMP-ADR008-04](IMP-ADR008-04-frontend-phase3-power-user.md) Task 4.
+- ~~**Statistics dashboard scope**~~: Resolved in Phase 3. Eight summary metrics + six trend charts using `vue-chartjs` (Chart.js wrapper). See [IMP-ADR008-04](IMP-ADR008-04-frontend-phase3-power-user.md) Task 5.
 
 ---
 

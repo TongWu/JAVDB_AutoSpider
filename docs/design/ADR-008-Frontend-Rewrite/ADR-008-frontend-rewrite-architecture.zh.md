@@ -1,15 +1,17 @@
 # ADR-008: 前端重写 — 独立 `javdb-autospider-web` 仓库
 
-**状态**: 已接受 —— Phase 1 完成（2026-05-23）；Phase 2 计划中、Phase 3 推迟
-**日期**: 2026-05-17（2026-05-18 修订）
+**状态**: 已完成 —— Phase 1（2026-05-23）、Phase 2（2026-05-24）、Phase 3（2026-05-24）
+**日期**: 2026-05-17（2026-05-18、2026-05-24 修订）
 **决策者**: 头脑风暴会议（设计规范：`docs/superpowers/specs/2026-05-16-frontend-rewrite-design.md`）
-**关联实现计划 (Related Implementation Plans)**: [IMP-ADR008-01](IMP-ADR008-01-frontend-phase1-backend-prerequisites.md)（BE 前置——2026-05-16 完成）、[IMP-ADR008-02](IMP-ADR008-02-frontend-phase1-completion.md)（Phase 1 收尾——2026-05-23 完成）、[IMP-ADR008-03](IMP-ADR008-03-frontend-phase2-full-cli-coverage.md)（Phase 2——计划中，未启动）、[IMP-ADR008-04](IMP-ADR008-04-frontend-phase3-power-user.md)（Phase 3——推迟，待 Phase 2 dogfooding 后定）
+**关联实现计划 (Related Implementation Plans)**: [IMP-ADR008-01](IMP-ADR008-01-frontend-phase1-backend-prerequisites.md)（BE 前置——2026-05-16 完成）、[IMP-ADR008-02](IMP-ADR008-02-frontend-phase1-completion.md)（Phase 1 收尾——2026-05-23 完成）、[IMP-ADR008-03](IMP-ADR008-03-frontend-phase2-full-cli-coverage.md)（Phase 2——2026-05-24 完成）、[IMP-ADR008-04](IMP-ADR008-04-frontend-phase3-power-user.md)（Phase 3——2026-05-24 完成）
 
 ## 待办 (Outstanding Work)
 
 - ~~IMP-ADR008-02 cutover 残留~~ —— 2026-05-23 完成。Rollback 分层反转推迟至 [ADR-014](../ADR-014-Storage-Cli-Layering/ADR-014-storage-cli-layering.md)。
-- IMP-ADR008-03（Phase 2 —— 全 CLI 表面覆盖）：未启动。
-- IMP-ADR008-04（Phase 3 —— 高级用户特性与分析）：推迟；具体范围待 Phase 2 dogfooding 累积数据后定。
+- ~~IMP-ADR008-03（Phase 2 —— 全 CLI 表面覆盖）~~ —— 2026-05-24 完成。全部 18 个任务（7 个 BE router + 11 个 FE 页面 + 侧栏导航 + E2E journeys 9–17）。
+- ~~IMP-ADR008-04（Phase 3 —— 高级用户特性与分析）~~ —— 2026-05-24 完成。全部 6 个任务 + E2E journeys 18–22。
+
+四个 IMP 文件全部完成。ADR-008 无剩余待办事项。
 
 ---
 
@@ -257,10 +259,10 @@ Token 复用 `config.py` 中已有的 `GIT_PASSWORD` PAT。除非操作者反馈
 
 ## 开放问题
 
-- **多标签页行为**: 两个标签页会双倍请求量。建议 BroadcastChannel 共享轮询，推迟到 Phase 3。见 [IMP-ADR008-04](IMP-ADR008-04-frontend-phase3-power-user.md) Task 6。
-- **D1 状态缓存 TTL**: 建议服务端约 10 秒 / 客户端会话级。需在 Phase 2 后的实际 Browse-Lists 使用中验证。
-- **全局日志搜索存储**: 日志持久化策略（DB 表 vs 文件系统 vs 结构化行）未决定。取决于 Phase 2 日志量观察。推迟到 Phase 3 设计会议 → ADR-009。见 [IMP-ADR008-04](IMP-ADR008-04-frontend-phase3-power-user.md) Task 4。
-- **统计仪表盘范围**: 已确定候选指标（运行成功率、历史增长、去重释放量），但范围和图表库未最终确定。推迟到 Phase 3 设计会议 → ADR-010。见 [IMP-ADR008-04](IMP-ADR008-04-frontend-phase3-power-user.md) Task 5。
+- ~~**多标签页行为**~~：已在 Phase 3 解决。`useSharedPolling` composable 使用 BroadcastChannel leader election，同一时间只有一个标签页轮询。见 [IMP-ADR008-04](IMP-ADR008-04-frontend-phase3-power-user.md) Task 6。
+- **D1 状态缓存 TTL**: 建议服务端约 10 秒 / 客户端会话级。需在实际 Browse-Lists 使用中验证。
+- ~~**全局日志搜索存储**~~：已在 Phase 3 解决。基于文件的 grep，通过 `GET /api/logs/search` 端点实现。见 [IMP-ADR008-04](IMP-ADR008-04-frontend-phase3-power-user.md) Task 4。
+- ~~**统计仪表盘范围**~~：已在 Phase 3 解决。八个汇总指标 + 六个趋势图表，使用 `vue-chartjs`（Chart.js wrapper）。见 [IMP-ADR008-04](IMP-ADR008-04-frontend-phase3-power-user.md) Task 5。
 
 ---
 
