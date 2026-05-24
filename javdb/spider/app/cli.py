@@ -31,6 +31,12 @@ def parse_arguments():
                         help='Enable history filter for ad-hoc mode (by default, ad-hoc mode ignores history for reading)')
     parser.add_argument('--url', type=str,
                         help='Custom URL to scrape (add ?page=x for pages)')
+    parser.add_argument(
+        '--result-json',
+        type=str,
+        default=None,
+        help='Write a versioned SpiderRunResult JSON sidecar to this path.',
+    )
     parser.add_argument('--phase', choices=['1', '2', 'all'], default='all',
                         help='Which phase to run: 1 (subtitle+today), 2 (today only), all (default)')
     parser.add_argument('--ignore-release-date', action='store_true',
