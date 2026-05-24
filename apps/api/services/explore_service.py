@@ -36,6 +36,7 @@ from javdb.infra.request import (
 
 EXPLORE_DETAIL_CACHE: Dict[str, tuple[int, bool]] = {}
 _DOWNLOADED_MAP_CACHE: Dict[str, tuple[float, Dict[str, bool]]] = {}
+_MAX_DOWNLOADED_MAP_CACHE_SIZE = 8
 
 
 def _result_to_dict(result: Any) -> Dict[str, Any]:
@@ -430,6 +431,9 @@ def _downloaded_map_by_href(cfg: Dict[str, Any]) -> Dict[str, bool]:
     except Exception:
         return {}
     _DOWNLOADED_MAP_CACHE[cache_key] = (now, downloaded)
+    if len(_DOWNLOADED_MAP_CACHE) > _MAX_DOWNLOADED_MAP_CACHE_SIZE:
+        oldest_key = min(_DOWNLOADED_MAP_CACHE, key=lambda k: _DOWNLOADED_MAP_CACHE[k][0])
+        _DOWNLOADED_MAP_CACHE.pop(oldest_key, None)
     return downloaded
 
 
