@@ -25,10 +25,10 @@ def test_spider_parser_adapter_uses_canonical_parsing_dispatch(
 
     original_import = builtins.__import__
 
-    def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
+    def guarded_import(name, globals_=None, locals_=None, fromlist=(), level=0):
         if name == 'apps.api.parsers' or name.startswith('apps.api.parsers.'):
             raise AssertionError('javdb.spider.parser must import from javdb.parsing')
-        return original_import(name, globals, locals, fromlist, level)
+        return original_import(name, globals_, locals_, fromlist, level)
 
     monkeypatch.setattr(builtins, '__import__', guarded_import)
     reloaded = importlib.reload(parser_adapter)
