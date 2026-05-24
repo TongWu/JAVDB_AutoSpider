@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import logging
+import os
 import queue
+import signal
 import subprocess
 import sys
 import threading
@@ -10,6 +12,9 @@ from datetime import datetime, timezone
 from typing import Protocol, Sequence
 
 from javdb.pipeline.models import StepPolicy, StepResult
+
+_PROCESS_STOP_GRACE_SEC = 1.0
+_READER_JOIN_GRACE_SEC = 1.0
 
 
 def _utc_now_iso() -> str:
@@ -37,6 +42,46 @@ class ConsoleAndFileLogSink:
             self._file_handler.stream.flush()
 
 
+def _process_group_kwargs() -> dict[str, object]:
+    if sys.platform == "win32":
+        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+    return {"start_new_session": True}
+
+
+def _terminate_process_group(process: subprocess.Popen[str]) -> None:
+    if process.poll() is not None:
+        return
+    if sys.platform == "win32":
+        subprocess.run(
+            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        return
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+
+
+def _kill_process_group(process: subprocess.Popen[str]) -> None:
+    if process.poll() is not None:
+        return
+    if sys.platform == "win32":
+        subprocess.run(
+            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        return
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        return
+
+
 class SubprocessStepRunner:
     def __init__(self, *, log_sink: LogSink | None = None):
         self._log_sink = log_sink or ConsoleAndFileLogSink()
@@ -58,6 +103,7 @@ class SubprocessStepRunner:
             text=True,
             bufsize=1,
             universal_newlines=True,
+            **_process_group_kwargs(),
         )
         stdout_finished = object()
         lines: queue.Queue[str | object] = queue.Queue()
@@ -72,6 +118,28 @@ class SubprocessStepRunner:
 
         reader = threading.Thread(target=_read_stdout, daemon=True)
         reader.start()
+
+        def _drain_available_output() -> bool:
+            stdout_done = False
+            while True:
+                try:
+                    item = lines.get_nowait()
+                except queue.Empty:
+                    break
+                if item is stdout_finished:
+                    stdout_done = True
+                elif isinstance(item, str) and item:
+                    self._log_sink.write_line(policy.name, item)
+            return stdout_done
+
+        def _terminate_and_wait() -> None:
+            _terminate_process_group(process)
+            try:
+                process.wait(timeout=_PROCESS_STOP_GRACE_SEC)
+            except subprocess.TimeoutExpired:
+                _kill_process_group(process)
+                process.wait()
+
         try:
             stdout_done = False
             while True:
@@ -90,8 +158,10 @@ class SubprocessStepRunner:
                     break
 
             if time.monotonic() > deadline and process.poll() is None:
-                process.kill()
-                process.wait()
+                _terminate_and_wait()
+                _drain_available_output()
+                reader.join(timeout=_READER_JOIN_GRACE_SEC)
+                _drain_available_output()
                 return StepResult(
                     name=policy.name,
                     status="timed_out",
@@ -120,5 +190,7 @@ class SubprocessStepRunner:
             )
         finally:
             if process.poll() is None:
-                process.kill()
-                process.wait()
+                _terminate_and_wait()
+            _drain_available_output()
+            reader.join(timeout=_READER_JOIN_GRACE_SEC)
+            _drain_available_output()
