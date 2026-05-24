@@ -1,5 +1,13 @@
 # IMP-ADR009-02: ADR-009 Phase 1 - Read-Only Drift Diagnose CLI
 
+## Table of Contents
+
+- [Task 1: Verify P0 Baseline](#task-1-verify-p0-baseline)
+- [Task 2: Implement Verify-Log Suspect Discovery](#task-2-implement-verify-log-suspect-discovery)
+- [Task 3: Implement D1 Sweep And Verdict Classification](#task-3-implement-d1-sweep-and-verdict-classification)
+- [Task 4: Add CLI Wrapper, Output, And Read-Only Docs](#task-4-add-cli-wrapper-output-and-read-only-docs)
+- [Completion Evidence](#completion-evidence)
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 | Field       | Value |

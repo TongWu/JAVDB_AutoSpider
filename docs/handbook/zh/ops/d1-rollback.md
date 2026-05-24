@@ -387,7 +387,9 @@ SessionId = ? AND ApplyState = 'pending'
 python3 -m apps.cli.db.drift_diagnose --apply --session-id <SessionId>
 ```
 
-不要从 GitHub Actions、邮件通知或告警处理代码自动调用 `--apply`。Actions 和邮件可以报告建议的操作员命令，但变更必须保持手动，并由当前诊断结果守卫。
+- **禁止自动触发位置：** 不要从 GitHub Actions、邮件通知或告警处理代码自动调用 `--apply`。
+- **可做的提示行为：** Actions 和邮件可以报告建议的操作员命令，但不得执行该命令。
+- **必须人工执行：** 任何数据变更都必须保持手动，并由当前诊断结果和人工批准共同守卫。
 
 ---
 
