@@ -254,8 +254,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     for f in failures:
         if f.get("unexpected"):
             logger.warning(
-                "Unexpected movie-claim sweep error for shard=%s",
-                f["shard_date"], exc_info=False,
+                "Unexpected movie-claim sweep error for shard=%s: %s",
+                f["shard_date"], f["error"], exc_info=False,
             )
         else:
             logger.warning(
