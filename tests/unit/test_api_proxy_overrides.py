@@ -92,6 +92,7 @@ def test_trigger_adhoc_task_uses_auto_proxy_by_default(monkeypatch):
         return {"job_id": "adhoc-job"}
 
     monkeypatch.setattr(task_service, "_spawn_job", fake_spawn)
+    monkeypatch.setattr(task_service, "_validate_target_url", lambda url: None)
 
     payload = AdhocTaskPayload(url="https://javdb.com/v/abcde")
     task_service.trigger_adhoc_task(payload, "tester")
@@ -109,6 +110,7 @@ def test_trigger_adhoc_task_supports_force_disable_proxy(monkeypatch):
         return {"job_id": "adhoc-job"}
 
     monkeypatch.setattr(task_service, "_spawn_job", fake_spawn)
+    monkeypatch.setattr(task_service, "_validate_target_url", lambda url: None)
 
     payload = AdhocTaskPayload(url="https://javdb.com/v/abcde", no_proxy=True)
     task_service.trigger_adhoc_task(payload, "tester")
