@@ -77,4 +77,4 @@ docker compose -f docker/docker-compose.fullstack.yml up -d --build
 
 ## Architecture
 
-See [ADR-008](../../../design/ADR-008-Frontend-Rewrite/ADR-008-frontend-rewrite-architecture.md) for the full design rationale (Vue 3 + Naive UI, Pinia stores, i18n, E2E test strategy).
+See [ADR-008](../../../design/_archive/ADR-008-Frontend-Rewrite/ADR-008-frontend-rewrite-architecture.md) for the full design rationale (Vue 3 + Naive UI, Pinia stores, i18n, E2E test strategy).
