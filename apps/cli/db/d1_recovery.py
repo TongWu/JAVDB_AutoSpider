@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from javdb.storage.d1_recovery import compact_replayed, pending_by_ordering_key
+from javdb.storage.d1_recovery import RecoveryEvent, compact_replayed, outbox_status
 
 
 def _default_outbox_path() -> str:
@@ -83,28 +83,43 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _inspect_summary(outbox: str) -> Dict[str, object]:
-    grouped = pending_by_ordering_key(outbox)
-    groups = {
+def _event_summary(event: RecoveryEvent) -> Dict[str, object]:
+    return {
+        "idempotency_key": event.idempotency_key,
+        "logical_db": event.logical_db,
+        "operation_type": event.operation_type,
+        "state": event.state,
+        "attempt": event.attempt,
+        "recovery_allowed": event.recovery_allowed,
+        "max_attempts": event.max_attempts,
+    }
+
+
+def _group_summary(
+    grouped: Dict[str, List[RecoveryEvent]],
+) -> Dict[str, List[Dict[str, object]]]:
+    return {
         ordering_key: [
-            {
-                "idempotency_key": event.idempotency_key,
-                "logical_db": event.logical_db,
-                "operation_type": event.operation_type,
-                "state": event.state,
-                "attempt": event.attempt,
-                "recovery_allowed": event.recovery_allowed,
-                "max_attempts": event.max_attempts,
-            }
+            _event_summary(event)
             for event in events
         ]
         for ordering_key, events in grouped.items()
     }
+
+
+def _inspect_summary(outbox: str) -> Dict[str, object]:
+    status = outbox_status(outbox)
+    pending_groups = _group_summary(status["pending_groups"])
+    dead_lettered_groups = _group_summary(status["dead_lettered_groups"])
     return {
         "outbox": outbox,
-        "pending_count": sum(len(events) for events in grouped.values()),
-        "ordering_key_count": len(grouped),
-        "groups": groups,
+        "pending_count": status["pending_count"],
+        "dead_lettered_count": status["dead_lettered_count"],
+        "malformed_count": status["malformed_count"],
+        "ordering_key_count": status["ordering_key_count"],
+        "pending_groups": pending_groups,
+        "dead_lettered_groups": dead_lettered_groups,
+        "latest_state_counts": status["latest_state_counts"],
     }
 
 
@@ -113,19 +128,41 @@ def _format_inspect(summary: Dict[str, object]) -> str:
     lines = [
         f"Outbox: {summary['outbox']}",
         f"Pending events: {pending_count}",
+        f"Dead-lettered events: {summary['dead_lettered_count']}",
+        f"Malformed lines: {summary['malformed_count']}",
         f"Ordering keys: {summary['ordering_key_count']}",
     ]
-    groups = summary["groups"]
-    if not isinstance(groups, dict) or not groups:
+    pending_groups = summary["pending_groups"]
+    dead_lettered_groups = summary["dead_lettered_groups"]
+    if (
+        not isinstance(pending_groups, dict)
+        or not isinstance(dead_lettered_groups, dict)
+        or (not pending_groups and not dead_lettered_groups)
+    ):
         lines.append("No pending recovery work.")
         return "\n".join(lines)
 
-    lines.append("")
-    for ordering_key, events in groups.items():
-        lines.append(f"{ordering_key}: {len(events)} pending")
+    if pending_groups:
+        lines.append("")
+        lines.append("Pending:")
+    for ordering_key, events in pending_groups.items():
+        lines.append(f"  {ordering_key}: {len(events)} pending")
         for event in events:
             lines.append(
-                "  - "
+                "    - "
+                f"{event['idempotency_key']} "
+                f"state={event['state']} "
+                f"attempt={event['attempt']}/{event['max_attempts']} "
+                f"operation={event['operation_type']}"
+            )
+    if dead_lettered_groups:
+        lines.append("")
+        lines.append("Dead-lettered:")
+    for ordering_key, events in dead_lettered_groups.items():
+        lines.append(f"  {ordering_key}: {len(events)} dead_lettered")
+        for event in events:
+            lines.append(
+                "    - "
                 f"{event['idempotency_key']} "
                 f"state={event['state']} "
                 f"attempt={event['attempt']}/{event['max_attempts']} "
@@ -154,7 +191,12 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(json.dumps(summary, indent=2, ensure_ascii=False))
         else:
             print(_format_inspect(summary))
-        return 1 if int(summary["pending_count"]) > 0 else 0
+        has_blocking_state = (
+            int(summary["pending_count"]) > 0
+            or int(summary["dead_lettered_count"]) > 0
+            or int(summary["malformed_count"]) > 0
+        )
+        return 1 if has_blocking_state else 0
 
     if args.command == "compact":
         processed = args.processed or _default_processed_path(outbox)

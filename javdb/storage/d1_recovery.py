@@ -20,11 +20,24 @@ RECOVERY_STATES = frozenset(
     {"queued", "attempting", "replayed", "dead_lettered", "abandoned"}
 )
 PENDING_STATES = frozenset({"queued", "attempting"})
+BLOCKING_STATES = frozenset({"dead_lettered"})
 COMPACTED_STATES = frozenset({"replayed", "abandoned"})
 
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _parse_recovery_allowed(raw: Any) -> bool:
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, str):
+        normalized = raw.strip().lower()
+        if normalized == "true":
+            return True
+        if normalized == "false":
+            return False
+    raise ValueError("recovery_allowed must be a boolean")
 
 
 @dataclass(frozen=True)
@@ -172,7 +185,7 @@ class RecoveryEvent:
             operation_type=str(raw["operation_type"]),
             idempotency_key=str(raw["idempotency_key"]),
             ordering_key=str(raw["ordering_key"]),
-            recovery_allowed=bool(raw["recovery_allowed"]),
+            recovery_allowed=_parse_recovery_allowed(raw["recovery_allowed"]),
             max_attempts=int(raw["max_attempts"]),
             state=state,
             attempt=int(raw.get("attempt", 0)),
@@ -244,6 +257,33 @@ def _read_raw_event_lines(path: PathLike) -> List[Tuple[str, Optional[RecoveryEv
     return records
 
 
+def _histories_from_events(
+    events: Iterable[RecoveryEvent],
+) -> "OrderedDict[str, List[RecoveryEvent]]":
+    histories: "OrderedDict[str, List[RecoveryEvent]]" = OrderedDict()
+    for event in events:
+        histories.setdefault(event.idempotency_key, []).append(event)
+    return histories
+
+
+def _latest_events_with_payload(
+    histories: "OrderedDict[str, List[RecoveryEvent]]",
+    states: frozenset[str],
+) -> "OrderedDict[str, List[RecoveryEvent]]":
+    grouped: "OrderedDict[str, List[RecoveryEvent]]" = OrderedDict()
+    for history in histories.values():
+        latest = history[-1]
+        if latest.state not in states:
+            continue
+        queued_payload = next(
+            (event for event in history if event.sql is not None),
+            latest,
+        )
+        latest_with_payload = latest.with_payload_from(queued_payload)
+        grouped.setdefault(latest.ordering_key, []).append(latest_with_payload)
+    return grouped
+
+
 def load_latest_events(path: PathLike) -> Dict[str, RecoveryEvent]:
     """Return the latest recovery event for each idempotency key."""
     latest: Dict[str, RecoveryEvent] = {}
@@ -254,23 +294,42 @@ def load_latest_events(path: PathLike) -> Dict[str, RecoveryEvent]:
 
 def pending_by_ordering_key(path: PathLike) -> Dict[str, List[RecoveryEvent]]:
     """Group active queued/attempting events by ordering key in FIFO order."""
-    histories: "OrderedDict[str, List[RecoveryEvent]]" = OrderedDict()
-    for event in _iter_events(path):
-        histories.setdefault(event.idempotency_key, []).append(event)
-
-    grouped: "OrderedDict[str, List[RecoveryEvent]]" = OrderedDict()
-    for history in histories.values():
-        latest = history[-1]
-        if latest.state not in PENDING_STATES:
-            continue
-        queued_payload = next(
-            (event for event in history if event.sql is not None),
-            latest,
+    return dict(
+        _latest_events_with_payload(
+            _histories_from_events(_iter_events(path)),
+            PENDING_STATES,
         )
-        latest_with_payload = latest.with_payload_from(queued_payload)
-        grouped.setdefault(latest.ordering_key, []).append(latest_with_payload)
+    )
 
-    return dict(grouped)
+
+def outbox_status(path: PathLike) -> Dict[str, Any]:
+    """Summarise latest active and malformed state for an outbox path."""
+    records = _read_raw_event_lines(path)
+    malformed_count = sum(1 for _, event in records if event is None)
+    events = [event for _, event in records if event is not None]
+    histories = _histories_from_events(events)
+    pending_groups = _latest_events_with_payload(histories, PENDING_STATES)
+    dead_lettered_groups = _latest_events_with_payload(histories, BLOCKING_STATES)
+
+    latest_state_counts = {
+        state: 0 for state in sorted(RECOVERY_STATES)
+    }
+    for history in histories.values():
+        latest_state_counts[history[-1].state] += 1
+
+    return {
+        "pending_count": sum(len(events) for events in pending_groups.values()),
+        "dead_lettered_count": sum(
+            len(events) for events in dead_lettered_groups.values()
+        ),
+        "malformed_count": malformed_count,
+        "ordering_key_count": len(
+            set(pending_groups.keys()) | set(dead_lettered_groups.keys())
+        ),
+        "pending_groups": dict(pending_groups),
+        "dead_lettered_groups": dict(dead_lettered_groups),
+        "latest_state_counts": latest_state_counts,
+    }
 
 
 def compact_replayed(active: PathLike, processed: PathLike) -> Dict[str, int]:
@@ -298,11 +357,14 @@ def compact_replayed(active: PathLike, processed: PathLike) -> Dict[str, int]:
             active_lines.append(raw_line)
 
     active_path.parent.mkdir(parents=True, exist_ok=True)
-    active_path.write_text("".join(active_lines), encoding="utf-8")
+    temp_path = active_path.with_name(f"{active_path.name}.tmp")
+    temp_path.write_text("".join(active_lines), encoding="utf-8")
 
     if processed_lines:
         processed_path.parent.mkdir(parents=True, exist_ok=True)
         with processed_path.open("a", encoding="utf-8") as fh:
             fh.writelines(processed_lines)
+
+    temp_path.replace(active_path)
 
     return {"active": len(active_lines), "processed": len(processed_lines)}
