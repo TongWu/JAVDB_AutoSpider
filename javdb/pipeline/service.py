@@ -565,14 +565,16 @@ def main():
                 email_args.extend(['--csv-path', csv_path])
             if args.dry_run:
                 email_args.append('--dry-run')
+            failure_email_policy = StepPolicy(
+                name="email_notification_failure",
+                required=False,
+                run_on_failure=True,
+                timeout_sec=3600,
+            )
+            failure_email_command = email_cmd + email_args
             failure_email_step = runner.run(
-                StepPolicy(
-                    name="email_notification_failure",
-                    required=False,
-                    run_on_failure=True,
-                    timeout_sec=3600,
-                ),
-                email_cmd + email_args,
+                failure_email_policy,
+                failure_email_command,
             )
             steps.append(failure_email_step)
             if _step_failed(failure_email_step):
@@ -581,6 +583,12 @@ def main():
                     failure_email_step.failure_reason or failure_email_step.status,
                 )
         except Exception as email_error:
+            failure_email_step = _failed_step_from_exception(
+                failure_email_policy,
+                failure_email_command,
+                email_error,
+            )
+            steps.append(failure_email_step)
             logger.error(f"Failed to send failure notification: {email_error}")
     
     # Exit with appropriate code
