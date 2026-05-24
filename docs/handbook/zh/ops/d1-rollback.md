@@ -37,6 +37,7 @@
   - [手动标记 session 为已提交](#手动标记-session-为已提交)
 - [已退役 audit 表取证](#已退役-audit-表取证)
 - [漂移处理](#漂移处理)
+  - [ADR-009 漂移诊断与受保护 apply](#adr-009-漂移诊断与受保护-apply)
 - [Schema 迁移](#schema-迁移)
 - [Pending 模式（当前默认）](#pending-模式当前默认)
   - [Pending 状态机](#pending-状态机)
@@ -364,6 +365,31 @@ ORDER BY movie_changes DESC;
 3. 如果你决定并发运行也是错误的，可选择稍后重新运行 `apps.cli.rollback --scope history --session-id <id> --apply`。
 
 CLI 以退出码 `4` 退出以暴露部分失败，让操作员注意到。
+
+### ADR-009 漂移诊断与受保护 apply
+
+当 `pending_session_verify`、rollback 日志或邮件告警报告已提交 session 之后仍有 pending-table 残留时，使用 `drift_diagnose`。诊断模式默认只读：
+
+```bash
+python3 -m apps.cli.db.drift_diagnose --since 24
+python3 -m apps.cli.db.drift_diagnose --since 24 --json
+```
+
+只有 `SAFE_TO_APPLY` 判定结果才允许手动 apply。apply 路径会在执行时重跑诊断，拒绝所有非 `SAFE_TO_APPLY` 状态，并且只能删除由以下谓词限定的孤立 pending 行：
+
+```sql
+SessionId = ? AND ApplyState = 'pending'
+```
+
+确认 session id 和当前判定结果后，运行：
+
+```bash
+python3 -m apps.cli.db.drift_diagnose --apply --session-id <SessionId>
+```
+
+- **禁止自动触发位置：** 不要从 GitHub Actions、邮件通知或告警处理代码自动调用 `--apply`。
+- **可做的提示行为：** Actions 和邮件可以报告建议的操作员命令，但不得执行该命令。
+- **必须人工执行：** 任何数据变更都必须保持手动，并由当前诊断结果和人工批准共同守卫。
 
 ---
 
