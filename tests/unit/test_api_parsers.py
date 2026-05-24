@@ -3,21 +3,23 @@ Tests for api.parsers – using both inline HTML and real HTML test files.
 """
 import os
 import sys
+import importlib
+import types
 
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
 import pytest
 
-from apps.api.parsers.index_parser import (
+from javdb.parsing.fallback.index_parser import (
     parse_index_page,
     parse_category_page,
     parse_top_page,
     find_exact_video_code_match,
     derive_letter_suffix_fallback_video_code,
 )
-from apps.api.parsers.detail_parser import parse_detail_page
-from apps.api.parsers.common import (
+from javdb.parsing.fallback.detail_parser import parse_detail_page
+from javdb.parsing.common import (
     extract_rate_and_comments,
     extract_video_code,
     detect_page_type,
@@ -33,6 +35,117 @@ def _load_html(filename):
         pytest.skip(f'HTML test file not found: {filename}')
     with open(path, 'r', encoding='utf-8') as f:
         return f.read()
+
+
+# ===================================================================
+# Compatibility adapters
+# ===================================================================
+
+class TestParserCompatibilityAdapters:
+    def _fake_rust_core_module(self):
+        fake = types.ModuleType("javdb.rust_core")
+
+        def parse_index_page(html_content, page_num=1):
+            return ("rust-index", html_content, page_num)
+
+        def parse_category_page(html_content, page_num=1):
+            return ("rust-category", html_content, page_num)
+
+        def parse_top_page(html_content, page_num=1):
+            return ("rust-top", html_content, page_num)
+
+        def parse_detail_page(html_content):
+            return ("rust-detail", html_content)
+
+        def parse_tag_page(html_content, page_num=1):
+            return ("rust-tag", html_content, page_num)
+
+        def detect_page_type(html_content):
+            return ("rust-detect", html_content)
+
+        fake.parse_index_page = parse_index_page
+        fake.parse_category_page = parse_category_page
+        fake.parse_top_page = parse_top_page
+        fake.parse_detail_page = parse_detail_page
+        fake.parse_tag_page = parse_tag_page
+        fake.detect_page_type = detect_page_type
+        return fake
+
+    def _reload_parser_dispatch(self, rust_core_module):
+        original_rust_core = sys.modules.get("javdb.rust_core", None)
+        had_rust_core = "javdb.rust_core" in sys.modules
+        self._original_api_parsers = sys.modules.get("apps.api.parsers", None)
+        self._had_api_parsers = "apps.api.parsers" in sys.modules
+        try:
+            sys.modules["javdb.rust_core"] = rust_core_module
+            parsing = importlib.reload(importlib.import_module("javdb.parsing"))
+            sys.modules.pop("apps.api.parsers", None)
+            return parsing
+        finally:
+            if had_rust_core:
+                sys.modules["javdb.rust_core"] = original_rust_core
+            else:
+                sys.modules.pop("javdb.rust_core", None)
+
+    def _restore_parser_dispatch(self):
+        importlib.reload(importlib.import_module("javdb.parsing"))
+        if self._had_api_parsers:
+            sys.modules["apps.api.parsers"] = self._original_api_parsers
+        else:
+            sys.modules.pop("apps.api.parsers", None)
+
+    def test_canonical_dispatch_prefers_rust_core_when_available(self):
+        fake_rust_core = self._fake_rust_core_module()
+        try:
+            parsing = self._reload_parser_dispatch(fake_rust_core)
+
+            assert parsing.RUST_PARSERS_AVAILABLE is True
+            assert parsing.parse_index_page is fake_rust_core.parse_index_page
+            assert parsing.parse_index_page("<html></html>", page_num=7) == (
+                "rust-index",
+                "<html></html>",
+                7,
+            )
+        finally:
+            self._restore_parser_dispatch()
+
+    def test_canonical_dispatch_uses_fallback_when_rust_core_unavailable(self):
+        try:
+            parsing = self._reload_parser_dispatch(None)
+            fallback_index = importlib.import_module("javdb.parsing.fallback.index_parser")
+
+            assert parsing.RUST_PARSERS_AVAILABLE is False
+            assert parsing.parse_index_page is fallback_index.parse_index_page
+        finally:
+            self._restore_parser_dispatch()
+
+    def test_parser_package_adapter_reexports_canonical_dispatch_objects(self):
+        fake_rust_core = self._fake_rust_core_module()
+        try:
+            parsing = self._reload_parser_dispatch(fake_rust_core)
+            compat = importlib.import_module("apps.api.parsers")
+
+            assert compat.__all__ == parsing.__all__
+            for name in parsing.__all__:
+                assert getattr(compat, name) is getattr(parsing, name)
+        finally:
+            self._restore_parser_dispatch()
+
+    def test_index_parser_adapter_reexports_canonical_fallback_objects(self):
+        compat = importlib.import_module('apps.api.parsers.index_parser')
+        canonical = importlib.import_module('javdb.parsing.fallback.index_parser')
+
+        assert compat.__all__ == canonical.__all__
+        for name in canonical.__all__:
+            assert getattr(compat, name) is getattr(canonical, name)
+
+    def test_detail_parser_adapter_reexports_canonical_fallback_objects(self):
+        compat = importlib.import_module('apps.api.parsers.detail_parser')
+        canonical = importlib.import_module('javdb.parsing.fallback.detail_parser')
+
+        assert compat.__all__ == canonical.__all__
+        for name in canonical.__all__:
+            assert getattr(compat, name) is getattr(canonical, name)
 
 
 # ===================================================================
@@ -326,7 +439,7 @@ class TestParseDetailPageInline:
         assert detail.magnets == []
 
     def test_actors_panel_na_placeholder(self):
-        from apps.api.models import NO_ACTOR_LISTING_ACTOR_NAME, NO_ACTOR_LISTING_ACTOR_GENDER
+        from javdb.parsing.models import NO_ACTOR_LISTING_ACTOR_NAME, NO_ACTOR_LISTING_ACTOR_GENDER
 
         html = '''
         <html><body>
