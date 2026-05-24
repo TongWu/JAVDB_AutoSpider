@@ -66,6 +66,113 @@ def test_pipeline_result_rejects_missing_required_field(tmp_path):
         read_pipeline_result(path)
 
 
+def test_pipeline_result_rejects_wrong_kind(tmp_path):
+    path = tmp_path / "pipeline-result.json"
+    write_pipeline_result_atomic(path, _pipeline_result())
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw["kind"] = "spider_run_result"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="pipeline_run_result"):
+        read_pipeline_result(path)
+
+
+def test_pipeline_result_rejects_incompatible_schema_version(tmp_path):
+    path = tmp_path / "pipeline-result.json"
+    write_pipeline_result_atomic(path, _pipeline_result())
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw["schema_version"] = "2.0"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Unsupported pipeline result schema_version"):
+        read_pipeline_result(path)
+
+
+def test_pipeline_result_rejects_non_object_payload(tmp_path):
+    path = tmp_path / "pipeline-result.json"
+    path.write_text(json.dumps(["not", "an", "object"]), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Pipeline result must be a JSON object"):
+        read_pipeline_result(path)
+
+
+def test_pipeline_result_rejects_invalid_status(tmp_path):
+    path = tmp_path / "pipeline-result.json"
+    write_pipeline_result_atomic(path, _pipeline_result())
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw["status"] = "partial"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Invalid pipeline result status"):
+        read_pipeline_result(path)
+
+
+def test_pipeline_result_rejects_non_list_steps(tmp_path):
+    path = tmp_path / "pipeline-result.json"
+    write_pipeline_result_atomic(path, _pipeline_result())
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw["steps"] = {"name": "spider"}
+    path.write_text(json.dumps(raw), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Invalid pipeline result field steps"):
+        read_pipeline_result(path)
+
+
+def test_pipeline_result_rejects_invalid_step_status(tmp_path):
+    path = tmp_path / "pipeline-result.json"
+    write_pipeline_result_atomic(path, _pipeline_result())
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw["steps"][0]["status"] = "partial"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"Invalid pipeline result steps\[0\]\.status"):
+        read_pipeline_result(path)
+
+
+def test_pipeline_result_rejects_invalid_step_exit_code(tmp_path):
+    path = tmp_path / "pipeline-result.json"
+    write_pipeline_result_atomic(path, _pipeline_result())
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw["steps"][0]["exit_code"] = "1"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"Invalid pipeline result steps\[0\]\.exit_code"):
+        read_pipeline_result(path)
+
+
+def test_pipeline_result_rejects_invalid_step_timestamp(tmp_path):
+    path = tmp_path / "pipeline-result.json"
+    write_pipeline_result_atomic(path, _pipeline_result())
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw["steps"][0]["started_at"] = None
+    path.write_text(json.dumps(raw), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"Invalid pipeline result steps\[0\] field started_at"):
+        read_pipeline_result(path)
+
+
+def test_pipeline_result_rejects_invalid_exit_code(tmp_path):
+    path = tmp_path / "pipeline-result.json"
+    write_pipeline_result_atomic(path, _pipeline_result())
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw["exit_code"] = None
+    path.write_text(json.dumps(raw), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Invalid pipeline result field exit_code"):
+        read_pipeline_result(path)
+
+
+def test_pipeline_result_rejects_invalid_timestamp(tmp_path):
+    path = tmp_path / "pipeline-result.json"
+    write_pipeline_result_atomic(path, _pipeline_result())
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw["started_at"] = None
+    path.write_text(json.dumps(raw), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Invalid pipeline result field started_at"):
+        read_pipeline_result(path)
+
+
 def test_pipeline_result_tolerates_unknown_fields(tmp_path):
     path = tmp_path / "pipeline-result.json"
     write_pipeline_result_atomic(path, _pipeline_result())

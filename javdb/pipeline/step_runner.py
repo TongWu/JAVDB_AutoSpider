@@ -48,14 +48,18 @@ def _process_group_kwargs() -> dict[str, object]:
     return {"start_new_session": True}
 
 
+def _taskkill_tree(pid: int) -> None:
+    subprocess.run(
+        ["taskkill", "/PID", str(pid), "/T", "/F"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+
+
 def _terminate_process_group(process: subprocess.Popen[str]) -> None:
     if sys.platform == "win32":
-        subprocess.run(
-            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=False,
-        )
+        _taskkill_tree(process.pid)
         return
     try:
         os.killpg(process.pid, signal.SIGTERM)
@@ -65,12 +69,7 @@ def _terminate_process_group(process: subprocess.Popen[str]) -> None:
 
 def _kill_process_group(process: subprocess.Popen[str]) -> None:
     if sys.platform == "win32":
-        subprocess.run(
-            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=False,
-        )
+        _taskkill_tree(process.pid)
         return
     try:
         os.killpg(process.pid, signal.SIGKILL)
@@ -98,7 +97,6 @@ class SubprocessStepRunner:
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
-            universal_newlines=True,
             **_process_group_kwargs(),
         )
         stdout_finished = object()
@@ -162,6 +160,7 @@ class SubprocessStepRunner:
 
             if time.monotonic() > deadline and (process.poll() is None or not stdout_done):
                 _terminate_and_wait(wait_for_stdout=True)
+                # Drain once for queued lines and once more for the reader sentinel after join.
                 _drain_available_output()
                 _drain_available_output()
                 return StepResult(
