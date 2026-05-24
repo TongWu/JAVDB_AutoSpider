@@ -59,6 +59,19 @@ def test_rust_scraper_change_runs_rust_wheel_fallback_and_parser_tests():
     assert "tests/unit/test_rust_adapters_fallback.py" in result.pytest_targets
 
 
+def test_canonical_parser_change_selects_parser_domain_and_rust_wheel():
+    result = select("javdb/parsing/fallback/detail_parser.py")
+
+    assert result.run_full_python is False
+    assert result.run_selected_python is True
+    assert result.build_rust_wheel is True
+    assert "tests/unit/test_api_parsers.py" in result.pytest_targets
+    assert "tests/unit/test_parser.py" in result.pytest_targets
+    assert "tests/unit/test_video_code_search.py" in result.pytest_targets
+    assert "tests/parity/test_parser_parity.py" in result.pytest_targets
+    assert any("parser-domain impact rule" in reason for reason in result.reason)
+
+
 def test_cargo_manifest_change_runs_full_rust_tests():
     result = select("javdb/rust_core/Cargo.toml")
 

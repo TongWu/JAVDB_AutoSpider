@@ -4,8 +4,8 @@ HTML parsing utilities for the spider.
 .. note::
 
     This module is a **backward-compatible wrapper** around the new
-    ``api.parsers`` layer.  New code should prefer importing from
-    ``api.parsers`` directly.
+    ``javdb.parsing`` layer.  New code should prefer importing from
+    ``javdb.parsing`` directly.
 
 The public interface (``extract_video_code``, ``parse_index``,
 ``parse_detail``) is preserved so that ``spider.py`` and existing tests
@@ -28,10 +28,10 @@ IGNORE_RELEASE_DATE_FILTER = cfg('IGNORE_RELEASE_DATE_FILTER', False)
 
 from javdb.infra.logging import get_logger
 
-# New API layer imports — go through the package __init__ so the Rust-first
-# routing in apps/api/parsers/__init__.py applies. Importing the submodules
-# directly bypasses Rust and forces the FROZEN Python fallback.
-from apps.api.parsers import (
+# Canonical parser imports — go through the package __init__ so the Rust-first
+# routing in javdb/parsing/__init__.py applies. Importing the fallback
+# submodules directly bypasses Rust and forces the Python fallback.
+from javdb.parsing import (
     parse_index_page as _api_parse_index,
     parse_detail_page as _api_parse_detail,
     parse_index_page,
@@ -185,31 +185,31 @@ def _is_yesterday_release(tags: list) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# extract_video_code  (delegates to api.parsers.common)
+# extract_video_code  (delegates to javdb.parsing.common)
 # ---------------------------------------------------------------------------
 
 def extract_video_code(a):
     """Extract video code from movie item with improved robustness.
 
-    .. deprecated:: Use ``api.parsers.common.extract_video_code`` instead.
+    .. deprecated:: Use ``javdb.parsing.common.extract_video_code`` instead.
 
     Returns:
         video_code: The extracted video code, or empty string if not found
                     or invalid.  Hyphen-less codes are accepted when they mix
                     letters and digits (e.g. ``n0656``).
     """
-    from apps.api.parsers.common import extract_video_code as _api_extract
+    from javdb.parsing.common import extract_video_code as _api_extract
     return _api_extract(a)
 
 
 # ---------------------------------------------------------------------------
-# parse_index  (delegates to api.parsers + applies business filters)
+# parse_index  (delegates to javdb.parsing + applies business filters)
 # ---------------------------------------------------------------------------
 
 def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=False, is_adhoc_mode=False):
     """Parse the index page to extract entries with required tags.
 
-    This function delegates HTML parsing to ``api.parsers.parse_index_page``
+    This function delegates HTML parsing to ``javdb.parsing.parse_index_page``
     and then applies the spider's business filtering logic (phase selection,
     subtitle/release-date tags, rate/comment thresholds).
 
@@ -332,13 +332,13 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
 
 
 # ---------------------------------------------------------------------------
-# parse_detail  (delegates to api.parsers + returns legacy tuple)
+# parse_detail  (delegates to javdb.parsing + returns legacy tuple)
 # ---------------------------------------------------------------------------
 
 def parse_detail(html_content, index=None, skip_sleep=False):
     """Parse the detail page to extract magnet links and actor information.
 
-    This function delegates HTML parsing to ``api.parsers.parse_detail_page``
+    This function delegates HTML parsing to ``javdb.parsing.parse_detail_page``
     and converts the result to the legacy tuple format.
 
     Note: video_code is extracted from the index/catalog page, not from

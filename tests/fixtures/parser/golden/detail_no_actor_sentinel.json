@@ -1,0 +1,35 @@
+{
+  "actors": [],
+  "code_prefix_link": "/video_codes/EDGE",
+  "comment_count": "101",
+  "directors": [],
+  "duration": "",
+  "fanart_urls": [],
+  "magnets": [
+    {
+      "file_count": 1,
+      "href": "magnet:?xt=urn:btih:edgenactor",
+      "name": "EDGE-NA.torrent",
+      "size": "2GB",
+      "tags": [
+        "字幕"
+      ],
+      "timestamp": "2026-01-01"
+    }
+  ],
+  "maker": null,
+  "no_actor_listing": true,
+  "parse_success": true,
+  "poster_url": "",
+  "publisher": null,
+  "rate": "4.2",
+  "release_date": "",
+  "review_count": 0,
+  "series": null,
+  "tags": [],
+  "title": "EDGE-NA No Actor Listing",
+  "trailer_url": null,
+  "video_code": "EDGE-NA",
+  "want_count": 0,
+  "watched_count": 0
+}

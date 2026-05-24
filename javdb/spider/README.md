@@ -6,7 +6,7 @@ JavDB scraping runtime: fetches index/detail pages, parses HTML, runs parallel/s
 
 | File | Purpose |
 |---|---|
-| `parser.py` | HTML parser for index and detail pages; emits `MovieEntry` / `TorrentEntry`. Wraps `apps.api.parsers` layer. |
+| `parser.py` | Temporary Spider parser adapter; preserves legacy index/detail return shapes while delegating HTML parsing to `javdb.parsing`. |
 | `contracts.py` | Cross-module data contracts: torrent category mapping, sensor priority, indicator tables (mirrored in Rust core). |
 | `url_helper.py` | JavDB URL parsing, type detection, and normalisation (Rust-accelerated with Python fallback). |
 | `filename_helper.py` | Filename derivation for spider output CSVs, with optional HTML-based name resolution. |
