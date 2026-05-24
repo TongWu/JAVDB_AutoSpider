@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from javdb.infra.logging import log_section, log_summary_block
 from javdb.storage.d1_recovery import RecoveryEvent, compact_replayed, outbox_status
+
+logger = logging.getLogger(__name__)
 
 
 def _default_outbox_path() -> str:
@@ -190,7 +194,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         if args.json_output:
             print(json.dumps(summary, indent=2, ensure_ascii=False))
         else:
-            print(_format_inspect(summary))
+            log_section(logger, "Recovery Outbox Inspect")
+            log_summary_block(logger, "Outbox Status", {
+                "Outbox": summary["outbox"],
+                "Pending events": summary["pending_count"],
+                "Dead-lettered events": summary["dead_lettered_count"],
+                "Malformed lines": summary["malformed_count"],
+                "Ordering keys": summary["ordering_key_count"],
+            })
         has_blocking_state = (
             int(summary["pending_count"]) > 0
             or int(summary["dead_lettered_count"]) > 0
@@ -210,7 +221,13 @@ def main(argv: Optional[List[str]] = None) -> int:
                 )
             )
         else:
-            print(_format_compact(result, outbox=outbox, processed=processed))
+            log_section(logger, "Recovery Outbox Compact")
+            log_summary_block(logger, "Compact Result", {
+                "Outbox": outbox,
+                "Processed": processed,
+                "Active lines left": result["active"],
+                "Processed lines moved": result["processed"],
+            })
         return 0
 
     return 2

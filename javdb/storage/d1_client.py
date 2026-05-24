@@ -325,7 +325,7 @@ class D1Connection:
             try:
                 self._session.close()
             except Exception:  # noqa: BLE001 — closing must not raise
-                pass
+                logger.warning("Failed to close D1 client session", exc_info=True)
 
     def _post_via_current_post_request(self, url: str, *, headers, json, timeout):
         return self._post_request(url, headers=headers, json=json, timeout=timeout)
