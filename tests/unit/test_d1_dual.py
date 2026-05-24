@@ -290,7 +290,8 @@ class _FakeResponse:
 
 
 @pytest.fixture
-def d1_conn():
+def d1_conn(monkeypatch, tmp_path):
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
     return D1Connection(account_id="acct", database_id="db", api_token="tok")
 
 
@@ -650,10 +651,11 @@ def test_export_lock_backoff_capped_by_max_sleep(monkeypatch, d1_conn, no_sleep)
     assert no_sleep[0] <= 5.5
 
 
-def test_d1_connection_uses_session_for_keepalive():
+def test_d1_connection_uses_session_for_keepalive(monkeypatch, tmp_path):
     """A real Session reuses the urllib3 connection pool across requests."""
     import requests as _requests
 
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
     conn = D1Connection(account_id="a", database_id="b", api_token="t")
     try:
         assert isinstance(conn._session, _requests.Session)

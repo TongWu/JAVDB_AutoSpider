@@ -436,3 +436,96 @@ def test_write_summary_creates_formatted_json(tmp_path):
     assert data["sql_statements"] == 1
     assert content.endswith("\n")
     assert "\n  " in content
+
+
+def test_write_summary_aggregates_counters_from_multiple_ports(tmp_path):
+    first = _port(
+        FakePoster(
+            [
+                FakeResponse(
+                    payload={
+                        "success": True,
+                        "result": [{"meta": {"changes": 0}, "results": []}],
+                    }
+                )
+            ]
+        )
+    )
+    second = _port(
+        FakePoster(
+            [
+                FakeResponse(
+                    payload={
+                        "success": True,
+                        "result": [{"meta": {"changes": 0}, "results": []}],
+                    }
+                )
+            ]
+        )
+    )
+    first.execute("SELECT 1", [])
+    second.execute("SELECT 2", [])
+
+    path = tmp_path / "d1_port_summary.json"
+    first.write_summary(path)
+    second.write_summary(path)
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["http_posts"] == 2
+    assert data["sql_statements"] == 2
+
+
+def test_write_summary_repeated_call_from_same_port_writes_only_delta(tmp_path):
+    poster = FakePoster(
+        [
+            FakeResponse(
+                payload={
+                    "success": True,
+                    "result": [{"meta": {"changes": 0}, "results": []}],
+                }
+            )
+        ]
+    )
+    port = _port(poster)
+    port.execute("SELECT 1", [])
+
+    path = tmp_path / "d1_port_summary.json"
+    port.write_summary(path)
+    port.write_summary(path)
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["http_posts"] == 1
+    assert data["sql_statements"] == 1
+
+
+def test_write_summary_includes_average_batch_size(tmp_path):
+    poster = FakePoster(
+        [
+            FakeResponse(
+                payload={
+                    "success": True,
+                    "result": [
+                        {"meta": {"changes": 1}, "results": []},
+                        {"meta": {"changes": 1}, "results": []},
+                    ],
+                }
+            ),
+            FakeResponse(
+                payload={
+                    "success": True,
+                    "result": [{"meta": {"changes": 1}, "results": []}],
+                }
+            ),
+        ]
+    )
+    port = _port(poster, batch_limit=2)
+    port.executemany("INSERT INTO MovieHistory(Id) VALUES (?)", [(1,), (2,), (3,)])
+
+    path = tmp_path / "d1_port_summary.json"
+    port.write_summary(path)
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["batches"] == 2
+    assert data["batch_statements"] == 3
+    assert data["average_batch_size"] == 1.5
+    assert data["recovery_drain_duration_sec"] == 0.0

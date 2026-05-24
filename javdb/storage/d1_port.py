@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import random
 import re
+import threading
 import time
 from typing import Any, Callable, Iterable, Sequence
 
@@ -48,6 +49,61 @@ def d1_summary_path(reports_dir: str | None = None) -> Path:
     return Path(root) / "D1" / "d1_port_summary.json"
 
 
+def _numeric_summary_value(value: Any) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    return 0
+
+
+def _read_existing_summary(path: Path) -> dict[str, int]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    return {
+        key: _numeric_summary_value(payload.get(key))
+        for key in _SUMMARY_COUNTER_KEYS
+    }
+
+
+def _with_derived_summary(summary: dict[str, int]) -> dict[str, int | float]:
+    out: dict[str, int | float] = {
+        key: _numeric_summary_value(summary.get(key))
+        for key in _SUMMARY_COUNTER_KEYS
+    }
+    batches = int(out["batches"])
+    batch_statements = int(out["batch_statements"])
+    out["average_batch_size"] = (
+        batch_statements / batches if batches else 0.0
+    )
+    out["recovery_drain_duration_sec"] = 0.0
+    return out
+
+
+_SUMMARY_WRITE_LOCK = threading.Lock()
+_SUMMARY_COUNTER_KEYS = (
+    "http_posts",
+    "sql_statements",
+    "batches",
+    "batch_statements",
+    "retries",
+    "retry_successes",
+    "transient_errors",
+    "permanent_errors",
+    "schema_cache_hits",
+    "schema_cache_misses",
+    "outbox_queued",
+    "outbox_replayed",
+    "outbox_dead_lettered",
+)
+
+
 class D1AccessPort:
     def __init__(
         self,
@@ -67,21 +123,8 @@ class D1AccessPort:
         self._sleep = sleep
         self._jitter = jitter
         self._schema_cache: dict[tuple[str, tuple[Any, ...]], list[D1Cursor]] = {}
-        self._summary = {
-            "http_posts": 0,
-            "sql_statements": 0,
-            "batches": 0,
-            "batch_statements": 0,
-            "retries": 0,
-            "retry_successes": 0,
-            "transient_errors": 0,
-            "permanent_errors": 0,
-            "schema_cache_hits": 0,
-            "schema_cache_misses": 0,
-            "outbox_queued": 0,
-            "outbox_replayed": 0,
-            "outbox_dead_lettered": 0,
-        }
+        self._summary = {key: 0 for key in _SUMMARY_COUNTER_KEYS}
+        self._last_written_summary = {key: 0 for key in _SUMMARY_COUNTER_KEYS}
 
     def execute(
         self,
@@ -162,17 +205,30 @@ class D1AccessPort:
     ) -> dict[str, int]:
         return {"replayed": 0, "dead_lettered": 0}
 
-    def summary(self) -> dict[str, int]:
-        return dict(self._summary)
+    def summary(self) -> dict[str, int | float]:
+        return _with_derived_summary(dict(self._summary))
 
     def write_summary(self, path: str | os.PathLike[str] | None = None) -> None:
         target = Path(path) if path is not None else d1_summary_path()
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(
-            json.dumps(self.summary(), ensure_ascii=False, indent=2, sort_keys=True)
-            + "\n",
-            encoding="utf-8",
-        )
+
+        with _SUMMARY_WRITE_LOCK:
+            current = dict(self._summary)
+            delta = {
+                key: current[key] - self._last_written_summary.get(key, 0)
+                for key in _SUMMARY_COUNTER_KEYS
+            }
+            aggregate = _read_existing_summary(target)
+            for key in _SUMMARY_COUNTER_KEYS:
+                aggregate[key] = _numeric_summary_value(aggregate.get(key)) + delta[key]
+            aggregate = _with_derived_summary(aggregate)
+
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(
+                json.dumps(aggregate, ensure_ascii=False, indent=2, sort_keys=True)
+                + "\n",
+                encoding="utf-8",
+            )
+            self._last_written_summary = current
 
     def close(self) -> None:
         try:
