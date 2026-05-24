@@ -29,13 +29,12 @@ def _load_html(filename):
 # ===================================================================
 
 class TestTagParserCompatibilityAdapter:
-    def test_tag_parser_adapter_reexports_canonical_fallback_objects(self):
+    def test_tag_parser_adapter_reexports_canonical_dispatch(self):
         compat = importlib.import_module('apps.api.parsers.tag_parser')
-        canonical = importlib.import_module('javdb.parsing.fallback.tag_parser')
+        parsing = importlib.import_module('javdb.parsing')
 
-        assert compat.__all__ == canonical.__all__
-        for name in canonical.__all__:
-            assert getattr(compat, name) is getattr(canonical, name)
+        assert compat.__all__ == ['parse_tag_page']
+        assert compat.parse_tag_page is parsing.parse_tag_page
 
     def test_tag_parser_adapter_reexports_private_helper_attributes(self):
         compat = importlib.import_module('apps.api.parsers.tag_parser')

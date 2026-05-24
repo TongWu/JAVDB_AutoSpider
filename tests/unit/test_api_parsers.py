@@ -74,12 +74,25 @@ class TestParserCompatibilityAdapters:
     def _reload_parser_dispatch(self, rust_core_module):
         original_rust_core = sys.modules.get("javdb.rust_core", None)
         had_rust_core = "javdb.rust_core" in sys.modules
-        self._original_api_parsers = sys.modules.get("apps.api.parsers", None)
-        self._had_api_parsers = "apps.api.parsers" in sys.modules
+        self._api_parser_modules = [
+            "apps.api.parsers",
+            "apps.api.parsers.detail_parser",
+            "apps.api.parsers.index_parser",
+            "apps.api.parsers.tag_parser",
+        ]
+        self._original_api_parser_modules = {
+            name: sys.modules.get(name, None)
+            for name in self._api_parser_modules
+        }
+        self._had_api_parser_modules = {
+            name: name in sys.modules
+            for name in self._api_parser_modules
+        }
         try:
             sys.modules["javdb.rust_core"] = rust_core_module
             parsing = importlib.reload(importlib.import_module("javdb.parsing"))
-            sys.modules.pop("apps.api.parsers", None)
+            for name in self._api_parser_modules:
+                sys.modules.pop(name, None)
             return parsing
         finally:
             if had_rust_core:
@@ -89,10 +102,11 @@ class TestParserCompatibilityAdapters:
 
     def _restore_parser_dispatch(self):
         importlib.reload(importlib.import_module("javdb.parsing"))
-        if self._had_api_parsers:
-            sys.modules["apps.api.parsers"] = self._original_api_parsers
-        else:
-            sys.modules.pop("apps.api.parsers", None)
+        for name in self._api_parser_modules:
+            if self._had_api_parser_modules[name]:
+                sys.modules[name] = self._original_api_parser_modules[name]
+            else:
+                sys.modules.pop(name, None)
 
     def test_canonical_dispatch_prefers_rust_core_when_available(self):
         fake_rust_core = self._fake_rust_core_module()
@@ -131,21 +145,35 @@ class TestParserCompatibilityAdapters:
         finally:
             self._restore_parser_dispatch()
 
-    def test_index_parser_adapter_reexports_canonical_fallback_objects(self):
-        compat = importlib.import_module('apps.api.parsers.index_parser')
-        canonical = importlib.import_module('javdb.parsing.fallback.index_parser')
+    def test_index_parser_adapter_reexports_canonical_dispatch_and_fallback_helpers(self):
+        fake_rust_core = self._fake_rust_core_module()
+        try:
+            parsing = self._reload_parser_dispatch(fake_rust_core)
+            compat = importlib.import_module('apps.api.parsers.index_parser')
+            fallback = importlib.import_module('javdb.parsing.fallback.index_parser')
 
-        assert compat.__all__ == canonical.__all__
-        for name in canonical.__all__:
-            assert getattr(compat, name) is getattr(canonical, name)
+            assert compat.__all__ == fallback.__all__
+            assert compat.parse_index_page is parsing.parse_index_page
+            assert compat.parse_category_page is parsing.parse_category_page
+            assert compat.parse_top_page is parsing.parse_top_page
+            assert compat.find_exact_video_code_match is fallback.find_exact_video_code_match
+            assert (
+                compat.derive_letter_suffix_fallback_video_code
+                is fallback.derive_letter_suffix_fallback_video_code
+            )
+        finally:
+            self._restore_parser_dispatch()
 
-    def test_detail_parser_adapter_reexports_canonical_fallback_objects(self):
-        compat = importlib.import_module('apps.api.parsers.detail_parser')
-        canonical = importlib.import_module('javdb.parsing.fallback.detail_parser')
+    def test_detail_parser_adapter_reexports_canonical_dispatch(self):
+        fake_rust_core = self._fake_rust_core_module()
+        try:
+            parsing = self._reload_parser_dispatch(fake_rust_core)
+            compat = importlib.import_module('apps.api.parsers.detail_parser')
 
-        assert compat.__all__ == canonical.__all__
-        for name in canonical.__all__:
-            assert getattr(compat, name) is getattr(canonical, name)
+            assert compat.__all__ == ['parse_detail_page']
+            assert compat.parse_detail_page is parsing.parse_detail_page
+        finally:
+            self._restore_parser_dispatch()
 
 
 # ===================================================================
@@ -212,6 +240,13 @@ class TestExtractVideoCode:
         soup = BeautifulSoup(html, 'html.parser')
         a = soup.find('a')
         assert extract_video_code(a) == ''
+
+    @pytest.mark.parametrize('invalid_tag', [None, 'not-a-tag'])
+    def test_invalid_tag_returns_empty_string(self, invalid_tag, caplog):
+        with caplog.at_level('DEBUG', logger='javdb.parsing.common'):
+            assert extract_video_code(invalid_tag) == ''
+
+        assert 'No valid <a> tag provided' in caplog.text
 
 
 class TestDetectPageType:
@@ -422,6 +457,70 @@ class TestParseDetailPageInline:
         assert detail.actors[0].name == 'Sample Actor'
         assert detail.actors[0].href == '/actors/xyz'
         assert detail.actors[0].gender == 'female'
+
+    def test_actor_extraction_accepts_simplified_chinese_label(self):
+        html = '''
+        <html><body>
+        <div class="video-meta-panel">
+          <div class="panel-block">
+            <strong>演员:</strong>
+            &nbsp;<span class="value">
+                <a href="/actors/xyz">Sample Actor</a>
+                <strong class="symbol female">♀</strong>
+            </span>
+          </div>
+        </div>
+        <div id="magnets-content">
+            <div class="item columns is-desktop">
+                <div class="magnet-name">
+                    <a href="magnet:?xt=urn:btih:actorlabeltest">
+                        <span class="name">ABC-123.torrent</span>
+                        <span class="meta">1GB, 1個文件</span>
+                    </a>
+                </div>
+                <span class="time">2024-01-01</span>
+            </div>
+        </div>
+        </body></html>
+        '''
+        detail = parse_detail_page(html)
+        assert detail.parse_success is True
+        assert len(detail.actors) == 1
+        assert detail.actors[0].name == 'Sample Actor'
+        assert detail.actors[0].href == '/actors/xyz'
+        assert detail.actors[0].gender == 'female'
+
+    def test_no_actor_placeholder_accepts_simplified_chinese_label(self):
+        from javdb.parsing.models import NO_ACTOR_LISTING_ACTOR_NAME
+
+        html = '''
+        <html><body>
+        <div class="video-meta-panel">
+          <div class="panel-block">
+            <strong>演员:</strong>
+            &nbsp;<span class="value">
+                N/A
+            </span>
+          </div>
+        </div>
+        <div id="magnets-content">
+            <div class="item columns is-desktop">
+                <div class="magnet-name">
+                    <a href="magnet:?xt=urn:btih:simplifiedplaceholder">
+                        <span class="name">ABC-123.torrent</span>
+                        <span class="meta">1GB, 1個文件</span>
+                    </a>
+                </div>
+                <span class="time">2024-01-01</span>
+            </div>
+        </div>
+        </body></html>
+        '''
+        detail = parse_detail_page(html)
+        assert detail.parse_success is True
+        assert detail.actors == []
+        assert detail.no_actor_listing is True
+        assert detail.get_first_actor_name() == NO_ACTOR_LISTING_ACTOR_NAME
 
     def test_magnet_fields(self, sample_detail_html):
         detail = parse_detail_page(sample_detail_html)

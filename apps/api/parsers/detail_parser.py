@@ -1,12 +1,12 @@
 """
-Compatibility exports for the frozen detail parser fallback.
+Compatibility exports for the canonical detail parser dispatch.
 
-The canonical Python fallback lives in ``javdb.parsing.fallback.detail_parser``.
+The canonical parser dispatch lives in ``javdb.parsing``.
 This module keeps the historical ``apps.api.parsers.detail_parser`` import path
 working for downstream callers.
 """
 
-from javdb.parsing.fallback.detail_parser import parse_detail_page
+from javdb.parsing import parse_detail_page
 
 __all__ = [
     'parse_detail_page',
