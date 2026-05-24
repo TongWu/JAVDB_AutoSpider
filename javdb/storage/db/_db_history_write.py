@@ -1391,6 +1391,13 @@ def _d1_retry_pending_cleanup(session_id: str) -> None:
 # ── Main commit entry point ──────────────────────────────────────────────
 
 
+def _commit_session_bulk_enabled() -> bool:
+    raw = os.getenv("COMMIT_SESSION_BULK")
+    if raw is None:
+        return True
+    return raw.strip().lower() not in {"0", "false", "no", "off", ""}
+
+
 def db_commit_session_history(
     session_id: str,
     *,
@@ -1467,9 +1474,7 @@ def db_commit_session_history(
     if status == "in_progress":
         db_begin_finalize_session(session_id, db_path=reports_db_path)
 
-    use_bulk = os.getenv("COMMIT_SESSION_BULK", "0").strip().lower() in (
-        "1", "true", "yes", "on",
-    )
+    use_bulk = _commit_session_bulk_enabled()
 
     if use_bulk:
         # Bulk path: collapse the per-href loop into 2 SELECTs + chunked

@@ -3,7 +3,7 @@
 **状态**：已接受 —— 实现待启动（截至 2026-05-19，四个阶段均未执行）
 **日期**：2026-05-19
 **决策者**：D1 统一读写端口 brainstorming + grill 会话
-**前置**：[ADR-006](../_archive/ADR-006-Pending-Mode-Rollout/ADR-006-pending-mode-default-rollout.md) 已将 Pending Mode 作为默认写入路径；[ADR-009](../ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md) 记录了近期 D1 瞬时失败和 drift 响应。
+**前置**：[ADR-006](../_archive/ADR-006-Pending-Mode-Rollout/ADR-006-pending-mode-default-rollout.md) 已将 Pending Mode 作为默认写入路径；[ADR-009](../_archive/ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md) 记录了近期 D1 瞬时失败和 drift 响应。
 **关联实现计划 (Related Implementation Plans)**：[IMP-ADR010-01](IMP-ADR010-01-d1-access-port-phase1-core.md)（Phase 1 — 端口核心）、[IMP-ADR010-02](IMP-ADR010-02-d1-access-port-phase2-recovery-outbox.md)（Phase 2 — 恢复 outbox）、[IMP-ADR010-03](IMP-ADR010-03-d1-access-port-phase3-safe-batching.md)（Phase 3 — 安全批处理）、[IMP-ADR010-04](IMP-ADR010-04-d1-access-port-phase4-startup-replay.md)（Phase 4 — 启动重放）
 
 ## 待办 (Outstanding Work)
@@ -307,5 +307,5 @@ reports/D1/d1_port_summary.json
 
 - [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md) —— Repo 迁移与最终 `db.py` 退役。
 - [ADR-006](../_archive/ADR-006-Pending-Mode-Rollout/ADR-006-pending-mode-default-rollout.md) —— Pending Mode 默认和 bake-gate 模型。
-- [ADR-009](../ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md) —— D1 瞬时错误分类器与 drift 诊断。
+- [ADR-009](../_archive/ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md) —— D1 瞬时错误分类器与 drift 诊断。
 - [`docs/handbook/zh/ops/d1-rollback.md`](../../handbook/zh/ops/d1-rollback.md) —— 当前 pending rollback 和 drift 响应 runbook。

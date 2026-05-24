@@ -204,15 +204,33 @@ class D1Connection:
         # ``requests`` module.
         self._session = requests.Session()
         self._post_request = self._session.post
+        # Import lazily: d1_port reuses cursor/error helpers from this module.
+        from javdb.storage.d1_port import D1AccessPort, D1PortConfig
+
+        self._port = D1AccessPort(
+            url=self._url,
+            headers=self._headers,
+            config=D1PortConfig(
+                timeout=self._timeout,
+                batch_limit=_BATCH_LIMIT,
+                max_retries=_MAX_RETRIES,
+                retry_base_sec=_RETRY_BASE_SEC,
+                retry_max_sleep_sec=_RETRY_MAX_SLEEP_SEC,
+            ),
+            # Compatibility: many tests and a few callers monkey-patch
+            # ``_post_request`` after construction. The port calls this wrapper
+            # so it observes the current attribute at request time.
+            post_request=self._post_via_current_post_request,
+            sleep=lambda seconds: time.sleep(seconds),
+            jitter=lambda: random.uniform(0, 0.5),
+        )
         # Attribute compatibility with sqlite3.Connection — D1 returns dict rows
         # natively so row_factory is a no-op (callers can still set it).
         self.row_factory = None
 
     def execute(self, sql: str, params: Iterable[Any] = ()) -> D1Cursor:
-        # CF /query single-statement shape: {sql, params}
-        cursors = self._post_with_retry(
-            {"sql": sql, "params": _params_for_d1_json(params)},
-        )
+        self._sync_port_config()
+        cursors = self._port.execute(sql, params)
         if not cursors:
             # success=true but empty result[] — should never happen per CF docs,
             # but guard against API regressions / proxy stripping the body.
@@ -234,19 +252,14 @@ class D1Connection:
         :class:`DualConnection` uses it to enforce the guarded-table
         ``lastrowid`` invariant after a batched INSERT.
         """
-        statements = [
-            {"sql": sql, "params": _params_for_d1_json(p)} for p in seq_of_params
-        ]
-        if not statements:
-            return None
         last_cursor: Optional[D1Cursor] = None
-        for chunk in _split(statements, _BATCH_LIMIT):
-            # CF /query batch shape: {batch: [{sql, params}, ...]}
-            cursors = self._post_with_retry({"batch": chunk})
-            for c in cursors:
-                self._total_changes += c.rowcount
-            if cursors:
-                last_cursor = cursors[-1]
+        self._sync_port_config()
+        cursors = self._port.executemany(sql, seq_of_params)
+        if not cursors:
+            return None
+        for c in cursors:
+            self._total_changes += c.rowcount
+        last_cursor = cursors[-1]
         return last_cursor
 
     def executescript(self, script: str) -> None:
@@ -266,9 +279,7 @@ class D1Connection:
         statements = [s.strip() for s in script.split(";") if s.strip()]
         if not statements:
             return
-        body_statements = [{"sql": s, "params": []} for s in statements]
-        for chunk in _split(body_statements, _BATCH_LIMIT):
-            self._post_with_retry({"batch": chunk})
+        self.batch_execute([(statement, []) for statement in statements])
 
     def batch_execute(
         self,
@@ -288,14 +299,10 @@ class D1Connection:
         cursors: List[D1Cursor] = []
         if not statements:
             return cursors
-        body_stmts = [
-            {"sql": s, "params": _params_for_d1_json(p)} for s, p in statements
-        ]
-        for chunk in _split(body_stmts, _BATCH_LIMIT):
-            chunk_cursors = self._post_with_retry({"batch": chunk})
-            for c in chunk_cursors:
-                self._total_changes += c.rowcount
-            cursors.extend(chunk_cursors)
+        self._sync_port_config()
+        cursors = self._port.batch_execute(statements)
+        for c in cursors:
+            self._total_changes += c.rowcount
         return cursors
 
     def commit(self) -> None:
@@ -309,154 +316,38 @@ class D1Connection:
 
     def close(self) -> None:
         try:
-            self._session.close()
-        except Exception:  # noqa: BLE001 — closing must not raise
-            pass
+            self._port.write_summary()
+        except Exception:  # noqa: BLE001 — summary emission is best-effort
+            logger.warning("Failed to write D1 port summary", exc_info=True)
+        try:
+            self._port.close()
+        finally:
+            try:
+                self._session.close()
+            except Exception:  # noqa: BLE001 — closing must not raise
+                logger.warning("Failed to close D1 client session", exc_info=True)
+
+    def _post_via_current_post_request(self, url: str, *, headers, json, timeout):
+        return self._post_request(url, headers=headers, json=json, timeout=timeout)
+
+    def _sync_port_config(self) -> None:
+        """Keep monkey-patched runtime constants visible to the access port."""
+        from javdb.storage.d1_port import D1PortConfig
+
+        current = D1PortConfig(
+            timeout=self._timeout,
+            batch_limit=_BATCH_LIMIT,
+            max_retries=_MAX_RETRIES,
+            retry_base_sec=_RETRY_BASE_SEC,
+            retry_max_sleep_sec=_RETRY_MAX_SLEEP_SEC,
+        )
+        port_config = getattr(self._port, "_config", None)
+        if port_config is not None and port_config != current:
+            self._port._config = current
 
     @property
     def total_changes(self) -> int:
         return self._total_changes
-
-    def _post_with_retry(self, body: dict) -> List[D1Cursor]:
-        """Execute ``_post`` with exponential backoff on :class:`D1TransientError`.
-
-        Honours ``Retry-After`` for 429 responses. Permanent errors are raised
-        immediately without retry.
-        """
-        last_exc: Optional[D1TransientError] = None
-        start = time.monotonic()
-        for attempt in range(_MAX_RETRIES):
-            try:
-                result = self._post(body)
-                if attempt > 0:
-                    logger.info(
-                        "D1 request succeeded after %d retr%s in %.2fs",
-                        attempt,
-                        "y" if attempt == 1 else "ies",
-                        time.monotonic() - start,
-                    )
-                return result
-            except D1PermanentError:
-                raise
-            except D1TransientError as exc:
-                last_exc = exc
-                if attempt >= _MAX_RETRIES - 1:
-                    break
-                sleep_for = self._compute_backoff(attempt, exc)
-                logger.warning(
-                    "D1 transient error (attempt %d/%d), retrying in %.2fs: %s",
-                    attempt + 1, _MAX_RETRIES, sleep_for, exc,
-                )
-                time.sleep(sleep_for)
-        logger.error(
-            "D1 request failed after %d attempts in %.2fs: %s",
-            _MAX_RETRIES, time.monotonic() - start, last_exc,
-        )
-        assert last_exc is not None
-        raise last_exc
-
-    @staticmethod
-    def _compute_backoff(attempt: int, exc: "D1TransientError") -> float:
-        # If a Retry-After hint is attached to the exception, honour it.
-        retry_after = getattr(exc, "retry_after", None)
-        if retry_after is not None:
-            try:
-                return max(0.0, float(retry_after))
-            except (TypeError, ValueError):
-                pass
-            try:
-                import email.utils as _eu
-                dt = _eu.parsedate_to_datetime(str(retry_after))
-                delay = (dt - __import__("datetime").datetime.now(
-                    tz=__import__("datetime").timezone.utc
-                )).total_seconds()
-                return max(0.0, delay)
-            except Exception:
-                pass
-        base = _RETRY_BASE_SEC * (2 ** attempt)
-        # Export-lock errors require a longer floor: short retries reliably
-        # land back inside the same lock window.
-        if getattr(exc, "is_export_lock", False):
-            base = max(base, _EXPORT_LOCK_BACKOFF_FLOOR_SEC)
-        return min(base, _RETRY_MAX_SLEEP_SEC) + random.uniform(0, 0.5)
-
-    def _post(self, body: dict) -> List[D1Cursor]:
-        try:
-            response = self._post_request(
-                self._url, headers=self._headers, json=body, timeout=self._timeout
-            )
-        except (requests.Timeout, requests.ConnectionError) as exc:
-            raise D1TransientError(f"D1 network error: {exc}") from exc
-        except requests.RequestException as exc:
-            raise D1TransientError(f"D1 HTTP request failed: {exc}") from exc
-
-        status = response.status_code
-        if status == 429 or 500 <= status < 600:
-            err = D1TransientError(
-                f"D1 API returned HTTP {status}: {response.text[:500]}"
-            )
-            retry_after = response.headers.get("Retry-After")
-            if retry_after:
-                err.retry_after = retry_after  # type: ignore[attr-defined]
-            raise err
-        if 400 <= status < 500:
-            # CF returns HTTP 400 for application-level errors too, including the
-            # "long-running export" lock (code 7500). Inspect the JSON body so we
-            # can promote those to D1TransientError and let _post_with_retry back
-            # off — otherwise a single CF export would silently drop every write.
-            errors = self._extract_errors(response)
-            if errors is not None:
-                err_text = str(errors)
-                if _matches_keyword(err_text, _TRANSIENT_ERROR_KEYWORDS):
-                    transient = D1TransientError(
-                        f"D1 API returned HTTP {status} (transient): {errors}"
-                    )
-                    if _matches_keyword(err_text, _EXPORT_LOCK_KEYWORDS):
-                        transient.is_export_lock = True  # type: ignore[attr-defined]
-                    raise transient
-                raise D1PermanentError(
-                    f"D1 API returned HTTP {status}: {errors}"
-                )
-            raise D1PermanentError(
-                f"D1 API returned HTTP {status}: {response.text[:500]}"
-            )
-        if status != 200:
-            raise D1PermanentError(
-                f"D1 API returned unexpected HTTP {status}: {response.text[:500]}"
-            )
-        try:
-            payload = response.json()
-        except ValueError as exc:
-            raise D1TransientError(
-                f"D1 returned non-JSON response: {response.text[:500]}"
-            ) from exc
-
-        if not payload.get("success"):
-            errors = payload.get("errors") or payload.get("messages") or []
-            err_text = str(errors)
-            if _matches_keyword(err_text, _TRANSIENT_ERROR_KEYWORDS):
-                transient = D1TransientError(f"D1 API transient error: {errors}")
-                if _matches_keyword(err_text, _EXPORT_LOCK_KEYWORDS):
-                    transient.is_export_lock = True  # type: ignore[attr-defined]
-                raise transient
-            raise D1PermanentError(f"D1 API error: {errors}")
-
-        return [D1Cursor(item) for item in payload.get("result") or []]
-
-    @staticmethod
-    def _extract_errors(response) -> Optional[list]:
-        """Best-effort extraction of CF ``errors`` array from a 4xx response.
-
-        Returns ``None`` when the body is not JSON or has no ``errors`` /
-        ``messages`` array — caller should then fall back to raw-text error.
-        """
-        try:
-            payload = response.json()
-        except ValueError:
-            return None
-        if not isinstance(payload, dict):
-            return None
-        return payload.get("errors") or payload.get("messages") or []
 
 
 # ── Resolution helpers ───────────────────────────────────────────────────
