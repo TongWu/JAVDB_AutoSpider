@@ -13,6 +13,16 @@ Ingestion pipeline orchestration: transforms parsed spider output into CSV rows,
 | `engine.py` | Compatibility re-export surface that bundles models/policies/adapters/planners for older callers and tests. |
 | `service.py` | Orchestration service that chains spider → uploader → pikpak → notification (the long-running pipeline). |
 
+## Run Output Contract
+
+Pipeline logs remain a real-time human stream for operators, GitHub Actions logs,
+and frontend task views. Machine-readable Pipeline and Spider run data is written
+to versioned result JSON sidecars.
+
+`SPIDER_*` stdout lines are compatibility output for existing workflows. They are
+not the internal Pipeline protocol, and new Pipeline internals should read
+business data from result JSON instead of parsing those stdout markers.
+
 ## Subdirectories
 
 (none)
