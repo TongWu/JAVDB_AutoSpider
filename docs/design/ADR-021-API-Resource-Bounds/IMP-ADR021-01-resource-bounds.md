@@ -21,11 +21,11 @@ Two independent hardening changes as specified in ADR-021:
 - Modify: `apps/api/routers/logs.py`
 - Modify: `apps/api/schemas/logs.py`
 
-- [ ] **Step 1: Add `scanned_files` to `LogSearchResponse`**
+- [x] **Step 1: Add `scanned_files` to `LogSearchResponse`**
 
 In `apps/api/schemas/logs.py`, add `scanned_files: int` field to `LogSearchResponse`.
 
-- [ ] **Step 2: Add `_MAX_META_SCAN` and apply `islice`**
+- [x] **Step 2: Add `_MAX_META_SCAN` and apply `islice`**
 
 In `apps/api/routers/logs.py`:
 - Import `itertools.islice`
@@ -34,7 +34,7 @@ In `apps/api/routers/logs.py`:
 - Track `scanned_files` count
 - Return `scanned_files` in the response
 
-- [ ] **Step 3: Add unit tests**
+- [x] **Step 3: Add unit tests**
 
 Test that:
 - When meta files exceed `_MAX_META_SCAN`, only the newest N are scanned
@@ -46,13 +46,13 @@ Test that:
 **Files:**
 - Modify: `apps/api/services/explore_service.py`
 
-- [ ] **Step 4: Add `_MAX_DOWNLOADED_MAP_CACHE_SIZE` and LRU eviction**
+- [x] **Step 4: Add `_MAX_DOWNLOADED_MAP_CACHE_SIZE` and LRU eviction**
 
 In `explore_service.py`:
 - Add `_MAX_DOWNLOADED_MAP_CACHE_SIZE = 8` constant
 - After the `_DOWNLOADED_MAP_CACHE[cache_key] = (now, downloaded)` write in `_downloaded_map_by_href`, add eviction: if `len(_DOWNLOADED_MAP_CACHE) > _MAX_DOWNLOADED_MAP_CACHE_SIZE`, find the key with the smallest timestamp and delete it.
 
-- [ ] **Step 5: Add unit tests**
+- [x] **Step 5: Add unit tests**
 
 Test that:
 - Cache evicts the oldest entry when size exceeds the cap
@@ -61,7 +61,7 @@ Test that:
 
 ### Phase 3: Validate
 
-- [ ] **Step 6: Run full test suite**
+- [x] **Step 6: Run full test suite**
 
 ```bash
 pytest tests/unit/ -x -q --tb=short
