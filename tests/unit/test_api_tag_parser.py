@@ -3,14 +3,15 @@ Tests for api.parsers.tag_parser – using real tag page HTML files.
 """
 import os
 import sys
+import importlib
 
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
 import pytest
 
-from apps.api.parsers.tag_parser import parse_tag_page
-from apps.api.models import TagOption, TagCategory, TagPageResult
+from javdb.parsing.fallback.tag_parser import parse_tag_page
+from javdb.parsing.models import TagOption, TagCategory, TagPageResult
 
 HTML_DIR = os.path.join(project_root, 'html')
 
@@ -21,6 +22,29 @@ def _load_html(filename):
         pytest.skip(f'HTML test file not found: {filename}')
     with open(path, 'r', encoding='utf-8') as f:
         return f.read()
+
+
+# ===================================================================
+# Compatibility adapters
+# ===================================================================
+
+class TestTagParserCompatibilityAdapter:
+    def test_tag_parser_adapter_reexports_canonical_dispatch(self):
+        compat = importlib.import_module('apps.api.parsers.tag_parser')
+        parsing = importlib.import_module('javdb.parsing')
+
+        assert compat.__all__ == ['parse_tag_page']
+        assert compat.parse_tag_page is parsing.parse_tag_page
+
+    def test_tag_parser_adapter_reexports_private_helper_attributes(self):
+        compat = importlib.import_module('apps.api.parsers.tag_parser')
+        canonical = importlib.import_module('javdb.parsing.fallback.tag_parser')
+
+        assert compat._extract_page_url is canonical._extract_page_url
+        assert compat._parse_url_params is canonical._parse_url_params
+        assert compat._extract_tag_id_from_href is canonical._extract_tag_id_from_href
+        assert compat._extract_new_tag_id_from_href is canonical._extract_new_tag_id_from_href
+        assert compat._parse_selected_tag is canonical._parse_selected_tag
 
 
 # ===================================================================

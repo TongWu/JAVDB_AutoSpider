@@ -1,0 +1,36 @@
+{
+  "category_name": "Actor Edge",
+  "category_type": "actors",
+  "has_movie_list": true,
+  "movies": [
+    {
+      "comment_count": "",
+      "cover_url": "",
+      "href": "/v/CAT-001",
+      "page": 3,
+      "ranking": null,
+      "rate": "3.5",
+      "release_date": "2025-12-31",
+      "tags": [
+        "含中字磁鏈"
+      ],
+      "title": "Category Title",
+      "video_code": "CAT-001"
+    },
+    {
+      "comment_count": "",
+      "cover_url": "",
+      "href": "/v/category-no-code",
+      "page": 3,
+      "ranking": null,
+      "rate": "",
+      "release_date": "",
+      "tags": [
+        "含磁鏈"
+      ],
+      "title": "NODASHCategory Missing Code",
+      "video_code": ""
+    }
+  ],
+  "page_title": "Actor Edge | JavDB"
+}
