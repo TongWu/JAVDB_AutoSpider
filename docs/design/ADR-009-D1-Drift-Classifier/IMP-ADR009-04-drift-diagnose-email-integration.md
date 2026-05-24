@@ -1,5 +1,15 @@
 # IMP-ADR009-04: ADR-009 Phase 3 - Email Drift Diagnosis Integration
 
+## Table of Contents
+
+- [Task 1: Verify P1/P2 Baseline](#task-1-verify-p1p2-baseline)
+- [Task 2: Add Email Diagnosis Tests](#task-2-add-email-diagnosis-tests)
+- [Task 3: Implement Non-Blocking Diagnosis Rendering](#task-3-implement-non-blocking-diagnosis-rendering)
+- [Task 4: Integrate With Pending-Mode Drift Email](#task-4-integrate-with-pending-mode-drift-email)
+- [Task 5: Review Workflow Impact](#task-5-review-workflow-impact)
+- [Task 6: Final ADR-009 Verification And Documentation](#task-6-final-adr-009-verification-and-documentation)
+- [Completion Evidence](#completion-evidence)
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 | Field       | Value |
