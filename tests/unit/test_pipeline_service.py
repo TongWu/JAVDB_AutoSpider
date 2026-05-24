@@ -108,6 +108,14 @@ class DedupExceptionStepRunner(FakeStepRunner):
         return super().run(policy, command, result_path=result_path)
 
 
+class FailureEmailExceptionStepRunner(FakeStepRunner):
+    def run(self, policy, command, *, result_path=None):
+        if policy.name == "email_notification_failure":
+            self.calls.append((policy, tuple(command), result_path))
+            raise RuntimeError("failed to launch failure email")
+        return super().run(policy, command, result_path=result_path)
+
+
 def _make_args(**overrides):
     defaults = {
         'url': None,
@@ -287,6 +295,42 @@ def test_pipeline_main_writes_failure_result_json_after_required_step_failure(mo
     failure_email = result.steps[-1]
     assert failure_email.run_on_failure is True
     assert failure_email.required is False
+
+
+def test_pipeline_main_records_failure_email_exception_without_changing_exit(monkeypatch, tmp_path):
+    runner = FailureEmailExceptionStepRunner(
+        outcomes={"qb_uploader": ("failed", 2, "exit code 2")},
+    )
+    result_path = tmp_path / "pipeline-result.json"
+    _patch_runner(monkeypatch, runner)
+    monkeypatch.setattr(
+        pipeline_service,
+        'parse_arguments',
+        lambda: _make_args(result_json=str(result_path)),
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        pipeline_service.main()
+
+    assert exc.value.code == 1
+    result = read_pipeline_result(result_path)
+    assert result.status == "failed"
+    assert [step.name for step in result.steps] == [
+        "spider",
+        "qb_uploader",
+        "email_notification_failure",
+    ]
+    failure_email = result.steps[-1]
+    assert failure_email.status == "failed"
+    assert failure_email.required is False
+    assert failure_email.run_on_failure is True
+    assert "apps.cli.notify.email" in failure_email.command
+    assert "--from-pipeline" in failure_email.command
+    assert failure_email.exit_code is None
+    assert failure_email.failure_reason == "failed to launch failure email"
+    assert failure_email.result_path is None
+    assert failure_email.started_at.endswith("Z")
+    assert failure_email.finished_at.endswith("Z")
 
 
 def test_pipeline_main_records_optional_dedup_failure_without_failing(monkeypatch, tmp_path):
