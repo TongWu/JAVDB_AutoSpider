@@ -10,6 +10,7 @@ project_root = os.path.dirname(
 )
 sys.path.insert(0, project_root)
 
+from apps.api.services import task_service
 from apps.api.services.task_service import (
     _compute_duration,
     _extract_params_from_command,
@@ -44,6 +45,26 @@ def test_extract_params_adhoc_with_url():
 def test_extract_params_empty_command():
     params = _extract_params_from_command([])
     assert params == {}
+
+
+def test_pipeline_command_accepts_result_json_flag():
+    command = [
+        "python3", "-u", "-m", "apps.cli.pipeline",
+        "--result-json", "logs/jobs/daily-20260520-010203-abcd.result.json",
+    ]
+
+    assert task_service._validate_task_command(command) == command
+
+
+def test_extract_params_includes_result_json_path():
+    command = [
+        "python3", "-u", "-m", "apps.cli.pipeline",
+        "--result-json", "logs/jobs/daily-20260520-010203-abcd.result.json",
+    ]
+
+    params = task_service._extract_params_from_command(command)
+
+    assert params["result_json"] == "logs/jobs/daily-20260520-010203-abcd.result.json"
 
 
 def test_compute_duration_valid():
