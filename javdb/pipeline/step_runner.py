@@ -49,8 +49,6 @@ def _process_group_kwargs() -> dict[str, object]:
 
 
 def _terminate_process_group(process: subprocess.Popen[str]) -> None:
-    if process.poll() is not None:
-        return
     if sys.platform == "win32":
         subprocess.run(
             ["taskkill", "/PID", str(process.pid), "/T", "/F"],
@@ -66,8 +64,6 @@ def _terminate_process_group(process: subprocess.Popen[str]) -> None:
 
 
 def _kill_process_group(process: subprocess.Popen[str]) -> None:
-    if process.poll() is not None:
-        return
     if sys.platform == "win32":
         subprocess.run(
             ["taskkill", "/PID", str(process.pid), "/T", "/F"],
@@ -132,13 +128,19 @@ class SubprocessStepRunner:
                     self._log_sink.write_line(policy.name, item)
             return stdout_done
 
-        def _terminate_and_wait() -> None:
+        def _terminate_and_wait(*, wait_for_stdout: bool = False) -> None:
             _terminate_process_group(process)
-            try:
-                process.wait(timeout=_PROCESS_STOP_GRACE_SEC)
-            except subprocess.TimeoutExpired:
-                _kill_process_group(process)
-                process.wait()
+            if process.poll() is None:
+                try:
+                    process.wait(timeout=_PROCESS_STOP_GRACE_SEC)
+                except subprocess.TimeoutExpired:
+                    _kill_process_group(process)
+                    process.wait()
+            if wait_for_stdout:
+                reader.join(timeout=_READER_JOIN_GRACE_SEC)
+                if reader.is_alive():
+                    _kill_process_group(process)
+                    reader.join(timeout=_READER_JOIN_GRACE_SEC)
 
         try:
             stdout_done = False
@@ -152,15 +154,14 @@ class SubprocessStepRunner:
                 elif isinstance(item, str) and item:
                     self._log_sink.write_line(policy.name, item)
 
-                if time.monotonic() > deadline and process.poll() is None:
+                if time.monotonic() > deadline and not stdout_done:
                     break
                 if stdout_done and process.poll() is not None:
                     break
 
-            if time.monotonic() > deadline and process.poll() is None:
-                _terminate_and_wait()
+            if time.monotonic() > deadline and not stdout_done:
+                _terminate_and_wait(wait_for_stdout=True)
                 _drain_available_output()
-                reader.join(timeout=_READER_JOIN_GRACE_SEC)
                 _drain_available_output()
                 return StepResult(
                     name=policy.name,

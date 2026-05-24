@@ -94,3 +94,29 @@ def test_subprocess_step_runner_timeout_cleans_up_descendant_stdout(tmp_path):
     assert ("demo", "child-start\n") in sink.lines
     time.sleep(2.5)
     assert not alive_marker.exists()
+
+
+def test_subprocess_step_runner_times_out_when_parent_exits_but_descendant_keeps_stdout():
+    sink = RecordingSink()
+    runner = SubprocessStepRunner(log_sink=sink)
+    policy = StepPolicy(name="demo", required=True, timeout_sec=1)
+    command = [
+        sys.executable,
+        "-c",
+        (
+            "import subprocess, sys; "
+            "subprocess.Popen([sys.executable, '-c', "
+            "\"import time; print('child-start', flush=True); time.sleep(3)\"]); "
+            "print('parent-done', flush=True)"
+        ),
+    ]
+
+    started_at = time.monotonic()
+    result = runner.run(policy, command)
+    elapsed = time.monotonic() - started_at
+
+    assert result.status == "timed_out"
+    assert result.exit_code is None
+    assert elapsed < 2.5
+    assert ("demo", "parent-done\n") in sink.lines
+    assert ("demo", "child-start\n") in sink.lines
