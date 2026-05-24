@@ -4,6 +4,7 @@ import sys
 import time
 
 from javdb.pipeline.models import StepPolicy
+from javdb.pipeline import step_runner
 from javdb.pipeline.step_runner import SubprocessStepRunner
 
 
@@ -139,3 +140,23 @@ def test_subprocess_step_runner_times_out_when_stdout_closes_before_process_exit
     assert result.status == "timed_out"
     assert result.exit_code is None
     assert elapsed < 2.5
+
+
+def test_taskkill_tree_uses_system_taskkill(monkeypatch):
+    calls = []
+    monkeypatch.setenv("SystemRoot", r"C:\Windows")
+    monkeypatch.setattr(
+        step_runner.subprocess,
+        "run",
+        lambda command, **kwargs: calls.append((command, kwargs)),
+    )
+
+    step_runner._taskkill_tree(123)
+
+    assert calls[0][0] == [
+        r"C:\Windows/System32/taskkill.exe",
+        "/PID",
+        "123",
+        "/T",
+        "/F",
+    ]
