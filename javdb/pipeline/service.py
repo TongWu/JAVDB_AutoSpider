@@ -29,7 +29,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 # Import unified configuration
 from javdb.infra.config import cfg
-from javdb.pipeline.models import PipelineRunResult, StepPolicy
+from javdb.pipeline.models import PipelineRunResult, StepPolicy, StepResult
 from javdb.pipeline.result_io import (
     read_spider_result,
     utc_now_iso,
@@ -272,6 +272,22 @@ def _raise_for_required_step(step_result):
         raise RuntimeError(f"Required step {step_result.name} failed: {reason}")
 
 
+def _failed_step_from_exception(policy, command, error, *, result_path=None):
+    now = utc_now_iso()
+    return StepResult(
+        name=policy.name,
+        status="failed",
+        required=policy.required,
+        run_on_failure=policy.run_on_failure,
+        command=list(command),
+        started_at=now,
+        finished_at=now,
+        exit_code=None,
+        failure_reason=str(error),
+        result_path=result_path,
+    )
+
+
 def _write_pipeline_result_best_effort(
     *,
     args,
@@ -434,21 +450,22 @@ def main():
 
         # 1. Run Spider
         logger.info("Step 1: Running JavDB Spider...")
-        spider_result_path = Path(tempfile.mkdtemp(prefix="pipeline-result-")) / "spider-result.json"
-        spider_args.extend(["--result-json", str(spider_result_path)])
-        spider_step = runner.run(
-            StepPolicy(name="spider", required=True, timeout_sec=3600),
-            spider_cmd + spider_args,
-            result_path=str(spider_result_path),
-        )
-        steps.append(spider_step)
-        try:
-            spider_result = read_spider_result(spider_result_path)
-        except Exception as spider_result_error:
-            if spider_step.status == "success":
-                raise
-            logger.warning("Could not read partial spider result JSON: %s", spider_result_error)
-        _raise_for_required_step(spider_step)
+        with tempfile.TemporaryDirectory(prefix="pipeline-result-") as spider_result_dir:
+            spider_result_path = Path(spider_result_dir) / "spider-result.json"
+            spider_args.extend(["--result-json", str(spider_result_path)])
+            spider_step = runner.run(
+                StepPolicy(name="spider", required=True, timeout_sec=3600),
+                spider_cmd + spider_args,
+                result_path=str(spider_result_path),
+            )
+            steps.append(spider_step)
+            try:
+                spider_result = read_spider_result(spider_result_path)
+            except Exception as spider_result_error:
+                if spider_step.status == "success":
+                    raise
+                logger.warning("Could not read partial spider result JSON: %s", spider_result_error)
+            _raise_for_required_step(spider_step)
         logger.info("✓ JavDB Spider completed successfully")
         
         csv_path = spider_result.csv_path or csv_path
@@ -490,10 +507,16 @@ def main():
         # 3.5 Run Rclone Dedup Executor (if enabled)
         if enable_dedup:
             logger.info("Step 3.5: Running Rclone Dedup Executor...")
-            dedup_step = runner.run(
-                StepPolicy(name="rclone_dedup", required=False, timeout_sec=3600),
-                rclone_cmd + ['--execute'],
-            )
+            dedup_policy = StepPolicy(name="rclone_dedup", required=False, timeout_sec=3600)
+            dedup_command = rclone_cmd + ['--execute']
+            try:
+                dedup_step = runner.run(dedup_policy, dedup_command)
+            except Exception as dedup_error:
+                dedup_step = _failed_step_from_exception(
+                    dedup_policy,
+                    dedup_command,
+                    dedup_error,
+                )
             steps.append(dedup_step)
             if _step_failed(dedup_step):
                 logger.warning(
