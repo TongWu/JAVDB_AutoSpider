@@ -358,3 +358,20 @@ def _truncate_workload_tables():
             "PendingTorrentHistoryWrites", "PendingMovieHistoryWrites",
         ):
             conn.execute(f"DELETE FROM {tbl}")
+
+
+def test_commit_session_bulk_defaults_on(monkeypatch):
+    monkeypatch.delenv("COMMIT_SESSION_BULK", raising=False)
+    assert _db_hw._commit_session_bulk_enabled() is True
+
+
+@pytest.mark.parametrize("value", ["0", "false", "no", "off"])
+def test_commit_session_bulk_can_be_disabled(monkeypatch, value):
+    monkeypatch.setenv("COMMIT_SESSION_BULK", value)
+    assert _db_hw._commit_session_bulk_enabled() is False
+
+
+@pytest.mark.parametrize("value", ["1", "true", "yes", "on"])
+def test_commit_session_bulk_accepts_enabled_values(monkeypatch, value):
+    monkeypatch.setenv("COMMIT_SESSION_BULK", value)
+    assert _db_hw._commit_session_bulk_enabled() is True
