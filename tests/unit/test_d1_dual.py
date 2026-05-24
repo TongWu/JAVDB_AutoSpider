@@ -322,6 +322,37 @@ def test_execute_sends_single_object_body(monkeypatch, d1_conn, no_sleep):
     assert captured["json"] == {"sql": "SELECT * FROM t WHERE id = ?", "params": [1]}
 
 
+def test_d1_connection_delegates_execute_to_port():
+    calls = []
+
+    class FakePort:
+        def execute(self, sql, params=(), *, policy=None):
+            calls.append(("execute", sql, list(params), policy))
+            return [D1Cursor({"meta": {"changes": 0}, "results": [{"n": 1}]})]
+
+        def executemany(self, sql, seq_of_params, *, policy=None):
+            calls.append(("executemany", sql, [list(p) for p in seq_of_params], policy))
+            return [D1Cursor({"meta": {"changes": 1}, "results": []})]
+
+        def batch_execute(self, statements, *, policy=None):
+            calls.append(("batch_execute", list(statements), policy))
+            return [D1Cursor({"meta": {"changes": 0}, "results": []})]
+
+        def write_summary(self):
+            calls.append(("write_summary",))
+
+        def close(self):
+            calls.append(("close",))
+
+    conn = D1Connection("acct", "db", "token")
+    conn._port = FakePort()
+
+    row = conn.execute("SELECT 1 AS n").fetchone()
+
+    assert row == {"n": 1}
+    assert calls[0] == ("execute", "SELECT 1 AS n", [], None)
+
+
 def test_execute_stringifies_json_unsafe_integer_params(monkeypatch, d1_conn, no_sleep):
     """Ints beyond JS Number.MAX_SAFE_INTEGER must not be JSON Number on the wire."""
     captured = {}
