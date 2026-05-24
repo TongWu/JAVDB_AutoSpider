@@ -387,7 +387,9 @@ After confirming the session id and current verdict, run:
 python3 -m apps.cli.db.drift_diagnose --apply --session-id <SessionId>
 ```
 
-Do not invoke `--apply` automatically from GitHub Actions, email notification, or alert-handling code. Actions and email may report the suggested operator command, but the mutation stays manual and gated by the current diagnosis.
+- **Prohibition:** Do not invoke `--apply` automatically from GitHub Actions, email notification, or alert-handling code.
+- **Allowed behavior:** Actions and email may report the suggested operator command, but must not execute it.
+- **Gate conditions:** Require manual diagnosis and approval before any operator command mutates data.
 
 ---
 
