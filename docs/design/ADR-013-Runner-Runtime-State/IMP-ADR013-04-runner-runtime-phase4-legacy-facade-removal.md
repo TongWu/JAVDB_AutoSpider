@@ -210,7 +210,7 @@ In `docs/design/architecture/spider-baseline.md`, replace the runtime state row
 with:
 
 ```markdown
-- Runtime ownership lives under `scripts/spider/runtime/`
+- Runtime ownership lives under `javdb/spider/runtime/`
   - `context.py`: `SpiderRuntime` aggregate and focused runtime state objects
   - `state.py`: documented compatibility facade for legacy entrypoints
   - `sleep.py`: sleep/throttle classes and compatibility names; production code uses runtime-owned sleep state

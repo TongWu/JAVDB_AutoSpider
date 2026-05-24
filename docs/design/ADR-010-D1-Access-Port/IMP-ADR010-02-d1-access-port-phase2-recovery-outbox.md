@@ -446,7 +446,7 @@ git commit -m "ci(workflows): stage d1 recovery state and guard public publish"
 
 Add English section:
 
-```markdown
+````markdown
 ## D1 Recovery Outbox
 
 ADR-010 adds `reports/D1/d1_recovery_outbox.jsonl` for safe, recoverable D1 write failures. In `STORAGE_BACKEND=d1`, queued outbox work is diagnostic only; the write still fails. In `STORAGE_BACKEND=dual`, safe operations may queue for recovery, but the related session cannot be committed until its ordering key drains.
@@ -468,7 +468,7 @@ Compact replayed work:
 ```bash
 python3 -m apps.cli.db.d1_recovery compact
 ```
-```
+````
 
 Add the Chinese equivalent to `docs/handbook/zh/ops/d1-rollback.md`.
 
