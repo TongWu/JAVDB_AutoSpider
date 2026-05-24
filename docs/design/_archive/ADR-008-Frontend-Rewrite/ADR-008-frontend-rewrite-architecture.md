@@ -260,7 +260,7 @@ No Full-Text Search (FTS5). SQLite supports it but Cloudflare D1 does not. Maint
 ## Open Questions
 
 - ~~**Multi-tab behavior**~~: Resolved in Phase 3. `useSharedPolling` composable uses BroadcastChannel leader election; only one tab polls at a time. See [IMP-ADR008-04](IMP-ADR008-04-frontend-phase3-power-user.md) Task 6.
-- **D1 status caching TTL**: ~10 s server / session client proposed. Needs validation under realistic Browse-Lists usage.
+- ~~**D1 status caching TTL**~~: Resolved. Server-side: `_downloaded_map_by_href` cached with 10 s TTL (`EXPLORE_DOWNLOADED_MAP_CACHE_TTL_SECONDS`); `_has_uncensored_magnet` cached with 300 s TTL (`EXPLORE_INDEX_STATUS_CACHE_TTL_SECONDS`). Client-side: `useIndexStatus` composable holds a session-scoped Map — once an href is resolved, it is not re-queried until page reload.
 - ~~**Global log search storage**~~: Resolved in Phase 3. File-based grep via `GET /api/logs/search` endpoint. See [IMP-ADR008-04](IMP-ADR008-04-frontend-phase3-power-user.md) Task 4.
 - ~~**Statistics dashboard scope**~~: Resolved in Phase 3. Eight summary metrics + six trend charts using `vue-chartjs` (Chart.js wrapper). See [IMP-ADR008-04](IMP-ADR008-04-frontend-phase3-power-user.md) Task 5.
 
