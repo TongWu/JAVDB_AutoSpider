@@ -198,7 +198,7 @@ class FakeD1Connection:
 
     def flush(self, ordering_key=None):
         self.flushes.append(ordering_key)
-        return []
+        return [FakeD1Cursor(lastrowid=123, rowcount=1)]
 
     def close(self):
         pass
@@ -268,6 +268,25 @@ def test_flush_is_forwarded_to_d1(sqlite_conn):
     dual.flush(ordering_key="history:s1")
 
     assert fake_d1.flushes == ["history:s1"]
+
+
+def test_flush_updates_uncommitted_write_count(sqlite_conn, tmp_path, monkeypatch):
+    drift_path = tmp_path / "d1_drift.jsonl"
+    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+
+    fake_d1 = FakeD1Connection()
+    dual = DualConnection(sqlite_conn, fake_d1)
+
+    dual.execute("INSERT INTO t (v) VALUES (?)", ("x",))
+    assert dual._d1_uncommitted_writes == 1
+
+    dual.flush()
+    assert dual._d1_uncommitted_writes == 2
+
+    dual.rollback()
+
+    record = json.loads(drift_path.read_text(encoding="utf-8").strip())
+    assert record["uncommitted_d1_writes"] == 2
 
 
 def test_d1_write_failure_does_not_break_sqlite(sqlite_conn):
