@@ -5,7 +5,9 @@ import json
 import pytest
 
 from javdb.storage.d1_client import D1PermanentError, D1TransientError
+import javdb.storage.d1_port as d1_port_module
 from javdb.storage.d1_port import D1AccessPort, D1PortConfig
+from javdb.storage.d1_recovery import RecoveryPolicy
 
 
 class FakeResponse:
@@ -53,6 +55,30 @@ def _port(poster, *, max_retries=2, batch_limit=50):
     )
 
 
+def _batch_policy(key="history:s1:seq1"):
+    return RecoveryPolicy(
+        logical_db="history",
+        operation_type="pending_stage",
+        idempotency_key=key,
+        ordering_key="history:s1",
+        recovery_allowed=True,
+        max_attempts=3,
+        batching_allowed=True,
+    )
+
+
+def _batch_policy_for_ordering(ordering_key, key):
+    return RecoveryPolicy(
+        logical_db="history",
+        operation_type="pending_stage",
+        idempotency_key=key,
+        ordering_key=ordering_key,
+        recovery_allowed=True,
+        max_attempts=3,
+        batching_allowed=True,
+    )
+
+
 def test_execute_posts_single_statement_body():
     poster = FakePoster(
         [
@@ -71,6 +97,225 @@ def test_execute_posts_single_statement_body():
     assert len(cursors) == 1
     assert poster.calls[0]["json"] == {"sql": "SELECT 1", "params": []}
     assert port.summary()["http_posts"] == 1
+
+
+def test_batching_disabled_executes_immediately(monkeypatch):
+    monkeypatch.delenv("D1_BATCHING_ENABLED", raising=False)
+    poster = FakePoster(
+        [
+            FakeResponse(
+                payload={
+                    "success": True,
+                    "result": [{"meta": {"changes": 1}, "results": []}],
+                }
+            )
+        ]
+    )
+    port = _port(poster)
+
+    port.execute("INSERT INTO x VALUES (?)", ["a"], policy=_batch_policy())
+
+    assert len(poster.calls) == 1
+
+
+def test_batching_enabled_queues_until_flush(monkeypatch):
+    monkeypatch.setenv("D1_BATCHING_ENABLED", "1")
+    poster = FakePoster(
+        [
+            FakeResponse(
+                payload={
+                    "success": True,
+                    "result": [{"meta": {"changes": 1}, "results": []}],
+                }
+            )
+        ]
+    )
+    port = _port(poster)
+
+    port.execute("INSERT INTO x VALUES (?)", ["a"], policy=_batch_policy())
+    assert len(poster.calls) == 0
+
+    port.flush(ordering_key="history:s1")
+    assert len(poster.calls) == 1
+    assert "batch" in poster.calls[0]["json"]
+
+
+def test_non_batch_safe_sql_executes_immediately_even_when_enabled(monkeypatch):
+    monkeypatch.setenv("D1_BATCHING_ENABLED", "1")
+    poster = FakePoster(
+        [
+            FakeResponse(
+                payload={
+                    "success": True,
+                    "result": [{"meta": {"changes": 1}, "results": []}],
+                }
+            )
+        ]
+    )
+    port = _port(poster)
+
+    port.execute("INSERT INTO x VALUES (?)", ["a"], policy=None)
+
+    assert len(poster.calls) == 1
+
+
+def test_batch_queue_flushes_at_batch_limit(monkeypatch):
+    monkeypatch.setenv("D1_BATCHING_ENABLED", "1")
+    poster = FakePoster(
+        [
+            FakeResponse(
+                payload={
+                    "success": True,
+                    "result": [
+                        {"meta": {"changes": 1}, "results": []},
+                        {"meta": {"changes": 1}, "results": []},
+                    ],
+                }
+            )
+        ]
+    )
+    port = _port(poster, batch_limit=2)
+
+    port.execute("INSERT INTO x VALUES (?)", ["a"], policy=_batch_policy("seq1"))
+    assert len(poster.calls) == 0
+
+    port.execute("INSERT INTO x VALUES (?)", ["b"], policy=_batch_policy("seq2"))
+
+    assert len(poster.calls) == 1
+    assert poster.calls[0]["json"] == {
+        "batch": [
+            {"sql": "INSERT INTO x VALUES (?)", "params": ["a"]},
+            {"sql": "INSERT INTO x VALUES (?)", "params": ["b"]},
+        ]
+    }
+    assert port.summary()["batches"] == 1
+    assert port.summary()["batch_statements"] == 2
+    assert port.summary()["sql_statements"] == 2
+
+
+def test_close_flushes_safe_batch(monkeypatch):
+    monkeypatch.setenv("D1_BATCHING_ENABLED", "1")
+    poster = FakePoster(
+        [
+            FakeResponse(
+                payload={
+                    "success": True,
+                    "result": [{"meta": {"changes": 1}, "results": []}],
+                }
+            )
+        ]
+    )
+    port = _port(poster)
+    port.execute("INSERT INTO x VALUES (?)", ["a"], policy=_batch_policy())
+
+    port.close()
+
+    assert len(poster.calls) == 1
+
+
+def test_failed_flush_keeps_queued_statements_for_retry(monkeypatch):
+    monkeypatch.setenv("D1_BATCHING_ENABLED", "1")
+    poster = FakePoster(
+        [
+            FakeResponse(
+                status_code=500,
+                payload={"success": False, "errors": [{"message": "temporary"}]},
+            ),
+            FakeResponse(
+                payload={
+                    "success": True,
+                    "result": [{"meta": {"changes": 1}, "results": []}],
+                }
+            ),
+        ]
+    )
+    port = _port(poster, max_retries=1)
+    port.execute("INSERT INTO x VALUES (?)", ["a"], policy=_batch_policy())
+
+    with pytest.raises(D1TransientError):
+        port.flush(ordering_key="history:s1")
+
+    port.flush(ordering_key="history:s1")
+
+    assert len(poster.calls) == 2
+    assert poster.calls[1]["json"] == {
+        "batch": [{"sql": "INSERT INTO x VALUES (?)", "params": ["a"]}]
+    }
+
+
+def test_failed_key_flush_preserves_other_ordering_keys(monkeypatch):
+    monkeypatch.setenv("D1_BATCHING_ENABLED", "1")
+    poster = FakePoster(
+        [
+            FakeResponse(
+                status_code=500,
+                payload={"success": False, "errors": [{"message": "temporary"}]},
+            ),
+            FakeResponse(
+                payload={
+                    "success": True,
+                    "result": [{"meta": {"changes": 1}, "results": []}],
+                }
+            ),
+            FakeResponse(
+                payload={
+                    "success": True,
+                    "result": [{"meta": {"changes": 1}, "results": []}],
+                }
+            ),
+        ]
+    )
+    port = _port(poster, max_retries=1)
+    port.execute(
+        "INSERT INTO x VALUES (?)",
+        ["a"],
+        policy=_batch_policy_for_ordering("history:s1", "history:s1:seq1"),
+    )
+    port.execute(
+        "INSERT INTO x VALUES (?)",
+        ["b"],
+        policy=_batch_policy_for_ordering("history:s2", "history:s2:seq1"),
+    )
+
+    with pytest.raises(D1TransientError):
+        port.flush(ordering_key="history:s1")
+
+    port.flush(ordering_key="history:s2")
+    port.flush(ordering_key="history:s1")
+
+    assert [call["json"] for call in poster.calls] == [
+        {"batch": [{"sql": "INSERT INTO x VALUES (?)", "params": ["a"]}]},
+        {"batch": [{"sql": "INSERT INTO x VALUES (?)", "params": ["b"]}]},
+        {"batch": [{"sql": "INSERT INTO x VALUES (?)", "params": ["a"]}]},
+    ]
+
+
+def test_batch_queue_flushes_when_interval_elapsed(monkeypatch):
+    monkeypatch.setenv("D1_BATCHING_ENABLED", "1")
+    monkeypatch.setenv("D1_FLUSH_INTERVAL_MS", "250")
+    ticks = iter([0.0, 0.3, 0.3])
+    monkeypatch.setattr(d1_port_module.time, "monotonic", lambda: next(ticks))
+    poster = FakePoster(
+        [
+            FakeResponse(
+                payload={
+                    "success": True,
+                    "result": [{"meta": {"changes": 1}, "results": []}],
+                }
+            )
+        ]
+    )
+    port = _port(poster)
+
+    port.execute("INSERT INTO x VALUES (?)", ["a"], policy=_batch_policy("seq1"))
+    assert len(poster.calls) == 0
+
+    port.execute("INSERT INTO x VALUES (?)", ["b"], policy=_batch_policy("seq2"))
+
+    assert len(poster.calls) == 1
+    assert poster.calls[0]["json"] == {
+        "batch": [{"sql": "INSERT INTO x VALUES (?)", "params": ["a"]}]
+    }
 
 
 def test_transient_error_retries_then_succeeds():

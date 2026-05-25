@@ -314,18 +314,27 @@ class D1Connection:
             "rollback is a no-op."
         )
 
+    def flush(self, ordering_key: str | None = None) -> None:
+        self._sync_port_config()
+        self._port.flush(ordering_key=ordering_key)
+
     def close(self) -> None:
+        close_exc: Exception | None = None
+        try:
+            self._port.close()
+        except Exception as exc:  # noqa: BLE001 — flush failures must propagate
+            close_exc = exc
+            logger.warning("Failed to close D1 port", exc_info=True)
         try:
             self._port.write_summary()
         except Exception:  # noqa: BLE001 — summary emission is best-effort
             logger.warning("Failed to write D1 port summary", exc_info=True)
         try:
-            self._port.close()
-        finally:
-            try:
-                self._session.close()
-            except Exception:  # noqa: BLE001 — closing must not raise
-                logger.warning("Failed to close D1 client session", exc_info=True)
+            self._session.close()
+        except Exception:  # noqa: BLE001 — closing must not raise
+            logger.warning("Failed to close D1 client session", exc_info=True)
+        if close_exc is not None:
+            raise close_exc
 
     def _post_via_current_post_request(self, url: str, *, headers, json, timeout):
         return self._post_request(url, headers=headers, json=json, timeout=timeout)

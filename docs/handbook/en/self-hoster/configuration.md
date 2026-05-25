@@ -445,7 +445,7 @@ runtime by various modules.
 | `STRICT_DUAL_WRITE` | `str` | `''` | When set to `'1'`, fail the run if a D1 write fails in dual mode. |
 | `COMMIT_SESSION_BULK` | `str` | enabled | Pending session commits use the bulk path by default. Set `'0'`, `'false'`, `'no'`, `'off'`, or an empty value to fall back to the per-href path. |
 | `D1_RECOVERY_OUTBOX_ENABLED` | `str` | `''` | Reserved for ADR-010 Phase 2. Set `'1'` to allow safe dual-mode D1 write failures to queue in `reports/D1/d1_recovery_outbox.jsonl`. |
-| `D1_BATCHING_ENABLED` | `str` | `''` | Reserved for ADR-010 Phase 3 safe-path micro-batching. Ordinary SQL remains synchronous. |
+| `D1_BATCHING_ENABLED` | `str` | `''` | Set `'1'` to enable ADR-010 Phase 3 safe-path micro-batching for explicitly batch-safe operations. Ordinary SQL remains synchronous. |
 | `D1_FLUSH_INTERVAL_MS` | `int` | `250` | Maximum safe-batch wait window when D1 batching is enabled. |
 | `D1_STARTUP_REPLAY_ENABLED` | `str` | `''` | Reserved for ADR-010 Phase 4 startup replay. |
 | `LOG_LEVEL` | `str` | `'INFO'` | Overrides the `LOG_LEVEL` in `config.py` when set as an environment variable. |

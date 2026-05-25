@@ -1571,6 +1571,10 @@ def db_commit_session_history(
     # The reverse order (delete first, flip last) was monitoring-hostile:
     # a crash mid-flip left ``Status='finalizing'`` with zero pending rows,
     # which any "stuck session" alert misreads as a hung commit.
+    with _get_db(history_db_path or _HISTORY_DB_PATH) as conn:
+        flush = getattr(conn, "flush", None)
+        if callable(flush):
+            flush(ordering_key=f"history:{session_id}")
     db_finish_commit_session(session_id, db_path=reports_db_path)
 
     with _get_db(history_db_path or _HISTORY_DB_PATH) as conn:
