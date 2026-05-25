@@ -1,9 +1,8 @@
 """
-Unit tests for utils/parser.py functions.
+Unit tests for spider parsing legacy adapters.
 """
 import os
 import sys
-import builtins
 import pytest
 
 # Add project root to path
@@ -13,56 +12,13 @@ sys.path.insert(0, project_root)
 from javdb.pipeline.index_selection import select_index_entries
 from javdb.parsing import parse_index_page
 from javdb.parsing.models import IndexPageResult, MovieIndexEntry
+from javdb.spider.parse_legacy_adapters import extract_video_code, parse_index, parse_detail
 from bs4 import BeautifulSoup
-
-
-def _parser_adapter():
-    import javdb.spider.parser as parser_adapter
-    return parser_adapter
-
-
-def extract_video_code(*args, **kwargs):
-    return _parser_adapter().extract_video_code(*args, **kwargs)
-
-
-def parse_index(*args, **kwargs):
-    return _parser_adapter().parse_index(*args, **kwargs)
-
-
-def parse_detail(*args, **kwargs):
-    return _parser_adapter().parse_detail(*args, **kwargs)
-
-
-def test_spider_parser_adapter_uses_canonical_parsing_dispatch(
-    monkeypatch,
-):
-    """Spider adapter must not depend on the old apps.api.parsers path."""
-    original_import = builtins.__import__
-    monkeypatch.delitem(sys.modules, "javdb.spider.parser", raising=False)
-
-    def guarded_import(name, globals_=None, locals_=None, fromlist=(), level=0):
-        if name == 'apps.api.parsers' or name.startswith('apps.api.parsers.'):
-            raise AssertionError('javdb.spider.parser must import from javdb.parsing')
-        return original_import(name, globals_, locals_, fromlist, level)
-
-    monkeypatch.setattr(builtins, '__import__', guarded_import)
-    parser_adapter = __import__("javdb.spider.parser", fromlist=["parser"])
-
-    for public_name in (
-        "extract_video_code",
-        "parse_index",
-        "parse_detail",
-        "is_login_page",
-        "is_maintenance_page",
-        "validate_index_html",
-        "result_to_dict",
-    ):
-        assert callable(getattr(parser_adapter, public_name))
 
 
 def test_spider_parser_parse_index_delegates_to_index_selection(monkeypatch, sample_index_html):
     """parse_index should stay as a thin adapter over the shared selector."""
-    import javdb.spider.parser as parser_adapter
+    import javdb.spider.parse_legacy_adapters as parse_legacy_adapters
 
     calls = {}
 
@@ -74,9 +30,9 @@ def test_spider_parser_parse_index_delegates_to_index_selection(monkeypatch, sam
         calls["is_adhoc_mode"] = is_adhoc_mode
         return [{"href": "/v/TEST-001"}]
 
-    monkeypatch.setattr(parser_adapter, "select_index_entries", fake_select_index_entries)
+    monkeypatch.setattr(parse_legacy_adapters, "select_index_entries", fake_select_index_entries)
 
-    results = parser_adapter.parse_index(
+    results = parse_legacy_adapters.parse_index(
         sample_index_html,
         page_num=7,
         phase=2,

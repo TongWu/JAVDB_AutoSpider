@@ -4,7 +4,7 @@ import sys
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from javdb.spider.parser import is_maintenance_page
+from javdb.spider.html_validators import is_maintenance_page
 
 
 def test_empty_string_returns_false():
