@@ -612,14 +612,22 @@ class DualConnection:
         )
 
     @staticmethod
-    def _count_applied_cursors(cursors) -> int:
+    def _coerce_cursor_list(cursors) -> list:
         if cursors is None:
-            return 0
+            return []
         if isinstance(cursors, list):
-            return sum(1 for cursor in cursors if cursor is not None)
+            return cursors
         if isinstance(cursors, tuple):
-            return sum(1 for cursor in cursors if cursor is not None)
-        return 1
+            return list(cursors)
+        return [cursors]
+
+    @staticmethod
+    def _count_applied_cursors(cursors) -> int:
+        return sum(
+            1
+            for cursor in DualConnection._coerce_cursor_list(cursors)
+            if cursor is not None
+        )
 
     def _record_flushed_cursors(self, cursors) -> None:
         applied_count = self._count_applied_cursors(cursors)
@@ -1005,10 +1013,11 @@ class DualConnection:
 
     def flush(self, ordering_key: Optional[str] = None):
         flush = getattr(self._d1, "flush", None)
-        if callable(flush):
-            cursors = flush(ordering_key=ordering_key)
-            self._record_flushed_cursors(cursors)
-            return cursors
+        if not callable(flush):
+            return []
+        cursors = self._coerce_cursor_list(flush(ordering_key=ordering_key))
+        self._record_flushed_cursors(cursors)
+        return cursors
 
     def close(self):
         try:
