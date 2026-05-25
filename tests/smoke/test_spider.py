@@ -123,6 +123,20 @@ class TestParseArguments:
         args = parse_arguments()
 
         assert args.result_json == '/tmp/spider-result.json'
+
+    def test_real_parser_defaults_enable_redownload_to_none(self, monkeypatch):
+        """Test canonical parser leaves --enable-redownload unspecified by default."""
+        from javdb.spider.app.cli import parse_arguments
+
+        monkeypatch.setattr(
+            sys,
+            'argv',
+            ['spider'],
+        )
+
+        args = parse_arguments()
+
+        assert args.enable_redownload is None
     
     def test_output_file_argument(self):
         """Test --output-file argument."""

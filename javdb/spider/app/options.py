@@ -20,7 +20,7 @@ class SpiderRunOptions:
     no_proxy: bool
     always_bypass_time: int | None
     enable_dedup: bool
-    enable_redownload: bool
+    enable_redownload: bool | None
     redownload_threshold: float | None
     result_json: str | None
     use_history: bool = False
@@ -49,7 +49,7 @@ def spider_options_from_args(args) -> SpiderRunOptions:
         no_proxy=bool(getattr(args, "no_proxy", False)),
         always_bypass_time=getattr(args, "always_bypass_time", None),
         enable_dedup=bool(getattr(args, "enable_dedup", False)),
-        enable_redownload=bool(getattr(args, "enable_redownload", False)),
+        enable_redownload=getattr(args, "enable_redownload", None),
         redownload_threshold=getattr(args, "redownload_threshold", None),
         result_json=getattr(args, "result_json", None),
         use_history=bool(getattr(args, "use_history", False)),

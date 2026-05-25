@@ -62,7 +62,7 @@ def parse_arguments():
                         help='Disable all filters (history, rclone inventory, release date) — process every entry from index')
     parser.add_argument('--enable-dedup', action='store_true',
                         help='Enable rclone dedup detection (compare against rclone_inventory.csv)')
-    parser.add_argument('--enable-redownload', action='store_true',
+    parser.add_argument('--enable-redownload', action='store_true', default=None,
                         help='Enable torrent re-download when a same-category torrent is significantly larger')
     parser.add_argument('--redownload-threshold', type=float, default=None,
                         help='Size increase threshold for re-download (default: 0.30 = 30%%)')
