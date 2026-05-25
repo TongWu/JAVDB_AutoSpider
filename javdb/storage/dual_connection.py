@@ -628,8 +628,9 @@ class DualConnection:
                 d1_cur = self._d1.execute(sql, params)
             else:
                 d1_cur = self._d1.execute(sql, params, policy=policy)
-            self._d1_uncommitted_writes += 1
-            self._maybe_warn_id_drift(sqlite_cur, d1_cur, sql)
+            if not getattr(d1_cur, "queued", False):
+                self._d1_uncommitted_writes += 1
+                self._maybe_warn_id_drift(sqlite_cur, d1_cur, sql)
         except Exception as exc:
             self._record_d1_failure(sql, exc, kind="write")
         return DualCursor.for_write(sqlite_cur, d1_cur, sql)
