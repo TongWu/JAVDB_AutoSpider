@@ -7,6 +7,11 @@ from typing import Any, Tuple
 
 from bs4 import BeautifulSoup
 
+from javdb.infra.logging import get_logger
+
+
+logger = get_logger(__name__)
+
 
 _LOGIN_REQUIRED_TEXT_MARKERS = (
     "due to copyright restrictions",
@@ -61,8 +66,12 @@ def is_login_page(
     if rust_parser_extras_available:
         try:
             return bool(rust_is_login_page(html))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug(
+                "Rust login-page detection failed; falling back to Python parser: %s",
+                exc,
+                exc_info=True,
+            )
     soup = BeautifulSoup(html, "html.parser")
     title_tag = soup.find("title")
     if title_tag:
@@ -81,8 +90,12 @@ def validate_index_html(
     if rust_parser_extras_available:
         try:
             return rust_validate_index_html(html)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug(
+                "Rust index HTML validation failed; falling back to Python parser: %s",
+                exc,
+                exc_info=True,
+            )
     soup = BeautifulSoup(html, "html.parser")
     movie_list = soup.find("div", class_=lambda x: x and "movie-list" in x)
     if movie_list:
@@ -93,7 +106,7 @@ def validate_index_html(
 
     page_text = soup.get_text()
     empty_message_div = soup.find("div", class_="empty-message")
-    age_modal = soup.find("div", class_="modal is-active over18-modal")
+    age_modal = soup.select_one("div.modal.is-active.over18-modal")
     has_no_content_msg = (
         "No content yet" in page_text
         or "No result" in page_text
