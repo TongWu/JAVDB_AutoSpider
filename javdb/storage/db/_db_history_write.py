@@ -61,7 +61,7 @@ def _ensure_imports():
             _resolve_session_id as rsi,
             get_active_write_mode,
         )
-        from apps.api.parsers.common import (
+        from javdb.parsing.common import (
             movie_href_lookup_values,
             javdb_absolute_url,
             absolutize_supporting_actors_json,

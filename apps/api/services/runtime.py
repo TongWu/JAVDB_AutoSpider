@@ -38,7 +38,7 @@ from apps.api.infra.security import (
     _sanitize_output_filename,
     _validate_target_url,
 )
-from apps.api.parsers import RUST_PARSERS_AVAILABLE
+from javdb.parsing import RUST_PARSERS_AVAILABLE
 from apps.api.routers.auth import login, logout, refresh_token, router as auth_router
 from apps.api.routers.capabilities import router as capabilities_router
 from apps.api.routers.onboarding import router as onboarding_router

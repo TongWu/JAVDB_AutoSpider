@@ -1,7 +1,7 @@
 """Parallel index-page fetching backed by the shared FetchEngine.
 
 Submits index-page URLs to a ``ParallelFetchBackend``, collects results,
-sorts them by page number, and applies ``parse_index`` exactly as the
+sorts them by page number, and applies canonical index selection exactly as the
 sequential path does — but with one worker per proxy running concurrently.
 
 Two submission strategies:
@@ -19,7 +19,8 @@ import os
 from typing import Dict, List, Optional
 
 from javdb.infra.logging import get_logger
-from javdb.spider.parser import parse_index
+from javdb.parsing import parse_index_page
+from javdb.pipeline.index_selection import select_index_entries
 from javdb.spider.url_helper import detect_url_type
 from javdb.spider.filename_helper import generate_output_csv_name_from_html
 
@@ -255,10 +256,13 @@ def fetch_all_index_pages_parallel(
 
         p1_count = 0
         p2_count = 0
+        page_result = parse_index_page(html, page_num)
 
         if phase_mode in ['1', 'all']:
-            page_results = parse_index(
-                html, page_num, phase=1,
+            page_results = select_index_entries(
+                page_result,
+                page_num=page_num,
+                phase=1,
                 disable_new_releases_filter=(custom_url is not None or ignore_release_date),
                 is_adhoc_mode=(custom_url is not None),
             )
@@ -267,8 +271,10 @@ def fetch_all_index_pages_parallel(
                 all_index_results_phase1.extend(page_results)
 
         if phase_mode in ['2', 'all']:
-            page_results_p2 = parse_index(
-                html, page_num, phase=2,
+            page_results_p2 = select_index_entries(
+                page_result,
+                page_num=page_num,
+                phase=2,
                 disable_new_releases_filter=(custom_url is not None or ignore_release_date),
                 is_adhoc_mode=(custom_url is not None),
             )

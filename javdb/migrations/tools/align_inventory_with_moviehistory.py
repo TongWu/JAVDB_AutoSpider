@@ -47,14 +47,13 @@ os.chdir(REPO_ROOT)
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from apps.api.parsers.common import normalize_javdb_href_path
-from apps.api.parsers.detail_parser import parse_detail_page
-from apps.api.parsers.index_parser import (
+from javdb.parsing import parse_detail_page, parse_index_page
+from javdb.parsing.common import normalize_javdb_href_path
+from javdb.parsing.fallback.index_parser import (
     derive_letter_suffix_fallback_video_code,
     find_exact_video_code_match,
-    parse_index_page,
 )
-from apps.api.parsers.search_exact import find_exact_entry_first_search_page
+from javdb.parsing.search_exact import find_exact_entry_first_search_page
 from javdb.spider.fetch.fallback import get_page_url
 from javdb.spider.fetch.fetch_engine import PER_WORKER_TASK_CAP_ERROR
 from javdb.spider.fetch.session import is_login_page
