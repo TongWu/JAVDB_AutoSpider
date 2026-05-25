@@ -8,7 +8,6 @@
 ## 待办 (Outstanding Work)
 
 - Phase 1 - 结构化 Spider/Pipeline result sidecar 和 Pipeline step model。
-- Phase 1 bake - 启动 in-process Spider 前必须完成 7 天生产 bake gate。
 - Phase 2 - bake 通过后，Pipeline 通过 in-process runner 调 Spider。
 - Final phase - GitHub workflows 和轻量 API task metadata 改用 result JSON，不再 grep stdout。
 

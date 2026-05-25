@@ -8,7 +8,6 @@
 ## Outstanding Work
 
 - Phase 1 - structured Spider/Pipeline result sidecars and Pipeline step model.
-- Phase 1 bake - 7-day production bake gate before in-process Spider work starts.
 - Phase 2 - Pipeline calls Spider through an in-process runner after bake.
 - Final phase - GitHub workflows and light API task metadata consume result JSON instead of grepping stdout.
 
