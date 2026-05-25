@@ -413,7 +413,7 @@ def db_insert_report_rows(
     """
     _ensure_imports()
 
-    from apps.api.parsers.common import javdb_absolute_url
+    from javdb.parsing.common import javdb_absolute_url
 
     _CATS = [
         ('hacked_subtitle',    'size_hacked_subtitle',    'file_count_hacked_subtitle',    'resolution_hacked_subtitle',    1, 0),
@@ -789,4 +789,3 @@ def db_get_sessions_by_date(
                 (report_date,),
             ).fetchall()
         return [dict(r) for r in rows]
-

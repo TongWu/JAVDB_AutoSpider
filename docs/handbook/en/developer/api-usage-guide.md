@@ -43,12 +43,14 @@ Core dependencies: `beautifulsoup4`, `lxml`, `javdb_rust_core` (optional). The R
 
 All parsing functions accept an **HTML string** and return **structured dataclass objects**. The parsers perform no business-level filtering (no phase1/phase2 distinction, no subtitle/date tag filtering) and return all raw data present on the page.
 
+New code should import parser functions and dataclasses from `javdb.parsing` and `javdb.parsing.models`. The older `apps.api.parsers`, `apps.api.models`, and `javdb.spider.parser` paths are transitional compatibility adapters kept for legacy callers.
+
 ### 1.1 Parsing Index Pages
 
 Parses any page containing a movie list (works for the home page, category pages, ranking pages, etc.).
 
 ```python
-from apps.api.parsers import parse_index_page
+from javdb.parsing import parse_index_page
 
 # Read HTML content
 with open('page.html', 'r', encoding='utf-8') as f:
@@ -108,7 +110,7 @@ data = result.to_dict()
 Extracts full metadata from a movie detail page.
 
 ```python
-from apps.api.parsers import parse_detail_page
+from javdb.parsing import parse_detail_page
 
 with open('detail.html', 'r', encoding='utf-8') as f:
     html = f.read()
@@ -197,7 +199,7 @@ magnets_list = detail.get_magnets_as_legacy()     # List[dict] format
 Parses category pages for makers, publishers, series, directors, code prefixes, actors, etc., extracting additional category information.
 
 ```python
-from apps.api.parsers import parse_category_page
+from javdb.parsing import parse_category_page
 
 result = parse_category_page(html, page_num=1)
 
@@ -224,7 +226,7 @@ for movie in result.movies:
 Parses Top250, daily/weekly/monthly ranking pages, etc.
 
 ```python
-from apps.api.parsers import parse_top_page
+from javdb.parsing import parse_top_page
 
 result = parse_top_page(html, page_num=1)
 
@@ -249,7 +251,7 @@ for movie in result.movies:
 Parses the `/tags` page, extracting the complete tag filter panel (all categories, all tag options, ID-to-name mappings) along with the movie list.
 
 ```python
-from apps.api.parsers import parse_tag_page
+from javdb.parsing import parse_tag_page
 
 result = parse_tag_page(html, page_num=1)
 
@@ -346,7 +348,7 @@ The category names and tag values below are the **actual identifiers used by the
 Not sure what type of page the HTML is? Let the parser auto-detect it.
 
 ```python
-from apps.api.parsers import detect_page_type
+from javdb.parsing import detect_page_type
 
 page_type = detect_page_type(html)
 # Returns: 'index', 'detail', 'top250', 'top_movies', 'makers',

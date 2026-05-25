@@ -4,7 +4,8 @@ import os
 from typing import Optional
 
 from javdb.infra.logging import get_logger, log_section
-from javdb.spider.parser import parse_index
+from javdb.parsing import parse_index_page
+from javdb.pipeline.index_selection import select_index_entries
 from javdb.spider.url_helper import detect_url_type
 from javdb.spider.filename_helper import generate_output_csv_name_from_html
 from javdb.pipeline.policies import (
@@ -149,18 +150,28 @@ def _fetch_all_index_pages_sequential(
         p1_count = 0
         p2_count = 0
 
+        page_result = parse_index_page(index_html, page_num)
+
         if phase_mode in ['1', 'all']:
-            page_results = parse_index(index_html, page_num, phase=1,
-                                       disable_new_releases_filter=(custom_url is not None or ignore_release_date),
-                                       is_adhoc_mode=(custom_url is not None))
+            page_results = select_index_entries(
+                page_result,
+                page_num=page_num,
+                phase=1,
+                disable_new_releases_filter=(custom_url is not None or ignore_release_date),
+                is_adhoc_mode=(custom_url is not None),
+            )
             p1_count = len(page_results)
             if p1_count > 0:
                 all_index_results_phase1.extend(page_results)
 
         if phase_mode in ['2', 'all']:
-            page_results_p2 = parse_index(index_html, page_num, phase=2,
-                                          disable_new_releases_filter=(custom_url is not None or ignore_release_date),
-                                          is_adhoc_mode=(custom_url is not None))
+            page_results_p2 = select_index_entries(
+                page_result,
+                page_num=page_num,
+                phase=2,
+                disable_new_releases_filter=(custom_url is not None or ignore_release_date),
+                is_adhoc_mode=(custom_url is not None),
+            )
             p2_count = len(page_results_p2)
             if p2_count > 0:
                 all_index_results_phase2.extend(page_results_p2)
