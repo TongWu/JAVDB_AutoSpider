@@ -176,6 +176,7 @@ class FakeD1Connection:
         self.executed: List[tuple] = []
         self.executed_many: List[tuple] = []
         self.commits = 0
+        self.flushes: List[str | None] = []
         self.fail_on_write = fail_on_write
         # Default response: one row from a SELECT
         self._next_select_rows = [{"n": 99}]
@@ -194,6 +195,10 @@ class FakeD1Connection:
 
     def commit(self):
         self.commits += 1
+
+    def flush(self, ordering_key=None):
+        self.flushes.append(ordering_key)
+        return []
 
     def close(self):
         pass
@@ -236,6 +241,16 @@ def test_reads_go_to_d1_only(sqlite_conn):
     assert any("SELECT" in s for s, _, _ in fake_d1.executed)
 
 
+def test_read_policy_is_not_forwarded_to_d1(sqlite_conn):
+    fake_d1 = FakeD1Connection()
+    dual = DualConnection(sqlite_conn, fake_d1)
+
+    policy = object()
+    dual.execute("SELECT COUNT(*) AS n FROM t", policy=policy)
+
+    assert fake_d1.executed[-1] == ("SELECT COUNT(*) AS n FROM t", [], None)
+
+
 def test_write_policy_is_forwarded_to_d1(sqlite_conn):
     fake_d1 = FakeD1Connection()
     dual = DualConnection(sqlite_conn, fake_d1)
@@ -244,6 +259,15 @@ def test_write_policy_is_forwarded_to_d1(sqlite_conn):
     dual.execute("INSERT INTO t (v) VALUES (?)", ("hello",), policy=policy)
 
     assert fake_d1.executed[-1][2] is policy
+
+
+def test_flush_is_forwarded_to_d1(sqlite_conn):
+    fake_d1 = FakeD1Connection()
+    dual = DualConnection(sqlite_conn, fake_d1)
+
+    dual.flush(ordering_key="history:s1")
+
+    assert fake_d1.flushes == ["history:s1"]
 
 
 def test_d1_write_failure_does_not_break_sqlite(sqlite_conn):
@@ -418,6 +442,64 @@ def test_d1_connection_forwards_policy_to_port_execute(monkeypatch):
         ("flush", policy.ordering_key),
         ("flushed", ("INSERT INTO t VALUES (?)", ["x"], policy)),
     ]
+
+
+def test_d1_connection_commit_flushes_queued_writes(monkeypatch):
+    monkeypatch.setenv("D1_BATCHING_ENABLED", "1")
+    calls = []
+
+    class FakePort:
+        def __init__(self):
+            self._queued = []
+
+        def execute(self, sql, params=(), *, policy=None):
+            calls.append(("execute", sql, list(params), policy))
+            if policy is not None and getattr(policy, "batching_allowed", False):
+                self._queued.append((sql, list(params), policy))
+                return [D1Cursor({"meta": {"changes": 0}, "results": []}, queued=True)]
+            return [D1Cursor({"meta": {"changes": 1}, "results": []})]
+
+        def executemany(self, sql, seq_of_params, *, policy=None):
+            raise AssertionError("unexpected executemany")
+
+        def batch_execute(self, statements, *, policy=None):
+            calls.append(("batch_execute", list(statements), policy))
+            return [D1Cursor({"meta": {"changes": 1}, "results": []}) for _ in statements]
+
+        def flush(self, ordering_key=None):
+            calls.append(("flush", ordering_key))
+            flushed = list(self._queued)
+            self._queued.clear()
+            return [D1Cursor({"meta": {"changes": 1}, "results": []}) for _ in flushed]
+
+        def write_summary(self):
+            pass
+
+        def close(self):
+            pass
+
+    conn = D1Connection("acct", "db", "token")
+    conn._port = FakePort()
+
+    policy = RecoveryPolicy(
+        logical_db="history",
+        operation_type="pending_stage",
+        idempotency_key="history:s1:seq1",
+        ordering_key="history:s1",
+        recovery_allowed=True,
+        max_attempts=3,
+        batching_allowed=True,
+    )
+    conn.execute("INSERT INTO t VALUES (?)", ("x",), policy=policy)
+    assert conn.total_changes == 0
+
+    conn.commit()
+
+    assert calls == [
+        ("execute", "INSERT INTO t VALUES (?)", ["x"], policy),
+        ("flush", None),
+    ]
+    assert conn.total_changes == 1
 
 
 def test_execute_stringifies_json_unsafe_integer_params(monkeypatch, d1_conn, no_sleep):

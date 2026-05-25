@@ -145,11 +145,12 @@ class D1PermanentError(D1Error):
 class D1Cursor:
     """Minimal sqlite3.Cursor-compatible result wrapper."""
 
-    __slots__ = ("_rows", "lastrowid", "rowcount")
+    __slots__ = ("_rows", "lastrowid", "queued", "rowcount")
 
-    def __init__(self, result: dict):
+    def __init__(self, result: dict, *, queued: bool = False):
         meta = result.get("meta") or {}
         self.lastrowid: Optional[int] = meta.get("last_row_id")
+        self.queued = queued
         self.rowcount: int = int(meta.get("changes") or 0)
         self._rows: List[dict] = list(result.get("results") or [])
 
@@ -315,7 +316,10 @@ class D1Connection:
         return cursors
 
     def commit(self) -> None:
-        return None
+        self._sync_port_config()
+        cursors = self._port.flush()
+        for cursor in cursors:
+            self._total_changes += cursor.rowcount
 
     def rollback(self) -> None:
         logger.warning(

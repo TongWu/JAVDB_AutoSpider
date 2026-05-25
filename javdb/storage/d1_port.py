@@ -158,7 +158,7 @@ class D1AccessPort:
         params_tuple = tuple(params)
         if self._should_queue(policy):
             self._queue_statement(sql, params_tuple, policy)
-            return [D1Cursor({"meta": {"changes": 0}, "results": []})]
+            return [D1Cursor({"meta": {"changes": 0}, "results": []}, queued=True)]
 
         key = self._schema_cache_key(sql, params_tuple)
         if key is not None and key in self._schema_cache:
@@ -220,16 +220,18 @@ class D1AccessPort:
             self._schema_cache.clear()
         return cursors
 
-    def flush(self, *, ordering_key: str | None = None) -> None:
+    def flush(self, *, ordering_key: str | None = None) -> list[D1Cursor]:
+        cursors: list[D1Cursor] = []
         keys = [ordering_key] if ordering_key is not None else list(self._batch_queue)
         for key in keys:
             queued = list(self._batch_queue.get(key) or [])
             if not queued:
                 continue
             statements = [(sql, params) for sql, params, _policy in queued]
-            self.batch_execute(statements)
+            cursors.extend(self.batch_execute(statements))
             self._batch_queue.pop(key, None)
             self._batch_queue_since.pop(key, None)
+        return cursors
 
     def drain_recovery(
         self,
