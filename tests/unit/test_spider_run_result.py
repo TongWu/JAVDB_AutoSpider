@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 
 import pytest
 
@@ -309,6 +310,56 @@ def test_run_spider_writes_failure_sidecar_and_clears_context(tmp_path, monkeypa
     assert loaded.exit_code == 1
     assert loaded.failure_reason == "boom"
     assert cleared == [None]
+
+
+def test_run_spider_suppresses_sidecar_when_cancelled(tmp_path, monkeypatch):
+    import javdb.storage.db as db_module
+
+    result_path = tmp_path / "spider-result.json"
+    cancel_event = threading.Event()
+    cancel_event.set()
+    options = SpiderRunOptions(
+        mode="daily",
+        url=None,
+        start_page=1,
+        end_page=1,
+        parse_all=False,
+        ignore_history=False,
+        use_history=False,
+        phase="all",
+        output_file="Javdb_Test.csv",
+        dry_run=True,
+        ignore_release_date=False,
+        use_proxy=False,
+        no_proxy=False,
+        always_bypass_time=None,
+        from_pipeline=False,
+        max_movies_phase1=None,
+        max_movies_phase2=None,
+        sequential=False,
+        no_rclone_filter=False,
+        disable_all_filters=False,
+        enable_dedup=False,
+        enable_redownload=None,
+        redownload_threshold=None,
+        result_json=str(result_path),
+        cancel_event=cancel_event,
+    )
+    monkeypatch.setattr(
+        run_service,
+        "_run_spider_impl",
+        lambda received: (_ for _ in ()).throw(RuntimeError("late boom")),
+    )
+
+    monkeypatch.setattr(db_module, "set_active_write_mode", lambda value: None)
+    monkeypatch.setattr(db_module, "set_active_session_id", lambda value: None)
+    monkeypatch.setattr(db_module, "set_active_run_identity", lambda run_id, run_attempt: None)
+    monkeypatch.setattr(db_module, "get_active_session_id", lambda: None)
+
+    with pytest.raises(RuntimeError, match="late boom"):
+        run_service.run_spider(options)
+
+    assert not result_path.exists()
 
 
 def test_spider_result_can_represent_failure_without_stats(tmp_path):
