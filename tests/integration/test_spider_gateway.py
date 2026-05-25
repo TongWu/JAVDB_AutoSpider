@@ -245,8 +245,8 @@ class TestParserMap:
 
 class TestRustFallback:
     def test_parse_html_python_fallback(self, index_html, monkeypatch):
-        from javdb.spider import parser as parser_adapter
-        monkeypatch.setattr(parser_adapter, 'RUST_PARSER_EXTRAS_AVAILABLE', False)
+        from javdb.spider import html_validators
+        monkeypatch.setattr(html_validators, 'RUST_PARSER_EXTRAS_AVAILABLE', False)
         gw = _make_gateway()
         r = gw.parse_html(index_html)
         assert r.ok is True
