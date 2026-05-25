@@ -79,8 +79,14 @@ class _SpiderResultContext:
 
 _result_context: ContextVar[_SpiderResultContext] = ContextVar(
     "spider_result_context",
-    default=_SpiderResultContext(),
 )
+
+
+def _get_result_context() -> _SpiderResultContext | None:
+    try:
+        return _result_context.get()
+    except LookupError:
+        return None
 
 
 def _page_range(start_page: int, end_page: int, parse_all: bool) -> str:
@@ -108,11 +114,18 @@ def _write_result_sidecar(result: SpiderRunResult, result_json: str | None) -> N
         write_spider_result_atomic(result_json, result)
 
 
+def _cancel_requested(options: SpiderRunOptions) -> bool:
+    cancel_event = options.cancel_event
+    return cancel_event is not None and cancel_event.is_set()
+
+
 def _write_failure_result_sidecar(exc: BaseException) -> None:
     exit_code = _failure_exit_code(exc)
     if exit_code is None:
         return
-    ctx = _result_context.get()
+    ctx = _get_result_context()
+    if ctx is None:
+        return
     _write_result_sidecar(
         SpiderRunResult(
             csv_path=str(ctx.csv_path) if ctx.csv_path else None,
@@ -160,7 +173,9 @@ def create_detail_backend(
 
 
 def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
-    result_context = _result_context.get()
+    result_context = _get_result_context()
+    if result_context is None:
+        result_context = _SpiderResultContext()
     started_at = utc_now_iso()
 
     start_page = options.start_page
@@ -190,6 +205,11 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
     page_range = _page_range(start_page, end_page, parse_all)
     result_json = options.result_json
     actual_mode = "adhoc" if custom_url else "daily"
+
+    if _cancel_requested(options):
+        logger.info("Spider run cancelled before startup")
+        sys.exit(124)
+
     result_context.result_json = result_json
     result_context.started_at = started_at
     result_context.mode = actual_mode
@@ -392,11 +412,17 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
             parsed_movies_history_phase1=parsed_movies_history_phase1,
             parsed_movies_history_phase2=parsed_movies_history_phase2,
             use_parallel=use_parallel,
+            cancel_event=options.cancel_event,
         )
     except AdhocLoginFailedError as e:
         logger.error(f"ADHOC SPIDER FAILED: Login failed during index page fetch — {e}")
         logger.error("Aborting spider run. Please check your session cookie or login credentials.")
         sys.exit(1)
+
+    if _cancel_requested(options):
+        logger.info("Spider run cancelled after index fetch")
+        sys.exit(124)
+
     all_index_results_phase1 = idx_result['all_index_results_phase1']
     all_index_results_phase2 = idx_result['all_index_results_phase2']
     any_proxy_banned = idx_result['any_proxy_banned']
@@ -613,6 +639,7 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
             redownload_threshold=redownload_threshold,
             include_recent_release_filters=use_parallel,
             log_duplicate_skips=not use_parallel,
+            cancel_event=options.cancel_event,
         )
         use_proxy = p1_result['use_proxy']
         use_cf_bypass = p1_result['use_cf_bypass']
@@ -623,6 +650,10 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
         failed_count += p1_result['failed']
         failed_movies_list.extend(p1_result.get('failed_movies', []))
         no_new_torrents_count += p1_result['no_new_torrents']
+
+        if _cancel_requested(options):
+            logger.info("Spider run cancelled after Phase 1")
+            sys.exit(124)
 
     # ======================================================================
     # Process Phase 2 entries
@@ -678,6 +709,7 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
             redownload_threshold=redownload_threshold,
             include_recent_release_filters=use_parallel,
             log_duplicate_skips=not use_parallel,
+            cancel_event=options.cancel_event,
         )
         use_proxy = p2_result['use_proxy']
         use_cf_bypass = p2_result['use_cf_bypass']
@@ -688,6 +720,10 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
         failed_count += p2_result['failed']
         failed_movies_list.extend(p2_result.get('failed_movies', []))
         no_new_torrents_count += p2_result['no_new_torrents']
+
+        if _cancel_requested(options):
+            logger.info("Spider run cancelled after Phase 2")
+            sys.exit(124)
 
     if not dry_run:
         logger.info(f"CSV file written incrementally to: {csv_path}")
@@ -831,12 +867,13 @@ def run_spider(options: SpiderRunOptions) -> SpiderRunResult:
     token = _result_context.set(result_context)
     try:
         result = _run_spider_impl(options)
-        if options.result_json:
+        if options.result_json and not _cancel_requested(options):
             write_spider_result_atomic(options.result_json, result)
         return result
     except BaseException as exc:
         try:
-            _write_failure_result_sidecar(exc)
+            if not _cancel_requested(options):
+                _write_failure_result_sidecar(exc)
         except Exception:
             logger.debug("Spider result sidecar failure write skipped", exc_info=True)
         try:
@@ -883,6 +920,11 @@ def main():
     if result.exit_code != 0:
         raise SystemExit(result.exit_code)
     return None
+
+
+def _main():
+    """Compatibility wrapper for internal tests and legacy imports."""
+    return main()
 
 
 class SpiderRunService:

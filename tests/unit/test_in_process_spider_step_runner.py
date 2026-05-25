@@ -168,3 +168,46 @@ def test_in_process_spider_step_runner_times_out_without_waiting_for_spider_comp
     assert result.result_path == "/tmp/spider-result.json"
     assert spider_result is None
     assert elapsed < 1
+
+
+def test_in_process_spider_step_runner_sets_cancel_event_on_timeout():
+    release_spider = threading.Event()
+    started = threading.Event()
+    cancel_seen = threading.Event()
+    finished_after_timeout = threading.Event()
+
+    def run_spider(options):
+        started.set()
+        assert options.cancel_event is not None
+        if options.cancel_event.wait(timeout=2):
+            cancel_seen.set()
+        release_spider.wait(timeout=2)
+        finished_after_timeout.set()
+        return SpiderRunResult(
+            csv_path=None,
+            session_id=None,
+            dedup_csv_path=None,
+            stats=None,
+            mode="daily",
+            url=None,
+            phase="all",
+            page_range=None,
+            started_at="2026-05-20T01:00:00Z",
+            finished_at="2026-05-20T01:01:00Z",
+            exit_code=0,
+            failure_reason=None,
+        )
+
+    runner = InProcessSpiderStepRunner(run_spider=run_spider)
+    policy = StepPolicy(name="spider", required=True, timeout_sec=0.1)
+    options = SimpleNamespace(result_json="/tmp/spider-result.json", cancel_event=None)
+
+    result, spider_result = runner.run(policy, options=options, command_label=("in-process", "spider"))
+
+    assert started.wait(timeout=1)
+    assert result.status == "timed_out"
+    assert result.failure_reason == "timed out after 0.1s"
+    assert spider_result is None
+    assert cancel_seen.wait(timeout=1)
+    assert not finished_after_timeout.is_set()
+    release_spider.set()

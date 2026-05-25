@@ -16,6 +16,7 @@ Two submission strategies:
 from __future__ import annotations
 
 import os
+from threading import Event
 from typing import Dict, List, Optional
 
 from javdb.infra.logging import get_logger
@@ -108,6 +109,7 @@ def fetch_all_index_pages_parallel(
     output_dated_dir: str,
     csv_path: str,
     user_specified_output: bool,
+    cancel_event: Event | None = None,
 ) -> dict:
     """Fetch index pages in parallel and return the same dict as the
     sequential ``fetch_all_index_pages``.
@@ -127,6 +129,9 @@ def fetch_all_index_pages_parallel(
 
     try:
         # -- submit tasks ---------------------------------------------------
+        if cancel_event is not None and cancel_event.is_set():
+            logger.info("Parallel index fetch cancelled before submission")
+            raise SystemExit(124)
 
         if parse_all:
             window_size = max(len(PROXY_POOL) * 2, 4) if PROXY_POOL else 4
@@ -153,6 +158,10 @@ def fetch_all_index_pages_parallel(
         stop_collecting = False
 
         for result in backend.results():
+            if cancel_event is not None and cancel_event.is_set():
+                logger.info("Parallel index fetch cancelled")
+                raise SystemExit(124)
+
             page_num = result.task.meta.get('page_num', 0)
             results_by_page[page_num] = result
 
