@@ -315,21 +315,24 @@ class D1Connection:
             self._total_changes += c.rowcount
         return cursors
 
-    def commit(self) -> None:
-        self._sync_port_config()
-        cursors = self._port.flush()
-        for cursor in cursors:
-            self._total_changes += cursor.rowcount
+    def commit(self) -> list[D1Cursor]:
+        return self.flush()
 
     def rollback(self) -> None:
         logger.warning(
             "D1Connection.rollback() called but D1 auto-commits each request; "
-            "rollback is a no-op."
+            "queued writes, if any, are discarded."
         )
+        discard = getattr(self._port, "discard", None)
+        if callable(discard):
+            discard()
 
-    def flush(self, ordering_key: str | None = None) -> None:
+    def flush(self, ordering_key: str | None = None) -> list[D1Cursor]:
         self._sync_port_config()
-        self._port.flush(ordering_key=ordering_key)
+        cursors = self._port.flush(ordering_key=ordering_key) or []
+        for cursor in cursors:
+            self._total_changes += cursor.rowcount
+        return cursors
 
     def close(self) -> None:
         close_exc: Exception | None = None
