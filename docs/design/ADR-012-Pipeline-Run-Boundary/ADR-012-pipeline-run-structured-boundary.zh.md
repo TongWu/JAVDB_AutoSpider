@@ -1,6 +1,6 @@
 # ADR-012：Pipeline Run 结构化边界
 
-**状态**：已接受 - Phase 1 已完成（2026-05-25 sign-off），Phase 2 已完成，最终阶段待完成
+**状态**：已接受 - Phase 1 已完成（2026-05-25 sign-off），Phase 2 已完成（2026-05-25 已验证），最终阶段待完成
 **日期**：2026-05-20
 **决策者**：Pipeline Run module brainstorming + grill 会话
 **关联实现计划 (Related Implementation Plans)**：[IMP-ADR012-01](IMP-ADR012-01-pipeline-run-phase1-result-sidecar.md)（Phase 1 - result sidecar）、[IMP-ADR012-02](IMP-ADR012-02-pipeline-run-phase1-bake.md)（Phase 1 bake）、[IMP-ADR012-03](IMP-ADR012-03-pipeline-run-phase2-in-process-spider.md)（Phase 2 - in-process Spider）、[IMP-ADR012-04](IMP-ADR012-04-pipeline-run-final-result-consumption.md)（Final phase - result consumption cleanup）
@@ -13,7 +13,7 @@
 
 - Phase 1 - 结构化 Spider/Pipeline result sidecar 和 Pipeline step model。已通过 [IMP-ADR012-01](IMP-ADR012-01-pipeline-run-phase1-result-sidecar.md) 完成。
 - Phase 1 bake - 生产/workflow bake gate 已通过 [IMP-ADR012-02](IMP-ADR012-02-pipeline-run-phase1-bake.md) 完成。
-- Phase 2 - Pipeline 通过 in-process runner 调 Spider，同时 qB uploader、PikPak、email 和 rclone dedup 继续保持 subprocess steps。已通过 [IMP-ADR012-03](IMP-ADR012-03-pipeline-run-phase2-in-process-spider.md) 完成。
+- Phase 2 - Pipeline 通过 in-process runner 调 Spider，同时 qB uploader、PikPak、email 和 rclone dedup 继续保持 subprocess steps。已通过 [IMP-ADR012-03](IMP-ADR012-03-pipeline-run-phase2-in-process-spider.md) 完成并验证。
 
 ---
 
