@@ -17,7 +17,7 @@ from javdb.spider.spider_gateway import (
     _PARSER_MAP,
     _build_page_url,
 )
-from javdb.spider.parser import result_to_dict
+from javdb.spider.html_validators import result_to_dict
 
 
 # ---------------------------------------------------------------------------
