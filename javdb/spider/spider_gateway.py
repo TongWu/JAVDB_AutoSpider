@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse, urlencode, parse_qs, urlunparse
 
-from apps.api.parsers import (
+from javdb.parsing import (
     parse_index_page,
     parse_detail_page,
     parse_category_page,

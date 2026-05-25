@@ -129,12 +129,12 @@ def _bench(
 def bench_parse_detail_python_only(iterations: int) -> Dict[str, float]:
     """Pure-Python BeautifulSoup fallback (NOT the production path).
 
-    Imports directly from the submodule to bypass the Rust dispatcher in
-    ``apps.api.parsers.__init__``. Use this only to measure the cost of
+    Imports directly from the fallback submodule to bypass the Rust dispatcher in
+    ``javdb.parsing``. Use this only to measure the cost of
     the FROZEN Python fallback, e.g. when validating that the Rust path
     actually beats it.
     """
-    from apps.api.parsers.detail_parser import parse_detail_page
+    from javdb.parsing.fallback.detail_parser import parse_detail_page
     html = _load_fixture("detail_page_AVSW-067.html")
     return _bench(
         "parse_detail_python_only", iterations,
@@ -143,8 +143,8 @@ def bench_parse_detail_python_only(iterations: int) -> Dict[str, float]:
 
 
 def bench_parse_detail_canonical(iterations: int) -> Dict[str, float]:
-    """Canonical entry: apps.api.parsers.parse_detail_page (Rust if available)."""
-    from apps.api.parsers import parse_detail_page, RUST_PARSERS_AVAILABLE
+    """Canonical entry: javdb.parsing.parse_detail_page (Rust if available)."""
+    from javdb.parsing import parse_detail_page, RUST_PARSERS_AVAILABLE
     html = _load_fixture("detail_page_AVSW-067.html")
     print(f"  (RUST_PARSERS_AVAILABLE={RUST_PARSERS_AVAILABLE})")
     return _bench(
@@ -165,7 +165,7 @@ def bench_parse_detail_wrapper(iterations: int) -> Dict[str, float]:
 
 def bench_parse_index_python_only(iterations: int) -> Dict[str, float]:
     """Pure-Python BeautifulSoup fallback (FROZEN, NOT the production path)."""
-    from apps.api.parsers.index_parser import parse_index_page
+    from javdb.parsing.fallback.index_parser import parse_index_page
     html = _load_fixture("JavDB-normal_index-page1.html")
     return _bench(
         "parse_index_python_only", iterations,
@@ -174,15 +174,15 @@ def bench_parse_index_python_only(iterations: int) -> Dict[str, float]:
 
 
 def bench_parse_index_canonical(iterations: int) -> Dict[str, float]:
-    """Canonical entry: apps.api.parsers.parse_index_page (Rust if available).
+    """Canonical entry: javdb.parsing.parse_index_page (Rust if available).
 
-    Important: ``apps.api.parsers/__init__.py`` dispatches to ``javdb_rust_core``
-    when the extension is installed. Importing from the submodule
-    (``apps.api.parsers.index_parser``) bypasses that dispatcher and hits
+    Important: ``javdb.parsing`` dispatches to ``javdb.rust_core``
+    when the extension is installed. Importing from a fallback submodule
+    (``javdb.parsing.fallback.index_parser``) bypasses that dispatcher and hits
     the FROZEN Python fallback — which is what the W4.1 baseline did
     until this correction.
     """
-    from apps.api.parsers import parse_index_page, RUST_PARSERS_AVAILABLE
+    from javdb.parsing import parse_index_page, RUST_PARSERS_AVAILABLE
     html = _load_fixture("JavDB-normal_index-page1.html")
     print(f"  (RUST_PARSERS_AVAILABLE={RUST_PARSERS_AVAILABLE})")
     return _bench(

@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from fastapi import HTTPException
 
 from apps.api.infra.security import _validate_target_url
-from apps.api.parsers import (
+from javdb.parsing import (
     RUST_PARSERS_AVAILABLE,
     detect_page_type,
     parse_category_page,
@@ -23,9 +23,6 @@ from apps.api.parsers import (
 )
 from apps.api.services import context
 from javdb.proxy.policy import resolve_proxy_override
-from javdb.spider.parser import (
-    result_to_dict,
-)
 
 
 # ---------------------------------------------------------------------------
@@ -303,35 +300,35 @@ async def refresh_javdb_session_with_options(payload: Any, username: str) -> Dic
 
 async def parse_index_payload(payload: Any) -> Dict[str, Any]:
     try:
-        return result_to_dict(parse_index_page(payload.html, payload.page_num))
+        return parse_index_page(payload.html, payload.page_num).to_dict()
     except Exception as exc:
         _raise_internal_error("Failed to parse index page", exc)
 
 
 async def parse_detail_payload(payload: Any) -> Dict[str, Any]:
     try:
-        return result_to_dict(parse_detail_page(payload.html))
+        return parse_detail_page(payload.html).to_dict()
     except Exception as exc:
         _raise_internal_error("Failed to parse detail page", exc)
 
 
 async def parse_category_payload(payload: Any) -> Dict[str, Any]:
     try:
-        return result_to_dict(parse_category_page(payload.html, payload.page_num))
+        return parse_category_page(payload.html, payload.page_num).to_dict()
     except Exception as exc:
         _raise_internal_error("Failed to parse category page", exc)
 
 
 async def parse_top_payload(payload: Any) -> Dict[str, Any]:
     try:
-        return result_to_dict(parse_top_page(payload.html, payload.page_num))
+        return parse_top_page(payload.html, payload.page_num).to_dict()
     except Exception as exc:
         _raise_internal_error("Failed to parse top page", exc)
 
 
 async def parse_tags_payload(payload: Any) -> Dict[str, Any]:
     try:
-        return result_to_dict(parse_tag_page(payload.html, payload.page_num))
+        return parse_tag_page(payload.html, payload.page_num).to_dict()
     except Exception as exc:
         _raise_internal_error("Failed to parse tag page", exc)
 

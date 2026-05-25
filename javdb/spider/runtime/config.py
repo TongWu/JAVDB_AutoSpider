@@ -115,7 +115,7 @@ setup_logging(SPIDER_LOG_FILE, LOG_LEVEL)
 def _log_rust_status():
     _logger = get_logger(__name__)
     try:
-        from apps.api.parsers import RUST_PARSERS_AVAILABLE
+        from javdb.parsing import RUST_PARSERS_AVAILABLE
         if RUST_PARSERS_AVAILABLE:
             _logger.debug("✅ Spider using Rust parsers - high-performance HTML parsing enabled")
         else:

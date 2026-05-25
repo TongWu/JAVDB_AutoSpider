@@ -20,7 +20,7 @@ os.chdir(REPO_ROOT)
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from apps.api.parsers.common import (  # noqa: E402
+from javdb.parsing.common import (  # noqa: E402
     javdb_absolute_url,
     absolutize_supporting_actors_json,
 )
