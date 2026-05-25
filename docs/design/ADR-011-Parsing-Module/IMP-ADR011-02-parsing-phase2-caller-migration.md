@@ -35,12 +35,12 @@
 **Files:**
 - Modify: API services, migration tools, storage modules, ops profiling, tests.
 
-- [ ] Replace non-Adapter imports of `apps.api.parsers` with `javdb.parsing`.
-- [ ] Replace non-Adapter imports of `apps.api.parsers.common` with `javdb.parsing.common`.
-- [ ] Replace non-Adapter imports of `apps.api.parsers.search_exact` with `javdb.parsing.search_exact`.
-- [ ] Replace non-Adapter imports of parser dataclasses from `apps.api.models` with `javdb.parsing.models`.
-- [ ] Leave `apps/api/parsers/*`, `apps/api/models.py`, and dedicated compatibility tests as the only old-path imports.
-- [ ] Run:
+- [x] Replace non-Adapter imports of `apps.api.parsers` with `javdb.parsing`.
+- [x] Replace non-Adapter imports of `apps.api.parsers.common` with `javdb.parsing.common`.
+- [x] Replace non-Adapter imports of `apps.api.parsers.search_exact` with `javdb.parsing.search_exact`.
+- [x] Replace non-Adapter imports of parser dataclasses from `apps.api.models` with `javdb.parsing.models`.
+- [x] Leave `apps/api/parsers/*`, `apps/api/models.py`, and dedicated compatibility tests as the only old-path imports.
+- [x] Run:
 
 ```bash
 pytest tests/unit/test_api_parsers.py tests/unit/test_api_common.py tests/unit/test_video_code_search.py tests/parity/test_parser_parity.py -v
@@ -52,15 +52,15 @@ pytest tests/unit/test_api_parsers.py tests/unit/test_api_common.py tests/unit/t
 - Create: `javdb/pipeline/index_selection.py`
 - Create or modify: focused index-selection tests.
 
-- [ ] Move phase 1 / phase 2 filtering out of `javdb.spider.parser.parse_index()`.
-- [ ] Preserve current ad hoc mode behavior.
-- [ ] Preserve release-date filtering, including today/yesterday logic.
-- [ ] Preserve subtitle and magnet tag handling.
-- [ ] Preserve P2 rate/comment thresholds and invalid score handling.
-- [ ] Preserve no-video-code exclusion behavior.
-- [ ] Preserve legacy entry dict output exactly.
-- [ ] Add focused tests for phase 1, phase 2, ad hoc mode, ignored release date, invalid rate/comment, no video code, subtitle/magnet tags, and legacy dict output.
-- [ ] Run:
+- [x] Move phase 1 / phase 2 filtering out of `javdb.spider.parser.parse_index()`.
+- [x] Preserve current ad hoc mode behavior.
+- [x] Preserve release-date filtering, including today/yesterday logic.
+- [x] Preserve subtitle and magnet tag handling.
+- [x] Preserve P2 rate/comment thresholds and invalid score handling.
+- [x] Preserve no-video-code exclusion behavior.
+- [x] Preserve legacy entry dict output exactly.
+- [x] Add focused tests for phase 1, phase 2, ad hoc mode, ignored release date, invalid rate/comment, no video code, subtitle/magnet tags, and legacy dict output.
+- [x] Run:
 
 ```bash
 pytest tests/unit/test_parser.py -v
@@ -72,10 +72,10 @@ pytest tests/unit/test_parser.py -v
 - Modify: `javdb/spider/parser.py`
 - Modify: Spider tests.
 
-- [ ] Reduce `javdb.spider.parser` to a compatibility Adapter over `javdb.parsing` and `javdb.pipeline.index_selection`.
-- [ ] Keep the existing function names and return shapes for callers that still use it.
-- [ ] Add a clear module comment that this Adapter is temporary and deleted by IMP-ADR011-03.
-- [ ] Run:
+- [x] Reduce `javdb.spider.parser` to a compatibility Adapter over `javdb.parsing` and `javdb.pipeline.index_selection`.
+- [x] Keep the existing function names and return shapes for callers that still use it.
+- [x] Add a clear module comment that this Adapter is temporary and deleted by IMP-ADR011-03.
+- [x] Run:
 
 ```bash
 pytest tests/unit/test_parser.py tests/unit/test_maintenance_detection.py tests/integration/test_spider_gateway.py -v
@@ -91,10 +91,10 @@ pytest tests/unit/test_parser.py tests/unit/test_maintenance_detection.py tests/
 - Modify: `javdb/infra/request.py`
 - Modify: other Spider runtime callers found by grep.
 
-- [ ] Move callers that need raw parsing to `javdb.parsing`.
-- [ ] Move callers that need phase filtering to `javdb.pipeline.index_selection`.
-- [ ] Keep legacy wrapper calls only where migration would require behavior work outside this phase.
-- [ ] Run:
+- [x] Move callers that need raw parsing to `javdb.parsing`.
+- [x] Move callers that need phase filtering to `javdb.pipeline.index_selection`.
+- [x] Keep legacy wrapper calls only where migration would require behavior work outside this phase.
+- [x] Run:
 
 ```bash
 pytest tests/unit/test_parser.py tests/integration/test_spider_gateway.py -v
@@ -109,47 +109,47 @@ pytest tests/unit/test_parser.py tests/integration/test_spider_gateway.py -v
 - Modify: `javdb/storage/repos/README.md`
 - Modify: any top-level README only if it teaches parser import paths.
 
-- [ ] Update primary developer import guidance to `javdb.parsing`.
-- [ ] Mark `apps.api.parsers`, `apps.api.models`, and `javdb.spider.parser` as transitional compatibility paths where they are mentioned.
-- [ ] Confirm README/wiki updates are not needed unless user-facing setup or usage guidance changed.
+- [x] Update primary developer import guidance to `javdb.parsing`.
+- [x] Mark `apps.api.parsers`, `apps.api.models`, and `javdb.spider.parser` as transitional compatibility paths where they are mentioned.
+- [x] Confirm README/wiki updates are not needed unless user-facing setup or usage guidance changed.
 
 ## Task 6: Phase 2 Grep Gate
 
-- [ ] Run:
+- [x] Run:
 
 ```bash
 rg -n "from apps\.api\.parsers|import apps\.api\.parsers|from apps\.api\.models|import apps\.api\.models" apps javdb tests docs --glob '*.py' --glob '*.md'
 ```
 
-- [ ] Confirm all remaining hits are one of:
+- [x] Confirm all remaining hits are one of:
   - compatibility Adapter modules;
   - explicit compatibility tests;
   - historical ADR/IMP/archive references;
   - transitional documentation that names the path as legacy.
-- [ ] Run:
+- [x] Run:
 
 ```bash
 rg -n "from javdb\.spider\.parser|import javdb\.spider\.parser" apps javdb tests docs --glob '*.py' --glob '*.md'
 ```
 
-- [ ] Confirm remaining hits are either active legacy callers intentionally deferred to IMP-ADR011-03 or historical references.
+- [x] Confirm remaining hits are either active legacy callers intentionally deferred to IMP-ADR011-03 or historical references.
 
 ## Task 7: Phase 2 Verification
 
-- [ ] Run parser parity tests:
+- [x] Run parser parity tests:
 
 ```bash
 pytest tests/parity/test_parser_parity.py -v
 ```
 
-- [ ] Run Spider and API service tests:
+- [x] Run Spider and API service tests:
 
 ```bash
 pytest tests/unit/test_parser.py tests/integration/test_spider_gateway.py tests/unit/test_api_system_service.py tests/unit/test_video_code_search.py -v
 ```
 
-- [ ] Confirm golden-output fixtures still match pre-migration output.
-- [ ] Commit:
+- [x] Confirm golden-output fixtures still match pre-migration output.
+- [x] Commit:
 
 ```bash
 git add apps javdb tests docs

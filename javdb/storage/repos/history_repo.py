@@ -8,7 +8,7 @@ import io
 from datetime import datetime, timezone
 from typing import Dict, Iterator, List, Optional, Tuple
 
-from apps.api.parsers.common import (
+from javdb.parsing.common import (
     normalize_javdb_href_path,
     movie_href_lookup_values,
     javdb_absolute_url,

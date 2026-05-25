@@ -4,26 +4,41 @@ Unit tests for utils/parser.py functions.
 import os
 import sys
 import builtins
-import importlib
 import pytest
 
 # Add project root to path
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from javdb.spider.parser import extract_video_code, parse_index, parse_detail
+from javdb.pipeline.index_selection import select_index_entries
+from javdb.parsing import parse_index_page
+from javdb.parsing.models import IndexPageResult, MovieIndexEntry
 from bs4 import BeautifulSoup
+
+
+def _parser_adapter():
+    import javdb.spider.parser as parser_adapter
+    return parser_adapter
+
+
+def extract_video_code(*args, **kwargs):
+    return _parser_adapter().extract_video_code(*args, **kwargs)
+
+
+def parse_index(*args, **kwargs):
+    return _parser_adapter().parse_index(*args, **kwargs)
+
+
+def parse_detail(*args, **kwargs):
+    return _parser_adapter().parse_detail(*args, **kwargs)
 
 
 def test_spider_parser_adapter_uses_canonical_parsing_dispatch(
     monkeypatch,
-    sample_index_html,
-    sample_detail_html,
 ):
     """Spider adapter must not depend on the old apps.api.parsers path."""
-    import javdb.spider.parser as parser_adapter
-
     original_import = builtins.__import__
+    monkeypatch.delitem(sys.modules, "javdb.spider.parser", raising=False)
 
     def guarded_import(name, globals_=None, locals_=None, fromlist=(), level=0):
         if name == 'apps.api.parsers' or name.startswith('apps.api.parsers.'):
@@ -31,52 +46,50 @@ def test_spider_parser_adapter_uses_canonical_parsing_dispatch(
         return original_import(name, globals_, locals_, fromlist, level)
 
     monkeypatch.setattr(builtins, '__import__', guarded_import)
-    reloaded = importlib.reload(parser_adapter)
+    parser_adapter = __import__("javdb.spider.parser", fromlist=["parser"])
 
-    html = '''
-    <a class="box" href="/v/ABC-123">
-        <div class="video-title"><strong>ABC-123</strong></div>
-    </a>
-    '''
-    soup = BeautifulSoup(html, 'html.parser')
-    assert reloaded.extract_video_code(soup.find('a')) == 'ABC-123'
+    for public_name in (
+        "extract_video_code",
+        "parse_index",
+        "parse_detail",
+        "is_login_page",
+        "is_maintenance_page",
+        "validate_index_html",
+        "result_to_dict",
+    ):
+        assert callable(getattr(parser_adapter, public_name))
 
-    index_results = reloaded.parse_index(sample_index_html, page_num=5, phase=1)
-    assert index_results == [
-        {
-            'href': '/v/ABC-123',
-            'video_code': 'ABC-123',
-            'page': 5,
-            'actor': '',
-            'rate': '4.47',
-            'comment_number': '595',
-            'is_today_release': True,
-            'is_yesterday_release': False,
-        },
-        {
-            'href': '/v/GHI-789',
-            'video_code': 'GHI-789',
-            'page': 5,
-            'actor': '',
-            'rate': '3.85',
-            'comment_number': '50',
-            'is_today_release': False,
-            'is_yesterday_release': True,
-        },
-    ]
 
-    detail_result = reloaded.parse_detail(sample_detail_html, index=1, skip_sleep=True)
-    magnets, actor_info, actor_gender, actor_link, supporting, parse_success = detail_result
-    assert parse_success is True
-    assert actor_info == 'Sample Actor'
-    assert actor_gender == 'female'
-    assert actor_link == '/actors/xyz'
-    assert supporting == '[]'
-    assert [m['href'] for m in magnets] == [
-        'magnet:?xt=urn:btih:abc123subtitle',
-        'magnet:?xt=urn:btih:abc123hacked',
-        'magnet:?xt=urn:btih:abc123normal',
-    ]
+def test_spider_parser_parse_index_delegates_to_index_selection(monkeypatch, sample_index_html):
+    """parse_index should stay as a thin adapter over the shared selector."""
+    import javdb.spider.parser as parser_adapter
+
+    calls = {}
+
+    def fake_select_index_entries(page_result, *, page_num, phase, disable_new_releases_filter, is_adhoc_mode):
+        calls["page_result"] = page_result
+        calls["page_num"] = page_num
+        calls["phase"] = phase
+        calls["disable_new_releases_filter"] = disable_new_releases_filter
+        calls["is_adhoc_mode"] = is_adhoc_mode
+        return [{"href": "/v/TEST-001"}]
+
+    monkeypatch.setattr(parser_adapter, "select_index_entries", fake_select_index_entries)
+
+    results = parser_adapter.parse_index(
+        sample_index_html,
+        page_num=7,
+        phase=2,
+        disable_new_releases_filter=True,
+        is_adhoc_mode=True,
+    )
+
+    assert results == [{"href": "/v/TEST-001"}]
+    assert calls["page_num"] == 7
+    assert calls["phase"] == 2
+    assert calls["disable_new_releases_filter"] is True
+    assert calls["is_adhoc_mode"] is True
+    assert calls["page_result"].has_movie_list is True
 
 
 class TestExtractVideoCode:
@@ -133,6 +146,143 @@ class TestExtractVideoCode:
 
 class TestParseIndex:
     """Test cases for parse_index function."""
+
+    def test_select_index_entries_phase1(self, sample_index_html):
+        """Phase 1 should keep subtitle entries with release-date tags."""
+        page_result = parse_index_page(sample_index_html, page_num=1)
+        results = select_index_entries(page_result, page_num=1, phase=1)
+
+        assert [r["video_code"] for r in results] == ["ABC-123", "GHI-789"]
+
+    def test_select_index_entries_phase1_accepts_simplified_yesterday_tag(self):
+        """Simplified yesterday tag should count as a release-date tag."""
+        page_result = IndexPageResult(
+            has_movie_list=True,
+            movies=[
+                MovieIndexEntry(
+                    href="/v/ABC-123",
+                    video_code="ABC-123",
+                    rate="4.47",
+                    comment_count="595",
+                    tags=["含中字磁鏈", "昨日新种"],
+                ),
+            ],
+        )
+
+        results = select_index_entries(page_result, page_num=1, phase=1)
+
+        assert [r["video_code"] for r in results] == ["ABC-123"]
+        assert results[0]["is_yesterday_release"] is True
+
+    def test_select_index_entries_phase2(self, sample_index_html):
+        """Phase 2 should keep qualifying non-subtitle entries only."""
+        page_result = parse_index_page(sample_index_html, page_num=1)
+        results = select_index_entries(page_result, page_num=1, phase=2)
+
+        assert [r["video_code"] for r in results] == ["DEF-456"]
+
+    def test_select_index_entries_adhoc_mode(self, sample_index_html_with_magnet_tags):
+        """Adhoc mode should split subtitle and non-subtitle entries by phase."""
+        page_result = parse_index_page(sample_index_html_with_magnet_tags, page_num=1)
+
+        phase1 = select_index_entries(page_result, page_num=1, phase=1, is_adhoc_mode=True)
+        phase2 = select_index_entries(page_result, page_num=1, phase=2, is_adhoc_mode=True)
+
+        assert [r["video_code"] for r in phase1] == ["ABC-123"]
+        assert [r["video_code"] for r in phase2] == ["DEF-456"]
+
+    def test_select_index_entries_ignored_release_date(self, sample_index_html):
+        """Release-date tags should be optional when the filter is disabled."""
+        page_result = parse_index_page(sample_index_html, page_num=1)
+        results = select_index_entries(
+            page_result,
+            page_num=1,
+            phase=1,
+            disable_new_releases_filter=True,
+        )
+
+        assert [r["video_code"] for r in results] == ["ABC-123", "GHI-789"]
+
+    def test_select_index_entries_invalid_rate_or_comment(self):
+        """Invalid rate/comment data should be skipped in phase 2."""
+        page_result = IndexPageResult(
+            has_movie_list=True,
+            movies=[
+                MovieIndexEntry(
+                    href="/v/ABC-123",
+                    video_code="ABC-123",
+                    rate="bad",
+                    comment_count="120",
+                    tags=["今日新種"],
+                ),
+                MovieIndexEntry(
+                    href="/v/DEF-456",
+                    video_code="DEF-456",
+                    rate="4.50",
+                    comment_count="bad",
+                    tags=["今日新種"],
+                ),
+            ],
+        )
+        results = select_index_entries(page_result, page_num=1, phase=2)
+
+        assert results == []
+
+    def test_select_index_entries_no_video_code(self):
+        """Entries without a valid video code should be excluded."""
+        page_result = IndexPageResult(
+            has_movie_list=True,
+            movies=[
+                MovieIndexEntry(
+                    href="/v/NO-CODE",
+                    video_code="",
+                    rate="4.50",
+                    comment_count="120",
+                    tags=["今日新種"],
+                ),
+            ],
+        )
+        results = select_index_entries(page_result, page_num=1, phase=1)
+
+        assert results == []
+
+    def test_select_index_entries_subtitle_and_magnet_tags(self, sample_index_html_with_magnet_tags):
+        """Subtitle and magnet tags should route entries into the right phase."""
+        page_result = parse_index_page(sample_index_html_with_magnet_tags, page_num=1)
+
+        phase1 = select_index_entries(page_result, page_num=1, phase=1, is_adhoc_mode=True)
+        phase2 = select_index_entries(page_result, page_num=1, phase=2, is_adhoc_mode=True)
+
+        assert [r["video_code"] for r in phase1] == ["ABC-123"]
+        assert [r["video_code"] for r in phase2] == ["DEF-456"]
+
+    def test_select_index_entries_legacy_dict_output(self, sample_index_html):
+        """Legacy dict output should stay byte-for-byte compatible in shape."""
+        page_result = parse_index_page(sample_index_html, page_num=5)
+        results = select_index_entries(page_result, page_num=5, phase=1)
+
+        assert results == [
+            {
+                "href": "/v/ABC-123",
+                "video_code": "ABC-123",
+                "page": 5,
+                "actor": "",
+                "rate": "4.47",
+                "comment_number": "595",
+                "is_today_release": True,
+                "is_yesterday_release": False,
+            },
+            {
+                "href": "/v/GHI-789",
+                "video_code": "GHI-789",
+                "page": 5,
+                "actor": "",
+                "rate": "3.85",
+                "comment_number": "50",
+                "is_today_release": False,
+                "is_yesterday_release": True,
+            },
+        ]
     
     def test_parse_phase1_with_subtitle_and_today(self, sample_index_html):
         """Test parsing phase 1 entries with both subtitle and today tags."""

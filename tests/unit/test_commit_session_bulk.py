@@ -102,7 +102,7 @@ def _capture_live_state(hrefs: List[str]) -> Dict[str, dict]:
     timestamps, SessionId) so the parity assertion only compares
     semantically-meaningful state.
     """
-    from apps.api.parsers.common import movie_href_lookup_values
+    from javdb.parsing.common import movie_href_lookup_values
     base = "https://javdb.com"
     out: Dict[str, dict] = {}
     with get_db() as conn:
