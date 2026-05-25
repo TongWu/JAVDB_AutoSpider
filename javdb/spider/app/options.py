@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from threading import Event
 from typing import Literal
+
+from javdb.spider.runtime.config import PAGE_END, PAGE_START
 
 
 @dataclass(frozen=True)
@@ -30,15 +33,18 @@ class SpiderRunOptions:
     sequential: bool = False
     no_rclone_filter: bool = False
     disable_all_filters: bool = False
+    cancel_event: Event | None = None
 
 
 def spider_options_from_args(args) -> SpiderRunOptions:
     url = getattr(args, "url", None)
+    start_page = getattr(args, "start_page", None)
+    end_page = getattr(args, "end_page", None)
     return SpiderRunOptions(
         mode="adhoc" if url else "daily",
         url=url,
-        start_page=getattr(args, "start_page", None),
-        end_page=getattr(args, "end_page", None),
+        start_page=start_page if start_page is not None else PAGE_START,
+        end_page=end_page if end_page is not None else PAGE_END,
         parse_all=bool(getattr(args, "all", False)),
         ignore_history=bool(getattr(args, "ignore_history", False)),
         phase=str(getattr(args, "phase", None) or "all"),

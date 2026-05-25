@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status**: Completed and verified 2026-05-25
+**Status**: Completed, review-hardened, and verified 2026-05-25
 
 **Goal:** Replace the Pipeline Spider subprocess with an in-process Spider runner after ADR-012 Phase 1 bake passes, while preserving real-time logs and all CLI compatibility output.
 
@@ -531,3 +531,10 @@ Verified on 2026-05-25 with:
 - `pytest tests/unit/test_spider_run_options.py tests/unit/test_spider_run_result.py tests/unit/test_in_process_spider_step_runner.py tests/unit/test_pipeline_service.py -v`
 - `pytest tests/unit/test_pipeline_step_runner.py -v`
 - `pytest tests/smoke/test_spider.py tests/smoke/test_spider_app_main.py -v`
+
+Post-review hardening verified on 2026-05-25 with:
+
+- `pytest tests/unit/test_spider_run_options.py tests/unit/test_spider_run_result.py tests/unit/test_in_process_spider_step_runner.py tests/unit/test_pipeline_service.py tests/smoke/test_spider.py tests/smoke/test_spider_app_main.py tests/smoke/test_spider_detail_runner.py tests/unit/test_detail_runner_work_distributor.py tests/unit/test_detail_runner_movie_claim.py tests/unit/test_index_parallel.py tests/smoke/test_spider_backends.py tests/unit/test_adr005_pr3a_repo_callers.py::test_run_service_main_saves_spider_stats_through_stats_repo tests/unit/test_pipeline_step_runner.py -v`
+- `python -m flake8 javdb/pipeline/step_runner.py javdb/spider/app/options.py javdb/spider/app/run_service.py javdb/spider/detail/runner.py javdb/spider/fetch/index.py javdb/spider/fetch/index_parallel.py tests/smoke/test_spider_app_main.py tests/unit/test_in_process_spider_step_runner.py tests/unit/test_pipeline_service.py tests/unit/test_spider_run_options.py tests/unit/test_spider_run_result.py --count --select=E9,F63,F7,F82 --show-source --statistics`
+- `python -m compileall -q` over the changed Python files
+- `git diff --check`

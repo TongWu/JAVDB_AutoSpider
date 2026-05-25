@@ -146,7 +146,7 @@ def test_spider_main_writes_result_json_on_success(tmp_path, monkeypatch):
 
 
 def test_spider_main_result_uses_actual_mode_from_url(tmp_path, monkeypatch):
-    import javdb.spider.app.run_service as run_service
+    from javdb.spider.app import run_service
 
     result_path = tmp_path / "spider-result.json"
     monkeypatch.setattr(

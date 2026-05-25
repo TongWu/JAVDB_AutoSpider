@@ -9,6 +9,7 @@ import sys
 import threading
 import time
 from datetime import datetime, timezone
+from dataclasses import replace
 from typing import Callable, NamedTuple, Protocol, Sequence
 
 from javdb.pipeline.models import StepPolicy, StepResult
@@ -16,10 +17,19 @@ from javdb.spider.app.options import SpiderRunOptions
 
 _PROCESS_STOP_GRACE_SEC = 1.0
 _READER_JOIN_GRACE_SEC = 1.0
+_IN_PROCESS_CANCEL_GRACE_SEC = 0.2
 
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _with_cancel_event(options: SpiderRunOptions, cancel_event: threading.Event) -> SpiderRunOptions:
+    try:
+        return replace(options, cancel_event=cancel_event)
+    except TypeError:
+        setattr(options, "cancel_event", cancel_event)
+        return options
 
 
 class LogSink(Protocol):
@@ -227,6 +237,8 @@ class InProcessSpiderStepRunner:
         started_at = _utc_now_iso()
         command_list = list(command_label)
         result_path = getattr(options, "result_json", None)
+        cancel_event = threading.Event()
+        options = _with_cancel_event(options, cancel_event)
 
         outcome_queue: queue.Queue[_SpiderThreadOutcome] = queue.Queue(maxsize=1)
 
@@ -240,6 +252,8 @@ class InProcessSpiderStepRunner:
         runner_thread.start()
         runner_thread.join(timeout=policy.timeout_sec)
         if runner_thread.is_alive():
+            cancel_event.set()
+            runner_thread.join(timeout=_IN_PROCESS_CANCEL_GRACE_SEC)
             return (
                 StepResult(
                     name=policy.name,

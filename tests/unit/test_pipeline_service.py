@@ -14,6 +14,7 @@ from javdb.spider.app.result import (
     SpiderRunStats,
     write_spider_result_atomic,
 )
+from javdb.spider.runtime.config import PAGE_END, PAGE_START
 
 
 class FakeStepRunner:
@@ -220,8 +221,8 @@ def _assert_spider_options(
     options,
     *,
     url=None,
-    start_page=None,
-    end_page=None,
+    start_page=PAGE_START,
+    end_page=PAGE_END,
     parse_all=False,
     ignore_history=False,
     phase="all",
