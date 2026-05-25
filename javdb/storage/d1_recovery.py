@@ -43,6 +43,18 @@ def _parse_recovery_allowed(raw: Any) -> bool:
     raise ValueError("recovery_allowed must be a boolean")
 
 
+def _parse_bool(raw: Any, *, field_name: str) -> bool:
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, str):
+        normalized = raw.strip().lower()
+        if normalized == "true":
+            return True
+        if normalized == "false":
+            return False
+    raise ValueError(f"{field_name} must be a boolean")
+
+
 @dataclass(frozen=True)
 class RecoveryPolicy:
     """Policy metadata attached to every recovery outbox event."""
@@ -53,6 +65,7 @@ class RecoveryPolicy:
     ordering_key: str
     recovery_allowed: bool
     max_attempts: int
+    batching_allowed: bool = False
 
 
 @dataclass(frozen=True)
@@ -67,6 +80,7 @@ class RecoveryEvent:
     max_attempts: int
     state: str
     attempt: int = 0
+    batching_allowed: bool = False
     sql: Optional[str] = None
     params: Optional[List[Any]] = None
     error: Optional[str] = None
@@ -92,6 +106,7 @@ class RecoveryEvent:
             ordering_key=policy.ordering_key,
             recovery_allowed=policy.recovery_allowed,
             max_attempts=policy.max_attempts,
+            batching_allowed=policy.batching_allowed,
             state=state,
             attempt=int(attempt),
             sql=sql,
@@ -164,6 +179,7 @@ class RecoveryEvent:
             "ordering_key": self.ordering_key,
             "recovery_allowed": bool(self.recovery_allowed),
             "max_attempts": int(self.max_attempts),
+            "batching_allowed": bool(self.batching_allowed),
             "state": self.state,
             "attempt": int(self.attempt),
         }
@@ -190,6 +206,10 @@ class RecoveryEvent:
             ordering_key=str(raw["ordering_key"]),
             recovery_allowed=_parse_recovery_allowed(raw["recovery_allowed"]),
             max_attempts=int(raw["max_attempts"]),
+            batching_allowed=_parse_bool(
+                raw.get("batching_allowed", False),
+                field_name="batching_allowed",
+            ),
             state=state,
             attempt=int(raw.get("attempt", 0)),
             sql=str(raw["sql"]) if raw.get("sql") is not None else None,

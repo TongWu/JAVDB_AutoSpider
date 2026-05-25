@@ -970,6 +970,11 @@ class DualConnection:
             )
         self._flush_drift_record(committed=False)
 
+    def flush(self, ordering_key: Optional[str] = None):
+        flush = getattr(self._d1, "flush", None)
+        if callable(flush):
+            return flush(ordering_key=ordering_key)
+
     def close(self):
         try:
             self._sqlite.close()

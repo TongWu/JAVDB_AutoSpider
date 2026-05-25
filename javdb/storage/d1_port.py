@@ -54,6 +54,21 @@ def d1_summary_path(reports_dir: str | None = None) -> Path:
     return Path(root) / "D1" / "d1_port_summary.json"
 
 
+def d1_batching_enabled() -> bool:
+    raw = os.environ.get("D1_BATCHING_ENABLED", "")
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
 def _numeric_summary_value(value: Any) -> int:
     if isinstance(value, bool):
         return int(value)
@@ -128,6 +143,8 @@ class D1AccessPort:
         self._sleep = sleep
         self._jitter = jitter
         self._schema_cache: dict[tuple[str, tuple[Any, ...]], list[D1Cursor]] = {}
+        self._batch_queue: dict[str, list[tuple[str, tuple[Any, ...], object]]] = {}
+        self._batch_queue_since: dict[str, float] = {}
         self._summary = {key: 0 for key in _SUMMARY_COUNTER_KEYS}
         self._last_written_summary = {key: 0 for key in _SUMMARY_COUNTER_KEYS}
 
@@ -139,6 +156,10 @@ class D1AccessPort:
         policy=None,
     ) -> list[D1Cursor]:
         params_tuple = tuple(params)
+        if self._should_queue(policy):
+            self._queue_statement(sql, params_tuple, policy)
+            return [D1Cursor({"meta": {"changes": 0}, "results": []})]
+
         key = self._schema_cache_key(sql, params_tuple)
         if key is not None and key in self._schema_cache:
             self._summary["schema_cache_hits"] += 1
@@ -200,7 +221,15 @@ class D1AccessPort:
         return cursors
 
     def flush(self, *, ordering_key: str | None = None) -> None:
-        return None
+        keys = [ordering_key] if ordering_key is not None else list(self._batch_queue)
+        for key in keys:
+            queued = list(self._batch_queue.get(key) or [])
+            if not queued:
+                continue
+            statements = [(sql, params) for sql, params, _policy in queued]
+            self.batch_execute(statements)
+            self._batch_queue.pop(key, None)
+            self._batch_queue_since.pop(key, None)
 
     def drain_recovery(
         self,
@@ -237,9 +266,12 @@ class D1AccessPort:
 
     def close(self) -> None:
         try:
-            self._session.close()
-        except Exception:
-            logger.warning("Failed to close D1 port session", exc_info=True)
+            self.flush()
+        finally:
+            try:
+                self._session.close()
+            except Exception:
+                logger.warning("Failed to close D1 port session", exc_info=True)
 
     def _post_with_retry(self, body: dict[str, Any]) -> list[D1Cursor]:
         last_exc: D1TransientError | None = None
@@ -394,6 +426,44 @@ class D1AccessPort:
         self._summary["batches"] += 1
         self._summary["batch_statements"] += statement_count
         self._summary["sql_statements"] += statement_count
+
+    def _should_queue(self, policy) -> bool:
+        return bool(
+            policy is not None
+            and getattr(policy, "batching_allowed", False)
+            and getattr(policy, "ordering_key", None)
+            and d1_batching_enabled()
+        )
+
+    def _queue_statement(
+        self,
+        sql: str,
+        params: tuple[Any, ...],
+        policy: object,
+    ) -> None:
+        ordering_key = str(getattr(policy, "ordering_key"))
+        self._flush_on_enqueue_if_interval_elapsed(ordering_key)
+
+        queue = self._batch_queue.setdefault(ordering_key, [])
+        if not queue:
+            self._batch_queue_since[ordering_key] = time.monotonic()
+        queue.append((sql, params, policy))
+        if len(queue) >= self._config.batch_limit:
+            self.flush(ordering_key=ordering_key)
+
+    def _flush_on_enqueue_if_interval_elapsed(self, ordering_key: str) -> None:
+        queue = self._batch_queue.get(ordering_key)
+        if not queue:
+            return
+        started_at = self._batch_queue_since.get(ordering_key)
+        if started_at is None:
+            return
+        interval_ms = _env_int("D1_FLUSH_INTERVAL_MS", 250)
+        if interval_ms <= 0:
+            return
+        elapsed_ms = (time.monotonic() - started_at) * 1000
+        if elapsed_ms >= interval_ms:
+            self.flush(ordering_key=ordering_key)
 
     @staticmethod
     def _is_schema_mutation(sql: str) -> bool:
