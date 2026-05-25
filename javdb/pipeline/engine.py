@@ -13,7 +13,16 @@ from javdb.pipeline.adapters import (
     create_redownload_row,
     should_include_torrent_in_csv,
 )
-from javdb.pipeline.models import AlignmentUpgradePlan, ParsedMovie, SpiderIngestionPlan
+from javdb.pipeline.models import (
+    AlignmentUpgradePlan,
+    ParsedMovie,
+    PipelineRunResult,
+    PipelineRunStatus,
+    PipelineStepStatus,
+    SpiderIngestionPlan,
+    StepPolicy,
+    StepResult,
+)
 from javdb.pipeline.planner import build_alignment_upgrade_plan, build_spider_ingestion_plan
 from javdb.pipeline.policies import (
     ALIGNMENT_CENSORED_FAMILY,
@@ -43,7 +52,12 @@ __all__ = [
     'ALIGNMENT_UNCENSORED_FAMILY',
     'AlignmentUpgradePlan',
     'ParsedMovie',
+    'PipelineRunResult',
+    'PipelineRunStatus',
+    'PipelineStepStatus',
     'SpiderIngestionPlan',
+    'StepPolicy',
+    'StepResult',
     'alignment_best_inventory_rank',
     'alignment_best_inventory_rank_for_family',
     'alignment_best_parsed_category',

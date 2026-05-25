@@ -17,8 +17,11 @@ import os
 import sys
 import argparse
 import time
+import tempfile
 from datetime import datetime
+from dataclasses import asdict
 from pathlib import Path
+from types import SimpleNamespace
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 os.chdir(_REPO_ROOT)
@@ -27,6 +30,13 @@ if str(_REPO_ROOT) not in sys.path:
 
 # Import unified configuration
 from javdb.infra.config import cfg
+from javdb.pipeline.models import PipelineRunResult, StepPolicy, StepResult
+from javdb.pipeline.result_io import (
+    read_spider_result,
+    utc_now_iso,
+    write_pipeline_result_atomic,
+)
+from javdb.pipeline.step_runner import SubprocessStepRunner
 from javdb.proxy.policy import add_proxy_arguments, resolve_proxy_override
 
 PIPELINE_LOG_FILE = cfg('PIPELINE_LOG_FILE', 'logs/pipeline.log')
@@ -143,6 +153,12 @@ def parse_arguments():
         default=None,
         help='Size increase threshold for re-download (spider default if omitted)',
     )
+    parser.add_argument(
+        '--result-json',
+        type=str,
+        default=None,
+        help='Write a versioned PipelineRunResult JSON sidecar to this path.',
+    )
     return parser.parse_args()
 
 
@@ -247,6 +263,65 @@ def extract_session_id_from_output(output):
     return None
 
 
+def _step_failed(step_result):
+    return step_result.status in ("failed", "timed_out")
+
+
+def _raise_for_required_step(step_result):
+    if step_result.required and _step_failed(step_result):
+        reason = step_result.failure_reason or step_result.status
+        raise RuntimeError(f"Required step {step_result.name} failed: {reason}")
+
+
+def _failed_step_from_exception(policy, command, error, *, result_path=None):
+    now = utc_now_iso()
+    return StepResult(
+        name=policy.name,
+        status="failed",
+        required=policy.required,
+        run_on_failure=policy.run_on_failure,
+        command=list(command),
+        started_at=now,
+        finished_at=now,
+        exit_code=None,
+        failure_reason=str(error),
+        result_path=result_path,
+    )
+
+
+def _write_pipeline_result_best_effort(
+    *,
+    args,
+    steps,
+    spider_result,
+    started_at,
+    status,
+    exit_code,
+    failure_reason,
+):
+    result_json = getattr(args, 'result_json', None)
+    if not result_json:
+        return
+
+    try:
+        write_pipeline_result_atomic(
+            result_json,
+            PipelineRunResult(
+                status=status,
+                mode="adhoc" if args.url else "daily",
+                url=args.url,
+                started_at=started_at,
+                finished_at=utc_now_iso(),
+                exit_code=exit_code,
+                failure_reason=failure_reason,
+                spider_result=asdict(spider_result) if spider_result is not None else None,
+                steps=list(steps),
+            ),
+        )
+    except Exception as result_error:
+        logger.warning("Failed to write pipeline result JSON: %s", result_error)
+
+
 def main():
     spider_cmd = ['python3', '-u', '-m', 'apps.cli.spider']
     uploader_cmd = ['python3', '-u', '-m', 'apps.cli.qb.uploader']
@@ -255,9 +330,22 @@ def main():
     email_cmd = ['python3', '-u', '-m', 'apps.cli.notify.email']
 
     args = parse_arguments()
+    runner = SubprocessStepRunner()
+    steps = []
+    spider_result = None
+    pipeline_started_at = utc_now_iso()
     proxy_override = resolve_proxy_override(args.use_proxy, args.no_proxy)
     if args.always_bypass_time is not None and args.always_bypass_time < 0:
         logger.error("--always-bypass-time must be >= 0")
+        _write_pipeline_result_best_effort(
+            args=args,
+            steps=steps,
+            spider_result=spider_result,
+            started_at=pipeline_started_at,
+            status="failed",
+            exit_code=2,
+            failure_reason="--always-bypass-time must be >= 0",
+        )
         sys.exit(2)
 
     is_adhoc_mode = args.url is not None
@@ -346,6 +434,7 @@ def main():
         pikpak_args.append('--no-proxy')
 
     pipeline_success = False
+    failure_reason = None
     
     try:
         # Check Rust core status at startup
@@ -362,21 +451,33 @@ def main():
 
         # 1. Run Spider
         logger.info("Step 1: Running JavDB Spider...")
-        spider_output = run_command(spider_cmd, spider_args)
+        with tempfile.TemporaryDirectory(prefix="pipeline-result-") as spider_result_dir:
+            spider_result_path = Path(spider_result_dir) / "spider-result.json"
+            spider_args.extend(["--result-json", str(spider_result_path)])
+            spider_step = runner.run(
+                StepPolicy(name="spider", required=True, timeout_sec=3600),
+                spider_cmd + spider_args,
+                result_path=str(spider_result_path),
+            )
+            steps.append(spider_step)
+            try:
+                spider_result = read_spider_result(spider_result_path)
+            except Exception as spider_result_error:
+                if spider_step.status == "success":
+                    raise
+                logger.warning("Could not read partial spider result JSON: %s", spider_result_error)
+            _raise_for_required_step(spider_step)
         logger.info("✓ JavDB Spider completed successfully")
         
-        # Extract CSV path from spider output if not pre-determined
-        if csv_path is None:
-            csv_path = extract_csv_path_from_output(spider_output)
-            if csv_path:
-                logger.info(f"Captured CSV path from spider: {csv_path}")
-            else:
-                logger.warning("Could not extract CSV path from spider output, uploader will use auto-discovery")
+        csv_path = spider_result.csv_path or csv_path
+        if csv_path:
+            logger.info(f"Captured CSV path from spider result: {csv_path}")
+        else:
+            logger.warning("Spider result did not include a CSV path, uploader will use auto-discovery")
 
-        # Extract session_id for stats persistence
-        session_id = extract_session_id_from_output(spider_output)
+        session_id = spider_result.session_id
         if session_id:
-            logger.info(f"Captured session ID from spider: {session_id}")
+            logger.info(f"Captured session ID from spider result: {session_id}")
             uploader_args.extend(['--session-id', str(session_id)])
             pikpak_args.extend(['--session-id', str(session_id)])
 
@@ -386,22 +487,45 @@ def main():
 
         # 2. Run Uploader
         logger.info("Step 2: Running qBittorrent Uploader...")
-        run_command(uploader_cmd, uploader_args)
+        uploader_step = runner.run(
+            StepPolicy(name="qb_uploader", required=True, timeout_sec=3600),
+            uploader_cmd + uploader_args,
+        )
+        steps.append(uploader_step)
+        _raise_for_required_step(uploader_step)
         logger.info("✓ qBittorrent Uploader completed successfully")
 
         # 3. Run PikPak Bridge
         logger.info("Step 3: Running PikPak Bridge to clean up old torrents...")
-        run_command(pikpak_cmd, pikpak_args)
+        pikpak_step = runner.run(
+            StepPolicy(name="pikpak_bridge", required=True, timeout_sec=3600),
+            pikpak_cmd + pikpak_args,
+        )
+        steps.append(pikpak_step)
+        _raise_for_required_step(pikpak_step)
         logger.info("✓ PikPak Bridge completed successfully")
 
         # 3.5 Run Rclone Dedup Executor (if enabled)
         if enable_dedup:
             logger.info("Step 3.5: Running Rclone Dedup Executor...")
+            dedup_policy = StepPolicy(name="rclone_dedup", required=False, timeout_sec=3600)
+            dedup_command = rclone_cmd + ['--execute']
             try:
-                run_command(rclone_cmd, ['--execute'])
+                dedup_step = runner.run(dedup_policy, dedup_command)
+            except Exception as dedup_error:
+                dedup_step = _failed_step_from_exception(
+                    dedup_policy,
+                    dedup_command,
+                    dedup_error,
+                )
+            steps.append(dedup_step)
+            if _step_failed(dedup_step):
+                logger.warning(
+                    "Rclone Dedup Executor failed (non-fatal): %s",
+                    dedup_step.failure_reason or dedup_step.status,
+                )
+            else:
                 logger.info("✓ Rclone Dedup Executor completed successfully")
-            except Exception as dedup_err:
-                logger.warning(f"Rclone Dedup Executor failed (non-fatal): {dedup_err}")
 
         # 4. Run Email Notification
         # Build email args after spider runs (csv_path is now known)
@@ -412,7 +536,12 @@ def main():
             email_args.append('--dry-run')
         
         logger.info("Step 4: Sending email notification...")
-        run_command(email_cmd, email_args)
+        email_step = runner.run(
+            StepPolicy(name="email_notification", required=True, timeout_sec=3600),
+            email_cmd + email_args,
+        )
+        steps.append(email_step)
+        _raise_for_required_step(email_step)
         logger.info("✓ Email notification sent successfully")
 
         pipeline_success = True
@@ -421,6 +550,7 @@ def main():
         logger.info("=" * 60)
 
     except Exception as e:
+        failure_reason = str(e)
         logger.error("=" * 60)
         logger.error("PIPELINE EXECUTION ERROR")
         logger.error("=" * 60)
@@ -428,22 +558,68 @@ def main():
         pipeline_success = False
         
         # Still try to send email notification on failure
+        email_args = ['--from-pipeline']
+        if csv_path:
+            email_args.extend(['--csv-path', csv_path])
+        if args.dry_run:
+            email_args.append('--dry-run')
+        failure_email_command = email_cmd + email_args
+        failure_email_policy = SimpleNamespace(
+            name="email_notification_failure",
+            required=False,
+            run_on_failure=True,
+            timeout_sec=3600,
+        )
         try:
             logger.info("Attempting to send failure notification email...")
-            # Build email args for failure notification
-            email_args = ['--from-pipeline']
-            if csv_path:
-                email_args.extend(['--csv-path', csv_path])
-            if args.dry_run:
-                email_args.append('--dry-run')
-            run_command(email_cmd, email_args)
+            # Keep the fallback above available if policy construction fails.
+            failure_email_policy = StepPolicy(
+                name="email_notification_failure",
+                required=False,
+                run_on_failure=True,
+                timeout_sec=3600,
+            )
+            failure_email_step = runner.run(
+                failure_email_policy,
+                failure_email_command,
+            )
+            steps.append(failure_email_step)
+            if _step_failed(failure_email_step):
+                logger.error(
+                    "Failed to send failure notification: %s",
+                    failure_email_step.failure_reason or failure_email_step.status,
+                )
         except Exception as email_error:
+            failure_email_step = _failed_step_from_exception(
+                failure_email_policy,
+                failure_email_command,
+                email_error,
+            )
+            steps.append(failure_email_step)
             logger.error(f"Failed to send failure notification: {email_error}")
     
     # Exit with appropriate code
     if pipeline_success:
+        _write_pipeline_result_best_effort(
+            args=args,
+            steps=steps,
+            spider_result=spider_result,
+            started_at=pipeline_started_at,
+            status="success",
+            exit_code=0,
+            failure_reason=None,
+        )
         sys.exit(0)
     else:
+        _write_pipeline_result_best_effort(
+            args=args,
+            steps=steps,
+            spider_result=spider_result,
+            started_at=pipeline_started_at,
+            status="failed",
+            exit_code=1,
+            failure_reason=failure_reason,
+        )
         sys.exit(1)
 
 
