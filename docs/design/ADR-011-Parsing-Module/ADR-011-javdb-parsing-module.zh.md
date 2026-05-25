@@ -1,6 +1,6 @@
 # ADR-011：JavDB Parsing Module
 
-**状态**：已接受 —— 实现待启动
+**状态**：已接受 —— Phase 1 已完成（PR #85），Phase 2–3 待实施
 **日期**：2026-05-20
 **决策者**：Parsing module 架构评审
 **取代**：[ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.zh.md) D4 / PR-6 parser-helper relocation
