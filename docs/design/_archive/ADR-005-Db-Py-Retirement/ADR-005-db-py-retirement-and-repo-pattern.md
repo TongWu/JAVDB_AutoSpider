@@ -5,7 +5,7 @@
 **Deciders**: Architecture depth-pass round 2
 **Prerequisites**: [ADR-006](../ADR-006-Pending-Mode-Rollout/ADR-006-pending-mode-default-rollout.md) — Pending Mode default must first be rolled out to 100% and the auto-fallback redesigned before this ADR can execute its D10 gate
 **Successor**: [ADR-001](../ADR-001-Split-Db-Module/ADR-001-split-db-module.md) — delivers the Phase 3 that ADR-001 never finished, and corrects its over-fine "split by read/write" decision
-**Related**: [ADR-011](../../ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) supersedes D4 / PR-6 parser-helper relocation
+**Related**: [ADR-011](../ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) supersedes D4 / PR-6 parser-helper relocation
 
 ## Outstanding Work
 
@@ -16,7 +16,7 @@ PR-1 (Repo classes) ✅ shipped: `HistoryRepo`, `OperationsRepo`, `StatsRepo`, `
 - **PR-4** ✅ shipped (2026-05-22): dropped Audit Mode tables and removed audit write / rollback branches.
 - **PR-5** ✅ shipped (2026-05-22): deleted `javdb/storage/db/db.py`; the ADR-001 modules remain as the canonical implementation modules, not shell facades.
 - **PR-6** ✅ shipped (2026-05-22): renamed 9 shell modules to `_db_*.py`; `__init__.py` re-exports 65 public symbols; 254 import statements migrated to package-level imports.
-- **Parser-helper relocation** remains outside ADR-005 and is tracked by [ADR-011](../../ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md). There is no remaining ADR-005 implementation work.
+- **Parser-helper relocation** remains outside ADR-005 and is tracked by [ADR-011](../ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md). There is no remaining ADR-005 implementation work.
 
 ## Amendments
 
@@ -53,7 +53,7 @@ PR-1 (Repo classes) ✅ shipped: `HistoryRepo`, `OperationsRepo`, `StatsRepo`, `
 
   D6's four-class plan becomes three new write-Repo classes + reuse of `SessionsRepo`. All other D-level decisions are unchanged.
 
-- **2026-05-20 amendment 3**: **Parser-helper relocation extracted to ADR-011.** D4 / PR-6 originally moved three helpers from `apps.api.parsers.common` into a lower module. That overlapped with a larger parsing-boundary correction. [ADR-011](../../ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) now owns the full JavDB Parsing Interface move to `javdb.parsing`, including those helpers under `javdb.parsing.common`. ADR-005 remains responsible for Storage/Repo retirement only. Any remaining ADR-005 implementation that needs these helpers should import from `javdb.parsing.common` once ADR-011 Phase 1 has landed.
+- **2026-05-20 amendment 3**: **Parser-helper relocation extracted to ADR-011.** D4 / PR-6 originally moved three helpers from `apps.api.parsers.common` into a lower module. That overlapped with a larger parsing-boundary correction. [ADR-011](../ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) now owns the full JavDB Parsing Interface move to `javdb.parsing`, including those helpers under `javdb.parsing.common`. ADR-005 remains responsible for Storage/Repo retirement only. Any remaining ADR-005 implementation that needs these helpers should import from `javdb.parsing.common` once ADR-011 Phase 1 has landed.
 
 - **2026-05-21 amendment 4**: **ADR-006 sign-off completed via operator-approved 7-day clean bake bypass.** The original plan required a 30-day bake until approximately 2026-06-15; the maintainer confirmed one clean week with no pending-mode issues and explicitly approved bypassing the remaining wait to continue. This removes the ADR-005 PR-2 start blocker. Risk handling is unchanged: PR-2 must not delete audit schema, audit code, or caller compatibility; ADR-005 PR-4 still requires the D10 trio to pass before audit-table deletion.
 
@@ -166,7 +166,7 @@ Write methods require a non-empty `session_id` at construction; read methods acc
 
 ### D4: Sink URL / parsing utilities
 
-Superseded by [ADR-011](../../ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md). The three functions in `apps.api.parsers.common` that `db.py` uses (`movie_href_lookup_values`, `javdb_absolute_url`, `absolutize_supporting_actors_json`) are now part of the full JavDB Parsing Interface migration. They move to `javdb.parsing.common`, not `packages/python/javdb_core/url_utils.py`.
+Superseded by [ADR-011](../ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md). The three functions in `apps.api.parsers.common` that `db.py` uses (`movie_href_lookup_values`, `javdb_absolute_url`, `absolutize_supporting_actors_json`) are now part of the full JavDB Parsing Interface migration. They move to `javdb.parsing.common`, not `packages/python/javdb_core/url_utils.py`.
 
 The layering invariant remains: Storage/Repo code must not import parser helpers from `apps.api`. After ADR-011 Phase 1, it imports from `javdb.parsing.common`.
 

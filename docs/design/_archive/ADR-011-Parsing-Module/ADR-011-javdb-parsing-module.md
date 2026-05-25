@@ -1,9 +1,9 @@
 # ADR-011: JavDB Parsing Module
 
-**Status**: Accepted — Phase 2 completed; Phase 3 pending
+**Status**: Completed — Phase 1, Phase 2, and Phase 3 delivered
 **Date**: 2026-05-20
 **Deciders**: Parsing module architecture review
-**Supersedes**: [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md) D4 / PR-6 parser-helper relocation
+**Supersedes**: [ADR-005](../ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md) D4 / PR-6 parser-helper relocation
 **Related Implementation Plans**: [IMP-ADR011-01](IMP-ADR011-01-parsing-phase1-core-module.md) (Phase 1 — core module), [IMP-ADR011-02](IMP-ADR011-02-parsing-phase2-caller-migration.md) (Phase 2 — caller migration), [IMP-ADR011-03](IMP-ADR011-03-parsing-phase3-delete-compat.md) (Phase 3 — compatibility deletion)
 
 ## Context
@@ -143,7 +143,7 @@ Implementation is split into three independently reviewable phases:
 | Phase 3 | [IMP-ADR011-03](IMP-ADR011-03-parsing-phase3-delete-compat.md) | Delete API parser/model re-export Adapters and the legacy Spider parser Adapter. |
 
 Phase 2 caller migration is delivered as of 2026-05-25. Phase 3 compatibility
-deletion remains required before this ADR is fully delivered.
+deletion is delivered as of 2026-05-26.
 
 ## Module Layout
 
@@ -219,7 +219,7 @@ lands, ADR-005 Storage work should import parsing helpers from
 
 ## References
 
-- [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md)
+- [ADR-005](../ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md)
 - [IMP-ADR011-01](IMP-ADR011-01-parsing-phase1-core-module.md)
 - [IMP-ADR011-02](IMP-ADR011-02-parsing-phase2-caller-migration.md)
 - [IMP-ADR011-03](IMP-ADR011-03-parsing-phase3-delete-compat.md)
