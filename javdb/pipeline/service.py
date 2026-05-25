@@ -11,15 +11,13 @@ Each script handles its own git commits. When run through this pipeline,
 scripts use GIT_USERNAME/GIT_PASSWORD from config.py for commits.
 """
 
-import subprocess
+import argparse
 import logging
 import os
-import sys
-import argparse
-import time
 import tempfile
+import sys
 from datetime import datetime
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -36,8 +34,10 @@ from javdb.pipeline.result_io import (
     utc_now_iso,
     write_pipeline_result_atomic,
 )
-from javdb.pipeline.step_runner import SubprocessStepRunner
+from javdb.pipeline.step_runner import InProcessSpiderStepRunner, SubprocessStepRunner
 from javdb.proxy.policy import add_proxy_arguments, resolve_proxy_override
+from javdb.spider.app.options import spider_options_from_args
+from javdb.spider.app.run_service import run_spider
 
 PIPELINE_LOG_FILE = cfg('PIPELINE_LOG_FILE', 'logs/pipeline.log')
 LOG_LEVEL = cfg('LOG_LEVEL', 'INFO')
@@ -162,107 +162,6 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def run_command(command, args=None, *, timeout=3600):
-    """
-    Run a canonical CLI command with arguments and stream output.
-
-    Args:
-        command: Base command to run
-        args: List of arguments to pass to the script
-        timeout: Maximum wall-clock seconds before the child is killed (default 3600).
-
-    Returns:
-        str: Captured output from the script
-
-    Raises:
-        RuntimeError: If the command fails with non-zero exit code or times out
-    """
-    cmd = list(command)
-    if args:
-        cmd += args
-    logger.info(f'Running: {" ".join(cmd)}')
-
-    # Get the file handler from the root logger to write subprocess output directly
-    file_handler = None
-    for handler in logging.getLogger().handlers:
-        if isinstance(handler, logging.FileHandler):
-            file_handler = handler
-            break
-
-    deadline = time.monotonic() + timeout
-
-    # Run with real-time output
-    process = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,
-        universal_newlines=True
-    )
-
-    # Capture output and write to both console and log file
-    output_lines = []
-    timed_out = False
-    if process.stdout:
-        for line in iter(process.stdout.readline, ''):
-            if line:
-                sys.stdout.write(line)
-                sys.stdout.flush()
-                output_lines.append(line)
-                # Write directly to log file (preserving original format from subprocess)
-                if file_handler:
-                    file_handler.stream.write(line)
-                    file_handler.stream.flush()
-            if time.monotonic() > deadline:
-                timed_out = True
-                break
-
-        process.stdout.close()
-
-    if timed_out:
-        process.kill()
-        process.wait()
-        raise RuntimeError(
-            f'Command {" ".join(cmd)} timed out after {timeout}s'
-        )
-
-    return_code = process.wait()
-
-    if return_code != 0:
-        logger.error(f'Command {" ".join(command)} failed with return code {return_code}')
-        raise RuntimeError(f'Command {" ".join(command)} failed with return code {return_code}')
-
-    return ''.join(output_lines)
-
-
-def extract_csv_path_from_output(output):
-    """
-    Extract CSV full path from spider output.
-    
-    Looks for a line in format: SPIDER_OUTPUT_CSV=/path/to/file.csv
-    
-    Args:
-        output: The captured stdout from spider script
-    
-    Returns:
-        str or None: The extracted CSV full path, or None if not found
-    """
-    for line in output.splitlines():
-        if line.startswith('SPIDER_OUTPUT_CSV='):
-            return line.split('=', 1)[1].strip()
-    return None
-
-
-def extract_session_id_from_output(output):
-    """Extract session_id from spider output (SPIDER_SESSION_ID=<id>)."""
-    for line in output.splitlines():
-        if line.startswith('SPIDER_SESSION_ID='):
-            val = line.split('=', 1)[1].strip()
-            return val if val else None
-    return None
-
-
 def _step_failed(step_result):
     return step_result.status in ("failed", "timed_out")
 
@@ -323,7 +222,6 @@ def _write_pipeline_result_best_effort(
 
 
 def main():
-    spider_cmd = ['python3', '-u', '-m', 'apps.cli.spider']
     uploader_cmd = ['python3', '-u', '-m', 'apps.cli.qb.uploader']
     pikpak_cmd = ['python3', '-u', '-m', 'apps.cli.pikpak.bridge']
     rclone_cmd = ['python3', '-u', '-m', 'apps.cli.rclone.manager']
@@ -375,41 +273,7 @@ def main():
     else:
         logger.info("Ad hoc mode: CSV filename will be determined by spider")
 
-    # Build arguments for spider
-    spider_args = ['--from-pipeline']  # Always pass --from-pipeline
-    if args.url:
-        spider_args.extend(['--url', args.url])
-    if args.start_page is not None:
-        spider_args.extend(['--start-page', str(args.start_page)])
-    if args.end_page is not None:
-        spider_args.extend(['--end-page', str(args.end_page)])
-    if args.all:
-        spider_args.append('--all')
-    if args.ignore_history:
-        spider_args.append('--ignore-history')
-    if args.phase:
-        spider_args.extend(['--phase', args.phase])
-    if spider_output_file:
-        spider_args.extend(['--output-file', spider_output_file])
-    if args.dry_run:
-        spider_args.append('--dry-run')
-    if args.ignore_release_date:
-        spider_args.append('--ignore-release-date')
-    if proxy_override is True:
-        spider_args.append('--use-proxy')
-    elif proxy_override is False:
-        spider_args.append('--no-proxy')
-    if args.always_bypass_time is not None:
-        spider_args.append('--always-bypass-time')
-        if args.always_bypass_time > 0:
-            spider_args.append(str(args.always_bypass_time))
     enable_dedup = args.enable_dedup
-    if enable_dedup:
-        spider_args.append('--enable-dedup')
-    if not getattr(args, 'no_redownload', False):
-        spider_args.append('--enable-redownload')
-        if args.redownload_threshold is not None:
-            spider_args.extend(['--redownload-threshold', str(args.redownload_threshold)])
     # Build base arguments for uploader (csv filename will be added after spider runs)
     uploader_args = ['--from-pipeline']  # Always pass --from-pipeline
     if is_adhoc_mode:
@@ -453,19 +317,32 @@ def main():
         logger.info("Step 1: Running JavDB Spider...")
         with tempfile.TemporaryDirectory(prefix="pipeline-result-") as spider_result_dir:
             spider_result_path = Path(spider_result_dir) / "spider-result.json"
-            spider_args.extend(["--result-json", str(spider_result_path)])
-            spider_step = runner.run(
+            spider_options = replace(
+                spider_options_from_args(args),
+                output_file=spider_output_file,
+                use_proxy=proxy_override is True,
+                no_proxy=proxy_override is False,
+                enable_redownload=not args.no_redownload,
+                result_json=str(spider_result_path),
+                use_history=False,
+                from_pipeline=True,
+            )
+            spider_step, spider_result = InProcessSpiderStepRunner(
+                run_spider=run_spider,
+            ).run(
                 StepPolicy(name="spider", required=True, timeout_sec=3600),
-                spider_cmd + spider_args,
-                result_path=str(spider_result_path),
+                options=spider_options,
+                command_label=[
+                    "in-process",
+                    "javdb.spider.app.run_service.run_spider",
+                ],
             )
             steps.append(spider_step)
-            try:
-                spider_result = read_spider_result(spider_result_path)
-            except Exception as spider_result_error:
-                if spider_step.status == "success":
-                    raise
-                logger.warning("Could not read partial spider result JSON: %s", spider_result_error)
+            if _step_failed(spider_step) and spider_result is None and spider_result_path.exists():
+                try:
+                    spider_result = read_spider_result(spider_result_path)
+                except Exception as spider_result_error:
+                    logger.warning("Could not read partial spider result JSON: %s", spider_result_error)
             _raise_for_required_step(spider_step)
         logger.info("✓ JavDB Spider completed successfully")
         

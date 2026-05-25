@@ -4,6 +4,8 @@ import json
 
 import pytest
 
+from javdb.spider.app.options import SpiderRunOptions
+from javdb.spider.app import run_service
 from javdb.spider.app.result import (
     SPIDER_RESULT_KIND,
     SPIDER_RESULT_SCHEMA_VERSION,
@@ -156,6 +158,104 @@ def test_spider_partial_failure_result_preserves_unknowns_as_none(tmp_path):
     assert loaded.stats is None
     assert loaded.exit_code == 2
     assert loaded.failure_reason == "proxy ban detected"
+
+
+def test_run_spider_returns_result_and_writes_sidecar(tmp_path, monkeypatch):
+    expected = _result(
+        csv_path="reports/DailyReport/x.csv",
+        session_id="s1",
+        stats=SpiderRunStats(
+            pages="1-1",
+            found=1,
+            parsed=1,
+            skipped=0,
+            failed=0,
+            no_new=0,
+        ),
+        started_at="2026-05-20T01:00:00Z",
+        finished_at="2026-05-20T01:01:00Z",
+    )
+    options = SpiderRunOptions(
+        mode="daily",
+        url=None,
+        start_page=1,
+        end_page=1,
+        parse_all=False,
+        ignore_history=False,
+        phase="all",
+        output_file="Javdb_Test.csv",
+        dry_run=True,
+        ignore_release_date=False,
+        use_proxy=False,
+        no_proxy=False,
+        always_bypass_time=None,
+        enable_dedup=False,
+        enable_redownload=False,
+        redownload_threshold=None,
+        result_json=str(tmp_path / "spider-result.json"),
+    )
+    monkeypatch.setattr(run_service, "_run_spider_impl", lambda received: expected)
+
+    result = run_service.run_spider(options)
+
+    assert result is expected
+    loaded = read_spider_result(options.result_json)
+    assert loaded.session_id == "s1"
+    assert loaded.csv_path == "reports/DailyReport/x.csv"
+
+
+def test_run_spider_clears_db_context(monkeypatch):
+    import javdb.storage.db as db_module
+
+    expected = _result(
+        csv_path="reports/DailyReport/x.csv",
+        session_id="s1",
+        stats=SpiderRunStats(
+            pages="1-1",
+            found=1,
+            parsed=1,
+            skipped=0,
+            failed=0,
+            no_new=0,
+        ),
+    )
+    options = SpiderRunOptions(
+        mode="daily",
+        url=None,
+        start_page=1,
+        end_page=1,
+        parse_all=False,
+        ignore_history=False,
+        use_history=False,
+        phase="all",
+        output_file="Javdb_Test.csv",
+        dry_run=True,
+        ignore_release_date=False,
+        use_proxy=False,
+        no_proxy=False,
+        always_bypass_time=None,
+        from_pipeline=False,
+        max_movies_phase1=None,
+        max_movies_phase2=None,
+        sequential=False,
+        no_rclone_filter=False,
+        disable_all_filters=False,
+        enable_dedup=False,
+        enable_redownload=False,
+        redownload_threshold=None,
+        result_json=None,
+    )
+    monkeypatch.setattr(run_service, "_run_spider_impl", lambda received: expected)
+    cleared = []
+
+    monkeypatch.setattr(db_module, "set_active_write_mode", lambda value: cleared.append(value))
+    monkeypatch.setattr(db_module, "set_active_session_id", lambda value: None)
+    monkeypatch.setattr(db_module, "set_active_run_identity", lambda run_id, run_attempt: None)
+
+    result = run_service.run_spider(options)
+
+    assert result is expected
+    assert cleared == [None]
 
 
 def test_spider_result_can_represent_failure_without_stats(tmp_path):
