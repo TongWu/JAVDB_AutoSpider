@@ -1,5 +1,5 @@
 """
-Tests for api.models data classes.
+Tests for javdb.parsing.models data classes.
 """
 import os
 import sys
@@ -9,8 +9,6 @@ sys.path.insert(0, project_root)
 
 from dataclasses import asdict
 
-import apps.api.models as api_models
-import javdb.parsing.models as parsing_models
 from javdb.parsing.models import (
     ActorCredit,
     MovieLink,
@@ -38,23 +36,6 @@ class TestMovieLink:
         link = MovieLink(name='Test', href='/test')
         d = link.to_dict()
         assert d == {'name': 'Test', 'href': '/test'}
-
-
-class TestApiModelCompatibility:
-    def test_api_models_re_export_parser_models_with_identity(self):
-        assert api_models.ActorCredit is parsing_models.ActorCredit
-        assert api_models.MovieLink is parsing_models.MovieLink
-        assert api_models.MagnetInfo is parsing_models.MagnetInfo
-        assert api_models.MovieIndexEntry is parsing_models.MovieIndexEntry
-        assert api_models.MovieDetail is parsing_models.MovieDetail
-        assert api_models.IndexPageResult is parsing_models.IndexPageResult
-        assert api_models.CategoryPageResult is parsing_models.CategoryPageResult
-        assert api_models.TopPageResult is parsing_models.TopPageResult
-        assert api_models.TagOption is parsing_models.TagOption
-        assert api_models.TagCategory is parsing_models.TagCategory
-        assert api_models.TagPageResult is parsing_models.TagPageResult
-        assert api_models.NO_ACTOR_LISTING_ACTOR_NAME is parsing_models.NO_ACTOR_LISTING_ACTOR_NAME
-        assert api_models.NO_ACTOR_LISTING_ACTOR_GENDER is parsing_models.NO_ACTOR_LISTING_ACTOR_GENDER
 
 
 class TestMagnetInfo:
