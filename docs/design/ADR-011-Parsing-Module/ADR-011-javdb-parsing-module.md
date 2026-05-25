@@ -1,6 +1,6 @@
 # ADR-011: JavDB Parsing Module
 
-**Status**: Accepted — implementation pending
+**Status**: Accepted — Phase 2 completed; Phase 3 pending
 **Date**: 2026-05-20
 **Deciders**: Parsing module architecture review
 **Supersedes**: [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md) D4 / PR-6 parser-helper relocation
@@ -142,8 +142,8 @@ Implementation is split into three independently reviewable phases:
 | Phase 2 | [IMP-ADR011-02](IMP-ADR011-02-parsing-phase2-caller-migration.md) | Internal callers move to `javdb.parsing`; index selection moves to Pipeline. |
 | Phase 3 | [IMP-ADR011-03](IMP-ADR011-03-parsing-phase3-delete-compat.md) | Delete API parser/model re-export Adapters and the legacy Spider parser Adapter. |
 
-Phase 1 compatibility is not the final architecture. The implementation must
-continue through Phase 3 before this ADR is fully delivered.
+Phase 2 caller migration is delivered as of 2026-05-25. Phase 3 compatibility
+deletion remains required before this ADR is fully delivered.
 
 ## Module Layout
 

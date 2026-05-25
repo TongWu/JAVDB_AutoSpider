@@ -1,5 +1,7 @@
 # IMP-ADR011-02: ADR-011 Phase 2 — Parsing Caller Migration
 
+**Status**: Accepted — Completed 2026-05-25 (Phase 3 compatibility deletion remains pending)
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship ADR-011 Phase 2: migrate internal callers to `javdb.parsing`, move index-stage filtering into `javdb.pipeline.index_selection`, and reduce `javdb.spider.parser` to a thin compatibility Adapter.
