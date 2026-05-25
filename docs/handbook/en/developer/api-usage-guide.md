@@ -43,7 +43,7 @@ Core dependencies: `beautifulsoup4`, `lxml`, `javdb_rust_core` (optional). The R
 
 All parsing functions accept an **HTML string** and return **structured dataclass objects**. The parsers perform no business-level filtering (no phase1/phase2 distinction, no subtitle/date tag filtering) and return all raw data present on the page.
 
-New code should import parser functions and dataclasses from `javdb.parsing` and `javdb.parsing.models`. The older `apps.api.parsers`, `apps.api.models`, and `javdb.spider.parser` paths are transitional compatibility adapters kept for legacy callers.
+Parser functions and dataclasses live in `javdb.parsing` and `javdb.parsing.models`. Import them from there.
 
 ### 1.1 Parsing Index Pages
 
