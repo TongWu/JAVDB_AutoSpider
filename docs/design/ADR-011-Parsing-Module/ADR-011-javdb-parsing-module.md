@@ -1,6 +1,6 @@
 # ADR-011: JavDB Parsing Module
 
-**Status**: Accepted — implementation pending
+**Status**: Accepted — Phase 1 complete (PR #85), Phases 2–3 pending
 **Date**: 2026-05-20
 **Deciders**: Parsing module architecture review
 **Supersedes**: [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md) D4 / PR-6 parser-helper relocation
