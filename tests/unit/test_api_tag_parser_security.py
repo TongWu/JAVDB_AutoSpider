@@ -4,7 +4,7 @@ import sys
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from apps.api.parsers import tag_parser  # noqa: E402
+from javdb.parsing.fallback import tag_parser  # noqa: E402
 
 
 def test_extract_page_url_from_saved_from_comment():

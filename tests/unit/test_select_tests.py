@@ -72,6 +72,16 @@ def test_canonical_parser_change_selects_parser_domain_and_rust_wheel():
     assert any("parser-domain impact rule" in reason for reason in result.reason)
 
 
+def test_index_selection_change_selects_parser_domain_tests():
+    result = select("javdb/pipeline/index_selection.py")
+
+    assert result.run_full_python is False
+    assert result.run_selected_python is True
+    assert "tests/unit/test_parser.py" in result.pytest_targets
+    assert "tests/parity/test_parser_parity.py" in result.pytest_targets
+    assert any("parser-domain impact rule" in reason for reason in result.reason)
+
+
 def test_cargo_manifest_change_runs_full_rust_tests():
     result = select("javdb/rust_core/Cargo.toml")
 

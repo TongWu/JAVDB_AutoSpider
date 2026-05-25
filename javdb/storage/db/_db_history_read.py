@@ -37,7 +37,7 @@ def _ensure_imports():
             batch_update_movie_actors,
         )
         from javdb.spider.contracts import category_to_indicators
-        from apps.api.parsers.common import movie_href_lookup_values
+        from javdb.parsing.common import movie_href_lookup_values
         from javdb.infra.config import cfg
         _get_db = get_db
         _HISTORY_DB_PATH = HISTORY_DB_PATH

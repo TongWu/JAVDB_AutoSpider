@@ -26,4 +26,8 @@ def find_exact_entry_first_search_page(movies: list, video_code: str):
     return find_exact_video_code_match(movies, alt)
 
 
-__all__ = ['find_exact_entry_first_search_page']
+__all__ = [
+    'derive_letter_suffix_fallback_video_code',
+    'find_exact_entry_first_search_page',
+    'find_exact_video_code_match',
+]
