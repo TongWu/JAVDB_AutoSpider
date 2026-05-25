@@ -204,6 +204,23 @@ class FakeD1Connection:
         pass
 
 
+class QueuedThenFailingCommitD1(FakeD1Connection):
+    def __init__(self):
+        super().__init__()
+        self.flush_called = False
+
+    def execute(self, sql: str, params: Iterable[Any] = (), *, policy=None):
+        self.executed.append((sql, list(params), policy))
+        if not _is_read(sql):
+            return D1Cursor({"meta": {"changes": 0}, "results": []}, queued=True)
+        return FakeD1Cursor(rows=self._next_select_rows)
+
+    def commit(self):
+        self.commits += 1
+        self.flush_called = True
+        raise RuntimeError("simulated D1 queued flush failure")
+
+
 @pytest.fixture
 def sqlite_conn(tmp_path):
     path = tmp_path / "test.db"
@@ -287,6 +304,27 @@ def test_flush_updates_uncommitted_write_count(sqlite_conn, tmp_path, monkeypatc
 
     record = json.loads(drift_path.read_text(encoding="utf-8").strip())
     assert record["uncommitted_d1_writes"] == 2
+
+
+def test_strict_commit_raises_when_queued_flush_fails(
+    sqlite_conn, monkeypatch, tmp_path,
+):
+    _strict_env(monkeypatch, True)
+    drift_path = tmp_path / "d1_drift.jsonl"
+    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+
+    fake_d1 = QueuedThenFailingCommitD1()
+    dual = DualConnection(sqlite_conn, fake_d1)
+
+    dual.execute("INSERT INTO t (v) VALUES (?)", ("x",))
+    assert dual._d1_queued_pending_writes == 1
+    assert dual._d1_uncommitted_writes == 0
+
+    with pytest.raises(DualWriteStrictError):
+        dual.commit()
+
+    assert fake_d1.flush_called is True
+    assert drift_path.exists()
 
 
 def test_d1_write_failure_does_not_break_sqlite(sqlite_conn):

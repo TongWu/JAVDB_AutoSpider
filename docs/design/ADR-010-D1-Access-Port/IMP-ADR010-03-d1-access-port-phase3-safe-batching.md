@@ -280,7 +280,7 @@ Verified on 2026-05-25:
 pytest tests/unit/test_d1_port.py tests/unit/test_d1_recovery.py tests/unit/test_d1_dual.py tests/unit/test_commit_session_bulk.py -v
 ```
 
-Result: `145 passed`.
+Result: `146 passed`.
 
 ```bash
 pytest tests/unit/test_rollback_pending_mode.py tests/unit/test_batch_c_movie_history_id.py -v
