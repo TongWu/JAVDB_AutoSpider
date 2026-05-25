@@ -20,7 +20,7 @@ def test_spider_options_from_args_daily_defaults():
         no_proxy=False,
         always_bypass_time=None,
         enable_dedup=False,
-        enable_redownload=True,
+        enable_redownload=None,
         redownload_threshold=None,
         result_json=None,
         use_history=False,
@@ -49,7 +49,7 @@ def test_spider_options_from_args_daily_defaults():
         no_proxy=False,
         always_bypass_time=None,
         enable_dedup=False,
-        enable_redownload=True,
+        enable_redownload=None,
         redownload_threshold=None,
         result_json=None,
         use_history=False,
@@ -117,3 +117,34 @@ def test_spider_options_from_args_adhoc_url():
         no_rclone_filter=True,
         disable_all_filters=True,
     )
+
+
+def test_spider_options_from_args_defaults_enable_redownload_to_none():
+    args = SimpleNamespace(
+        url=None,
+        start_page=1,
+        end_page=1,
+        all=False,
+        ignore_history=False,
+        phase="all",
+        output_file=None,
+        dry_run=False,
+        ignore_release_date=False,
+        use_proxy=False,
+        no_proxy=False,
+        always_bypass_time=None,
+        enable_dedup=False,
+        redownload_threshold=None,
+        result_json=None,
+        use_history=False,
+        from_pipeline=False,
+        max_movies_phase1=None,
+        max_movies_phase2=None,
+        sequential=False,
+        no_rclone_filter=False,
+        disable_all_filters=False,
+    )
+
+    options = spider_options_from_args(args)
+
+    assert options.enable_redownload is None

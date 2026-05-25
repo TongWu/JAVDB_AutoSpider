@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+import time
 from types import SimpleNamespace
 
 from javdb.pipeline.models import StepPolicy
@@ -125,3 +127,44 @@ def test_in_process_spider_step_runner_maps_system_exit_zero_to_success():
     assert result.exit_code == 0
     assert result.failure_reason is None
     assert spider_result is None
+
+
+def test_in_process_spider_step_runner_times_out_without_waiting_for_spider_completion():
+    release_spider = threading.Event()
+    started = threading.Event()
+
+    def run_spider(options):
+        started.set()
+        release_spider.wait(timeout=5)
+        return SpiderRunResult(
+            csv_path=None,
+            session_id=None,
+            dedup_csv_path=None,
+            stats=None,
+            mode="daily",
+            url=None,
+            phase="all",
+            page_range=None,
+            started_at="2026-05-20T01:00:00Z",
+            finished_at="2026-05-20T01:01:00Z",
+            exit_code=0,
+            failure_reason=None,
+        )
+
+    runner = InProcessSpiderStepRunner(run_spider=run_spider)
+    policy = StepPolicy(name="spider", required=True, timeout_sec=0.1)
+    options = SimpleNamespace(result_json="/tmp/spider-result.json")
+
+    started_at = time.monotonic()
+    result, spider_result = runner.run(policy, options=options, command_label=("in-process", "spider"))
+    elapsed = time.monotonic() - started_at
+    release_spider.set()
+
+    assert started.wait(timeout=1)
+    assert result.status == "timed_out"
+    assert result.exit_code is None
+    assert result.failure_reason == "timed out after 0.1s"
+    assert result.command == ["in-process", "spider"]
+    assert result.result_path == "/tmp/spider-result.json"
+    assert spider_result is None
+    assert elapsed < 1

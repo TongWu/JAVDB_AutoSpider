@@ -36,7 +36,7 @@ def _base_args(**overrides):
         no_rclone_filter=True,
         disable_all_filters=True,
         enable_dedup=False,
-        enable_redownload=False,
+        enable_redownload=None,
         redownload_threshold=None,
         result_json=None,
     )
@@ -143,6 +143,27 @@ def test_spider_main_writes_result_json_on_success(tmp_path, monkeypatch):
     assert result.page_range == "2-4"
     assert result.exit_code == 0
     assert result.failure_reason is None
+
+
+def test_spider_main_result_uses_actual_mode_from_url(tmp_path, monkeypatch):
+    import javdb.spider.app.run_service as run_service
+
+    result_path = tmp_path / "spider-result.json"
+    monkeypatch.setattr(
+        run_service,
+        "parse_arguments",
+        lambda: _base_args(
+            result_json=str(result_path),
+            url="https://javdb.com/actors/EvkJ",
+        ),
+    )
+    _patch_lightweight_spider_run(monkeypatch, run_service, tmp_path)
+
+    run_service.main()
+
+    result = read_spider_result(result_path)
+    assert result.mode == "adhoc"
+    assert result.url == "https://javdb.com/actors/EvkJ"
 
 
 def test_spider_main_writes_partial_result_json_on_failure(tmp_path, monkeypatch):
