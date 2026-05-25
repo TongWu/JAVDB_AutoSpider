@@ -1,6 +1,6 @@
 # IMP-ADR011-02: ADR-011 Phase 2 — Parsing Caller Migration
 
-**Status**: Accepted — Completed 2026-05-25 (Phase 3 compatibility deletion remains pending)
+**Status**: Completed — delivered 2026-05-25.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

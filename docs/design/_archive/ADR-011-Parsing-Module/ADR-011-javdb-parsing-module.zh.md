@@ -1,9 +1,9 @@
 # ADR-011：JavDB Parsing Module
 
-**状态**：已接受 —— Phase 2 已完成；Phase 3 待实施
+**状态**：已完成 —— Phase 1、Phase 2、Phase 3 全部交付
 **日期**：2026-05-20
 **决策者**：Parsing module 架构评审
-**取代**：[ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.zh.md) D4 / PR-6 parser-helper relocation
+**取代**：[ADR-005](../ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.zh.md) D4 / PR-6 parser-helper relocation
 **关联实现计划 (Related Implementation Plans)**：[IMP-ADR011-01](IMP-ADR011-01-parsing-phase1-core-module.md)（Phase 1 — core module）、[IMP-ADR011-02](IMP-ADR011-02-parsing-phase2-caller-migration.md)（Phase 2 — caller migration）、[IMP-ADR011-03](IMP-ADR011-03-parsing-phase3-delete-compat.md)（Phase 3 — compatibility deletion）
 
 ## 背景
@@ -138,8 +138,8 @@ parser Interfaces，违背本 ADR。
 | Phase 2 | [IMP-ADR011-02](IMP-ADR011-02-parsing-phase2-caller-migration.md) | 内部 caller 迁移到 `javdb.parsing`；index selection 移到 Pipeline。 |
 | Phase 3 | [IMP-ADR011-03](IMP-ADR011-03-parsing-phase3-delete-compat.md) | 删除 API parser/model re-export Adapters 和 legacy Spider parser Adapter。 |
 
-Phase 2 caller migration 已于 2026-05-25 交付。仍需完成 Phase 3 compatibility
-deletion 后，本 ADR 才算完整交付。
+Phase 2 caller migration 已于 2026-05-25 交付。Phase 3 compatibility
+deletion 已于 2026-05-26 交付。
 
 ## Module Layout
 
@@ -213,7 +213,7 @@ parser/helper relocation。Phase 1 落地后，ADR-005 Storage 工作应从
 
 ## References
 
-- [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.zh.md)
+- [ADR-005](../ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.zh.md)
 - [IMP-ADR011-01](IMP-ADR011-01-parsing-phase1-core-module.md)
 - [IMP-ADR011-02](IMP-ADR011-02-parsing-phase2-caller-migration.md)
 - [IMP-ADR011-03](IMP-ADR011-03-parsing-phase3-delete-compat.md)
