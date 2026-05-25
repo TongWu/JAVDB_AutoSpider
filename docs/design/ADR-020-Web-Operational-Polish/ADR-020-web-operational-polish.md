@@ -11,7 +11,7 @@
 
 After ADR-018 (security hardening) and ADR-019 (feature parity), a final audit pass identified five architecture-level improvements that reduce operational friction and complete the web UI's coverage of the system's operational surface:
 
-1. **Missing workflow UI dispatch** — Four GitHub Actions workflows (`WeeklyDedup`, `Migration`, `TestIngestion`, `BakeCheck`) cannot be triggered from the web UI. The existing `POST /api/gh-actions/runs` endpoint can dispatch any workflow, but the frontend has no way to know each workflow's parameter schema, types, defaults, or validation rules.
+1. **Missing workflow UI dispatch** — Three GitHub Actions workflows (`WeeklyDedup`, `Migration`, `TestIngestion`) cannot be triggered from the web UI. The existing `POST /api/gh-actions/runs` endpoint can dispatch any workflow, but the frontend has no way to know each workflow's parameter schema, types, defaults, or validation rules.
 
 2. **Incomplete rollback parameters** — `RollbackD1.yml` accepts 10 parameters (`scope`, `force`, `confirm_production`, `log_level`, `runner`, etc.), but the TS backend's `POST /sessions/:id/rollback` only forwards `session_id`. Users must use GitHub's UI directly for advanced rollback options. The `dry_run` flag returns mock data instead of dispatching a real dry-run to GH Actions.
 
@@ -60,7 +60,6 @@ interface WorkflowEntry {
 | `WeeklyDedup.yml` | 8 | `confirm_production = "I-UNDERSTAND"` when `dry_run = false` |
 | `Migration.yml` | 21 | `confirm_production = "I-UNDERSTAND"` when `dry_run = false` |
 | `TestIngestion.yml` | 2 | None |
-| `BakeCheck.yml` | 2 | None |
 | `RollbackD1.yml` | 10 | `confirm_production = "I-UNDERSTAND"` when `dry_run = false` or `force = true` |
 
 **Validation on dispatch:** `POST /api/gh-actions/runs` validates inputs against the registered schema before dispatching. Safety gates are enforced server-side — the frontend cannot bypass them.
