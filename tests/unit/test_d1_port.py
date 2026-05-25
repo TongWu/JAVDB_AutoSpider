@@ -179,7 +179,11 @@ def test_batch_queue_flushes_at_batch_limit(monkeypatch):
     port.execute("INSERT INTO x VALUES (?)", ["a"], policy=_batch_policy("seq1"))
     assert len(poster.calls) == 0
 
-    port.execute("INSERT INTO x VALUES (?)", ["b"], policy=_batch_policy("seq2"))
+    result = port.execute(
+        "INSERT INTO x VALUES (?)",
+        ["b"],
+        policy=_batch_policy("seq2"),
+    )
 
     assert len(poster.calls) == 1
     assert poster.calls[0]["json"] == {
@@ -188,6 +192,9 @@ def test_batch_queue_flushes_at_batch_limit(monkeypatch):
             {"sql": "INSERT INTO x VALUES (?)", "params": ["b"]},
         ]
     }
+    assert len(result) == 1
+    assert result[0].queued is True
+    assert result[0].rowcount == 0
     assert port.summary()["batches"] == 1
     assert port.summary()["batch_statements"] == 2
     assert port.summary()["sql_statements"] == 2

@@ -221,6 +221,10 @@ class QueuedThenFailingCommitD1(FakeD1Connection):
         raise RuntimeError("simulated D1 queued flush failure")
 
 
+class NoFlushD1:
+    pass
+
+
 @pytest.fixture
 def sqlite_conn(tmp_path):
     path = tmp_path / "test.db"
@@ -304,6 +308,12 @@ def test_flush_updates_uncommitted_write_count(sqlite_conn, tmp_path, monkeypatc
 
     record = json.loads(drift_path.read_text(encoding="utf-8").strip())
     assert record["uncommitted_d1_writes"] == 2
+
+
+def test_flush_without_d1_flush_returns_empty_list(sqlite_conn):
+    dual = DualConnection(sqlite_conn, NoFlushD1())
+
+    assert dual.flush() == []
 
 
 def test_strict_commit_raises_when_queued_flush_fails(
