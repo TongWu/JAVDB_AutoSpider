@@ -47,7 +47,7 @@ Expected: PASS.
 
 Record the verified entries under "Bake Evidence" below.
 
-- [ ] **Step 4: Commit evidence update**
+- [x] **Step 4: Commit evidence update**
 
 ```bash
 git add docs/design/ADR-012-Pipeline-Run-Boundary/IMP-ADR012-02-pipeline-run-phase1-bake.md
@@ -76,7 +76,7 @@ Use a narrow ad hoc input. Record the same evidence fields as DailyIngestion.
 
 Record the same evidence fields as DailyIngestion.
 
-- [ ] **Step 4: Commit workflow evidence**
+- [x] **Step 4: Commit workflow evidence**
 
 ```bash
 git add docs/design/ADR-012-Pipeline-Run-Boundary/IMP-ADR012-02-pipeline-run-phase1-bake.md
@@ -117,7 +117,7 @@ Expected:
 - job metadata file contains `result_path`;
 - result JSON is readable after job completion.
 
-- [ ] **Step 4: Commit frontend/API evidence**
+- [x] **Step 4: Commit frontend/API evidence**
 
 ```bash
 git add docs/design/ADR-012-Pipeline-Run-Boundary/IMP-ADR012-02-pipeline-run-phase1-bake.md
@@ -155,7 +155,7 @@ Check pipeline/email logs. Expected:
 - failure notification success or failure does not change final exit code;
 - no regression in existing email log format.
 
-- [ ] **Step 4: Commit failure-path evidence**
+- [x] **Step 4: Commit failure-path evidence**
 
 ```bash
 git add docs/design/ADR-012-Pipeline-Run-Boundary/IMP-ADR012-02-pipeline-run-phase1-bake.md
@@ -190,7 +190,7 @@ The bake passes only if all are true:
 - no frontend task stream regression;
 - no failure email regression.
 
-- [ ] **Step 4: Commit final bake sign-off**
+- [x] **Step 4: Commit final bake sign-off**
 
 ```bash
 git add docs/design/ADR-012-Pipeline-Run-Boundary/IMP-ADR012-02-pipeline-run-phase1-bake.md

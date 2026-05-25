@@ -1,13 +1,13 @@
 # ADR-012：Pipeline Run 结构化边界
 
-**状态**：已接受 - 实现待启动
+**状态**：已接受 - Phase 1 已完成（2026-05-25 sign-off），Phase 2 待启动
 **日期**：2026-05-20
 **决策者**：Pipeline Run module brainstorming + grill 会话
 **关联实现计划 (Related Implementation Plans)**：[IMP-ADR012-01](IMP-ADR012-01-pipeline-run-phase1-result-sidecar.md)（Phase 1 - result sidecar）、[IMP-ADR012-02](IMP-ADR012-02-pipeline-run-phase1-bake.md)（Phase 1 bake）、[IMP-ADR012-03](IMP-ADR012-03-pipeline-run-phase2-in-process-spider.md)（Phase 2 - in-process Spider）、[IMP-ADR012-04](IMP-ADR012-04-pipeline-run-final-result-consumption.md)（Final phase - result consumption cleanup）
 
 ## 待办 (Outstanding Work)
 
-- Phase 1 - 结构化 Spider/Pipeline result sidecar 和 Pipeline step model。
+- Phase 1 - 结构化 Spider/Pipeline result sidecar 和 Pipeline step model。**已完成**（2026-05-25 sign-off，详见 [IMP-ADR012-02](IMP-ADR012-02-pipeline-run-phase1-bake.md)）。
 - Phase 2 - bake 通过后，Pipeline 通过 in-process runner 调 Spider。
 - Final phase - GitHub workflows 和轻量 API task metadata 改用 result JSON，不再 grep stdout。
 
