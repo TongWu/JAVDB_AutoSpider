@@ -299,13 +299,6 @@ describe("workflow-registry", () => {
     expect(schema!.safetyGate).toBeUndefined();
   });
 
-  it("returns schema for BakeCheck.yml", () => {
-    const schema = getWorkflowSchema("BakeCheck.yml");
-    expect(schema).toBeDefined();
-    expect(schema!.params.length).toBe(2);
-    expect(schema!.safetyGate).toBeUndefined();
-  });
-
   it("returns schema for RollbackD1.yml", () => {
     const schema = getWorkflowSchema("RollbackD1.yml");
     expect(schema).toBeDefined();
@@ -438,17 +431,6 @@ WORKFLOW_REGISTRY.set("TestIngestion.yml", {
   params: [
     { name: "runner", type: "choice", required: false, default: "ubuntu-latest", choices: ["ubuntu-latest", "self-hosted"] },
     { name: "proxy_spider", type: "boolean", required: false, default: true, description: "Enable proxy for Spider requests" },
-  ],
-});
-
-WORKFLOW_REGISTRY.set("BakeCheck.yml", {
-  filename: "BakeCheck.yml",
-  displayName: "Bake Check",
-  description: "Check ADR-006 bake metrics — verifies data stability over a bake window",
-  category: "monitoring",
-  params: [
-    { name: "since", type: "string", required: false, default: "2026-05-16", description: "Bake window start date (YYYY-MM-DD)" },
-    { name: "runner", type: "choice", required: false, default: "ubuntu-latest", choices: ["ubuntu-latest", "self-hosted"] },
   ],
 });
 
