@@ -102,6 +102,7 @@ IMPACT_RULES = (
         (
             "apps/api/parsers/**",
             "javdb/parsing/**",
+            "javdb/pipeline/index_selection.py",
             "javdb/spider/contracts.py",
             "javdb/spider/filename_helper.py",
             "javdb/spider/magnet_extractor.py",

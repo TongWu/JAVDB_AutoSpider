@@ -12,7 +12,7 @@ sys.path.insert(0, project_root)
 
 import pytest
 
-from apps.api.parsers.index_parser import parse_index_page
+from javdb.parsing import parse_index_page
 from javdb.parsing.search_exact import find_exact_entry_first_search_page
 
 HTML_DIR = os.path.join(project_root, 'html')

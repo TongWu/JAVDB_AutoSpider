@@ -39,10 +39,10 @@ from javdb.storage.repos.history_repo import HistoryRepo
 from javdb.spider.parser import parse_index, parse_detail
 from javdb.spider.magnet_extractor import extract_magnets
 
-from apps.api.parsers import parse_index_page as api_parse_index_page
-from apps.api.parsers import parse_detail_page as api_parse_detail_page
-from apps.api.parsers import parse_category_page as api_parse_category_page
-from apps.api.parsers import parse_top_page as api_parse_top_page
+from javdb.parsing import parse_index_page as api_parse_index_page
+from javdb.parsing import parse_detail_page as api_parse_detail_page
+from javdb.parsing import parse_category_page as api_parse_category_page
+from javdb.parsing import parse_top_page as api_parse_top_page
 from javdb.infra.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
 from javdb.infra.paths import get_dated_report_path, ensure_dated_dir, get_dated_subdir
 
@@ -129,7 +129,7 @@ logger = get_logger(__name__)
 
 # Check Rust components availability and log status
 try:
-    from apps.api.parsers import RUST_PARSERS_AVAILABLE
+    from javdb.parsing import RUST_PARSERS_AVAILABLE
     if RUST_PARSERS_AVAILABLE:
         logger.debug("✅ Spider using Rust parsers - high-performance HTML parsing enabled")
     else:

@@ -1,48 +1,25 @@
 """
-HTML parsing utilities for the spider.
+Temporary compatibility adapter for spider parsing.
 
-.. note::
-
-    This module is a **backward-compatible wrapper** around the new
-    ``javdb.parsing`` layer.  New code should prefer importing from
-    ``javdb.parsing`` directly.
-
-The public interface (``extract_video_code``, ``parse_index``,
-``parse_detail``) is preserved so that ``spider.py`` and existing tests
-continue to work without modification.
+This module exists only to preserve the legacy ``javdb.spider.parser``
+imports while callers are migrated to ``javdb.parsing`` and
+``javdb.pipeline.index_selection``. It is expected to be deleted by
+IMP-ADR011-03.
 """
 
-import re
-from dataclasses import asdict
 from typing import Any, Tuple
 from bs4 import BeautifulSoup
-from bs4.element import Tag
-
-# Import configuration
-from javdb.infra.config import cfg
-
-PHASE2_MIN_RATE = cfg('PHASE2_MIN_RATE', 4.0)
-PHASE2_MIN_COMMENTS = cfg('PHASE2_MIN_COMMENTS', 100)
-LOG_LEVEL = cfg('LOG_LEVEL', 'INFO')
-IGNORE_RELEASE_DATE_FILTER = cfg('IGNORE_RELEASE_DATE_FILTER', False)
 
 from javdb.infra.logging import get_logger
+from javdb.spider import _parser_support as _support
 
-# Canonical parser imports — go through the package __init__ so the Rust-first
-# routing in javdb/parsing/__init__.py applies. Importing the fallback
-# submodules directly bypasses Rust and forces the Python fallback.
 from javdb.parsing import (
     parse_index_page as _api_parse_index,
     parse_detail_page as _api_parse_detail,
-    parse_index_page,
-    parse_detail_page,
-    parse_category_page,
-    parse_top_page,
-    parse_tag_page,
-    detect_page_type,
 )
+from javdb.parsing.common import extract_video_code as _api_extract_video_code
+from javdb.pipeline.index_selection import select_index_entries
 
-# Optional Rust-backed helpers (inlined from the former bridges.rust_adapters.parser_adapter shim)
 try:
     from javdb.rust_core import is_login_page as _rust_is_login_page
     from javdb.rust_core import validate_index_html as _rust_validate_index_html
@@ -54,164 +31,43 @@ except ImportError:
     _rust_validate_index_html = None
 
 
-_LOGIN_REQUIRED_TEXT_MARKERS = (
-    "due to copyright restrictions",
-    "not available in your country",
-)
-
-_MAINTENANCE_MARKERS = (
-    "系統維護中",
-    "系统维护中",
-    "system maintenance",
-    "service unavailable",
-    "temporarily unavailable",
-    "暫時無法使用",
-)
-
-
-def _has_login_required_text(html: str) -> bool:
-    lower_html = html.lower()
-    return all(marker in lower_html for marker in _LOGIN_REQUIRED_TEXT_MARKERS)
-
-
 def is_maintenance_page(html: str) -> bool:
-    """Detect javdb maintenance or service-unavailable pages.
-
-    These should NOT trigger CF penalty events — the issue is site-wide,
-    not proxy-specific.
-    """
-    if not html:
-        return False
-    lower_html = html.lower()
-    if any(marker.lower() in lower_html for marker in _MAINTENANCE_MARKERS):
-        return True
-    if len(html) < 2000 and "<html" in lower_html:
-        if "movie-list" not in lower_html and "video-detail" not in lower_html:
-            if "503" in html or "502" in html or "maintenance" in lower_html:
-                return True
-    return False
+    return _support.is_maintenance_page(html)
 
 
 def result_to_dict(result: Any) -> dict:
-    if hasattr(result, "to_dict"):
-        return result.to_dict()
-    return asdict(result)
+    return _support.result_to_dict(result)
 
 
 def is_login_page(html: str) -> bool:
-    if not html:
-        return False
-    if _has_login_required_text(html):
-        return True
-    if RUST_PARSER_EXTRAS_AVAILABLE:
-        try:
-            return bool(_rust_is_login_page(html))
-        except Exception:
-            pass
-    soup = BeautifulSoup(html, "html.parser")
-    title_tag = soup.find("title")
-    if title_tag:
-        title_text = title_tag.get_text().strip().lower()
-        if "登入" in title_text or "login" in title_text:
-            return True
-    return False
+    return _support.is_login_page(
+        html,
+        rust_parser_extras_available=RUST_PARSER_EXTRAS_AVAILABLE,
+        rust_is_login_page=_rust_is_login_page,
+    )
 
 
 def validate_index_html(html: str) -> Tuple[bool, bool]:
-    if RUST_PARSER_EXTRAS_AVAILABLE:
-        try:
-            return _rust_validate_index_html(html)
-        except Exception:
-            pass
-    soup = BeautifulSoup(html, "html.parser")
-    movie_list = soup.find("div", class_=lambda x: x and "movie-list" in x)
-    if movie_list:
-        movie_items = movie_list.find_all("div", class_="item")
-        if len(movie_items) > 0:
-            return True, False
-        return False, True
-
-    page_text = soup.get_text()
-    empty_message_div = soup.find("div", class_="empty-message")
-    age_modal = soup.find("div", class_="modal is-active over18-modal")
-    has_no_content_msg = (
-        "No content yet" in page_text
-        or "No result" in page_text
-        or "暫無內容" in page_text
-        or "暂无内容" in page_text
-        or empty_message_div is not None
+    return _support.validate_index_html(
+        html,
+        rust_parser_extras_available=RUST_PARSER_EXTRAS_AVAILABLE,
+        rust_validate_index_html=_rust_validate_index_html,
     )
-    if empty_message_div is not None or (not age_modal and has_no_content_msg) or (not age_modal and len(html) > 20000):
-        return False, True
-    return False, False
 
 
 logger = get_logger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Subtitle / magnet / release-date tag helpers
-# ---------------------------------------------------------------------------
-
-_SUBTITLE_TAGS = frozenset(['含中字磁鏈', '含中字磁链', 'CnSub DL'])
-_MAGNET_TAGS = frozenset(['含磁鏈', '含磁链', 'DL'])
-_TODAY_TAGS = frozenset(['今日新種', '今日新种', 'Today'])
-_YESTERDAY_TAGS = frozenset(['昨日新種', '昨日新种', 'Yesterday'])
-_RELEASE_DATE_TAGS = frozenset([
-    '今日新種', '昨日新種',
-    '今日新种', '昨日新种',
-    'Today', 'Yesterday',
-])
-
-
-def _has_subtitle(tags: list) -> bool:
-    return bool(_SUBTITLE_TAGS.intersection(tags))
-
-
-def _has_magnet(tags: list) -> bool:
-    return bool(_MAGNET_TAGS.intersection(tags)) or _has_subtitle(tags)
-
-
-def _has_release_date(tags: list) -> bool:
-    return bool(_RELEASE_DATE_TAGS.intersection(tags))
-
-
-def _is_today_release(tags: list) -> bool:
-    return bool(_TODAY_TAGS.intersection(tags))
-
-
-def _is_yesterday_release(tags: list) -> bool:
-    return bool(_YESTERDAY_TAGS.intersection(tags))
-
-
-# ---------------------------------------------------------------------------
-# extract_video_code  (delegates to javdb.parsing.common)
-# ---------------------------------------------------------------------------
-
 def extract_video_code(a):
-    """Extract video code from movie item with improved robustness.
+    return _api_extract_video_code(a)
 
-    .. deprecated:: Use ``javdb.parsing.common.extract_video_code`` instead.
-
-    Returns:
-        video_code: The extracted video code, or empty string if not found
-                    or invalid.  Hyphen-less codes are accepted when they mix
-                    letters and digits (e.g. ``n0656``).
-    """
-    from javdb.parsing.common import extract_video_code as _api_extract
-    return _api_extract(a)
-
-
-# ---------------------------------------------------------------------------
-# parse_index  (delegates to javdb.parsing + applies business filters)
-# ---------------------------------------------------------------------------
 
 def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=False, is_adhoc_mode=False):
     """Parse the index page to extract entries with required tags.
 
     This function delegates HTML parsing to ``javdb.parsing.parse_index_page``
-    and then applies the spider's business filtering logic (phase selection,
-    subtitle/release-date tags, rate/comment thresholds).
+    and then applies the spider's business filtering logic in
+    ``javdb.pipeline.index_selection``.
 
     Args:
         html_content: HTML content to parse
@@ -222,9 +78,7 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
         is_adhoc_mode: If True, disable ALL filters and process ALL entries
             (for custom URL mode)
     """
-    # Use the new API parser to get ALL entries (no filtering)
     page_result = _api_parse_index(html_content, page_num)
-
     if not page_result.has_movie_list:
         logger.warning(f'[Page {page_num}] No movie list found!')
         # Preserve the original debug output for diagnostics
@@ -235,105 +89,14 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
         logger.debug(f'[Page {page_num}] Page title: {page_title}')
         return []
 
-    logger.debug(f"[Page {page_num}] Found movie list container")
-    logger.debug(f"[Page {page_num}] Parsing index page for phase {phase}...")
+    return select_index_entries(
+        page_result,
+        page_num=page_num,
+        phase=phase,
+        disable_new_releases_filter=disable_new_releases_filter,
+        is_adhoc_mode=is_adhoc_mode,
+    )
 
-    results = []
-
-    for entry in page_result.movies:
-        tags = entry.tags
-        video_code = entry.video_code
-
-        # Skip entries without a valid video code
-        if not video_code:
-            continue
-
-        logger.debug(f"[Page {page_num}] Found tags: {tags}")
-
-        # Build the legacy result dict from the API entry
-        def _to_result(e):
-            return {
-                'href': e.href,
-                'video_code': e.video_code,
-                'page': page_num,
-                'actor': '',  # Will be filled from detail page
-                'rate': e.rate,
-                'comment_number': e.comment_count,
-                'is_today_release': _is_today_release(tags),
-                'is_yesterday_release': _is_yesterday_release(tags),
-            }
-
-        # ---- AD HOC MODE ----
-        if is_adhoc_mode:
-            has_sub = _has_subtitle(tags)
-            has_mag = _has_magnet(tags)
-
-            if not has_mag:
-                logger.debug(f"[Page {page_num}] Skipping entry without magnet link (no magnet tag in HTML)")
-                continue
-
-            if phase == 1 and has_sub:
-                logger.debug(f"[Page {page_num}] Found entry (adhoc P1): {video_code} ({entry.href})")
-                results.append(_to_result(entry))
-            elif phase == 2 and not has_sub:
-                logger.debug(f"[Page {page_num}] Found entry (adhoc P2): {video_code} ({entry.href})")
-                results.append(_to_result(entry))
-            continue
-
-        # ---- PHASE 1 ----
-        if phase == 1:
-            if disable_new_releases_filter:
-                if _has_subtitle(tags):
-                    logger.debug(f"[Page {page_num}] Found entry (filter disabled): {video_code} ({entry.href})")
-                    results.append(_to_result(entry))
-            else:
-                has_sub = _has_subtitle(tags)
-                has_rd = _has_release_date(tags)
-                if has_sub and (IGNORE_RELEASE_DATE_FILTER or has_rd):
-                    logger.debug(f"[Page {page_num}] Found entry: {video_code} ({entry.href})")
-                    results.append(_to_result(entry))
-
-        # ---- PHASE 2 ----
-        elif phase == 2:
-            if _has_subtitle(tags):
-                # Already handled in phase 1
-                continue
-
-            should_process = False
-            if disable_new_releases_filter:
-                should_process = True
-            else:
-                has_rd = _has_release_date(tags)
-                if IGNORE_RELEASE_DATE_FILTER or has_rd:
-                    should_process = True
-
-            if should_process:
-                # Apply rate/comment thresholds for phase 2
-                try:
-                    comment_num = int(entry.comment_count) if entry.comment_count else 0
-                    rate_num = float(entry.rate) if entry.rate else 0
-
-                    if comment_num >= PHASE2_MIN_COMMENTS and rate_num >= PHASE2_MIN_RATE:
-                        logger.debug(
-                            f"[Page {page_num}] Found entry: {video_code} ({entry.href}) "
-                            f"- Rate: {entry.rate}, Comments: {entry.comment_count}")
-                        results.append(_to_result(entry))
-                    else:
-                        logger.debug(
-                            f"[Page {page_num}] Skipped entry (filtered): {video_code} "
-                            f"- Rate: {entry.rate}, Comments: {entry.comment_count}")
-                except (ValueError, TypeError):
-                    logger.debug(
-                        f"[Page {page_num}] Skipped entry (invalid data): {video_code} "
-                        f"- Rate: {entry.rate}, Comments: {entry.comment_count}")
-
-    logger.debug(f"[Page {page_num}] Found {len(results)} entries for phase {phase}")
-    return results
-
-
-# ---------------------------------------------------------------------------
-# parse_detail  (delegates to javdb.parsing + returns legacy tuple)
-# ---------------------------------------------------------------------------
 
 def parse_detail(html_content, index=None, skip_sleep=False):
     """Parse the detail page to extract magnet links and actor information.

@@ -46,7 +46,7 @@ if str(REPO_ROOT) not in sys.path:
 
 import requests  # noqa: E402
 
-from apps.api.parsers.common import javdb_absolute_url, absolutize_supporting_actors_json  # noqa: E402
+from javdb.parsing.common import javdb_absolute_url, absolutize_supporting_actors_json  # noqa: E402
 from javdb.infra.config import cfg  # noqa: E402
 from javdb.infra.logging import setup_logging, get_logger  # noqa: E402
 

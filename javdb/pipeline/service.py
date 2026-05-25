@@ -61,7 +61,7 @@ def check_rust_core_status():
     
     # Check parsers
     try:
-        from apps.api.parsers import RUST_PARSERS_AVAILABLE
+        from javdb.parsing import RUST_PARSERS_AVAILABLE
         status['parsers'] = RUST_PARSERS_AVAILABLE
     except Exception:
         status['parsers'] = False

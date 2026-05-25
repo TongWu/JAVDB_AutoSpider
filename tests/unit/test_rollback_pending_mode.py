@@ -120,7 +120,7 @@ def _href_variants(href: str) -> List[str]:
     every row.  Tests query by both variants to stay agnostic to whichever
     form the production code chose to persist.
     """
-    from apps.api.parsers.common import movie_href_lookup_values
+    from javdb.parsing.common import movie_href_lookup_values
     base = "https://javdb.com"
     path_href, abs_href = movie_href_lookup_values(href, base)
     variants = [v for v in (path_href, abs_href, href) if v]
