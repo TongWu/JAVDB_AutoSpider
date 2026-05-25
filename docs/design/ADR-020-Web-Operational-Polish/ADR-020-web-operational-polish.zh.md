@@ -11,7 +11,7 @@
 
 ADR-018（安全加固）和 ADR-019（功能对齐）之后，最终审计发现了五个架构层面的改进，用于减少运维摩擦并完成 Web UI 对系统运维表面的覆盖：
 
-1. **缺失 workflow 的 UI 调度** — 四个 GitHub Actions workflow（`WeeklyDedup`、`Migration`、`TestIngestion`、`BakeCheck`）无法从 Web UI 触发。现有的 `POST /api/gh-actions/runs` 端点可以调度任何 workflow，但前端无法获知每个 workflow 的参数 schema、类型、默认值或验证规则。
+1. **缺失 workflow 的 UI 调度** — 三个 GitHub Actions workflow（`WeeklyDedup`、`Migration`、`TestIngestion`）无法从 Web UI 触发。现有的 `POST /api/gh-actions/runs` 端点可以调度任何 workflow，但前端无法获知每个 workflow 的参数 schema、类型、默认值或验证规则。
 
 2. **Rollback 参数不完整** — `RollbackD1.yml` 接受 10 个参数（`scope`、`force`、`confirm_production`、`log_level`、`runner` 等），但 TS 后端的 `POST /sessions/:id/rollback` 只传 `session_id`。用户必须直接使用 GitHub UI 进行高级回滚操作。`dry_run` 标志返回 mock 数据而非调度真正的 dry-run。
 
@@ -60,7 +60,6 @@ interface WorkflowEntry {
 | `WeeklyDedup.yml` | 8 | `confirm_production = "I-UNDERSTAND"`（当 `dry_run = false`） |
 | `Migration.yml` | 21 | `confirm_production = "I-UNDERSTAND"`（当 `dry_run = false`） |
 | `TestIngestion.yml` | 2 | 无 |
-| `BakeCheck.yml` | 2 | 无 |
 | `RollbackD1.yml` | 10 | `confirm_production = "I-UNDERSTAND"`（当 `dry_run = false` 或 `force = true`） |
 
 **调度时验证：** `POST /api/gh-actions/runs` 在调度前根据注册的 schema 验证输入。安全门在服务端强制执行——前端无法绕过。
