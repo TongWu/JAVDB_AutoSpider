@@ -35,6 +35,7 @@ _absolutize_supporting_actors_json = None
 _has_meaningful_actor_data = None
 _batch_update_movie_actors_repo = None
 _generate_integer_id = None
+_RecoveryPolicy = None
 
 
 def _ensure_imports():
@@ -46,7 +47,7 @@ def _ensure_imports():
     global _movie_href_lookup_values, _javdb_absolute_url
     global _absolutize_supporting_actors_json
     global _has_meaningful_actor_data, _batch_update_movie_actors_repo
-    global _generate_integer_id
+    global _generate_integer_id, _RecoveryPolicy
     if _get_db is None:
         from javdb.storage.db._db_connection import (
             get_db,
@@ -71,6 +72,7 @@ def _ensure_imports():
             batch_update_movie_actors as buam,
         )
         from javdb.storage.db._db_session import generate_integer_id as gii
+        from javdb.storage.d1_recovery import RecoveryPolicy
         _get_db = get_db
         _HISTORY_DB_PATH = HISTORY_DB_PATH
         _REPORTS_DB_PATH = REPORTS_DB_PATH
@@ -86,6 +88,27 @@ def _ensure_imports():
         _has_meaningful_actor_data = hmad
         _batch_update_movie_actors_repo = buam
         _generate_integer_id = gii
+        _RecoveryPolicy = RecoveryPolicy
+
+
+def _pending_stage_policy(session_id: str, seq: str, kind: str):
+    _ensure_imports()
+    return _RecoveryPolicy(
+        logical_db="history",
+        operation_type=f"pending_stage_{kind}",
+        idempotency_key=f"history:{session_id}:{seq}",
+        ordering_key=f"history:{session_id}",
+        recovery_allowed=True,
+        max_attempts=3,
+        batching_allowed=True,
+    )
+
+
+def _execute_pending_stage(conn, sql: str, params: tuple, policy) -> None:
+    if hasattr(conn, "flush"):
+        conn.execute(sql, params, policy=policy)
+        return
+    conn.execute(sql, params)
 
 
 # Constants
@@ -194,8 +217,10 @@ def db_stage_history_write(
         )
 
     with _get_db(db_path or _HISTORY_DB_PATH) as conn:
+        policy = _pending_stage_policy(session_id, seq, kind)
         if kind == _KIND_MOVIE:
-            conn.execute(
+            _execute_pending_stage(
+                conn,
                 """INSERT INTO PendingMovieHistoryWrites
                    (Seq, SessionId, RunId, RunAttempt, Href, VideoCode,
                     ActorName, ActorGender, ActorLink, SupportingActors,
@@ -218,6 +243,7 @@ def db_stage_history_write(
                     visited,
                     now,
                 ),
+                policy=policy,
             )
         else:  # torrent
             sub_ind = payload.get("SubtitleIndicator")
@@ -232,7 +258,8 @@ def db_stage_history_write(
                 sub_ind, cen_ind = category_to_indicators(category)
             if not category:
                 category = indicators_to_category(int(sub_ind), int(cen_ind))
-            conn.execute(
+            _execute_pending_stage(
+                conn,
                 """INSERT INTO PendingTorrentHistoryWrites
                    (Seq, SessionId, RunId, RunAttempt, Href, VideoCode,
                     Category, SubtitleIndicator, CensorIndicator,
@@ -256,6 +283,7 @@ def db_stage_history_write(
                     visited,
                     now,
                 ),
+                policy=policy,
             )
     return seq
 
