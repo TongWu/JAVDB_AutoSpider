@@ -1,4 +1,15 @@
-"""Internal support helpers for ``javdb.spider.parser``."""
+"""HTML validators and generic helpers used by the spider runtime.
+
+Provides Rust-accelerated detectors with pure-Python fallbacks for:
+- ``is_login_page`` — login page detection
+- ``is_maintenance_page`` — maintenance / service-unavailable detection
+- ``validate_index_html`` — index page structural validation
+- ``result_to_dict`` — generic dataclass-or-method-to-dict coercion
+
+These helpers were previously housed in ``javdb.spider.parser`` /
+``javdb.spider._parser_support``. They were relocated as part of
+ADR-011 Phase 3 so that the parser adapter can be deleted.
+"""
 
 from __future__ import annotations
 
@@ -11,6 +22,17 @@ from javdb.infra.logging import get_logger
 
 
 logger = get_logger(__name__)
+
+
+try:
+    from javdb.rust_core import is_login_page as _rust_is_login_page
+    from javdb.rust_core import validate_index_html as _rust_validate_index_html
+
+    RUST_PARSER_EXTRAS_AVAILABLE = True
+except ImportError:
+    RUST_PARSER_EXTRAS_AVAILABLE = False
+    _rust_is_login_page = None
+    _rust_validate_index_html = None
 
 
 _LOGIN_REQUIRED_TEXT_MARKERS = (
@@ -53,19 +75,14 @@ def result_to_dict(result: Any) -> dict:
     return asdict(result)
 
 
-def is_login_page(
-    html: str,
-    *,
-    rust_parser_extras_available: bool,
-    rust_is_login_page,
-) -> bool:
+def is_login_page(html: str) -> bool:
     if not html:
         return False
     if _has_login_required_text(html):
         return True
-    if rust_parser_extras_available:
+    if RUST_PARSER_EXTRAS_AVAILABLE:
         try:
-            return bool(rust_is_login_page(html))
+            return bool(_rust_is_login_page(html))
         except Exception as exc:
             logger.debug(
                 "Rust login-page detection failed; falling back to Python parser: %s",
@@ -81,15 +98,10 @@ def is_login_page(
     return False
 
 
-def validate_index_html(
-    html: str,
-    *,
-    rust_parser_extras_available: bool,
-    rust_validate_index_html,
-) -> Tuple[bool, bool]:
-    if rust_parser_extras_available:
+def validate_index_html(html: str) -> Tuple[bool, bool]:
+    if RUST_PARSER_EXTRAS_AVAILABLE:
         try:
-            return rust_validate_index_html(html)
+            return _rust_validate_index_html(html)
         except Exception as exc:
             logger.debug(
                 "Rust index HTML validation failed; falling back to Python parser: %s",

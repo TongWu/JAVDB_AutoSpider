@@ -30,7 +30,7 @@ from javdb.storage.history_manager import (
     save_parsed_movie_to_history,
     validate_history_file
 )
-from javdb.spider.parser import parse_detail
+from javdb.spider.parse_legacy_adapters import parse_detail
 from javdb.spider.magnet_extractor import extract_magnets
 from javdb.infra.logging import setup_logging, get_logger
 from javdb.spider.spider_gateway import create_gateway
