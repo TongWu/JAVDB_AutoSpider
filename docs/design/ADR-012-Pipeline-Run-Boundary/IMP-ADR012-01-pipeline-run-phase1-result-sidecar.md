@@ -42,7 +42,7 @@
 - Create: `javdb/spider/app/result.py`
 - Create: `tests/unit/test_spider_run_result.py`
 
-- [ ] **Step 1: Write failing tests for Spider result JSON**
+- [x] **Step 1: Write failing tests for Spider result JSON**
 
 Create `tests/unit/test_spider_run_result.py`:
 
@@ -144,7 +144,7 @@ def test_spider_partial_failure_result_preserves_unknowns_as_none(tmp_path):
     assert loaded.failure_reason == "proxy ban detected"
 ```
 
-- [ ] **Step 2: Run the tests and verify the expected failure**
+- [x] **Step 2: Run the tests and verify the expected failure**
 
 ```bash
 pytest tests/unit/test_spider_run_result.py -v
@@ -152,7 +152,7 @@ pytest tests/unit/test_spider_run_result.py -v
 
 Expected: FAIL with `ModuleNotFoundError: No module named 'javdb.spider.app.result'`.
 
-- [ ] **Step 3: Implement `javdb/spider/app/result.py`**
+- [x] **Step 3: Implement `javdb/spider/app/result.py`**
 
 Create `javdb/spider/app/result.py`:
 
@@ -264,7 +264,7 @@ def read_spider_result(path: str | Path) -> SpiderRunResult:
     )
 ```
 
-- [ ] **Step 4: Run the result tests**
+- [x] **Step 4: Run the result tests**
 
 ```bash
 pytest tests/unit/test_spider_run_result.py -v
@@ -272,7 +272,7 @@ pytest tests/unit/test_spider_run_result.py -v
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add javdb/spider/app/result.py tests/unit/test_spider_run_result.py
@@ -286,7 +286,7 @@ git commit -m "feat(spider): add structured run result"
 - Create: `javdb/pipeline/result_io.py`
 - Create: `tests/unit/test_pipeline_result_io.py`
 
-- [ ] **Step 1: Write failing tests for Pipeline result JSON**
+- [x] **Step 1: Write failing tests for Pipeline result JSON**
 
 Create `tests/unit/test_pipeline_result_io.py`:
 
@@ -371,7 +371,7 @@ def test_pipeline_result_tolerates_unknown_fields(tmp_path):
     assert loaded.status == "success"
 ```
 
-- [ ] **Step 2: Run the tests and verify the expected failure**
+- [x] **Step 2: Run the tests and verify the expected failure**
 
 ```bash
 pytest tests/unit/test_pipeline_result_io.py -v
@@ -379,7 +379,7 @@ pytest tests/unit/test_pipeline_result_io.py -v
 
 Expected: FAIL with missing `StepResult` or missing `javdb.pipeline.result_io`.
 
-- [ ] **Step 3: Add result dataclasses to `javdb/pipeline/models.py`**
+- [x] **Step 3: Add result dataclasses to `javdb/pipeline/models.py`**
 
 Append the following dataclasses below the existing ingestion models:
 
@@ -428,7 +428,7 @@ class PipelineRunResult:
 Also update `__all__` in `javdb/pipeline/engine.py` if callers need these
 types through the compatibility export.
 
-- [ ] **Step 4: Implement `javdb/pipeline/result_io.py`**
+- [x] **Step 4: Implement `javdb/pipeline/result_io.py`**
 
 Create `javdb/pipeline/result_io.py`:
 
@@ -502,7 +502,7 @@ __all__ = [
 ]
 ```
 
-- [ ] **Step 5: Run Pipeline result tests**
+- [x] **Step 5: Run Pipeline result tests**
 
 ```bash
 pytest tests/unit/test_pipeline_result_io.py -v
@@ -510,7 +510,7 @@ pytest tests/unit/test_pipeline_result_io.py -v
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add javdb/pipeline/models.py javdb/pipeline/result_io.py javdb/pipeline/engine.py tests/unit/test_pipeline_result_io.py
@@ -523,7 +523,7 @@ git commit -m "feat(pipeline): add structured run result model"
 - Create: `javdb/pipeline/step_runner.py`
 - Create: `tests/unit/test_pipeline_step_runner.py`
 
-- [ ] **Step 1: Write failing tests for streaming, exit code, and timeout**
+- [x] **Step 1: Write failing tests for streaming, exit code, and timeout**
 
 Create `tests/unit/test_pipeline_step_runner.py`:
 
@@ -590,7 +590,7 @@ def test_subprocess_step_runner_times_out():
     assert ("demo", "start\n") in sink.lines
 ```
 
-- [ ] **Step 2: Run tests and verify expected failure**
+- [x] **Step 2: Run tests and verify expected failure**
 
 ```bash
 pytest tests/unit/test_pipeline_step_runner.py -v
@@ -598,7 +598,7 @@ pytest tests/unit/test_pipeline_step_runner.py -v
 
 Expected: FAIL with `ModuleNotFoundError: No module named 'javdb.pipeline.step_runner'`.
 
-- [ ] **Step 3: Implement `javdb/pipeline/step_runner.py`**
+- [x] **Step 3: Implement `javdb/pipeline/step_runner.py`**
 
 Create `javdb/pipeline/step_runner.py`:
 
@@ -706,7 +706,7 @@ class SubprocessStepRunner:
                 process.wait()
 ```
 
-- [ ] **Step 4: Run step runner tests**
+- [x] **Step 4: Run step runner tests**
 
 ```bash
 pytest tests/unit/test_pipeline_step_runner.py -v
@@ -714,7 +714,7 @@ pytest tests/unit/test_pipeline_step_runner.py -v
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add javdb/pipeline/step_runner.py tests/unit/test_pipeline_step_runner.py
@@ -730,7 +730,7 @@ git commit -m "feat(pipeline): add subprocess step runner"
 - Modify: `tests/smoke/test_spider.py`
 - Modify: `tests/smoke/test_spider_app_main.py`
 
-- [ ] **Step 1: Add tests for result JSON CLI/runtime behavior**
+- [x] **Step 1: Add tests for result JSON CLI/runtime behavior**
 
 Append to `tests/unit/test_spider_run_result.py`:
 
@@ -759,7 +759,7 @@ def test_spider_result_can_represent_failure_without_stats(tmp_path):
     assert loaded.failure_reason == "boom"
 ```
 
-- [ ] **Step 2: Add `--result-json` argument**
+- [x] **Step 2: Add `--result-json` argument**
 
 In `javdb/spider/app/cli.py`, add:
 
@@ -772,7 +772,7 @@ parser.add_argument(
 )
 ```
 
-- [ ] **Step 3: Write success result from `run_service`**
+- [x] **Step 3: Write success result from `run_service`**
 
 In `javdb/spider/app/run_service.py`, capture `started_at` near the start of
 `main()`. After stats are known and before returning success, build
@@ -806,7 +806,7 @@ result = SpiderRunResult(
 write_spider_result_atomic(args.result_json, result)
 ```
 
-- [ ] **Step 4: Write best-effort failure result**
+- [x] **Step 4: Write best-effort failure result**
 
 In the existing `except Exception as exc:` block in `javdb/spider/app/run_service.py`,
 write a partial result when `args.result_json` exists. Preserve any known
@@ -814,7 +814,7 @@ write a partial result when `args.result_json` exists. Preserve any known
 Set `exit_code=1` unless the exception is `SystemExit` with a concrete non-zero
 integer code.
 
-- [ ] **Step 5: Run Spider result and compatibility tests**
+- [x] **Step 5: Run Spider result and compatibility tests**
 
 ```bash
 pytest tests/unit/test_spider_run_result.py tests/smoke/test_spider.py tests/smoke/test_spider_app_main.py -v
@@ -822,7 +822,7 @@ pytest tests/unit/test_spider_run_result.py tests/smoke/test_spider.py tests/smo
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add javdb/spider/app/cli.py javdb/spider/app/run_service.py tests/unit/test_spider_run_result.py tests/smoke/test_spider.py tests/smoke/test_spider_app_main.py
@@ -835,7 +835,7 @@ git commit -m "feat(spider): write structured run result sidecar"
 - Modify: `javdb/pipeline/service.py`
 - Modify: `tests/unit/test_pipeline_service.py`
 
-- [ ] **Step 1: Update Pipeline tests to provide Spider result JSON**
+- [x] **Step 1: Update Pipeline tests to provide Spider result JSON**
 
 In `tests/unit/test_pipeline_service.py`, replace fake `run_command()` return
 strings with a fake `SubprocessStepRunner` that writes a Spider result JSON when
@@ -893,7 +893,7 @@ class FakeStepRunner:
         )
 ```
 
-- [ ] **Step 2: Add Pipeline CLI `--result-json` argument**
+- [x] **Step 2: Add Pipeline CLI `--result-json` argument**
 
 In `javdb/pipeline/service.py`, extend `parse_arguments()`:
 
@@ -906,7 +906,7 @@ parser.add_argument(
 )
 ```
 
-- [ ] **Step 3: Replace `run_command()` usage with `SubprocessStepRunner`**
+- [x] **Step 3: Replace `run_command()` usage with `SubprocessStepRunner`**
 
 In `javdb/pipeline/service.py`, create a runner near the start of `main()`:
 
@@ -929,7 +929,7 @@ spider_step = runner.run(
 If the Spider step succeeds, read `read_spider_result(spider_result_path)` and
 use `csv_path` / `session_id` from the result. Do not parse stdout.
 
-- [ ] **Step 4: Keep qB/PikPak/email/dedup subprocess steps**
+- [x] **Step 4: Keep qB/PikPak/email/dedup subprocess steps**
 
 Execute qB, PikPak, rclone dedup, and email through `runner.run()` with explicit
 `StepPolicy`. Keep rclone dedup optional/non-fatal:
@@ -941,7 +941,7 @@ dedup_policy = StepPolicy(name="rclone_dedup", required=False, timeout_sec=3600)
 For required steps, failed or timed-out status raises the same Pipeline failure
 path as the previous `RuntimeError`.
 
-- [ ] **Step 5: Record success and failure notification steps**
+- [x] **Step 5: Record success and failure notification steps**
 
 Record success email as `email_notification`. In the `except` path, run failure
 email with:
@@ -953,19 +953,19 @@ StepPolicy(name="email_notification_failure", required=False, run_on_failure=Tru
 Append its `StepResult` regardless of success or failure. Keep final exit code
 as 1 when the main flow failed.
 
-- [ ] **Step 6: Write PipelineRunResult**
+- [x] **Step 6: Write PipelineRunResult**
 
 Before `sys.exit()`, build `PipelineRunResult` and write it when
 `args.result_json` is set. Also write best-effort partial results in failure
 paths.
 
-- [ ] **Step 7: Remove internal stdout extraction dependency**
+- [x] **Step 7: Remove internal stdout extraction dependency**
 
 Delete or stop calling `extract_csv_path_from_output()` and
 `extract_session_id_from_output()` from Pipeline core. Keep them only if tests or
 compatibility code still need them outside Pipeline core.
 
-- [ ] **Step 8: Run Pipeline service tests**
+- [x] **Step 8: Run Pipeline service tests**
 
 ```bash
 pytest tests/unit/test_pipeline_service.py tests/unit/test_pipeline_result_io.py tests/unit/test_pipeline_step_runner.py -v
@@ -973,7 +973,7 @@ pytest tests/unit/test_pipeline_service.py tests/unit/test_pipeline_result_io.py
 
 Expected: PASS.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add javdb/pipeline/service.py tests/unit/test_pipeline_service.py
@@ -987,7 +987,7 @@ git commit -m "refactor(pipeline): read spider result sidecar"
 - Modify: `tests/unit/test_task_service_metadata.py`
 - Modify: `tests/unit/test_api_task_service_security.py`
 
-- [ ] **Step 1: Add metadata tests**
+- [x] **Step 1: Add metadata tests**
 
 Append to `tests/unit/test_task_service_metadata.py`:
 
@@ -1015,7 +1015,7 @@ def test_extract_params_includes_result_json_path():
     assert params["result_json"] == "logs/jobs/daily-20260520-010203-abcd.result.json"
 ```
 
-- [ ] **Step 2: Allow `--result-json` for task commands**
+- [x] **Step 2: Allow `--result-json` for task commands**
 
 In `apps/api/services/task_service.py`, add to `_TASK_ALLOWED_FLAGS`:
 
@@ -1026,7 +1026,7 @@ In `apps/api/services/task_service.py`, add to `_TASK_ALLOWED_FLAGS`:
 Add validation for `job_result_file`: it must resolve under
 `context.RESOLVED_JOB_LOG_DIR` and end with `.result.json`.
 
-- [ ] **Step 3: Pass result JSON path for pipeline jobs**
+- [x] **Step 3: Pass result JSON path for pipeline jobs**
 
 In `_spawn_job()`, when `command[3] == "apps.cli.pipeline"` and the command does
 not already contain `--result-json`, compute:
@@ -1038,7 +1038,7 @@ command.extend(["--result-json", str(result_path)])
 
 Record `result_path` in the in-memory job dict and `.meta.json`.
 
-- [ ] **Step 4: Preserve stream response shape**
+- [x] **Step 4: Preserve stream response shape**
 
 Run the existing task metadata tests and add no required frontend field changes
 in this phase.
@@ -1049,7 +1049,7 @@ pytest tests/unit/test_task_service_metadata.py tests/unit/test_api_task_service
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api/services/task_service.py tests/unit/test_task_service_metadata.py tests/unit/test_api_task_service_security.py
@@ -1063,7 +1063,7 @@ git commit -m "feat(api): record pipeline result sidecar path"
 - Modify: `docs/handbook/en/ops/logging.md`
 - Modify: `docs/handbook/zh/ops/logging.md`
 
-- [ ] **Step 1: Update `javdb/pipeline/README.md`**
+- [x] **Step 1: Update `javdb/pipeline/README.md`**
 
 Document:
 
@@ -1071,7 +1071,7 @@ Document:
 - Pipeline structured data uses result JSON.
 - `SPIDER_*` stdout is compatibility output, not the internal Pipeline protocol.
 
-- [ ] **Step 2: Update logging handbook in English and Chinese**
+- [x] **Step 2: Update logging handbook in English and Chinese**
 
 Add a section after "GitHub Actions Step Summary":
 
@@ -1085,7 +1085,7 @@ during ADR-012 Phase 1. Do not add new Pipeline internals that parse those
 stdout markers for business data.
 ```
 
-- [ ] **Step 3: Run docs and focused tests**
+- [x] **Step 3: Run docs and focused tests**
 
 ```bash
 pytest tests/unit/test_spider_run_result.py tests/unit/test_pipeline_result_io.py tests/unit/test_pipeline_step_runner.py tests/unit/test_pipeline_service.py tests/unit/test_task_service_metadata.py -v
@@ -1094,7 +1094,7 @@ git diff --check
 
 Expected: PASS and no whitespace errors.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add javdb/pipeline/README.md docs/handbook/en/ops/logging.md docs/handbook/zh/ops/logging.md
@@ -1103,10 +1103,10 @@ git commit -m "docs(pipeline): document structured run results"
 
 ## Phase 1 Completion Gate
 
-- [ ] `pytest tests/unit/test_spider_run_result.py tests/unit/test_pipeline_result_io.py tests/unit/test_pipeline_step_runner.py tests/unit/test_pipeline_service.py tests/unit/test_task_service_metadata.py -v` passes.
-- [ ] Existing `SPIDER_OUTPUT_CSV`, `SPIDER_SESSION_ID`, and `SPIDER_STAT_*` stdout compatibility tests pass.
-- [ ] Pipeline no longer reads `csv_path` or `session_id` by parsing stdout.
-- [ ] Pipeline CLI writes `PipelineRunResult` when `--result-json` is supplied.
-- [ ] Spider CLI writes `SpiderRunResult` when `--result-json` is supplied.
-- [ ] API task runner stores `result_path` metadata for pipeline jobs.
-- [ ] Daily/AdHoc/Test workflows are unchanged in Phase 1.
+- [x] `pytest tests/unit/test_spider_run_result.py tests/unit/test_pipeline_result_io.py tests/unit/test_pipeline_step_runner.py tests/unit/test_pipeline_service.py tests/unit/test_task_service_metadata.py -v` passes.
+- [x] Existing `SPIDER_OUTPUT_CSV`, `SPIDER_SESSION_ID`, and `SPIDER_STAT_*` stdout compatibility tests pass.
+- [x] Pipeline no longer reads `csv_path` or `session_id` by parsing stdout.
+- [x] Pipeline CLI writes `PipelineRunResult` when `--result-json` is supplied.
+- [x] Spider CLI writes `SpiderRunResult` when `--result-json` is supplied.
+- [x] API task runner stores `result_path` metadata for pipeline jobs.
+- [x] Daily/AdHoc/Test workflows are unchanged in Phase 1.
