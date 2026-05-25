@@ -75,8 +75,10 @@ def parse_index(html_content, page_num, phase=1, disable_new_releases_filter=Fal
         phase: 1 for subtitle entries, 2 for non-subtitle entries
         disable_new_releases_filter: If True, disable release date filter
             but keep other filters
-        is_adhoc_mode: If True, disable ALL filters and process ALL entries
-            (for custom URL mode)
+        is_adhoc_mode: If True, bypass only the new-release date filter for
+            custom URL mode. Entry selection still delegates to
+            ``select_index_entries()``, so phase subtitle/non-subtitle
+            filtering and magnet-tag skips still apply.
     """
     page_result = _api_parse_index(html_content, page_num)
     if not page_result.has_movie_list:
