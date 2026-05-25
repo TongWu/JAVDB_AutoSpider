@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status**: Completed 2026-05-25
+**Status**: Completed and verified 2026-05-25
 
 **Goal:** Replace the Pipeline Spider subprocess with an in-process Spider runner after ADR-012 Phase 1 bake passes, while preserving real-time logs and all CLI compatibility output.
 
@@ -523,3 +523,11 @@ git commit -m "refactor(pipeline): run spider in process"
 - [x] `SPIDER_*` CLI compatibility remains.
 - [x] `python -m apps.cli.pipeline --result-json <path>` writes `PipelineRunResult`.
 - [x] Focused Pipeline/Spider tests pass.
+
+## Verification
+
+Verified on 2026-05-25 with:
+
+- `pytest tests/unit/test_spider_run_options.py tests/unit/test_spider_run_result.py tests/unit/test_in_process_spider_step_runner.py tests/unit/test_pipeline_service.py -v`
+- `pytest tests/unit/test_pipeline_step_runner.py -v`
+- `pytest tests/smoke/test_spider.py tests/smoke/test_spider_app_main.py -v`
