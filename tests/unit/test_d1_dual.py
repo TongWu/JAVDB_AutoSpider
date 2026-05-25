@@ -34,6 +34,7 @@ from javdb.storage.repos.operations_repo import (  # noqa: E402
     open_rclone_staging,
     swap_rclone_inventory,
 )
+from javdb.storage.d1_recovery import RecoveryPolicy  # noqa: E402
 
 
 # ── _is_read ─────────────────────────────────────────────────────────────
@@ -179,8 +180,8 @@ class FakeD1Connection:
         # Default response: one row from a SELECT
         self._next_select_rows = [{"n": 99}]
 
-    def execute(self, sql: str, params: Iterable[Any] = ()):
-        self.executed.append((sql, list(params)))
+    def execute(self, sql: str, params: Iterable[Any] = (), *, policy=None):
+        self.executed.append((sql, list(params), policy))
         if not _is_read(sql):
             if self.fail_on_write:
                 raise RuntimeError("simulated D1 write failure")
@@ -218,6 +219,7 @@ def test_writes_go_to_both_backends(sqlite_conn):
     assert [dict(r) for r in rows] == [{"v": "hello"}]
     # D1 also saw it
     assert fake_d1.executed[-1][0].startswith("INSERT INTO t")
+    assert fake_d1.executed[-1][2] is None
     # Cursor reports the SQLite-canonical lastrowid
     assert cur.lastrowid == 1
 
@@ -231,7 +233,17 @@ def test_reads_go_to_d1_only(sqlite_conn):
     assert cur.fetchone() == {"n": 7}
 
     # The SQL should have hit D1 and not SQLite
-    assert any("SELECT" in s for s, _ in fake_d1.executed)
+    assert any("SELECT" in s for s, _, _ in fake_d1.executed)
+
+
+def test_write_policy_is_forwarded_to_d1(sqlite_conn):
+    fake_d1 = FakeD1Connection()
+    dual = DualConnection(sqlite_conn, fake_d1)
+
+    policy = object()
+    dual.execute("INSERT INTO t (v) VALUES (?)", ("hello",), policy=policy)
+
+    assert fake_d1.executed[-1][2] is policy
 
 
 def test_d1_write_failure_does_not_break_sqlite(sqlite_conn):
@@ -1253,7 +1265,7 @@ def test_explicit_id_skips_lastrowid_check_even_when_backends_disagree(tmp_path)
 
     # D1 returns a *different* lastrowid (e.g. its internal counter
     # value) — SQLite returns SID because Id is the rowid alias.
-    fake_d1.execute = lambda sql, params=(): _Cursor(  # type: ignore[assignment]
+    fake_d1.execute = lambda sql, params=(), *, policy=None: _Cursor(  # type: ignore[assignment]
         lastrowid=347, rowcount=1,
     )
 
@@ -1284,7 +1296,7 @@ def test_lastrowid_mismatch_on_report_sessions_raises(monkeypatch, tmp_path):
             return []
 
     # SQLite will use AUTOINCREMENT (1), D1 returns 999 → mismatch.
-    fake_d1.execute = lambda sql, params=(): _Cursor(  # type: ignore[assignment]
+    fake_d1.execute = lambda sql, params=(), *, policy=None: _Cursor(  # type: ignore[assignment]
         lastrowid=999, rowcount=1,
     )
 
@@ -1331,7 +1343,7 @@ def test_unguarded_table_id_drift_is_warning_not_error(tmp_path):
         def fetchall(self):
             return []
 
-    fake_d1.execute = lambda sql, params=(): _Cursor(  # type: ignore[assignment]
+    fake_d1.execute = lambda sql, params=(), *, policy=None: _Cursor(  # type: ignore[assignment]
         lastrowid=999, rowcount=1,
     )
 
@@ -1369,7 +1381,7 @@ def test_explicit_pk_insert_does_not_emit_drift_warning(tmp_path, caplog):
     ]
     cursor_iter = iter(plan)
 
-    def _fake_execute(sql, params=()):
+    def _fake_execute(sql, params=(), *, policy=None):
         _, d1_lr = next(cursor_iter)
         return _FixedLastrowidCursor(lastrowid=d1_lr, rowcount=1)
 
@@ -1478,7 +1490,7 @@ def test_explicit_seq_into_pending_movie_history_is_accepted(tmp_path):
     fake_d1 = FakeD1Connection()
 
     SAME_SEQ = 1755545088000123
-    fake_d1.execute = lambda sql, params=(): _FixedLastrowidCursor(  # type: ignore[assignment]
+    fake_d1.execute = lambda sql, params=(), *, policy=None: _FixedLastrowidCursor(  # type: ignore[assignment]
         lastrowid=SAME_SEQ, rowcount=1,
     )
 
@@ -1497,7 +1509,7 @@ def test_explicit_seq_into_pending_torrent_history_is_accepted(tmp_path):
     fake_d1 = FakeD1Connection()
 
     SAME_SEQ = 1755545088000456
-    fake_d1.execute = lambda sql, params=(): _FixedLastrowidCursor(  # type: ignore[assignment]
+    fake_d1.execute = lambda sql, params=(), *, policy=None: _FixedLastrowidCursor(  # type: ignore[assignment]
         lastrowid=SAME_SEQ, rowcount=1,
     )
 
@@ -1522,7 +1534,7 @@ def test_explicit_seq_skips_lastrowid_check_even_when_backends_disagree(tmp_path
     fake_d1 = FakeD1Connection()
 
     SEQ = 1821300000000099
-    fake_d1.execute = lambda sql, params=(): _FixedLastrowidCursor(  # type: ignore[assignment]
+    fake_d1.execute = lambda sql, params=(), *, policy=None: _FixedLastrowidCursor(  # type: ignore[assignment]
         lastrowid=42, rowcount=1,
     )
 
@@ -1546,7 +1558,7 @@ def test_lastrowid_mismatch_on_pending_movie_history_raises(monkeypatch, tmp_pat
     """
     sqlite_conn = _make_pending_tables_sqlite(tmp_path)
     fake_d1 = FakeD1Connection()
-    fake_d1.execute = lambda sql, params=(): _FixedLastrowidCursor(  # type: ignore[assignment]
+    fake_d1.execute = lambda sql, params=(), *, policy=None: _FixedLastrowidCursor(  # type: ignore[assignment]
         lastrowid=999, rowcount=1,
     )
 
@@ -1570,7 +1582,7 @@ def test_lastrowid_mismatch_on_pending_movie_history_raises(monkeypatch, tmp_pat
 def test_lastrowid_mismatch_on_pending_torrent_history_raises(monkeypatch, tmp_path):
     sqlite_conn = _make_pending_tables_sqlite(tmp_path)
     fake_d1 = FakeD1Connection()
-    fake_d1.execute = lambda sql, params=(): _FixedLastrowidCursor(  # type: ignore[assignment]
+    fake_d1.execute = lambda sql, params=(), *, policy=None: _FixedLastrowidCursor(  # type: ignore[assignment]
         lastrowid=999, rowcount=1,
     )
 

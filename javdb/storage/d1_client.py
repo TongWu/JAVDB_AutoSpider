@@ -228,9 +228,18 @@ class D1Connection:
         # natively so row_factory is a no-op (callers can still set it).
         self.row_factory = None
 
-    def execute(self, sql: str, params: Iterable[Any] = ()) -> D1Cursor:
+    def execute(
+        self,
+        sql: str,
+        params: Iterable[Any] = (),
+        *,
+        policy=None,
+    ) -> D1Cursor:
         self._sync_port_config()
-        cursors = self._port.execute(sql, params)
+        if policy is None:
+            cursors = self._port.execute(sql, params)
+        else:
+            cursors = self._port.execute(sql, params, policy=policy)
         if not cursors:
             # success=true but empty result[] — should never happen per CF docs,
             # but guard against API regressions / proxy stripping the body.
