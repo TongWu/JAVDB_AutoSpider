@@ -612,9 +612,7 @@ class DualConnection:
     def execute(self, sql: str, params: Iterable[Any] = (), *, policy=None):
         if _is_read(sql):
             try:
-                if policy is None:
-                    return self._d1.execute(sql, params)
-                return self._d1.execute(sql, params, policy=policy)
+                return self._d1.execute(sql, params)
             except Exception as exc:
                 # Read failures are NOT drift — we transparently fall back to
                 # SQLite and keep serving the request. Counting them as drift
