@@ -6,7 +6,8 @@ JavDB scraping runtime: fetches index/detail pages, parses HTML, runs parallel/s
 
 | File | Purpose |
 |---|---|
-| `parser.py` | Temporary Spider parser adapter; preserves legacy index/detail return shapes while delegating HTML parsing to `javdb.parsing`. |
+| `html_validators.py` | HTML validators / generic helpers (`is_login_page`, `is_maintenance_page`, `validate_index_html`, `result_to_dict`) with Rust-first dispatch. |
+| `parse_legacy_adapters.py` | Legacy-shape parsing wrappers (`parse_index`, `parse_detail`, `extract_video_code`) over `javdb.parsing` + `javdb.pipeline.index_selection`. |
 | `contracts.py` | Cross-module data contracts: torrent category mapping, sensor priority, indicator tables (mirrored in Rust core). |
 | `url_helper.py` | JavDB URL parsing, type detection, and normalisation (Rust-accelerated with Python fallback). |
 | `filename_helper.py` | Filename derivation for spider output CSVs, with optional HTML-based name resolution. |

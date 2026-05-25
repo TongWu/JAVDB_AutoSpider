@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import List
 
 from javdb.infra.logging import get_logger
-from javdb.spider.parser import parse_detail
+from javdb.spider.parse_legacy_adapters import parse_detail
 
 from javdb.spider.detail.runner import (
     process_detail_entries,
