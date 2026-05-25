@@ -366,6 +366,60 @@ def test_d1_connection_delegates_execute_to_port():
     assert calls[0] == ("execute", "SELECT 1 AS n", [], None)
 
 
+def test_d1_connection_forwards_policy_to_port_execute(monkeypatch):
+    monkeypatch.setenv("D1_BATCHING_ENABLED", "1")
+    calls = []
+    queued = []
+
+    class FakePort:
+        def execute(self, sql, params=(), *, policy=None):
+            calls.append(("execute", sql, list(params), policy))
+            if policy is not None and getattr(policy, "batching_allowed", False):
+                queued.append((sql, list(params), policy))
+                return [D1Cursor({"meta": {"changes": 0}, "results": []})]
+            return [D1Cursor({"meta": {"changes": 1}, "results": []})]
+
+        def flush(self, ordering_key=None):
+            calls.append(("flush", ordering_key))
+            while queued:
+                calls.append(("flushed", queued.pop(0)))
+            return None
+
+        def executemany(self, sql, seq_of_params, *, policy=None):
+            raise AssertionError("unexpected executemany")
+
+        def batch_execute(self, statements, *, policy=None):
+            raise AssertionError("unexpected batch_execute")
+
+        def write_summary(self):
+            pass
+
+        def close(self):
+            pass
+
+    conn = D1Connection("acct", "db", "token")
+    conn._port = FakePort()
+
+    policy = RecoveryPolicy(
+        logical_db="history",
+        operation_type="pending_stage",
+        idempotency_key="history:s1:seq1",
+        ordering_key="history:s1",
+        recovery_allowed=True,
+        max_attempts=3,
+        batching_allowed=True,
+    )
+    conn.execute("INSERT INTO t VALUES (?)", ("x",), policy=policy)
+
+    assert calls[0] == ("execute", "INSERT INTO t VALUES (?)", ["x"], policy)
+    assert queued == [("INSERT INTO t VALUES (?)", ["x"], policy)]
+    conn.flush(ordering_key=policy.ordering_key)
+    assert calls[-2:] == [
+        ("flush", policy.ordering_key),
+        ("flushed", ("INSERT INTO t VALUES (?)", ["x"], policy)),
+    ]
+
+
 def test_execute_stringifies_json_unsafe_integer_params(monkeypatch, d1_conn, no_sleep):
     """Ints beyond JS Number.MAX_SAFE_INTEGER must not be JSON Number on the wire."""
     captured = {}
