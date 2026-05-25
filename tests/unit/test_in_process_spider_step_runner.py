@@ -129,6 +129,24 @@ def test_in_process_spider_step_runner_maps_system_exit_zero_to_success():
     assert spider_result is None
 
 
+def test_in_process_spider_step_runner_fails_when_spider_returns_none():
+    def run_spider(options):
+        return None
+
+    runner = InProcessSpiderStepRunner(run_spider=run_spider)
+    policy = StepPolicy(name="spider", required=True, timeout_sec=10)
+    options = SimpleNamespace(result_json="/tmp/spider-result.json")
+
+    result, spider_result = runner.run(policy, options=options, command_label=("in-process", "spider"))
+
+    assert result.status == "failed"
+    assert result.exit_code == 1
+    assert result.failure_reason == "spider did not return a result"
+    assert result.command == ["in-process", "spider"]
+    assert result.result_path == "/tmp/spider-result.json"
+    assert spider_result is None
+
+
 def test_in_process_spider_step_runner_times_out_without_waiting_for_spider_completion():
     release_spider = threading.Event()
     started = threading.Event()
