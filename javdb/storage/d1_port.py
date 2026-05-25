@@ -157,7 +157,9 @@ class D1AccessPort:
     ) -> list[D1Cursor]:
         params_tuple = tuple(params)
         if self._should_queue(policy):
-            self._queue_statement(sql, params_tuple, policy)
+            flushed = self._queue_statement(sql, params_tuple, policy)
+            if flushed:
+                return flushed
             return [D1Cursor({"meta": {"changes": 0}, "results": []}, queued=True)]
 
         key = self._schema_cache_key(sql, params_tuple)
@@ -232,6 +234,12 @@ class D1AccessPort:
             self._batch_queue.pop(key, None)
             self._batch_queue_since.pop(key, None)
         return cursors
+
+    def discard(self, *, ordering_key: str | None = None) -> None:
+        keys = [ordering_key] if ordering_key is not None else list(self._batch_queue)
+        for key in keys:
+            self._batch_queue.pop(key, None)
+            self._batch_queue_since.pop(key, None)
 
     def drain_recovery(
         self,
@@ -442,7 +450,7 @@ class D1AccessPort:
         sql: str,
         params: tuple[Any, ...],
         policy: object,
-    ) -> None:
+    ) -> list[D1Cursor]:
         ordering_key = str(getattr(policy, "ordering_key"))
         self._flush_on_enqueue_if_interval_elapsed(ordering_key)
 
@@ -451,7 +459,8 @@ class D1AccessPort:
             self._batch_queue_since[ordering_key] = time.monotonic()
         queue.append((sql, params, policy))
         if len(queue) >= self._config.batch_limit:
-            self.flush(ordering_key=ordering_key)
+            return self.flush(ordering_key=ordering_key)
+        return []
 
     def _flush_on_enqueue_if_interval_elapsed(self, ordering_key: str) -> None:
         queue = self._batch_queue.get(ordering_key)

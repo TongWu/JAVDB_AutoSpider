@@ -1,19 +1,19 @@
 # ADR-010：统一 Python D1 读写端口
 
-**状态**：已接受 —— 实现待启动（截至 2026-05-19，四个阶段均未执行）
+**状态**：已接受 —— Phase 1 和 Phase 3 已实现；Phase 2 和 Phase 4 截至 2026-05-25 仍待完成
 **日期**：2026-05-19
 **决策者**：D1 统一读写端口 brainstorming + grill 会话
 **前置**：[ADR-006](../_archive/ADR-006-Pending-Mode-Rollout/ADR-006-pending-mode-default-rollout.md) 已将 Pending Mode 作为默认写入路径；[ADR-009](../_archive/ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md) 记录了近期 D1 瞬时失败和 drift 响应。
 **关联实现计划 (Related Implementation Plans)**：[IMP-ADR010-01](IMP-ADR010-01-d1-access-port-phase1-core.md)（Phase 1 — 端口核心）、[IMP-ADR010-02](IMP-ADR010-02-d1-access-port-phase2-recovery-outbox.md)（Phase 2 — 恢复 outbox）、[IMP-ADR010-03](IMP-ADR010-03-d1-access-port-phase3-safe-batching.md)（Phase 3 — 安全批处理）、[IMP-ADR010-04](IMP-ADR010-04-d1-access-port-phase4-startup-replay.md)（Phase 4 — 启动重放）
 
-## 待办 (Outstanding Work)
+## 实现进展 (Implementation Progress)
 
-- Phase 1 —— `D1AccessPort` 核心类 + `D1Connection`/`DualConnection` 代理。`javdb/storage/` 下尚未出现 `D1AccessPort` 符号。
-- Phase 2 —— 恢复 outbox + replay 队列（对应 D5）。
-- Phase 3 —— 安全 micro-batching + `flush()` 边界（对应 D4）。
-- Phase 4 —— 启动期 outbox 重放。
+- Phase 1 —— `D1AccessPort` 核心类 + `D1Connection`/`DualConnection` 代理已实现。
+- Phase 2 —— 恢复 outbox + replay 队列（对应 D5）仍待完成。
+- Phase 3 —— 安全 micro-batching + `flush()` 边界（对应 D4）已在 `D1_BATCHING_ENABLED` gate 后实现，并已完成本地验证。
+- Phase 4 —— 启动期 outbox 重放仍待完成。
 
-四阶段独立闸门；截至该日期，本 ADR 中尚无任何决策上线。
+四阶段独立闸门。本 ADR 在 Phase 4 交付或由后续决策明确延期前保持打开。
 
 ---
 

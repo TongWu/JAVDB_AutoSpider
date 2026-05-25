@@ -607,6 +607,16 @@ class DualConnection:
             collections.OrderedDict()
         )
 
+    @staticmethod
+    def _count_applied_cursors(cursors) -> int:
+        if cursors is None:
+            return 0
+        if isinstance(cursors, list):
+            return sum(1 for cursor in cursors if cursor is not None)
+        if isinstance(cursors, tuple):
+            return sum(1 for cursor in cursors if cursor is not None)
+        return 1
+
     # ── Statement execution ─────────────────────────────────────────────
 
     def execute(self, sql: str, params: Iterable[Any] = (), *, policy=None):
@@ -944,7 +954,9 @@ class DualConnection:
 
         self._sqlite.commit()
         try:
-            self._d1.commit()
+            self._d1_uncommitted_writes += self._count_applied_cursors(
+                self._d1.commit()
+            )
         except Exception as exc:
             self._record_d1_failure("COMMIT", exc, kind="commit")
             if _strict_dual_write_enabled() and self._d1_uncommitted_writes > 0:
@@ -977,7 +989,9 @@ class DualConnection:
     def flush(self, ordering_key: Optional[str] = None):
         flush = getattr(self._d1, "flush", None)
         if callable(flush):
-            return flush(ordering_key=ordering_key)
+            cursors = flush(ordering_key=ordering_key)
+            self._d1_uncommitted_writes += self._count_applied_cursors(cursors)
+            return cursors
 
     def close(self):
         try:
