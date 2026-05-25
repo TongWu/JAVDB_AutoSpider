@@ -9,7 +9,7 @@ import sys
 import threading
 import time
 from datetime import datetime, timezone
-from typing import Callable, Protocol, Sequence
+from typing import Callable, NamedTuple, Protocol, Sequence
 
 from javdb.pipeline.models import StepPolicy, StepResult
 from javdb.spider.app.options import SpiderRunOptions
@@ -30,6 +30,11 @@ class LogSink(Protocol):
 class SpiderStepRunResult(Protocol):
     exit_code: int
     failure_reason: str | None
+
+
+class _SpiderThreadOutcome(NamedTuple):
+    spider_result: SpiderStepRunResult | None
+    exception: BaseException | None
 
 
 class ConsoleAndFileLogSink:
@@ -223,26 +228,56 @@ class InProcessSpiderStepRunner:
         command_list = list(command_label)
         result_path = getattr(options, "result_json", None)
 
-        try:
-            spider_result = self._run_spider(options)
-        except SystemExit as exc:
-            code = self._system_exit_code(exc)
+        outcome_queue: queue.Queue[_SpiderThreadOutcome] = queue.Queue(maxsize=1)
+
+        def _run_spider_thread() -> None:
+            try:
+                outcome_queue.put(_SpiderThreadOutcome(self._run_spider(options), None))
+            except BaseException as exc:
+                outcome_queue.put(_SpiderThreadOutcome(None, exc))
+
+        runner_thread = threading.Thread(target=_run_spider_thread, daemon=True)
+        runner_thread.start()
+        runner_thread.join(timeout=policy.timeout_sec)
+        if runner_thread.is_alive():
             return (
                 StepResult(
                     name=policy.name,
-                    status="success" if code == 0 else "failed",
+                    status="timed_out",
                     required=policy.required,
                     run_on_failure=policy.run_on_failure,
                     command=command_list,
                     started_at=started_at,
                     finished_at=_utc_now_iso(),
-                    exit_code=code,
-                    failure_reason=None if code == 0 else f"exit code {code}",
+                    exit_code=None,
+                    failure_reason=f"timed out after {policy.timeout_sec}s",
                     result_path=result_path,
                 ),
                 None,
             )
-        except Exception as exc:
+
+        outcome = outcome_queue.get()
+        if outcome.exception is not None:
+            exc = outcome.exception
+            if isinstance(exc, SystemExit):
+                code = self._system_exit_code(exc)
+                return (
+                    StepResult(
+                        name=policy.name,
+                        status="success" if code == 0 else "failed",
+                        required=policy.required,
+                        run_on_failure=policy.run_on_failure,
+                        command=command_list,
+                        started_at=started_at,
+                        finished_at=_utc_now_iso(),
+                        exit_code=code,
+                        failure_reason=None if code == 0 else f"exit code {code}",
+                        result_path=result_path,
+                    ),
+                    None,
+                )
+            if not isinstance(exc, Exception):
+                raise exc
             return (
                 StepResult(
                     name=policy.name,
@@ -254,6 +289,24 @@ class InProcessSpiderStepRunner:
                     finished_at=_utc_now_iso(),
                     exit_code=1,
                     failure_reason=str(exc),
+                    result_path=result_path,
+                ),
+                None,
+            )
+
+        spider_result = outcome.spider_result
+        if spider_result is None:
+            return (
+                StepResult(
+                    name=policy.name,
+                    status="failed",
+                    required=policy.required,
+                    run_on_failure=policy.run_on_failure,
+                    command=command_list,
+                    started_at=started_at,
+                    finished_at=_utc_now_iso(),
+                    exit_code=1,
+                    failure_reason="spider did not return a result",
                     result_path=result_path,
                 ),
                 None,

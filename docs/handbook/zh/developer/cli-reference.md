@@ -592,6 +592,6 @@ python3 -m apps.cli.config_generator --github-actions
 | `--no-rclone-filter` | 标志 | 禁用 rclone 库存过滤（不跳过已在 rclone 库存中的条目） | `False` | `--no-rclone-filter` |
 | `--disable-all-filters` | 标志 | 禁用所有过滤器（历史记录、rclone 库存、发布日期）— 处理索引中的每一个条目 | `False` | `--disable-all-filters` |
 | `--enable-dedup` | 标志 | 启用 rclone 去重检测（与 rclone 库存对比） | `False` | `--enable-dedup` |
-| `--enable-redownload` | 标志 | 当同类别种子显著更大时启用重新下载 | `False` | `--enable-redownload` |
+| `--enable-redownload` | 标志 | 当同类别种子显著更大时启用重新下载 | `ENABLE_REDOWNLOAD` 配置值 | `--enable-redownload` |
 | `--redownload-threshold` | 浮点数 | 重新下载的大小增长阈值（0.30 = 30%） | `0.30` | `--redownload-threshold 0.50` |
 | `--from-pipeline` | 标志 | 内部参数：从 pipeline 运行（使用 GIT_USERNAME 进行提交） | `False` | `--from-pipeline` |

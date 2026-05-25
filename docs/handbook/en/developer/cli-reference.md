@@ -592,6 +592,6 @@ All arguments accepted by `apps.cli.spider`:
 | `--no-rclone-filter` | flag | Disable rclone inventory filter (do not skip entries already in rclone inventory) | `False` | `--no-rclone-filter` |
 | `--disable-all-filters` | flag | Disable all filters (history, rclone inventory, release date) -- process every entry from index | `False` | `--disable-all-filters` |
 | `--enable-dedup` | flag | Enable rclone dedup detection (compare against rclone inventory) | `False` | `--enable-dedup` |
-| `--enable-redownload` | flag | Enable torrent re-download when a same-category torrent is significantly larger | `False` | `--enable-redownload` |
+| `--enable-redownload` | flag | Enable torrent re-download when a same-category torrent is significantly larger | `ENABLE_REDOWNLOAD` config | `--enable-redownload` |
 | `--redownload-threshold` | float | Size increase threshold for re-download (0.30 = 30%) | `0.30` | `--redownload-threshold 0.50` |
 | `--from-pipeline` | flag | Internal: running from pipeline (uses GIT_USERNAME for commits) | `False` | `--from-pipeline` |

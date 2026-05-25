@@ -1,5 +1,6 @@
 """Spider runtime orchestration service."""
 
+from contextvars import ContextVar
 from dataclasses import dataclass
 import os
 import sys
@@ -76,7 +77,10 @@ class _SpiderResultContext:
     page_range: str | None = None
 
 
-_result_context = _SpiderResultContext()
+_result_context: ContextVar[_SpiderResultContext] = ContextVar(
+    "spider_result_context",
+    default=_SpiderResultContext(),
+)
 
 
 def _page_range(start_page: int, end_page: int, parse_all: bool) -> str:
@@ -108,7 +112,7 @@ def _write_failure_result_sidecar(exc: BaseException) -> None:
     exit_code = _failure_exit_code(exc)
     if exit_code is None:
         return
-    ctx = _result_context
+    ctx = _result_context.get()
     _write_result_sidecar(
         SpiderRunResult(
             csv_path=str(ctx.csv_path) if ctx.csv_path else None,
@@ -156,8 +160,7 @@ def create_detail_backend(
 
 
 def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
-    global _result_context
-    _result_context = _SpiderResultContext()
+    result_context = _result_context.get()
     started_at = utc_now_iso()
 
     start_page = options.start_page
@@ -178,16 +181,21 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
     sequential = options.sequential
     enable_dedup = options.enable_dedup
     rclone_filter = not options.no_rclone_filter
-    enable_redownload = options.enable_redownload or ENABLE_REDOWNLOAD
+    enable_redownload = (
+        options.enable_redownload
+        if options.enable_redownload is not None
+        else ENABLE_REDOWNLOAD
+    )
     redownload_threshold = options.redownload_threshold if options.redownload_threshold is not None else REDOWNLOAD_SIZE_THRESHOLD
     page_range = _page_range(start_page, end_page, parse_all)
     result_json = options.result_json
-    _result_context.result_json = result_json
-    _result_context.started_at = started_at
-    _result_context.mode = "adhoc" if custom_url else "daily"
-    _result_context.url = custom_url
-    _result_context.phase = str(phase_mode)
-    _result_context.page_range = page_range
+    actual_mode = "adhoc" if custom_url else "daily"
+    result_context.result_json = result_json
+    result_context.started_at = started_at
+    result_context.mode = actual_mode
+    result_context.url = custom_url
+    result_context.phase = str(phase_mode)
+    result_context.page_range = page_range
 
     if always_bypass_time is not None and always_bypass_time < 0:
         logger.error("--always-bypass-time must be >= 0")
@@ -220,7 +228,7 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
         csv_path = os.path.join(output_dated_dir, output_csv)
         use_history_for_loading = not options.disable_all_filters
         use_history_for_saving = True
-    _result_context.csv_path = str(csv_path) if csv_path else None
+    result_context.csv_path = str(csv_path) if csv_path else None
 
     log_section(logger, "START · JavDB spider", emoji='▶')
     if options.disable_all_filters:
@@ -325,7 +333,7 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
         dedup_csv_path = os.path.join(dedup_dated_dir, dedup_filename)
     else:
         dedup_csv_path = os.path.join(REPORTS_DIR, DEDUP_CSV)
-    _result_context.dedup_csv_path = str(dedup_csv_path) if enable_dedup and dedup_csv_path else None
+    result_context.dedup_csv_path = str(dedup_csv_path) if enable_dedup and dedup_csv_path else None
     rclone_inventory = {}
     if os.path.exists(rclone_inventory_path):
         rclone_inventory = load_rclone_inventory(rclone_inventory_path)
@@ -395,7 +403,7 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
     use_proxy = idx_result['use_proxy']
     use_cf_bypass = idx_result['use_cf_bypass']
     csv_path = idx_result['csv_path']
-    _result_context.csv_path = str(csv_path) if csv_path else None
+    result_context.csv_path = str(csv_path) if csv_path else None
 
     # Create a report session in DB-backed storage (when enabled)
     _session_id = None
@@ -501,7 +509,7 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
                 run_attempt=run_attempt,
                 write_mode=requested_write_mode,
             )
-            _result_context.session_id = str(_session_id) if _session_id else None
+            result_context.session_id = str(_session_id) if _session_id else None
             set_active_session(_session_id)
             # Tag every history / dedup / align write that follows in this
             # process with this session id so a downstream rollback can
@@ -771,7 +779,7 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
             failed=int(failed_count),
             no_new=int(no_new_torrents_count),
         ),
-        mode=options.mode,
+        mode=actual_mode,
         url=options.url,
         phase=str(phase_mode),
         page_range=page_range,
@@ -809,6 +817,18 @@ def _run_spider_impl(options: SpiderRunOptions) -> SpiderRunResult:
 
 
 def run_spider(options: SpiderRunOptions) -> SpiderRunResult:
+    result_context = _SpiderResultContext(
+        result_json=options.result_json,
+        mode="adhoc" if options.url else "daily",
+        url=options.url,
+        phase=str(options.phase),
+        page_range=(
+            _page_range(options.start_page, options.end_page, options.parse_all)
+            if options.start_page is not None and options.end_page is not None
+            else None
+        ),
+    )
+    token = _result_context.set(result_context)
     try:
         result = _run_spider_impl(options)
         if options.result_json:
@@ -854,6 +874,7 @@ def run_spider(options: SpiderRunOptions) -> SpiderRunResult:
             logger.warning(
                 f"Could not clear db audit session context on exit: {_e}"
             )
+        _result_context.reset(token)
 
 
 def main():
