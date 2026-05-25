@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status**: Completed 2026-05-25
+
 **Goal:** Replace the Pipeline Spider subprocess with an in-process Spider runner after ADR-012 Phase 1 bake passes, while preserving real-time logs and all CLI compatibility output.
 
 **Architecture:** Phase 1 already introduced `SpiderRunResult`, `PipelineRunResult`, `StepResult`, and `LogSink`. Phase 2 adds an in-process runner for the Spider step only. qB uploader, PikPak, email, and rclone dedup remain subprocess steps.
@@ -513,11 +515,11 @@ git commit -m "refactor(pipeline): run spider in process"
 
 ## Phase 2 Completion Gate
 
-- [ ] [IMP-ADR012-02](IMP-ADR012-02-pipeline-run-phase1-bake.md) Phase 2 Unlock Gate is complete.
-- [ ] Pipeline no longer subprocesses the Spider step.
-- [ ] Pipeline still subprocesses qB uploader, PikPak, email, and rclone dedup.
-- [ ] GitHub Actions logs still stream in real time.
-- [ ] Frontend task stream still grows in real time.
-- [ ] `SPIDER_*` CLI compatibility remains.
-- [ ] `python -m apps.cli.pipeline --result-json <path>` writes `PipelineRunResult`.
-- [ ] Focused Pipeline/Spider tests pass.
+- [x] [IMP-ADR012-02](IMP-ADR012-02-pipeline-run-phase1-bake.md) Phase 2 Unlock Gate is complete.
+- [x] Pipeline no longer subprocesses the Spider step.
+- [x] Pipeline still subprocesses qB uploader, PikPak, email, and rclone dedup.
+- [x] GitHub Actions logs still stream in real time.
+- [x] Frontend task stream still grows in real time.
+- [x] `SPIDER_*` CLI compatibility remains.
+- [x] `python -m apps.cli.pipeline --result-json <path>` writes `PipelineRunResult`.
+- [x] Focused Pipeline/Spider tests pass.

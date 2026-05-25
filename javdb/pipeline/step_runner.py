@@ -9,9 +9,10 @@ import sys
 import threading
 import time
 from datetime import datetime, timezone
-from typing import Protocol, Sequence
+from typing import Callable, Protocol, Sequence
 
 from javdb.pipeline.models import StepPolicy, StepResult
+from javdb.spider.app.options import SpiderRunOptions
 
 _PROCESS_STOP_GRACE_SEC = 1.0
 _READER_JOIN_GRACE_SEC = 1.0
@@ -24,6 +25,11 @@ def _utc_now_iso() -> str:
 class LogSink(Protocol):
     def write_line(self, step_name: str, line: str) -> None:
         pass
+
+
+class SpiderStepRunResult(Protocol):
+    exit_code: int
+    failure_reason: str | None
 
 
 class ConsoleAndFileLogSink:
@@ -200,3 +206,83 @@ class SubprocessStepRunner:
             _drain_available_output()
             reader.join(timeout=_READER_JOIN_GRACE_SEC)
             _drain_available_output()
+
+
+class InProcessSpiderStepRunner:
+    def __init__(self, *, run_spider: Callable[[SpiderRunOptions], SpiderStepRunResult]):
+        self._run_spider = run_spider
+
+    def run(
+        self,
+        policy: StepPolicy,
+        *,
+        options: SpiderRunOptions,
+        command_label: Sequence[str],
+    ) -> tuple[StepResult, SpiderStepRunResult | None]:
+        started_at = _utc_now_iso()
+        command_list = list(command_label)
+        result_path = getattr(options, "result_json", None)
+
+        try:
+            spider_result = self._run_spider(options)
+        except SystemExit as exc:
+            code = self._system_exit_code(exc)
+            return (
+                StepResult(
+                    name=policy.name,
+                    status="success" if code == 0 else "failed",
+                    required=policy.required,
+                    run_on_failure=policy.run_on_failure,
+                    command=command_list,
+                    started_at=started_at,
+                    finished_at=_utc_now_iso(),
+                    exit_code=code,
+                    failure_reason=None if code == 0 else f"exit code {code}",
+                    result_path=result_path,
+                ),
+                None,
+            )
+        except Exception as exc:
+            return (
+                StepResult(
+                    name=policy.name,
+                    status="failed",
+                    required=policy.required,
+                    run_on_failure=policy.run_on_failure,
+                    command=command_list,
+                    started_at=started_at,
+                    finished_at=_utc_now_iso(),
+                    exit_code=1,
+                    failure_reason=str(exc),
+                    result_path=result_path,
+                ),
+                None,
+            )
+
+        exit_code = spider_result.exit_code
+        failure_reason = spider_result.failure_reason
+        if exit_code != 0 and failure_reason is None:
+            failure_reason = f"exit code {exit_code}"
+        return (
+            StepResult(
+                name=policy.name,
+                status="success" if exit_code == 0 else "failed",
+                required=policy.required,
+                run_on_failure=policy.run_on_failure,
+                command=command_list,
+                started_at=started_at,
+                finished_at=_utc_now_iso(),
+                exit_code=exit_code,
+                failure_reason=None if exit_code == 0 else failure_reason,
+                result_path=result_path,
+            ),
+            spider_result,
+        )
+
+    @staticmethod
+    def _system_exit_code(exc: SystemExit) -> int:
+        if exc.code is None:
+            return 0
+        if isinstance(exc.code, int):
+            return exc.code
+        return 1
