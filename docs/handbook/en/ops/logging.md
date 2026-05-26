@@ -81,15 +81,19 @@ With folding enabled, long but low-density blocks (per-proxy detail, dual-write 
 
 ## GitHub Actions Step Summary
 
-The ingestion workflows (`DailyIngestion` / `AdHocIngestion`) parse the spider's `SPIDER_STAT_*` stdout lines and write a Markdown table to `$GITHUB_STEP_SUMMARY`. This surfaces the run's key metrics (pages, found, parsed, skipped, failed counts, CSV filename, and session_id) in the Actions UI summary panel without expanding the spider log block.
+The main ingestion workflows (`DailyIngestion` / `AdHocIngestion`) read the run's result JSON and write a Markdown table to `$GITHUB_STEP_SUMMARY`. This surfaces the run's key metrics (pages, found, parsed, skipped, failed counts, CSV filename, and session_id) in the Actions UI summary panel without expanding the spider log block.
 
 ## Structured Run Results
 
 Pipeline and Spider CLIs can write versioned result JSON through
 `--result-json <path>`. These files are the machine-readable run contract.
-The `SPIDER_*` stdout lines remain compatibility output for existing workflows
-during ADR-012 Phase 1. Do not add new Pipeline internals that parse those
-stdout markers for business data.
+GitHub Actions workflows consume this JSON for outputs, summaries, and other
+step-to-step data. `TestIngestion` also reads result JSON for machine-readable
+outputs and downstream artifact handling, but it does not render the same
+step-summary table as the main ingestion workflows. Log streaming remains the
+human-readable execution trace for operators, while result JSON is the source
+for machine-readable values. Do not parse `SPIDER_*` stdout markers for
+workflow outputs or business data.
 
 ## Log File Paths
 

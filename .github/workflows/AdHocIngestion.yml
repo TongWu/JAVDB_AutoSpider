@@ -476,10 +476,12 @@ jobs:
           INPUT_ENABLE_REDOWNLOAD: ${{ inputs.enable_redownload }}
           INPUT_REDOWNLOAD_THRESHOLD: ${{ inputs.redownload_threshold }}
         run: |
-          set -e  # Exit on error
-          set -o pipefail  # Exit on error in pipeline (important for tee)
+          set -o pipefail
           
           SPIDER_CMD=(python3 -m apps.cli.spider --url "$INPUT_URL" --start-page "$INPUT_START_PAGE")
+          SPIDER_RESULT_JSON="$RUNNER_TEMP/spider-result.json"
+          rm -f "$SPIDER_RESULT_JSON"
+          SPIDER_CMD+=(--result-json "$SPIDER_RESULT_JSON")
           
           # Add end page or --all flag
           END_PAGE="$INPUT_END_PAGE"
@@ -540,34 +542,58 @@ jobs:
           fi
 
           echo "Executing: ${SPIDER_CMD[*]}"
-          SPIDER_OUTPUT=$("${SPIDER_CMD[@]}" | tee /dev/stderr) && SPIDER_EXIT=0 || SPIDER_EXIT=$?
+          # Stream logs in real time while preserving the spider exit code.
+          set +e
+          "${SPIDER_CMD[@]}" 2>&1 | tee "$RUNNER_TEMP/spider.log"
+          SPIDER_EXIT=${PIPESTATUS[0]}
+          set -e
           
-          # Extract CSV filename and session_id from spider output
-          CSV_FILENAME=$(echo "$SPIDER_OUTPUT" | grep "^SPIDER_OUTPUT_CSV=" | cut -d'=' -f2 | tail -1 || true)
+          RESULT_OUTPUTS="$RUNNER_TEMP/spider-result.outputs"
+          : > "$RESULT_OUTPUTS"
+          set +e
+          python3 -m apps.cli.ops.run_result_outputs \
+            --result-json "$SPIDER_RESULT_JSON" \
+            --github-output "$GITHUB_OUTPUT" | tee "$RESULT_OUTPUTS"
+          RESULT_HELPER_EXIT=${PIPESTATUS[0]}
+          set -e
+
+          CSV_FILENAME=""
+          SESSION_ID=""
+          DEDUP_CSV_PATH=""
+          STAT_PAGES=""
+          STAT_FOUND=""
+          STAT_PARSED=""
+          STAT_SKIPPED=""
+          STAT_FAILED=""
+          STAT_NO_NEW=""
+          while IFS='=' read -r key value; do
+            case "$key" in
+              csv_filename) CSV_FILENAME="$value" ;;
+              session_id) SESSION_ID="$value" ;;
+              dedup_csv_path) DEDUP_CSV_PATH="$value" ;;
+              stat_pages) STAT_PAGES="$value" ;;
+              stat_found) STAT_FOUND="$value" ;;
+              stat_parsed) STAT_PARSED="$value" ;;
+              stat_skipped) STAT_SKIPPED="$value" ;;
+              stat_failed) STAT_FAILED="$value" ;;
+              stat_no_new) STAT_NO_NEW="$value" ;;
+            esac
+          done < "$RESULT_OUTPUTS"
+
           if [ -n "$CSV_FILENAME" ]; then
-            echo "csv_filename=$CSV_FILENAME" >> $GITHUB_OUTPUT
             echo "Captured CSV filename: $CSV_FILENAME"
           else
-            echo "Warning: Could not capture CSV filename from spider output"
+            echo "Warning: Could not capture CSV filename from spider result JSON"
           fi
-          
-          SESSION_ID=$(echo "$SPIDER_OUTPUT" | grep "^SPIDER_SESSION_ID=" | cut -d'=' -f2 | tail -1 || true)
           if [ -n "$SESSION_ID" ]; then
-            if echo "$SESSION_ID" | grep -qE '^[a-zA-Z0-9._-]+$'; then
-              echo "session_id=$SESSION_ID" >> $GITHUB_OUTPUT
-              echo "Captured session ID: $SESSION_ID"
-            else
-              echo "::warning::Ignoring invalid SESSION_ID format"
-            fi
+            echo "Captured session ID: $SESSION_ID"
+          fi
+          if [ -n "$DEDUP_CSV_PATH" ]; then
+            echo "Captured dedup CSV path: $DEDUP_CSV_PATH"
           fi
 
           # Markdown summary so the GitHub Actions UI surfaces the run's
           # key metrics without having to expand the spider log block.
-          STAT_PAGES=$(echo "$SPIDER_OUTPUT" | grep '^SPIDER_STAT_PAGES=' | cut -d'=' -f2 | tail -1 || true)
-          STAT_FOUND=$(echo "$SPIDER_OUTPUT" | grep '^SPIDER_STAT_FOUND=' | cut -d'=' -f2 | tail -1 || true)
-          STAT_PARSED=$(echo "$SPIDER_OUTPUT" | grep '^SPIDER_STAT_PARSED=' | cut -d'=' -f2 | tail -1 || true)
-          STAT_SKIPPED=$(echo "$SPIDER_OUTPUT" | grep '^SPIDER_STAT_SKIPPED=' | cut -d'=' -f2 | tail -1 || true)
-          STAT_FAILED=$(echo "$SPIDER_OUTPUT" | grep '^SPIDER_STAT_FAILED=' | cut -d'=' -f2 | tail -1 || true)
           if [ -n "$STAT_PAGES$STAT_FOUND$STAT_PARSED$STAT_SKIPPED$STAT_FAILED" ]; then
             {
               echo "## Spider run summary (Ad-Hoc)"
@@ -588,9 +614,15 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 
-          if [ "$SPIDER_EXIT" -ne 0 ]; then
+          if [ $RESULT_HELPER_EXIT -ne 0 ] && [ $SPIDER_EXIT -eq 0 ]; then
+            echo "Result output helper exited with code $RESULT_HELPER_EXIT"
+            exit $RESULT_HELPER_EXIT
+          fi
+
+          # Re-raise spider exit code so the step is correctly marked as failed
+          if [ $SPIDER_EXIT -ne 0 ]; then
             echo "Spider exited with code $SPIDER_EXIT"
-            exit "$SPIDER_EXIT"
+            exit $SPIDER_EXIT
           fi
 
       - name: Step 2 - Run qBittorrent Uploader (Ad-Hoc)

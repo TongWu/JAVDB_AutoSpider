@@ -1,19 +1,16 @@
 # ADR-012: Pipeline Run Structured Boundary
 
-**Status**: Accepted - Phase 1 complete (signed off 2026-05-25); Phase 2 complete and review-hardened (verified 2026-05-25); final phase pending
+**Status**: Completed - Phase 1 complete (signed off 2026-05-25); Phase 2 complete and review-hardened (verified 2026-05-25); final phase complete and review-hardened (verified 2026-05-26)
 **Date**: 2026-05-20
 **Deciders**: Pipeline Run module brainstorming and grill session
 **Related Implementation Plans**: [IMP-ADR012-01](IMP-ADR012-01-pipeline-run-phase1-result-sidecar.md) (Phase 1 - result sidecar), [IMP-ADR012-02](IMP-ADR012-02-pipeline-run-phase1-bake.md) (Phase 1 bake), [IMP-ADR012-03](IMP-ADR012-03-pipeline-run-phase2-in-process-spider.md) (Phase 2 - in-process Spider), [IMP-ADR012-04](IMP-ADR012-04-pipeline-run-final-result-consumption.md) (Final phase - result consumption cleanup)
-
-## Outstanding Work
-
-- Final phase - GitHub workflows and light API task metadata consume result JSON instead of grepping stdout.
 
 ## Implementation Status
 
 - Phase 1 - structured Spider/Pipeline result sidecars and Pipeline step model. Done via [IMP-ADR012-01](IMP-ADR012-01-pipeline-run-phase1-result-sidecar.md).
 - Phase 1 bake - production/workflow bake gate completed via [IMP-ADR012-02](IMP-ADR012-02-pipeline-run-phase1-bake.md).
 - Phase 2 - Pipeline calls Spider through an in-process runner while qB uploader, PikPak, email, and rclone dedup remain subprocess steps. Done, review-hardened, and verified via [IMP-ADR012-03](IMP-ADR012-03-pipeline-run-phase2-in-process-spider.md).
+- Final phase - GitHub workflows and light API task metadata consume result JSON instead of grepping stdout. Done, review-hardened, and verified via [IMP-ADR012-04](IMP-ADR012-04-pipeline-run-final-result-consumption.md).
 
 ---
 
@@ -317,4 +314,4 @@ ADR-012.
 - [IMP-ADR012-02](IMP-ADR012-02-pipeline-run-phase1-bake.md)
 - [IMP-ADR012-03](IMP-ADR012-03-pipeline-run-phase2-in-process-spider.md)
 - [IMP-ADR012-04](IMP-ADR012-04-pipeline-run-final-result-consumption.md)
-- [Logging handbook](../../handbook/en/ops/logging.md)
+- [Logging handbook](../../../handbook/en/ops/logging.md)
