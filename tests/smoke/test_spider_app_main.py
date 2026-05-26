@@ -282,3 +282,27 @@ def test_create_detail_backend_selects_sequential(monkeypatch):
             },
         )
     ]
+
+
+import javdb.spider.runtime.state as state
+from javdb.spider.app import run_service
+
+
+def test_spider_run_service_binds_and_clears_runtime(monkeypatch):
+    observed = {}
+
+    def fake_main():
+        runtime = state.get_active_runtime()
+        observed["runtime"] = runtime
+        observed["holder_id"] = state.runtime_holder_id
+        return 0
+
+    monkeypatch.setattr(run_service, "main", fake_main)
+
+    result = run_service.SpiderRunService().run()
+
+    assert result == 0
+    assert observed["runtime"] is not None
+    assert observed["holder_id"] == observed["runtime"].runner_registry.holder_id
+    assert state.get_active_runtime() is None
+    assert observed["runtime"].closed is True

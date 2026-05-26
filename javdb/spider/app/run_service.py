@@ -931,7 +931,18 @@ class SpiderRunService:
     """Application-service wrapper for the spider runtime."""
 
     def run(self):
-        return main()
+        from javdb.spider.runtime.context import SpiderRuntime
+        from javdb.spider.runtime import state as runtime_state
+
+        runtime = SpiderRuntime()
+        runtime_state.bind_active_runtime(runtime)
+        try:
+            return main()
+        finally:
+            try:
+                runtime.close()
+            finally:
+                runtime_state.clear_active_runtime(runtime)
 
 
 __all__ = ["SpiderRunService", "create_detail_backend", "main", "run_spider"]
