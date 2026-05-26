@@ -4,6 +4,9 @@ import json
 import logging
 from pathlib import Path
 
+import pytest
+
+from javdb.storage.d1_client import D1PermanentError, D1TransientError
 from javdb.storage.d1_recovery import (
     RecoveryEvent,
     RecoveryPolicy,
@@ -12,13 +15,15 @@ from javdb.storage.d1_recovery import (
     load_latest_events,
     outbox_status,
     pending_by_ordering_key,
+    replay_ordering_key,
+    startup_drain,
 )
 
 
-def _policy(key="history:s1:seq1", ordering="history:s1"):
+def _policy(key="history:s1:seq1", ordering="history:s1", operation_type="pending_stage"):
     return RecoveryPolicy(
         logical_db="history",
-        operation_type="pending_stage",
+        operation_type=operation_type,
         idempotency_key=key,
         ordering_key=ordering,
         recovery_allowed=True,
@@ -101,6 +106,281 @@ def test_pending_by_ordering_key_preserves_fifo(tmp_path):
         "history:s1:1",
         "history:s1:2",
     ]
+
+
+def test_replay_marks_success_and_compacts(tmp_path):
+    outbox = tmp_path / "d1_recovery_outbox.jsonl"
+    processed = tmp_path / "d1_recovery_outbox.processed.jsonl"
+    policy = _policy()
+    append_event(
+        outbox,
+        RecoveryEvent.queued(
+            policy,
+            "INSERT INTO x VALUES (?)",
+            ["a"],
+            "timeout",
+        ),
+    )
+    calls = []
+
+    class Conn:
+        def execute(self, sql, params=()):
+            calls.append((sql, list(params)))
+
+    result = replay_ordering_key(outbox, processed, "history:s1", Conn())
+
+    assert result["replayed"] == 1
+    assert result["dead_lettered"] == 0
+    assert calls == [("INSERT INTO x VALUES (?)", ["a"])]
+    assert "replayed" in processed.read_text(encoding="utf-8")
+    assert pending_by_ordering_key(outbox) == {}
+
+
+def test_replay_dead_letters_permanent_failure(tmp_path):
+    outbox = tmp_path / "d1_recovery_outbox.jsonl"
+    processed = tmp_path / "d1_recovery_outbox.processed.jsonl"
+    policy = _policy()
+    append_event(
+        outbox,
+        RecoveryEvent.queued(
+            policy,
+            "INSERT INTO x VALUES (?)",
+            ["a"],
+            "timeout",
+        ),
+    )
+
+    class Conn:
+        def execute(self, sql, params=()):
+            raise D1PermanentError("permanent")
+
+    result = replay_ordering_key(outbox, processed, "history:s1", Conn())
+
+    assert result["replayed"] == 0
+    assert result["dead_lettered"] == 1
+    latest = load_latest_events(outbox)
+    assert latest["history:s1:seq1"].state == "dead_lettered"
+
+
+def test_replay_treats_pending_stage_seq_duplicate_as_replayed(tmp_path):
+    outbox = tmp_path / "d1_recovery_outbox.jsonl"
+    processed = tmp_path / "d1_recovery_outbox.processed.jsonl"
+    policy = _policy()
+    append_event(
+        outbox,
+        RecoveryEvent.queued(
+            policy,
+            "INSERT INTO PendingMovieHistoryWrites "
+            "(Seq, SessionId, Href, ApplyState) VALUES (?, ?, ?, 'pending')",
+            ["seq1", "s1", "https://example.test/movie"],
+            "timeout",
+        ),
+    )
+    append_event(outbox, RecoveryEvent.attempting(policy, attempt=1))
+    calls = []
+
+    class Conn:
+        def execute(self, sql, params=()):
+            calls.append((sql, list(params)))
+            raise D1PermanentError(
+                "UNIQUE constraint failed: PendingMovieHistoryWrites.Seq"
+            )
+
+    result = replay_ordering_key(outbox, processed, "history:s1", Conn())
+
+    assert result["replayed"] == 1
+    assert result["dead_lettered"] == 0
+    assert calls == [
+        (
+            "INSERT INTO PendingMovieHistoryWrites "
+            "(Seq, SessionId, Href, ApplyState) VALUES (?, ?, ?, 'pending')",
+            ["seq1", "s1", "https://example.test/movie"],
+        )
+    ]
+    assert pending_by_ordering_key(outbox) == {}
+    assert "replayed" in processed.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    ("operation_type", "table"),
+    [
+        ("pending_stage_movie", "PendingMovieHistoryWrites"),
+        ("pending_stage_torrent", "PendingTorrentHistoryWrites"),
+    ],
+)
+def test_replay_treats_real_pending_stage_seq_duplicates_as_replayed(
+    tmp_path,
+    operation_type,
+    table,
+):
+    outbox = tmp_path / "d1_recovery_outbox.jsonl"
+    processed = tmp_path / "d1_recovery_outbox.processed.jsonl"
+    policy = _policy(operation_type=operation_type)
+    sql = (
+        f"INSERT INTO {table} "
+        "(Seq, SessionId, Href, ApplyState) VALUES (?, ?, ?, 'pending')"
+    )
+    append_event(
+        outbox,
+        RecoveryEvent.queued(
+            policy,
+            sql,
+            ["seq1", "s1", "https://example.test/item"],
+            "timeout",
+        ),
+    )
+    append_event(outbox, RecoveryEvent.attempting(policy, attempt=1))
+
+    class Conn:
+        def execute(self, sql, params=()):
+            raise D1PermanentError(f"UNIQUE constraint failed: {table}.Seq")
+
+    result = replay_ordering_key(outbox, processed, "history:s1", Conn())
+
+    assert result == {"replayed": 1, "dead_lettered": 0}
+    assert pending_by_ordering_key(outbox) == {}
+    assert "replayed" in processed.read_text(encoding="utf-8")
+
+
+def test_replay_transient_failure_remains_pending_for_retry(tmp_path):
+    outbox = tmp_path / "d1_recovery_outbox.jsonl"
+    processed = tmp_path / "d1_recovery_outbox.processed.jsonl"
+    policy = _policy()
+    append_event(
+        outbox,
+        RecoveryEvent.queued(
+            policy,
+            "INSERT INTO x VALUES (?)",
+            ["a"],
+            "timeout",
+        ),
+    )
+
+    class Conn:
+        def execute(self, sql, params=()):
+            raise D1TransientError("temporary")
+
+    with pytest.raises(D1TransientError, match="temporary"):
+        replay_ordering_key(outbox, processed, "history:s1", Conn())
+
+    latest = load_latest_events(outbox)
+    assert latest["history:s1:seq1"].state == "attempting"
+    assert pending_by_ordering_key(outbox)["history:s1"][0].params == ["a"]
+    assert not processed.exists()
+
+
+def test_replay_unclassified_failure_remains_pending_for_diagnosis(tmp_path):
+    outbox = tmp_path / "d1_recovery_outbox.jsonl"
+    processed = tmp_path / "d1_recovery_outbox.processed.jsonl"
+    policy = _policy()
+    append_event(
+        outbox,
+        RecoveryEvent.queued(
+            policy,
+            "INSERT INTO x VALUES (?)",
+            ["a"],
+            "timeout",
+        ),
+    )
+
+    class Conn:
+        def execute(self, sql, params=()):
+            raise RuntimeError("adapter fault")
+
+    with pytest.raises(RuntimeError, match="adapter fault"):
+        replay_ordering_key(outbox, processed, "history:s1", Conn())
+
+    latest = load_latest_events(outbox)
+    assert latest["history:s1:seq1"].state == "attempting"
+    assert pending_by_ordering_key(outbox)["history:s1"][0].sql is not None
+    assert not processed.exists()
+
+
+def test_replay_dead_letters_when_max_attempts_exceeded(tmp_path):
+    outbox = tmp_path / "d1_recovery_outbox.jsonl"
+    processed = tmp_path / "d1_recovery_outbox.processed.jsonl"
+    policy = RecoveryPolicy(
+        logical_db="history",
+        operation_type="pending_stage",
+        idempotency_key="history:s1:seq1",
+        ordering_key="history:s1",
+        recovery_allowed=True,
+        max_attempts=1,
+    )
+    append_event(
+        outbox,
+        RecoveryEvent.queued(
+            policy,
+            "INSERT INTO x VALUES (?)",
+            ["a"],
+            "timeout",
+        ),
+    )
+    append_event(outbox, RecoveryEvent.attempting(policy, attempt=1))
+    calls = []
+
+    class Conn:
+        def execute(self, sql, params=()):
+            calls.append((sql, list(params)))
+
+    result = replay_ordering_key(outbox, processed, "history:s1", Conn())
+
+    assert result["replayed"] == 0
+    assert result["dead_lettered"] == 1
+    assert calls == []
+    latest = load_latest_events(outbox)
+    assert latest["history:s1:seq1"].state == "dead_lettered"
+    assert "max attempts" in (latest["history:s1:seq1"].error or "")
+
+
+def test_startup_drain_skips_dead_letters(tmp_path):
+    outbox = tmp_path / "d1_recovery_outbox.jsonl"
+    processed = tmp_path / "d1_recovery_outbox.processed.jsonl"
+    policy = _policy()
+    append_event(
+        outbox,
+        RecoveryEvent.queued(
+            policy,
+            "INSERT INTO x VALUES (?)",
+            ["a"],
+            "timeout",
+        ),
+    )
+    append_event(
+        outbox,
+        RecoveryEvent.dead_lettered(policy, attempt=1, error="permanent"),
+    )
+
+    result = startup_drain(outbox, processed, connection_factory=lambda _db: object())
+
+    assert result["replayed"] == 0
+    assert result["dead_lettered"] == 1
+
+
+def test_startup_drain_replays_pending_key(tmp_path):
+    outbox = tmp_path / "d1_recovery_outbox.jsonl"
+    processed = tmp_path / "d1_recovery_outbox.processed.jsonl"
+    policy = _policy()
+    append_event(
+        outbox,
+        RecoveryEvent.queued(
+            policy,
+            "INSERT INTO x VALUES (?)",
+            ["a"],
+            "timeout",
+        ),
+    )
+    calls = []
+
+    class Conn:
+        def execute(self, sql, params=()):
+            calls.append((sql, list(params)))
+
+    result = startup_drain(outbox, processed, connection_factory=lambda _db: Conn())
+
+    assert result["replayed"] == 1
+    assert result["dead_lettered"] == 0
+    assert calls == [("INSERT INTO x VALUES (?)", ["a"])]
 
 
 def test_compact_replayed_moves_replayed_events(tmp_path):
@@ -287,3 +567,70 @@ def test_cli_inspect_empty_json_exits_zero(tmp_path, capsys):
     assert output["dead_lettered_count"] == 0
     assert output["malformed_count"] == 0
     assert output["pending_groups"] == {}
+
+
+def test_cli_replay_ordering_key_marks_success(tmp_path, monkeypatch, capsys):
+    from apps.cli.db import d1_recovery as cli
+
+    outbox = tmp_path / "d1_recovery_outbox.jsonl"
+    processed = tmp_path / "d1_recovery_outbox.processed.jsonl"
+    policy = _policy()
+    append_event(
+        outbox,
+        RecoveryEvent.queued(
+            policy,
+            "INSERT INTO x VALUES (?)",
+            ["a"],
+            "timeout",
+        ),
+    )
+    calls = []
+
+    class Conn:
+        def execute(self, sql, params=()):
+            calls.append((sql, list(params)))
+
+    monkeypatch.setattr(cli, "_make_connection_for_key", lambda *_args: Conn())
+
+    rc = cli.main(
+        [
+            "replay",
+            "--json",
+            "--outbox",
+            str(outbox),
+            "--processed",
+            str(processed),
+            "--ordering-key",
+            "history:s1",
+        ]
+    )
+
+    assert rc == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["replayed"] == 1
+    assert calls == [("INSERT INTO x VALUES (?)", ["a"])]
+
+
+def test_cli_startup_drain_empty_json_exits_zero(tmp_path, monkeypatch, capsys):
+    from apps.cli.db import d1_recovery as cli
+    import javdb.storage.d1_client as d1_client
+
+    monkeypatch.setattr(
+        d1_client,
+        "make_d1_connection",
+        lambda _logical_db: object(),
+    )
+
+    rc = cli.main(
+        [
+            "startup-drain",
+            "--json",
+            "--outbox",
+            str(tmp_path / "missing.jsonl"),
+        ]
+    )
+
+    assert rc == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["replayed"] == 0
+    assert output["dead_lettered"] == 0

@@ -1,6 +1,6 @@
 # IMP-ADR010-02: ADR-010 Phase 2 — D1 Recovery Outbox Enablement
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Enable ADR-010 Phase 2 recovery outbox behavior behind `D1_RECOVERY_OUTBOX_ENABLED=1` while preserving `STORAGE_BACKEND=d1` strong consistency and `STRICT_DUAL_WRITE=1` precedence.
 
@@ -11,6 +11,8 @@
 **Source spec:** [ADR-010](ADR-010-d1-access-port.md), D5-D7, D10 Phase 2, D11.
 
 **Current baseline (2026-05-26):** current main has Phase 3 safe batching but lacks Phase 2 replay/outbox completion (`replay_ordering_key` and the CLI replay command are absent). The approved scope is to restore and verify these Phase 2 prerequisites before continuing Phase 4 startup replay. Because Phase 3 safe writes can remain queued until `D1AccessPort.flush()`, the restored Phase 2 behavior must also queue retry-exhausted safe-batch flush operations using their preserved `RecoveryPolicy`, so Phase 4 startup replay covers that path.
+
+**Status:** Completed — restored and verified on 2026-05-26.
 
 ---
 
@@ -38,7 +40,7 @@
 - Modify: `javdb/storage/d1_port.py`
 - Modify: `tests/unit/test_d1_port.py`
 
-- [ ] **Step 1: Add tests for enabled and disabled queueing**
+- [x] **Step 1: Add tests for enabled and disabled queueing**
 
 Append to `tests/unit/test_d1_port.py`:
 
@@ -89,7 +91,7 @@ def test_outbox_disabled_does_not_write_file(tmp_path, monkeypatch):
     assert not outbox.exists()
 ```
 
-- [ ] **Step 2: Run tests**
+- [x] **Step 2: Run tests**
 
 ```bash
 pytest tests/unit/test_d1_port.py::test_retry_exhaustion_queues_safe_operation_when_enabled tests/unit/test_d1_port.py::test_outbox_disabled_does_not_write_file -v
@@ -97,7 +99,7 @@ pytest tests/unit/test_d1_port.py::test_retry_exhaustion_queues_safe_operation_w
 
 Expected: FAIL until queueing is implemented.
 
-- [ ] **Step 3: Implement env gate and outbox path**
+- [x] **Step 3: Implement env gate and outbox path**
 
 In `javdb/storage/d1_port.py`, add:
 
@@ -117,11 +119,11 @@ def recovery_outbox_enabled() -> bool:
 
 Set `self._outbox_path = recovery_outbox_path()` in `D1AccessPort.__init__`.
 
-- [ ] **Step 4: Queue safe operations on retry exhaustion**
+- [x] **Step 4: Queue safe operations on retry exhaustion**
 
 Change `_post_with_retry` to accept `policy`, `sql`, and `params`. When retry is exhausted and the gate is enabled, append `RecoveryEvent.queued(...)` before raising the transient error. `STORAGE_BACKEND=d1` must still raise; queueing is diagnostic there.
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 ```bash
 pytest tests/unit/test_d1_port.py tests/unit/test_d1_recovery.py -v
@@ -129,7 +131,7 @@ pytest tests/unit/test_d1_port.py tests/unit/test_d1_recovery.py -v
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add javdb/storage/d1_port.py tests/unit/test_d1_port.py
@@ -145,7 +147,7 @@ git commit -m "feat(storage): enable gated d1 recovery queueing"
 - Modify: `apps/cli/db/d1_recovery.py`
 - Modify: `tests/unit/test_d1_recovery.py`
 
-- [ ] **Step 1: Add replay tests**
+- [x] **Step 1: Add replay tests**
 
 Append to `tests/unit/test_d1_recovery.py`:
 
@@ -171,6 +173,7 @@ def test_replay_marks_success_and_compacts(tmp_path):
 
 
 def test_replay_dead_letters_permanent_failure(tmp_path):
+    from javdb.storage.d1_client import D1PermanentError
     from javdb.storage.d1_recovery import replay_ordering_key
 
     outbox = tmp_path / "d1_recovery_outbox.jsonl"
@@ -180,7 +183,7 @@ def test_replay_dead_letters_permanent_failure(tmp_path):
 
     class Conn:
         def execute(self, sql, params=()):
-            raise RuntimeError("permanent")
+            raise D1PermanentError("permanent")
 
     result = replay_ordering_key(outbox, processed, "history:s1", Conn())
 
@@ -189,7 +192,7 @@ def test_replay_dead_letters_permanent_failure(tmp_path):
     assert latest["history:s1:seq1"].state == "dead_lettered"
 ```
 
-- [ ] **Step 2: Run tests**
+- [x] **Step 2: Run tests**
 
 ```bash
 pytest tests/unit/test_d1_recovery.py::test_replay_marks_success_and_compacts tests/unit/test_d1_recovery.py::test_replay_dead_letters_permanent_failure -v
@@ -197,11 +200,11 @@ pytest tests/unit/test_d1_recovery.py::test_replay_marks_success_and_compacts te
 
 Expected: FAIL until replay helper exists.
 
-- [ ] **Step 3: Implement `replay_ordering_key`**
+- [x] **Step 3: Implement `replay_ordering_key`**
 
-Add a helper that loads pending events for one key, appends `attempting`, calls `conn.execute(event.sql, event.params)`, appends `replayed` on success, appends `dead_lettered` on exception, and compacts replayed events to processed.
+Add a helper that loads pending events for one key, appends `attempting`, calls `conn.execute(event.sql, event.params)`, appends `replayed` on success, and compacts replayed events to processed. In alignment with ADR-010 D5, `D1TransientError` and unclassified local/adapter failures remain active for diagnosis or a later replay attempt; only `D1PermanentError` or exhausted `max_attempts` appends `dead_lettered`.
 
-- [ ] **Step 4: Add CLI replay command**
+- [x] **Step 4: Add CLI replay command**
 
 Extend `apps/cli/db/d1_recovery.py`:
 
@@ -211,7 +214,7 @@ python3 -m apps.cli.db.d1_recovery replay --ordering-key history:s1
 
 The command constructs `make_d1_connection(logical_db)` from each event's `logical_db`. It refuses to replay multiple logical DBs in one ordering-key command unless all pending events share the same logical DB.
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 ```bash
 pytest tests/unit/test_d1_recovery.py -v
@@ -219,7 +222,7 @@ pytest tests/unit/test_d1_recovery.py -v
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add javdb/storage/d1_recovery.py apps/cli/db/d1_recovery.py tests/unit/test_d1_recovery.py
@@ -236,7 +239,7 @@ git commit -m "feat(storage): replay d1 recovery outbox events"
 - Modify: `tests/unit/test_d1_port.py`
 - Modify: `tests/unit/test_d1_dual.py`
 
-- [ ] **Step 1: Add d1 strong-consistency test**
+- [x] **Step 1: Add d1 strong-consistency test**
 
 Append:
 
@@ -254,7 +257,7 @@ def test_d1_mode_does_not_turn_outbox_into_success(tmp_path, monkeypatch):
         port.execute("INSERT INTO PendingMovieHistoryWrites (Seq) VALUES (?)", ["seq1"], policy=_policy())
 ```
 
-- [ ] **Step 2: Add strict dual test**
+- [x] **Step 2: Add strict dual test**
 
 Append to `tests/unit/test_d1_dual.py`:
 
@@ -277,7 +280,7 @@ def test_strict_dual_write_still_raises_when_d1_failure_is_outboxable(monkeypatc
         dual.commit()
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 ```bash
 pytest tests/unit/test_d1_port.py::test_d1_mode_does_not_turn_outbox_into_success tests/unit/test_d1_dual.py::test_strict_dual_write_still_raises_when_d1_failure_is_outboxable -v
@@ -285,7 +288,7 @@ pytest tests/unit/test_d1_port.py::test_d1_mode_does_not_turn_outbox_into_succes
 
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tests/unit/test_d1_port.py tests/unit/test_d1_dual.py
@@ -300,7 +303,7 @@ git commit -m "test(storage): lock d1 recovery consistency semantics"
 - Modify: `javdb/storage/db/_db_history_write.py`
 - Modify: `tests/unit/test_rollback_pending_mode.py` or create `tests/unit/test_d1_recovery_commit_gate.py`
 
-- [ ] **Step 1: Add commit-blocking test**
+- [x] **Step 1: Add commit-blocking test**
 
 Create `tests/unit/test_d1_recovery_commit_gate.py`:
 
@@ -338,7 +341,7 @@ def test_pending_commit_refuses_unresolved_recovery_key(monkeypatch, tmp_path):
         db_commit_session_history(sid)
 ```
 
-- [ ] **Step 2: Run test**
+- [x] **Step 2: Run test**
 
 ```bash
 pytest tests/unit/test_d1_recovery_commit_gate.py -v
@@ -346,7 +349,7 @@ pytest tests/unit/test_d1_recovery_commit_gate.py -v
 
 Expected: FAIL until the commit gate exists.
 
-- [ ] **Step 3: Implement commit gate**
+- [x] **Step 3: Implement commit gate**
 
 In `javdb/storage/db/_db_history_write.py`, before `db_finish_commit_session(...)`, check:
 
@@ -362,9 +365,9 @@ if f"history:{session_id}" in pending_recovery:
     )
 ```
 
-Keep this check narrow to pending history commit. Broader ordering-key gates can be added when more operation types opt in.
+Keep this check narrow to pending history commit. For a session still in `in_progress`, flush pending safe batches and then check before `db_begin_finalize_session(...)` so neither pre-existing nor flush-created recovery work can advance the session into `finalizing`; flush and check again before the `committed` transition to catch recovery work created during the drain. Broader ordering-key gates can be added when more operation types opt in.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 pytest tests/unit/test_d1_recovery_commit_gate.py tests/unit/test_rollback_pending_mode.py -v
@@ -372,7 +375,7 @@ pytest tests/unit/test_d1_recovery_commit_gate.py tests/unit/test_rollback_pendi
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add javdb/storage/db/_db_history_write.py tests/unit/test_d1_recovery_commit_gate.py
@@ -391,7 +394,7 @@ git commit -m "fix(storage): block pending commit on unresolved d1 recovery"
 - Modify: `.github/workflows/Migration.yml`
 - Modify: `.github/workflows/publish-to-public.yml`
 
-- [ ] **Step 1: Stage D1 recovery state files**
+- [x] **Step 1: Stage D1 recovery state files**
 
 In each workflow that already stages `d1_drift.jsonl`, replace individual `git add "$REPORTS_DIR/D1/..."` lines with:
 
@@ -407,7 +410,7 @@ do
 done
 ```
 
-- [ ] **Step 2: Add public publish guard**
+- [x] **Step 2: Add public publish guard**
 
 In `.github/workflows/publish-to-public.yml`, before publish copy/filter work:
 
@@ -421,7 +424,7 @@ if find reports/D1 -maxdepth 1 \( \
 fi
 ```
 
-- [ ] **Step 3: Verify workflow text**
+- [x] **Step 3: Verify workflow text**
 
 ```bash
 rg -n "d1_recovery_outbox|d1_port_summary|refusing public publish" .github/workflows
@@ -429,7 +432,7 @@ rg -n "d1_recovery_outbox|d1_port_summary|refusing public publish" .github/workf
 
 Expected: private workflow staging hits plus `publish-to-public.yml` guard.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add .github/workflows/DailyIngestion.yml .github/workflows/AdHocIngestion.yml .github/workflows/RcloneManager.yml .github/workflows/WeeklyDedup.yml .github/workflows/Migration.yml .github/workflows/publish-to-public.yml
@@ -444,7 +447,7 @@ git commit -m "ci(workflows): stage d1 recovery state and guard public publish"
 - Modify: `docs/handbook/en/ops/d1-rollback.md`
 - Modify: `docs/handbook/zh/ops/d1-rollback.md`
 
-- [ ] **Step 1: Add operator docs**
+- [x] **Step 1: Add operator docs**
 
 Add English section:
 
@@ -474,7 +477,7 @@ python3 -m apps.cli.db.d1_recovery compact
 
 Add the Chinese equivalent to `docs/handbook/zh/ops/d1-rollback.md`.
 
-- [ ] **Step 2: Run tests**
+- [x] **Step 2: Run tests**
 
 ```bash
 pytest tests/unit/test_d1_port.py tests/unit/test_d1_recovery.py tests/unit/test_d1_dual.py tests/unit/test_d1_recovery_commit_gate.py -v
@@ -482,7 +485,7 @@ pytest tests/unit/test_d1_port.py tests/unit/test_d1_recovery.py tests/unit/test
 
 Expected: PASS.
 
-- [ ] **Step 3: Run doc grep**
+- [x] **Step 3: Run doc grep**
 
 ```bash
 rg -n "d1_recovery_outbox|d1_recovery replay|D1 Recovery Outbox" docs/handbook/en/ops/d1-rollback.md docs/handbook/zh/ops/d1-rollback.md
@@ -490,7 +493,7 @@ rg -n "d1_recovery_outbox|d1_recovery replay|D1 Recovery Outbox" docs/handbook/e
 
 Expected: hits in both docs.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/handbook/en/ops/d1-rollback.md docs/handbook/zh/ops/d1-rollback.md
@@ -501,7 +504,7 @@ git commit -m "docs(d1): document recovery outbox operations"
 
 ## Verification Gate
 
-- [ ] **Run focused suite**
+- [x] **Run focused suite**
 
 ```bash
 pytest tests/unit/test_d1_port.py tests/unit/test_d1_recovery.py tests/unit/test_d1_dual.py tests/unit/test_d1_recovery_commit_gate.py -v
@@ -509,7 +512,7 @@ pytest tests/unit/test_d1_port.py tests/unit/test_d1_recovery.py tests/unit/test
 
 Expected: PASS.
 
-- [ ] **Run storage regression suite**
+- [x] **Run storage regression suite**
 
 ```bash
 pytest tests/unit/test_reconcile_d1_drift.py tests/unit/test_sync_d1_to_sqlite.py tests/unit/test_rollback_pending_mode.py tests/unit/test_batch_c_movie_history_id.py -v
