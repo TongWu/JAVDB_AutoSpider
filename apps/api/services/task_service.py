@@ -213,6 +213,9 @@ def _load_result_summary(result_path: str | None) -> Dict[str, Any] | None:
     except json.JSONDecodeError:
         logger.warning("Invalid task result JSON ignored: %s", path)
         return None
+    except UnicodeDecodeError as exc:
+        logger.warning("Unable to decode task result JSON %s: %s", path, exc)
+        return None
     except OSError as exc:
         logger.warning("Unable to read task result JSON %s: %s", path, exc)
         return None
