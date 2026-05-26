@@ -1,7 +1,6 @@
 """Tests for the search-exact shared helper and the video-code search service."""
 
 import asyncio
-import importlib
 import os
 import sys
 from types import SimpleNamespace
@@ -69,12 +68,6 @@ _EMPTY_SEARCH_HTML = '<html><body><div class="movie-list"></div></body></html>'
 # ---------------------------------------------------------------------------
 
 class TestFindExactEntryFirstSearchPage:
-    def test_canonical_module_exports_search_helper(self):
-        canonical = importlib.import_module('javdb.parsing.search_exact')
-        legacy = importlib.import_module('apps.api.parsers.search_exact')
-
-        assert legacy.find_exact_entry_first_search_page is canonical.find_exact_entry_first_search_page
-
     def test_direct_match_inline(self):
         movies = parse_index_page(_MINIMAL_SEARCH_HTML, page_num=1).movies
         hit = find_exact_entry_first_search_page(movies, 'JAC-228')

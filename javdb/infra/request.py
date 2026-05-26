@@ -39,7 +39,7 @@ from javdb.infra.masking import (
     mask_proxies,
 )
 from javdb.proxy.policy import should_proxy_module
-from javdb.spider.parser import (
+from javdb.spider.html_validators import (
     is_login_page as _is_login_page,
     is_maintenance_page as _is_maintenance_page,
 )

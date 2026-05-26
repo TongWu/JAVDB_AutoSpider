@@ -9,8 +9,8 @@ directory; restored to this location for the reasons below.
 
 - `_spider_legacy.py` — the monolithic spider that ran before
   Phase 1 split scraping into [`javdb.spider`](../spider/). Imports
-  have been retargeted to the post-ADR-007 canonical paths
-  (`javdb.storage.*`, `javdb.spider.*`, `apps.api.parsers`, …) so the
+  have been retargeted to the post-ADR-007 / ADR-011 canonical paths
+  (`javdb.storage.*`, `javdb.spider.*`, `javdb.parsing.*`, …) so the
   module still parses cleanly under the modern layout.
 
 ## Why it's kept
