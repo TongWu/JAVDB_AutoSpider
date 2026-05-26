@@ -80,6 +80,9 @@ jobs:
     environment: Production
     env:
       TZ: Asia/Singapore
+      D1_RECOVERY_OUTBOX_ENABLED: ${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}
+      D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
+      D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
       # Ingestion Perfect Rollback (Phase 2): TestIngestion is the
       # experimental canary for the pending write path.  Setting
       # JAVDB_HISTORY_WRITE_MODE=pending makes db_create_report_session

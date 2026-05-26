@@ -105,6 +105,9 @@ GitHub Actions 部署提供：
 | `PROXY_MODULES_JSON` | `["spider"]` | 使用 proxy 的模块 JSON 数组：`spider`、`qbittorrent`、`pikpak`、`all` |
 | `LOG_LEVEL` | `INFO` | `DEBUG`、`INFO`、`WARNING`、`ERROR` |
 | `STORAGE_BACKEND` | `sqlite` | `sqlite`、`d1` 或 `dual` |
+| `D1_RECOVERY_OUTBOX_ENABLED` | `false` | 启用 ADR-010 recovery outbox，处理安全 D1 写入失败。可识别的真值包括 `1`、`true`、`yes`、`on`。 |
+| `D1_BATCHING_ENABLED` | `false` | 启用 ADR-010 safe-path D1 micro-batching。可识别的真值包括 `1`、`true`、`yes`、`on`。 |
+| `D1_STARTUP_REPLAY_ENABLED` | `false` | 在首次 D1/Dual 操作前启用 ADR-010 startup replay。可识别的真值包括 `1`、`true`、`yes`、`on`。 |
 
 ### 爬虫调优 Variables
 
