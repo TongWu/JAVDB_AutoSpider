@@ -34,6 +34,7 @@ WORKFLOWS = (
     REPO_ROOT / ".github" / "workflows" / "DailyIngestion.yml",
     REPO_ROOT / ".github" / "workflows" / "AdHocIngestion.yml",
 )
+TEST_INGESTION = REPO_ROOT / ".github" / "workflows" / "TestIngestion.yml"
 
 
 def _extract_run(workflow_path: Path, step_id: str) -> str:
@@ -215,6 +216,83 @@ exit 99
     return fake_python
 
 
+def _write_fake_python_for_test_ingestion_spider(
+    bin_dir: Path,
+    csv_path: str,
+) -> Path:
+    fake_python = bin_dir / "python3"
+    fake_python.write_text(
+        f"""#!/usr/bin/env bash
+set -u
+
+if [ "${{1:-}}" = "-m" ] && [ "${{2:-}}" = "apps.cli.spider" ]; then
+  result_json=""
+  while [ "$#" -gt 0 ]; do
+    if [ "$1" = "--result-json" ]; then
+      shift
+      result_json="$1"
+    fi
+    shift || true
+  done
+
+  echo "fake TestIngestion spider streamed log"
+  if [ "${{FAKE_WRITE_RESULT_JSON:-true}}" = "true" ]; then
+    cat > "$result_json" <<'JSON'
+{{"csv_path":"{csv_path}","session_id":"20260526T005000.000000Z-0001-0001","stats":{{"pages":"1-2","found":3,"parsed":2,"skipped":1,"failed":0,"no_new":0}}}}
+JSON
+  fi
+  exit "${{FAKE_SPIDER_EXIT:-0}}"
+fi
+
+if [ "${{1:-}}" = "-m" ] && [ "${{2:-}}" = "apps.cli.ops.run_result_outputs" ]; then
+  result_json=""
+  github_output=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --result-json)
+        shift
+        result_json="$1"
+        ;;
+      --github-output)
+        shift
+        github_output="$1"
+        ;;
+    esac
+    shift || true
+  done
+
+  echo "helper invoked" >> "$RUNNER_TEMP/helper-invoked"
+  if [ "${{FAKE_HELPER_EXIT:-0}}" != "0" ]; then
+    echo "fake helper failed" >&2
+    exit "$FAKE_HELPER_EXIT"
+  fi
+  if [ ! -s "$result_json" ]; then
+    echo "fake helper missing result JSON" >&2
+    exit 24
+  fi
+
+  outputs='csv_filename={csv_path}
+session_id=20260526T005000.000000Z-0001-0001
+stat_pages=1-2
+stat_found=3
+stat_parsed=2
+stat_skipped=1
+stat_failed=0
+stat_no_new=0'
+  printf '%s\n' "$outputs" >> "$github_output"
+  printf '%s\n' "$outputs"
+  exit 0
+fi
+
+echo "unexpected fake python invocation: $*" >&2
+exit 99
+""",
+        encoding="utf-8",
+    )
+    fake_python.chmod(0o755)
+    return fake_python
+
+
 def _run_daily_spider_step(
     script: str,
     tmp_path: Path,
@@ -257,6 +335,43 @@ def _run_daily_spider_step(
         text=True,
     )
     return proc, gh_output, gh_summary
+
+
+def _run_test_ingestion_spider_step(
+    script: str,
+    tmp_path: Path,
+    *,
+    csv_path: str,
+    spider_exit: int,
+    helper_exit: int = 0,
+    write_result_json: bool = True,
+) -> tuple[subprocess.CompletedProcess[str], Path]:
+    bin_dir = tmp_path / "bin"
+    runner_temp = tmp_path / "runner_temp"
+    bin_dir.mkdir()
+    runner_temp.mkdir()
+    _write_fake_python_for_test_ingestion_spider(bin_dir, csv_path)
+
+    gh_output = tmp_path / "gh_output"
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{bin_dir}{os.pathsep}{env['PATH']}",
+            "GITHUB_OUTPUT": str(gh_output),
+            "RUNNER_TEMP": str(runner_temp),
+            "FAKE_SPIDER_EXIT": str(spider_exit),
+            "FAKE_HELPER_EXIT": str(helper_exit),
+            "FAKE_WRITE_RESULT_JSON": "true" if write_result_json else "false",
+        }
+    )
+    proc = subprocess.run(
+        ["bash", "-e", "-c", script],
+        cwd=str(tmp_path),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    return proc, gh_output
 
 
 def _run_adhoc_spider_step(
@@ -528,6 +643,86 @@ def test_adhoc_spider_consumes_result_json_not_stdout_markers():
     assert "grep \"^SPIDER_" not in body
     assert "grep '^SPIDER_" not in body
     assert "SPIDER_OUTPUT=" not in body
+
+
+@pytest.mark.parametrize(
+    ("step_id", "result_json"),
+    (
+        ("daily_spider", "daily-spider-result.json"),
+        ("adhoc_spider", "adhoc-spider-result.json"),
+    ),
+)
+def test_test_ingestion_spider_consumes_result_json_not_stdout_markers(
+    step_id,
+    result_json,
+):
+    body = _extract_step(TEST_INGESTION, step_id)["run"]
+
+    assert f'SPIDER_RESULT_JSON="$RUNNER_TEMP/{result_json}"' in body
+    assert "--result-json \"$SPIDER_RESULT_JSON\"" in body
+    assert "| tee /dev/stderr" in body
+    assert "SPIDER_EXIT=${PIPESTATUS[0]}" in body
+    assert "python3 -m apps.cli.ops.run_result_outputs" in body
+    assert "--github-output \"$GITHUB_OUTPUT\"" in body
+    assert "RESULT_HELPER_EXIT=${PIPESTATUS[0]}" in body
+    assert "grep \"^SPIDER_" not in body
+    assert "grep '^SPIDER_" not in body
+    assert "SPIDER_OUTPUT=" not in body
+
+
+@pytest.mark.parametrize(
+    ("step_id", "csv_path"),
+    (
+        ("daily_spider", "reports/DailyReport/failure.csv"),
+        ("adhoc_spider", "reports/AdHoc/failure.csv"),
+    ),
+)
+def test_test_ingestion_spider_failure_takes_precedence_over_helper_failure(
+    step_id,
+    csv_path,
+    tmp_path,
+):
+    body = _extract_step(TEST_INGESTION, step_id)["run"]
+
+    proc, _ = _run_test_ingestion_spider_step(
+        body,
+        tmp_path,
+        csv_path=csv_path,
+        spider_exit=7,
+        write_result_json=False,
+    )
+
+    assert proc.returncode == 7
+    assert "fake helper missing result JSON" in proc.stderr
+    assert "Spider exited with code 7" in proc.stdout
+    assert (tmp_path / "runner_temp" / "helper-invoked").exists()
+
+
+@pytest.mark.parametrize(
+    ("step_id", "csv_path"),
+    (
+        ("daily_spider", "reports/DailyReport/failure.csv"),
+        ("adhoc_spider", "reports/AdHoc/failure.csv"),
+    ),
+)
+def test_test_ingestion_helper_failure_is_captured_when_spider_succeeds(
+    step_id,
+    csv_path,
+    tmp_path,
+):
+    body = _extract_step(TEST_INGESTION, step_id)["run"]
+
+    proc, _ = _run_test_ingestion_spider_step(
+        body,
+        tmp_path,
+        csv_path=csv_path,
+        spider_exit=0,
+        helper_exit=23,
+    )
+
+    assert proc.returncode == 23
+    assert "Result output helper exited with code 23" in proc.stdout
+    assert (tmp_path / "runner_temp" / "helper-invoked").exists()
 
 
 def test_adhoc_spider_failure_still_runs_result_helper_under_errexit(tmp_path):
