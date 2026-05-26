@@ -271,7 +271,10 @@ class SpiderRuntime:
                     try:
                         client.close()
                     except Exception:  # noqa: BLE001
-                        pass
+                        legacy_state.logger.debug(
+                            "Failed to close redundant movie-claim client",
+                            exc_info=True,
+                        )
                 legacy_state._sync_legacy_globals_from_runtime(self)
                 return self.movie_claim.client_public
             if self.movie_claim.client_pending is not None:
@@ -279,7 +282,10 @@ class SpiderRuntime:
                     try:
                         client.close()
                     except Exception:  # noqa: BLE001
-                        pass
+                        legacy_state.logger.debug(
+                            "Failed to close redundant movie-claim client",
+                            exc_info=True,
+                        )
                 if self.movie_claim.mode == MOVIE_CLAIM_MODE_FORCE_ON or (
                     self.movie_claim.mode == MOVIE_CLAIM_MODE_AUTO
                     and self.movie_claim.last_recommended
@@ -658,10 +664,8 @@ class SpiderRuntime:
             )
         else:
             self.runner_registry.unregistered = True
-        try:
+        with contextlib.suppress(Exception):
             client.close()
-        except Exception:
-            pass
         self.services.runner_registry_client = None
         if self.runner_registry.heartbeat_thread is not None and not self.runner_registry.heartbeat_thread.is_alive():
             self.runner_registry.heartbeat_thread = None
@@ -707,6 +711,7 @@ class SpiderRuntime:
             for key, value in zip(
                 ("PROXY_COORDINATOR_URL", "PROXY_COORDINATOR_TOKEN", "RUNNER_REGISTRY_ENABLED"),
                 prior,
+                strict=True,
             ):
                 if value is None:
                     _os.environ.pop(key, None)
