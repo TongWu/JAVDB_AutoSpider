@@ -13,6 +13,8 @@
 - Phase 3 — safe micro-batching + `flush()` boundaries (per D4) is implemented behind `D1_BATCHING_ENABLED` and locally verified.
 - Phase 4 — startup replay of any persisted outbox entries remains pending.
 
+2026-05-26 baseline: current main includes Phase 3 without completed Phase 2 replay/outbox behavior. Restore and verify Phase 2 before shipping Phase 4 startup replay.
+
 The four phases are independently gated. This ADR remains open until Phase 4 ships or is explicitly deferred by a follow-up decision.
 
 ---
@@ -23,8 +25,8 @@ The current D1 path is split across several layers:
 
 - `javdb/storage/d1_client.py` owns the Cloudflare D1 HTTP request shape, retry classification, backoff, `executemany`, `batch_execute`, and `requests.Session` reuse.
 - `javdb/storage/dual_connection.py` mirrors writes to SQLite and D1, routes reads to D1, tracks drift, and enforces guarded primary-key rules.
-- `javdb/storage/db/db_connection.py` selects `sqlite`, `d1`, or `dual` through `STORAGE_BACKEND`.
-- The business write path still lives in `db.py`, `db_history_write.py`, and the Repo wrappers. Those layers know about sessions, pending history, stats, rollback, and operations.
+- `javdb/storage/db/_db_connection.py` selects `sqlite`, `d1`, or `dual` through `STORAGE_BACKEND`.
+- The business write path still lives in `db.py`, `_db_history_write.py`, and the Repo wrappers. Those layers know about sessions, pending history, stats, rollback, and operations.
 
 This has worked, but it leaves two recurring problems:
 
@@ -44,7 +46,7 @@ Introduce a process-local `D1AccessPort` under `javdb/storage/`. It becomes the 
 The layering becomes:
 
 ```text
-Business storage code: db.py / repos / db_history_write / db_reports / db_stats
+Business storage code: db.py / repos / _db_history_write / db_reports / db_stats
         |
 get_db() / D1Connection / DualConnection
         |

@@ -10,6 +10,8 @@
 
 **Source spec:** [ADR-010](ADR-010-d1-access-port.md), D5-D7, D10 Phase 2, D11.
 
+**Current baseline (2026-05-26):** current main has Phase 3 safe batching but lacks Phase 2 replay/outbox completion (`replay_ordering_key` and the CLI replay command are absent). The approved scope is to restore and verify these Phase 2 prerequisites before continuing Phase 4 startup replay. Because Phase 3 safe writes can remain queued until `D1AccessPort.flush()`, the restored Phase 2 behavior must also queue retry-exhausted safe-batch flush operations using their preserved `RecoveryPolicy`, so Phase 4 startup replay covers that path.
+
 ---
 
 ## Files
@@ -19,7 +21,7 @@
 | `javdb/storage/d1_port.py` | Queue safe retry-exhausted operations to outbox when gated on. |
 | `javdb/storage/d1_recovery.py` | Add drain/replay helpers, dead-letter transitions, and ordering-key status queries. |
 | `javdb/storage/dual_connection.py` | Preserve strict-mode behavior and expose finalize-drain checks where needed. |
-| `javdb/storage/db/db.py` | Drain related recovery keys before pending session finalization/commit. |
+| `javdb/storage/db/_db_history_write.py` | Drain related recovery keys before pending session finalization/commit. |
 | `apps/cli/db/d1_recovery.py` | Add replay command for selected ordering key or all pending work. |
 | `tests/unit/test_d1_port.py` | Queueing, disabled gate, d1-mode failure, dual-mode soft-success tests. |
 | `tests/unit/test_d1_recovery.py` | Replay, dead-letter, compact, and ordering-key status tests. |
@@ -295,7 +297,7 @@ git commit -m "test(storage): lock d1 recovery consistency semantics"
 ## Task 4: Drain Recovery Before Pending Session Commit
 
 **Files:**
-- Modify: `javdb/storage/db/db.py`
+- Modify: `javdb/storage/db/_db_history_write.py`
 - Modify: `tests/unit/test_rollback_pending_mode.py` or create `tests/unit/test_d1_recovery_commit_gate.py`
 
 - [ ] **Step 1: Add commit-blocking test**
@@ -307,13 +309,13 @@ from __future__ import annotations
 
 import pytest
 
-import javdb.storage.db.db as db_mod
+import javdb.storage.db._db_history_write as history_write_mod
 from javdb.storage.d1_recovery import RecoveryEvent, RecoveryPolicy, append_event
 
 
 def test_pending_commit_refuses_unresolved_recovery_key(monkeypatch, tmp_path):
     monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
-    sid = db_mod.db_create_report_session(
+    sid = history_write_mod.db_create_report_session(
         report_type="DailyReport",
         report_date="2026-05-19",
         csv_filename="recovery-block.csv",
@@ -333,7 +335,7 @@ def test_pending_commit_refuses_unresolved_recovery_key(monkeypatch, tmp_path):
     )
 
     with pytest.raises(RuntimeError, match="unresolved D1 recovery"):
-        db_mod.db_commit_session_history(sid)
+        history_write_mod.db_commit_session_history(sid)
 ```
 
 - [ ] **Step 2: Run test**
@@ -346,7 +348,7 @@ Expected: FAIL until the commit gate exists.
 
 - [ ] **Step 3: Implement commit gate**
 
-In `javdb/storage/db/db.py`, before `db_finish_commit_session(...)`, check:
+In `javdb/storage/db/_db_history_write.py`, before `db_finish_commit_session(...)`, check:
 
 ```python
 from javdb.storage.d1_recovery import pending_by_ordering_key
@@ -373,7 +375,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add javdb/storage/db/db.py tests/unit/test_d1_recovery_commit_gate.py
+git add javdb/storage/db/_db_history_write.py tests/unit/test_d1_recovery_commit_gate.py
 git commit -m "fix(storage): block pending commit on unresolved d1 recovery"
 ```
 
