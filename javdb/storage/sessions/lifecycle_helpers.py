@@ -242,7 +242,8 @@ def fanout_movie_claim(
             "(DB-side mutation unaffected)", config.method_name,
         )
         return []
-    attempts = max(1, int(max_attempts))
+    configured_attempts = max(1, int(max_attempts))
+    attempts = 1 if operation == "commit" else configured_attempts
     target_date = shard_date or current_shard_date()
     summaries: List[dict] = []
     try:

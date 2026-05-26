@@ -405,9 +405,8 @@ def test_fanout_movie_claim_commit_does_not_retry(patch_claim_client):
         "commit_completed_movies": fail_once,
     })
     patch_claim_client(client)
-    # commit defaults to max_attempts=1.
     out = helpers.fanout_movie_claim(
-        ["sY"], operation="commit",
+        ["sY"], operation="commit", max_attempts=3,
     )
     assert len(calls) == 1
     assert out[0]["ok"] is False
