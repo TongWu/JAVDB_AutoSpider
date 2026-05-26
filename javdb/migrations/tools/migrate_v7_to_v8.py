@@ -463,7 +463,7 @@ def run_actor_backfill(
     # ------------------------------------------------------------------
     if use_proxy and PROXY_POOL:
         from javdb.spider.fetch.fetch_engine import FetchEngine, EngineTask
-        from javdb.spider.parser import parse_detail
+        from javdb.spider.parse_legacy_adapters import parse_detail
 
         completed_ids: set[int] = set()
         stop_event = threading.Event()

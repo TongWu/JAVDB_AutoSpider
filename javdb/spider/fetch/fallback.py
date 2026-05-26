@@ -1,8 +1,8 @@
 """Multi-level fallback logic for fetching index and detail pages."""
 
 from javdb.infra.logging import get_logger
-from javdb.spider.parser import parse_detail
-from javdb.spider.parser import validate_index_html as _validate_index_html_fast
+from javdb.spider.parse_legacy_adapters import parse_detail
+from javdb.spider.html_validators import validate_index_html as _validate_index_html_fast
 from javdb.spider.url_helper import get_page_url as _url_helper_get_page_url
 from javdb.infra.request import ProxyBannedError, ProxyExhaustedError
 

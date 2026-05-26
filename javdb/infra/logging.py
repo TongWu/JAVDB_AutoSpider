@@ -87,7 +87,8 @@ _MODULE_SHORT_NAMES = {
     'javdb.spider.app.run_service': 'Spider',
     'javdb.spider.services.dedup': 'Dedup',
     # javdb_core
-    'javdb.spider.parser': 'Parser',
+    'javdb.spider.html_validators': 'Parser',
+    'javdb.spider.parse_legacy_adapters': 'Parser',
     'javdb.infra.masking': 'Masking',
     'javdb.spider.url_helper': 'URLHelper',
     'javdb.spider.filename_helper': 'FileHelper',

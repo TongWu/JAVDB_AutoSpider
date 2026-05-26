@@ -155,7 +155,7 @@ def bench_parse_detail_canonical(iterations: int) -> Dict[str, float]:
 
 def bench_parse_detail_wrapper(iterations: int) -> Dict[str, float]:
     """Spider-side wrapper: parse_detail (includes tuple reshape)."""
-    from javdb.spider.parser import parse_detail
+    from javdb.spider.parse_legacy_adapters import parse_detail
     html = _load_fixture("detail_page_AVSW-067.html")
     return _bench(
         "parse_detail_wrapper", iterations,
