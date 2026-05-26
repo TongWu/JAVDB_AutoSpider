@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from threading import Event
 from typing import List, Optional, Set, Tuple
 from urllib.parse import urljoin
 
@@ -355,10 +356,14 @@ def process_detail_entries(
     redownload_threshold: float = 0.30,
     include_recent_release_filters: bool = False,
     log_duplicate_skips: bool = False,
+    cancel_event: Event | None = None,
 ) -> dict:
     """Run the shared detail pipeline against a concrete fetch backend."""
 
     total_entries = len(entries)
+    if cancel_event is not None and cancel_event.is_set():
+        logger.info("Phase %d detail processing cancelled before dispatch", phase)
+        raise SystemExit(124)
 
     prepared_entries, skipped_history = prepare_detail_entries(
         entries,
@@ -452,6 +457,10 @@ def process_detail_entries(
         pull_batch_size = max(10, min(50, len(prepared_entries) or 10))
         try:
             while True:
+                if cancel_event is not None and cancel_event.is_set():
+                    logger.info("Phase %d detail queue pull cancelled", phase)
+                    raise SystemExit(124)
+
                 pull = work_client.pull(
                     holder_id,
                     max_items=pull_batch_size,
@@ -496,6 +505,10 @@ def process_detail_entries(
     # Local-dispatch path (default; also the fallback after a queue
     # outage). Skips candidates already dispatched via the queue.
     for candidate in prepared_entries:
+        if cancel_event is not None and cancel_event.is_set():
+            logger.info("Phase %d detail dispatch cancelled", phase)
+            raise SystemExit(124)
+
         if candidate.href in queue_held_hrefs:
             continue
         detail_url = urljoin(BASE_URL, candidate.href)
@@ -546,6 +559,10 @@ def process_detail_entries(
 
     try:
         for result in backend.results():
+            if cancel_event is not None and cancel_event.is_set():
+                logger.info("Phase %d detail result collection cancelled", phase)
+                raise SystemExit(124)
+
             entry = result.task.meta['entry']
             href = entry['href']
             page_num = entry['page']
