@@ -1,6 +1,6 @@
 # ADR-010：统一 Python D1 读写端口
 
-**状态**：已接受 —— Phase 1 和 Phase 3 已实现；Phase 2 和 Phase 4 截至 2026-05-25 仍待完成
+**状态**：已接受 —— 截至 2026-05-26，实现在 rollout gates 后已完成；默认推广等待 bake/metrics
 **日期**：2026-05-19
 **决策者**：D1 统一读写端口 brainstorming + grill 会话
 **前置**：[ADR-006](../_archive/ADR-006-Pending-Mode-Rollout/ADR-006-pending-mode-default-rollout.md) 已将 Pending Mode 作为默认写入路径；[ADR-009](../_archive/ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md) 记录了近期 D1 瞬时失败和 drift 响应。
@@ -9,11 +9,13 @@
 ## 实现进展 (Implementation Progress)
 
 - Phase 1 —— `D1AccessPort` 核心类 + `D1Connection`/`DualConnection` 代理已实现。
-- Phase 2 —— 恢复 outbox + replay 队列（对应 D5）仍待完成。
+- Phase 2 —— 恢复 outbox + replay 队列（对应 D5）已在 `D1_RECOVERY_OUTBOX_ENABLED` gate 后实现。
 - Phase 3 —— 安全 micro-batching + `flush()` 边界（对应 D4）已在 `D1_BATCHING_ENABLED` gate 后实现，并已完成本地验证。
-- Phase 4 —— 启动期 outbox 重放仍待完成。
+- Phase 4 —— 启动期 outbox 重放已在 `D1_STARTUP_REPLAY_ENABLED` gate 后实现。
 
-四阶段独立闸门。本 ADR 在 Phase 4 交付或由后续决策明确延期前保持打开。
+2026-05-26 更新：Phase 2 replay/outbox 恢复和 Phase 4 startup replay 已实现并完成本地验证。所有高风险行为仍保持在环境变量 gate 后显式开启。
+
+四阶段独立闸门。本 ADR 在 gated 行为完成 bake，且默认推广或明确延期有后续决策前保持打开。
 
 ---
 
@@ -23,15 +25,15 @@
 
 - `javdb/storage/d1_client.py` 负责 Cloudflare D1 HTTP 请求格式、错误分类、retry/backoff、`executemany`、`batch_execute` 和 `requests.Session` 复用。
 - `javdb/storage/dual_connection.py` 负责 SQLite + D1 双写、读走 D1、drift 记录，以及受保护主键表的校验。
-- `javdb/storage/db/db_connection.py` 通过 `STORAGE_BACKEND` 选择 `sqlite`、`d1` 或 `dual`。
-- 业务写入语义仍在 `db.py`、`db_history_write.py` 和 Repo wrapper 中。这些层知道 Session、PendingHistory、Stats、Rollback 和 Operations。
+- `javdb/storage/db/_db_connection.py` 通过 `STORAGE_BACKEND` 选择 `sqlite`、`d1` 或 `dual`。
+- 业务存储语义位于 `javdb/storage/db/_db_history_write.py`、`_db_reports.py`、`_db_stats.py` 和 Repo wrapper 中。这些层知道 Session、PendingHistory、Stats、Rollback 和 Operations。
 
 这套结构能工作，但有两个持续问题：
 
 1. D1 仍会从热点路径收到大量短间隔 HTTP 请求。此前最明显的是 pending session commit；已存在且已有测试覆盖的 `COMMIT_SESSION_BULK` 路径可以把 per-href D1 请求压成批量请求，但目前仍是 opt-in。
 2. 可恢复 D1 写失败主要靠单请求 retry + drift 检测。retry 耗尽后，dual 模式可以继续落 SQLite 并记录 drift，但没有统一的端口级 recovery queue 来重放已证明幂等的 D1 写。
 
-目标边界是 Python 内部 D1 access port，不新增外部服务。这个端口也**不是**“D1 版 `db.py`”。`db.py` 和 Repo 层继续负责业务语义和 SQL 构造。D1 access port 只负责 Cloudflare D1 的 transport、可靠性、批处理、recovery、schema metadata cache 和观测。
+目标边界是 Python 内部 D1 access port，不新增外部服务。这个端口也**不是**概念上的 D1 版业务存储包。`javdb/storage/db/` shell 和 Repo 层继续负责业务语义和 SQL 构造。D1 access port 只负责 Cloudflare D1 的 transport、可靠性、批处理、recovery、schema metadata cache 和观测。
 
 ---
 
@@ -44,7 +46,7 @@
 分层变为：
 
 ```text
-业务存储代码：db.py / repos / db_history_write / db_reports / db_stats
+业务存储代码：javdb/storage/db/ shell、repos、_db_history_write、_db_reports、_db_stats
         |
 get_db() / D1Connection / DualConnection
         |
