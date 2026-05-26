@@ -1,5 +1,7 @@
 # IMP-ADR013-01: ADR-013 Phase 1 - Runtime Skeleton And Active Facade
 
+**Status:** Completed — delivered 2026-05-26.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship ADR-013 Phase 1 by introducing `SpiderRuntime`, focused runtime state dataclasses, runtime service slots, active-runtime binding, and legacy `state.py` facade compatibility without changing production behavior.
