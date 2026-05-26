@@ -430,6 +430,7 @@ jobs:
           set -o pipefail
           SPIDER_CMD=(python3 -m apps.cli.spider)
           SPIDER_RESULT_JSON="$RUNNER_TEMP/spider-result.json"
+          rm -f "$SPIDER_RESULT_JSON"
           SPIDER_CMD+=(--result-json "$SPIDER_RESULT_JSON")
           if [ "$INPUT_DISABLE_ALL_FILTERS" = "true" ]; then
             SPIDER_CMD+=(--disable-all-filters)

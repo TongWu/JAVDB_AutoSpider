@@ -235,6 +235,7 @@ jobs:
           # - Process only first 1 movie for phase 1 (--max-movies-phase1 1)
           # - Process only first 1 movie for phase 2 (--max-movies-phase2 1)
           SPIDER_RESULT_JSON="$RUNNER_TEMP/daily-spider-result.json"
+          rm -f "$SPIDER_RESULT_JSON"
 
           set +e
           python3 -m apps.cli.spider \
@@ -282,6 +283,7 @@ jobs:
           # - Process only first 1 movie for phase 2 (--max-movies-phase2 1)
           # - Ignore release date filter for adhoc mode
           SPIDER_RESULT_JSON="$RUNNER_TEMP/adhoc-spider-result.json"
+          rm -f "$SPIDER_RESULT_JSON"
 
           set +e
           python3 -m apps.cli.spider \
