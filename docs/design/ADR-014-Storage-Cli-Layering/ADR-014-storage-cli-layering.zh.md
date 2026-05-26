@@ -1,14 +1,14 @@
 # ADR-014：Storage CLI 分层收束
 
-**状态**：已接受 - Phase 1 已交付，Phases 2-3 待实施
+**状态**：已接受 - Phases 1-2 已交付，Phase 3 待实施
 **日期**：2026-05-20
 **决策者**：Storage CLI layering brainstorming + grill 会话
-**关联实现计划 (Related Implementation Plans)**：[IMP-ADR014-01](IMP-ADR014-01-storage-cli-layering-phase1-guard.md)（Phase 1 - guard and direct storage imports —— **已完成 2026-05-26**）、[IMP-ADR014-02](IMP-ADR014-02-storage-cli-layering-phase2-lifecycle-helpers.md)（Phase 2 - canonical lifecycle helpers）、[IMP-ADR014-03](IMP-ADR014-03-storage-cli-layering-phase3-delete-legacy-wrappers.md)（Phase 3 - delete legacy wrappers）
+**关联实现计划 (Related Implementation Plans)**：[IMP-ADR014-01](IMP-ADR014-01-storage-cli-layering-phase1-guard.md)（Phase 1 - guard and direct storage imports —— **已完成 2026-05-26**）、[IMP-ADR014-02](IMP-ADR014-02-storage-cli-layering-phase2-lifecycle-helpers.md)（Phase 2 - canonical lifecycle helpers —— **已完成 2026-05-26**）、[IMP-ADR014-03](IMP-ADR014-03-storage-cli-layering-phase3-delete-legacy-wrappers.md)（Phase 3 - delete legacy wrappers）
 
 ## 待办 (Outstanding Work)
 
 - ~~Phase 1 - 增加 storage-to-CLI import guard，将剩余的 commit-session CLI helper import 改成 storage helper 直连，并更新过期 ADR/IMP 说明。~~ **已完成 2026-05-26**（IMP-ADR014-01）。
-- Phase 2 - 将共享 helper 实现迁到 `javdb.storage.sessions.lifecycle_helpers`，并让生产调用方改用 canonical path。
+- ~~Phase 2 - 将共享 helper 实现迁到 `javdb.storage.sessions.lifecycle_helpers`，并让生产调用方改用 canonical path。~~ **已完成 2026-05-26**（IMP-ADR014-02）。
 - Phase 3 - 删除 `apps.cli.db._session_helpers` 和 `javdb.storage.rollback.session_helpers`，并防止这两个旧路径回流。
 
 ---
