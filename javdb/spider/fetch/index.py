@@ -1,6 +1,7 @@
 """Index-page fetching and parsing across all pages."""
 
 import os
+from threading import Event
 from typing import Optional
 
 from javdb.infra.logging import get_logger, log_section
@@ -29,6 +30,7 @@ def fetch_all_index_pages(
     user_specified_output: bool,
     parsed_movies_history_phase1: dict, parsed_movies_history_phase2: dict,
     use_parallel: bool = False,
+    cancel_event: Event | None = None,
 ) -> dict:
     """Fetch and parse all index pages, collecting entries for both phases.
 
@@ -63,6 +65,7 @@ def fetch_all_index_pages(
             max_consecutive_empty=max_consecutive_empty,
             output_csv=output_csv, output_dated_dir=output_dated_dir,
             csv_path=csv_path, user_specified_output=user_specified_output,
+            cancel_event=cancel_event,
         )
         return _post_process_index_results(
             idx_result, custom_url,
@@ -81,6 +84,7 @@ def fetch_all_index_pages(
         parsed_movies_history_phase1=parsed_movies_history_phase1,
         parsed_movies_history_phase2=parsed_movies_history_phase2,
         num_workers=active_workers,
+        cancel_event=cancel_event,
     )
 
 
@@ -92,6 +96,7 @@ def _fetch_all_index_pages_sequential(
     user_specified_output: bool,
     parsed_movies_history_phase1: dict, parsed_movies_history_phase2: dict,
     num_workers: int = 1,
+    cancel_event: Event | None = None,
 ) -> dict:
     """Original sequential index fetch logic."""
 
@@ -105,6 +110,10 @@ def _fetch_all_index_pages_sequential(
     csv_name_resolved = False
 
     while True:
+        if cancel_event is not None and cancel_event.is_set():
+            logger.info("Index page fetch cancelled")
+            raise SystemExit(124)
+
         page_url = get_page_url(page_num, custom_url=custom_url)
         logger.debug(f"[Page {page_num}] Fetching: {page_url}")
 
