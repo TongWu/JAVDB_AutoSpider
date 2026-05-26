@@ -34,7 +34,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set
 
-from apps.cli.db._session_helpers import (
+from javdb.storage.rollback.session_helpers import (
     append_jsonl_record,
     attach_run_identity,
     fanout_movie_claim,
@@ -327,7 +327,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     since = normalize_run_started_at(args.run_started_at)
     if since:
         # commit_session has stricter window-scan semantics than the
-        # generic helper in _session_helpers: a DB hiccup with no
+        # shared session helper: a DB hiccup with no
         # explicit ``--session-id`` is a hard error (exit 1) so an
         # operator notices, but with an explicit id we still try to
         # commit it. Call db_find_in_progress_sessions directly so the
