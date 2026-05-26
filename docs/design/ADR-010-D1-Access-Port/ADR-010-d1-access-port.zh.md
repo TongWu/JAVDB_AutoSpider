@@ -13,6 +13,8 @@
 - Phase 3 —— 安全 micro-batching + `flush()` 边界（对应 D4）已在 `D1_BATCHING_ENABLED` gate 后实现，并已完成本地验证。
 - Phase 4 —— 启动期 outbox 重放仍待完成。
 
+2026-05-26 基线：当前 main 已包含 Phase 3，但 Phase 2 的 replay/outbox 行为尚未完成。必须先恢复并验证 Phase 2，再交付 Phase 4 启动重放。
+
 四阶段独立闸门。本 ADR 在 Phase 4 交付或由后续决策明确延期前保持打开。
 
 ---
@@ -23,8 +25,8 @@
 
 - `javdb/storage/d1_client.py` 负责 Cloudflare D1 HTTP 请求格式、错误分类、retry/backoff、`executemany`、`batch_execute` 和 `requests.Session` 复用。
 - `javdb/storage/dual_connection.py` 负责 SQLite + D1 双写、读走 D1、drift 记录，以及受保护主键表的校验。
-- `javdb/storage/db/db_connection.py` 通过 `STORAGE_BACKEND` 选择 `sqlite`、`d1` 或 `dual`。
-- 业务写入语义仍在 `db.py`、`db_history_write.py` 和 Repo wrapper 中。这些层知道 Session、PendingHistory、Stats、Rollback 和 Operations。
+- `javdb/storage/db/_db_connection.py` 通过 `STORAGE_BACKEND` 选择 `sqlite`、`d1` 或 `dual`。
+- 业务写入语义仍在 `db.py`、`_db_history_write.py` 和 Repo wrapper 中。这些层知道 Session、PendingHistory、Stats、Rollback 和 Operations。
 
 这套结构能工作，但有两个持续问题：
 
@@ -44,7 +46,7 @@
 分层变为：
 
 ```text
-业务存储代码：db.py / repos / db_history_write / db_reports / db_stats
+业务存储代码：db.py / repos / _db_history_write / db_reports / db_stats
         |
 get_db() / D1Connection / DualConnection
         |

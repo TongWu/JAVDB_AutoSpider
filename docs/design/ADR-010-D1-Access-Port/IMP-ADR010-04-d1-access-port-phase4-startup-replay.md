@@ -10,6 +10,8 @@
 
 **Source spec:** [ADR-010](ADR-010-d1-access-port.md), D5-D7, D10 Phase 4.
 
+**Prerequisite (2026-05-26):** Phase 2 replay is missing on current main and will be restored under [IMP-ADR010-02](IMP-ADR010-02-d1-access-port-phase2-recovery-outbox.md) before this phase ships.
+
 ---
 
 ## Files
@@ -17,7 +19,7 @@
 | Path | Responsibility |
 |---|---|
 | `javdb/storage/d1_recovery.py` | Startup drain coordinator and bounded replay result model. |
-| `javdb/storage/db/db_connection.py` | Invoke startup replay once per process when enabled. |
+| `javdb/storage/db/_db_connection.py` | Invoke startup replay once per process when enabled. |
 | `apps/cli/db/d1_recovery.py` | Expose `startup-drain` command for manual parity with automatic behavior. |
 | `tests/unit/test_d1_recovery.py` | Startup drain grouping, bounds, and dead-letter skip tests. |
 | `tests/unit/test_d1_dual.py` or new `tests/unit/test_d1_startup_replay.py` | Ensure connection creation triggers startup drain once when enabled. |
@@ -102,7 +104,7 @@ git commit -m "feat(storage): add d1 startup recovery drain"
 ## Task 2: Wire Startup Drain to Connection Setup
 
 **Files:**
-- Modify: `javdb/storage/db/db_connection.py`
+- Modify: `javdb/storage/db/_db_connection.py`
 - Create or modify: `tests/unit/test_d1_startup_replay.py`
 
 - [ ] **Step 1: Add startup gate test**
@@ -112,7 +114,7 @@ Create `tests/unit/test_d1_startup_replay.py`:
 ```python
 from __future__ import annotations
 
-import javdb.storage.db.db_connection as db_conn
+import javdb.storage.db._db_connection as db_conn
 
 
 def test_startup_replay_runs_once_when_enabled(monkeypatch):
@@ -136,7 +138,7 @@ Expected: FAIL until helper exists.
 
 - [ ] **Step 3: Implement startup gate**
 
-In `javdb/storage/db/db_connection.py`, add module-level flag:
+In `javdb/storage/db/_db_connection.py`, add module-level flag:
 
 ```python
 _startup_recovery_drained = False
@@ -184,7 +186,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add javdb/storage/db/db_connection.py tests/unit/test_d1_startup_replay.py
+git add javdb/storage/db/_db_connection.py tests/unit/test_d1_startup_replay.py
 git commit -m "feat(storage): gate d1 startup recovery replay"
 ```
 
