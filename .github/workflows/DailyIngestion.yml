@@ -113,6 +113,9 @@ jobs:
       paused: ${{ steps.pause_gate.outputs.paused }}
     env:
       TZ: Asia/Singapore
+      D1_RECOVERY_OUTBOX_ENABLED: ${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}
+      D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
+      D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
 
     steps:
       - name: Capture workflow run start (UTC ISO)
@@ -359,6 +362,9 @@ jobs:
       health_check_outcome: ${{ steps.health_check.outcome }}
     env:
       TZ: Asia/Singapore
+      D1_RECOVERY_OUTBOX_ENABLED: ${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}
+      D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
+      D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
       # ── Storage backend selection (sqlite | d1 | dual) ──
       # Set GitHub Variable STORAGE_BACKEND=dual to mirror writes to D1 and
       # serve reads from D1 while still committing reports/*.db to git LFS.
@@ -805,6 +811,9 @@ jobs:
     if: ${{ always() && needs.setup.outputs.paused != 'true' && (needs.run-pipeline.result == 'failure' || needs.run-pipeline.result == 'cancelled') }}
     env:
       TZ: Asia/Singapore
+      D1_RECOVERY_OUTBOX_ENABLED: ${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}
+      D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
+      D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
       STORAGE_BACKEND: ${{ vars.STORAGE_BACKEND || 'sqlite' }}
       # Phase 3 — must match the run-pipeline value so the rollback CLI's
       # WriteMode dispatcher sees the same resolved mode.  The CLI itself
@@ -905,6 +914,9 @@ jobs:
     if: ${{ always() && needs.setup.outputs.paused != 'true' }}
     env:
       TZ: Asia/Singapore
+      D1_RECOVERY_OUTBOX_ENABLED: ${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}
+      D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
+      D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
       # Email subject/body date ≈ workflow start (first job UTC timestamp), not send time
       PIPELINE_WORKFLOW_RUN_STARTED_AT: ${{ needs.setup.outputs.pipeline_workflow_run_started_at }}
       GH_TOKEN: ${{ github.token }}
@@ -1167,6 +1179,9 @@ jobs:
       pull-requests: write
     env:
       TZ: Asia/Singapore
+      D1_RECOVERY_OUTBOX_ENABLED: ${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}
+      D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
+      D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
       GH_TOKEN: ${{ github.token }}
       # MR-2 (multi-runtime): surfaced so the commit step can skip the
       # reports/*.db git add when STORAGE_BACKEND=d1. In d1-only mode the
