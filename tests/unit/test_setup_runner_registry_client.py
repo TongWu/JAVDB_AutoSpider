@@ -194,6 +194,32 @@ def test_setup_is_idempotent(monkeypatch):
     state._runner_heartbeat_stop.set()
 
 
+def test_setup_resets_stale_unregister_flag_for_new_legacy_lifecycle(monkeypatch):
+    """A fresh legacy registry setup must not inherit a closed runtime flag."""
+    _enabled_cfg(monkeypatch)
+    monkeypatch.setattr(state, "_runner_unregistered", True)
+    monkeypatch.setattr(state, "_RUNNER_HEARTBEAT_INTERVAL_SEC", 60.0)
+
+    fake_client = _make_client_mock()
+    with patch(
+        "javdb.spider.runtime.state.create_runner_registry_client_from_env",
+        return_value=fake_client,
+    ):
+        client = state.setup_runner_registry_client()
+
+    assert client is fake_client
+    assert state._runner_unregistered is False
+
+    state._unregister_runner_at_exit()
+
+    fake_client.unregister.assert_called_once_with(
+        state.runtime_holder_id, session=None,
+    )
+    fake_client.close.assert_called_once()
+    assert state._runner_unregistered is True
+    assert state.global_runner_registry_client is None
+
+
 def test_setup_continues_on_register_unavailable(monkeypatch):
     """Register failure must NOT take down the spider — return None and log."""
     _enabled_cfg(monkeypatch)
