@@ -2,6 +2,9 @@
 
 Session-lifecycle and database-maintenance CLIs — rollback, commit, audit cleanup, pending-mode health/alert, D1↔SQLite sync.
 
+Shared session lifecycle helpers now live in `javdb.storage.sessions.lifecycle_helpers`;
+`_session_helpers.py` remains only as a temporary compatibility wrapper for this phase.
+
 ## Files
 
 | File | Purpose |
@@ -18,7 +21,7 @@ Session-lifecycle and database-maintenance CLIs — rollback, commit, audit clea
 | `d1_recovery.py` | Inspect, replay, startup-drain, and compact the D1 recovery outbox introduced by ADR-010. Use `inspect` for read-only inspection; `replay` / `startup-drain` for recoverable work; `compact` moves replayed/abandoned records to `d1_recovery_outbox.processed.jsonl`. |
 | `pending_health.py` | Phase-3 email pre-step. Aggregates the last 24h of `pending_session_verify` records from `reports/D1/d1_drift.jsonl` into `reports/D1/pending_health_24h.json`. |
 | `pending_alert.py` | ADR-006 pause-on-alert: injects `pipeline_paused_until: <ISO>` into `.publish-config.yml` when the email pipeline detects a critical pending-mode alert. Idempotent — extends the timer rather than shortening it. |
-| `_session_helpers.py` | Internal scaffolding shared by `rollback` and `commit_session`: ISO-timestamp normalisation, session lookups, pre-state reads, MovieClaim DO fan-out, JSONL emission. Not a CLI entry point. |
+| `_session_helpers.py` | Temporary compatibility wrapper that re-exports `javdb.storage.sessions.lifecycle_helpers`. Not a CLI entry point. |
 
 ## Invoked by
 

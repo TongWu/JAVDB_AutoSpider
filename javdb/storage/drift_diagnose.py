@@ -37,7 +37,7 @@ from typing import Dict, List, Optional
 
 from javdb.infra.logging import get_logger
 from javdb.storage.d1_client import make_d1_connection
-from javdb.storage.rollback.session_helpers import append_jsonl_record
+from javdb.storage.sessions.lifecycle_helpers import append_jsonl_record
 from javdb.storage.repos.history_repo import HistoryRepo
 from javdb.storage.repos.sessions_repo import SessionsRepo
 
