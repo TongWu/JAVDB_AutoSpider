@@ -111,6 +111,28 @@ def _execute_pending_stage(conn, sql: str, params: tuple, policy) -> None:
     conn.execute(sql, params)
 
 
+def _assert_no_blocking_d1_recovery(session_id: str) -> None:
+    from javdb.storage.d1_port import recovery_outbox_path
+    from javdb.storage.d1_recovery import outbox_status
+
+    ordering_key = f"history:{session_id}"
+    status = outbox_status(recovery_outbox_path())
+    pending = status["pending_groups"].get(ordering_key, [])
+    dead_lettered = status["dead_lettered_groups"].get(ordering_key, [])
+    if pending or dead_lettered:
+        raise RuntimeError(
+            f"unresolved D1 recovery work for ordering key {ordering_key}; "
+            "drain it before committing the session"
+        )
+
+
+def _flush_pending_d1_batch(session_id: str, history_db_path: Optional[str]) -> None:
+    with _get_db(history_db_path or _HISTORY_DB_PATH) as conn:
+        flush = getattr(conn, "flush", None)
+        if callable(flush):
+            flush(ordering_key=f"history:{session_id}")
+
+
 # Constants
 _PENDING_KINDS = {'movie', 'torrent'}
 _KIND_MOVIE = 'movie'
@@ -1500,6 +1522,12 @@ def db_commit_session_history(
         return counts
 
     if status == "in_progress":
+        # Recovery work must block the state transition itself: finalizing
+        # sessions are resumed rather than rolled back. Flush queued stage
+        # writes first so a transient batch failure cannot appear only after
+        # the session has crossed into finalizing.
+        _flush_pending_d1_batch(session_id, history_db_path)
+        _assert_no_blocking_d1_recovery(session_id)
         db_begin_finalize_session(session_id, db_path=reports_db_path)
 
     use_bulk = _commit_session_bulk_enabled()
@@ -1599,10 +1627,8 @@ def db_commit_session_history(
     # The reverse order (delete first, flip last) was monitoring-hostile:
     # a crash mid-flip left ``Status='finalizing'`` with zero pending rows,
     # which any "stuck session" alert misreads as a hung commit.
-    with _get_db(history_db_path or _HISTORY_DB_PATH) as conn:
-        flush = getattr(conn, "flush", None)
-        if callable(flush):
-            flush(ordering_key=f"history:{session_id}")
+    _flush_pending_d1_batch(session_id, history_db_path)
+    _assert_no_blocking_d1_recovery(session_id)
     db_finish_commit_session(session_id, db_path=reports_db_path)
 
     with _get_db(history_db_path or _HISTORY_DB_PATH) as conn:

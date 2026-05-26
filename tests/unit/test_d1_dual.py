@@ -21,6 +21,7 @@ from javdb.storage.d1_client import (  # noqa: E402
     _split,
 )
 from javdb.storage import d1_client as _d1_client_module  # noqa: E402
+from javdb.storage import d1_port as _d1_port_module  # noqa: E402
 from javdb.storage import dual_connection as _dual_module  # noqa: E402
 from javdb.storage.dual_connection import (  # noqa: E402
     APPLICATION_GENERATED_ID_TABLES,
@@ -34,7 +35,7 @@ from javdb.storage.repos.operations_repo import (  # noqa: E402
     open_rclone_staging,
     swap_rclone_inventory,
 )
-from javdb.storage.d1_recovery import RecoveryPolicy  # noqa: E402
+from javdb.storage.d1_recovery import RecoveryPolicy, load_latest_events  # noqa: E402
 
 
 # ── _is_read ─────────────────────────────────────────────────────────────
@@ -225,6 +226,67 @@ class NoFlushD1:
     pass
 
 
+class QueuedRollbackD1(FakeD1Connection):
+    def __init__(self):
+        super().__init__()
+        self.rollbacks = 0
+
+    def execute(self, sql: str, params: Iterable[Any] = (), *, policy=None):
+        self.executed.append((sql, list(params), policy))
+        if not _is_read(sql):
+            return D1Cursor({"meta": {"changes": 0}, "results": []}, queued=True)
+        return FakeD1Cursor(rows=self._next_select_rows)
+
+    def rollback(self):
+        self.rollbacks += 1
+
+
+class UndurableRecoveryD1(FakeD1Connection):
+    def execute(self, sql: str, params: Iterable[Any] = (), *, policy=None):
+        self.executed.append((sql, list(params), policy))
+        if not _is_read(sql):
+            exc = D1TransientError("simulated D1 write outage")
+            exc.d1_recovery_outbox_required = True
+            exc.d1_recovery_durable = False
+            raise exc
+        return FakeD1Cursor(rows=self._next_select_rows)
+
+
+class QueuedThenUndurableFlushD1(FakeD1Connection):
+    def execute(self, sql: str, params: Iterable[Any] = (), *, policy=None):
+        self.executed.append((sql, list(params), policy))
+        if not _is_read(sql):
+            return D1Cursor({"meta": {"changes": 0}, "results": []}, queued=True)
+        return FakeD1Cursor(rows=self._next_select_rows)
+
+    def commit(self):
+        self.commits += 1
+        exc = D1TransientError("simulated D1 queued flush outage")
+        exc.d1_recovery_outbox_required = True
+        exc.d1_recovery_durable = False
+        raise exc
+
+
+class QueuedThenDurableFlushD1(QueuedThenUndurableFlushD1):
+    def commit(self):
+        self.commits += 1
+        exc = D1TransientError("simulated D1 queued flush outage")
+        exc.d1_recovery_outbox_required = True
+        exc.d1_recovery_durable = True
+        raise exc
+
+
+class QueuedThenBlockedFlushD1(QueuedThenUndurableFlushD1):
+    def commit(self):
+        self.commits += 1
+        error = RuntimeError(
+            "unresolved D1 recovery work for ordering key history:s1; "
+            "drain it before flushing queued writes"
+        )
+        error.d1_recovery_blocker = True
+        raise error
+
+
 @pytest.fixture
 def sqlite_conn(tmp_path):
     path = tmp_path / "test.db"
@@ -334,6 +396,255 @@ def test_strict_commit_raises_when_queued_flush_fails(
         dual.commit()
 
     assert fake_d1.flush_called is True
+    assert drift_path.exists()
+
+
+def test_rollback_discards_queued_d1_writes(sqlite_conn):
+    fake_d1 = QueuedRollbackD1()
+    dual = DualConnection(sqlite_conn, fake_d1)
+
+    dual.execute("INSERT INTO t (v) VALUES (?)", ("x",), policy=object())
+    assert dual._d1_queued_pending_writes == 1
+
+    dual.rollback()
+
+    assert fake_d1.rollbacks == 1
+    assert dual._d1_queued_pending_writes == 0
+
+
+def test_strict_dual_write_still_raises_when_d1_failure_is_outboxable(
+    sqlite_conn,
+    monkeypatch,
+):
+    _strict_env(monkeypatch, True)
+    monkeypatch.setenv("D1_RECOVERY_OUTBOX_ENABLED", "1")
+
+    class FailingD1(FakeD1Connection):
+        def execute(self, sql, params=(), *, policy=None):
+            self.executed.append((sql, list(params), policy))
+            if not _is_read(sql):
+                raise RuntimeError("simulated D1 write failure")
+            return FakeD1Cursor(rows=[{"n": 1}])
+
+    dual = DualConnection(sqlite_conn, FailingD1(), logical_name="history")
+    policy = RecoveryPolicy(
+        logical_db="history",
+        operation_type="pending_stage",
+        idempotency_key="history:s1:seq1",
+        ordering_key="history:s1",
+        recovery_allowed=True,
+        max_attempts=3,
+    )
+    dual.execute("INSERT INTO t (v) VALUES (?)", ("x",), policy=policy)
+
+    with pytest.raises(_dual_module.DualWriteStrictError):
+        dual.commit()
+
+
+def test_strict_dual_direct_recovery_write_leaves_no_replayable_outbox(
+    sqlite_conn,
+    monkeypatch,
+    tmp_path,
+):
+    _strict_env(monkeypatch, True)
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    monkeypatch.setenv("D1_RECOVERY_OUTBOX_ENABLED", "1")
+    monkeypatch.setattr(_d1_client_module, "_MAX_RETRIES", 1)
+
+    poster_calls = []
+
+    def poster(url, *, headers, json, timeout):
+        poster_calls.append(
+            {"url": url, "headers": headers, "json": json, "timeout": timeout}
+        )
+        return _FakeResponse(
+            status_code=429,
+            json_body={
+                "success": False,
+                "errors": [{"message": "overloaded"}],
+            },
+        )
+
+    d1 = D1Connection("acct", "db", "token")
+    d1._post_request = poster
+    dual = DualConnection(sqlite_conn, d1, logical_name="history")
+    policy = RecoveryPolicy(
+        logical_db="history",
+        operation_type="pending_stage",
+        idempotency_key="history:s1:seq1",
+        ordering_key="history:s1",
+        recovery_allowed=True,
+        max_attempts=3,
+        batching_allowed=False,
+    )
+
+    dual.execute("INSERT INTO t (v) VALUES (?)", ("x",), policy=policy)
+
+    with pytest.raises(_dual_module.DualWriteStrictError):
+        dual.commit()
+
+    assert [call["json"] for call in poster_calls] == [
+        {"sql": "INSERT INTO t (v) VALUES (?)", "params": ["x"]},
+    ]
+    assert load_latest_events(_d1_port_module.recovery_outbox_path()) == {}
+    assert sqlite_conn.execute("SELECT v FROM t").fetchall() == []
+
+
+def test_strict_dual_batching_policy_executes_immediately_without_outbox(
+    sqlite_conn,
+    monkeypatch,
+    tmp_path,
+):
+    _strict_env(monkeypatch, True)
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    monkeypatch.setenv("D1_BATCHING_ENABLED", "1")
+    monkeypatch.setenv("D1_RECOVERY_OUTBOX_ENABLED", "1")
+    monkeypatch.setattr(_d1_client_module, "_MAX_RETRIES", 1)
+
+    poster_calls = []
+
+    def poster(url, *, headers, json, timeout):
+        poster_calls.append(json)
+        return _FakeResponse(
+            status_code=429,
+            json_body={
+                "success": False,
+                "errors": [{"message": "overloaded"}],
+            },
+        )
+
+    d1 = D1Connection("acct", "db", "token")
+    d1._post_request = poster
+    dual = DualConnection(sqlite_conn, d1, logical_name="history")
+    policy = RecoveryPolicy(
+        logical_db="history",
+        operation_type="pending_stage",
+        idempotency_key="history:s1:seq1",
+        ordering_key="history:s1",
+        recovery_allowed=True,
+        max_attempts=3,
+        batching_allowed=True,
+    )
+
+    dual.execute("INSERT INTO t (v) VALUES (?)", ("x",), policy=policy)
+
+    with pytest.raises(_dual_module.DualWriteStrictError):
+        dual.commit()
+
+    assert poster_calls == [{"sql": "INSERT INTO t (v) VALUES (?)", "params": ["x"]}]
+    assert d1._port._batch_queue == {}
+    assert load_latest_events(_d1_port_module.recovery_outbox_path()) == {}
+    assert sqlite_conn.execute("SELECT v FROM t").fetchall() == []
+
+
+def test_outbox_eligible_write_raises_when_recovery_is_not_durable(
+    sqlite_conn,
+    monkeypatch,
+):
+    _strict_env(monkeypatch, False)
+    monkeypatch.setenv("D1_RECOVERY_OUTBOX_ENABLED", "1")
+
+    dual = DualConnection(sqlite_conn, UndurableRecoveryD1(), logical_name="history")
+    policy = RecoveryPolicy(
+        logical_db="history",
+        operation_type="pending_stage",
+        idempotency_key="history:s1:seq1",
+        ordering_key="history:s1",
+        recovery_allowed=True,
+        max_attempts=3,
+    )
+
+    with pytest.raises(D1TransientError, match="simulated D1 write outage"):
+        dual.execute("INSERT INTO t (v) VALUES (?)", ("x",), policy=policy)
+
+    rows = sqlite_conn.execute("SELECT v FROM t").fetchall()
+    assert [row["v"] for row in rows] == ["x"]
+
+
+def test_commit_raises_when_safe_batch_recovery_is_not_durable(
+    sqlite_conn,
+    monkeypatch,
+    tmp_path,
+):
+    _strict_env(monkeypatch, False)
+    drift_path = tmp_path / "d1_drift.jsonl"
+    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+
+    dual = DualConnection(
+        sqlite_conn,
+        QueuedThenUndurableFlushD1(),
+        logical_name="history",
+    )
+    policy = RecoveryPolicy(
+        logical_db="history",
+        operation_type="pending_stage",
+        idempotency_key="history:s1:seq1",
+        ordering_key="history:s1",
+        recovery_allowed=True,
+        max_attempts=3,
+        batching_allowed=True,
+    )
+    dual.execute("INSERT INTO t (v) VALUES (?)", ("x",), policy=policy)
+
+    with pytest.raises(D1TransientError, match="simulated D1 queued flush outage"):
+        dual.commit()
+
+    assert drift_path.exists()
+
+
+def test_commit_soft_succeeds_when_safe_batch_recovery_is_durable(
+    sqlite_conn,
+    monkeypatch,
+):
+    _strict_env(monkeypatch, False)
+
+    dual = DualConnection(
+        sqlite_conn,
+        QueuedThenDurableFlushD1(),
+        logical_name="history",
+    )
+    policy = RecoveryPolicy(
+        logical_db="history",
+        operation_type="pending_stage",
+        idempotency_key="history:s1:seq1",
+        ordering_key="history:s1",
+        recovery_allowed=True,
+        max_attempts=3,
+        batching_allowed=True,
+    )
+    dual.execute("INSERT INTO t (v) VALUES (?)", ("x",), policy=policy)
+
+    dual.commit()
+
+
+def test_commit_raises_when_queued_flush_is_blocked_by_unresolved_recovery(
+    sqlite_conn,
+    monkeypatch,
+    tmp_path,
+):
+    _strict_env(monkeypatch, False)
+    drift_path = tmp_path / "d1_drift.jsonl"
+    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+
+    dual = DualConnection(
+        sqlite_conn,
+        QueuedThenBlockedFlushD1(),
+        logical_name="history",
+    )
+    policy = RecoveryPolicy(
+        logical_db="history",
+        operation_type="pending_stage",
+        idempotency_key="history:s1:seq1",
+        ordering_key="history:s1",
+        recovery_allowed=True,
+        max_attempts=3,
+        batching_allowed=True,
+    )
+    dual.execute("INSERT INTO t (v) VALUES (?)", ("x",), policy=policy)
+
+    with pytest.raises(RuntimeError, match="unresolved D1 recovery work"):
+        dual.commit()
+
     assert drift_path.exists()
 
 

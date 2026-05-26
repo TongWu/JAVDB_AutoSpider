@@ -811,10 +811,16 @@ jobs:
           # D1 operational files MUST be archived so commit-results can stage
           # the actual generated files after its fresh checkout, including on
           # failed runs where the audit trail is most valuable.
-          for DRIFT_FILE in "$REPORTS_DIR/D1/d1_drift.jsonl" "$REPORTS_DIR/D1/d1_drift.processed.jsonl" "$REPORTS_DIR/D1/d1_port_summary.json"; do
-            if [ -f "$DRIFT_FILE" ]; then
-              FILES_TO_ARCHIVE="$FILES_TO_ARCHIVE $DRIFT_FILE"
-              echo "Including: $DRIFT_FILE"
+          for D1_STATE_FILE in \
+            "$REPORTS_DIR/D1/d1_drift.jsonl" \
+            "$REPORTS_DIR/D1/d1_drift.processed.jsonl" \
+            "$REPORTS_DIR/D1/d1_recovery_outbox.jsonl" \
+            "$REPORTS_DIR/D1/d1_recovery_outbox.processed.jsonl" \
+            "$REPORTS_DIR/D1/d1_port_summary.json"
+          do
+            if [ -f "$D1_STATE_FILE" ]; then
+              FILES_TO_ARCHIVE="$FILES_TO_ARCHIVE $D1_STATE_FILE"
+              echo "Including: $D1_STATE_FILE"
             fi
           done
           # Add dedup reports (reports/Dedup/YYYY/MM/*.csv)
@@ -1313,11 +1319,17 @@ jobs:
             find "$AD_HOC_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
             find "$DAILY_REPORT_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
           fi
-          # D1 drift logs are staged unconditionally — they record D1/SQLite
-          # divergence and must survive failed runs to preserve the audit trail.
-          git add "$REPORTS_DIR/D1/d1_drift.jsonl" 2>/dev/null || true
-          git add "$REPORTS_DIR/D1/d1_drift.processed.jsonl" 2>/dev/null || true
-          git add "$REPORTS_DIR/D1/d1_port_summary.json" 2>/dev/null || true
+          # D1 state logs are staged unconditionally — they record D1/SQLite
+          # divergence and recovery state and must survive failed runs.
+          for D1_STATE_FILE in \
+            "$REPORTS_DIR/D1/d1_drift.jsonl" \
+            "$REPORTS_DIR/D1/d1_drift.processed.jsonl" \
+            "$REPORTS_DIR/D1/d1_recovery_outbox.jsonl" \
+            "$REPORTS_DIR/D1/d1_recovery_outbox.processed.jsonl" \
+            "$REPORTS_DIR/D1/d1_port_summary.json"
+          do
+            git add "$D1_STATE_FILE" 2>/dev/null || true
+          done
           
           # Check if there are any changes to commit
           if git diff --cached --quiet; then

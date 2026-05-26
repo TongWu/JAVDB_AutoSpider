@@ -444,10 +444,12 @@ runtime by various modules.
 | `WRITE_MODE` | `str` | `'pending'` | Write mode for session management. Only `'pending'` is supported; legacy `'audit'` requests fall back to pending. |
 | `STRICT_DUAL_WRITE` | `str` | `''` | When set to `'1'`, fail the run if a D1 write fails in dual mode. |
 | `COMMIT_SESSION_BULK` | `str` | enabled | Pending session commits use the bulk path by default. Set `'0'`, `'false'`, `'no'`, `'off'`, or an empty value to fall back to the per-href path. |
-| `D1_RECOVERY_OUTBOX_ENABLED` | `str` | `''` | Reserved for ADR-010 Phase 2. Set `'1'` to allow safe dual-mode D1 write failures to queue in `reports/D1/d1_recovery_outbox.jsonl`. |
+| `D1_RECOVERY_OUTBOX_ENABLED` | `str` | `''` | ADR-010 Phase 2 gate. Set `'1'` to allow safe D1 write failures to queue in `reports/D1/d1_recovery_outbox.jsonl`; D1 mode still fails the write, and dual mode blocks commit until the ordering key drains. |
 | `D1_BATCHING_ENABLED` | `str` | `''` | Set `'1'` to enable ADR-010 Phase 3 safe-path micro-batching for explicitly batch-safe operations. Ordinary SQL remains synchronous. |
 | `D1_FLUSH_INTERVAL_MS` | `int` | `250` | Maximum safe-batch wait window when D1 batching is enabled. |
-| `D1_STARTUP_REPLAY_ENABLED` | `str` | `''` | Reserved for ADR-010 Phase 4 startup replay. |
+| `D1_STARTUP_REPLAY_ENABLED` | `str` | `''` | ADR-010 Phase 4 gate. Set `'1'` to drain non-dead-lettered recovery work when a process first opens a D1 or Dual connection. |
+| `D1_STARTUP_REPLAY_MAX_ORDERING_KEYS` | `int` | `25` | Maximum ordering keys drained during automatic startup replay. |
+| `D1_STARTUP_REPLAY_MAX_EVENTS_PER_KEY` | `int` | `100` | Maximum events replayed per ordering key during automatic startup replay. |
 | `LOG_LEVEL` | `str` | `'INFO'` | Overrides the `LOG_LEVEL` in `config.py` when set as an environment variable. |
 | `LOG_STYLE` | `str` | `'compact'` | Log output format. `'compact'` -- concise single-line. `'plain'` -- standard format. `'verbose'` -- full 4-field format. |
 | `LOG_GITHUB_GROUPS` | `str` | `'auto'` | GitHub Actions log grouping. `'on'` -- always emit `::group::` markers. `'off'` -- never. `'auto'` -- detect CI environment. |

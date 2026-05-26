@@ -246,8 +246,15 @@ jobs:
 
           git add "$REPORTS_DIR/$RCLONE_INVENTORY_CSV" 2>/dev/null || true
           git add "$REPORTS_DIR/operations.db" 2>/dev/null || true
-          git add "$REPORTS_DIR/D1/d1_drift.jsonl" 2>/dev/null || true
-          git add "$REPORTS_DIR/D1/d1_drift.processed.jsonl" 2>/dev/null || true
+          for D1_STATE_FILE in \
+            "$REPORTS_DIR/D1/d1_drift.jsonl" \
+            "$REPORTS_DIR/D1/d1_drift.processed.jsonl" \
+            "$REPORTS_DIR/D1/d1_recovery_outbox.jsonl" \
+            "$REPORTS_DIR/D1/d1_recovery_outbox.processed.jsonl" \
+            "$REPORTS_DIR/D1/d1_port_summary.json"
+          do
+            git add "$D1_STATE_FILE" 2>/dev/null || true
+          done
           git add "$REPORTS_DIR/dedup_history.csv" 2>/dev/null || true
           find "$DEDUP_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
 

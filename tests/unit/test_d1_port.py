@@ -232,7 +232,9 @@ def test_close_flushes_safe_batch(monkeypatch):
     assert len(poster.calls) == 1
 
 
-def test_failed_flush_keeps_queued_statements_for_retry(monkeypatch):
+def test_failed_flush_keeps_queued_statements_for_retry_when_outbox_disabled(
+    monkeypatch,
+):
     monkeypatch.setenv("D1_BATCHING_ENABLED", "1")
     poster = FakePoster(
         [
@@ -262,8 +264,13 @@ def test_failed_flush_keeps_queued_statements_for_retry(monkeypatch):
     }
 
 
-def test_failed_key_flush_preserves_other_ordering_keys(monkeypatch):
+def test_failed_key_flush_with_outbox_enabled_discards_recovered_key_only(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
     monkeypatch.setenv("D1_BATCHING_ENABLED", "1")
+    monkeypatch.setenv("D1_RECOVERY_OUTBOX_ENABLED", "1")
     poster = FakePoster(
         [
             FakeResponse(
@@ -305,8 +312,50 @@ def test_failed_key_flush_preserves_other_ordering_keys(monkeypatch):
     assert [call["json"] for call in poster.calls] == [
         {"batch": [{"sql": "INSERT INTO x VALUES (?)", "params": ["a"]}]},
         {"batch": [{"sql": "INSERT INTO x VALUES (?)", "params": ["b"]}]},
-        {"batch": [{"sql": "INSERT INTO x VALUES (?)", "params": ["a"]}]},
     ]
+
+
+def test_failed_mixed_flush_blocks_remaining_write_behind_outbox(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    monkeypatch.setenv("D1_BATCHING_ENABLED", "1")
+    monkeypatch.setenv("D1_RECOVERY_OUTBOX_ENABLED", "1")
+    poster = FakePoster(
+        [
+            FakeResponse(
+                status_code=500,
+                payload={"success": False, "errors": [{"message": "temporary"}]},
+            ),
+        ]
+    )
+    port = _port(poster, max_retries=1)
+    port.execute("INSERT INTO x VALUES (?)", ["a"], policy=_batch_policy("recover"))
+    port.execute(
+        "INSERT INTO x VALUES (?)",
+        ["b"],
+        policy=RecoveryPolicy(
+            logical_db="history",
+            operation_type="pending_stage",
+            idempotency_key="history:s1:no-recovery",
+            ordering_key="history:s1",
+            recovery_allowed=False,
+            max_attempts=3,
+            batching_allowed=True,
+        ),
+    )
+
+    with pytest.raises(D1TransientError) as excinfo:
+        port.flush(ordering_key="history:s1")
+
+    assert getattr(excinfo.value, "d1_recovery_outbox_required", None) is True
+    assert getattr(excinfo.value, "d1_recovery_durable", None) is False
+
+    with pytest.raises(RuntimeError, match="unresolved D1 recovery"):
+        port.flush(ordering_key="history:s1")
+
+    assert len(poster.calls) == 1
 
 
 def test_batch_queue_flushes_when_interval_elapsed(monkeypatch):
@@ -333,8 +382,55 @@ def test_batch_queue_flushes_when_interval_elapsed(monkeypatch):
 
     assert len(poster.calls) == 1
     assert poster.calls[0]["json"] == {
-        "batch": [{"sql": "INSERT INTO x VALUES (?)", "params": ["a"]}]
+        "batch": [
+            {"sql": "INSERT INTO x VALUES (?)", "params": ["a"]},
+            {"sql": "INSERT INTO x VALUES (?)", "params": ["b"]},
+        ]
     }
+
+
+def test_interval_flush_failure_outboxes_current_statement(monkeypatch, tmp_path):
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    monkeypatch.setenv("D1_BATCHING_ENABLED", "1")
+    monkeypatch.setenv("D1_FLUSH_INTERVAL_MS", "250")
+    monkeypatch.setenv("D1_RECOVERY_OUTBOX_ENABLED", "1")
+    ticks = iter([0.0, 0.3])
+    monkeypatch.setattr(d1_port_module.time, "monotonic", lambda: next(ticks))
+    poster = FakePoster(
+        [
+            FakeResponse(
+                status_code=429,
+                payload={"success": False, "errors": [{"message": "overloaded"}]},
+            )
+        ]
+    )
+    port = _port(poster, max_retries=1)
+
+    port.execute(
+        "INSERT INTO x VALUES (?)",
+        ["a"],
+        policy=_batch_policy("history:s1:seq1"),
+    )
+
+    with pytest.raises(D1TransientError) as excinfo:
+        port.execute(
+            "INSERT INTO x VALUES (?)",
+            ["b"],
+            policy=_batch_policy("history:s1:seq2"),
+        )
+
+    assert getattr(excinfo.value, "d1_recovery_outbox_required", None) is True
+    assert getattr(excinfo.value, "d1_recovery_durable", None) is True
+    assert poster.calls[0]["json"] == {
+        "batch": [
+            {"sql": "INSERT INTO x VALUES (?)", "params": ["a"]},
+            {"sql": "INSERT INTO x VALUES (?)", "params": ["b"]},
+        ]
+    }
+    latest = load_latest_events(d1_port_module.recovery_outbox_path())
+    assert latest["history:s1:seq1"].params == ["a"]
+    assert latest["history:s1:seq2"].params == ["b"]
+    assert port.summary()["outbox_queued"] == 2
 
 
 def test_transient_error_retries_then_succeeds():
@@ -429,6 +525,27 @@ def test_retry_exhaustion_queues_safe_operation_when_enabled(monkeypatch, tmp_pa
     assert port.summary()["outbox_queued"] == 1
 
 
+def test_d1_mode_does_not_turn_outbox_into_success(monkeypatch, tmp_path):
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    monkeypatch.setenv("STORAGE_BACKEND", "d1")
+    monkeypatch.setenv("D1_RECOVERY_OUTBOX_ENABLED", "1")
+    poster = FakePoster(
+        [
+            FakeResponse(
+                status_code=429,
+                payload={"success": False, "errors": [{"message": "overloaded"}]},
+            )
+        ]
+    )
+    port = _port(poster, max_retries=1)
+
+    with pytest.raises(D1TransientError):
+        port.execute("INSERT INTO x VALUES (?)", ["a"], policy=_policy())
+
+    latest = load_latest_events(d1_port_module.recovery_outbox_path())
+    assert latest["history:s1:seq1"].state == "queued"
+
+
 def test_outbox_disabled_does_not_write_file(monkeypatch, tmp_path):
     monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
     monkeypatch.delenv("D1_RECOVERY_OUTBOX_ENABLED", raising=False)
@@ -494,6 +611,30 @@ def test_outbox_append_failure_preserves_original_transient_error(
         port.execute("INSERT INTO x VALUES (?)", ["a"], policy=_policy())
 
     assert "HTTP 429" in str(excinfo.value)
+    assert getattr(excinfo.value, "d1_recovery_outbox_required", None) is True
+    assert getattr(excinfo.value, "d1_recovery_durable", None) is False
+    assert port.summary()["outbox_queued"] == 0
+
+
+def test_outbox_encoding_failure_preserves_original_transient_error(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    monkeypatch.setenv("D1_RECOVERY_OUTBOX_ENABLED", "1")
+    poster = FakePoster(
+        [
+            FakeResponse(
+                status_code=429,
+                payload={"success": False, "errors": [{"message": "overloaded"}]},
+            )
+        ]
+    )
+    port = _port(poster, max_retries=1)
+
+    with pytest.raises(D1TransientError) as excinfo:
+        port.execute("INSERT INTO x VALUES (?)", ["\ud800"], policy=_policy())
+
+    assert "HTTP 429" in str(excinfo.value)
     assert port.summary()["outbox_queued"] == 0
 
 
@@ -521,8 +662,11 @@ def test_flush_retry_exhaustion_queues_safe_batch_operation_when_enabled(
 
     port.execute("INSERT INTO x VALUES (?)", ["a"], policy=_batch_policy())
 
-    with pytest.raises(D1TransientError):
+    with pytest.raises(D1TransientError) as excinfo:
         port.flush(ordering_key="history:s1")
+
+    assert getattr(excinfo.value, "d1_recovery_outbox_required", None) is True
+    assert getattr(excinfo.value, "d1_recovery_durable", None) is True
 
     path = d1_port_module.recovery_outbox_path()
     latest = load_latest_events(path)
@@ -534,10 +678,7 @@ def test_flush_retry_exhaustion_queues_safe_batch_operation_when_enabled(
 
     port.flush(ordering_key="history:s1")
 
-    assert len(poster.calls) == 2
-    assert poster.calls[1]["json"] == {
-        "batch": [{"sql": "INSERT INTO x VALUES (?)", "params": ["a"]}]
-    }
+    assert len(poster.calls) == 1
 
 
 def test_recovery_disallowed_policy_does_not_queue(monkeypatch, tmp_path):

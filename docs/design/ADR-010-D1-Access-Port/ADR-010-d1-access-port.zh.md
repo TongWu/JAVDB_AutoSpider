@@ -1,6 +1,6 @@
 # ADR-010：统一 Python D1 读写端口
 
-**状态**：已接受 —— Phase 1 和 Phase 3 已实现；Phase 2 和 Phase 4 截至 2026-05-25 仍待完成
+**状态**：已接受 —— 截至 2026-05-26，实现在 rollout gates 后已完成；默认推广等待 bake/metrics
 **日期**：2026-05-19
 **决策者**：D1 统一读写端口 brainstorming + grill 会话
 **前置**：[ADR-006](../_archive/ADR-006-Pending-Mode-Rollout/ADR-006-pending-mode-default-rollout.md) 已将 Pending Mode 作为默认写入路径；[ADR-009](../_archive/ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md) 记录了近期 D1 瞬时失败和 drift 响应。
@@ -9,13 +9,13 @@
 ## 实现进展 (Implementation Progress)
 
 - Phase 1 —— `D1AccessPort` 核心类 + `D1Connection`/`DualConnection` 代理已实现。
-- Phase 2 —— 恢复 outbox + replay 队列（对应 D5）仍待完成。
+- Phase 2 —— 恢复 outbox + replay 队列（对应 D5）已在 `D1_RECOVERY_OUTBOX_ENABLED` gate 后实现。
 - Phase 3 —— 安全 micro-batching + `flush()` 边界（对应 D4）已在 `D1_BATCHING_ENABLED` gate 后实现，并已完成本地验证。
-- Phase 4 —— 启动期 outbox 重放仍待完成。
+- Phase 4 —— 启动期 outbox 重放已在 `D1_STARTUP_REPLAY_ENABLED` gate 后实现。
 
-2026-05-26 基线：当前 main 已包含 Phase 3，但 Phase 2 的 replay/outbox 行为尚未完成。必须先恢复并验证 Phase 2，再交付 Phase 4 启动重放。
+2026-05-26 更新：Phase 2 replay/outbox 恢复和 Phase 4 startup replay 已实现并完成本地验证。所有高风险行为仍保持在环境变量 gate 后显式开启。
 
-四阶段独立闸门。本 ADR 在 Phase 4 交付或由后续决策明确延期前保持打开。
+四阶段独立闸门。本 ADR 在 gated 行为完成 bake，且默认推广或明确延期有后续决策前保持打开。
 
 ---
 

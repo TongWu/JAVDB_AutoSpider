@@ -21,6 +21,7 @@
 ## 目录
 
 - [摘要](#摘要)
+- [D1 Recovery Outbox](#d1-recovery-outbox)
 - [策略概要（仅 Pending）](#策略概要仅-pending)
   - [为什么 history 需要 audit 表？*（遗留——保留供上下文参考，参见附录 A）*](#为什么-history-需要-audit-表遗留保留供上下文参考参见附录-a)
   - [SessionId 生成（2026-05-08+）](#sessionid-生成2026-05-08)
@@ -63,6 +64,44 @@
 - **MovieClaim 跨 session rollback 安全性（Phase 1）：** 详情页完成状态现在在 MovieClaim DO 上按 session 暂存，然后再进入永久的 `completed_committed[]` 列表。`apps.cli.commit_session` 在成功时提升暂存状态；`apps.cli.rollback` 在完成 DB 回滚前调用 `rollback_staged_movies`（最多重试 3 次）。一个失败的对等 session 不再阻止另一个 session 对同一 href 的临时重试——只有 `completed_committed[]` 才有阻止效果。参见 [`docs/handbook/zh/self-hoster/proxy-coordinator.md` §15.2](../../zh/self-hoster/proxy-coordinator.md) 了解协议及 `JAVDB_AutoSpider.wiki/Cross-Runner-State.md` §2.3 了解运行时语义。
 
 ---
+
+## D1 Recovery Outbox
+
+ADR-010 新增 `reports/D1/d1_recovery_outbox.jsonl`，用于记录安全、可恢复的 D1 写入失败。在 `STORAGE_BACKEND=d1` 中，进入 outbox 仅用于诊断：原写入仍然失败。在 `STORAGE_BACKEND=dual` 中，安全操作可以进入恢复队列，但相关 session 在 `history:<session_id>` ordering key 清空前不能提交。如果 outbox 事件本身无法可靠写入，原写入或 commit 仍然失败。dead-lettered 工作同样会阻断对应 ordering key。
+
+检查待恢复工作：
+
+```bash
+python3 -m apps.cli.db.d1_recovery inspect
+```
+
+重放单个 ordering key：
+
+```bash
+python3 -m apps.cli.db.d1_recovery replay --ordering-key history:<session_id>
+```
+
+重放所有非 dead-lettered key：
+
+```bash
+python3 -m apps.cli.db.d1_recovery replay --all
+```
+
+压缩已重放工作：
+
+```bash
+python3 -m apps.cli.db.d1_recovery compact
+```
+
+### Startup Replay
+
+`D1_STARTUP_REPLAY_ENABLED=1` 会在进程首次打开 D1 或 Dual 连接时清空非 dead-lettered 的恢复工作。自动 startup replay 受 `D1_STARTUP_REPLAY_MAX_ORDERING_KEYS`（默认 `25`）和 `D1_STARTUP_REPLAY_MAX_EVENTS_PER_KEY`（默认 `100`）限制。同一行为也可以手动运行：
+
+```bash
+python3 -m apps.cli.db.d1_recovery startup-drain
+```
+
+Startup replay 是显式开启且受 outbox 状态约束的。如果 replay 将事件写入 `dead_lettered`，保持 workflow 停止，检查该 ordering key，并在重试 session commit 前修复或放弃该事件。
 
 ## 策略概要（仅 Pending）
 
