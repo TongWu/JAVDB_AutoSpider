@@ -1,5 +1,5 @@
 """Pin down the shared scaffolding extracted from ``apps.cli.db.rollback``
-and ``apps.cli.db.commit_session`` into ``javdb.storage.rollback.session_helpers``.
+and ``apps.cli.db.commit_session`` into ``javdb.storage.sessions.lifecycle_helpers``.
 
 The headline regression these tests guard against is the
 ``normalize_run_started_at`` divergence — see the module's history
@@ -23,7 +23,7 @@ from typing import Any, Dict
 
 import pytest
 
-from javdb.storage.rollback import session_helpers as helpers
+from javdb.storage.sessions import lifecycle_helpers as helpers
 
 
 # ── normalize_run_started_at ───────────────────────────────────────────
@@ -405,9 +405,8 @@ def test_fanout_movie_claim_commit_does_not_retry(patch_claim_client):
         "commit_completed_movies": fail_once,
     })
     patch_claim_client(client)
-    # commit defaults to max_attempts=1.
     out = helpers.fanout_movie_claim(
-        ["sY"], operation="commit",
+        ["sY"], operation="commit", max_attempts=3,
     )
     assert len(calls) == 1
     assert out[0]["ok"] is False

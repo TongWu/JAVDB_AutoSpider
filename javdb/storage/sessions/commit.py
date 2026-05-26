@@ -76,7 +76,7 @@ def _emit_commit_metrics(
     """
     from datetime import datetime, timezone
 
-    from javdb.storage.rollback.session_helpers import (
+    from javdb.storage.sessions.lifecycle_helpers import (
         append_jsonl_record,
         attach_run_identity,
     )
@@ -214,7 +214,7 @@ def commit_session(req: CommitRequest) -> CommitResult:
 
     claim_results: List[Dict[str, Any]] = []
     if req.fanout_claims:
-        from javdb.storage.rollback.session_helpers import fanout_movie_claim
+        from javdb.storage.sessions.lifecycle_helpers import fanout_movie_claim
         claim_results = fanout_movie_claim(
             [req.session_id],
             operation="commit",
