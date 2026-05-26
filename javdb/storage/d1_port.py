@@ -492,7 +492,15 @@ class D1AccessPort:
         if policy is None or not getattr(policy, "recovery_allowed", False):
             return
         event = RecoveryEvent.queued(policy, sql, params, str(error))
-        append_event(self._outbox_path, event)
+        try:
+            append_event(self._outbox_path, event)
+        except OSError:
+            logger.warning(
+                "Failed to append D1 recovery outbox event for %s",
+                getattr(policy, "idempotency_key", "<unknown>"),
+                exc_info=True,
+            )
+            return
         self._summary["outbox_queued"] += 1
 
     def _flush_on_enqueue_if_interval_elapsed(self, ordering_key: str) -> None:
