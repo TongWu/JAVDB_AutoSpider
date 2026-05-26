@@ -34,6 +34,11 @@ WORKFLOWS = (
     REPO_ROOT / ".github" / "workflows" / "DailyIngestion.yml",
     REPO_ROOT / ".github" / "workflows" / "AdHocIngestion.yml",
 )
+D1_STAGING_WORKFLOWS = WORKFLOWS + (
+    REPO_ROOT / ".github" / "workflows" / "Migration.yml",
+    REPO_ROOT / ".github" / "workflows" / "RcloneManager.yml",
+    REPO_ROOT / ".github" / "workflows" / "WeeklyDedup.yml",
+)
 TEST_INGESTION = REPO_ROOT / ".github" / "workflows" / "TestIngestion.yml"
 
 
@@ -614,14 +619,41 @@ def test_pause_gate_uses_heredoc_form(workflow):
 
 
 @pytest.mark.parametrize("workflow", WORKFLOWS, ids=lambda p: p.name)
-def test_d1_port_summary_is_archived_and_staged(workflow):
+def test_d1_state_artifacts_are_archived_for_ingestion_workflows(workflow):
     text = _workflow_text(workflow)
 
-    assert "$REPORTS_DIR/D1/d1_port_summary.json" in text
-    assert (
-        'git add "$REPORTS_DIR/D1/d1_port_summary.json" 2>/dev/null || true'
-        in text
-    )
+    for filename in (
+        "d1_drift.jsonl",
+        "d1_drift.processed.jsonl",
+        "d1_recovery_outbox.jsonl",
+        "d1_recovery_outbox.processed.jsonl",
+        "d1_port_summary.json",
+    ):
+        assert f"$REPORTS_DIR/D1/{filename}" in text
+    assert 'FILES_TO_ARCHIVE="$FILES_TO_ARCHIVE $D1_STATE_FILE"' in text
+
+
+@pytest.mark.parametrize("workflow", D1_STAGING_WORKFLOWS, ids=lambda p: p.name)
+def test_d1_state_files_are_staged_for_private_workflows(workflow):
+    text = _workflow_text(workflow)
+
+    for filename in (
+        "d1_drift.jsonl",
+        "d1_drift.processed.jsonl",
+        "d1_recovery_outbox.jsonl",
+        "d1_recovery_outbox.processed.jsonl",
+        "d1_port_summary.json",
+    ):
+        assert f"$REPORTS_DIR/D1/{filename}" in text
+    assert 'git add "$D1_STATE_FILE" 2>/dev/null || true' in text
+
+
+def test_public_publish_refuses_recovery_payloads():
+    text = _workflow_text(REPO_ROOT / ".github" / "workflows" / "publish-to-public.yml")
+
+    assert "d1_recovery_outbox.jsonl" in text
+    assert "d1_recovery_outbox.processed.jsonl" in text
+    assert "refusing public publish" in text
 
 
 def test_bash_available_for_runs():
