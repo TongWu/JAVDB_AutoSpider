@@ -696,8 +696,44 @@ def extract_spider_statistics(log_path):
         failed = re.search(r'Failed to fetch/parse: (\d+)', content)
         if failed:
             stats['overall']['failed'] = int(failed.group(1))
-        
-        # If overall total_discovered wasn't found (is None), calculate from phase totals
+
+        # Newer spider logs keep phase completion lines but no longer emit the
+        # legacy overall text lines parsed above. Derive the missing overall
+        # fields from phase stats before falling back to the all-zero defaults.
+        has_phase_stats = any(
+            stats[phase]['discovered'] is not None
+            for phase in ('phase1', 'phase2')
+        )
+        if has_phase_stats:
+            phase_total_discovered = sum(
+                stats[phase]['discovered'] or 0
+                for phase in ('phase1', 'phase2')
+            )
+            if stats['overall']['total_discovered'] is None:
+                stats['overall']['total_discovered'] = phase_total_discovered
+            if not successfully_processed:
+                stats['overall']['successfully_processed'] = sum(
+                    stats[phase]['processed']
+                    for phase in ('phase1', 'phase2')
+                )
+            if not skipped_history:
+                stats['overall']['skipped_history'] = sum(
+                    stats[phase]['skipped_history']
+                    for phase in ('phase1', 'phase2')
+                )
+            if not no_new_torrents:
+                stats['overall']['no_new_torrents'] = sum(
+                    stats[phase].get('no_new_torrents', 0)
+                    for phase in ('phase1', 'phase2')
+                )
+            if not failed:
+                stats['overall']['failed'] = sum(
+                    stats[phase]['failed']
+                    for phase in ('phase1', 'phase2')
+                )
+
+        # If overall total_discovered still wasn't found, calculate from
+        # whatever overall components were available.
         if stats['overall']['total_discovered'] is None:
             stats['overall']['total_discovered'] = (
                 stats['overall']['successfully_processed'] + 
