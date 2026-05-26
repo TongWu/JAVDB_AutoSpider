@@ -383,6 +383,43 @@ def test_startup_drain_replays_pending_key(tmp_path):
     assert calls == [("INSERT INTO x VALUES (?)", ["a"])]
 
 
+def test_startup_drain_closes_temporary_connections(tmp_path):
+    outbox = tmp_path / "d1_recovery_outbox.jsonl"
+    processed = tmp_path / "d1_recovery_outbox.processed.jsonl"
+    policy = _policy()
+    append_event(
+        outbox,
+        RecoveryEvent.queued(
+            policy,
+            "INSERT INTO x VALUES (?)",
+            ["a"],
+            "timeout",
+        ),
+    )
+
+    class Conn:
+        def __init__(self):
+            self.closed = False
+
+        def execute(self, sql, params=()):
+            pass
+
+        def close(self):
+            self.closed = True
+
+    conns = []
+
+    def factory(_logical_db):
+        conn = Conn()
+        conns.append(conn)
+        return conn
+
+    result = startup_drain(outbox, processed, connection_factory=factory)
+
+    assert result["replayed"] == 1
+    assert conns and conns[0].closed is True
+
+
 def test_compact_replayed_moves_replayed_events(tmp_path):
     active = tmp_path / "d1_recovery_outbox.jsonl"
     processed = tmp_path / "d1_recovery_outbox.processed.jsonl"
@@ -611,6 +648,80 @@ def test_cli_replay_ordering_key_marks_success(tmp_path, monkeypatch, capsys):
     assert calls == [("INSERT INTO x VALUES (?)", ["a"])]
 
 
+def test_cli_replay_all_marks_success(tmp_path, monkeypatch, capsys):
+    from apps.cli.db import d1_recovery as cli
+    import javdb.storage.d1_client as d1_client
+
+    outbox = tmp_path / "d1_recovery_outbox.jsonl"
+    processed = tmp_path / "d1_recovery_outbox.processed.jsonl"
+    policy = _policy()
+    append_event(
+        outbox,
+        RecoveryEvent.queued(
+            policy,
+            "INSERT INTO x VALUES (?)",
+            ["a"],
+            "timeout",
+        ),
+    )
+    calls = []
+
+    class Conn:
+        def execute(self, sql, params=()):
+            calls.append((sql, list(params)))
+
+    monkeypatch.setattr(d1_client, "make_d1_connection", lambda _db: Conn())
+
+    rc = cli.main(
+        [
+            "replay",
+            "--all",
+            "--json",
+            "--outbox",
+            str(outbox),
+            "--processed",
+            str(processed),
+        ]
+    )
+
+    assert rc == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["ordering_keys"] == 1
+    assert output["replayed"] == 1
+    assert calls == [("INSERT INTO x VALUES (?)", ["a"])]
+
+
+def test_cli_replay_all_dead_lettered_exits_one(tmp_path, monkeypatch, capsys):
+    from apps.cli.db import d1_recovery as cli
+    import javdb.storage.d1_client as d1_client
+
+    outbox = tmp_path / "d1_recovery_outbox.jsonl"
+    policy = _policy()
+    append_event(
+        outbox,
+        RecoveryEvent.dead_lettered(policy, attempt=3, error="permanent"),
+    )
+    monkeypatch.setattr(
+        d1_client,
+        "make_d1_connection",
+        lambda _logical_db: object(),
+    )
+
+    rc = cli.main(
+        [
+            "replay",
+            "--all",
+            "--json",
+            "--outbox",
+            str(outbox),
+        ]
+    )
+
+    assert rc == 1
+    output = json.loads(capsys.readouterr().out)
+    assert output["dead_lettered"] == 1
+
+
 def test_cli_startup_drain_empty_json_exits_zero(tmp_path, monkeypatch, capsys):
     from apps.cli.db import d1_recovery as cli
     import javdb.storage.d1_client as d1_client
@@ -634,3 +745,22 @@ def test_cli_startup_drain_empty_json_exits_zero(tmp_path, monkeypatch, capsys):
     output = json.loads(capsys.readouterr().out)
     assert output["replayed"] == 0
     assert output["dead_lettered"] == 0
+
+
+def test_cli_startup_drain_rejects_non_positive_max_values():
+    from apps.cli.db import d1_recovery as cli
+
+    parser = cli._build_arg_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["startup-drain", "--max-ordering-keys", "0"])
+    with pytest.raises(SystemExit):
+        parser.parse_args(["startup-drain", "--max-events-per-key", "-1"])
+
+
+def test_processed_outbox_path_defaults_under_reports_dir(monkeypatch):
+    from javdb.storage.d1_recovery import processed_outbox_path
+
+    monkeypatch.setenv("REPORTS_DIR", "/tmp/custom-reports")
+    assert processed_outbox_path(None).as_posix() == (
+        "/tmp/custom-reports/D1/d1_recovery_outbox.processed.jsonl"
+    )

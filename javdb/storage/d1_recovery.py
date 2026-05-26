@@ -7,6 +7,7 @@ operator or startup drain can replay them later without hiding failures.
 from __future__ import annotations
 
 import json
+import os
 from collections import OrderedDict
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
@@ -234,8 +235,7 @@ def append_event(path: PathLike, event: RecoveryEvent) -> None:
     outbox = Path(path)
     outbox.parent.mkdir(parents=True, exist_ok=True)
     with outbox.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(event.to_dict(), ensure_ascii=False, sort_keys=True))
-        fh.write("\n")
+        fh.write(json.dumps(event.to_dict(), ensure_ascii=False, sort_keys=True) + "\n")
 
 
 def _iter_events(path: PathLike) -> Iterable[RecoveryEvent]:
@@ -322,7 +322,7 @@ def load_latest_events(path: PathLike) -> Dict[str, RecoveryEvent]:
 def processed_outbox_path(outbox: PathLike | None = None) -> Path:
     """Return the processed JSONL path next to *outbox*."""
     if outbox is None:
-        root = Path("reports") / "D1"
+        root = Path(os.environ.get("REPORTS_DIR", "reports")) / "D1"
         return root / "d1_recovery_outbox.processed.jsonl"
     return Path(outbox).with_name("d1_recovery_outbox.processed.jsonl")
 
@@ -515,13 +515,24 @@ def startup_drain(
             continue
         logical_db = _single_logical_db(events, key)
         conn = connection_factory(logical_db)
-        replayed = replay_ordering_key(
-            active,
-            processed,
-            key,
-            conn,
-            max_events=max_events_per_key,
-        )
+        try:
+            replayed = replay_ordering_key(
+                active,
+                processed,
+                key,
+                conn,
+                max_events=max_events_per_key,
+            )
+        finally:
+            close = getattr(conn, "close", None)
+            if callable(close):
+                try:
+                    close()
+                except Exception:
+                    logger.warning(
+                        "Failed to close temporary D1 recovery connection",
+                        exc_info=True,
+                    )
         result["ordering_keys"] += 1
         result["replayed"] += int(replayed.get("replayed", 0))
         result["dead_lettered"] += int(replayed.get("dead_lettered", 0))
