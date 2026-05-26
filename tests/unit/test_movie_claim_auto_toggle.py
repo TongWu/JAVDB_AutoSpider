@@ -17,7 +17,7 @@ import logging
 import os
 import sys
 import threading
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -25,6 +25,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 sys.path.insert(0, project_root)
 
 import javdb.spider.runtime.state as state  # noqa: E402
+from javdb.spider.runtime.context import SpiderRuntime  # noqa: E402
 from javdb.proxy.coordinator.movie_claim_client import (  # noqa: E402
     MOVIE_CLAIM_MODE_AUTO,
     MOVIE_CLAIM_MODE_FORCE_ON,
@@ -49,11 +50,17 @@ def _reset_state(monkeypatch):
     monkeypatch.setattr(state, "_movie_claim_client_pending", None, raising=False)
     monkeypatch.setattr(state, "_movie_claim_mode", MOVIE_CLAIM_MODE_OFF, raising=False)
     monkeypatch.setattr(state, "_movie_claim_last_recommended", False, raising=False)
+    active = state.get_active_runtime()
+    if active is not None:
+        state.clear_active_runtime(active)
     yield
     monkeypatch.setattr(state, "global_movie_claim_client", None, raising=False)
     monkeypatch.setattr(state, "_movie_claim_client_pending", None, raising=False)
     monkeypatch.setattr(state, "_movie_claim_mode", MOVIE_CLAIM_MODE_OFF, raising=False)
     monkeypatch.setattr(state, "_movie_claim_last_recommended", False, raising=False)
+    active = state.get_active_runtime()
+    if active is not None:
+        state.clear_active_runtime(active)
 
 
 # ── auto mode — recommended=True / False edge transitions ─────────────────
@@ -234,6 +241,21 @@ def test_apply_recommendation_updates_last_recommended_regardless_of_mode(
     assert state._movie_claim_last_recommended is True
     state._apply_movie_claim_recommendation(False)
     assert state._movie_claim_last_recommended is False
+
+
+def test_apply_recommendation_delegates_to_bound_runtime(monkeypatch):
+    runtime = SpiderRuntime()
+    state.bind_active_runtime(runtime)
+
+    with patch.object(
+        SpiderRuntime,
+        "_apply_movie_claim_recommendation",
+        autospec=True,
+        return_value=None,
+    ) as runtime_apply:
+        state._apply_movie_claim_recommendation(True)
+
+    runtime_apply.assert_called_once_with(runtime, True)
 
 
 # ── thread safety ──────────────────────────────────────────────────────────
