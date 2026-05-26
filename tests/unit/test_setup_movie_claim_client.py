@@ -19,6 +19,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 sys.path.insert(0, project_root)
 
 import javdb.spider.runtime.state as state  # noqa: E402
+from javdb.spider.runtime.context import SpiderRuntime  # noqa: E402
 from javdb.proxy.coordinator.movie_claim_client import (  # noqa: E402
     MovieClaimClient,
 )
@@ -44,6 +45,9 @@ def _reset_globals(monkeypatch):
         state.MOVIE_CLAIM_MODE_OFF, raising=False,
     )
     monkeypatch.setattr(state, "_movie_claim_last_recommended", False, raising=False)
+    active = state.get_active_runtime()
+    if active is not None:
+        state.clear_active_runtime(active)
     yield
     monkeypatch.setattr(state, "global_movie_claim_client", None, raising=False)
     monkeypatch.setattr(state, "_movie_claim_client_pending", None, raising=False)
@@ -56,6 +60,9 @@ def _reset_globals(monkeypatch):
         state.MOVIE_CLAIM_MODE_OFF, raising=False,
     )
     monkeypatch.setattr(state, "_movie_claim_last_recommended", False, raising=False)
+    active = state.get_active_runtime()
+    if active is not None:
+        state.clear_active_runtime(active)
 
 
 def _patch_cfg(monkeypatch, **values):
@@ -164,6 +171,21 @@ def test_setup_does_not_clobber_unrelated_env_vars(monkeypatch):
     assert os.environ["PROXY_COORDINATOR_TOKEN"] == "EXTERNAL_TOKEN"
     assert "MOVIE_CLAIM_ENABLED" not in os.environ
     client.close()
+
+
+def test_setup_delegates_to_bound_runtime(monkeypatch):
+    runtime = SpiderRuntime()
+    state.bind_active_runtime(runtime)
+
+    with patch.object(
+        SpiderRuntime,
+        "setup_movie_claim_client",
+        autospec=True,
+        return_value="runtime-client",
+    ) as runtime_setup:
+        assert state.setup_movie_claim_client() == "runtime-client"
+
+    runtime_setup.assert_called_once_with(runtime)
 
 
 # ── tri-state / auto-toggle behaviour ──────────────────────────────────────
