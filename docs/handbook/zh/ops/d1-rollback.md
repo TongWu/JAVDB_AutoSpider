@@ -67,7 +67,12 @@
 
 ## D1 Recovery Outbox
 
-ADR-010 新增 `reports/D1/d1_recovery_outbox.jsonl`，用于记录安全、可恢复的 D1 写入失败。在 `STORAGE_BACKEND=d1` 中，进入 outbox 仅用于诊断：原写入仍然失败。在 `STORAGE_BACKEND=dual` 中，安全操作可以进入恢复队列，但相关 session 在 `history:<session_id>` ordering key 清空前不能提交。如果 outbox 事件本身无法可靠写入，原写入或 commit 仍然失败。dead-lettered 工作同样会阻断对应 ordering key。
+ADR-010 新增 `reports/D1/d1_recovery_outbox.jsonl`，用于记录安全、可恢复的 D1 写入失败。
+
+- **D1 行为：** 在 `STORAGE_BACKEND=d1` 中，进入 outbox 仅用于诊断：原写入仍然失败。
+- **Dual 行为：** 在 `STORAGE_BACKEND=dual` 中，安全操作可以进入恢复队列，但相关 session 在 `history:SESSION_ID` ordering key 清空前不能提交。
+- **失败语义：** 如果 outbox 事件本身无法可靠写入，原写入或 commit 仍然失败。
+- **Dead-letter 阻塞：** dead-lettered 工作同样会阻断对应 ordering key。
 
 检查待恢复工作：
 
@@ -78,7 +83,7 @@ python3 -m apps.cli.db.d1_recovery inspect
 重放单个 ordering key：
 
 ```bash
-python3 -m apps.cli.db.d1_recovery replay --ordering-key history:<session_id>
+python3 -m apps.cli.db.d1_recovery replay --ordering-key 'history:SESSION_ID'
 ```
 
 重放所有非 dead-lettered key：

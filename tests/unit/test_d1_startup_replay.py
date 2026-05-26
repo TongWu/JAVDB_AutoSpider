@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import threading
-import time
 
 import pytest
 
@@ -53,6 +52,7 @@ def test_startup_replay_failure_counts_as_process_attempt(monkeypatch):
 def test_startup_replay_concurrent_call_runs_once(monkeypatch):
     calls = []
     started = threading.Event()
+    second_ready = threading.Event()
     release = threading.Event()
     monkeypatch.setenv("D1_STARTUP_REPLAY_ENABLED", "1")
 
@@ -64,12 +64,16 @@ def test_startup_replay_concurrent_call_runs_once(monkeypatch):
     monkeypatch.setattr(db_conn, "_startup_recovery_drain", drain)
     monkeypatch.setattr(db_conn, "_startup_recovery_drained", False)
 
+    def second_call():
+        second_ready.set()
+        db_conn._maybe_startup_recovery_drain()
+
     first = threading.Thread(target=db_conn._maybe_startup_recovery_drain)
-    second = threading.Thread(target=db_conn._maybe_startup_recovery_drain)
+    second = threading.Thread(target=second_call)
     first.start()
     assert started.wait(timeout=1)
     second.start()
-    time.sleep(0.05)
+    assert second_ready.wait(timeout=1)
     release.set()
     first.join(timeout=1)
     second.join(timeout=1)

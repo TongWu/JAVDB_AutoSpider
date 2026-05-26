@@ -6,8 +6,14 @@ import pytest
 
 from javdb.storage.d1_client import D1PermanentError, D1TransientError
 import javdb.storage.d1_port as d1_port_module
+import javdb.storage.d1_client as d1_client_module
 from javdb.storage.d1_port import D1AccessPort, D1PortConfig
-from javdb.storage.d1_recovery import RecoveryPolicy, load_latest_events
+from javdb.storage.d1_recovery import (
+    RecoveryEvent,
+    RecoveryPolicy,
+    append_event,
+    load_latest_events,
+)
 
 
 class FakeResponse:
@@ -67,7 +73,7 @@ def _batch_policy(key="history:s1:seq1"):
     )
 
 
-def _policy(*, key="history:s1:seq1", recovery_allowed=True):
+def _policy(*, key="history:s1:seq1", recovery_allowed=True) -> RecoveryPolicy:
     return RecoveryPolicy(
         logical_db="history",
         operation_type="pending_stage",
@@ -636,6 +642,39 @@ def test_outbox_encoding_failure_preserves_original_transient_error(
 
     assert "HTTP 429" in str(excinfo.value)
     assert port.summary()["outbox_queued"] == 0
+
+
+def test_drain_recovery_closes_temporary_connection(monkeypatch, tmp_path):
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    monkeypatch.setenv("D1_RECOVERY_OUTBOX_ENABLED", "1")
+    outbox = d1_port_module.recovery_outbox_path()
+    append_event(
+        outbox,
+        RecoveryEvent.queued(
+            _policy(),
+            "INSERT INTO x VALUES (?)",
+            ["a"],
+            "timeout",
+        ),
+    )
+
+    class Conn:
+        def __init__(self):
+            self.closed = False
+
+        def execute(self, sql, params=()):
+            return None
+
+        def close(self):
+            self.closed = True
+
+    conn = Conn()
+    monkeypatch.setattr(d1_client_module, "make_d1_connection", lambda _db: conn)
+
+    port = _port(FakePoster([]))
+    port.drain_recovery(ordering_key="history:s1", max_batches=1)
+
+    assert conn.closed is True
 
 
 def test_flush_retry_exhaustion_queues_safe_batch_operation_when_enabled(

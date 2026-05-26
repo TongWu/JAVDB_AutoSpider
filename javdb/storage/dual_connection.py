@@ -1011,7 +1011,14 @@ class DualConnection:
         self._sqlite.rollback()
         d1_rollback = getattr(self._d1, "rollback", None)
         if callable(d1_rollback):
-            d1_rollback()
+            try:
+                d1_rollback()
+            except Exception:
+                logger.warning(
+                    "DualConnection.rollback(): D1 rollback failed after SQLite "
+                    "rollback; continuing cleanup",
+                    exc_info=True,
+                )
         # Only warn when there's actually something to be concerned about:
         # if no D1 writes happened (read-only transaction) and no failures
         # were recorded, the rollback is a true no-op for both backends.

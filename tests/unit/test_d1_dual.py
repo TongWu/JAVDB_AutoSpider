@@ -1471,6 +1471,23 @@ def test_rollback_with_no_writes_does_not_log_drift(monkeypatch, sqlite_conn, tm
     assert not drift_path.exists()
 
 
+def test_rollback_logs_d1_exception_and_continues_cleanup(
+    monkeypatch, sqlite_conn, tmp_path
+):
+    drift_path = tmp_path / "d1_drift.jsonl"
+    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+
+    class RaisingD1Connection(FakeD1Connection):
+        def rollback(self):
+            raise RuntimeError("d1 rollback failed")
+
+    dual = DualConnection(sqlite_conn, RaisingD1Connection(), logical_name="history")
+    dual.execute("INSERT INTO t (v) VALUES (?)", ("x",))
+    dual.rollback()
+
+    assert drift_path.exists()
+
+
 def test_rollback_drift_includes_executemany_count(monkeypatch, sqlite_conn, tmp_path):
     """Successful executemany writes must inflate uncommitted_d1_writes."""
     drift_path = tmp_path / "d1_drift.jsonl"

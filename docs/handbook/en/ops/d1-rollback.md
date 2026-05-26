@@ -67,7 +67,7 @@ This document is the operator's reference for rolling back partial Cloudflare D1
 
 ## D1 Recovery Outbox
 
-ADR-010 adds `reports/D1/d1_recovery_outbox.jsonl` for safe, recoverable D1 write failures. In `STORAGE_BACKEND=d1`, queued outbox work is diagnostic only: the write still fails. In `STORAGE_BACKEND=dual`, safe operations may queue for recovery, but the related session cannot be committed until its `history:<session_id>` ordering key drains. If the outbox entry itself cannot be written durably, the write or commit still fails. Dead-lettered work also blocks its ordering key.
+ADR-010 adds `reports/D1/d1_recovery_outbox.jsonl` for safe, recoverable D1 write failures. In `STORAGE_BACKEND=d1`, queued outbox work is diagnostic only: the write still fails. In `STORAGE_BACKEND=dual`, safe operations may queue for recovery, but the related session cannot be committed until its `history:SESSION_ID` ordering key drains. If the outbox entry itself cannot be written durably, the write or commit still fails. Dead-lettered work also blocks its ordering key.
 
 Inspect pending work:
 
@@ -78,7 +78,7 @@ python3 -m apps.cli.db.d1_recovery inspect
 Replay one ordering key:
 
 ```bash
-python3 -m apps.cli.db.d1_recovery replay --ordering-key history:<session_id>
+python3 -m apps.cli.db.d1_recovery replay --ordering-key 'history:SESSION_ID'
 ```
 
 Replay every non-dead-lettered key:
@@ -95,7 +95,7 @@ python3 -m apps.cli.db.d1_recovery compact
 
 ### Startup Replay
 
-`D1_STARTUP_REPLAY_ENABLED=1` drains non-dead-lettered recovery work when the process first opens a D1 or Dual connection. Automatic startup replay is bounded by `D1_STARTUP_REPLAY_MAX_ORDERING_KEYS` (default `25`) and `D1_STARTUP_REPLAY_MAX_EVENTS_PER_KEY` (default `100`). The same behavior can be run manually:
+`D1_STARTUP_REPLAY_ENABLED=1` drains non-dead-lettered recovery work when the process first opens a D1 or Dual connection. Automatic startup replay is bounded by [`D1_STARTUP_REPLAY_MAX_ORDERING_KEYS=25`](../../../../javdb/storage/db/_db_connection.py#L108) and [`D1_STARTUP_REPLAY_MAX_EVENTS_PER_KEY=100`](../../../../javdb/storage/db/_db_connection.py#L109) in `javdb/storage/db/_db_connection.py` (`_STARTUP_REPLAY_MAX_ORDERING_KEYS_DEFAULT` / `_STARTUP_REPLAY_MAX_EVENTS_PER_KEY_DEFAULT`). The same behavior can be run manually:
 
 ```bash
 python3 -m apps.cli.db.d1_recovery startup-drain

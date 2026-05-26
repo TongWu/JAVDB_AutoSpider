@@ -22,6 +22,18 @@ from javdb.storage.d1_recovery import (
 logger = logging.getLogger(__name__)
 
 
+def _positive_int(raw: str) -> int:
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "value must be a positive integer"
+        ) from exc
+    if value <= 0:
+        raise argparse.ArgumentTypeError("value must be a positive integer")
+    return value
+
+
 def _default_outbox_path() -> str:
     return os.path.join(
         os.environ.get("REPORTS_DIR", "reports"),
@@ -131,15 +143,21 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     )
     startup.add_argument(
         "--max-ordering-keys",
-        type=int,
+        type=_positive_int,
         default=None,
-        help="Optional cap on ordering keys drained in this invocation.",
+        help=(
+            "Optional positive integer cap on ordering keys drained in this "
+            "invocation."
+        ),
     )
     startup.add_argument(
         "--max-events-per-key",
-        type=int,
+        type=_positive_int,
         default=None,
-        help="Optional cap on events replayed per ordering key.",
+        help=(
+            "Optional positive integer cap on events replayed per ordering "
+            "key."
+        ),
     )
     startup.add_argument(
         "--json",

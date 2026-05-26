@@ -112,9 +112,12 @@ def _execute_pending_stage(conn, sql: str, params: tuple, policy) -> None:
 
 
 def _assert_no_blocking_d1_recovery(session_id: str) -> None:
+    from javdb.storage.db._db_connection import current_backend
     from javdb.storage.d1_port import recovery_outbox_path
     from javdb.storage.d1_recovery import outbox_status
 
+    if current_backend() not in ("d1", "dual"):
+        return
     ordering_key = f"history:{session_id}"
     status = outbox_status(recovery_outbox_path())
     pending = status["pending_groups"].get(ordering_key, [])
