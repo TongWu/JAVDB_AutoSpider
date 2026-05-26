@@ -422,7 +422,7 @@ uvicorn 之前 `export VAR=...`。
 | `STRICT_DUAL_WRITE` | `str` | `''` | 设为 `'1'` 时，在 dual 模式下 D1 写入失败会导致运行失败。 |
 | `COMMIT_SESSION_BULK` | `str` | 启用 | pending session commit 默认使用 bulk 路径。设为 `'0'`、`'false'`、`'no'`、`'off'` 或空值可回退到 per-href 路径。 |
 | `D1_RECOVERY_OUTBOX_ENABLED` | `str` | `''` | ADR-010 Phase 2 预留。设为 `'1'` 时，dual 模式下 safe D1 写失败可进入 `reports/D1/d1_recovery_outbox.jsonl`。 |
-| `D1_BATCHING_ENABLED` | `str` | `''` | ADR-010 Phase 3 safe-path micro-batching 预留。普通 SQL 仍同步执行。 |
+| `D1_BATCHING_ENABLED` | `str` | `''` | 设为 `'1'` 可启用 ADR-010 Phase 3 safe-path micro-batching，仅作用于显式标记为 batch-safe 的操作。普通 SQL 仍同步执行。 |
 | `D1_FLUSH_INTERVAL_MS` | `int` | `250` | 启用 D1 batching 后 safe batch 的最大等待窗口。 |
 | `D1_STARTUP_REPLAY_ENABLED` | `str` | `''` | ADR-010 Phase 4 startup replay 预留。 |
 | `LOG_LEVEL` | `str` | `'INFO'` | 当设为环境变量时，覆盖 `config.py` 中的 `LOG_LEVEL`。 |

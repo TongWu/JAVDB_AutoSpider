@@ -145,11 +145,12 @@ class D1PermanentError(D1Error):
 class D1Cursor:
     """Minimal sqlite3.Cursor-compatible result wrapper."""
 
-    __slots__ = ("_rows", "lastrowid", "rowcount")
+    __slots__ = ("_rows", "lastrowid", "queued", "rowcount")
 
-    def __init__(self, result: dict):
+    def __init__(self, result: dict, *, queued: bool = False):
         meta = result.get("meta") or {}
         self.lastrowid: Optional[int] = meta.get("last_row_id")
+        self.queued = queued
         self.rowcount: int = int(meta.get("changes") or 0)
         self._rows: List[dict] = list(result.get("results") or [])
 
@@ -228,9 +229,18 @@ class D1Connection:
         # natively so row_factory is a no-op (callers can still set it).
         self.row_factory = None
 
-    def execute(self, sql: str, params: Iterable[Any] = ()) -> D1Cursor:
+    def execute(
+        self,
+        sql: str,
+        params: Iterable[Any] = (),
+        *,
+        policy=None,
+    ) -> D1Cursor:
         self._sync_port_config()
-        cursors = self._port.execute(sql, params)
+        if policy is None:
+            cursors = self._port.execute(sql, params)
+        else:
+            cursors = self._port.execute(sql, params, policy=policy)
         if not cursors:
             # success=true but empty result[] — should never happen per CF docs,
             # but guard against API regressions / proxy stripping the body.
@@ -305,27 +315,42 @@ class D1Connection:
             self._total_changes += c.rowcount
         return cursors
 
-    def commit(self) -> None:
-        return None
+    def commit(self) -> list[D1Cursor]:
+        return self.flush()
 
     def rollback(self) -> None:
         logger.warning(
             "D1Connection.rollback() called but D1 auto-commits each request; "
-            "rollback is a no-op."
+            "queued writes, if any, are discarded."
         )
+        discard = getattr(self._port, "discard", None)
+        if callable(discard):
+            discard()
+
+    def flush(self, ordering_key: str | None = None) -> list[D1Cursor]:
+        self._sync_port_config()
+        cursors = self._port.flush(ordering_key=ordering_key) or []
+        for cursor in cursors:
+            self._total_changes += cursor.rowcount
+        return cursors
 
     def close(self) -> None:
+        close_exc: Exception | None = None
+        try:
+            self._port.close()
+        except Exception as exc:  # noqa: BLE001 — flush failures must propagate
+            close_exc = exc
+            logger.warning("Failed to close D1 port", exc_info=True)
         try:
             self._port.write_summary()
         except Exception:  # noqa: BLE001 — summary emission is best-effort
             logger.warning("Failed to write D1 port summary", exc_info=True)
         try:
-            self._port.close()
-        finally:
-            try:
-                self._session.close()
-            except Exception:  # noqa: BLE001 — closing must not raise
-                logger.warning("Failed to close D1 client session", exc_info=True)
+            self._session.close()
+        except Exception:  # noqa: BLE001 — closing must not raise
+            logger.warning("Failed to close D1 client session", exc_info=True)
+        if close_exc is not None:
+            raise close_exc
 
     def _post_via_current_post_request(self, url: str, *, headers, json, timeout):
         return self._post_request(url, headers=headers, json=json, timeout=timeout)

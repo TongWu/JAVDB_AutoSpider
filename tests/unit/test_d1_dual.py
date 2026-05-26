@@ -34,6 +34,7 @@ from javdb.storage.repos.operations_repo import (  # noqa: E402
     open_rclone_staging,
     swap_rclone_inventory,
 )
+from javdb.storage.d1_recovery import RecoveryPolicy  # noqa: E402
 
 
 # ── _is_read ─────────────────────────────────────────────────────────────
@@ -175,12 +176,13 @@ class FakeD1Connection:
         self.executed: List[tuple] = []
         self.executed_many: List[tuple] = []
         self.commits = 0
+        self.flushes: List[str | None] = []
         self.fail_on_write = fail_on_write
         # Default response: one row from a SELECT
         self._next_select_rows = [{"n": 99}]
 
-    def execute(self, sql: str, params: Iterable[Any] = ()):
-        self.executed.append((sql, list(params)))
+    def execute(self, sql: str, params: Iterable[Any] = (), *, policy=None):
+        self.executed.append((sql, list(params), policy))
         if not _is_read(sql):
             if self.fail_on_write:
                 raise RuntimeError("simulated D1 write failure")
@@ -194,8 +196,33 @@ class FakeD1Connection:
     def commit(self):
         self.commits += 1
 
+    def flush(self, ordering_key=None):
+        self.flushes.append(ordering_key)
+        return [FakeD1Cursor(lastrowid=123, rowcount=1)]
+
     def close(self):
         pass
+
+
+class QueuedThenFailingCommitD1(FakeD1Connection):
+    def __init__(self):
+        super().__init__()
+        self.flush_called = False
+
+    def execute(self, sql: str, params: Iterable[Any] = (), *, policy=None):
+        self.executed.append((sql, list(params), policy))
+        if not _is_read(sql):
+            return D1Cursor({"meta": {"changes": 0}, "results": []}, queued=True)
+        return FakeD1Cursor(rows=self._next_select_rows)
+
+    def commit(self):
+        self.commits += 1
+        self.flush_called = True
+        raise RuntimeError("simulated D1 queued flush failure")
+
+
+class NoFlushD1:
+    pass
 
 
 @pytest.fixture
@@ -218,6 +245,7 @@ def test_writes_go_to_both_backends(sqlite_conn):
     assert [dict(r) for r in rows] == [{"v": "hello"}]
     # D1 also saw it
     assert fake_d1.executed[-1][0].startswith("INSERT INTO t")
+    assert fake_d1.executed[-1][2] is None
     # Cursor reports the SQLite-canonical lastrowid
     assert cur.lastrowid == 1
 
@@ -231,7 +259,82 @@ def test_reads_go_to_d1_only(sqlite_conn):
     assert cur.fetchone() == {"n": 7}
 
     # The SQL should have hit D1 and not SQLite
-    assert any("SELECT" in s for s, _ in fake_d1.executed)
+    assert any("SELECT" in s for s, _, _ in fake_d1.executed)
+
+
+def test_read_policy_is_not_forwarded_to_d1(sqlite_conn):
+    fake_d1 = FakeD1Connection()
+    dual = DualConnection(sqlite_conn, fake_d1)
+
+    policy = object()
+    dual.execute("SELECT COUNT(*) AS n FROM t", policy=policy)
+
+    assert fake_d1.executed[-1] == ("SELECT COUNT(*) AS n FROM t", [], None)
+
+
+def test_write_policy_is_forwarded_to_d1(sqlite_conn):
+    fake_d1 = FakeD1Connection()
+    dual = DualConnection(sqlite_conn, fake_d1)
+
+    policy = object()
+    dual.execute("INSERT INTO t (v) VALUES (?)", ("hello",), policy=policy)
+
+    assert fake_d1.executed[-1][2] is policy
+
+
+def test_flush_is_forwarded_to_d1(sqlite_conn):
+    fake_d1 = FakeD1Connection()
+    dual = DualConnection(sqlite_conn, fake_d1)
+
+    dual.flush(ordering_key="history:s1")
+
+    assert fake_d1.flushes == ["history:s1"]
+
+
+def test_flush_updates_uncommitted_write_count(sqlite_conn, tmp_path, monkeypatch):
+    drift_path = tmp_path / "d1_drift.jsonl"
+    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+
+    fake_d1 = FakeD1Connection()
+    dual = DualConnection(sqlite_conn, fake_d1)
+
+    dual.execute("INSERT INTO t (v) VALUES (?)", ("x",))
+    assert dual._d1_uncommitted_writes == 1
+
+    dual.flush()
+    assert dual._d1_uncommitted_writes == 2
+
+    dual.rollback()
+
+    record = json.loads(drift_path.read_text(encoding="utf-8").strip())
+    assert record["uncommitted_d1_writes"] == 2
+
+
+def test_flush_without_d1_flush_returns_empty_list(sqlite_conn):
+    dual = DualConnection(sqlite_conn, NoFlushD1())
+
+    assert dual.flush() == []
+
+
+def test_strict_commit_raises_when_queued_flush_fails(
+    sqlite_conn, monkeypatch, tmp_path,
+):
+    _strict_env(monkeypatch, True)
+    drift_path = tmp_path / "d1_drift.jsonl"
+    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+
+    fake_d1 = QueuedThenFailingCommitD1()
+    dual = DualConnection(sqlite_conn, fake_d1)
+
+    dual.execute("INSERT INTO t (v) VALUES (?)", ("x",))
+    assert dual._d1_queued_pending_writes == 1
+    assert dual._d1_uncommitted_writes == 0
+
+    with pytest.raises(DualWriteStrictError):
+        dual.commit()
+
+    assert fake_d1.flush_called is True
+    assert drift_path.exists()
 
 
 def test_d1_write_failure_does_not_break_sqlite(sqlite_conn):
@@ -352,6 +455,118 @@ def test_d1_connection_delegates_execute_to_port():
 
     assert row == {"n": 1}
     assert calls[0] == ("execute", "SELECT 1 AS n", [], None)
+
+
+def test_d1_connection_forwards_policy_to_port_execute(monkeypatch):
+    monkeypatch.setenv("D1_BATCHING_ENABLED", "1")
+    calls = []
+    queued = []
+
+    class FakePort:
+        def execute(self, sql, params=(), *, policy=None):
+            calls.append(("execute", sql, list(params), policy))
+            if policy is not None and getattr(policy, "batching_allowed", False):
+                queued.append((sql, list(params), policy))
+                return [D1Cursor({"meta": {"changes": 0}, "results": []})]
+            return [D1Cursor({"meta": {"changes": 1}, "results": []})]
+
+        def flush(self, ordering_key=None):
+            calls.append(("flush", ordering_key))
+            while queued:
+                calls.append(("flushed", queued.pop(0)))
+            return None
+
+        def executemany(self, sql, seq_of_params, *, policy=None):
+            raise AssertionError("unexpected executemany")
+
+        def batch_execute(self, statements, *, policy=None):
+            raise AssertionError("unexpected batch_execute")
+
+        def write_summary(self):
+            pass
+
+        def close(self):
+            pass
+
+    conn = D1Connection("acct", "db", "token")
+    conn._port = FakePort()
+
+    policy = RecoveryPolicy(
+        logical_db="history",
+        operation_type="pending_stage",
+        idempotency_key="history:s1:seq1",
+        ordering_key="history:s1",
+        recovery_allowed=True,
+        max_attempts=3,
+        batching_allowed=True,
+    )
+    conn.execute("INSERT INTO t VALUES (?)", ("x",), policy=policy)
+
+    assert calls[0] == ("execute", "INSERT INTO t VALUES (?)", ["x"], policy)
+    assert queued == [("INSERT INTO t VALUES (?)", ["x"], policy)]
+    conn.flush(ordering_key=policy.ordering_key)
+    assert calls[-2:] == [
+        ("flush", policy.ordering_key),
+        ("flushed", ("INSERT INTO t VALUES (?)", ["x"], policy)),
+    ]
+
+
+def test_d1_connection_commit_flushes_queued_writes(monkeypatch):
+    monkeypatch.setenv("D1_BATCHING_ENABLED", "1")
+    calls = []
+
+    class FakePort:
+        def __init__(self):
+            self._queued = []
+
+        def execute(self, sql, params=(), *, policy=None):
+            calls.append(("execute", sql, list(params), policy))
+            if policy is not None and getattr(policy, "batching_allowed", False):
+                self._queued.append((sql, list(params), policy))
+                return [D1Cursor({"meta": {"changes": 0}, "results": []}, queued=True)]
+            return [D1Cursor({"meta": {"changes": 1}, "results": []})]
+
+        def executemany(self, sql, seq_of_params, *, policy=None):
+            raise AssertionError("unexpected executemany")
+
+        def batch_execute(self, statements, *, policy=None):
+            calls.append(("batch_execute", list(statements), policy))
+            return [D1Cursor({"meta": {"changes": 1}, "results": []}) for _ in statements]
+
+        def flush(self, ordering_key=None):
+            calls.append(("flush", ordering_key))
+            flushed = list(self._queued)
+            self._queued.clear()
+            return [D1Cursor({"meta": {"changes": 1}, "results": []}) for _ in flushed]
+
+        def write_summary(self):
+            pass
+
+        def close(self):
+            pass
+
+    conn = D1Connection("acct", "db", "token")
+    conn._port = FakePort()
+
+    policy = RecoveryPolicy(
+        logical_db="history",
+        operation_type="pending_stage",
+        idempotency_key="history:s1:seq1",
+        ordering_key="history:s1",
+        recovery_allowed=True,
+        max_attempts=3,
+        batching_allowed=True,
+    )
+    conn.execute("INSERT INTO t VALUES (?)", ("x",), policy=policy)
+    assert conn.total_changes == 0
+
+    conn.commit()
+
+    assert calls == [
+        ("execute", "INSERT INTO t VALUES (?)", ["x"], policy),
+        ("flush", None),
+    ]
+    assert conn.total_changes == 1
 
 
 def test_execute_stringifies_json_unsafe_integer_params(monkeypatch, d1_conn, no_sleep):
@@ -1253,7 +1468,7 @@ def test_explicit_id_skips_lastrowid_check_even_when_backends_disagree(tmp_path)
 
     # D1 returns a *different* lastrowid (e.g. its internal counter
     # value) — SQLite returns SID because Id is the rowid alias.
-    fake_d1.execute = lambda sql, params=(): _Cursor(  # type: ignore[assignment]
+    fake_d1.execute = lambda sql, params=(), *, policy=None: _Cursor(  # type: ignore[assignment]
         lastrowid=347, rowcount=1,
     )
 
@@ -1284,7 +1499,7 @@ def test_lastrowid_mismatch_on_report_sessions_raises(monkeypatch, tmp_path):
             return []
 
     # SQLite will use AUTOINCREMENT (1), D1 returns 999 → mismatch.
-    fake_d1.execute = lambda sql, params=(): _Cursor(  # type: ignore[assignment]
+    fake_d1.execute = lambda sql, params=(), *, policy=None: _Cursor(  # type: ignore[assignment]
         lastrowid=999, rowcount=1,
     )
 
@@ -1331,7 +1546,7 @@ def test_unguarded_table_id_drift_is_warning_not_error(tmp_path):
         def fetchall(self):
             return []
 
-    fake_d1.execute = lambda sql, params=(): _Cursor(  # type: ignore[assignment]
+    fake_d1.execute = lambda sql, params=(), *, policy=None: _Cursor(  # type: ignore[assignment]
         lastrowid=999, rowcount=1,
     )
 
@@ -1369,7 +1584,7 @@ def test_explicit_pk_insert_does_not_emit_drift_warning(tmp_path, caplog):
     ]
     cursor_iter = iter(plan)
 
-    def _fake_execute(sql, params=()):
+    def _fake_execute(sql, params=(), *, policy=None):
         _, d1_lr = next(cursor_iter)
         return _FixedLastrowidCursor(lastrowid=d1_lr, rowcount=1)
 
@@ -1478,7 +1693,7 @@ def test_explicit_seq_into_pending_movie_history_is_accepted(tmp_path):
     fake_d1 = FakeD1Connection()
 
     SAME_SEQ = 1755545088000123
-    fake_d1.execute = lambda sql, params=(): _FixedLastrowidCursor(  # type: ignore[assignment]
+    fake_d1.execute = lambda sql, params=(), *, policy=None: _FixedLastrowidCursor(  # type: ignore[assignment]
         lastrowid=SAME_SEQ, rowcount=1,
     )
 
@@ -1497,7 +1712,7 @@ def test_explicit_seq_into_pending_torrent_history_is_accepted(tmp_path):
     fake_d1 = FakeD1Connection()
 
     SAME_SEQ = 1755545088000456
-    fake_d1.execute = lambda sql, params=(): _FixedLastrowidCursor(  # type: ignore[assignment]
+    fake_d1.execute = lambda sql, params=(), *, policy=None: _FixedLastrowidCursor(  # type: ignore[assignment]
         lastrowid=SAME_SEQ, rowcount=1,
     )
 
@@ -1522,7 +1737,7 @@ def test_explicit_seq_skips_lastrowid_check_even_when_backends_disagree(tmp_path
     fake_d1 = FakeD1Connection()
 
     SEQ = 1821300000000099
-    fake_d1.execute = lambda sql, params=(): _FixedLastrowidCursor(  # type: ignore[assignment]
+    fake_d1.execute = lambda sql, params=(), *, policy=None: _FixedLastrowidCursor(  # type: ignore[assignment]
         lastrowid=42, rowcount=1,
     )
 
@@ -1546,7 +1761,7 @@ def test_lastrowid_mismatch_on_pending_movie_history_raises(monkeypatch, tmp_pat
     """
     sqlite_conn = _make_pending_tables_sqlite(tmp_path)
     fake_d1 = FakeD1Connection()
-    fake_d1.execute = lambda sql, params=(): _FixedLastrowidCursor(  # type: ignore[assignment]
+    fake_d1.execute = lambda sql, params=(), *, policy=None: _FixedLastrowidCursor(  # type: ignore[assignment]
         lastrowid=999, rowcount=1,
     )
 
@@ -1570,7 +1785,7 @@ def test_lastrowid_mismatch_on_pending_movie_history_raises(monkeypatch, tmp_pat
 def test_lastrowid_mismatch_on_pending_torrent_history_raises(monkeypatch, tmp_path):
     sqlite_conn = _make_pending_tables_sqlite(tmp_path)
     fake_d1 = FakeD1Connection()
-    fake_d1.execute = lambda sql, params=(): _FixedLastrowidCursor(  # type: ignore[assignment]
+    fake_d1.execute = lambda sql, params=(), *, policy=None: _FixedLastrowidCursor(  # type: ignore[assignment]
         lastrowid=999, rowcount=1,
     )
 

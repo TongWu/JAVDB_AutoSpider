@@ -603,13 +603,45 @@ class DualConnection:
         # so a SQLite rollback with N>0 means D1 keeps rows SQLite no
         # longer has — that's drift even when zero failures occurred.
         self._d1_uncommitted_writes = 0
+        # Writes that have landed in SQLite but are only queued on the D1
+        # side. They are not D1 drift yet, but STRICT_DUAL_WRITE must fail
+        # loudly if a commit-time flush cannot land them in D1.
+        self._d1_queued_pending_writes = 0
         self._recent_failure_signatures: "collections.OrderedDict[str, int]" = (
             collections.OrderedDict()
         )
 
+    @staticmethod
+    def _coerce_cursor_list(cursors) -> list:
+        if cursors is None:
+            return []
+        if isinstance(cursors, list):
+            return cursors
+        if isinstance(cursors, tuple):
+            return list(cursors)
+        return [cursors]
+
+    @staticmethod
+    def _count_applied_cursors(cursors) -> int:
+        return sum(
+            1
+            for cursor in DualConnection._coerce_cursor_list(cursors)
+            if cursor is not None
+        )
+
+    def _record_flushed_cursors(self, cursors) -> None:
+        applied_count = self._count_applied_cursors(cursors)
+        if applied_count <= 0:
+            return
+        self._d1_uncommitted_writes += applied_count
+        self._d1_queued_pending_writes = max(
+            0,
+            self._d1_queued_pending_writes - applied_count,
+        )
+
     # ── Statement execution ─────────────────────────────────────────────
 
-    def execute(self, sql: str, params: Iterable[Any] = ()):
+    def execute(self, sql: str, params: Iterable[Any] = (), *, policy=None):
         if _is_read(sql):
             try:
                 return self._d1.execute(sql, params)
@@ -624,9 +656,15 @@ class DualConnection:
         sqlite_cur = self._sqlite.execute(sql, params)
         d1_cur = None
         try:
-            d1_cur = self._d1.execute(sql, params)
-            self._d1_uncommitted_writes += 1
-            self._maybe_warn_id_drift(sqlite_cur, d1_cur, sql)
+            if policy is None:
+                d1_cur = self._d1.execute(sql, params)
+            else:
+                d1_cur = self._d1.execute(sql, params, policy=policy)
+            if getattr(d1_cur, "queued", False):
+                self._d1_queued_pending_writes += 1
+            else:
+                self._d1_uncommitted_writes += 1
+                self._maybe_warn_id_drift(sqlite_cur, d1_cur, sql)
         except Exception as exc:
             self._record_d1_failure(sql, exc, kind="write")
         return DualCursor.for_write(sqlite_cur, d1_cur, sql)
@@ -940,15 +978,18 @@ class DualConnection:
 
         self._sqlite.commit()
         try:
-            self._d1.commit()
+            self._record_flushed_cursors(self._d1.commit())
         except Exception as exc:
             self._record_d1_failure("COMMIT", exc, kind="commit")
-            if _strict_dual_write_enabled() and self._d1_uncommitted_writes > 0:
+            if _strict_dual_write_enabled() and (
+                self._d1_uncommitted_writes > 0
+                or self._d1_queued_pending_writes > 0
+            ):
                 # COMMIT itself raised on D1 *and* the transaction had
-                # at least one successful prior D1 write. SQLite has
-                # already committed so we cannot truly recover, but we
-                # surface the mismatch loudly instead of silently
-                # claiming success.
+                # at least one successful prior D1 write or queued write
+                # that SQLite has already committed. We cannot truly
+                # recover here, but we surface the mismatch loudly instead
+                # of silently claiming success.
                 self._flush_drift_record(committed=True)
                 raise DualWriteStrictError(
                     f"db={self._logical_name}: SQLite commit succeeded but "
@@ -969,6 +1010,14 @@ class DualConnection:
                 self._d1_uncommitted_writes,
             )
         self._flush_drift_record(committed=False)
+
+    def flush(self, ordering_key: Optional[str] = None):
+        flush = getattr(self._d1, "flush", None)
+        if not callable(flush):
+            return []
+        cursors = self._coerce_cursor_list(flush(ordering_key=ordering_key))
+        self._record_flushed_cursors(cursors)
+        return cursors
 
     def close(self):
         try:
@@ -1114,6 +1163,7 @@ class DualConnection:
         self._d1_failure_first_sql = None
         self._d1_failure_first_error = None
         self._d1_uncommitted_writes = 0
+        self._d1_queued_pending_writes = 0
         self._recent_failure_signatures.clear()
 
     @staticmethod
