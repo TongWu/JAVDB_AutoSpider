@@ -249,12 +249,46 @@ from javdb.spider.runtime.context import SpiderRuntime  # noqa: E402
 
 def _sync_legacy_globals_from_runtime(runtime: SpiderRuntime) -> None:
     global parsed_links, proxy_ban_html_files, runtime_holder_id
+    global _runner_session, _runner_heartbeat_thread, _runner_unregistered
+    global _runner_heartbeat_stop, _last_applied_config_version
+    global _signal_banned_proxies, _signal_lock
+    global _HEARTBEAT_INTERVAL_MULTI_RUNNER_SEC, _HEARTBEAT_INTERVAL_SINGLE_RUNNER_SEC
+    global _RUNNER_HEARTBEAT_INTERVAL_SEC
+    global global_runner_registry_client
+    global global_movie_claim_client, _movie_claim_client_pending, _movie_claim_mode
+    global _movie_claim_intended_mode, _movie_claim_last_recommended
+    global _movie_claim_lock, _movie_claim_swept_at_exit
     parsed_links = runtime.detail.parsed_links
     proxy_ban_html_files = runtime.proxy.proxy_ban_html_files
     runtime_holder_id = runtime.runner_registry.holder_id
+    _runner_session = runtime.runner_registry.session
+    _runner_heartbeat_thread = runtime.runner_registry.heartbeat_thread
+    _runner_heartbeat_stop = runtime.runner_registry.heartbeat_stop
+    _runner_unregistered = runtime.runner_registry.unregistered
+    _last_applied_config_version = runtime.runner_registry.last_applied_config_version
+    _signal_banned_proxies = runtime.runner_registry.signal_banned_proxies
+    _signal_lock = runtime.runner_registry.signal_lock
+    _HEARTBEAT_INTERVAL_MULTI_RUNNER_SEC = (
+        runtime.runner_registry.heartbeat_interval_multi_runner_sec
+    )
+    _HEARTBEAT_INTERVAL_SINGLE_RUNNER_SEC = (
+        runtime.runner_registry.heartbeat_interval_single_runner_sec
+    )
+    _RUNNER_HEARTBEAT_INTERVAL_SEC = (
+        runtime.runner_registry.runner_heartbeat_interval_sec
+    )
+    global_runner_registry_client = runtime.services.runner_registry_client
+    global_movie_claim_client = runtime.movie_claim.client_public
+    _movie_claim_client_pending = runtime.movie_claim.client_pending
+    _movie_claim_mode = runtime.movie_claim.mode
+    _movie_claim_intended_mode = runtime.movie_claim.intended_mode
+    _movie_claim_last_recommended = runtime.movie_claim.last_recommended
+    _movie_claim_lock = runtime.movie_claim.lock
+    _movie_claim_swept_at_exit = runtime.movie_claim.swept_at_exit
 
 
 def bind_active_runtime(runtime: SpiderRuntime) -> SpiderRuntime:
+    """Bind a runtime before any setup_* calls or concurrent spider startup."""
     bound = _bind_active_runtime(runtime)
     _sync_legacy_globals_from_runtime(bound)
     return bound
@@ -418,37 +452,14 @@ def setup_login_state_client() -> Optional[LoginStateClient]:
 
 
 def _apply_movie_claim_recommendation(recommended: bool) -> None:
-    """Mount or unmount :data:`global_movie_claim_client` per *recommended*.
+    runtime = get_active_runtime()
+    if runtime is not None:
+        return runtime._apply_movie_claim_recommendation(recommended)
+    return _apply_movie_claim_recommendation_legacy(recommended)
 
-    Called from three places: once at the end of
-    :func:`setup_runner_registry_client` (the first ``register`` response),
-    on every successful heartbeat in :func:`_runner_heartbeat_loop`, and
-    on every successful re-register inside the same loop.  The function
-    is idempotent and edge-triggered: the mount/unmount transition only
-    happens when the public ``global_movie_claim_client`` actually
-    changes, so a steady-state cluster doesn't spam INFO logs.
 
-    Mode semantics (matches the docs in §15.4 of
-    ``docs/PROXY_COORDINATOR_DEPLOY.md``):
-
-    - :data:`MOVIE_CLAIM_MODE_OFF` — never mount; signal is ignored.
-      ``_movie_claim_last_recommended`` is still updated so the
-      heartbeat-interval helper can run uniformly across modes.
-    - :data:`MOVIE_CLAIM_MODE_FORCE_ON` — always mount (idempotently);
-      signal is ignored.  Reproduces the legacy P1-B "operator
-      explicitly enabled it" behaviour.  Mounts ``_movie_claim_client_pending``
-      onto the global if the global is still ``None`` (defensive: keeps
-      the function safe even if a future caller blanks the global).
-    - :data:`MOVIE_CLAIM_MODE_AUTO` — drive the global purely from the
-      recommendation: ``True`` mounts pending → global, ``False``
-      unmounts global (keeps pending alive so the next ``True`` is a
-      cheap pointer copy, no new HTTP session).
-
-    Thread safety: held under :data:`_movie_claim_lock` so a concurrent
-    heartbeat tick + atexit unregister cannot toggle the global out
-    from under each other.  Callers must NEVER hold the lock across
-    network I/O.
-    """
+def _apply_movie_claim_recommendation_legacy(recommended: bool) -> None:
+    """Mount or unmount :data:`global_movie_claim_client` per *recommended*."""
     global global_movie_claim_client, _movie_claim_last_recommended
 
     with _movie_claim_lock:
@@ -456,15 +467,9 @@ def _apply_movie_claim_recommendation(recommended: bool) -> None:
         mode = _movie_claim_mode
 
         if mode == MOVIE_CLAIM_MODE_OFF:
-            # Signal ignored; never mount.  Update the cached flag so
-            # the heartbeat interval helper still has a value to read,
-            # even though it will only honour 60 s for non-auto modes.
             return
 
         if mode == MOVIE_CLAIM_MODE_FORCE_ON:
-            # Force-on: idempotently mount pending → global if the
-            # global got blanked for any reason.  Do NOT log on the
-            # steady-state path (already-mounted is the common case).
             if (
                 global_movie_claim_client is None
                 and _movie_claim_client_pending is not None
@@ -476,8 +481,6 @@ def _apply_movie_claim_recommendation(recommended: bool) -> None:
                 )
             return
 
-        # Auto mode: drive the global from the registry signal,
-        # edge-triggered so steady state stays log-quiet.
         if recommended:
             if (
                 global_movie_claim_client is None
@@ -489,9 +492,6 @@ def _apply_movie_claim_recommendation(recommended: bool) -> None:
                 )
         else:
             if global_movie_claim_client is not None:
-                # Keep ``_movie_claim_client_pending`` alive (do NOT
-                # close it) so a subsequent recommended=True can mount
-                # the same client without rebuilding the session.
                 global_movie_claim_client = None
                 logger.info(
                     "movie-claim auto: unmounted (active_runners < threshold)",
@@ -499,6 +499,13 @@ def _apply_movie_claim_recommendation(recommended: bool) -> None:
 
 
 def setup_movie_claim_client() -> Optional[MovieClaimClient]:
+    runtime = get_active_runtime()
+    if runtime is not None:
+        return runtime.setup_movie_claim_client()
+    return setup_movie_claim_client_legacy()
+
+
+def setup_movie_claim_client_legacy() -> Optional[MovieClaimClient]:
     """Initialise the cross-instance movie-detail claim coordinator (P1-B).
 
     Companion of :func:`setup_proxy_coordinator` /
@@ -666,6 +673,13 @@ def setup_movie_claim_client() -> Optional[MovieClaimClient]:
 
 
 def enforce_movie_claim_for_d1() -> None:
+    runtime = get_active_runtime()
+    if runtime is not None:
+        return runtime.enforce_movie_claim_for_d1()
+    return enforce_movie_claim_for_d1_legacy()
+
+
+def enforce_movie_claim_for_d1_legacy() -> None:
     """MR-4 (multi-runtime): fail closed when d1-only mode wants movie
     claim coordination but the Worker is unreachable.
 
@@ -767,6 +781,13 @@ def _resolve_proxy_pool_json() -> str:
 
 
 def _next_heartbeat_interval() -> float:
+    runtime = get_active_runtime()
+    if runtime is not None:
+        return runtime._next_heartbeat_interval()
+    return _next_heartbeat_interval_legacy()
+
+
+def _next_heartbeat_interval_legacy() -> float:
     """Pick the next ``_runner_heartbeat_stop.wait`` duration.
 
     The auto-toggle wants two cadences:
@@ -825,7 +846,7 @@ def _update_sleep_runner_count(count: int) -> None:
 _last_applied_config_version: int = -1
 
 
-def _apply_config_snapshot(snap: ConfigSnapshot) -> None:
+def _apply_config_snapshot_legacy(snap: ConfigSnapshot) -> None:
     """Apply an operator-pushed config snapshot from the heartbeat.
 
     Only keys the Python client actually consumes locally are honoured;
@@ -897,6 +918,13 @@ def _apply_config_snapshot(snap: ConfigSnapshot) -> None:
     )
 
 
+def _apply_config_snapshot(snap: ConfigSnapshot) -> None:
+    runtime = get_active_runtime()
+    if runtime is not None:
+        return runtime._apply_config_snapshot(snap)
+    return _apply_config_snapshot_legacy(snap)
+
+
 # ---------------------------------------------------------------------------
 # W6.A.2 — W5.4 active signals state
 # ---------------------------------------------------------------------------
@@ -911,7 +939,7 @@ _signal_banned_proxies: set = set()
 _signal_lock = threading.Lock()
 
 
-def _apply_active_signals(signals: list) -> None:
+def _apply_active_signals_legacy(signals: list) -> None:
     """Reconcile the runtime state against the W5.4 ``active_signals`` set.
 
     Signals are STATE, not events: every heartbeat delivers the full
@@ -1016,7 +1044,14 @@ def _apply_active_signals(signals: list) -> None:
                     )
 
 
-def _maybe_honour_pipeline_pause(
+def _apply_active_signals(signals: list) -> None:
+    runtime = get_active_runtime()
+    if runtime is not None:
+        return runtime._apply_active_signals(signals)
+    return _apply_active_signals_legacy(signals)
+
+
+def _maybe_honour_pipeline_pause_legacy(
     *,
     pipeline_paused_until_ms: int,
     reason: Optional[str],
@@ -1057,7 +1092,24 @@ def _maybe_honour_pipeline_pause(
     sys.exit(0)
 
 
-def set_active_runner_session(
+def _maybe_honour_pipeline_pause(
+    *,
+    pipeline_paused_until_ms: int,
+    reason: Optional[str],
+) -> None:
+    runtime = get_active_runtime()
+    if runtime is not None:
+        return runtime._maybe_honour_pipeline_pause(
+            pipeline_paused_until_ms=pipeline_paused_until_ms,
+            reason=reason,
+        )
+    return _maybe_honour_pipeline_pause_legacy(
+        pipeline_paused_until_ms=pipeline_paused_until_ms,
+        reason=reason,
+    )
+
+
+def _set_active_runner_session_legacy(
     *,
     session_id: str,
     status: str,
@@ -1100,7 +1152,36 @@ def set_active_runner_session(
         )
 
 
-def _runner_heartbeat_loop(client: RunnerRegistryClient, holder_id: str) -> None:
+def set_active_runner_session(
+    *,
+    session_id: str,
+    status: str,
+    write_mode: Optional[str] = None,
+    report_type: Optional[str] = None,
+    failure_reason: Optional[str] = None,
+    flush_immediately: bool = False,
+) -> None:
+    runtime = get_active_runtime()
+    if runtime is not None:
+        return runtime.set_active_runner_session(
+            session_id=session_id,
+            status=status,
+            write_mode=write_mode,
+            report_type=report_type,
+            failure_reason=failure_reason,
+            flush_immediately=flush_immediately,
+        )
+    return _set_active_runner_session_legacy(
+        session_id=session_id,
+        status=status,
+        write_mode=write_mode,
+        report_type=report_type,
+        failure_reason=failure_reason,
+        flush_immediately=flush_immediately,
+    )
+
+
+def _runner_heartbeat_loop_legacy(client: RunnerRegistryClient, holder_id: str) -> None:
     """Background thread: ping ``/heartbeat`` until stopped.
 
     Cadence is dynamic via :func:`_next_heartbeat_interval` so that auto
@@ -1178,7 +1259,14 @@ def _runner_heartbeat_loop(client: RunnerRegistryClient, holder_id: str) -> None
         _apply_active_signals(result.active_signals)
 
 
-def _unregister_runner_at_exit() -> None:
+def _runner_heartbeat_loop(client: RunnerRegistryClient, holder_id: str) -> None:
+    runtime = get_active_runtime()
+    if runtime is not None:
+        return runtime._runner_heartbeat_loop(client, holder_id)
+    return _runner_heartbeat_loop_legacy(client, holder_id)
+
+
+def _unregister_runner_at_exit_legacy() -> None:
     """Best-effort cleanup of this runner's registry entry.
 
     Registered via :func:`atexit.register` from :func:`setup_runner_registry_client`.
@@ -1224,6 +1312,13 @@ def _unregister_runner_at_exit() -> None:
         _runner_heartbeat_thread = None
 
 
+def _unregister_runner_at_exit() -> None:
+    runtime = get_active_runtime()
+    if runtime is not None:
+        return runtime._unregister_runner_at_exit()
+    return _unregister_runner_at_exit_legacy()
+
+
 # MR-5 (multi-runtime): opportunistic orphan-stage sweep on clean exit.
 #
 # The StaleSessionCleanup cron sweeps once a day; a stage orphaned by a
@@ -1239,6 +1334,13 @@ _movie_claim_swept_at_exit: bool = False
 
 
 def _movie_claim_sweep_shard_dates() -> list:
+    runtime = get_active_runtime()
+    if runtime is not None:
+        return runtime._movie_claim_sweep_shard_dates()
+    return _movie_claim_sweep_shard_dates_legacy()
+
+
+def _movie_claim_sweep_shard_dates_legacy() -> list:
     """Today + yesterday in the ops timezone (Asia/Singapore, UTC+8).
 
     Two days covers a session that staged just before midnight and a
@@ -1256,6 +1358,13 @@ def _movie_claim_sweep_shard_dates() -> list:
 
 
 def _sweep_movie_claim_stages_at_exit() -> None:
+    runtime = get_active_runtime()
+    if runtime is not None:
+        return runtime._sweep_movie_claim_stages_at_exit()
+    return _sweep_movie_claim_stages_at_exit_legacy()
+
+
+def _sweep_movie_claim_stages_at_exit_legacy() -> None:
     """Best-effort opportunistic sweep of orphaned MovieClaim stages.
 
     Registered via :func:`atexit.register` from
@@ -1327,7 +1436,7 @@ def _warn_on_proxy_pool_drift(
         )
 
 
-def setup_runner_registry_client() -> Optional[RunnerRegistryClient]:
+def _setup_runner_registry_client_legacy() -> Optional[RunnerRegistryClient]:
     """Initialise the singleton runner-registry client (P2-E).
 
     Companion of :func:`setup_proxy_coordinator` /
@@ -1351,7 +1460,7 @@ def setup_runner_registry_client() -> Optional[RunnerRegistryClient]:
 
     Cached in :data:`global_runner_registry_client`.  Idempotent.
     """
-    global global_runner_registry_client, _runner_heartbeat_thread
+    global global_runner_registry_client, _runner_heartbeat_thread, _runner_unregistered
 
     if global_runner_registry_client is not None:
         return global_runner_registry_client
@@ -1452,6 +1561,7 @@ def setup_runner_registry_client() -> Optional[RunnerRegistryClient]:
         return None
 
     global_runner_registry_client = client
+    _runner_unregistered = False
     _runner_heartbeat_stop.clear()
     if _runner_heartbeat_thread is None or not _runner_heartbeat_thread.is_alive():
         _runner_heartbeat_thread = threading.Thread(
@@ -1463,6 +1573,13 @@ def setup_runner_registry_client() -> Optional[RunnerRegistryClient]:
         _runner_heartbeat_thread.start()
     atexit.register(_unregister_runner_at_exit)
     return client
+
+
+def setup_runner_registry_client() -> Optional[RunnerRegistryClient]:
+    runtime = get_active_runtime()
+    if runtime is not None:
+        return runtime.setup_runner_registry_client()
+    return _setup_runner_registry_client_legacy()
 
 
 def setup_work_distributor_client():
