@@ -315,6 +315,21 @@ class TestExtractSpiderStatistics:
         assert stats['overall']['skipped_history'] == 4
         assert stats['overall']['no_new_torrents'] == 1
         assert stats['overall']['failed'] == 2
+
+    def test_statistics_extraction_derives_overall_from_phase_completion(self, temp_dir):
+        """Derive overall stats when spider log has phase summaries but no legacy overall lines."""
+        log_path = os.path.join(temp_dir, 'spider.log')
+        with open(log_path, 'w') as f:
+            f.write("Phase 1 completed: 33 movies discovered, 12 processed, 21 skipped (history), 0 no new torrents, 0 failed\n")
+            f.write("Phase 2 completed: 40 movies discovered, 17 processed, 22 skipped (history), 1 no new torrents, 0 failed\n")
+
+        stats = extract_spider_statistics(log_path)
+
+        assert stats['overall']['total_discovered'] == 73
+        assert stats['overall']['successfully_processed'] == 29
+        assert stats['overall']['skipped_history'] == 43
+        assert stats['overall']['no_new_torrents'] == 1
+        assert stats['overall']['failed'] == 0
     
     def test_statistics_extraction_old_format(self, temp_dir):
         """Test extracting statistics from spider log (old format for backwards compatibility)."""
