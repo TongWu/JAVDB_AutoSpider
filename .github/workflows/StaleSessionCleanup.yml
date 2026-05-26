@@ -90,6 +90,9 @@ jobs:
     environment: Production
     env:
       TZ: Asia/Singapore
+      D1_RECOVERY_OUTBOX_ENABLED: ${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}
+      D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
+      D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
       INPUT_MAX_AGE_HOURS: ${{ inputs.max_age_hours || '48' }}
       INPUT_APPLY: ${{ inputs.apply }}
       INPUT_SCOPE: ${{ inputs.scope || 'all' }}

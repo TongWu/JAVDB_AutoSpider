@@ -40,6 +40,17 @@ D1_STAGING_WORKFLOWS = WORKFLOWS + (
     REPO_ROOT / ".github" / "workflows" / "WeeklyDedup.yml",
 )
 TEST_INGESTION = REPO_ROOT / ".github" / "workflows" / "TestIngestion.yml"
+ADR010_D1_GATE_WORKFLOWS = D1_STAGING_WORKFLOWS + (
+    TEST_INGESTION,
+    REPO_ROOT / ".github" / "workflows" / "QBFileFilter.yml",
+    REPO_ROOT / ".github" / "workflows" / "RollbackD1.yml",
+    REPO_ROOT / ".github" / "workflows" / "StaleSessionCleanup.yml",
+)
+ADR010_D1_GATE_ENV = {
+    "D1_RECOVERY_OUTBOX_ENABLED": "${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}",
+    "D1_BATCHING_ENABLED": "${{ vars.D1_BATCHING_ENABLED || 'false' }}",
+    "D1_STARTUP_REPLAY_ENABLED": "${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}",
+}
 
 
 def _extract_run(workflow_path: Path, step_id: str) -> str:
@@ -70,6 +81,11 @@ def _extract_step(workflow_path: Path, step_id: str) -> dict:
 
 def _workflow_text(workflow_path: Path) -> str:
     return workflow_path.read_text(encoding="utf-8")
+
+
+def _load_workflow(workflow_path: Path) -> dict:
+    with workflow_path.open() as f:
+        return yaml.safe_load(f)
 
 
 def _inject_override(run_script: str, value: str) -> str:
@@ -646,6 +662,31 @@ def test_d1_state_files_are_staged_for_private_workflows(workflow):
     ):
         assert f"$REPORTS_DIR/D1/{filename}" in text
     assert 'git add "$D1_STATE_FILE" 2>/dev/null || true' in text
+
+
+@pytest.mark.parametrize(
+    "workflow",
+    ADR010_D1_GATE_WORKFLOWS,
+    ids=lambda p: p.name,
+)
+def test_d1_gate_environment_vars_are_exported_for_d1_workflow_jobs(workflow):
+    """D1 feature gates are GitHub Environment variables, so workflow jobs
+    must export them into the runner environment before Python can read them."""
+    jobs = _load_workflow(workflow)["jobs"]
+
+    missing: list[str] = []
+    for job_name, job in jobs.items():
+        if job.get("environment") != "Production":
+            continue
+        job_env = job.get("env", {})
+        for env_name, expected_expr in ADR010_D1_GATE_ENV.items():
+            if job_env.get(env_name) != expected_expr:
+                missing.append(f"{job_name}.{env_name}")
+
+    assert not missing, (
+        f"{workflow.name} does not export ADR-010 D1 gates: "
+        + ", ".join(missing)
+    )
 
 
 def test_public_publish_refuses_recovery_payloads():
