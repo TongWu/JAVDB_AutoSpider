@@ -164,10 +164,12 @@ class LoginCoordinator:
         all_workers: list,
         login_proxy_name: str | None = None,
         lock: threading.Lock | None = None,
+        runtime=None,
     ):
         self._lock = lock or threading.Lock()
         self._all_workers = all_workers
         self._login_proxy_name = login_proxy_name
+        self._runtime = runtime or state.get_active_runtime()
         self.logged_in_worker_id: int | None = None
         # Tasks parked while another runner holds the DO re-login lease.
         # Each entry is ``(worker_proxy_name, task, login_queue)`` so the
@@ -198,6 +200,25 @@ class LoginCoordinator:
         """Expose the lock for ``_get_next_task`` synchronization."""
         return self._lock
 
+    def _login_state(self):
+        return self._runtime.login if self._runtime is not None else state
+
+    def _services(self):
+        return self._runtime.services if self._runtime is not None else state
+
+    def _login_state_client(self):
+        services = self._services()
+        return (
+            services.login_state_client
+            if self._runtime is not None
+            else services.global_login_state_client
+        )
+
+    def _holder_id(self) -> str:
+        if self._runtime is not None:
+            return self._runtime.runner_registry.holder_id
+        return state.runtime_holder_id
+
     # -- DO lease / park / poll helpers ------------------------------------
 
     def _try_acquire_login_lease(self, hint_proxy_name: str) -> bool:
@@ -218,12 +239,12 @@ class LoginCoordinator:
         the caller parks its task — the poller will replay parked tasks
         once the cooldown expires.
         """
-        client = state.global_login_state_client
+        client = self._login_state_client()
         if client is None:
             return True  # fail-open: pre-DO behaviour
         try:
             result = client.acquire_lease(
-                state.runtime_holder_id,
+                self._holder_id(),
                 hint_proxy_name,
                 _DO_LEASE_TTL_MS,
             )
@@ -257,7 +278,7 @@ class LoginCoordinator:
             # exclusive).  Best-effort — failure here is harmless.
             if result.acquired:
                 try:
-                    client.release_lease(state.runtime_holder_id)
+                    client.release_lease(self._holder_id())
                 except LoginStateUnavailable:
                     pass
             return False
@@ -286,12 +307,12 @@ class LoginCoordinator:
         between calls) still parks correctly.  Never raises — the
         cooldown is a soft signal and a missed record is harmless.
         """
-        client = state.global_login_state_client
+        client = self._login_state_client()
         if client is None:
             return
         try:
             result = client.record_attempt(
-                state.runtime_holder_id, proxy_name, outcome,
+                self._holder_id(), proxy_name, outcome,
             )
         except LoginStateUnavailable as exc:
             logger.debug(
@@ -327,11 +348,11 @@ class LoginCoordinator:
         Errors are swallowed — the lease will time out on its own at
         worst.
         """
-        client = state.global_login_state_client
+        client = self._login_state_client()
         if client is None:
             return
         try:
-            client.release_lease(state.runtime_holder_id)
+            client.release_lease(self._holder_id())
         except LoginStateUnavailable as exc:
             logger.warning(
                 "DO release_lease failed (%s) — relying on TTL for cleanup",
@@ -349,12 +370,12 @@ class LoginCoordinator:
         side effects — the login already succeeded, we just need to
         broadcast.
         """
-        client = state.global_login_state_client
+        client = self._login_state_client()
         if client is None:
             return
         try:
             result = client.acquire_lease(
-                state.runtime_holder_id,
+                self._holder_id(),
                 actual_proxy_name,
                 _DO_LEASE_TTL_MS,
             )
@@ -375,7 +396,12 @@ class LoginCoordinator:
             )
             return
         try:
-            _publish_login_state_to_do(actual_proxy_name, cookie)
+            if self._runtime is None:
+                _publish_login_state_to_do(actual_proxy_name, cookie)
+            else:
+                _publish_login_state_to_do(
+                    actual_proxy_name, cookie, runtime=self._runtime,
+                )
         finally:
             self._release_login_lease()
 
@@ -388,8 +414,9 @@ class LoginCoordinator:
         stop trusting it ASAP.  Uses the optimistic version lock so we
         never wipe a newer cookie that someone else just published.
         """
-        client = state.global_login_state_client
-        version = state.current_login_state_version
+        client = self._login_state_client()
+        login_ctx = self._login_state()
+        version = login_ctx.current_login_state_version
         if client is None or version is None:
             return
         try:
@@ -398,13 +425,13 @@ class LoginCoordinator:
             logger.warning("DO invalidate failed (%s) — ignored", exc)
             return
         if result.invalidated:
-            state.current_login_state_version = result.current_version
+            login_ctx.current_login_state_version = result.current_version
             logger.info("DO invalidated stale cookie (new version=%d)", result.current_version)
         else:
             # Stale view: someone else already published a fresher cookie
             # while we were running this branch.  Pick it up via the
             # poller on its next tick.
-            state.current_login_state_version = result.current_version
+            login_ctx.current_login_state_version = result.current_version
             logger.info(
                 "DO invalidate no-op (current_version=%d > our %d) — "
                 "polling will pick up the fresher cookie",
@@ -508,7 +535,7 @@ class LoginCoordinator:
                     # release parked tasks immediately.
                     pass
 
-            client = state.global_login_state_client
+            client = self._login_state_client()
             if client is None:
                 # DO went away mid-flight (extremely unlikely).  Drain the
                 # parked tasks back to their original queues so the rest
@@ -563,24 +590,26 @@ class LoginCoordinator:
                 continue
             consecutive_get_state_failures = 0
 
-            current_version = state.current_login_state_version or 0
+            login_ctx = self._login_state()
+            current_version = login_ctx.current_login_state_version or 0
             if snapshot.version <= current_version:
                 continue
             if not snapshot.proxy_name or not snapshot.cookie:
                 # Version advanced via an ``invalidate`` (cookie cleared),
                 # not a fresh ``publish`` — keep polling for the next
                 # publish to come in.
-                state.current_login_state_version = snapshot.version
+                login_ctx.current_login_state_version = snapshot.version
                 continue
 
             with self._lock:
+                login_ctx = self._login_state()
                 # Re-check after re-entering the lock: another worker may
                 # have raced and published locally already.
-                if (state.current_login_state_version or 0) >= snapshot.version:
+                if (login_ctx.current_login_state_version or 0) >= snapshot.version:
                     continue
-                state.current_login_state_version = snapshot.version
-                state.refreshed_session_cookie = snapshot.cookie
-                state.logged_in_proxy_name = snapshot.proxy_name
+                login_ctx.current_login_state_version = snapshot.version
+                login_ctx.refreshed_session_cookie = snapshot.cookie
+                login_ctx.logged_in_proxy_name = snapshot.proxy_name
                 self._cooldown_until_ms = 0
 
                 injected_worker_id: Optional[int] = None
@@ -639,6 +668,7 @@ class LoginCoordinator:
             explicit_proxy_name=proxy_name,
             spider_uses_proxy=True,
             publish_to_do=False,
+            runtime=self._runtime,
         )
 
     def _login_and_verify(self, worker, *, defer_publish: bool = False) -> tuple[bool, str | None]:
@@ -668,7 +698,12 @@ class LoginCoordinator:
 
         if not LOGIN_VERIFICATION_URLS:
             if not defer_publish:
-                _publish_login_state_to_do(worker.proxy_name, new_cookie)
+                if self._runtime is None:
+                    _publish_login_state_to_do(worker.proxy_name, new_cookie)
+                else:
+                    _publish_login_state_to_do(
+                        worker.proxy_name, new_cookie, runtime=self._runtime,
+                    )
             return True, new_cookie
 
         verified = verify_login_via_fixed_pages(
@@ -677,7 +712,12 @@ class LoginCoordinator:
         )
         if verified:
             if not defer_publish:
-                _publish_login_state_to_do(worker.proxy_name, new_cookie)
+                if self._runtime is None:
+                    _publish_login_state_to_do(worker.proxy_name, new_cookie)
+                else:
+                    _publish_login_state_to_do(
+                        worker.proxy_name, new_cookie, runtime=self._runtime,
+                    )
             return True, new_cookie
 
         logger.warning(
@@ -690,8 +730,9 @@ class LoginCoordinator:
         # cookie still lives in local globals until we discard it here. Use
         # ``None`` (not an empty string) to match the ``Optional[str]``
         # declaration in ``state.py`` and the other clears in this module.
-        state.refreshed_session_cookie = None
-        state.logged_in_proxy_name = None
+        login_ctx = self._login_state()
+        login_ctx.refreshed_session_cookie = None
+        login_ctx.logged_in_proxy_name = None
         return False, None
 
     def _worker_for_id(self, worker_id: int):
@@ -721,11 +762,12 @@ class LoginCoordinator:
         for w in self._all_workers:
             if w.proxy_name in exclude:
                 continue
-            proxy_attempts = state.login_attempts_per_proxy.get(w.proxy_name, 0)
+            login_ctx = self._login_state()
+            proxy_attempts = login_ctx.login_attempts_per_proxy.get(w.proxy_name, 0)
             if proxy_attempts >= LOGIN_ATTEMPTS_PER_PROXY_LIMIT:
                 continue
 
-            state.login_failures_per_proxy[w.proxy_name] = 0
+            login_ctx.login_failures_per_proxy[w.proxy_name] = 0
             logger.info(
                 "Switching login proxy to [%s] (logins: %d/%d)",
                 w.proxy_name, proxy_attempts, LOGIN_ATTEMPTS_PER_PROXY_LIMIT,
@@ -878,6 +920,7 @@ class LoginCoordinator:
         works for spider, backfill, and alignment workers.
         """
         with self._lock:
+            login_ctx = self._login_state()
             # -- Route to existing logged-in worker (not self) -------------
             if (
                 self.logged_in_worker_id is not None
@@ -909,19 +952,19 @@ class LoginCoordinator:
 
             # -- Budget exhausted ------------------------------------------
             if (
-                state.login_total_budget > 0
-                and state.login_total_attempts >= state.login_total_budget
+                login_ctx.login_total_budget > 0
+                and login_ctx.login_total_attempts >= login_ctx.login_total_budget
             ):
                 logger.warning(
                     "%s Login budget exhausted (%d/%d), "
                     "treating %s as normal failure",
                     _task_worker_ctx(task.entry_index, worker.proxy_name),
-                    state.login_total_attempts, state.login_total_budget,
+                    login_ctx.login_total_attempts, login_ctx.login_total_budget,
                     video_code,
                 )
                 self.logged_in_worker_id = None
-                state.refreshed_session_cookie = None
-                state.logged_in_proxy_name = None
+                login_ctx.refreshed_session_cookie = None
+                login_ctx.logged_in_proxy_name = None
                 task.failed_proxies.add(worker.proxy_name)
                 requeue_front(task_queue, task)
                 return
@@ -950,8 +993,8 @@ class LoginCoordinator:
                     # "no logged-in worker yet" branch and can pick a fresh
                     # proxy for re-login.
                     self.logged_in_worker_id = None
-                    state.refreshed_session_cookie = None
-                    state.logged_in_proxy_name = None
+                    login_ctx.refreshed_session_cookie = None
+                    login_ctx.logged_in_proxy_name = None
                     task.failed_proxies.add(worker.proxy_name)
                     requeue_front(task_queue, task)
                     return
@@ -964,10 +1007,10 @@ class LoginCoordinator:
                 self._invalidate_do_state_if_owned()
 
                 stale_count = (
-                    state.login_failures_per_proxy.get(worker.proxy_name, 0) + 1
+                    login_ctx.login_failures_per_proxy.get(worker.proxy_name, 0) + 1
                 )
-                state.login_failures_per_proxy[worker.proxy_name] = stale_count
-                proxy_attempts = state.login_attempts_per_proxy.get(
+                login_ctx.login_failures_per_proxy[worker.proxy_name] = stale_count
+                proxy_attempts = login_ctx.login_attempts_per_proxy.get(
                     worker.proxy_name, 0,
                 )
 
@@ -1011,8 +1054,8 @@ class LoginCoordinator:
 
                 # Try to switch to another proxy
                 self.logged_in_worker_id = None
-                state.refreshed_session_cookie = None
-                state.logged_in_proxy_name = None
+                login_ctx.refreshed_session_cookie = None
+                login_ctx.logged_in_proxy_name = None
 
                 next_wid, parked = self._find_and_login_next_worker_with_lease(
                     exclude={worker.proxy_name},
@@ -1037,11 +1080,11 @@ class LoginCoordinator:
 
                 # No other proxy — give current proxy another round if budget
                 # remains.
-                cur_attempts = state.login_attempts_per_proxy.get(
+                cur_attempts = login_ctx.login_attempts_per_proxy.get(
                     worker.proxy_name, 0,
                 )
                 if cur_attempts < LOGIN_ATTEMPTS_PER_PROXY_LIMIT:
-                    state.login_failures_per_proxy[worker.proxy_name] = 0
+                    login_ctx.login_failures_per_proxy[worker.proxy_name] = 0
                     verified, _, parked = self._login_and_verify_with_lease(
                         worker, task, login_queue,
                     )
@@ -1065,7 +1108,7 @@ class LoginCoordinator:
                 self._login_proxy_name
                 and worker.proxy_name != self._login_proxy_name
             ):
-                lp_attempts = state.login_attempts_per_proxy.get(
+                lp_attempts = login_ctx.login_attempts_per_proxy.get(
                     self._login_proxy_name, 0,
                 )
                 if lp_attempts < LOGIN_ATTEMPTS_PER_PROXY_LIMIT:
@@ -1080,7 +1123,7 @@ class LoginCoordinator:
                     return
 
             # Try login on own proxy
-            own_attempts = state.login_attempts_per_proxy.get(
+            own_attempts = login_ctx.login_attempts_per_proxy.get(
                 worker.proxy_name, 0,
             )
             if own_attempts < LOGIN_ATTEMPTS_PER_PROXY_LIMIT:
