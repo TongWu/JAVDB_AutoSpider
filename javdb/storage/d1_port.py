@@ -35,6 +35,7 @@ from javdb.storage.d1_client import (
     _matches_keyword,
     _params_for_d1_json,
 )
+from javdb.storage.d1_recovery import RecoveryEvent, append_event
 
 
 logger = get_logger(__name__)
@@ -56,6 +57,16 @@ def d1_summary_path(reports_dir: str | None = None) -> Path:
 
 def d1_batching_enabled() -> bool:
     raw = os.environ.get("D1_BATCHING_ENABLED", "")
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def recovery_outbox_path(reports_dir: str | None = None) -> Path:
+    root = reports_dir or os.environ.get("REPORTS_DIR", "reports")
+    return Path(root) / "D1" / "d1_recovery_outbox.jsonl"
+
+
+def recovery_outbox_enabled() -> bool:
+    raw = os.environ.get("D1_RECOVERY_OUTBOX_ENABLED", "")
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
@@ -147,6 +158,7 @@ class D1AccessPort:
         self._batch_queue_since: dict[str, float] = {}
         self._summary = {key: 0 for key in _SUMMARY_COUNTER_KEYS}
         self._last_written_summary = {key: 0 for key in _SUMMARY_COUNTER_KEYS}
+        self._outbox_path = recovery_outbox_path()
 
     def execute(
         self,
@@ -167,9 +179,13 @@ class D1AccessPort:
         if key is not None:
             self._summary["schema_cache_misses"] += 1
 
-        cursors = self._post_with_retry(
-            {"sql": sql, "params": _params_for_d1_json(params_tuple)}
-        )
+        try:
+            cursors = self._post_with_retry(
+                {"sql": sql, "params": _params_for_d1_json(params_tuple)}
+            )
+        except D1TransientError as exc:
+            self._queue_recovery_if_allowed(policy, sql, params_tuple, exc)
+            raise
         self._summary["sql_statements"] += 1
         if key is not None:
             self._schema_cache[key] = self._clone_cursors(cursors)
@@ -228,7 +244,12 @@ class D1AccessPort:
             if not queued:
                 continue
             statements = [(sql, params) for sql, params, _policy in queued]
-            cursors.extend(self.batch_execute(statements))
+            try:
+                cursors.extend(self.batch_execute(statements))
+            except D1TransientError as exc:
+                for sql, params, policy in queued:
+                    self._queue_recovery_if_allowed(policy, sql, params, exc)
+                raise
             self._batch_queue.pop(key, None)
             self._batch_queue_since.pop(key, None)
         return cursors
@@ -458,6 +479,21 @@ class D1AccessPort:
         queue.append((sql, params, policy))
         if len(queue) >= self._config.batch_limit:
             self.flush(ordering_key=ordering_key)
+
+    def _queue_recovery_if_allowed(
+        self,
+        policy,
+        sql: str,
+        params: Iterable[Any],
+        error: D1TransientError,
+    ) -> None:
+        if not recovery_outbox_enabled():
+            return
+        if policy is None or not getattr(policy, "recovery_allowed", False):
+            return
+        event = RecoveryEvent.queued(policy, sql, params, str(error))
+        append_event(self._outbox_path, event)
+        self._summary["outbox_queued"] += 1
 
     def _flush_on_enqueue_if_interval_elapsed(self, ordering_key: str) -> None:
         queue = self._batch_queue.get(ordering_key)
