@@ -1,8 +1,7 @@
 """Append-only recovery outbox helpers for D1 write failures.
 
-ADR-010 introduces an inert recovery model: callers can append durable recovery
-events and operators can inspect or compact the outbox, but replay remains out
-of scope for Phase 1.
+ADR-010 recovery events preserve safe D1 writes that exhausted retry so an
+operator or startup drain can replay them later without hiding failures.
 """
 
 from __future__ import annotations
@@ -14,6 +13,8 @@ from datetime import datetime, timezone
 from javdb.infra.logging import get_logger
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple, Union
+
+from javdb.storage.d1_client import D1PermanentError, D1TransientError
 
 logger = get_logger(__name__)
 
@@ -318,6 +319,47 @@ def load_latest_events(path: PathLike) -> Dict[str, RecoveryEvent]:
     return latest
 
 
+def processed_outbox_path(outbox: PathLike | None = None) -> Path:
+    """Return the processed JSONL path next to *outbox*."""
+    if outbox is None:
+        root = Path("reports") / "D1"
+        return root / "d1_recovery_outbox.processed.jsonl"
+    return Path(outbox).with_name("d1_recovery_outbox.processed.jsonl")
+
+
+def _policy_from_event(event: RecoveryEvent) -> RecoveryPolicy:
+    return RecoveryPolicy(
+        logical_db=event.logical_db,
+        operation_type=event.operation_type,
+        idempotency_key=event.idempotency_key,
+        ordering_key=event.ordering_key,
+        recovery_allowed=event.recovery_allowed,
+        max_attempts=event.max_attempts,
+        batching_allowed=event.batching_allowed,
+    )
+
+
+def _is_pending_stage_seq_duplicate(
+    event: RecoveryEvent,
+    exc: D1PermanentError,
+) -> bool:
+    """Return true when replay hit an already-applied pending-stage Seq."""
+
+    if (
+        event.operation_type != "pending_stage"
+        and not event.operation_type.startswith("pending_stage_")
+    ) or event.sql is None:
+        return False
+    normalized_sql = " ".join(event.sql.lower().split())
+    error_text = str(exc).lower()
+    if "unique constraint" not in error_text and "constraint failed" not in error_text:
+        return False
+    for table in ("pendingmoviehistorywrites", "pendingtorrenthistorywrites"):
+        if normalized_sql.startswith(f"insert into {table}") and f"{table}.seq" in error_text:
+            return True
+    return False
+
+
 def pending_by_ordering_key(path: PathLike) -> Dict[str, List[RecoveryEvent]]:
     """Group active queued/attempting events by ordering key in FIFO order."""
     return dict(
@@ -356,6 +398,134 @@ def outbox_status(path: PathLike) -> Dict[str, Any]:
         "dead_lettered_groups": dict(dead_lettered_groups),
         "latest_state_counts": latest_state_counts,
     }
+
+
+def replay_ordering_key(
+    active: PathLike,
+    processed: PathLike,
+    ordering_key: str,
+    conn: Any,
+    *,
+    max_events: int | None = None,
+) -> Dict[str, int]:
+    """Replay pending recovery events for one ordering key.
+
+    Replayed histories are compacted to *processed*. Permanent failures or
+    exhausted attempts are dead-lettered and stop the key so later events
+    keep FIFO ordering; transient/unclassified failures stay active.
+    """
+    status = outbox_status(active)
+    dead_lettered = len(status["dead_lettered_groups"].get(ordering_key, []))
+    if dead_lettered:
+        return {"replayed": 0, "dead_lettered": dead_lettered}
+
+    pending = pending_by_ordering_key(active).get(ordering_key, [])
+    if max_events is not None:
+        pending = pending[: max(0, max_events)]
+    result = {"replayed": 0, "dead_lettered": 0}
+
+    for event in pending:
+        policy = _policy_from_event(event)
+        attempt = int(event.attempt or 0) + 1
+        if attempt > int(event.max_attempts):
+            append_event(
+                active,
+                RecoveryEvent.dead_lettered(
+                    policy,
+                    attempt=attempt,
+                    error=f"max attempts exceeded ({event.max_attempts})",
+                ),
+            )
+            result["dead_lettered"] += 1
+            break
+        append_event(active, RecoveryEvent.attempting(policy, attempt=attempt))
+        try:
+            if event.sql is None:
+                raise D1PermanentError(
+                    f"recovery event {event.idempotency_key} is missing SQL payload"
+                )
+            conn.execute(event.sql, tuple(event.params or ()))
+        except D1TransientError:
+            # The D1 connection has already exhausted its synchronous retries.
+            # Leave the attempting event active so a later drain can retry it.
+            raise
+        except D1PermanentError as exc:
+            if _is_pending_stage_seq_duplicate(event, exc):
+                append_event(active, RecoveryEvent.replayed(policy, attempt=attempt))
+                result["replayed"] += 1
+                continue
+            append_event(
+                active,
+                RecoveryEvent.dead_lettered(
+                    policy,
+                    attempt=attempt,
+                    error=f"{type(exc).__name__}: {exc}",
+                ),
+            )
+            result["dead_lettered"] += 1
+            break
+        except Exception:
+            # Unknown local/adapter failures are not proof the D1 operation is
+            # permanently invalid. Leave it pending for operator diagnosis.
+            raise
+        append_event(active, RecoveryEvent.replayed(policy, attempt=attempt))
+        result["replayed"] += 1
+
+    if result["replayed"]:
+        compact_replayed(active, processed)
+    return result
+
+
+def _single_logical_db(events: Iterable[RecoveryEvent], ordering_key: str) -> str:
+    logical_dbs = {event.logical_db for event in events}
+    if len(logical_dbs) != 1:
+        raise RuntimeError(
+            f"ordering key {ordering_key!r} spans multiple logical DBs: "
+            f"{sorted(logical_dbs)}"
+        )
+    return next(iter(logical_dbs))
+
+
+def startup_drain(
+    active: PathLike,
+    processed: PathLike,
+    *,
+    connection_factory,
+    max_ordering_keys: int | None = None,
+    max_events_per_key: int | None = None,
+) -> Dict[str, int]:
+    """Drain non-dead-lettered recovery work during D1 startup."""
+    status = outbox_status(active)
+    dead_keys = set(status["dead_lettered_groups"])
+    result = {
+        "ordering_keys": 0,
+        "replayed": 0,
+        "dead_lettered": sum(
+            len(events) for events in status["dead_lettered_groups"].values()
+        ),
+    }
+    pending_groups = pending_by_ordering_key(active)
+    keys = [key for key in pending_groups if key not in dead_keys]
+    if max_ordering_keys is not None:
+        keys = keys[: max(0, max_ordering_keys)]
+
+    for key in keys:
+        events = pending_groups.get(key) or []
+        if not events:
+            continue
+        logical_db = _single_logical_db(events, key)
+        conn = connection_factory(logical_db)
+        replayed = replay_ordering_key(
+            active,
+            processed,
+            key,
+            conn,
+            max_events=max_events_per_key,
+        )
+        result["ordering_keys"] += 1
+        result["replayed"] += int(replayed.get("replayed", 0))
+        result["dead_lettered"] += int(replayed.get("dead_lettered", 0))
+    return result
 
 
 def compact_replayed(active: PathLike, processed: PathLike) -> Dict[str, int]:

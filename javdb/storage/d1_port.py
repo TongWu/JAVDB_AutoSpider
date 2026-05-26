@@ -35,7 +35,15 @@ from javdb.storage.d1_client import (
     _matches_keyword,
     _params_for_d1_json,
 )
-from javdb.storage.d1_recovery import RecoveryEvent, append_event
+from javdb.storage.d1_recovery import (
+    RecoveryEvent,
+    append_event,
+    outbox_status,
+    pending_by_ordering_key,
+    processed_outbox_path,
+    replay_ordering_key,
+    startup_drain,
+)
 
 
 logger = get_logger(__name__)
@@ -243,12 +251,46 @@ class D1AccessPort:
             queued = list(self._batch_queue.get(key) or [])
             if not queued:
                 continue
+            status = outbox_status(self._outbox_path)
+            if (
+                status["pending_groups"].get(key)
+                or status["dead_lettered_groups"].get(key)
+            ):
+                error = RuntimeError(
+                    f"unresolved D1 recovery work for ordering key {key}; "
+                    "drain it before flushing queued writes"
+                )
+                error.d1_recovery_blocker = True  # type: ignore[attr-defined]
+                raise error
             statements = [(sql, params) for sql, params, _policy in queued]
             try:
                 cursors.extend(self.batch_execute(statements))
             except D1TransientError as exc:
+                remaining: list[tuple[str, tuple[Any, ...], object]] = []
+                recovery_attempted = False
                 for sql, params, policy in queued:
-                    self._queue_recovery_if_allowed(policy, sql, params, exc)
+                    if (
+                        recovery_outbox_enabled()
+                        and policy is not None
+                        and getattr(policy, "recovery_allowed", False)
+                    ):
+                        recovery_attempted = True
+                    recovered = self._queue_recovery_if_allowed(
+                        policy,
+                        sql,
+                        params,
+                        exc,
+                    )
+                    if not recovered:
+                        remaining.append((sql, params, policy))
+                if remaining:
+                    self._batch_queue[key] = remaining
+                else:
+                    self._batch_queue.pop(key, None)
+                    self._batch_queue_since.pop(key, None)
+                if recovery_attempted:
+                    exc.d1_recovery_outbox_required = True  # type: ignore[attr-defined]
+                    exc.d1_recovery_durable = not remaining  # type: ignore[attr-defined]
                 raise
             self._batch_queue.pop(key, None)
             self._batch_queue_since.pop(key, None)
@@ -266,7 +308,53 @@ class D1AccessPort:
         ordering_key: str | None = None,
         max_batches: int | None = None,
     ) -> dict[str, int]:
-        return {"replayed": 0, "dead_lettered": 0}
+        from javdb.storage.d1_client import make_d1_connection
+
+        if ordering_key is not None:
+            status = outbox_status(self._outbox_path)
+            dead_lettered = len(status["dead_lettered_groups"].get(ordering_key, []))
+            if dead_lettered:
+                result = {
+                    "ordering_keys": 0,
+                    "replayed": 0,
+                    "dead_lettered": dead_lettered,
+                }
+                self._summary["outbox_dead_lettered"] += dead_lettered
+                return result
+            pending_events = pending_by_ordering_key(self._outbox_path).get(
+                ordering_key,
+                [],
+            )
+            if not pending_events:
+                return {"ordering_keys": 0, "replayed": 0, "dead_lettered": 0}
+            logical_dbs = {event.logical_db for event in pending_events}
+            if len(logical_dbs) != 1:
+                raise RuntimeError(
+                    f"ordering key {ordering_key!r} spans multiple logical DBs: "
+                    f"{sorted(logical_dbs)}"
+                )
+            pending = replay_ordering_key(
+                self._outbox_path,
+                processed_outbox_path(self._outbox_path),
+                ordering_key,
+                make_d1_connection(next(iter(logical_dbs))),
+                max_events=max_batches,
+            )
+            self._summary["outbox_replayed"] += int(pending.get("replayed", 0))
+            self._summary["outbox_dead_lettered"] += int(
+                pending.get("dead_lettered", 0)
+            )
+            return pending | {"ordering_keys": 1}
+
+        result = startup_drain(
+            self._outbox_path,
+            processed_outbox_path(self._outbox_path),
+            connection_factory=make_d1_connection,
+            max_ordering_keys=max_batches,
+        )
+        self._summary["outbox_replayed"] += int(result.get("replayed", 0))
+        self._summary["outbox_dead_lettered"] += int(result.get("dead_lettered", 0))
+        return result
 
     def summary(self) -> dict[str, int | float]:
         return _with_derived_summary(dict(self._summary))
@@ -471,13 +559,15 @@ class D1AccessPort:
         policy: object,
     ) -> None:
         ordering_key = str(getattr(policy, "ordering_key"))
-        self._flush_on_enqueue_if_interval_elapsed(ordering_key)
-
         queue = self._batch_queue.setdefault(ordering_key, [])
-        if not queue:
+        was_empty = not queue
+        if was_empty:
             self._batch_queue_since[ordering_key] = time.monotonic()
         queue.append((sql, params, policy))
-        if len(queue) >= self._config.batch_limit:
+
+        if not was_empty:
+            self._flush_on_enqueue_if_interval_elapsed(ordering_key)
+        if len(self._batch_queue.get(ordering_key) or []) >= self._config.batch_limit:
             self.flush(ordering_key=ordering_key)
 
     def _queue_recovery_if_allowed(
@@ -486,22 +576,26 @@ class D1AccessPort:
         sql: str,
         params: Iterable[Any],
         error: D1TransientError,
-    ) -> None:
+    ) -> bool:
         if not recovery_outbox_enabled():
-            return
+            return False
         if policy is None or not getattr(policy, "recovery_allowed", False):
-            return
-        event = RecoveryEvent.queued(policy, sql, params, str(error))
+            return False
+        error.d1_recovery_outbox_required = True  # type: ignore[attr-defined]
         try:
+            event = RecoveryEvent.queued(policy, sql, params, str(error))
             append_event(self._outbox_path, event)
-        except OSError:
+        except Exception:  # noqa: BLE001 - recovery must not mask D1 failure
+            error.d1_recovery_durable = False  # type: ignore[attr-defined]
             logger.warning(
                 "Failed to append D1 recovery outbox event for %s",
                 getattr(policy, "idempotency_key", "<unknown>"),
                 exc_info=True,
             )
-            return
+            return False
+        error.d1_recovery_durable = True  # type: ignore[attr-defined]
         self._summary["outbox_queued"] += 1
+        return True
 
     def _flush_on_enqueue_if_interval_elapsed(self, ordering_key: str) -> None:
         queue = self._batch_queue.get(ordering_key)

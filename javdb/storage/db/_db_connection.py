@@ -103,6 +103,10 @@ def _row_to_jsonable_dict(row) -> dict:
 # ── Thread-local connection cache ────────────────────────────────────────
 
 _local = threading.local()
+_startup_recovery_drained = False
+_startup_recovery_lock = threading.Lock()
+_STARTUP_REPLAY_MAX_ORDERING_KEYS_DEFAULT = 25
+_STARTUP_REPLAY_MAX_EVENTS_PER_KEY_DEFAULT = 100
 
 
 # ── Backend mode resolution ──────────────────────────────────────────────
@@ -150,6 +154,54 @@ def current_backend() -> str:
     importing private helpers.
     """
     return _backend_mode()
+
+
+def _startup_replay_enabled() -> bool:
+    raw = os.environ.get("D1_STARTUP_REPLAY_ENABLED", "")
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_positive_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+def _startup_recovery_drain() -> None:
+    from javdb.storage.d1_client import make_d1_connection
+    from javdb.storage.d1_port import recovery_outbox_path
+    from javdb.storage.d1_recovery import processed_outbox_path, startup_drain
+
+    outbox = recovery_outbox_path()
+    startup_drain(
+        outbox,
+        processed_outbox_path(outbox),
+        connection_factory=make_d1_connection,
+        max_ordering_keys=_env_positive_int(
+            "D1_STARTUP_REPLAY_MAX_ORDERING_KEYS",
+            _STARTUP_REPLAY_MAX_ORDERING_KEYS_DEFAULT,
+        ),
+        max_events_per_key=_env_positive_int(
+            "D1_STARTUP_REPLAY_MAX_EVENTS_PER_KEY",
+            _STARTUP_REPLAY_MAX_EVENTS_PER_KEY_DEFAULT,
+        ),
+    )
+
+
+def _maybe_startup_recovery_drain() -> None:
+    global _startup_recovery_drained
+    if _startup_recovery_drained or not _startup_replay_enabled():
+        return
+    with _startup_recovery_lock:
+        if _startup_recovery_drained:
+            return
+        _startup_recovery_drained = True
+        _startup_recovery_drain()
 
 
 def _logical_name_for(db_path: str) -> str:
@@ -251,9 +303,11 @@ def _get_connection(db_path: str):
     if backend == 'sqlite':
         conn = _open_sqlite_connection(db_path)
     elif backend == 'd1':
+        _maybe_startup_recovery_drain()
         from javdb.storage.d1_client import make_d1_connection
         conn = make_d1_connection(_logical_name_for(db_path))
     elif backend == 'dual':
+        _maybe_startup_recovery_drain()
         from javdb.storage.d1_client import make_d1_connection
         from javdb.storage.dual_connection import DualConnection
         sqlite_conn = _open_sqlite_connection(db_path)
