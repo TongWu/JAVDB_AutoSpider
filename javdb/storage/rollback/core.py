@@ -96,7 +96,7 @@ class RollbackResult:
     summary: Dict[str, Any] = field(default_factory=dict)
 
 
-# ── Pipeline helpers (moved from apps.cli.db.rollback) ──────────────────
+# ── Pipeline helpers (moved from the rollback CLI) ──────────────────────
 
 
 def _resolve_target_sessions(
