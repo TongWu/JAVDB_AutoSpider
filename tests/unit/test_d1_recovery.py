@@ -26,6 +26,40 @@ def _policy(key="history:s1:seq1", ordering="history:s1"):
     )
 
 
+def test_recovery_policy_carries_batching_permission():
+    policy = RecoveryPolicy(
+        logical_db="history",
+        operation_type="pending_stage",
+        idempotency_key="history:s1:seq1",
+        ordering_key="history:s1",
+        recovery_allowed=True,
+        max_attempts=3,
+        batching_allowed=True,
+    )
+
+    event = RecoveryEvent.queued(policy, "INSERT INTO x VALUES (?)", ["a"], "timeout")
+
+    assert event.batching_allowed is True
+    assert RecoveryEvent.from_dict(event.to_dict()).batching_allowed is True
+
+
+def test_recovery_event_defaults_missing_batching_permission_to_false():
+    event = RecoveryEvent.from_dict(
+        {
+            "logical_db": "history",
+            "operation_type": "pending_stage",
+            "idempotency_key": "history:s1:seq1",
+            "ordering_key": "history:s1",
+            "recovery_allowed": True,
+            "max_attempts": 3,
+            "state": "queued",
+            "attempt": 0,
+        }
+    )
+
+    assert event.batching_allowed is False
+
+
 def test_append_and_load_latest_events(tmp_path):
     path = tmp_path / "d1_recovery_outbox.jsonl"
     policy = _policy()
