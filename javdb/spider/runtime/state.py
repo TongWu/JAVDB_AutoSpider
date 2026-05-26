@@ -1460,7 +1460,7 @@ def _setup_runner_registry_client_legacy() -> Optional[RunnerRegistryClient]:
 
     Cached in :data:`global_runner_registry_client`.  Idempotent.
     """
-    global global_runner_registry_client, _runner_heartbeat_thread
+    global global_runner_registry_client, _runner_heartbeat_thread, _runner_unregistered
 
     if global_runner_registry_client is not None:
         return global_runner_registry_client
@@ -1561,6 +1561,7 @@ def _setup_runner_registry_client_legacy() -> Optional[RunnerRegistryClient]:
         return None
 
     global_runner_registry_client = client
+    _runner_unregistered = False
     _runner_heartbeat_stop.clear()
     if _runner_heartbeat_thread is None or not _runner_heartbeat_thread.is_alive():
         _runner_heartbeat_thread = threading.Thread(
