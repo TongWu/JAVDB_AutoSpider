@@ -231,12 +231,11 @@ from javdb.spider.runtime.proxy_state import (  # noqa: E402
 # ---------------------------------------------------------------------------
 # Active SpiderRuntime facade (ADR-013 Phase 1)
 #
-# Wires this legacy module to the *active* :class:`SpiderRuntime` for a small,
-# explicit set of mutable handles. Only fields that are safe to rebind in
-# Phase 1 are synced here: ``parsed_links``, ``proxy_ban_html_files``, and
-# the scalar ``runtime_holder_id``. Scalars with active direct-assignment
-# writers (e.g. ``always_bypass_time``, ``login_total_attempts``,
-# ``current_login_state_version``) remain module-owned until Phase 3/4.
+# Wires this legacy module to the *active* :class:`SpiderRuntime` for Phase 1
+# mutable handles and Phase 3 service-handle compatibility. Scalars with
+# active direct-assignment writers (e.g. ``always_bypass_time``,
+# ``login_total_attempts``, ``current_login_state_version``) remain
+# module-owned until Phase 3/4.
 # ---------------------------------------------------------------------------
 
 from javdb.spider.runtime.active import (  # noqa: E402
@@ -254,12 +253,18 @@ def _sync_legacy_globals_from_runtime(runtime: SpiderRuntime) -> None:
     global _signal_banned_proxies, _signal_lock
     global _HEARTBEAT_INTERVAL_MULTI_RUNNER_SEC, _HEARTBEAT_INTERVAL_SINGLE_RUNNER_SEC
     global _RUNNER_HEARTBEAT_INTERVAL_SEC
-    global global_runner_registry_client
+    global always_bypass_time, proxies_requiring_cf_bypass, _cf_bypass_lock
+    global global_proxy_pool, global_request_handler, global_proxy_coordinator
+    global global_login_state_client, global_runner_registry_client
+    global global_recommend_proxy_policy, global_work_distributor_client
     global global_movie_claim_client, _movie_claim_client_pending, _movie_claim_mode
     global _movie_claim_intended_mode, _movie_claim_last_recommended
     global _movie_claim_lock, _movie_claim_swept_at_exit
     parsed_links = runtime.detail.parsed_links
     proxy_ban_html_files = runtime.proxy.proxy_ban_html_files
+    always_bypass_time = runtime.proxy.always_bypass_time
+    proxies_requiring_cf_bypass = runtime.proxy.proxies_requiring_cf_bypass
+    _cf_bypass_lock = runtime.proxy.cf_bypass_lock
     runtime_holder_id = runtime.runner_registry.holder_id
     _runner_session = runtime.runner_registry.session
     _runner_heartbeat_thread = runtime.runner_registry.heartbeat_thread
@@ -277,7 +282,14 @@ def _sync_legacy_globals_from_runtime(runtime: SpiderRuntime) -> None:
     _RUNNER_HEARTBEAT_INTERVAL_SEC = (
         runtime.runner_registry.runner_heartbeat_interval_sec
     )
+    global_proxy_pool = runtime.services.proxy_pool
+    global_request_handler = runtime.services.request_handler
+    global_proxy_coordinator = runtime.services.proxy_coordinator
+    global_login_state_client = runtime.services.login_state_client
     global_runner_registry_client = runtime.services.runner_registry_client
+    global_recommend_proxy_policy = runtime.services.recommend_proxy_policy
+    global_work_distributor_client = runtime.services.work_distributor_client
+    runtime.services.movie_claim_client = runtime.movie_claim.client_public
     global_movie_claim_client = runtime.movie_claim.client_public
     _movie_claim_client_pending = runtime.movie_claim.client_pending
     _movie_claim_mode = runtime.movie_claim.mode
@@ -294,8 +306,38 @@ def bind_active_runtime(runtime: SpiderRuntime) -> SpiderRuntime:
     return bound
 
 
+def _clear_runtime_service_globals(runtime: SpiderRuntime) -> None:
+    global global_proxy_pool, global_request_handler, global_proxy_coordinator
+    global global_login_state_client, global_runner_registry_client
+    global global_recommend_proxy_policy, global_work_distributor_client
+    global global_movie_claim_client
+
+    service_globals = (
+        ("global_proxy_pool", "proxy_pool"),
+        ("global_request_handler", "request_handler"),
+        ("global_proxy_coordinator", "proxy_coordinator"),
+        ("global_login_state_client", "login_state_client"),
+        ("global_runner_registry_client", "runner_registry_client"),
+        ("global_recommend_proxy_policy", "recommend_proxy_policy"),
+        ("global_work_distributor_client", "work_distributor_client"),
+    )
+    for global_name, service_name in service_globals:
+        service_value = getattr(runtime.services, service_name)
+        if service_value is not None and globals()[global_name] is service_value:
+            globals()[global_name] = None
+    if (
+        runtime.movie_claim.client_public is not None
+        and global_movie_claim_client is runtime.movie_claim.client_public
+    ):
+        global_movie_claim_client = None
+
+
 def clear_active_runtime(runtime: SpiderRuntime | None = None) -> None:
+    active = get_active_runtime()
     _clear_active_runtime(runtime)
+    cleared = active if runtime is None else runtime
+    if active is cleared and cleared is not None:
+        _clear_runtime_service_globals(cleared)
 
 
 # ---------------------------------------------------------------------------
@@ -306,10 +348,15 @@ def clear_active_runtime(runtime: SpiderRuntime | None = None) -> None:
 def get_page(url, session=None, use_cookie=False, use_proxy=False,
              module_name='unknown', max_retries=3, use_cf_bypass=False):
     """Fetch a webpage via the global request handler."""
-    if global_request_handler is None:
+    runtime = get_active_runtime()
+    request_handler = (
+        runtime.services.request_handler if runtime is not None
+        else global_request_handler
+    )
+    if request_handler is None:
         logger.error("Request handler not initialized. Call initialize_request_handler() first.")
         return None
-    return global_request_handler.get_page(
+    return request_handler.get_page(
         url=url, session=session, use_cookie=use_cookie,
         use_proxy=use_proxy, module_name=module_name,
         max_retries=max_retries, use_cf_bypass=use_cf_bypass,
@@ -317,8 +364,13 @@ def get_page(url, session=None, use_cookie=False, use_proxy=False,
 
 
 def should_use_proxy_for_module(module_name: str, use_proxy_flag) -> bool:
-    if global_request_handler:
-        return global_request_handler.should_use_proxy_for_module(module_name, use_proxy_flag)
+    runtime = get_active_runtime()
+    request_handler = (
+        runtime.services.request_handler if runtime is not None
+        else global_request_handler
+    )
+    if request_handler:
+        return request_handler.should_use_proxy_for_module(module_name, use_proxy_flag)
     return should_proxy_module(module_name, use_proxy_flag, PROXY_MODULES, proxy_mode=PROXY_MODE)
 
 
@@ -327,8 +379,13 @@ def extract_ip_from_proxy_url(proxy_url: str) -> Optional[str]:
 
 
 def get_cf_bypass_service_url(proxy_ip: Optional[str] = None) -> str:
-    if global_request_handler:
-        return global_request_handler.get_cf_bypass_service_url(proxy_ip)
+    runtime = get_active_runtime()
+    request_handler = (
+        runtime.services.request_handler if runtime is not None
+        else global_request_handler
+    )
+    if request_handler:
+        return request_handler.get_cf_bypass_service_url(proxy_ip)
     if proxy_ip:
         return f"http://{proxy_ip}:{CF_BYPASS_SERVICE_PORT}"
     return f"http://127.0.0.1:{CF_BYPASS_SERVICE_PORT}"
@@ -343,6 +400,15 @@ def is_cf_bypass_failure(html_content: str) -> bool:
 
 
 def setup_proxy_coordinator() -> Optional[ProxyCoordinatorClient]:
+    runtime = get_active_runtime()
+    if runtime is not None:
+        client = runtime.setup_proxy_coordinator()
+        _sync_legacy_globals_from_runtime(runtime)
+        return client
+    return _setup_proxy_coordinator_legacy()
+
+
+def _setup_proxy_coordinator_legacy() -> Optional[ProxyCoordinatorClient]:
     """Initialise the cross-instance proxy coordinator from configuration.
 
     Reads ``PROXY_COORDINATOR_URL`` / ``PROXY_COORDINATOR_TOKEN`` from the
@@ -407,6 +473,15 @@ def setup_proxy_coordinator() -> Optional[ProxyCoordinatorClient]:
 
 
 def setup_login_state_client() -> Optional[LoginStateClient]:
+    runtime = get_active_runtime()
+    if runtime is not None:
+        client = runtime.setup_login_state_client()
+        _sync_legacy_globals_from_runtime(runtime)
+        return client
+    return _setup_login_state_client_legacy()
+
+
+def _setup_login_state_client_legacy() -> Optional[LoginStateClient]:
     """Initialise the cross-instance login-state coordinator.
 
     Sister function of :func:`setup_proxy_coordinator`: reads the **same**
@@ -1578,11 +1653,22 @@ def _setup_runner_registry_client_legacy() -> Optional[RunnerRegistryClient]:
 def setup_runner_registry_client() -> Optional[RunnerRegistryClient]:
     runtime = get_active_runtime()
     if runtime is not None:
-        return runtime.setup_runner_registry_client()
+        client = runtime.setup_runner_registry_client()
+        _sync_legacy_globals_from_runtime(runtime)
+        return client
     return _setup_runner_registry_client_legacy()
 
 
 def setup_work_distributor_client():
+    runtime = get_active_runtime()
+    if runtime is not None:
+        client = runtime.setup_work_distributor_client()
+        _sync_legacy_globals_from_runtime(runtime)
+        return client
+    return _setup_work_distributor_client_legacy()
+
+
+def _setup_work_distributor_client_legacy():
     """W6.C (W5.2) — initialise the opt-in work-distribution queue client.
 
     Companion of the other DO setup functions; gated by
@@ -1620,6 +1706,15 @@ def setup_work_distributor_client():
 
 
 def initialize_request_handler():
+    runtime = get_active_runtime()
+    if runtime is not None:
+        runtime.initialize_request_handler()
+        _sync_legacy_globals_from_runtime(runtime)
+        return None
+    return _initialize_request_handler_legacy()
+
+
+def _initialize_request_handler_legacy():
     """Create the global RequestHandler from configuration."""
     global global_request_handler
     from javdb.spider.runtime.sleep import (
@@ -1677,6 +1772,15 @@ def initialize_request_handler():
 
 
 def setup_proxy_pool(use_proxy) -> None:
+    runtime = get_active_runtime()
+    if runtime is not None:
+        runtime.setup_proxy_pool(use_proxy)
+        _sync_legacy_globals_from_runtime(runtime)
+        return None
+    return _setup_proxy_pool_legacy(use_proxy)
+
+
+def _setup_proxy_pool_legacy(use_proxy) -> None:
     """Initialize the global proxy pool from configuration.
 
     Also lazily initialises all four cross-instance coordinators
