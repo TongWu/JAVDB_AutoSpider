@@ -3,8 +3,23 @@ from __future__ import annotations
 import threading
 from unittest.mock import MagicMock
 
+import pytest
+
 from javdb.proxy.coordinator.runner_registry_client import UnregisterResult
 from javdb.spider.runtime.context import SpiderRuntime
+
+
+@pytest.fixture(autouse=True)
+def _reset_active_runtime():
+    import javdb.spider.runtime.state as state
+
+    active = state.get_active_runtime()
+    if active is not None:
+        state.clear_active_runtime(active)
+    yield
+    active = state.get_active_runtime()
+    if active is not None:
+        state.clear_active_runtime(active)
 
 
 def test_runtime_close_stops_heartbeat_and_unregisters_once():
