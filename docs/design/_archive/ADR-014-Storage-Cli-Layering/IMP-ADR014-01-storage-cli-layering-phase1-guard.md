@@ -4,9 +4,14 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**2026-05-27 supersession note:** This completed Phase 1 plan is historical.
+ADR-014 Phase 3 later converged helper imports on
+`javdb.storage.sessions.lifecycle_helpers` and deleted both legacy wrapper paths:
+`apps.cli.db._session_helpers` and `javdb.storage.rollback.session_helpers`.
+
 **Goal:** Ship ADR-014 Phase 1 by making the storage-to-CLI dependency rule executable, switching the remaining commit-session helper import away from the CLI shim, and updating stale design docs.
 
-**Architecture:** CLI modules may import storage modules. `javdb.storage.*` must not import `apps.cli.*`. Phase 1 keeps the current helper implementation at `javdb.storage.rollback.session_helpers`; the neutral canonical move waits for Phase 2.
+**Architecture:** CLI modules may import storage modules. `javdb.storage.*` must not import `apps.cli.*`. Phase 1 kept the then-current helper implementation at `javdb.storage.rollback.session_helpers`; the neutral canonical move waited for Phase 2. ADR-014 Phase 3 later deleted this interim path.
 
 **Tech Stack:** Python 3.11, ast, pathlib, pytest, existing DB rollback/commit CLIs.
 
@@ -152,7 +157,8 @@ Replace the historical rollback-layering bullet with a note that says:
 
 - the original `javdb/storage/rollback/core.py -> apps.cli.db._session_helpers`
   import has been removed;
-- `javdb.storage.rollback.session_helpers` is the current interim storage path;
+- `javdb.storage.rollback.session_helpers` was the then-current interim storage
+  path and was later deleted by ADR-014 Phase 3;
 - ADR-014 tracks convergence to `javdb.storage.sessions.lifecycle_helpers`;
 - Phase 3 deletes both legacy wrappers.
 
@@ -161,7 +167,10 @@ Replace the historical rollback-layering bullet with a note that says:
 Add a short status note before the Task 4 context:
 
 ```text
-2026-05-20 update: this task has been partially completed. The original storage-to-CLI import has moved to javdb.storage.rollback.session_helpers, while apps.cli.db._session_helpers remains a shim. ADR-014 and IMP-ADR014-01 through IMP-ADR014-03 track the final canonical module and wrapper deletion.
+2026-05-20 update: at that time, this task had been partially completed. The original storage-to-CLI import had moved to javdb.storage.rollback.session_helpers, while apps.cli.db._session_helpers remained a shim. ADR-014 and IMP-ADR014-01 through IMP-ADR014-03 tracked the final canonical module and wrapper deletion.
+
+2026-05-27 supersession note: ADR-014 Phase 3 completed the final convergence to
+`javdb.storage.sessions.lifecycle_helpers` and deleted both legacy wrapper paths.
 ```
 
 Keep the historical instructions intact below the note so the document remains

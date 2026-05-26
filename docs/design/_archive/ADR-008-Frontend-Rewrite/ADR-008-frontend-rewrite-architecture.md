@@ -7,7 +7,7 @@
 
 ## Outstanding Work
 
-- ~~IMP-ADR008-02 cutover items~~ — completed 2026-05-23. Rollback layering deferred to [ADR-014](../../ADR-014-Storage-Cli-Layering/ADR-014-storage-cli-layering.md).
+- ~~IMP-ADR008-02 cutover items~~ — completed 2026-05-23. Rollback layering deferred to [ADR-014](../ADR-014-Storage-Cli-Layering/ADR-014-storage-cli-layering.md).
 - ~~IMP-ADR008-03 (Phase 2 — full CLI surface coverage)~~ — completed 2026-05-24. All 18 tasks (7 BE routers + 11 FE pages + sidebar nav + E2E journeys 9–17).
 - ~~IMP-ADR008-04 (Phase 3 — power-user features and analytics)~~ — completed 2026-05-24. All 6 tasks + E2E journeys 18–22.
 
@@ -252,7 +252,7 @@ No Full-Text Search (FTS5). SQLite supports it but Cloudflare D1 does not. Maint
 
 - **Backend version skew**: FE refuses to boot when `capabilities.build.backend_version` < minimum. Boot gate renders "please upgrade" page.
 - **i18n for BE errors**: BE error codes mapped to FE translations. Log strings stay English.
-- **Rollback library layering inversion (updated 2026-05-20)**: the original `javdb/storage/rollback/core.py` -> `apps.cli.db._session_helpers` import has been removed. The interim helper path is `javdb.storage.rollback.session_helpers`, while `apps.cli.db._session_helpers` remains a shim. [ADR-014](../../ADR-014-Storage-Cli-Layering/ADR-014-storage-cli-layering.md) tracks final convergence to `javdb.storage.sessions.lifecycle_helpers` and deletion of both legacy wrappers.
+- **Rollback library layering inversion (updated 2026-05-27)**: the original `javdb/storage/rollback/core.py` -> `apps.cli.db._session_helpers` import has been removed. [ADR-014](../ADR-014-Storage-Cli-Layering/ADR-014-storage-cli-layering.md) Phase 3 completed convergence to `javdb.storage.sessions.lifecycle_helpers` and deleted both legacy wrapper paths, including the interim `javdb.storage.rollback.session_helpers` path and the `apps.cli.db._session_helpers` shim.
 - **Commit endpoint side-effect parity**: `javdb/storage/sessions/commit.py` already has `fanout_claims` and `emit_metrics` flags; HTTP endpoint defaults them to `False`. Fix: default to `True` in the API request body for CLI parity. Tracked in [IMP-ADR008-02](IMP-ADR008-02-frontend-phase1-completion.md) Task 5.
 - **PikPak endpoint granularity**: Batch mode only (`POST /api/ops/pikpak/transfer { days, dry_run }`). Single-torrent transfer deferred.
 - **Rclone endpoint granularity**: Single endpoint with flags (`POST /api/ops/rclone/run { scan, report, execute, dry_run }`). FE presets "Quick Dedup" and "Advanced" mode.
