@@ -105,6 +105,9 @@ These are non-sensitive values. The `config_generator` reads them via `VAR_*` en
 | `PROXY_MODULES_JSON` | `["spider"]` | JSON array of modules that use proxy: `spider`, `qbittorrent`, `pikpak`, `all` |
 | `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 | `STORAGE_BACKEND` | `sqlite` | `sqlite`, `d1`, or `dual` |
+| `D1_RECOVERY_OUTBOX_ENABLED` | `false` | Enable ADR-010 recovery outbox handling for safe D1 write failures. Accepted truthy values include `1`, `true`, `yes`, and `on`. |
+| `D1_BATCHING_ENABLED` | `false` | Enable ADR-010 safe-path D1 micro-batching. Accepted truthy values include `1`, `true`, `yes`, and `on`. |
+| `D1_STARTUP_REPLAY_ENABLED` | `false` | Enable ADR-010 startup replay before the first D1/Dual operation. Accepted truthy values include `1`, `true`, `yes`, and `on`. |
 
 ### Spider Tuning Variables
 
