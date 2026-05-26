@@ -1,13 +1,13 @@
 # ADR-014: Storage CLI Layering
 
-**Status**: Accepted - implementation pending
+**Status**: Accepted - Phase 1 delivered; Phases 2-3 pending
 **Date**: 2026-05-20
 **Deciders**: Storage CLI layering brainstorming and grill session
-**Related Implementation Plans**: [IMP-ADR014-01](IMP-ADR014-01-storage-cli-layering-phase1-guard.md) (Phase 1 - guard and direct storage imports), [IMP-ADR014-02](IMP-ADR014-02-storage-cli-layering-phase2-lifecycle-helpers.md) (Phase 2 - canonical lifecycle helpers), [IMP-ADR014-03](IMP-ADR014-03-storage-cli-layering-phase3-delete-legacy-wrappers.md) (Phase 3 - delete legacy wrappers)
+**Related Implementation Plans**: [IMP-ADR014-01](IMP-ADR014-01-storage-cli-layering-phase1-guard.md) (Phase 1 - guard and direct storage imports — **Completed 2026-05-26**), [IMP-ADR014-02](IMP-ADR014-02-storage-cli-layering-phase2-lifecycle-helpers.md) (Phase 2 - canonical lifecycle helpers), [IMP-ADR014-03](IMP-ADR014-03-storage-cli-layering-phase3-delete-legacy-wrappers.md) (Phase 3 - delete legacy wrappers)
 
 ## Outstanding Work
 
-- Phase 1 - add the storage-to-CLI import guard, move the remaining commit-session CLI helper import to the storage helper, and update stale ADR/IMP notes.
+- ~~Phase 1 - add the storage-to-CLI import guard, move the remaining commit-session CLI helper import to the storage helper, and update stale ADR/IMP notes.~~ **Completed 2026-05-26** (IMP-ADR014-01).
 - Phase 2 - move the shared helper implementation to `javdb.storage.sessions.lifecycle_helpers` and migrate production callers to the canonical path.
 - Phase 3 - delete `apps.cli.db._session_helpers` and `javdb.storage.rollback.session_helpers`, then guard against both paths returning.
 
