@@ -1,34 +1,28 @@
 # ADR-014：Storage CLI 分层收束
 
-**状态**：已接受 - Phases 1-2 已交付，Phase 3 待实施
+**状态**：已完成 —— 所有 phases 已于 2026-05-27 交付
 **日期**：2026-05-20
 **决策者**：Storage CLI layering brainstorming + grill 会话
-**关联实现计划 (Related Implementation Plans)**：[IMP-ADR014-01](IMP-ADR014-01-storage-cli-layering-phase1-guard.md)（Phase 1 - guard and direct storage imports —— **已完成 2026-05-26**）、[IMP-ADR014-02](IMP-ADR014-02-storage-cli-layering-phase2-lifecycle-helpers.md)（Phase 2 - canonical lifecycle helpers —— **已完成 2026-05-26**）、[IMP-ADR014-03](IMP-ADR014-03-storage-cli-layering-phase3-delete-legacy-wrappers.md)（Phase 3 - delete legacy wrappers）
+**关联实现计划 (Related Implementation Plans)**：[IMP-ADR014-01](IMP-ADR014-01-storage-cli-layering-phase1-guard.md)（Phase 1 - guard and direct storage imports —— **已完成 2026-05-26**）、[IMP-ADR014-02](IMP-ADR014-02-storage-cli-layering-phase2-lifecycle-helpers.md)（Phase 2 - canonical lifecycle helpers —— **已完成 2026-05-26**）、[IMP-ADR014-03](IMP-ADR014-03-storage-cli-layering-phase3-delete-legacy-wrappers.md)（Phase 3 - delete legacy wrappers —— **已完成 2026-05-27**）
 
 ## 待办 (Outstanding Work)
 
 - ~~Phase 1 - 增加 storage-to-CLI import guard，将剩余的 commit-session CLI helper import 改成 storage helper 直连，并更新过期 ADR/IMP 说明。~~ **已完成 2026-05-26**（IMP-ADR014-01）。
 - ~~Phase 2 - 将共享 helper 实现迁到 `javdb.storage.sessions.lifecycle_helpers`，并让生产调用方改用 canonical path。~~ **已完成 2026-05-26**（IMP-ADR014-02）。
-- Phase 3 - 删除 `apps.cli.db._session_helpers` 和 `javdb.storage.rollback.session_helpers`，并防止这两个旧路径回流。
+- ~~Phase 3 - 删除 `apps.cli.db._session_helpers` 和 `javdb.storage.rollback.session_helpers`，并防止这两个旧路径回流。~~ **已完成 2026-05-27**（IMP-ADR014-03）。
 
 ---
 
 ## 背景
 
 ADR-008 曾记录一个 storage 分层倒挂：rollback library code 从
-`apps.cli.db._session_helpers` 导入 helper code。这个原始问题已经被部分修复：
+`apps.cli.db._session_helpers` 导入 helper code。这个原始问题现在已经完全解决：helper
+实现位于 `javdb.storage.sessions.lifecycle_helpers`，生产调用方使用这个 canonical path，
+并且 Phase 3 已删除两个 legacy wrapper path。
 
-- `javdb.storage.rollback.core` 现在从
-  `javdb.storage.rollback.session_helpers` 导入；
-- `apps.cli.db._session_helpers` 现在是 re-export shim；
-- helper 实现已经位于 `javdb.storage.rollback` 下。
-
-剩余问题更小，但仍然尖锐：
-
-- `apps.cli.db.commit_session` 仍然从 CLI shim 导入；
-- canonical helper path 仍然带有 rollback 命名，但这组代码实际被 rollback、commit、
-  API commit side effects 和 session lifecycle operations 共用；
-- 目前没有 architecture guard 防止 `javdb.storage.*` 再次导入 `apps.cli.*`。
+早期 phase 曾使用 `javdb.storage.rollback.session_helpers` 作为过渡 storage-side helper
+path，并保留 `apps.cli.db._session_helpers` 作为 compatibility shim。这些路径现在只属于历史
+记录，并已由 ADR-014 Phase 3 删除。
 
 ## 不可协商分层不变量
 
@@ -74,10 +68,13 @@ CLI module 名称。
 
 ### D3. Phase 1 完成剩余直接导入清理
 
-`apps.cli.db.commit_session` 停止从 `apps.cli.db._session_helpers` 导入，改为直接从
-`javdb.storage.rollback.session_helpers` 导入。
+Phase 1 中，`apps.cli.db.commit_session` 已停止从 `apps.cli.db._session_helpers` 导入，
+并改为直接从过渡路径 `javdb.storage.rollback.session_helpers` 导入。
 
-`apps.cli.db._session_helpers` 暂时保留为 CLI compatibility shim。
+`apps.cli.db._session_helpers` 在该 phase 中作为临时 CLI compatibility shim 保留。
+
+**结果：** 这只是 Phase 1 的过渡状态。Phase 2 已将生产调用方迁到
+`javdb.storage.sessions.lifecycle_helpers`，Phase 3 已删除两个 legacy wrapper path。
 
 ### D4. Phase 2 使用中性 Canonical Helper Module
 
@@ -99,6 +96,8 @@ Phase 2 保留两个 legacy path，作为 re-export wrapper：
 
 同一个 phase 内，生产调用方迁到 `javdb.storage.sessions.lifecycle_helpers`。
 
+**结果：** 这些 wrapper 只在 Phase 2 保留，并已于 2026-05-27 被 ADR-014 Phase 3 删除。
+
 ### D6. Phase 3 删除两个 Legacy Wrappers
 
 Phase 3 删除：
@@ -108,6 +107,8 @@ Phase 3 删除：
 
 测试、monkeypatch target、文档和 README 引用迁到
 `javdb.storage.sessions.lifecycle_helpers`。
+
+**结果：** IMP-ADR014-03 已于 2026-05-27 完成。两个 legacy wrapper path 均已删除，之后只应作为历史引用出现。
 
 ### D7. 本 ADR 内 `write_github_output` 继续留在 Lifecycle Helper
 
@@ -177,12 +178,12 @@ javdb.storage.* -> apps.cli.*
 - Storage/library code 不再依赖 CLI helper modules。
 - 共享 session lifecycle helpers 获得中性 canonical home。
 - Architecture tests 让分层规则变成可执行约束。
-- Legacy wrappers 有明确删除 phase。
+- Legacy wrappers 已在既定 Phase 3 删除。
 
 ### 负面
 
-- Phase 2 和 Phase 3 需要在生产代码和测试中进行 import churn。
-- canonical move 后，compatibility wrappers 会多存在一个 phase。
+- Phase 2 和 Phase 3 已经在生产代码和测试中进行 import churn。
+- canonical move 后，compatibility wrappers 曾多存在一个 phase。
 - `write_github_output` 在独立 workflow-side-effect ADR 处理前，仍然位于
   storage-adjacent helper 中。
 
