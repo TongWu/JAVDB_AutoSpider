@@ -1,5 +1,7 @@
 # IMP-ADR013-02: ADR-013 Phase 2 - Registry And MovieClaim Lifecycle
 
+**Status:** Completed — delivered 2026-05-26.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Move RunnerRegistry heartbeat/session lifecycle and MovieClaim auto lifecycle from module globals into `SpiderRuntime` owned state/services while preserving old `state.py` entrypoints.
