@@ -1,7 +1,20 @@
 from __future__ import annotations
 
+import pytest
+
 import javdb.spider.runtime.state as state
 from javdb.spider.runtime.context import SpiderRuntime
+
+
+@pytest.fixture(autouse=True)
+def _reset_active_runtime():
+    active = state.get_active_runtime()
+    if active is not None:
+        state.clear_active_runtime(active)
+    yield
+    active = state.get_active_runtime()
+    if active is not None:
+        state.clear_active_runtime(active)
 
 
 def test_bind_active_runtime_rebinds_mutable_detail_state():

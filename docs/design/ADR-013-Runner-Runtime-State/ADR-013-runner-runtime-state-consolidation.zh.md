@@ -202,3 +202,11 @@ runtime-owned sleep state。
 ### 中性
 
 - 本 ADR 不减少 runtime 行为数量。它先改变 ownership 和 lifecycle boundary。
+
+## Related
+
+- [IMP-ADR013-01](IMP-ADR013-01-runner-runtime-phase1-skeleton-facade.md) — Phase 1：runtime skeleton + active facade。**已完成 2026-05-26。**
+- [IMP-ADR013-02](IMP-ADR013-02-runner-runtime-phase2-registry-movieclaim.md) — Phase 2：RunnerRegistry + MovieClaim lifecycle。
+- [IMP-ADR013-03](IMP-ADR013-03-runner-runtime-phase3-explicit-callers.md) — Phase 3：显式 production callers。
+- [IMP-ADR013-04](IMP-ADR013-04-runner-runtime-phase4-legacy-facade-removal.md) — Phase 4：legacy facade freeze/removal。
+- [ADR-012](../ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md) — Pipeline run boundary；in-process Spider 集成的驱动场景，催生了显式 runtime ownership 的需要。

@@ -216,3 +216,11 @@ The following work is explicitly deferred to the next ADR:
 
 - This ADR does not reduce the amount of runtime behavior. It changes ownership
   and lifecycle boundaries first.
+
+## Related
+
+- [IMP-ADR013-01](IMP-ADR013-01-runner-runtime-phase1-skeleton-facade.md) — Phase 1: runtime skeleton + active facade. **Completed 2026-05-26.**
+- [IMP-ADR013-02](IMP-ADR013-02-runner-runtime-phase2-registry-movieclaim.md) — Phase 2: RunnerRegistry + MovieClaim lifecycle.
+- [IMP-ADR013-03](IMP-ADR013-03-runner-runtime-phase3-explicit-callers.md) — Phase 3: explicit production callers.
+- [IMP-ADR013-04](IMP-ADR013-04-runner-runtime-phase4-legacy-facade-removal.md) — Phase 4: legacy facade freeze/removal.
+- [ADR-012](../ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md) — Pipeline run boundary; in-process Spider integration that motivates explicit runtime ownership.
