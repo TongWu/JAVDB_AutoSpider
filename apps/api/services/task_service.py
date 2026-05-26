@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import shlex
@@ -21,6 +22,7 @@ from javdb.proxy.policy import resolve_proxy_override
 
 JOBS: Dict[str, Dict[str, Any]] = {}
 JOB_LOCK = threading.Lock()
+logger = logging.getLogger(__name__)
 
 _JOB_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 _TASK_ALLOWED_FLAGS: dict[str, str] = {
@@ -193,6 +195,40 @@ def _resolve_job_result_file(value: str) -> Path:
     raw_path = Path(value).expanduser()
     base_path = raw_path if raw_path.is_absolute() else context.REPO_ROOT / raw_path
     return base_path.resolve()
+
+
+def _load_result_summary(result_path: str | None) -> Dict[str, Any] | None:
+    if not result_path:
+        return None
+    path = _resolve_job_result_file(result_path)
+    try:
+        path.relative_to(context.RESOLVED_JOB_LOG_DIR)
+    except ValueError:
+        logger.warning("Task result JSON outside job log dir ignored: %s", path)
+        return None
+    if not path.exists():
+        return None
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        logger.warning("Invalid task result JSON ignored: %s", path)
+        return None
+    except UnicodeDecodeError as exc:
+        logger.warning("Unable to decode task result JSON %s: %s", path, exc)
+        return None
+    except OSError as exc:
+        logger.warning("Unable to read task result JSON %s: %s", path, exc)
+        return None
+    if not isinstance(raw, dict):
+        logger.warning("Invalid task result payload ignored: %s", path)
+        return None
+    return {
+        "kind": raw.get("kind"),
+        "schema_version": raw.get("schema_version"),
+        "status": raw.get("status"),
+        "exit_code": raw.get("exit_code"),
+        "failure_reason": raw.get("failure_reason"),
+    }
 
 
 def _validate_task_command(command: list[str]) -> list[str]:
@@ -515,6 +551,7 @@ def _get_job(job_id: str) -> Dict[str, Any]:
         "command": summary["command"],
         "source": summary["source"],
         "result_path": summary.get("result_path"),
+        "result_summary": _load_result_summary(summary.get("result_path")),
         "log_size": _log_offset(log_path),
         "log": log_content,
     }

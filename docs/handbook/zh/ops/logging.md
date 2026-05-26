@@ -81,14 +81,17 @@ export LOG_GITHUB_GROUPS=off
 
 ## GitHub Actions 步骤摘要
 
-摄入工作流（`DailyIngestion` / `AdHocIngestion`）解析爬虫的 `SPIDER_STAT_*` 标准输出行，并将 Markdown 表格写入 `$GITHUB_STEP_SUMMARY`。这使得运行的关键指标（页数、发现数、解析数、跳过数、失败数、CSV 文件名和 session_id）直接显示在 Actions UI 摘要面板中，无需展开爬虫日志块。
+主要摄入工作流（`DailyIngestion` / `AdHocIngestion`）读取本次运行的结果 JSON，并将 Markdown 表格写入 `$GITHUB_STEP_SUMMARY`。这使得运行的关键指标（页数、发现数、解析数、跳过数、失败数、CSV 文件名和 session_id）直接显示在 Actions UI 摘要面板中，无需展开爬虫日志块。
 
 ## 结构化运行结果
 
 Pipeline 和 Spider CLI 可以通过 `--result-json <path>` 写入带版本的结果
-JSON。这些文件是机器可读的运行契约。`SPIDER_*` 标准输出行在
-ADR-012 Phase 1 期间仍作为现有工作流的兼容输出。不要新增会解析这些
-标准输出标记来获取业务数据的 Pipeline 内部逻辑。
+JSON。这些文件是机器可读的运行契约。GitHub Actions 工作流会消费此
+JSON，用于输出、摘要和其他步骤间数据。`TestIngestion` 也会读取结果
+JSON，用于机器可读输出和后续 artifact 处理，但它不会渲染与主要摄入
+工作流相同的步骤摘要表。日志流仍然是给运维人员阅读的执行轨迹，而结果
+JSON 是机器可读值的来源。不要解析 `SPIDER_*` 标准输出标记来获取工作流
+输出或业务数据。
 
 ## 日志文件路径
 

@@ -234,19 +234,33 @@ jobs:
           # - Parse only first 10 pages (--start-page 1 --end-page 10)
           # - Process only first 1 movie for phase 1 (--max-movies-phase1 1)
           # - Process only first 1 movie for phase 2 (--max-movies-phase2 1)
-          SPIDER_OUTPUT=$(python3 -m apps.cli.spider \
+          SPIDER_RESULT_JSON="$RUNNER_TEMP/daily-spider-result.json"
+          rm -f "$SPIDER_RESULT_JSON"
+
+          set +e
+          python3 -m apps.cli.spider \
             --start-page 1 \
             --end-page 10 \
             --max-movies-phase1 1 \
-            --max-movies-phase2 1 | tee /dev/stderr)
-          
-          # Extract CSV filename from spider output
-          CSV_FILENAME=$(echo "$SPIDER_OUTPUT" | grep "^SPIDER_OUTPUT_CSV=" | cut -d'=' -f2 | tail -1)
-          if [ -n "$CSV_FILENAME" ]; then
-            echo "csv_filename=$CSV_FILENAME" >> $GITHUB_OUTPUT
-            echo "Captured Daily CSV filename: $CSV_FILENAME"
-          else
-            echo "Warning: Could not capture Daily CSV filename from spider output"
+            --max-movies-phase2 1 \
+            --result-json "$SPIDER_RESULT_JSON" | tee /dev/stderr
+          SPIDER_EXIT=${PIPESTATUS[0]}
+          set -e
+
+          set +e
+          python3 -m apps.cli.ops.run_result_outputs \
+            --result-json "$SPIDER_RESULT_JSON" \
+            --github-output "$GITHUB_OUTPUT"
+          RESULT_HELPER_EXIT=${PIPESTATUS[0]}
+          set -e
+
+          if [ "$RESULT_HELPER_EXIT" -ne 0 ] && [ "$SPIDER_EXIT" -eq 0 ]; then
+            echo "Result output helper exited with code $RESULT_HELPER_EXIT"
+            exit "$RESULT_HELPER_EXIT"
+          fi
+          if [ "$SPIDER_EXIT" -ne 0 ]; then
+            echo "Spider exited with code $SPIDER_EXIT"
+            exit "$SPIDER_EXIT"
           fi
 
       # ========================================
@@ -268,21 +282,35 @@ jobs:
           # - Process only first 1 movie for phase 1 (--max-movies-phase1 1)
           # - Process only first 1 movie for phase 2 (--max-movies-phase2 1)
           # - Ignore release date filter for adhoc mode
-          SPIDER_OUTPUT=$(python3 -m apps.cli.spider \
+          SPIDER_RESULT_JSON="$RUNNER_TEMP/adhoc-spider-result.json"
+          rm -f "$SPIDER_RESULT_JSON"
+
+          set +e
+          python3 -m apps.cli.spider \
             --url 'https://javdb.com/actors/wm9B?t=d&sort_type=0' \
             --start-page 1 \
             --end-page 1 \
             --max-movies-phase1 1 \
             --max-movies-phase2 1 \
-            --ignore-release-date | tee /dev/stderr)
-          
-          # Extract CSV filename from spider output
-          CSV_FILENAME=$(echo "$SPIDER_OUTPUT" | grep "^SPIDER_OUTPUT_CSV=" | cut -d'=' -f2 | tail -1)
-          if [ -n "$CSV_FILENAME" ]; then
-            echo "csv_filename=$CSV_FILENAME" >> $GITHUB_OUTPUT
-            echo "Captured AdHoc CSV filename: $CSV_FILENAME"
-          else
-            echo "Warning: Could not capture AdHoc CSV filename from spider output"
+            --ignore-release-date \
+            --result-json "$SPIDER_RESULT_JSON" | tee /dev/stderr
+          SPIDER_EXIT=${PIPESTATUS[0]}
+          set -e
+
+          set +e
+          python3 -m apps.cli.ops.run_result_outputs \
+            --result-json "$SPIDER_RESULT_JSON" \
+            --github-output "$GITHUB_OUTPUT"
+          RESULT_HELPER_EXIT=${PIPESTATUS[0]}
+          set -e
+
+          if [ "$RESULT_HELPER_EXIT" -ne 0 ] && [ "$SPIDER_EXIT" -eq 0 ]; then
+            echo "Result output helper exited with code $RESULT_HELPER_EXIT"
+            exit "$RESULT_HELPER_EXIT"
+          fi
+          if [ "$SPIDER_EXIT" -ne 0 ]; then
+            echo "Spider exited with code $SPIDER_EXIT"
+            exit "$SPIDER_EXIT"
           fi
 
       - name: "[VERIFY] Snapshot pending tables BEFORE rollback"

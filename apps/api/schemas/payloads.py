@@ -257,6 +257,8 @@ class JobSummaryResponse(_AllowExtra):
     completed_at: Optional[str] = None
     command: Optional[List[str]] = None
     source: Optional[str] = None
+    result_path: Optional[str] = None
+    result_summary: Optional[Dict[str, Any]] = None
     log_size: Optional[int] = None
     log: Optional[str] = None
 
