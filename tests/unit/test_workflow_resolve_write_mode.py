@@ -787,10 +787,10 @@ def test_test_ingestion_spider_failure_takes_precedence_over_helper_failure(
 
 @pytest.mark.parametrize(
     ("step_id", "csv_path"),
-    (
+    [
         ("daily_spider", "reports/DailyReport/failure.csv"),
         ("adhoc_spider", "reports/AdHoc/failure.csv"),
-    ),
+    ],
 )
 def test_test_ingestion_spider_clears_stale_result_json_before_run(
     step_id,
