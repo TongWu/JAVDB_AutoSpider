@@ -26,14 +26,14 @@
 - `javdb/storage/d1_client.py` 负责 Cloudflare D1 HTTP 请求格式、错误分类、retry/backoff、`executemany`、`batch_execute` 和 `requests.Session` 复用。
 - `javdb/storage/dual_connection.py` 负责 SQLite + D1 双写、读走 D1、drift 记录，以及受保护主键表的校验。
 - `javdb/storage/db/_db_connection.py` 通过 `STORAGE_BACKEND` 选择 `sqlite`、`d1` 或 `dual`。
-- 业务写入语义仍在 `db.py`、`_db_history_write.py` 和 Repo wrapper 中。这些层知道 Session、PendingHistory、Stats、Rollback 和 Operations。
+- 业务存储语义位于 `javdb/storage/db/_db_history_write.py`、`_db_reports.py`、`_db_stats.py` 和 Repo wrapper 中。这些层知道 Session、PendingHistory、Stats、Rollback 和 Operations。
 
 这套结构能工作，但有两个持续问题：
 
 1. D1 仍会从热点路径收到大量短间隔 HTTP 请求。此前最明显的是 pending session commit；已存在且已有测试覆盖的 `COMMIT_SESSION_BULK` 路径可以把 per-href D1 请求压成批量请求，但目前仍是 opt-in。
 2. 可恢复 D1 写失败主要靠单请求 retry + drift 检测。retry 耗尽后，dual 模式可以继续落 SQLite 并记录 drift，但没有统一的端口级 recovery queue 来重放已证明幂等的 D1 写。
 
-目标边界是 Python 内部 D1 access port，不新增外部服务。这个端口也**不是**“D1 版 `db.py`”。`db.py` 和 Repo 层继续负责业务语义和 SQL 构造。D1 access port 只负责 Cloudflare D1 的 transport、可靠性、批处理、recovery、schema metadata cache 和观测。
+目标边界是 Python 内部 D1 access port，不新增外部服务。这个端口也**不是**概念上的 D1 版业务存储包。`javdb/storage/db/` shell 和 Repo 层继续负责业务语义和 SQL 构造。D1 access port 只负责 Cloudflare D1 的 transport、可靠性、批处理、recovery、schema metadata cache 和观测。
 
 ---
 
@@ -46,7 +46,7 @@
 分层变为：
 
 ```text
-业务存储代码：db.py / repos / _db_history_write / db_reports / db_stats
+业务存储代码：javdb/storage/db/ shell、repos、_db_history_write、_db_reports、_db_stats
         |
 get_db() / D1Connection / DualConnection
         |

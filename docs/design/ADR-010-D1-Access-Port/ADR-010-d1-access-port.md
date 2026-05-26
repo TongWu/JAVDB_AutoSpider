@@ -26,14 +26,14 @@ The current D1 path is split across several layers:
 - `javdb/storage/d1_client.py` owns the Cloudflare D1 HTTP request shape, retry classification, backoff, `executemany`, `batch_execute`, and `requests.Session` reuse.
 - `javdb/storage/dual_connection.py` mirrors writes to SQLite and D1, routes reads to D1, tracks drift, and enforces guarded primary-key rules.
 - `javdb/storage/db/_db_connection.py` selects `sqlite`, `d1`, or `dual` through `STORAGE_BACKEND`.
-- The business write path still lives in `db.py`, `_db_history_write.py`, and the Repo wrappers. Those layers know about sessions, pending history, stats, rollback, and operations.
+- Business storage semantics live in `javdb/storage/db/_db_history_write.py`, `_db_reports.py`, `_db_stats.py`, and the Repo wrappers. Those layers know about sessions, pending history, stats, rollback, and operations.
 
 This has worked, but it leaves two recurring problems:
 
 1. D1 still receives many short-interval HTTP requests from hot paths. The worst offender used to be pending session commit; a tested `COMMIT_SESSION_BULK` path already exists and collapses per-href D1 traffic to batched requests, but it is still opt-in.
 2. Recoverable D1 failures are handled mostly as per-request retry plus drift detection. When retry is exhausted, dual mode can continue with SQLite and record drift, but there is no unified port-level recovery queue that can replay proven-idempotent D1 writes.
 
-The desired boundary is a Python-internal D1 access port, not a new external service. The port is also **not** a "D1 version of `db.py`". `db.py` and the Repo layer remain responsible for business semantics and SQL construction. The D1 access port owns transport, reliability, batching, recovery, schema metadata caching, and observability for Cloudflare D1.
+The desired boundary is a Python-internal D1 access port, not a new external service. The port is also **not** a notional D1 version of the business storage package. The `javdb/storage/db/` shell and Repo layer remain responsible for business semantics and SQL construction. The D1 access port owns transport, reliability, batching, recovery, schema metadata caching, and observability for Cloudflare D1.
 
 ---
 
@@ -46,7 +46,7 @@ Introduce a process-local `D1AccessPort` under `javdb/storage/`. It becomes the 
 The layering becomes:
 
 ```text
-Business storage code: db.py / repos / _db_history_write / db_reports / db_stats
+Business storage code: javdb/storage/db/ shell, repos, _db_history_write, _db_reports, _db_stats
         |
 get_db() / D1Connection / DualConnection
         |

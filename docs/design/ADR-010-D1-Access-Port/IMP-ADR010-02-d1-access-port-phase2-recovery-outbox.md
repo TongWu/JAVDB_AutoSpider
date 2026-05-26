@@ -309,13 +309,13 @@ from __future__ import annotations
 
 import pytest
 
-import javdb.storage.db._db_history_write as history_write_mod
+from javdb.storage.db import db_commit_session_history, db_create_report_session
 from javdb.storage.d1_recovery import RecoveryEvent, RecoveryPolicy, append_event
 
 
 def test_pending_commit_refuses_unresolved_recovery_key(monkeypatch, tmp_path):
     monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
-    sid = history_write_mod.db_create_report_session(
+    sid = db_create_report_session(
         report_type="DailyReport",
         report_date="2026-05-19",
         csv_filename="recovery-block.csv",
@@ -335,7 +335,7 @@ def test_pending_commit_refuses_unresolved_recovery_key(monkeypatch, tmp_path):
     )
 
     with pytest.raises(RuntimeError, match="unresolved D1 recovery"):
-        history_write_mod.db_commit_session_history(sid)
+        db_commit_session_history(sid)
 ```
 
 - [ ] **Step 2: Run test**
