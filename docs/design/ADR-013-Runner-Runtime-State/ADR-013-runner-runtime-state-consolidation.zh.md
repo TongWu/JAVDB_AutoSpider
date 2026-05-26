@@ -1,13 +1,13 @@
 # ADR-013：Runner Runtime 全局状态收束
 
-**状态**：已接受 - 实现待启动
+**状态**：已接受 - Phase 1 已交付，Phases 2-4 待实施
 **日期**：2026-05-20
 **决策者**：Runner runtime state brainstorming + grill 会话
-**关联实现计划 (Related Implementation Plans)**：[IMP-ADR013-01](IMP-ADR013-01-runner-runtime-phase1-skeleton-facade.md)（Phase 1 - runtime skeleton and active facade）、[IMP-ADR013-02](IMP-ADR013-02-runner-runtime-phase2-registry-movieclaim.md)（Phase 2 - registry and MovieClaim lifecycle）、[IMP-ADR013-03](IMP-ADR013-03-runner-runtime-phase3-explicit-callers.md)（Phase 3 - explicit production callers）、[IMP-ADR013-04](IMP-ADR013-04-runner-runtime-phase4-legacy-facade-removal.md)（Phase 4 - legacy facade freeze/removal）
+**关联实现计划 (Related Implementation Plans)**：[IMP-ADR013-01](IMP-ADR013-01-runner-runtime-phase1-skeleton-facade.md)（Phase 1 - runtime skeleton and active facade — **已完成 2026-05-26**）、[IMP-ADR013-02](IMP-ADR013-02-runner-runtime-phase2-registry-movieclaim.md)（Phase 2 - registry and MovieClaim lifecycle）、[IMP-ADR013-03](IMP-ADR013-03-runner-runtime-phase3-explicit-callers.md)（Phase 3 - explicit production callers）、[IMP-ADR013-04](IMP-ADR013-04-runner-runtime-phase4-legacy-facade-removal.md)（Phase 4 - legacy facade freeze/removal）
 
 ## 待办 (Outstanding Work)
 
-- Phase 1 - 引入 `SpiderRuntime`、小型 runtime state 对象、runtime service slots，以及 active-runtime facade binding，同时保留旧 `state.*` caller。
+- ~~Phase 1 - 引入 `SpiderRuntime`、小型 runtime state 对象、runtime service slots，以及 active-runtime facade binding，同时保留旧 `state.*` caller。~~ **已完成 2026-05-26**（IMP-ADR013-01）。
 - Phase 2 - 将 RunnerRegistry heartbeat/session lifecycle 和 MovieClaim auto lifecycle 迁到 runtime-owned state/services。
 - Phase 3 - 将 sleep、proxy、request、login、fetch、detail、report 的生产调用方逐步迁到显式 runtime/context。
 - Phase 4 - freeze 或删除 legacy direct-mutation `state.py` compatibility，并记录最终显式 runtime 使用规则。
@@ -202,3 +202,11 @@ runtime-owned sleep state。
 ### 中性
 
 - 本 ADR 不减少 runtime 行为数量。它先改变 ownership 和 lifecycle boundary。
+
+## Related
+
+- [IMP-ADR013-01](IMP-ADR013-01-runner-runtime-phase1-skeleton-facade.md) — Phase 1：runtime skeleton + active facade。**已完成 2026-05-26。**
+- [IMP-ADR013-02](IMP-ADR013-02-runner-runtime-phase2-registry-movieclaim.md) — Phase 2：RunnerRegistry + MovieClaim lifecycle。
+- [IMP-ADR013-03](IMP-ADR013-03-runner-runtime-phase3-explicit-callers.md) — Phase 3：显式 production callers。
+- [IMP-ADR013-04](IMP-ADR013-04-runner-runtime-phase4-legacy-facade-removal.md) — Phase 4：legacy facade freeze/removal。
+- [ADR-012](../ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md) — Pipeline run boundary；in-process Spider 集成的驱动场景，催生了显式 runtime ownership 的需要。
