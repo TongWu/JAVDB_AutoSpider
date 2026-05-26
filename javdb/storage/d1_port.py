@@ -333,13 +333,25 @@ class D1AccessPort:
                     f"ordering key {ordering_key!r} spans multiple logical DBs: "
                     f"{sorted(logical_dbs)}"
                 )
-            pending = replay_ordering_key(
-                self._outbox_path,
-                processed_outbox_path(self._outbox_path),
-                ordering_key,
-                make_d1_connection(next(iter(logical_dbs))),
-                max_events=max_batches,
-            )
+            conn = make_d1_connection(next(iter(logical_dbs)))
+            try:
+                pending = replay_ordering_key(
+                    self._outbox_path,
+                    processed_outbox_path(self._outbox_path),
+                    ordering_key,
+                    conn,
+                    max_events=max_batches,
+                )
+            finally:
+                close = getattr(conn, "close", None)
+                if callable(close):
+                    try:
+                        close()
+                    except Exception:
+                        logger.warning(
+                            "Failed to close temporary D1 recovery connection",
+                            exc_info=True,
+                        )
             self._summary["outbox_replayed"] += int(pending.get("replayed", 0))
             self._summary["outbox_dead_lettered"] += int(
                 pending.get("dead_lettered", 0)
