@@ -109,19 +109,28 @@ if [ "${1:-}" = "-m" ] && [ "${2:-}" = "apps.cli.spider" ]; then
   done
 
   echo "fake spider streamed log"
-  cat > "$result_json" <<'JSON'
+  if [ "${FAKE_WRITE_RESULT_JSON:-true}" = "true" ]; then
+    cat > "$result_json" <<'JSON'
 {"csv_path":"reports/DailyReport/failure.csv","session_id":"20260526T005000.000000Z-0001-0001","dedup_csv_path":"reports/dedup.csv","stats":{"pages":"1-2","found":3,"parsed":2,"skipped":1,"failed":0,"no_new":0}}
 JSON
+  fi
   exit "${FAKE_SPIDER_EXIT:-0}"
 fi
 
 if [ "${1:-}" = "-m" ] && [ "${2:-}" = "apps.cli.ops.run_result_outputs" ]; then
+  result_json=""
   github_output=""
   while [ "$#" -gt 0 ]; do
-    if [ "$1" = "--github-output" ]; then
-      shift
-      github_output="$1"
-    fi
+    case "$1" in
+      --result-json)
+        shift
+        result_json="$1"
+        ;;
+      --github-output)
+        shift
+        github_output="$1"
+        ;;
+    esac
     shift || true
   done
 
@@ -129,6 +138,10 @@ if [ "${1:-}" = "-m" ] && [ "${2:-}" = "apps.cli.ops.run_result_outputs" ]; then
   if [ "${FAKE_HELPER_EXIT:-0}" != "0" ]; then
     echo "fake helper failed" >&2
     exit "$FAKE_HELPER_EXIT"
+  fi
+  if [ ! -s "$result_json" ]; then
+    echo "fake helper missing result JSON" >&2
+    exit 24
   fi
 
   outputs='csv_filename=reports/DailyReport/failure.csv
@@ -171,19 +184,28 @@ if [ "${1:-}" = "-m" ] && [ "${2:-}" = "apps.cli.spider" ]; then
   done
 
   echo "fake adhoc spider streamed log"
-  cat > "$result_json" <<'JSON'
+  if [ "${FAKE_WRITE_RESULT_JSON:-true}" = "true" ]; then
+    cat > "$result_json" <<'JSON'
 {"csv_path":"reports/AdHoc/failure.csv","session_id":"20260526T005000.000000Z-0001-0001","dedup_csv_path":"reports/dedup.csv","stats":{"pages":"1-2","found":3,"parsed":2,"skipped":1,"failed":0,"no_new":0}}
 JSON
+  fi
   exit "${FAKE_SPIDER_EXIT:-0}"
 fi
 
 if [ "${1:-}" = "-m" ] && [ "${2:-}" = "apps.cli.ops.run_result_outputs" ]; then
+  result_json=""
   github_output=""
   while [ "$#" -gt 0 ]; do
-    if [ "$1" = "--github-output" ]; then
-      shift
-      github_output="$1"
-    fi
+    case "$1" in
+      --result-json)
+        shift
+        result_json="$1"
+        ;;
+      --github-output)
+        shift
+        github_output="$1"
+        ;;
+    esac
     shift || true
   done
 
@@ -191,6 +213,10 @@ if [ "${1:-}" = "-m" ] && [ "${2:-}" = "apps.cli.ops.run_result_outputs" ]; then
   if [ "${FAKE_HELPER_EXIT:-0}" != "0" ]; then
     echo "fake helper failed" >&2
     exit "$FAKE_HELPER_EXIT"
+  fi
+  if [ ! -s "$result_json" ]; then
+    echo "fake helper missing result JSON" >&2
+    exit 24
   fi
 
   outputs='csv_filename=reports/AdHoc/failure.csv
@@ -299,14 +325,22 @@ def _run_daily_spider_step(
     *,
     spider_exit: int,
     helper_exit: int = 0,
+    write_result_json: bool = True,
+    stale_result_json: bool = False,
 ) -> tuple[subprocess.CompletedProcess[str], Path, Path]:
     bin_dir = tmp_path / "bin"
     runner_temp = tmp_path / "runner_temp"
     bin_dir.mkdir()
     runner_temp.mkdir()
+    if stale_result_json:
+        (runner_temp / "spider-result.json").write_text(
+            '{"csv_path":"stale.csv"}',
+            encoding="utf-8",
+        )
     _write_fake_python_for_daily_spider(bin_dir)
 
     gh_output = tmp_path / "gh_output"
+    gh_output.write_text("")
     gh_summary = tmp_path / "step_summary.md"
     env = os.environ.copy()
     env.update(
@@ -325,6 +359,7 @@ def _run_daily_spider_step(
             "SCHEDULE_ENABLE_REDOWNLOAD": "false",
             "FAKE_SPIDER_EXIT": str(spider_exit),
             "FAKE_HELPER_EXIT": str(helper_exit),
+            "FAKE_WRITE_RESULT_JSON": "true" if write_result_json else "false",
         }
     )
     proc = subprocess.run(
@@ -345,14 +380,22 @@ def _run_test_ingestion_spider_step(
     spider_exit: int,
     helper_exit: int = 0,
     write_result_json: bool = True,
+    stale_result_json: bool = False,
 ) -> tuple[subprocess.CompletedProcess[str], Path]:
     bin_dir = tmp_path / "bin"
     runner_temp = tmp_path / "runner_temp"
     bin_dir.mkdir()
     runner_temp.mkdir()
+    if stale_result_json:
+        for name in ("daily-spider-result.json", "adhoc-spider-result.json"):
+            (runner_temp / name).write_text(
+                '{"csv_path":"stale.csv"}',
+                encoding="utf-8",
+            )
     _write_fake_python_for_test_ingestion_spider(bin_dir, csv_path)
 
     gh_output = tmp_path / "gh_output"
+    gh_output.write_text("")
     env = os.environ.copy()
     env.update(
         {
@@ -380,14 +423,22 @@ def _run_adhoc_spider_step(
     *,
     spider_exit: int,
     helper_exit: int = 0,
+    write_result_json: bool = True,
+    stale_result_json: bool = False,
 ) -> tuple[subprocess.CompletedProcess[str], Path, Path]:
     bin_dir = tmp_path / "bin"
     runner_temp = tmp_path / "runner_temp"
     bin_dir.mkdir()
     runner_temp.mkdir()
+    if stale_result_json:
+        (runner_temp / "spider-result.json").write_text(
+            '{"csv_path":"stale.csv"}',
+            encoding="utf-8",
+        )
     _write_fake_python_for_adhoc_spider(bin_dir)
 
     gh_output = tmp_path / "gh_output"
+    gh_output.write_text("")
     gh_summary = tmp_path / "step_summary.md"
     env = os.environ.copy()
     env.update(
@@ -411,6 +462,7 @@ def _run_adhoc_spider_step(
             "INPUT_REDOWNLOAD_THRESHOLD": "0.30",
             "FAKE_SPIDER_EXIT": str(spider_exit),
             "FAKE_HELPER_EXIT": str(helper_exit),
+            "FAKE_WRITE_RESULT_JSON": "true" if write_result_json else "false",
         }
     )
     proc = subprocess.run(
@@ -583,6 +635,7 @@ def test_daily_spider_consumes_result_json_not_stdout_markers():
     body = step["run"]
 
     assert 'SPIDER_RESULT_JSON="$RUNNER_TEMP/spider-result.json"' in body
+    assert 'rm -f "$SPIDER_RESULT_JSON"' in body
     assert 'SPIDER_CMD+=(--result-json "$SPIDER_RESULT_JSON")' in body
     assert '"${SPIDER_CMD[@]}" 2>&1 | tee "$RUNNER_TEMP/spider.log"' in body
     assert "SPIDER_EXIT=${PIPESTATUS[0]}" in body
@@ -613,6 +666,22 @@ def test_daily_spider_failure_still_runs_result_helper_under_errexit(tmp_path):
     assert "| csv | `reports/DailyReport/failure.csv` |" in summary
 
 
+def test_daily_spider_clears_stale_result_json_before_run(tmp_path):
+    body = _extract_step(WORKFLOWS[0], "spider")["run"]
+
+    proc, _, _ = _run_daily_spider_step(
+        body,
+        tmp_path,
+        spider_exit=7,
+        write_result_json=False,
+        stale_result_json=True,
+    )
+
+    assert proc.returncode == 7
+    assert "fake helper missing result JSON" in proc.stderr
+    assert "stale.csv" not in (tmp_path / "gh_output").read_text()
+
+
 def test_daily_spider_helper_failure_is_captured_under_errexit(tmp_path):
     body = _extract_step(WORKFLOWS[0], "spider")["run"]
 
@@ -632,6 +701,7 @@ def test_adhoc_spider_consumes_result_json_not_stdout_markers():
     body = step["run"]
 
     assert 'SPIDER_RESULT_JSON="$RUNNER_TEMP/spider-result.json"' in body
+    assert 'rm -f "$SPIDER_RESULT_JSON"' in body
     assert 'SPIDER_CMD+=(--result-json "$SPIDER_RESULT_JSON")' in body
     assert '"${SPIDER_CMD[@]}" 2>&1 | tee "$RUNNER_TEMP/spider.log"' in body
     assert "SPIDER_EXIT=${PIPESTATUS[0]}" in body
@@ -643,6 +713,22 @@ def test_adhoc_spider_consumes_result_json_not_stdout_markers():
     assert "grep \"^SPIDER_" not in body
     assert "grep '^SPIDER_" not in body
     assert "SPIDER_OUTPUT=" not in body
+
+
+def test_adhoc_spider_clears_stale_result_json_before_run(tmp_path):
+    body = _extract_step(WORKFLOWS[1], "spider")["run"]
+
+    proc, _, _ = _run_adhoc_spider_step(
+        body,
+        tmp_path,
+        spider_exit=7,
+        write_result_json=False,
+        stale_result_json=True,
+    )
+
+    assert proc.returncode == 7
+    assert "fake helper missing result JSON" in proc.stderr
+    assert "stale.csv" not in (tmp_path / "gh_output").read_text()
 
 
 @pytest.mark.parametrize(
@@ -659,6 +745,7 @@ def test_test_ingestion_spider_consumes_result_json_not_stdout_markers(
     body = _extract_step(TEST_INGESTION, step_id)["run"]
 
     assert f'SPIDER_RESULT_JSON="$RUNNER_TEMP/{result_json}"' in body
+    assert 'rm -f "$SPIDER_RESULT_JSON"' in body
     assert "--result-json \"$SPIDER_RESULT_JSON\"" in body
     assert "| tee /dev/stderr" in body
     assert "SPIDER_EXIT=${PIPESTATUS[0]}" in body
@@ -696,6 +783,34 @@ def test_test_ingestion_spider_failure_takes_precedence_over_helper_failure(
     assert "fake helper missing result JSON" in proc.stderr
     assert "Spider exited with code 7" in proc.stdout
     assert (tmp_path / "runner_temp" / "helper-invoked").exists()
+
+
+@pytest.mark.parametrize(
+    ("step_id", "csv_path"),
+    (
+        ("daily_spider", "reports/DailyReport/failure.csv"),
+        ("adhoc_spider", "reports/AdHoc/failure.csv"),
+    ),
+)
+def test_test_ingestion_spider_clears_stale_result_json_before_run(
+    step_id,
+    csv_path,
+    tmp_path,
+):
+    body = _extract_step(TEST_INGESTION, step_id)["run"]
+
+    proc, gh_output = _run_test_ingestion_spider_step(
+        body,
+        tmp_path,
+        csv_path=csv_path,
+        spider_exit=7,
+        write_result_json=False,
+        stale_result_json=True,
+    )
+
+    assert proc.returncode == 7
+    assert "fake helper missing result JSON" in proc.stderr
+    assert "stale.csv" not in gh_output.read_text()
 
 
 @pytest.mark.parametrize(

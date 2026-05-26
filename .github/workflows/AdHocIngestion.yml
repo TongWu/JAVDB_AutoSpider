@@ -480,6 +480,7 @@ jobs:
           
           SPIDER_CMD=(python3 -m apps.cli.spider --url "$INPUT_URL" --start-page "$INPUT_START_PAGE")
           SPIDER_RESULT_JSON="$RUNNER_TEMP/spider-result.json"
+          rm -f "$SPIDER_RESULT_JSON"
           SPIDER_CMD+=(--result-json "$SPIDER_RESULT_JSON")
           
           # Add end page or --all flag
