@@ -229,6 +229,42 @@ from javdb.spider.runtime.proxy_state import (  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
+# Active SpiderRuntime facade (ADR-013 Phase 1)
+#
+# Wires this legacy module to the *active* :class:`SpiderRuntime` for a small,
+# explicit set of mutable handles. Only fields that are safe to rebind in
+# Phase 1 are synced here: ``parsed_links``, ``proxy_ban_html_files``, and
+# the scalar ``runtime_holder_id``. Scalars with active direct-assignment
+# writers (e.g. ``always_bypass_time``, ``login_total_attempts``,
+# ``current_login_state_version``) remain module-owned until Phase 3/4.
+# ---------------------------------------------------------------------------
+
+from javdb.spider.runtime.active import (  # noqa: E402
+    bind_active_runtime as _bind_active_runtime,
+    clear_active_runtime as _clear_active_runtime,
+    get_active_runtime,
+)
+from javdb.spider.runtime.context import SpiderRuntime  # noqa: E402
+
+
+def _sync_legacy_globals_from_runtime(runtime: SpiderRuntime) -> None:
+    global parsed_links, proxy_ban_html_files, runtime_holder_id
+    parsed_links = runtime.detail.parsed_links
+    proxy_ban_html_files = runtime.proxy.proxy_ban_html_files
+    runtime_holder_id = runtime.runner_registry.holder_id
+
+
+def bind_active_runtime(runtime: SpiderRuntime) -> SpiderRuntime:
+    bound = _bind_active_runtime(runtime)
+    _sync_legacy_globals_from_runtime(bound)
+    return bound
+
+
+def clear_active_runtime(runtime: SpiderRuntime | None = None) -> None:
+    _clear_active_runtime(runtime)
+
+
+# ---------------------------------------------------------------------------
 # Request delegation
 # ---------------------------------------------------------------------------
 
