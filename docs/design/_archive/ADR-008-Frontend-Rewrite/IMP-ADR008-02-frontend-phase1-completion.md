@@ -208,7 +208,7 @@
 - Modify: `apps/cli/db/commit_session.py`
 - Modify: tests that monkeypatch `apps.cli.db._session_helpers`
 
-**2026-05-20 update:** this task has been partially completed. The original storage-to-CLI import has moved to `javdb.storage.rollback.session_helpers`, while `apps.cli.db._session_helpers` remains a shim. [ADR-014](../ADR-014-Storage-Cli-Layering/ADR-014-storage-cli-layering.md) and [IMP-ADR014-01](../ADR-014-Storage-Cli-Layering/IMP-ADR014-01-storage-cli-layering-phase1-guard.md) through [IMP-ADR014-03](../ADR-014-Storage-Cli-Layering/IMP-ADR014-03-storage-cli-layering-phase3-delete-legacy-wrappers.md) track the final canonical module and wrapper deletion.
+**2026-05-20 update:** this task has been partially completed. The original storage-to-CLI import has moved to `javdb.storage.rollback.session_helpers`, while `apps.cli.db._session_helpers` remains a shim. [ADR-014](../../ADR-014-Storage-Cli-Layering/ADR-014-storage-cli-layering.md) and [IMP-ADR014-01](../../ADR-014-Storage-Cli-Layering/IMP-ADR014-01-storage-cli-layering-phase1-guard.md) through [IMP-ADR014-03](../../ADR-014-Storage-Cli-Layering/IMP-ADR014-03-storage-cli-layering-phase3-delete-legacy-wrappers.md) track the final canonical module and wrapper deletion.
 
 **Context:** `javdb/storage/rollback/core.py` imports from `apps.cli.db._session_helpers` — a cross-layer import (library → CLI). The helpers need to move into `javdb/storage/`.
 
