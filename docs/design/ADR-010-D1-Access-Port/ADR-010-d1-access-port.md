@@ -1,19 +1,19 @@
 # ADR-010: Unified Python D1 Access Port
 
-**Status**: Accepted — implementation pending (all four phases unexecuted as of 2026-05-19)
+**Status**: Accepted — Phases 1 and 3 implemented; Phases 2 and 4 pending as of 2026-05-25
 **Date**: 2026-05-19
 **Deciders**: D1 access-port brainstorming and grill session
 **Prerequisites**: [ADR-006](../_archive/ADR-006-Pending-Mode-Rollout/ADR-006-pending-mode-default-rollout.md) keeps pending mode as the default write path; [ADR-009](../_archive/ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md) documents the recent D1 transient-failure and drift response.
 **Related Implementation Plans**: [IMP-ADR010-01](IMP-ADR010-01-d1-access-port-phase1-core.md) (Phase 1 — port core), [IMP-ADR010-02](IMP-ADR010-02-d1-access-port-phase2-recovery-outbox.md) (Phase 2 — recovery outbox), [IMP-ADR010-03](IMP-ADR010-03-d1-access-port-phase3-safe-batching.md) (Phase 3 — safe batching), [IMP-ADR010-04](IMP-ADR010-04-d1-access-port-phase4-startup-replay.md) (Phase 4 — startup replay)
 
-## Outstanding Work
+## Implementation Progress
 
-- Phase 1 — `D1AccessPort` core class + `D1Connection`/`DualConnection` delegation. No `D1AccessPort` symbol exists in `javdb/storage/` yet.
-- Phase 2 — recovery outbox + replay queue (per D5).
-- Phase 3 — safe micro-batching + `flush()` boundaries (per D4).
-- Phase 4 — startup replay of any persisted outbox entries.
+- Phase 1 — `D1AccessPort` core class + `D1Connection`/`DualConnection` delegation is implemented.
+- Phase 2 — recovery outbox + replay queue (per D5) remains pending.
+- Phase 3 — safe micro-batching + `flush()` boundaries (per D4) is implemented behind `D1_BATCHING_ENABLED` and locally verified.
+- Phase 4 — startup replay of any persisted outbox entries remains pending.
 
-The four phases are independently gated; nothing in this ADR has shipped as of the date above.
+The four phases are independently gated. This ADR remains open until Phase 4 ships or is explicitly deferred by a follow-up decision.
 
 ---
 

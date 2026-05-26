@@ -10,6 +10,8 @@
 
 **Source spec:** [ADR-010](ADR-010-d1-access-port.md), D3-D4, D7, D10 Phase 3.
 
+**Status:** Completed — implemented and verified on 2026-05-25.
+
 ---
 
 ## Files
@@ -19,8 +21,11 @@
 | `javdb/storage/d1_port.py` | Safe batch queue, env gates, flush boundaries, batch metrics. |
 | `javdb/storage/d1_recovery.py` | Extend `RecoveryPolicy` with batching permission if not already present. |
 | `javdb/storage/d1_client.py` | Call `flush()` from connection lifecycle. |
-| `javdb/storage/db/db.py` | Explicit flush around pending commit/finalization boundaries when D1 batching is enabled. |
+| `javdb/storage/dual_connection.py` | Forward safe-batch flushes to the D1 side and account for applied queued writes. |
+| `javdb/storage/db/_db_history_write.py` | Explicit flush around pending commit/finalization boundaries when D1 batching is enabled. |
 | `tests/unit/test_d1_port.py` | Queue, threshold, interval, explicit flush, and non-safe SQL tests. |
+| `tests/unit/test_d1_recovery.py` | `RecoveryPolicy`/`RecoveryEvent` batching-permission serialization tests. |
+| `tests/unit/test_d1_dual.py` | D1/Dual connection flush delegation and queued-write accounting tests. |
 | `tests/unit/test_commit_session_bulk.py` | Ensure default bulk path remains compatible with batching gate. |
 
 ---
@@ -31,7 +36,7 @@
 - Modify: `javdb/storage/d1_recovery.py`
 - Modify: `tests/unit/test_d1_recovery.py`
 
-- [ ] **Step 1: Add policy serialization test**
+- [x] **Step 1: Add policy serialization test**
 
 Append:
 
@@ -52,7 +57,7 @@ def test_recovery_policy_carries_batching_permission():
     assert event.batching_allowed is True
 ```
 
-- [ ] **Step 2: Run the test**
+- [x] **Step 2: Run the test**
 
 ```bash
 pytest tests/unit/test_d1_recovery.py::test_recovery_policy_carries_batching_permission -v
@@ -60,11 +65,11 @@ pytest tests/unit/test_d1_recovery.py::test_recovery_policy_carries_batching_per
 
 Expected: FAIL until `batching_allowed` exists.
 
-- [ ] **Step 3: Add `batching_allowed`**
+- [x] **Step 3: Add `batching_allowed`**
 
 Add `batching_allowed: bool = False` to `RecoveryPolicy` and `RecoveryEvent`. Make `RecoveryEvent.policy()` preserve it.
 
-- [ ] **Step 4: Run recovery tests**
+- [x] **Step 4: Run recovery tests**
 
 ```bash
 pytest tests/unit/test_d1_recovery.py -v
@@ -72,7 +77,7 @@ pytest tests/unit/test_d1_recovery.py -v
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add javdb/storage/d1_recovery.py tests/unit/test_d1_recovery.py
@@ -87,7 +92,7 @@ git commit -m "feat(storage): mark d1 recovery policies batch-safe"
 - Modify: `javdb/storage/d1_port.py`
 - Modify: `tests/unit/test_d1_port.py`
 
-- [ ] **Step 1: Add batching tests**
+- [x] **Step 1: Add batching tests**
 
 Append:
 
@@ -143,7 +148,7 @@ def test_non_batch_safe_sql_executes_immediately_even_when_enabled(monkeypatch):
     assert len(poster.calls) == 1
 ```
 
-- [ ] **Step 2: Run batching tests**
+- [x] **Step 2: Run batching tests**
 
 ```bash
 pytest tests/unit/test_d1_port.py::test_batching_enabled_queues_until_flush -v
@@ -151,7 +156,7 @@ pytest tests/unit/test_d1_port.py::test_batching_enabled_queues_until_flush -v
 
 Expected: FAIL until queueing exists.
 
-- [ ] **Step 3: Implement gates**
+- [x] **Step 3: Implement gates**
 
 In `javdb/storage/d1_port.py`, add:
 
@@ -169,11 +174,11 @@ self._batch_queue: dict[str, list[tuple[str, tuple[Any, ...], object]]] = {}
 
 When `execute()` receives a policy with `batching_allowed=True` and batching is enabled, store `(sql, params_tuple, policy)` and return a cursor with `rowcount=0` only if the caller does not require immediate rowcount. For initial rollout, only allow batching for operations whose result is ignored. If the caller needs rowcount, do not batch.
 
-- [ ] **Step 4: Implement `flush()`**
+- [x] **Step 4: Implement `flush()`**
 
 `flush(ordering_key=...)` converts queued statements to `batch_execute` calls and clears the queue only after the D1 batch succeeds. It must update `batches`, `batch_statements`, and `sql_statements` metrics.
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 ```bash
 pytest tests/unit/test_d1_port.py -v
@@ -181,7 +186,7 @@ pytest tests/unit/test_d1_port.py -v
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add javdb/storage/d1_port.py tests/unit/test_d1_port.py
@@ -194,10 +199,11 @@ git commit -m "feat(storage): add gated d1 safe batching"
 
 **Files:**
 - Modify: `javdb/storage/d1_client.py`
-- Modify: `javdb/storage/db/db.py`
+- Modify: `javdb/storage/db/_db_history_write.py`
+- Modify: `javdb/storage/dual_connection.py`
 - Modify: `tests/unit/test_d1_port.py`
 
-- [ ] **Step 1: Add close-flush test**
+- [x] **Step 1: Add close-flush test**
 
 Append:
 
@@ -215,11 +221,11 @@ def test_close_flushes_safe_batch(monkeypatch):
     assert len(poster.calls) == 1
 ```
 
-- [ ] **Step 2: Implement close flush**
+- [x] **Step 2: Implement close flush**
 
 In `D1AccessPort.close()`, call `self.flush()` before closing the session.
 
-- [ ] **Step 3: Add pending commit flush**
+- [x] **Step 3: Add pending commit flush**
 
 In `db_commit_session_history`, call `flush()` on the active connection when available before `db_finish_commit_session(...)`:
 
@@ -229,9 +235,9 @@ if callable(flush):
     flush(ordering_key=f"history:{session_id}")
 ```
 
-If `conn` is a `DualConnection`, add a `flush()` method that delegates to the D1 side when present.
+If `conn` is a `DualConnection`, add a `flush()` method that delegates to the D1 side when present and accounts for applied queued writes.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 pytest tests/unit/test_d1_port.py tests/unit/test_commit_session_bulk.py tests/unit/test_rollback_pending_mode.py -v
@@ -239,10 +245,10 @@ pytest tests/unit/test_d1_port.py tests/unit/test_commit_session_bulk.py tests/u
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
-git add javdb/storage/d1_port.py javdb/storage/d1_client.py javdb/storage/db/db.py tests/unit/test_d1_port.py
+git add javdb/storage/d1_port.py javdb/storage/d1_client.py javdb/storage/dual_connection.py javdb/storage/db/_db_history_write.py tests/unit/test_d1_port.py
 git commit -m "feat(storage): flush d1 safe batches at commit boundaries"
 ```
 
@@ -250,7 +256,7 @@ git commit -m "feat(storage): flush d1 safe batches at commit boundaries"
 
 ## Task 4: Phase 3 Verification
 
-- [ ] **Step 1: Run focused tests**
+- [x] **Step 1: Run focused tests**
 
 ```bash
 pytest tests/unit/test_d1_port.py tests/unit/test_d1_recovery.py tests/unit/test_d1_dual.py tests/unit/test_commit_session_bulk.py -v
@@ -258,10 +264,26 @@ pytest tests/unit/test_d1_port.py tests/unit/test_d1_recovery.py tests/unit/test
 
 Expected: PASS.
 
-- [ ] **Step 2: Run storage regressions**
+- [x] **Step 2: Run storage regressions**
 
 ```bash
 pytest tests/unit/test_rollback_pending_mode.py tests/unit/test_batch_c_movie_history_id.py -v
 ```
 
 Expected: PASS.
+
+## Completion Evidence
+
+Verified on 2026-05-25:
+
+```bash
+pytest tests/unit/test_d1_port.py tests/unit/test_d1_recovery.py tests/unit/test_d1_dual.py tests/unit/test_commit_session_bulk.py -v
+```
+
+Result: `147 passed`.
+
+```bash
+pytest tests/unit/test_rollback_pending_mode.py tests/unit/test_batch_c_movie_history_id.py -v
+```
+
+Result: `32 passed`.
