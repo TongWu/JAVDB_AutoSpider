@@ -87,10 +87,10 @@ For the full configuration reference (60+ options), see [Configuration Guide](do
 | `WRITE_MODE` | `pending` | `pending` only; legacy `audit` requests fall back to pending |
 | `STRICT_DUAL_WRITE` | unset | Set `1` to fail on D1 write errors |
 | `COMMIT_SESSION_BULK` | on | Pending session commits use the bulk path by default. Set `0`, `false`, `no`, `off`, or an empty value to fall back to the per-href path. |
-| `D1_RECOVERY_OUTBOX_ENABLED` | unset | Reserved for ADR-010 Phase 2. Set `1` to allow safe dual-mode D1 write failures to queue in `reports/D1/d1_recovery_outbox.jsonl`. |
+| `D1_RECOVERY_OUTBOX_ENABLED` | unset | ADR-010 Phase 2 gate. Set `1` to queue safe D1 write failures in `reports/D1/d1_recovery_outbox.jsonl`; D1 mode still fails, and dual mode blocks commit until recovery drains. |
 | `D1_BATCHING_ENABLED` | unset | Set `1` to enable ADR-010 Phase 3 safe-path micro-batching for explicitly batch-safe operations. Ordinary SQL remains synchronous. |
 | `D1_FLUSH_INTERVAL_MS` | `250` | Maximum safe-batch wait window when D1 batching is enabled. |
-| `D1_STARTUP_REPLAY_ENABLED` | unset | Reserved for ADR-010 Phase 4 startup replay. |
+| `D1_STARTUP_REPLAY_ENABLED` | unset | ADR-010 Phase 4 gate. Set `1` to drain non-dead-lettered recovery work when the process first opens a D1 or Dual connection. |
 | `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 
 ## Common Commands

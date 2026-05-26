@@ -1,4 +1,4 @@
-"""Inspect and compact the inert ADR-010 D1 recovery outbox."""
+"""Inspect, replay, and compact the ADR-010 D1 recovery outbox."""
 
 from __future__ import annotations
 
@@ -10,9 +10,28 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from javdb.infra.logging import log_section, log_summary_block
-from javdb.storage.d1_recovery import RecoveryEvent, compact_replayed, outbox_status
+from javdb.storage.d1_recovery import (
+    RecoveryEvent,
+    compact_replayed,
+    outbox_status,
+    pending_by_ordering_key,
+    replay_ordering_key,
+    startup_drain,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _positive_int(raw: str) -> int:
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "value must be a positive integer"
+        ) from exc
+    if value <= 0:
+        raise argparse.ArgumentTypeError("value must be a positive integer")
+    return value
 
 
 def _default_outbox_path() -> str:
@@ -32,24 +51,26 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="apps.cli.db.d1_recovery",
         description=(
-            "Inspect or compact the ADR-010 D1 recovery outbox. "
-            "Replay is intentionally not implemented in Phase 1."
+            "Inspect, replay, or compact the ADR-010 D1 recovery outbox."
         ),
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    def add_outbox_args(subparser: argparse.ArgumentParser) -> None:
+        subparser.add_argument(
+            "--outbox",
+            default=None,
+            help=(
+                "Path to d1_recovery_outbox.jsonl. Defaults to "
+                "$REPORTS_DIR/D1/d1_recovery_outbox.jsonl."
+            ),
+        )
 
     inspect = subparsers.add_parser(
         "inspect",
         help="Summarise pending D1 recovery work without mutating the outbox.",
     )
-    inspect.add_argument(
-        "--outbox",
-        default=None,
-        help=(
-            "Path to d1_recovery_outbox.jsonl. Defaults to "
-            "$REPORTS_DIR/D1/d1_recovery_outbox.jsonl."
-        ),
-    )
+    add_outbox_args(inspect)
     inspect.add_argument(
         "--json",
         action="store_true",
@@ -61,14 +82,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         "compact",
         help="Move replayed/abandoned event histories to the processed JSONL.",
     )
-    compact.add_argument(
-        "--outbox",
-        default=None,
-        help=(
-            "Path to d1_recovery_outbox.jsonl. Defaults to "
-            "$REPORTS_DIR/D1/d1_recovery_outbox.jsonl."
-        ),
-    )
+    add_outbox_args(compact)
     compact.add_argument(
         "--processed",
         default=None,
@@ -82,6 +96,74 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         dest="json_output",
         help="Output compaction result as JSON.",
+    )
+
+    replay = subparsers.add_parser(
+        "replay",
+        help="Replay pending recovery work for one ordering key or all keys.",
+    )
+    add_outbox_args(replay)
+    replay.add_argument(
+        "--processed",
+        default=None,
+        help=(
+            "Path to processed JSONL. Defaults to sibling "
+            "d1_recovery_outbox.processed.jsonl."
+        ),
+    )
+    target = replay.add_mutually_exclusive_group(required=True)
+    target.add_argument(
+        "--ordering-key",
+        help="Replay one FIFO ordering key such as history:<session_id>.",
+    )
+    target.add_argument(
+        "--all",
+        action="store_true",
+        help="Replay all non-dead-lettered pending ordering keys.",
+    )
+    replay.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Output replay result as JSON.",
+    )
+
+    startup = subparsers.add_parser(
+        "startup-drain",
+        help="Run the same bounded drain used by D1 startup replay.",
+    )
+    add_outbox_args(startup)
+    startup.add_argument(
+        "--processed",
+        default=None,
+        help=(
+            "Path to processed JSONL. Defaults to sibling "
+            "d1_recovery_outbox.processed.jsonl."
+        ),
+    )
+    startup.add_argument(
+        "--max-ordering-keys",
+        type=_positive_int,
+        default=None,
+        help=(
+            "Optional positive integer cap on ordering keys drained in this "
+            "invocation."
+        ),
+    )
+    startup.add_argument(
+        "--max-events-per-key",
+        type=_positive_int,
+        default=None,
+        help=(
+            "Optional positive integer cap on events replayed per ordering "
+            "key."
+        ),
+    )
+    startup.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Output drain result as JSON.",
     )
 
     return parser
@@ -185,6 +267,26 @@ def _format_compact(result: Dict[str, int], *, outbox: str, processed: str) -> s
     return "\n".join(lines)
 
 
+def _make_connection_for_key(outbox: str, ordering_key: str):
+    events = pending_by_ordering_key(outbox).get(ordering_key, [])
+    if not events:
+        return _NoopConnection()
+    logical_dbs = {event.logical_db for event in events}
+    if len(logical_dbs) != 1:
+        raise RuntimeError(
+            f"ordering key {ordering_key!r} spans multiple logical DBs: "
+            f"{sorted(logical_dbs)}"
+        )
+    from javdb.storage.d1_client import make_d1_connection
+
+    return make_d1_connection(next(iter(logical_dbs)))
+
+
+class _NoopConnection:
+    def execute(self, sql, params=()):
+        raise RuntimeError(f"no pending recovery event exists for SQL {sql!r}")
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     args = _build_arg_parser().parse_args(argv)
     outbox = args.outbox or _default_outbox_path()
@@ -229,6 +331,73 @@ def main(argv: Optional[List[str]] = None) -> int:
                 "Processed lines moved": result["processed"],
             })
         return 0
+
+    if args.command == "replay":
+        processed = args.processed or _default_processed_path(outbox)
+        if args.ordering_key:
+            result = replay_ordering_key(
+                outbox,
+                processed,
+                args.ordering_key,
+                _make_connection_for_key(outbox, args.ordering_key),
+            )
+            result = {"ordering_keys": 1 if sum(result.values()) else 0, **result}
+        else:
+            from javdb.storage.d1_client import make_d1_connection
+
+            result = startup_drain(
+                outbox,
+                processed,
+                connection_factory=make_d1_connection,
+            )
+        if args.json_output:
+            print(
+                json.dumps(
+                    {"outbox": outbox, "processed": processed, **result},
+                    indent=2,
+                    ensure_ascii=False,
+                )
+            )
+        else:
+            log_section(logger, "Recovery Outbox Replay")
+            log_summary_block(logger, "Replay Result", {
+                "Outbox": outbox,
+                "Processed": processed,
+                "Ordering keys": result.get("ordering_keys", 0),
+                "Replayed events": result.get("replayed", 0),
+                "Dead-lettered events": result.get("dead_lettered", 0),
+            })
+        return 1 if int(result.get("dead_lettered", 0)) > 0 else 0
+
+    if args.command == "startup-drain":
+        processed = args.processed or _default_processed_path(outbox)
+        from javdb.storage.d1_client import make_d1_connection
+
+        result = startup_drain(
+            outbox,
+            processed,
+            connection_factory=make_d1_connection,
+            max_ordering_keys=args.max_ordering_keys,
+            max_events_per_key=args.max_events_per_key,
+        )
+        if args.json_output:
+            print(
+                json.dumps(
+                    {"outbox": outbox, "processed": processed, **result},
+                    indent=2,
+                    ensure_ascii=False,
+                )
+            )
+        else:
+            log_section(logger, "Recovery Outbox Startup Drain")
+            log_summary_block(logger, "Startup Drain Result", {
+                "Outbox": outbox,
+                "Processed": processed,
+                "Ordering keys": result.get("ordering_keys", 0),
+                "Replayed events": result.get("replayed", 0),
+                "Dead-lettered events": result.get("dead_lettered", 0),
+            })
+        return 1 if int(result.get("dead_lettered", 0)) > 0 else 0
 
     return 2
 
