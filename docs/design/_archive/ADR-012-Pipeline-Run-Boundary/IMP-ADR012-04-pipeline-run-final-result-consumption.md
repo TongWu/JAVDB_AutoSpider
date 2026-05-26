@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status**: Completed, review-hardened, and verified 2026-05-26
+
 **Goal:** Move scoped GitHub workflow and API task consumers from stdout grepping to structured result JSON while preserving real-time logs.
 
 **Architecture:** Workflows keep streaming logs with `tee /dev/stderr` or equivalent. Machine-readable data comes from `--result-json` plus a small JSON-to-GitHub-output helper. API task runner remains subprocess-based in this ADR but records and can expose result metadata.
@@ -18,7 +20,7 @@
 
 | Path | Responsibility |
 |---|---|
-| `apps/cli/ops/run_result_outputs.py` | New helper that reads result JSON and writes selected values to `GITHUB_OUTPUT` and `GITHUB_STEP_SUMMARY`. |
+| `apps/cli/ops/run_result_outputs.py` | New helper that reads result JSON and writes selected values to `GITHUB_OUTPUT` for workflow steps to consume. |
 | `.github/workflows/DailyIngestion.yml` | Stop grepping `SPIDER_*` stdout; read result JSON. |
 | `.github/workflows/AdHocIngestion.yml` | Stop grepping `SPIDER_*` stdout; read result JSON. |
 | `.github/workflows/TestIngestion.yml` | Stop grepping `SPIDER_OUTPUT_CSV`; read result JSON. |
@@ -36,7 +38,7 @@
 - Create: `apps/cli/ops/run_result_outputs.py`
 - Create: `tests/unit/test_run_result_outputs.py`
 
-- [ ] **Step 1: Write helper tests**
+- [x] **Step 1: Write helper tests**
 
 Create `tests/unit/test_run_result_outputs.py`:
 
@@ -100,7 +102,7 @@ def test_write_github_output_file(tmp_path):
     assert output.read_text(encoding="utf-8") == "csv_filename=reports/x.csv\nsession_id=s1\n"
 ```
 
-- [ ] **Step 2: Run tests and verify expected failure**
+- [x] **Step 2: Run tests and verify expected failure**
 
 ```bash
 pytest tests/unit/test_run_result_outputs.py -v
@@ -108,7 +110,7 @@ pytest tests/unit/test_run_result_outputs.py -v
 
 Expected: FAIL until helper exists.
 
-- [ ] **Step 3: Implement helper**
+- [x] **Step 3: Implement helper**
 
 Create `apps/cli/ops/run_result_outputs.py`:
 
@@ -162,7 +164,7 @@ if __name__ == "__main__":
     raise SystemExit(main())
 ```
 
-- [ ] **Step 4: Run helper tests**
+- [x] **Step 4: Run helper tests**
 
 ```bash
 pytest tests/unit/test_run_result_outputs.py -v
@@ -170,7 +172,7 @@ pytest tests/unit/test_run_result_outputs.py -v
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/cli/ops/run_result_outputs.py tests/unit/test_run_result_outputs.py
@@ -183,7 +185,7 @@ git commit -m "feat(ops): emit github outputs from run result"
 - Modify: `.github/workflows/DailyIngestion.yml`
 - Modify: `tests/unit/test_workflow_resolve_write_mode.py`
 
-- [ ] **Step 1: Add result JSON path**
+- [x] **Step 1: Add result JSON path**
 
 In the Spider step, create:
 
@@ -192,7 +194,7 @@ SPIDER_RESULT_JSON="$RUNNER_TEMP/spider-result.json"
 SPIDER_CMD+=(--result-json "$SPIDER_RESULT_JSON")
 ```
 
-- [ ] **Step 2: Preserve real-time log streaming**
+- [x] **Step 2: Preserve real-time log streaming**
 
 Keep:
 
@@ -203,7 +205,7 @@ Keep:
 Do not buffer stdout into a shell variable — stream logs while the process runs
 and capture the exit code from the pipeline.
 
-- [ ] **Step 3: Replace grep extraction with JSON helper**
+- [x] **Step 3: Replace grep extraction with JSON helper**
 
 After the Spider command exits, run:
 
@@ -215,12 +217,12 @@ python3 -m apps.cli.ops.run_result_outputs \
 
 Use helper outputs instead of `grep "^SPIDER_OUTPUT_CSV="`.
 
-- [ ] **Step 4: Keep Step Summary**
+- [x] **Step 4: Keep Step Summary**
 
 Build the existing Markdown summary from helper output variables. Preserve
 columns for pages, found, parsed, skipped, failed, csv, and session_id.
 
-- [ ] **Step 5: Run workflow shell tests**
+- [x] **Step 5: Run workflow shell tests**
 
 ```bash
 pytest tests/unit/test_workflow_resolve_write_mode.py tests/unit/test_run_result_outputs.py -v
@@ -228,7 +230,7 @@ pytest tests/unit/test_workflow_resolve_write_mode.py tests/unit/test_run_result
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add .github/workflows/DailyIngestion.yml tests/unit/test_workflow_resolve_write_mode.py
@@ -240,7 +242,7 @@ git commit -m "ci(pipeline): read daily spider result json"
 **Files:**
 - Modify: `.github/workflows/AdHocIngestion.yml`
 
-- [ ] **Step 1: Add `SPIDER_RESULT_JSON` under `$RUNNER_TEMP`**
+- [x] **Step 1: Add `SPIDER_RESULT_JSON` under `$RUNNER_TEMP`**
 
 Use the same pattern as DailyIngestion:
 
@@ -249,16 +251,16 @@ SPIDER_RESULT_JSON="$RUNNER_TEMP/spider-result.json"
 SPIDER_CMD+=(--result-json "$SPIDER_RESULT_JSON")
 ```
 
-- [ ] **Step 2: Replace stdout grep extraction**
+- [x] **Step 2: Replace stdout grep extraction**
 
 Run `python3 -m apps.cli.ops.run_result_outputs` and use its GitHub outputs.
 
-- [ ] **Step 3: Preserve real-time logs and summary table**
+- [x] **Step 3: Preserve real-time logs and summary table**
 
 Keep `tee /dev/stderr` or equivalent streaming. Keep the Ad-Hoc summary title
 and table shape.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 pytest tests/unit/test_workflow_resolve_write_mode.py tests/unit/test_run_result_outputs.py -v
@@ -266,7 +268,7 @@ pytest tests/unit/test_workflow_resolve_write_mode.py tests/unit/test_run_result
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add .github/workflows/AdHocIngestion.yml
@@ -278,7 +280,7 @@ git commit -m "ci(pipeline): read adhoc spider result json"
 **Files:**
 - Modify: `.github/workflows/TestIngestion.yml`
 
-- [ ] **Step 1: Add result JSON paths for daily and ad hoc Spider test steps**
+- [x] **Step 1: Add result JSON paths for daily and ad hoc Spider test steps**
 
 Use distinct paths:
 
@@ -292,7 +294,7 @@ and:
 SPIDER_RESULT_JSON="$RUNNER_TEMP/adhoc-spider-result.json"
 ```
 
-- [ ] **Step 2: Replace `SPIDER_OUTPUT_CSV` grep**
+- [x] **Step 2: Replace `SPIDER_OUTPUT_CSV` grep**
 
 Use:
 
@@ -302,7 +304,7 @@ python3 -m apps.cli.ops.run_result_outputs \
   --github-output "$GITHUB_OUTPUT"
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 ```bash
 pytest tests/unit/test_workflow_resolve_write_mode.py tests/unit/test_run_result_outputs.py -v
@@ -310,7 +312,7 @@ pytest tests/unit/test_workflow_resolve_write_mode.py tests/unit/test_run_result
 
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add .github/workflows/TestIngestion.yml
@@ -324,7 +326,7 @@ git commit -m "ci(pipeline): read testing spider result json"
 - Modify: `apps/api/schemas/payloads.py`
 - Modify: `tests/unit/test_task_service_metadata.py`
 
-- [ ] **Step 1: Add metadata tests**
+- [x] **Step 1: Add metadata tests**
 
 Add a test proving completed task payloads include `result_path` and, when the
 result JSON exists, a small `result_summary`:
@@ -389,7 +391,7 @@ def test_job_payload_includes_result_metadata(tmp_path, monkeypatch):
     }
 ```
 
-- [ ] **Step 2: Add optional schema fields**
+- [x] **Step 2: Add optional schema fields**
 
 In the task response schema, add optional fields:
 
@@ -398,7 +400,7 @@ result_path: Optional[str] = None
 result_summary: Optional[Dict[str, Any]] = None
 ```
 
-- [ ] **Step 3: Load result summary safely**
+- [x] **Step 3: Load result summary safely**
 
 In `_get_job()`, if metadata contains `result_path` and the file exists, load a
 small summary:
@@ -416,7 +418,7 @@ small summary:
 Ignore invalid JSON with a warning in server logs and do not fail task payload
 retrieval.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 pytest tests/unit/test_task_service_metadata.py tests/unit/test_api_task_service_security.py -v
@@ -424,7 +426,7 @@ pytest tests/unit/test_task_service_metadata.py tests/unit/test_api_task_service
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api/services/task_service.py apps/api/schemas/payloads.py tests/unit/test_task_service_metadata.py
@@ -437,12 +439,12 @@ git commit -m "feat(api): expose task result metadata"
 - Modify: `docs/handbook/en/ops/logging.md`
 - Modify: `docs/handbook/zh/ops/logging.md`
 
-- [ ] **Step 1: Update logging docs**
+- [x] **Step 1: Update logging docs**
 
 Document that workflows now use result JSON for machine-readable outputs while
 keeping log streaming for human-readable output.
 
-- [ ] **Step 2: Run final checks**
+- [x] **Step 2: Run final checks**
 
 ```bash
 rg -n "grep \\\"\\^SPIDER_|grep '\\^SPIDER_|SPIDER_OUTPUT=\\$\\(" .github/workflows/DailyIngestion.yml .github/workflows/AdHocIngestion.yml .github/workflows/TestIngestion.yml
@@ -456,7 +458,7 @@ Expected:
 - tests pass;
 - no whitespace errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add docs/handbook/en/ops/logging.md docs/handbook/zh/ops/logging.md
@@ -465,11 +467,11 @@ git commit -m "docs(pipeline): document result json workflow outputs"
 
 ## Final Phase Completion Gate
 
-- [ ] DailyIngestion no longer greps `SPIDER_*` stdout.
-- [ ] AdHocIngestion no longer greps `SPIDER_*` stdout.
-- [ ] TestIngestion no longer greps `SPIDER_OUTPUT_CSV`.
-- [ ] Real-time workflow logs remain visible while Spider runs.
-- [ ] GitHub outputs still include CSV path, session ID, and dedup CSV path when present.
-- [ ] GitHub Step Summary still renders spider stats.
-- [ ] API task payloads expose result metadata without changing stream behavior.
-- [ ] API task runner remains subprocess-based in this ADR.
+- [x] DailyIngestion no longer greps `SPIDER_*` stdout.
+- [x] AdHocIngestion no longer greps `SPIDER_*` stdout.
+- [x] TestIngestion no longer greps `SPIDER_OUTPUT_CSV`.
+- [x] Real-time workflow logs remain visible while Spider runs.
+- [x] GitHub outputs still include CSV path, session ID, and dedup CSV path when present.
+- [x] GitHub Step Summary still renders spider stats.
+- [x] API task payloads expose result metadata without changing stream behavior.
+- [x] API task runner remains subprocess-based in this ADR.
