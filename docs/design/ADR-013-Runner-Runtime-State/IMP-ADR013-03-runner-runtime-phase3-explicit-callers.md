@@ -1,5 +1,7 @@
 # IMP-ADR013-03: ADR-013 Phase 3 - Explicit Runtime Callers
 
+**Status:** Completed — delivered 2026-05-27.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Move production Spider callers away from implicit module-level runtime state and toward explicit `SpiderRuntime` / state / service access.

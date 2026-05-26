@@ -111,6 +111,31 @@ class SpiderRuntime:
     closed: bool = False
     _close_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
+    @property
+    def proxy_pool(self):
+        return self.services.proxy_pool
+
+    @proxy_pool.setter
+    def proxy_pool(self, value):
+        self.services.proxy_pool = value
+
+    @property
+    def request_handler(self):
+        return self.services.request_handler
+
+    @request_handler.setter
+    def request_handler(self, value):
+        self.services.request_handler = value
+
+    @staticmethod
+    def _close_service(service) -> None:
+        if service is None:
+            return
+        close = getattr(service, "close", None)
+        if callable(close):
+            with contextlib.suppress(Exception):
+                close()
+
     def close(self) -> None:
         with self._close_lock:
             if self.closed:
@@ -140,12 +165,38 @@ class SpiderRuntime:
                     session=self.runner_registry.session,
                 )
                 self.runner_registry.unregistered = True
-            with contextlib.suppress(Exception):
-                client.close()
+        self._close_service(client)
         self.services.runner_registry_client = None
+
+        policy = self.services.recommend_proxy_policy
+        shutdown = getattr(policy, "shutdown", None)
+        if callable(shutdown):
+            with contextlib.suppress(Exception):
+                shutdown()
+        self.services.recommend_proxy_policy = None
+
+        for attr in (
+            "proxy_coordinator",
+            "login_state_client",
+            "work_distributor_client",
+        ):
+            self._close_service(getattr(self.services, attr))
+            setattr(self.services, attr, None)
+
+        for client in (
+            self.movie_claim.client_public,
+            self.movie_claim.client_pending,
+        ):
+            self._close_service(client)
+        self.movie_claim.client_public = None
+        self.movie_claim.client_pending = None
+        self.services.movie_claim_client = None
 
         import javdb.spider.runtime.state as legacy_state
 
+        with contextlib.suppress(Exception):
+            legacy_state.set_remote_ban_hook(None)
+            legacy_state.set_remote_unban_hook(None)
         legacy_state._sync_legacy_globals_from_runtime(self)
 
     def set_active_runner_session(
@@ -503,7 +554,8 @@ class SpiderRuntime:
                 )
 
         try:
-            from javdb.spider.runtime.sleep import movie_sleep_mgr as _mgr
+            from javdb.spider.runtime.sleep import ensure_sleep_runtime
+            _mgr = ensure_sleep_runtime(self).movie_sleep_mgr
             _mgr.set_global_factor(desired_factor)
             _mgr.set_pause_until_ms(desired_pause_until_ms)
         except Exception:
@@ -549,6 +601,15 @@ class SpiderRuntime:
                         exc_info=True,
                     )
         legacy_state._sync_legacy_globals_from_runtime(self)
+
+    def _apply_sleep_runner_count(self, count: int) -> None:
+        if count <= 0:
+            return
+        try:
+            from javdb.spider.runtime.sleep import ensure_sleep_runtime
+            ensure_sleep_runtime(self).movie_sleep_mgr.set_active_runners(count)
+        except Exception:  # noqa: BLE001
+            pass
 
     def _maybe_honour_pipeline_pause(self, *, pipeline_paused_until_ms: int, reason: Optional[str]) -> None:
         import javdb.spider.runtime.state as legacy_state
@@ -611,7 +672,7 @@ class SpiderRuntime:
                     legacy_state.logger.info("Runner-registry recovered after eviction")
                     self._apply_movie_claim_recommendation(rereg.movie_claim_recommended)
                     legacy_state._sync_legacy_globals_from_runtime(self)
-                    legacy_state._update_sleep_runner_count(len(rereg.active_runners))
+                    self._apply_sleep_runner_count(len(rereg.active_runners))
                     if rereg.config is not None:
                         self._apply_config_snapshot(rereg.config)
                     self._apply_active_signals(rereg.active_signals)
@@ -626,7 +687,7 @@ class SpiderRuntime:
 
             self._apply_movie_claim_recommendation(result.movie_claim_recommended)
             legacy_state._sync_legacy_globals_from_runtime(self)
-            legacy_state._update_sleep_runner_count(result.active_runners_count)
+            self._apply_sleep_runner_count(result.active_runners_count)
             if result.config is not None:
                 self._apply_config_snapshot(result.config)
             self._apply_active_signals(result.active_signals)
@@ -746,7 +807,7 @@ class SpiderRuntime:
             )
             self._apply_movie_claim_recommendation(result.movie_claim_recommended)
             legacy_state._sync_legacy_globals_from_runtime(self)
-            legacy_state._update_sleep_runner_count(len(result.active_runners))
+            self._apply_sleep_runner_count(len(result.active_runners))
         except legacy_state.RunnerRegistryUnavailable:
             legacy_state.logger.warning(
                 "Runner-registry register failed at startup; continuing without registry coordination this run",
@@ -776,3 +837,277 @@ class SpiderRuntime:
         _atexit.register(self._unregister_runner_at_exit)
         legacy_state._sync_legacy_globals_from_runtime(self)
         return client
+
+    def setup_proxy_coordinator(self):
+        import javdb.spider.runtime.state as legacy_state
+        from javdb.infra.config import cfg
+
+        if self.services.proxy_coordinator is not None:
+            return self.services.proxy_coordinator
+
+        url = (cfg("PROXY_COORDINATOR_URL", "") or "").strip()
+        token = (cfg("PROXY_COORDINATOR_TOKEN", "") or "").strip()
+        if not url or not token:
+            legacy_state.logger.info(
+                "Proxy coordinator not configured (PROXY_COORDINATOR_URL/TOKEN unset) "
+                "— using local throttling only",
+            )
+            self.services.proxy_coordinator = None
+            legacy_state._sync_legacy_globals_from_runtime(self)
+            return None
+
+        client = legacy_state.ProxyCoordinatorClient(base_url=url, token=token)
+        if not client.health_check():
+            legacy_state.logger.error(
+                "Proxy coordinator URL %s is configured but /health did not respond — "
+                "falling back to local throttling for this run",
+                url,
+            )
+            self.services.proxy_coordinator = None
+            legacy_state._sync_legacy_globals_from_runtime(self)
+            return None
+        legacy_state.logger.info(
+            "Proxy coordinator client initialised: base_url=%s",
+            url,
+        )
+        self.services.proxy_coordinator = client
+        legacy_state.set_remote_ban_hook(lambda name: client.mark_proxy_banned(name))
+        legacy_state.set_remote_unban_hook(lambda name: client.mark_proxy_unbanned(name))
+
+        try:
+            from javdb.spider.runtime.sleep import ensure_sleep_runtime
+            _mgr = ensure_sleep_runtime(self).movie_sleep_mgr
+            if _mgr._coordinator is None:
+                _mgr.set_coordinator(client)
+                legacy_state.logger.debug("Coordinator injected into movie_sleep_mgr")
+        except Exception:
+            legacy_state.logger.debug("Failed to inject coordinator into movie_sleep_mgr", exc_info=True)
+
+        legacy_state._sync_legacy_globals_from_runtime(self)
+        return client
+
+    def setup_login_state_client(self):
+        import javdb.spider.runtime.state as legacy_state
+        from javdb.infra.config import cfg
+
+        if self.services.login_state_client is not None:
+            return self.services.login_state_client
+
+        url = (cfg("PROXY_COORDINATOR_URL", "") or "").strip()
+        token = (cfg("PROXY_COORDINATOR_TOKEN", "") or "").strip()
+        if not url or not token:
+            legacy_state.logger.info(
+                "Login-state client not configured (PROXY_COORDINATOR_URL/TOKEN unset) "
+                "— using per-runner login only",
+            )
+            self.services.login_state_client = None
+            legacy_state._sync_legacy_globals_from_runtime(self)
+            return None
+
+        client = legacy_state.LoginStateClient(base_url=url, token=token)
+        if not client.health_check():
+            legacy_state.logger.error(
+                "Login-state Worker URL %s is configured but /health did not respond — "
+                "falling back to per-runner login for this run",
+                url,
+            )
+            client.close()
+            self.services.login_state_client = None
+            legacy_state._sync_legacy_globals_from_runtime(self)
+            return None
+        legacy_state.logger.info(
+            "Login-state client initialised: base_url=%s, holder_id=%s",
+            url, self.runner_registry.holder_id,
+        )
+        self.services.login_state_client = client
+        legacy_state._sync_legacy_globals_from_runtime(self)
+        return client
+
+    def setup_work_distributor_client(self):
+        import javdb.spider.runtime.state as legacy_state
+
+        if self.services.work_distributor_client is not None:
+            return self.services.work_distributor_client
+
+        try:
+            from javdb.proxy.coordinator.work_distributor_client import (
+                create_work_distributor_client_from_env,
+            )
+        except Exception:
+            legacy_state.logger.warning("WorkDistributor client import failed", exc_info=True)
+            return None
+
+        try:
+            client = create_work_distributor_client_from_env()
+        except Exception:
+            legacy_state.logger.warning("WorkDistributor client setup failed", exc_info=True)
+            return None
+
+        self.services.work_distributor_client = client
+        legacy_state._sync_legacy_globals_from_runtime(self)
+        return client
+
+    def initialize_request_handler(self):
+        import javdb.spider.runtime.state as legacy_state
+        from javdb.spider.runtime.sleep import ensure_sleep_runtime
+
+        sleep_ctx = ensure_sleep_runtime(self)
+        _pt = sleep_ctx.penalty_tracker
+        _mgr = sleep_ctx.movie_sleep_mgr
+        _cd = _mgr.get_cooldown()
+        config = legacy_state.RequestConfig(
+            base_url=legacy_state.BASE_URL,
+            cf_bypass_service_port=legacy_state.CF_BYPASS_SERVICE_PORT,
+            cf_bypass_port_map=legacy_state.CF_BYPASS_PORT_MAP,
+            cf_bypass_enabled=legacy_state.CF_BYPASS_ENABLED,
+            cf_bypass_max_failures=3,
+            cf_turnstile_cooldown=_cd,
+            fallback_cooldown=_cd,
+            javdb_session_cookie=legacy_state.JAVDB_SESSION_COOKIE,
+            proxy_http=legacy_state.PROXY_HTTP,
+            proxy_https=legacy_state.PROXY_HTTPS,
+            proxy_modules=legacy_state.PROXY_MODULES,
+            proxy_mode=legacy_state.PROXY_MODE,
+            between_attempt_sleep=_mgr.sleep,
+        )
+
+        def _global_cf_event_cb(proxy_name):
+            coord = self.services.proxy_coordinator
+            if coord is None or not proxy_name:
+                return
+            coord.report_async(proxy_name, "cf")
+
+        def _global_request_complete_cb(proxy_name, kind, latency_ms):
+            coord = self.services.proxy_coordinator
+            if coord is None or not proxy_name:
+                return
+            coord.report_async(proxy_name, kind, latency_ms=latency_ms)
+
+        self.services.request_handler = legacy_state.RequestHandler(
+            proxy_pool=self.services.proxy_pool, config=config, penalty_tracker=_pt,
+            on_cf_event=_global_cf_event_cb,
+            on_request_complete=_global_request_complete_cb,
+        )
+        legacy_state.logger.info("Request handler initialized successfully")
+        legacy_state._sync_legacy_globals_from_runtime(self)
+
+    def setup_proxy_pool(self, use_proxy) -> None:
+        import atexit as _atexit
+        import javdb.spider.runtime.state as legacy_state
+        from javdb.proxy.policy import is_proxy_mode_disabled
+
+        self.setup_proxy_coordinator()
+        self.setup_login_state_client()
+        self.setup_movie_claim_client()
+        self.enforce_movie_claim_for_d1()
+        _atexit.register(self._sweep_movie_claim_stages_at_exit)
+        self.setup_runner_registry_client()
+        self.setup_work_distributor_client()
+
+        if is_proxy_mode_disabled(legacy_state.PROXY_MODE):
+            legacy_state.logger.info(
+                "Proxy globally disabled (PROXY_MODE='%s') - skipping pool init",
+                legacy_state.PROXY_MODE,
+            )
+            self.services.proxy_pool = None
+            legacy_state._sync_legacy_globals_from_runtime(self)
+            return
+
+        if not use_proxy:
+            legacy_state.logger.info("Proxy disabled for this run (--no-proxy) - skipping pool init")
+            self.services.proxy_pool = None
+            legacy_state._sync_legacy_globals_from_runtime(self)
+            return
+
+        if legacy_state.PROXY_POOL and len(legacy_state.PROXY_POOL) > 0:
+            if legacy_state.PROXY_MODE == "pool":
+                legacy_state.logger.info(
+                    f"Initializing proxy pool with {len(legacy_state.PROXY_POOL)} proxies..."
+                )
+                self.services.proxy_pool = legacy_state.create_proxy_pool_from_config(
+                    legacy_state.PROXY_POOL,
+                    max_failures=legacy_state.PROXY_POOL_MAX_FAILURES,
+                )
+                legacy_state.logger.info("Proxy pool initialized successfully")
+                legacy_state.logger.info(
+                    "Max failures before ban: %d (session-scoped)",
+                    legacy_state.PROXY_POOL_MAX_FAILURES,
+                )
+            elif legacy_state.PROXY_MODE == "single":
+                legacy_state.logger.info("Initializing single proxy mode (using first proxy from pool)...")
+                self.services.proxy_pool = legacy_state.create_proxy_pool_from_config(
+                    [legacy_state.PROXY_POOL[0]],
+                    max_failures=legacy_state.PROXY_POOL_MAX_FAILURES,
+                )
+                legacy_state.logger.info(
+                    f"Single proxy initialized: {legacy_state.PROXY_POOL[0].get('name', 'Main-Proxy')}"
+                )
+        elif legacy_state.PROXY_HTTP or legacy_state.PROXY_HTTPS:
+            legacy_state.logger.info("Using legacy PROXY_HTTP/PROXY_HTTPS configuration")
+            legacy_proxy = {
+                "name": "Legacy-Proxy",
+                "http": legacy_state.PROXY_HTTP,
+                "https": legacy_state.PROXY_HTTPS,
+            }
+            self.services.proxy_pool = legacy_state.create_proxy_pool_from_config(
+                [legacy_proxy],
+                max_failures=legacy_state.PROXY_POOL_MAX_FAILURES,
+            )
+        else:
+            if legacy_state.should_proxy_module(
+                "spider",
+                use_proxy,
+                legacy_state.PROXY_MODULES,
+                proxy_mode=legacy_state.PROXY_MODE,
+            ):
+                legacy_state.logger.warning(
+                    "Proxy enabled but no proxy configuration found (neither PROXY_POOL nor PROXY_HTTP/PROXY_HTTPS)"
+                )
+            self.services.proxy_pool = None
+
+        if (
+            self.services.proxy_pool is not None
+            and hasattr(self.services.proxy_pool, "set_health_provider")
+        ):
+            provider_label = None
+            try:
+                from javdb.proxy.recommend.client import (
+                    create_recommend_proxy_client_from_env,
+                )
+                from javdb.proxy.recommend.policy import (
+                    RecommendProxyPolicy,
+                )
+                rec_client = create_recommend_proxy_client_from_env()
+                if rec_client is not None:
+                    proxy_ids = [p.get("name", "") for p in (legacy_state.PROXY_POOL or [])
+                                 if isinstance(p, dict) and p.get("name")]
+                    policy = RecommendProxyPolicy(rec_client, proxy_ids=proxy_ids)
+                    policy.start()
+                    self.services.recommend_proxy_policy = policy
+                    self.services.proxy_pool.set_health_provider(policy.score_for)
+                    _atexit.register(policy.shutdown)
+                    provider_label = "W5.5 /recommend_proxy"
+            except Exception:
+                legacy_state.logger.warning(
+                    "Failed to wire RecommendProxy policy; will fall back to local cache",
+                    exc_info=True,
+                )
+
+            if provider_label is None and self.services.proxy_coordinator is not None:
+                try:
+                    self.services.proxy_pool.set_health_provider(
+                        self.services.proxy_coordinator.get_proxy_health_score
+                    )
+                    provider_label = "P2-D coordinator cache"
+                except Exception:
+                    legacy_state.logger.warning(
+                        "Failed to wire proxy health provider; falling back to round-robin",
+                        exc_info=True,
+                    )
+
+            if provider_label is not None:
+                legacy_state.logger.info(
+                    "Proxy pool health-weighted selection enabled (%s)",
+                    provider_label,
+                )
+        legacy_state._sync_legacy_globals_from_runtime(self)

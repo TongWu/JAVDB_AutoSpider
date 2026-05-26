@@ -42,8 +42,38 @@ from javdb.spider.runtime.config import BASE_URL
 logger = get_logger(__name__)
 
 
+def _resolve_runtime(runtime=None):
+    return runtime or state.get_active_runtime()
+
+
+def _detail_state(runtime=None):
+    runtime = _resolve_runtime(runtime)
+    return runtime.detail if runtime is not None else state
+
+
+def _movie_claim_client(runtime=None):
+    runtime = _resolve_runtime(runtime)
+    if runtime is None:
+        return state.global_movie_claim_client
+    return runtime.movie_claim.client_public
+
+
+def _work_distributor_client(runtime=None):
+    runtime = _resolve_runtime(runtime)
+    if runtime is None:
+        return state.global_work_distributor_client
+    return runtime.services.work_distributor_client
+
+
+def _holder_id(runtime=None) -> str:
+    runtime = _resolve_runtime(runtime)
+    return runtime.runner_registry.holder_id if runtime is not None else state.runtime_holder_id
+
+
 def _claim_detail_candidates(
     candidates: List["DetailEntryCandidate"],
+    *,
+    runtime=None,
 ) -> Tuple[List["DetailEntryCandidate"], int, int, Optional[str], Set[str]]:
     """Acquire MovieClaim leases for *candidates* before submitting fetches.
 
@@ -81,12 +111,14 @@ def _claim_detail_candidates(
         hrefs that returned ``acquired=True``.  The same ``shard_date``
         MUST be passed back to ``complete``/``release`` for symmetric ops.
     """
-    client = state.global_movie_claim_client
+    runtime = _resolve_runtime(runtime)
+    detail_ctx = _detail_state(runtime)
+    client = _movie_claim_client(runtime)
     if client is None or not candidates:
         return list(candidates), 0, 0, None, set()
 
     shard_date = current_shard_date()
-    holder = state.runtime_holder_id
+    holder = _holder_id(runtime)
     # Phase-1 — thread the active ReportSessions.Id through every claim
     # call so the DO can scope ``staged_complete`` skips to the same
     # session.  Falls back to an empty string when the session context
@@ -136,7 +168,7 @@ def _claim_detail_candidates(
                 shard_date,
             )
             skipped_completed += 1
-            state.parsed_links.add(candidate.href)
+            detail_ctx.parsed_links.add(candidate.href)
             continue
         # acquired=False, already_completed=False → live contention
         logger.info(
@@ -151,13 +183,18 @@ def _claim_detail_candidates(
     return kept, skipped_completed, skipped_contention, shard_date, leased
 
 
-def _release_movie_claim(href: str, shard_date: Optional[str]) -> None:
+def _release_movie_claim(
+    href: str,
+    shard_date: Optional[str],
+    *,
+    runtime=None,
+) -> None:
     """Best-effort release of a MovieClaim lease.  Never raises."""
-    client = state.global_movie_claim_client
+    client = _movie_claim_client(runtime)
     if client is None or shard_date is None or not href:
         return
     try:
-        client.release(href, state.runtime_holder_id, date=shard_date)
+        client.release(href, _holder_id(runtime), date=shard_date)
     except MovieClaimUnavailable:
         logger.debug("MovieClaim release unavailable for %s — ignoring", href)
     except Exception:  # noqa: BLE001
@@ -168,6 +205,8 @@ def _stage_complete_movie_claim(
     href: str,
     shard_date: Optional[str],
     session_id: str,
+    *,
+    runtime=None,
 ) -> bool:
     """Best-effort Phase-1 stage of a successful detail fetch.
 
@@ -197,7 +236,7 @@ def _stage_complete_movie_claim(
     path commits the href immediately; rollback safety only applies in
     the new staged path.
     """
-    client = state.global_movie_claim_client
+    client = _movie_claim_client(runtime)
     if client is None or shard_date is None or not href:
         return False
     if not session_id:
@@ -207,7 +246,7 @@ def _stage_complete_movie_claim(
         # need it.
         try:
             result = client.complete(
-                href, state.runtime_holder_id, date=shard_date,
+                href, _holder_id(runtime), date=shard_date,
             )
         except MovieClaimUnavailable:
             logger.debug(
@@ -226,7 +265,7 @@ def _stage_complete_movie_claim(
     try:
         result = client.stage_complete(
             href,
-            state.runtime_holder_id,
+            _holder_id(runtime),
             session_id,
             date=shard_date,
         )
@@ -275,6 +314,7 @@ def _report_movie_claim_failure(
     shard_date: Optional[str],
     *,
     error_kind: str = "",
+    runtime=None,
 ) -> bool:
     """Best-effort P2-A failure report for a MovieClaim lease.
 
@@ -289,13 +329,13 @@ def _report_movie_claim_failure(
     the DO already released the lease); ``False`` when the caller
     should fall back to a plain ``release`` call.  Never raises.
     """
-    client = state.global_movie_claim_client
+    client = _movie_claim_client(runtime)
     if client is None or shard_date is None or not href:
         return False
     try:
         client.report_failure(
             href,
-            state.runtime_holder_id,
+            _holder_id(runtime),
             error_kind=error_kind or "",
             date=shard_date,
         )
@@ -338,6 +378,7 @@ class DetailPersistOutcome:
 
 def process_detail_entries(
     *,
+    runtime=None,
     backend: FetchBackend,
     entries: List[dict],
     phase: int,
@@ -359,6 +400,8 @@ def process_detail_entries(
     cancel_event: Event | None = None,
 ) -> dict:
     """Run the shared detail pipeline against a concrete fetch backend."""
+    runtime = _resolve_runtime(runtime)
+    holder_id = _holder_id(runtime)
 
     total_entries = len(entries)
     if cancel_event is not None and cancel_event.is_set():
@@ -367,6 +410,7 @@ def process_detail_entries(
 
     prepared_entries, skipped_history = prepare_detail_entries(
         entries,
+        runtime=runtime,
         history_data=history_data,
         is_adhoc_mode=is_adhoc_mode,
         rclone_inventory=rclone_inventory,
@@ -388,7 +432,7 @@ def process_detail_entries(
         skipped_contention,
         shard_date,
         leased_hrefs,
-    ) = _claim_detail_candidates(prepared_entries)
+    ) = _claim_detail_candidates(prepared_entries, runtime=runtime)
     # Phase-1 — capture the active ReportSessions.Id once at the top so
     # every ``stage_complete`` call below carries the same session
     # affinity.  Empty string when no DB session is active (dry-runs,
@@ -423,7 +467,7 @@ def process_detail_entries(
     #
     # When the queue is disabled (default), the existing local-loop
     # dispatch path runs unchanged — zero behavioural drift.
-    work_client = state.global_work_distributor_client
+    work_client = _work_distributor_client(runtime)
     queue_held_hrefs: Set[str] = set()
     # Gate the entire producer + consumer path on `prepared_entries`:
     # an empty survivor list means there's nothing to enqueue AND we
@@ -453,7 +497,6 @@ def process_detail_entries(
         # this runner is allowed to process (each item carries a
         # visibility lease tied to ``state.runtime_holder_id``).
         prepared_by_href = {c.href: c for c in prepared_entries}
-        holder_id = state.runtime_holder_id
         pull_batch_size = max(10, min(50, len(prepared_entries) or 10))
         try:
             while True:
@@ -595,9 +638,9 @@ def process_detail_entries(
                 if href in held_claims:
                     error_kind = _classify_fetch_error_kind(result.error)
                     if not _report_movie_claim_failure(
-                        href, shard_date, error_kind=error_kind
+                        href, shard_date, error_kind=error_kind, runtime=runtime,
                     ):
-                        _release_movie_claim(href, shard_date)
+                        _release_movie_claim(href, shard_date, runtime=runtime)
                     held_claims.discard(href)
                 # W5.2 — failed task → release queue lease so a peer
                 # (or this runner on retry) can re-pull. We deliberately
@@ -605,7 +648,7 @@ def process_detail_entries(
                 # treats released items as still-pending.
                 if href in queue_held_hrefs and work_client is not None:
                     try:
-                        work_client.release(state.runtime_holder_id, [href])
+                        work_client.release(holder_id, [href])
                     except Exception:  # noqa: BLE001 — fail-open
                         logger.debug(
                             "WorkDistributor release(%s) failed", href,
@@ -679,9 +722,9 @@ def process_detail_entries(
             # ``release`` so the slot frees up promptly.
             if href in held_claims:
                 if not _stage_complete_movie_claim(
-                    href, shard_date, _session_id_str,
+                    href, shard_date, _session_id_str, runtime=runtime,
                 ):
-                    _release_movie_claim(href, shard_date)
+                    _release_movie_claim(href, shard_date, runtime=runtime)
                 held_claims.discard(href)
 
             # W5.2 — successful task → mark the queue item complete so
@@ -690,7 +733,7 @@ def process_detail_entries(
             # timeout (30 min, set at pull time) is the safety net.
             if href in queue_held_hrefs and work_client is not None:
                 try:
-                    work_client.complete(state.runtime_holder_id, [href])
+                    work_client.complete(holder_id, [href])
                 except Exception:  # noqa: BLE001 — fail-open
                     logger.debug(
                         "WorkDistributor complete(%s) failed", href,
@@ -714,14 +757,14 @@ def process_detail_entries(
         # alarm will eventually mop up either way, but a prompt release
         # tightens the recovery window from minutes to milliseconds.
         for stuck_href in list(held_claims):
-            _release_movie_claim(stuck_href, shard_date)
+            _release_movie_claim(stuck_href, shard_date, runtime=runtime)
         held_claims.clear()
         # W5.2 — same recovery for queue leases. Releasing all at once
         # in a single API call keeps shutdown latency bounded.
         if queue_held_hrefs and work_client is not None:
             try:
                 work_client.release(
-                    state.runtime_holder_id, list(queue_held_hrefs),
+                    holder_id, list(queue_held_hrefs),
                 )
             except Exception:  # noqa: BLE001 — fail-open on shutdown
                 logger.debug(
@@ -759,6 +802,7 @@ def process_detail_entries(
 def prepare_detail_entries(
     entries: List[dict],
     *,
+    runtime=None,
     history_data: dict,
     is_adhoc_mode: bool,
     rclone_inventory: Optional[dict] = None,
@@ -769,6 +813,8 @@ def prepare_detail_entries(
     log_duplicate_skips: bool = False,
 ) -> tuple[List[DetailEntryCandidate], int]:
     """Filter raw entries into detail-page candidates for fetching."""
+    runtime = _resolve_runtime(runtime)
+    detail_ctx = _detail_state(runtime)
 
     total_entries = len(entries)
     prepared: List[DetailEntryCandidate] = []
@@ -779,7 +825,7 @@ def prepare_detail_entries(
         href = entry['href']
         page_num = entry['page']
 
-        if href in state.parsed_links or href in local_parsed_links:
+        if href in detail_ctx.parsed_links or href in local_parsed_links:
             if log_duplicate_skips:
                 logger.info(
                     f"[{i}/{total_entries}] [Page {page_num}] "
@@ -877,7 +923,7 @@ def prepare_detail_entries(
             )
         )
 
-    state.parsed_links.update(local_parsed_links)
+    detail_ctx.parsed_links.update(local_parsed_links)
     return prepared, skipped_history
 
 

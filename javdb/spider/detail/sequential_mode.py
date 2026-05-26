@@ -11,6 +11,7 @@ from javdb.spider.fetch.sequential_backend import SequentialFetchBackend
 def build_sequential_detail_backend(
     session,
     *,
+    runtime=None,
     use_cookie: bool,
     is_adhoc_mode: bool,
     use_proxy: bool,
@@ -20,6 +21,7 @@ def build_sequential_detail_backend(
 
     return SequentialFetchBackend(
         session,
+        runtime=runtime,
         use_proxy=use_proxy,
         use_cf_bypass=use_cf_bypass,
         use_cookie=use_cookie,

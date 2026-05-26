@@ -60,6 +60,7 @@ def _spider_parse_fn(html: str, task: EngineTask):
 
 def build_parallel_detail_backend(
     *,
+    runtime=None,
     use_cookie: bool,
     use_proxy: bool = True,
     use_cf_bypass: bool = False,
@@ -73,6 +74,7 @@ def build_parallel_detail_backend(
             use_proxy=use_proxy,
             use_cf_bypass=use_cf_bypass,
         ),
+        runtime=runtime,
     )
 
 
