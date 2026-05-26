@@ -449,6 +449,54 @@ def test_outbox_disabled_does_not_write_file(monkeypatch, tmp_path):
     assert port.summary()["outbox_queued"] == 0
 
 
+def test_missing_recovery_policy_does_not_queue(monkeypatch, tmp_path):
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    monkeypatch.setenv("D1_RECOVERY_OUTBOX_ENABLED", "1")
+    poster = FakePoster(
+        [
+            FakeResponse(
+                status_code=429,
+                payload={"success": False, "errors": [{"message": "overloaded"}]},
+            )
+        ]
+    )
+    port = _port(poster, max_retries=1)
+
+    with pytest.raises(D1TransientError) as excinfo:
+        port.execute("INSERT INTO x VALUES (?)", ["a"], policy=None)
+
+    assert "HTTP 429" in str(excinfo.value)
+    assert not d1_port_module.recovery_outbox_path().exists()
+    assert port.summary()["outbox_queued"] == 0
+
+
+def test_outbox_append_failure_preserves_original_transient_error(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    monkeypatch.setenv("D1_RECOVERY_OUTBOX_ENABLED", "1")
+    monkeypatch.setattr(
+        d1_port_module,
+        "append_event",
+        lambda _path, _event: (_ for _ in ()).throw(OSError("disk full")),
+    )
+    poster = FakePoster(
+        [
+            FakeResponse(
+                status_code=429,
+                payload={"success": False, "errors": [{"message": "overloaded"}]},
+            )
+        ]
+    )
+    port = _port(poster, max_retries=1)
+
+    with pytest.raises(D1TransientError) as excinfo:
+        port.execute("INSERT INTO x VALUES (?)", ["a"], policy=_policy())
+
+    assert "HTTP 429" in str(excinfo.value)
+    assert port.summary()["outbox_queued"] == 0
+
+
 def test_flush_retry_exhaustion_queues_safe_batch_operation_when_enabled(
     monkeypatch, tmp_path
 ):
