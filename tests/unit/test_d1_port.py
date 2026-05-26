@@ -7,7 +7,7 @@ import pytest
 from javdb.storage.d1_client import D1PermanentError, D1TransientError
 import javdb.storage.d1_port as d1_port_module
 from javdb.storage.d1_port import D1AccessPort, D1PortConfig
-from javdb.storage.d1_recovery import RecoveryPolicy
+from javdb.storage.d1_recovery import RecoveryPolicy, load_latest_events
 
 
 class FakeResponse:
@@ -64,6 +64,18 @@ def _batch_policy(key="history:s1:seq1"):
         recovery_allowed=True,
         max_attempts=3,
         batching_allowed=True,
+    )
+
+
+def _policy(*, key="history:s1:seq1", recovery_allowed=True):
+    return RecoveryPolicy(
+        logical_db="history",
+        operation_type="pending_stage",
+        idempotency_key=key,
+        ordering_key="history:s1",
+        recovery_allowed=recovery_allowed,
+        max_attempts=3,
+        batching_allowed=False,
     )
 
 
@@ -389,6 +401,139 @@ def test_transient_error_exhaustion_raises_transient():
         port.execute("SELECT 1", [])
 
     assert port.summary()["transient_errors"] == 2
+
+
+def test_retry_exhaustion_queues_safe_operation_when_enabled(monkeypatch, tmp_path):
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    monkeypatch.setenv("D1_RECOVERY_OUTBOX_ENABLED", "1")
+    poster = FakePoster(
+        [
+            FakeResponse(
+                status_code=429,
+                payload={"success": False, "errors": [{"message": "overloaded"}]},
+            )
+        ]
+    )
+    port = _port(poster, max_retries=1)
+
+    with pytest.raises(D1TransientError):
+        port.execute("INSERT INTO x VALUES (?)", ["a"], policy=_policy())
+
+    path = d1_port_module.recovery_outbox_path()
+    latest = load_latest_events(path)
+    event = latest["history:s1:seq1"]
+    assert event.state == "queued"
+    assert event.sql == "INSERT INTO x VALUES (?)"
+    assert event.params == ["a"]
+    assert "HTTP 429" in (event.error or "")
+    assert port.summary()["outbox_queued"] == 1
+
+
+def test_outbox_disabled_does_not_write_file(monkeypatch, tmp_path):
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    monkeypatch.delenv("D1_RECOVERY_OUTBOX_ENABLED", raising=False)
+    poster = FakePoster(
+        [
+            FakeResponse(
+                status_code=429,
+                payload={"success": False, "errors": [{"message": "overloaded"}]},
+            )
+        ]
+    )
+    port = _port(poster, max_retries=1)
+
+    with pytest.raises(D1TransientError):
+        port.execute("INSERT INTO x VALUES (?)", ["a"], policy=_policy())
+
+    assert not d1_port_module.recovery_outbox_path().exists()
+    assert port.summary()["outbox_queued"] == 0
+
+
+def test_flush_retry_exhaustion_queues_safe_batch_operation_when_enabled(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    monkeypatch.setenv("D1_BATCHING_ENABLED", "1")
+    monkeypatch.setenv("D1_RECOVERY_OUTBOX_ENABLED", "1")
+    poster = FakePoster(
+        [
+            FakeResponse(
+                status_code=429,
+                payload={"success": False, "errors": [{"message": "overloaded"}]},
+            ),
+            FakeResponse(
+                payload={
+                    "success": True,
+                    "result": [{"meta": {"changes": 1}, "results": []}],
+                }
+            ),
+        ]
+    )
+    port = _port(poster, max_retries=1)
+
+    port.execute("INSERT INTO x VALUES (?)", ["a"], policy=_batch_policy())
+
+    with pytest.raises(D1TransientError):
+        port.flush(ordering_key="history:s1")
+
+    path = d1_port_module.recovery_outbox_path()
+    latest = load_latest_events(path)
+    event = latest["history:s1:seq1"]
+    assert event.state == "queued"
+    assert event.sql == "INSERT INTO x VALUES (?)"
+    assert event.params == ["a"]
+    assert port.summary()["outbox_queued"] == 1
+
+    port.flush(ordering_key="history:s1")
+
+    assert len(poster.calls) == 2
+    assert poster.calls[1]["json"] == {
+        "batch": [{"sql": "INSERT INTO x VALUES (?)", "params": ["a"]}]
+    }
+
+
+def test_recovery_disallowed_policy_does_not_queue(monkeypatch, tmp_path):
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    monkeypatch.setenv("D1_RECOVERY_OUTBOX_ENABLED", "1")
+    poster = FakePoster(
+        [
+            FakeResponse(
+                status_code=429,
+                payload={"success": False, "errors": [{"message": "overloaded"}]},
+            )
+        ]
+    )
+    port = _port(poster, max_retries=1)
+
+    with pytest.raises(D1TransientError):
+        port.execute(
+            "INSERT INTO x VALUES (?)",
+            ["a"],
+            policy=_policy(recovery_allowed=False),
+        )
+
+    assert not d1_port_module.recovery_outbox_path().exists()
+    assert port.summary()["outbox_queued"] == 0
+
+
+def test_permanent_failure_does_not_queue_recovery_outbox(monkeypatch, tmp_path):
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    monkeypatch.setenv("D1_RECOVERY_OUTBOX_ENABLED", "1")
+    poster = FakePoster(
+        [
+            FakeResponse(
+                status_code=400,
+                payload={"success": False, "errors": [{"message": "no such table: x"}]},
+            )
+        ]
+    )
+    port = _port(poster, max_retries=1)
+
+    with pytest.raises(D1PermanentError):
+        port.execute("INSERT INTO x VALUES (?)", ["a"], policy=_policy())
+
+    assert not d1_port_module.recovery_outbox_path().exists()
+    assert port.summary()["outbox_queued"] == 0
 
 
 def test_schema_metadata_queries_are_cached_with_cloned_cursor_hits():
