@@ -35,7 +35,7 @@ from javdb.parsing import (
 )
 from javdb.proxy.pool import create_proxy_pool_from_config
 from javdb.infra.request import RequestConfig, RequestHandler
-from javdb.spider.parser import result_to_dict
+from javdb.spider.html_validators import result_to_dict
 
 logger = logging.getLogger(__name__)
 

@@ -36,7 +36,7 @@ from javdb.storage.history_manager import load_parsed_movies_history, save_parse
     determine_torrent_types, get_missing_torrent_types, validate_history_file, has_complete_subtitles
 from javdb.infra.config import use_sqlite
 from javdb.storage.repos.history_repo import HistoryRepo
-from javdb.spider.parser import parse_index, parse_detail
+from javdb.spider.parse_legacy_adapters import parse_index, parse_detail
 from javdb.spider.magnet_extractor import extract_magnets
 
 from javdb.parsing import parse_index_page as api_parse_index_page

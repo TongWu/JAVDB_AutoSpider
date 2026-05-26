@@ -16,7 +16,7 @@ from javdb.parsing.search_exact import (
 from apps.api.services import config_service, context
 from apps.api.services.explore_service import _fetch_javdb_html
 from javdb.spider.url_helper import build_search_url
-from javdb.spider.parser import (
+from javdb.spider.html_validators import (
     is_login_page,
 )
 

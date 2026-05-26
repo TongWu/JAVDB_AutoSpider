@@ -1,58 +1,26 @@
-"""
-Temporary compatibility adapter for spider parsing.
+"""Legacy-shape parsing wrappers used by spider runtime callers.
 
-This module exists only to preserve the legacy ``javdb.spider.parser``
-imports while callers are migrated to ``javdb.parsing`` and
-``javdb.pipeline.index_selection``. It is expected to be deleted by
-IMP-ADR011-03.
+These wrappers preserve the spider's legacy return shapes for index/detail
+parsing (and ``extract_video_code``). They delegate HTML parsing to
+``javdb.parsing`` and apply selection logic via
+``javdb.pipeline.index_selection``.
+
+Previously housed in ``javdb.spider.parser``. Relocated as part of
+ADR-011 Phase 3 so the parser adapter can be deleted; these wrappers now
+live inside the spider runtime where the legacy return shapes belong.
 """
 
-from typing import Any, Tuple
+from __future__ import annotations
+
 from bs4 import BeautifulSoup
 
 from javdb.infra.logging import get_logger
-from javdb.spider import _parser_support as _support
-
 from javdb.parsing import (
     parse_index_page as _api_parse_index,
     parse_detail_page as _api_parse_detail,
 )
 from javdb.parsing.common import extract_video_code as _api_extract_video_code
 from javdb.pipeline.index_selection import select_index_entries
-
-try:
-    from javdb.rust_core import is_login_page as _rust_is_login_page
-    from javdb.rust_core import validate_index_html as _rust_validate_index_html
-
-    RUST_PARSER_EXTRAS_AVAILABLE = True
-except ImportError:
-    RUST_PARSER_EXTRAS_AVAILABLE = False
-    _rust_is_login_page = None
-    _rust_validate_index_html = None
-
-
-def is_maintenance_page(html: str) -> bool:
-    return _support.is_maintenance_page(html)
-
-
-def result_to_dict(result: Any) -> dict:
-    return _support.result_to_dict(result)
-
-
-def is_login_page(html: str) -> bool:
-    return _support.is_login_page(
-        html,
-        rust_parser_extras_available=RUST_PARSER_EXTRAS_AVAILABLE,
-        rust_is_login_page=_rust_is_login_page,
-    )
-
-
-def validate_index_html(html: str) -> Tuple[bool, bool]:
-    return _support.validate_index_html(
-        html,
-        rust_parser_extras_available=RUST_PARSER_EXTRAS_AVAILABLE,
-        rust_validate_index_html=_rust_validate_index_html,
-    )
 
 
 logger = get_logger(__name__)

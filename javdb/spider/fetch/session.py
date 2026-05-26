@@ -4,7 +4,7 @@ from typing import Iterable, Optional
 
 from javdb.infra.logging import get_logger, log_section
 from javdb.proxy.coordinator.login_state_client import LoginStateUnavailable
-from javdb.spider.parser import is_login_page
+from javdb.spider.html_validators import is_login_page
 import javdb.spider.runtime.state as state
 from javdb.spider.runtime.config import (
     BASE_URL,

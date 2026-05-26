@@ -1,5 +1,7 @@
 # IMP-ADR011-01: ADR-011 Phase 1 — Parsing Core Module
 
+**Status:** Completed — delivered prior to 2026-05-25.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship ADR-011 Phase 1: establish `javdb.parsing` as the canonical parser module while preserving existing parser behavior exactly.

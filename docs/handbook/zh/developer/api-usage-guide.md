@@ -43,7 +43,7 @@ pip install -r requirements.txt
 
 所有解析函数接收 **HTML 字符串**，返回 **结构化 dataclass 对象**。解析器不做任何业务过滤（不区分 phase1/phase2，不过滤字幕/日期标签），返回页面上的所有原始数据。
 
-新代码应从 `javdb.parsing` 和 `javdb.parsing.models` 导入解析函数与 dataclass。旧的 `apps.api.parsers`、`apps.api.models` 和 `javdb.spider.parser` 路径是为遗留调用方保留的临时兼容适配器。
+解析函数和 dataclass 位于 `javdb.parsing` 和 `javdb.parsing.models`，请从这里导入。
 
 ### 1.1 解析首页/索引页
 
