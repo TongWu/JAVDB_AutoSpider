@@ -153,6 +153,68 @@ exit 99
     return fake_python
 
 
+def _write_fake_python_for_adhoc_spider(bin_dir: Path) -> Path:
+    fake_python = bin_dir / "python3"
+    fake_python.write_text(
+        """#!/usr/bin/env bash
+set -u
+
+if [ "${1:-}" = "-m" ] && [ "${2:-}" = "apps.cli.spider" ]; then
+  result_json=""
+  while [ "$#" -gt 0 ]; do
+    if [ "$1" = "--result-json" ]; then
+      shift
+      result_json="$1"
+    fi
+    shift || true
+  done
+
+  echo "fake adhoc spider streamed log"
+  cat > "$result_json" <<'JSON'
+{"csv_path":"reports/AdHoc/failure.csv","session_id":"20260526T005000.000000Z-0001-0001","dedup_csv_path":"reports/dedup.csv","stats":{"pages":"1-2","found":3,"parsed":2,"skipped":1,"failed":0,"no_new":0}}
+JSON
+  exit "${FAKE_SPIDER_EXIT:-0}"
+fi
+
+if [ "${1:-}" = "-m" ] && [ "${2:-}" = "apps.cli.ops.run_result_outputs" ]; then
+  github_output=""
+  while [ "$#" -gt 0 ]; do
+    if [ "$1" = "--github-output" ]; then
+      shift
+      github_output="$1"
+    fi
+    shift || true
+  done
+
+  echo "helper invoked" >> "$RUNNER_TEMP/helper-invoked"
+  if [ "${FAKE_HELPER_EXIT:-0}" != "0" ]; then
+    echo "fake helper failed" >&2
+    exit "$FAKE_HELPER_EXIT"
+  fi
+
+  outputs='csv_filename=reports/AdHoc/failure.csv
+session_id=20260526T005000.000000Z-0001-0001
+dedup_csv_path=reports/dedup.csv
+stat_pages=1-2
+stat_found=3
+stat_parsed=2
+stat_skipped=1
+stat_failed=0
+stat_no_new=0'
+  printf '%s\n' "$outputs" >> "$github_output"
+  printf '%s\n' "$outputs"
+  exit 0
+fi
+
+echo "unexpected fake python invocation: $*" >&2
+exit 99
+""",
+        encoding="utf-8",
+    )
+    fake_python.chmod(0o755)
+    return fake_python
+
+
 def _run_daily_spider_step(
     script: str,
     tmp_path: Path,
@@ -183,6 +245,55 @@ def _run_daily_spider_step(
             "INPUT_ALWAYS_BYPASS_TIME": "",
             "SCHEDULE_ENABLE_DEDUP": "false",
             "SCHEDULE_ENABLE_REDOWNLOAD": "false",
+            "FAKE_SPIDER_EXIT": str(spider_exit),
+            "FAKE_HELPER_EXIT": str(helper_exit),
+        }
+    )
+    proc = subprocess.run(
+        ["bash", "-e", "-c", script],
+        cwd=str(tmp_path),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    return proc, gh_output, gh_summary
+
+
+def _run_adhoc_spider_step(
+    script: str,
+    tmp_path: Path,
+    *,
+    spider_exit: int,
+    helper_exit: int = 0,
+) -> tuple[subprocess.CompletedProcess[str], Path, Path]:
+    bin_dir = tmp_path / "bin"
+    runner_temp = tmp_path / "runner_temp"
+    bin_dir.mkdir()
+    runner_temp.mkdir()
+    _write_fake_python_for_adhoc_spider(bin_dir)
+
+    gh_output = tmp_path / "gh_output"
+    gh_summary = tmp_path / "step_summary.md"
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{bin_dir}{os.pathsep}{env['PATH']}",
+            "GITHUB_OUTPUT": str(gh_output),
+            "GITHUB_STEP_SUMMARY": str(gh_summary),
+            "RUNNER_TEMP": str(runner_temp),
+            "INPUT_URL": "https://javdb.com/actors/test",
+            "INPUT_START_PAGE": "1",
+            "INPUT_END_PAGE": "",
+            "INPUT_PHASE": "all",
+            "INPUT_DISABLE_ALL_FILTERS": "false",
+            "INPUT_HISTORY_FILTER": "false",
+            "INPUT_DATE_FILTER": "false",
+            "INPUT_ENABLE_RCLONE_FILTER": "false",
+            "INPUT_PROXY_SPIDER": "true",
+            "INPUT_ALWAYS_BYPASS_TIME": "",
+            "INPUT_ENABLE_DEDUP": "true",
+            "INPUT_ENABLE_REDOWNLOAD": "false",
+            "INPUT_REDOWNLOAD_THRESHOLD": "0.30",
             "FAKE_SPIDER_EXIT": str(spider_exit),
             "FAKE_HELPER_EXIT": str(helper_exit),
         }
@@ -399,3 +510,40 @@ def test_daily_spider_helper_failure_is_captured_under_errexit(tmp_path):
 
     assert proc.returncode == 23
     assert "Result output helper exited with code 23" in proc.stdout
+
+
+def test_adhoc_spider_consumes_result_json_not_stdout_markers():
+    step = _extract_step(WORKFLOWS[1], "spider")
+    body = step["run"]
+
+    assert 'SPIDER_RESULT_JSON="$RUNNER_TEMP/spider-result.json"' in body
+    assert 'SPIDER_CMD+=(--result-json "$SPIDER_RESULT_JSON")' in body
+    assert '"${SPIDER_CMD[@]}" 2>&1 | tee "$RUNNER_TEMP/spider.log"' in body
+    assert "SPIDER_EXIT=${PIPESTATUS[0]}" in body
+    assert "python3 -m apps.cli.ops.run_result_outputs" in body
+    assert "--result-json \"$SPIDER_RESULT_JSON\"" in body
+    assert "--github-output \"$GITHUB_OUTPUT\"" in body
+    assert "RESULT_HELPER_EXIT=${PIPESTATUS[0]}" in body
+    assert "## Spider run summary (Ad-Hoc)" in body
+    assert "grep \"^SPIDER_" not in body
+    assert "grep '^SPIDER_" not in body
+    assert "SPIDER_OUTPUT=" not in body
+
+
+def test_adhoc_spider_failure_still_runs_result_helper_under_errexit(tmp_path):
+    body = _extract_step(WORKFLOWS[1], "spider")["run"]
+
+    proc, gh_output, gh_summary = _run_adhoc_spider_step(
+        body,
+        tmp_path,
+        spider_exit=7,
+    )
+
+    assert proc.returncode == 7
+    assert "Spider exited with code 7" in proc.stdout
+    assert (tmp_path / "runner_temp" / "helper-invoked").exists()
+    assert "csv_filename=reports/AdHoc/failure.csv" in gh_output.read_text()
+    summary = gh_summary.read_text()
+    assert "## Spider run summary (Ad-Hoc)" in summary
+    assert "| pages | 1-2 |" in summary
+    assert "| csv | `reports/AdHoc/failure.csv` |" in summary
