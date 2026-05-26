@@ -288,6 +288,7 @@ def _sync_legacy_globals_from_runtime(runtime: SpiderRuntime) -> None:
 
 
 def bind_active_runtime(runtime: SpiderRuntime) -> SpiderRuntime:
+    """Bind a runtime before any setup_* calls or concurrent spider startup."""
     bound = _bind_active_runtime(runtime)
     _sync_legacy_globals_from_runtime(bound)
     return bound
