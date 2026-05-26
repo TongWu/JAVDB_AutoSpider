@@ -1,5 +1,7 @@
 # IMP-ADR014-02: ADR-014 Phase 2 - Canonical Lifecycle Helpers
 
+**Status:** Completed — delivered and verified 2026-05-26.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship ADR-014 Phase 2 by moving the shared session helper implementation to `javdb.storage.sessions.lifecycle_helpers`, keeping legacy wrappers temporarily, and migrating production callers to the canonical path.
@@ -22,6 +24,7 @@
 | `javdb/storage/rollback/session_helpers.py` | Temporary re-export wrapper to the canonical module. |
 | `apps/cli/db/_session_helpers.py` | Temporary CLI re-export wrapper to the canonical module. |
 | `apps/cli/db/commit_session.py` | Production caller import migration. |
+| `javdb/storage/drift_diagnose.py` | Production caller import migration discovered by Phase 2 import search. |
 | `javdb/storage/rollback/core.py` | Production caller import migration. |
 | `javdb/storage/sessions/commit.py` | Production caller import migration. |
 | `apps/cli/db/README.md` | Document canonical helper ownership. |
@@ -42,7 +45,7 @@
 - Modify: `javdb/storage/rollback/session_helpers.py`
 - Modify: `apps/cli/db/_session_helpers.py`
 
-- [ ] **Step 1: Move the implementation.**
+- [x] **Step 1: Move the implementation.**
 
 Use `git mv`:
 
@@ -61,7 +64,7 @@ output adapters, and run identity attachment.
 """
 ```
 
-- [ ] **Step 2: Recreate the rollback compatibility wrapper.**
+- [x] **Step 2: Recreate the rollback compatibility wrapper.**
 
 Create `javdb/storage/rollback/session_helpers.py`:
 
@@ -71,7 +74,7 @@ Create `javdb/storage/rollback/session_helpers.py`:
 from javdb.storage.sessions.lifecycle_helpers import *  # noqa: F401,F403
 ```
 
-- [ ] **Step 3: Update the CLI compatibility wrapper.**
+- [x] **Step 3: Update the CLI compatibility wrapper.**
 
 Change `apps/cli/db/_session_helpers.py` to re-export the canonical module:
 
@@ -89,10 +92,11 @@ Keep both wrappers in place until Phase 3.
 
 **Files:**
 - Modify: `apps/cli/db/commit_session.py`
+- Modify: `javdb/storage/drift_diagnose.py`
 - Modify: `javdb/storage/rollback/core.py`
 - Modify: `javdb/storage/sessions/commit.py`
 
-- [ ] **Step 1: Change imports to the canonical path.**
+- [x] **Step 1: Change imports to the canonical path.**
 
 Replace imports from `javdb.storage.rollback.session_helpers` with:
 
@@ -105,10 +109,11 @@ from javdb.storage.sessions.lifecycle_helpers import (
 Apply this to:
 
 - `apps/cli/db/commit_session.py`
+- `javdb/storage/drift_diagnose.py`
 - `javdb/storage/rollback/core.py`
 - `javdb/storage/sessions/commit.py`
 
-- [ ] **Step 2: Confirm production callers no longer use the legacy paths.**
+- [x] **Step 2: Confirm production callers no longer use the legacy paths.**
 
 ```bash
 rg -n "apps\.cli\.db\._session_helpers|javdb\.storage\.rollback\.session_helpers" apps javdb
@@ -125,7 +130,7 @@ describe the migration.
 - Create: `tests/unit/test_session_lifecycle_helper_imports.py`
 - Modify: `tests/unit/test_session_helpers.py`
 
-- [ ] **Step 1: Make helper behavior tests import the canonical path.**
+- [x] **Step 1: Make helper behavior tests import the canonical path.**
 
 Change:
 
@@ -139,7 +144,7 @@ to:
 from javdb.storage.sessions import lifecycle_helpers as helpers
 ```
 
-- [ ] **Step 2: Add temporary wrapper identity tests.**
+- [x] **Step 2: Add temporary wrapper identity tests.**
 
 Create `tests/unit/test_session_lifecycle_helper_imports.py`:
 
@@ -169,17 +174,17 @@ These tests are temporary and are deleted in Phase 3 with the wrappers.
 - Modify: `javdb/storage/rollback/README.md`
 - Modify: `javdb/storage/sessions/README.md`
 
-- [ ] **Step 1: Update CLI DB README.**
+- [x] **Step 1: Update CLI DB README.**
 
 Describe `_session_helpers.py` as a temporary wrapper, not the helper owner.
 Name `javdb.storage.sessions.lifecycle_helpers` as the canonical helper module.
 
-- [ ] **Step 2: Update rollback storage README.**
+- [x] **Step 2: Update rollback storage README.**
 
 Rollback owns rollback orchestration. It does not own generic session lifecycle
 helper implementation after this phase.
 
-- [ ] **Step 3: Update sessions README.**
+- [x] **Step 3: Update sessions README.**
 
 Document that `lifecycle_helpers.py` owns shared session lifecycle scaffolding:
 
@@ -195,7 +200,7 @@ Document that `lifecycle_helpers.py` owns shared session lifecycle scaffolding:
 
 ## Task 5: Verify Phase 2
 
-- [ ] **Step 1: Run focused tests.**
+- [x] **Step 1: Run focused tests.**
 
 ```bash
 pytest tests/unit/test_session_lifecycle_helper_imports.py -v
@@ -208,7 +213,7 @@ pytest tests/architecture/test_storage_cli_layering.py -v
 
 Expected: PASS.
 
-- [ ] **Step 2: Run import search.**
+- [x] **Step 2: Run import search.**
 
 ```bash
 rg -n "apps\.cli\.db\._session_helpers|javdb\.storage\.rollback\.session_helpers" apps javdb tests
@@ -216,20 +221,21 @@ rg -n "apps\.cli\.db\._session_helpers|javdb\.storage\.rollback\.session_helpers
 
 Expected: only wrapper modules, wrapper identity tests, and migration docs.
 
-- [ ] **Step 3: Review workflow and docs impact.**
+- [x] **Step 3: Review workflow and docs impact.**
 
 This phase changes internal imports and README ownership text. CLI flags,
 workflow commands, stdout output, `GITHUB_OUTPUT`, and JSONL behavior stay
 unchanged. Confirm `.github/workflows/`, root README, and the wiki do not need
 usage changes.
 
-- [ ] **Step 4: Commit.**
+- [x] **Step 4: Commit.**
 
 ```bash
 git add javdb/storage/sessions/lifecycle_helpers.py \
         javdb/storage/rollback/session_helpers.py \
         apps/cli/db/_session_helpers.py \
         apps/cli/db/commit_session.py \
+        javdb/storage/drift_diagnose.py \
         javdb/storage/rollback/core.py \
         javdb/storage/sessions/commit.py \
         apps/cli/db/README.md \

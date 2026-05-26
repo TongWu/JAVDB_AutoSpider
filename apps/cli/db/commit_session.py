@@ -34,7 +34,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set
 
-from javdb.storage.rollback.session_helpers import (
+from javdb.storage.sessions.lifecycle_helpers import (
     append_jsonl_record,
     attach_run_identity,
     fanout_movie_claim,
