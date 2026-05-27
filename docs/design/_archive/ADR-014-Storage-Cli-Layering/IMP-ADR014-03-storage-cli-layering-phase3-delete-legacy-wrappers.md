@@ -1,5 +1,7 @@
 # IMP-ADR014-03: ADR-014 Phase 3 - Delete Legacy Wrappers
 
+**Status:** Completed — delivered and verified 2026-05-27.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship ADR-014 Phase 3 by deleting both legacy helper wrappers, updating all imports and monkeypatch targets to `javdb.storage.sessions.lifecycle_helpers`, and extending guards so the old paths do not return.
@@ -39,14 +41,14 @@
 - Delete: `apps/cli/db/_session_helpers.py`
 - Delete: `javdb/storage/rollback/session_helpers.py`
 
-- [ ] **Step 1: Remove wrapper files.**
+- [x] **Step 1: Remove wrapper files.**
 
 ```bash
 git rm apps/cli/db/_session_helpers.py
 git rm javdb/storage/rollback/session_helpers.py
 ```
 
-- [ ] **Step 2: Confirm no production import remains.**
+- [x] **Step 2: Confirm no production import remains.**
 
 ```bash
 rg -n "apps\.cli\.db\._session_helpers|javdb\.storage\.rollback\.session_helpers" apps javdb
@@ -63,13 +65,13 @@ Expected: no production imports. Documentation references are handled in Task 4.
 - Modify: tests that mention `javdb.storage.rollback.session_helpers`
 - Modify or delete: `tests/unit/test_session_lifecycle_helper_imports.py`
 
-- [ ] **Step 1: Locate legacy test references.**
+- [x] **Step 1: Locate legacy test references.**
 
 ```bash
 rg -n "apps\.cli\.db\._session_helpers|javdb\.storage\.rollback\.session_helpers" tests
 ```
 
-- [ ] **Step 2: Move monkeypatch targets to the canonical path.**
+- [x] **Step 2: Move monkeypatch targets to the canonical path.**
 
 Use:
 
@@ -79,7 +81,7 @@ javdb.storage.sessions.lifecycle_helpers
 
 for helper monkeypatches.
 
-- [ ] **Step 3: Replace wrapper identity tests with deletion tests.**
+- [x] **Step 3: Replace wrapper identity tests with deletion tests.**
 
 Create or update `tests/unit/test_session_lifecycle_helper_imports.py`:
 
@@ -107,7 +109,7 @@ def test_legacy_session_helper_wrappers_are_deleted():
 **Files:**
 - Modify: `tests/architecture/test_storage_cli_layering.py`
 
-- [ ] **Step 1: Keep the storage-to-CLI guard.**
+- [x] **Step 1: Keep the storage-to-CLI guard.**
 
 Do not weaken the Phase 1 rule:
 
@@ -115,7 +117,7 @@ Do not weaken the Phase 1 rule:
 javdb.storage.* must not import apps.cli.*
 ```
 
-- [ ] **Step 2: Add a deleted-path import guard.**
+- [x] **Step 2: Add a deleted-path import guard.**
 
 Extend the test file with a repository-wide AST scan for Python import
 statements that reference either deleted helper path:
@@ -174,16 +176,16 @@ def test_deleted_session_helper_modules_are_not_imported():
 - Modify: `javdb/storage/sessions/README.md`
 - Modify: docs that mention deleted wrapper paths
 
-- [ ] **Step 1: Remove `_session_helpers.py` from the active CLI DB README.**
+- [x] **Step 1: Remove `_session_helpers.py` from the active CLI DB README.**
 
 The README should no longer list `_session_helpers.py` as an active module.
 
-- [ ] **Step 2: Remove rollback helper wrapper language.**
+- [x] **Step 2: Remove rollback helper wrapper language.**
 
 Rollback docs should direct shared helper readers to
 `javdb.storage.sessions.lifecycle_helpers`.
 
-- [ ] **Step 3: Search docs for stale wrapper references.**
+- [x] **Step 3: Search docs for stale wrapper references.**
 
 ```bash
 rg -n "apps\.cli\.db\._session_helpers|javdb\.storage\.rollback\.session_helpers" docs apps javdb
@@ -196,7 +198,7 @@ legacy and deleted by ADR-014 Phase 3.
 
 ## Task 5: Verify Phase 3
 
-- [ ] **Step 1: Run focused tests.**
+- [x] **Step 1: Run focused tests.**
 
 ```bash
 pytest tests/architecture/test_storage_cli_layering.py -v
@@ -210,7 +212,7 @@ pytest tests/unit/test_rollback_pending_mode.py -v
 
 Expected: PASS.
 
-- [ ] **Step 2: Run import searches.**
+- [x] **Step 2: Run import searches.**
 
 ```bash
 rg -n "from apps\.cli|import apps\.cli" javdb/storage
@@ -219,13 +221,13 @@ rg -n "apps\.cli\.db\._session_helpers|javdb\.storage\.rollback\.session_helpers
 
 Expected: no results.
 
-- [ ] **Step 3: Review workflow and docs impact.**
+- [x] **Step 3: Review workflow and docs impact.**
 
 This phase deletes Python compatibility wrappers, but does not change CLI
 commands, flags, stdout, workflow outputs, or JSONL. Confirm `.github/workflows/`,
 root README, and the wiki do not require usage changes.
 
-- [ ] **Step 4: Commit.**
+- [x] **Step 4: Commit.**
 
 ```bash
 git add -u apps/cli/db/_session_helpers.py \
