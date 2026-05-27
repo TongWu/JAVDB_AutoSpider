@@ -199,6 +199,68 @@ def test_runtime_registry_signals_update_runtime_sleep_not_legacy():
     assert legacy_mgr._throttle.extra_max == legacy_extra_max
 
 
+def test_runtime_config_snapshot_updates_runtime_throttle_not_legacy():
+    from javdb.proxy.coordinator.runner_registry_client import ConfigSnapshot
+    from javdb.spider.runtime import sleep as sleep_module
+
+    runtime = SpiderRuntime()
+    ensure_sleep_runtime(runtime)
+    legacy_throttle = sleep_module.triple_window_throttle
+    legacy_original = (
+        legacy_throttle.short_max,
+        legacy_throttle.long_max,
+        legacy_throttle.extra_max,
+        legacy_throttle.short_window,
+        legacy_throttle.long_window,
+        legacy_throttle.extra_window,
+        legacy_throttle._base_short_max,
+        legacy_throttle._base_long_max,
+        legacy_throttle._base_extra_max,
+    )
+
+    try:
+        runtime._apply_config_snapshot(
+            ConfigSnapshot(
+                version=1,
+                updated_at_ms=0,
+                values={
+                    "short_max": "3",
+                    "long_max": "12",
+                    "extra_max": "90",
+                    "long_window_sec": "180",
+                },
+            )
+        )
+
+        assert runtime.sleep.triple_window_throttle.short_max == 3
+        assert runtime.sleep.triple_window_throttle.long_max == 12
+        assert runtime.sleep.triple_window_throttle.extra_max == 90
+        assert runtime.sleep.triple_window_throttle.long_window == 180.0
+        assert (
+            legacy_throttle.short_max,
+            legacy_throttle.long_max,
+            legacy_throttle.extra_max,
+            legacy_throttle.short_window,
+            legacy_throttle.long_window,
+            legacy_throttle.extra_window,
+            legacy_throttle._base_short_max,
+            legacy_throttle._base_long_max,
+            legacy_throttle._base_extra_max,
+        ) == legacy_original
+    finally:
+        (
+            legacy_throttle.short_max,
+            legacy_throttle.long_max,
+            legacy_throttle.extra_max,
+            legacy_throttle.short_window,
+            legacy_throttle.long_window,
+            legacy_throttle.extra_window,
+            legacy_throttle._base_short_max,
+            legacy_throttle._base_long_max,
+            legacy_throttle._base_extra_max,
+        ) = legacy_original
+
+
 def test_runtime_runner_registry_startup_updates_runtime_sleep(monkeypatch):
     from javdb.proxy.coordinator.runner_registry_client import (
         RegisterResult,

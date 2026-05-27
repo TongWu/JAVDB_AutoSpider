@@ -467,7 +467,7 @@ class SpiderRuntime:
 
     def _apply_config_snapshot(self, snap) -> None:
         import javdb.spider.runtime.state as legacy_state
-        from javdb.spider.runtime.sleep import triple_window_throttle as _throttle
+        from javdb.spider.runtime.sleep import ensure_sleep_runtime
 
         if snap.version == self.runner_registry.last_applied_config_version:
             return
@@ -494,6 +494,7 @@ class SpiderRuntime:
                 return None
 
         try:
+            _throttle = ensure_sleep_runtime(self).triple_window_throttle
             _throttle.apply_config(
                 short_max=_to_int("short_max"),
                 long_max=_to_int("long_max"),
