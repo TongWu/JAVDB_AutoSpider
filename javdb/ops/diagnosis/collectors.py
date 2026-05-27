@@ -29,6 +29,9 @@ def _collect_log_snippets(
         except (TypeError, ValueError):
             logger.warning("Invalid OPS_DIAGNOSIS_MAX_LOG_SNIPPETS=%r; falling back to 20", raw_limit)
             limit = 20
+        if limit <= 0:
+            logger.warning("Invalid OPS_DIAGNOSIS_MAX_LOG_SNIPPETS=%r; falling back to 20", raw_limit)
+            limit = 20
     for raw_path in paths:
         path = Path(raw_path)
         try:

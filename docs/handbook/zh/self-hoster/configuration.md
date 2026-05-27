@@ -364,7 +364,7 @@ Google Drive 库存扫描和重复文件清理的设置。
 
 这些变量在 `.env` 文件中设置，而非 `config.py`。
 
-### 14.1 根目录 `.env`（Docker / cron 入口脚本）
+### 15.1 根目录 `.env`（Docker / cron 入口脚本）
 
 在仓库根目录的 `.env.example` 中定义。**裸 uvicorn 不会自动加载此文件** ——
 `apps/api/services/context.py` 故意去掉了 `load_dotenv`，以避免陈旧的 `.env`
@@ -426,7 +426,7 @@ uvicorn 之前 `export VAR=...`。
 | `MAX_LOG_SIZE` | `str` | *（无）* | 日志文件轮转前的最大大小，例如 `100M`。 |
 | `MAX_LOG_FILES` | `int` | *（无）* | 保留的轮转日志文件最大数量。 |
 
-### 14.2 Shell / CI 环境变量
+### 15.2 Shell / CI 环境变量
 
 在 Shell 或 GitHub Actions 工作流文件中设置，由各模块在运行时读取。
 
@@ -447,7 +447,7 @@ uvicorn 之前 `export VAR=...`。
 | `LOG_GITHUB_GROUPS` | `str` | `'auto'` | GitHub Actions 日志分组。`'on'` —— 始终输出 `::group::` 标记。`'off'` —— 从不。`'auto'` —— 自动检测 CI 环境。 |
 | `VAR_MOVIE_SLEEP` | `str` | *（无）* | 覆盖自适应休眠范围，格式为 `"min,max"`（秒），例如 CI 中使用 `"0,0"`。 |
 
-### 14.3 Docker 专用 `.env`（`docker/.env.example`）
+### 15.3 Docker 专用 `.env`（`docker/.env.example`）
 
 `docker/.env.example` 文件提供了 Docker 容器的简化 cron 配置格式。使用与[Docker 定时任务调度](#docker-定时任务调度)中相同的变量，但采用替代的内联格式：
 
