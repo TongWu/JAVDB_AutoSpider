@@ -1,18 +1,4 @@
-"""Per-proxy CF-bypass and login-budget state mutators (W3.4).
-
-Extracted from :mod:`runtime.state` so the canonical mutable-globals
-module stays focused on globals + getters. These helpers all touch
-state owned by :mod:`runtime.state` (``login_total_budget``,
-``proxies_requiring_cf_bypass``, ``always_bypass_time``,
-``global_proxy_coordinator``, the locks); we access that state via
-``state.<name>`` rather than re-declaring it here, so the single source
-of truth stays in one place.
-
-External callers should continue to use the ``state.proxy_needs_cf_bypass``
-/ ``state.mark_proxy_cf_bypass`` / ``state.deduct_proxy_login_budget``
-spellings — :mod:`runtime.state` re-exports these so the API is
-backwards-compatible.
-"""
+"""Per-proxy CF-bypass and login-budget state mutators (W3.4)."""
 
 from __future__ import annotations
 
@@ -97,29 +83,48 @@ def deduct_proxy_login_budget(proxy_name: Optional[str]) -> int:
 # ---------------------------------------------------------------------------
 
 
-def proxy_needs_cf_bypass(proxy_name: str) -> bool:
+def _resolve_runtime(runtime=None):
+    return runtime if runtime is not None else state.get_active_runtime()
+
+
+def _proxy_ctx(runtime=None):
+    runtime = _resolve_runtime(runtime)
+    return runtime.proxy if runtime is not None else state
+
+
+def _proxy_coordinator(runtime=None):
+    runtime = _resolve_runtime(runtime)
+    return (
+        runtime.services.proxy_coordinator
+        if runtime is not None
+        else state.global_proxy_coordinator
+    )
+
+
+def proxy_needs_cf_bypass(proxy_name: str, *, runtime=None) -> bool:
     """Check if a proxy is still within the configured CF bypass window."""
-    if state.always_bypass_time is None:
+    proxy_ctx = _proxy_ctx(runtime)
+    if proxy_ctx.always_bypass_time is None:
         return False
 
-    with state._cf_bypass_lock:
-        marked_at = state.proxies_requiring_cf_bypass.get(proxy_name)
+    with proxy_ctx.cf_bypass_lock:
+        marked_at = proxy_ctx.proxies_requiring_cf_bypass.get(proxy_name)
         if marked_at is None:
             return False
 
-        if state.always_bypass_time == 0:
+        if proxy_ctx.always_bypass_time == 0:
             return True
 
-        window_seconds = state.always_bypass_time * 60
+        window_seconds = proxy_ctx.always_bypass_time * 60
         if time.time() - marked_at <= window_seconds:
             return True
 
         # Expired: fall back to direct-first behavior.
-        state.proxies_requiring_cf_bypass.pop(proxy_name, None)
+        proxy_ctx.proxies_requiring_cf_bypass.pop(proxy_name, None)
         return False
 
 
-def mark_proxy_cf_bypass(proxy_name: str):
+def mark_proxy_cf_bypass(proxy_name: str, *, runtime=None):
     """Mark a proxy for CF bypass reuse according to --always-bypass-time.
 
     Side effect (P1-A): when the cross-instance proxy coordinator is wired
@@ -129,12 +134,13 @@ def mark_proxy_cf_bypass(proxy_name: str):
     when the coordinator is not configured the call is a no-op and the
     behaviour is identical to the pre-DO world.
     """
-    if state.always_bypass_time is None:
+    proxy_ctx = _proxy_ctx(runtime)
+    if proxy_ctx.always_bypass_time is None:
         return
 
-    with state._cf_bypass_lock:
-        state.proxies_requiring_cf_bypass[proxy_name] = time.time()
-    if state.always_bypass_time == 0:
+    with proxy_ctx.cf_bypass_lock:
+        proxy_ctx.proxies_requiring_cf_bypass[proxy_name] = time.time()
+    if proxy_ctx.always_bypass_time == 0:
         logger.info(
             "Proxy '%s' marked as requiring CF bypass for this runtime",
             proxy_name,
@@ -142,18 +148,18 @@ def mark_proxy_cf_bypass(proxy_name: str):
     else:
         logger.info(
             "Proxy '%s' marked for CF bypass reuse for %d minute(s)",
-            proxy_name, state.always_bypass_time,
+            proxy_name, proxy_ctx.always_bypass_time,
         )
 
-    coord = state.global_proxy_coordinator
+    coord = _proxy_coordinator(runtime)
     if coord is not None and proxy_name:
         # ``always_bypass_time``:
         #   - 0       → permanent for this session  → DO ttl_ms = 0
         #   - N (min) → expires after N minutes     → DO ttl_ms = N * 60_000
         # The Worker stores the tri-state so peers see the right window.
         ttl_ms = (
-            0 if state.always_bypass_time == 0
-            else int(state.always_bypass_time) * 60 * 1000
+            0 if proxy_ctx.always_bypass_time == 0
+            else int(proxy_ctx.always_bypass_time) * 60 * 1000
         )
         try:
             coord.mark_cf_bypass(proxy_name, ttl_ms=ttl_ms)

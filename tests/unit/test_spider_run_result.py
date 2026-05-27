@@ -205,6 +205,55 @@ def test_run_spider_returns_result_and_writes_sidecar(tmp_path, monkeypatch):
     assert loaded.csv_path == "reports/DailyReport/x.csv"
 
 
+def test_run_spider_owns_runtime_when_called_without_service(monkeypatch):
+    import javdb.spider.runtime.state as state
+
+    expected = _result()
+    observed = {}
+
+    def fake_impl(_options):
+        runtime = state.get_active_runtime()
+        observed["runtime"] = runtime
+        observed["holder"] = state.runtime_holder_id
+        return expected
+
+    options = SpiderRunOptions(
+        mode="daily",
+        url=None,
+        start_page=1,
+        end_page=1,
+        parse_all=False,
+        ignore_history=False,
+        use_history=False,
+        phase="all",
+        output_file="Javdb_Test.csv",
+        dry_run=True,
+        ignore_release_date=False,
+        use_proxy=False,
+        no_proxy=False,
+        always_bypass_time=None,
+        from_pipeline=True,
+        max_movies_phase1=None,
+        max_movies_phase2=None,
+        sequential=False,
+        no_rclone_filter=False,
+        disable_all_filters=False,
+        enable_dedup=False,
+        enable_redownload=False,
+        redownload_threshold=None,
+        result_json=None,
+    )
+    monkeypatch.setattr(run_service, "_run_spider_impl", fake_impl)
+
+    result = run_service.run_spider(options)
+
+    assert result is expected
+    assert observed["runtime"] is not None
+    assert observed["holder"] == observed["runtime"].runner_registry.holder_id
+    assert observed["runtime"].closed is True
+    assert state.get_active_runtime() is None
+
+
 def test_run_spider_clears_db_context(monkeypatch):
     import javdb.storage.db as db_module
 

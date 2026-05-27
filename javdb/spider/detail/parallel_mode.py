@@ -60,6 +60,7 @@ def _spider_parse_fn(html: str, task: EngineTask):
 
 def build_parallel_detail_backend(
     *,
+    runtime=None,
     use_cookie: bool,
     use_proxy: bool = True,
     use_cf_bypass: bool = False,
@@ -73,6 +74,7 @@ def build_parallel_detail_backend(
             use_proxy=use_proxy,
             use_cf_bypass=use_cf_bypass,
         ),
+        runtime=runtime,
     )
 
 
@@ -98,6 +100,8 @@ def process_detail_entries_parallel(
     dedup_csv_path: str = '',
     enable_redownload: bool = False,
     redownload_threshold: float = 0.30,
+    *,
+    runtime=None,
 ) -> dict:
     """Process detail entries in parallel using one worker per proxy.
 
@@ -105,9 +109,11 @@ def process_detail_entries_parallel(
         rows, skipped_history, failed, failed_movies, no_new_torrents
     """
     backend = build_parallel_detail_backend(
+        runtime=runtime,
         use_cookie=use_cookie,
     )
     return process_detail_entries(
+        runtime=runtime,
         backend=backend,
         entries=entries,
         phase=phase,
