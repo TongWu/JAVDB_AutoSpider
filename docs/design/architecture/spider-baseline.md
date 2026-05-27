@@ -12,11 +12,11 @@
 - App entrypoints live under `scripts/spider/app/`
   - `main.py`: top-level spider orchestration
   - `cli.py`: argument parsing
-- Runtime state lives under `scripts/spider/runtime/`
-  - `config.py`: config/constants bootstrap
-  - `state.py`: mutable runtime state
-  - `sleep.py`: adaptive sleep and throttling
-  - `report.py`: summary reporting
+- Runtime ownership lives under `javdb/spider/runtime/`
+  - `context.py`: `SpiderRuntime` aggregate and focused runtime state objects
+  - `state.py`: documented compatibility facade for legacy entrypoints
+  - `sleep.py`: sleep/throttle classes and compatibility names; production code uses runtime-owned sleep state
+  - `report.py`: summary reporting with explicit runtime access
 - Fetch execution lives under `scripts/spider/fetch/`
   - `index.py`: index-page fetching
   - `fallback.py`: direct/proxy/CF/login fallback flow
@@ -58,3 +58,7 @@
 - New spider implementation work should target the layered paths above.
 - Public invocation stays `python3 scripts/spider`.
 - `scripts/_spider_legacy.py` remains a historical compatibility reference, not the primary implementation surface.
+
+## Runtime Usage Rule
+
+New Spider production code must receive `SpiderRuntime` or a focused state/service object explicitly. Do not add new direct `state.<field>` dependencies. `state.py` exists only for documented compatibility functions and transitional tests.
