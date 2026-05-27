@@ -1,16 +1,16 @@
 # ADR-013: Runner Runtime State Consolidation
 
-**Status**: Accepted - Phases 1-3 delivered; Phase 4 pending
+**Status**: Completed — all phases delivered 2026-05-27
 **Date**: 2026-05-20
 **Deciders**: Runner runtime state brainstorming and grill session
-**Related Implementation Plans**: [IMP-ADR013-01](IMP-ADR013-01-runner-runtime-phase1-skeleton-facade.md) (Phase 1 - runtime skeleton and active facade — **Completed 2026-05-26**), [IMP-ADR013-02](IMP-ADR013-02-runner-runtime-phase2-registry-movieclaim.md) (Phase 2 - registry and MovieClaim lifecycle — **Completed 2026-05-26**), [IMP-ADR013-03](IMP-ADR013-03-runner-runtime-phase3-explicit-callers.md) (Phase 3 - explicit production callers — **Completed 2026-05-27**), [IMP-ADR013-04](IMP-ADR013-04-runner-runtime-phase4-legacy-facade-removal.md) (Phase 4 - legacy facade freeze/removal)
+**Related Implementation Plans**: [IMP-ADR013-01](IMP-ADR013-01-runner-runtime-phase1-skeleton-facade.md) (Phase 1 - runtime skeleton and active facade — **Completed 2026-05-26**), [IMP-ADR013-02](IMP-ADR013-02-runner-runtime-phase2-registry-movieclaim.md) (Phase 2 - registry and MovieClaim lifecycle — **Completed 2026-05-26**), [IMP-ADR013-03](IMP-ADR013-03-runner-runtime-phase3-explicit-callers.md) (Phase 3 - explicit production callers — **Completed 2026-05-27**), [IMP-ADR013-04](IMP-ADR013-04-runner-runtime-phase4-legacy-facade-removal.md) (Phase 4 - legacy facade freeze/removal — **Completed 2026-05-27**)
 
 ## Outstanding Work
 
 - ~~Phase 1 - introduce `SpiderRuntime`, small runtime state objects, runtime service slots, and active-runtime facade binding while preserving old `state.*` callers.~~ **Completed 2026-05-26** (IMP-ADR013-01).
 - ~~Phase 2 - move RunnerRegistry heartbeat/session lifecycle and MovieClaim auto lifecycle under runtime-owned state/services.~~ **Completed 2026-05-26** (IMP-ADR013-02).
 - ~~Phase 3 - migrate sleep, proxy, request, login, fetch, detail, and report production callers toward explicit runtime/context access.~~ **Completed 2026-05-27** (IMP-ADR013-03).
-- Phase 4 - freeze or remove legacy direct-mutation `state.py` compatibility and document the final explicit-runtime usage rule.
+- ~~Phase 4 - freeze or remove legacy direct-mutation `state.py` compatibility and document the final explicit-runtime usage rule.~~ **Completed 2026-05-27** (IMP-ADR013-04).
 
 ---
 
@@ -222,5 +222,5 @@ The following work is explicitly deferred to the next ADR:
 - [IMP-ADR013-01](IMP-ADR013-01-runner-runtime-phase1-skeleton-facade.md) — Phase 1: runtime skeleton + active facade. **Completed 2026-05-26.**
 - [IMP-ADR013-02](IMP-ADR013-02-runner-runtime-phase2-registry-movieclaim.md) — Phase 2: RunnerRegistry + MovieClaim lifecycle. **Completed 2026-05-26.**
 - [IMP-ADR013-03](IMP-ADR013-03-runner-runtime-phase3-explicit-callers.md) — Phase 3: explicit production callers. **Completed 2026-05-27.**
-- [IMP-ADR013-04](IMP-ADR013-04-runner-runtime-phase4-legacy-facade-removal.md) — Phase 4: legacy facade freeze/removal.
+- [IMP-ADR013-04](IMP-ADR013-04-runner-runtime-phase4-legacy-facade-removal.md) — Phase 4: legacy facade freeze/removal. **Completed 2026-05-27.**
 - [ADR-012](../ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md) — Pipeline run boundary; in-process Spider integration that motivates explicit runtime ownership.

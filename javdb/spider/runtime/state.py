@@ -1,7 +1,8 @@
-"""Global mutable state for the spider package.
+"""Legacy compatibility facade for spider runtime state.
 
-Every module that needs to read or *mutate* shared state should
-``import javdb.spider.runtime.state as state`` and access ``state.<var>``.
+New production code should receive ``SpiderRuntime`` or focused runtime-owned
+objects explicitly. Keep legacy module-field reads and writes behind the
+compatibility helpers in this module until the facade is frozen or removed.
 """
 
 import atexit
@@ -63,6 +64,58 @@ from javdb.spider.runtime.config import (
 )
 
 logger = get_logger(__name__)
+_UNSET = object()
+
+__all__ = (
+    "bind_active_runtime",
+    "clear_active_runtime",
+    "get_active_runtime",
+    "setup_proxy_pool",
+    "initialize_request_handler",
+    "get_page",
+    "should_use_proxy_for_module",
+    "extract_ip_from_proxy_url",
+    "get_cf_bypass_service_url",
+    "is_cf_bypass_failure",
+    "set_active_runner_session",
+    "setup_runner_registry_client",
+    "setup_movie_claim_client",
+    "setup_login_state_client",
+    "setup_proxy_coordinator",
+    "setup_work_distributor_client",
+    "proxy_needs_cf_bypass",
+    "mark_proxy_cf_bypass",
+    "deduct_proxy_login_budget",
+    "ensure_reports_dir",
+    "ensure_report_dated_dir",
+    "save_proxy_ban_html",
+)
+
+# Temporary module data retained for state.py/context.py fallback internals only.
+# New production callers must use SpiderRuntime or the function facade above.
+LEGACY_DATA_FIELDS = (
+    "always_bypass_time",
+    "current_login_state_version",
+    "global_login_state_client",
+    "global_movie_claim_client",
+    "global_proxy_coordinator",
+    "global_proxy_pool",
+    "global_recommend_proxy_policy",
+    "global_request_handler",
+    "global_runner_registry_client",
+    "global_work_distributor_client",
+    "logged_in_proxy_name",
+    "login_attempted",
+    "login_attempts_per_proxy",
+    "login_failures_per_proxy",
+    "login_total_attempts",
+    "login_total_budget",
+    "parsed_links",
+    "proxies_requiring_cf_bypass",
+    "proxy_ban_html_files",
+    "refreshed_session_cookie",
+    "runtime_holder_id",
+)
 
 # ---------------------------------------------------------------------------
 # Mutable globals
@@ -244,6 +297,215 @@ from javdb.spider.runtime.active import (  # noqa: E402
     get_active_runtime,
 )
 from javdb.spider.runtime.context import SpiderRuntime  # noqa: E402
+
+
+def get_legacy_proxy_pool():
+    """Compatibility boundary for legacy proxy-pool reads."""
+    return global_proxy_pool
+
+
+def get_legacy_proxy_coordinator():
+    """Compatibility boundary for legacy proxy-coordinator reads."""
+    return global_proxy_coordinator
+
+
+def get_legacy_login_state_client():
+    """Compatibility boundary for legacy login-state client reads."""
+    return global_login_state_client
+
+
+def get_legacy_movie_claim_client():
+    """Compatibility boundary for legacy movie-claim client reads."""
+    return global_movie_claim_client
+
+
+def get_legacy_work_distributor_client():
+    """Compatibility boundary for legacy work-distributor client reads."""
+    return global_work_distributor_client
+
+
+def get_legacy_runtime_holder_id() -> str:
+    """Compatibility boundary for the legacy runner holder id."""
+    return runtime_holder_id
+
+
+def get_legacy_parsed_links() -> set:
+    """Compatibility boundary for legacy parsed-link reads."""
+    return parsed_links
+
+
+def get_legacy_proxy_ban_html_files() -> list:
+    """Compatibility boundary for legacy proxy-ban HTML file reads."""
+    return proxy_ban_html_files
+
+
+class _LegacyDetailContext:
+    @property
+    def parsed_links(self) -> set:
+        return parsed_links
+
+
+class _LegacyRuntimeServices:
+    @property
+    def proxy_pool(self):
+        return global_proxy_pool
+
+    @property
+    def request_handler(self):
+        return global_request_handler
+
+    @property
+    def login_state_client(self):
+        return global_login_state_client
+
+
+class _LegacyLoginContext:
+    @property
+    def login_attempted(self) -> bool:
+        return login_attempted
+
+    @login_attempted.setter
+    def login_attempted(self, value: bool) -> None:
+        global login_attempted
+        login_attempted = value
+
+    @property
+    def refreshed_session_cookie(self) -> Optional[str]:
+        return refreshed_session_cookie
+
+    @refreshed_session_cookie.setter
+    def refreshed_session_cookie(self, value: Optional[str]) -> None:
+        global refreshed_session_cookie
+        refreshed_session_cookie = value
+
+    @property
+    def logged_in_proxy_name(self) -> Optional[str]:
+        return logged_in_proxy_name
+
+    @logged_in_proxy_name.setter
+    def logged_in_proxy_name(self, value: Optional[str]) -> None:
+        global logged_in_proxy_name
+        logged_in_proxy_name = value
+
+    @property
+    def current_login_state_version(self) -> Optional[int]:
+        return current_login_state_version
+
+    @current_login_state_version.setter
+    def current_login_state_version(self, value: Optional[int]) -> None:
+        global current_login_state_version
+        current_login_state_version = value
+
+    @property
+    def login_attempts_per_proxy(self) -> Dict[str, int]:
+        return login_attempts_per_proxy
+
+    @property
+    def login_failures_per_proxy(self) -> Dict[str, int]:
+        return login_failures_per_proxy
+
+    @property
+    def login_total_attempts(self) -> int:
+        return login_total_attempts
+
+    @login_total_attempts.setter
+    def login_total_attempts(self, value: int) -> None:
+        global login_total_attempts
+        login_total_attempts = value
+
+    @property
+    def login_total_budget(self) -> int:
+        return login_total_budget
+
+    @login_total_budget.setter
+    def login_total_budget(self, value: int) -> None:
+        global login_total_budget
+        login_total_budget = value
+
+
+_legacy_detail_context = _LegacyDetailContext()
+_legacy_runtime_services = _LegacyRuntimeServices()
+_legacy_login_context = _LegacyLoginContext()
+
+
+def get_legacy_detail_context():
+    """Return a focused legacy detail-state adapter."""
+    return _legacy_detail_context
+
+
+def get_legacy_runtime_services():
+    """Return a focused legacy service-handle adapter."""
+    return _legacy_runtime_services
+
+
+def get_legacy_login_context():
+    """Return a focused legacy login-state adapter."""
+    return _legacy_login_context
+
+
+def set_legacy_always_bypass_time(value: Optional[int]) -> None:
+    """Compatibility boundary for legacy CF-bypass duration writes."""
+    global always_bypass_time
+    always_bypass_time = value
+
+
+def get_legacy_cf_bypass_state():
+    """Return legacy CF-bypass duration, lock, and proxy marker map."""
+    return always_bypass_time, _cf_bypass_lock, proxies_requiring_cf_bypass
+
+
+def get_legacy_login_budget() -> tuple[int, int]:
+    """Return legacy ``(total_attempts, total_budget)``."""
+    return login_total_attempts, login_total_budget
+
+
+def set_legacy_login_total_budget(value: int) -> None:
+    """Compatibility boundary for legacy login budget writes."""
+    global login_total_budget
+    login_total_budget = value
+
+
+def get_legacy_login_state() -> tuple[Optional[str], Optional[str], Optional[int]]:
+    """Return legacy ``(proxy_name, cookie, version)`` login state."""
+    return logged_in_proxy_name, refreshed_session_cookie, current_login_state_version
+
+
+def set_legacy_login_state(
+    *,
+    proxy_name=_UNSET,
+    cookie=_UNSET,
+    version=_UNSET,
+) -> None:
+    """Compatibility boundary for legacy login-state writes."""
+    global logged_in_proxy_name, refreshed_session_cookie, current_login_state_version
+    if proxy_name is not _UNSET:
+        logged_in_proxy_name = proxy_name
+    if cookie is not _UNSET:
+        refreshed_session_cookie = cookie
+    if version is not _UNSET:
+        current_login_state_version = version
+
+
+def _deduct_legacy_proxy_login_budget_locked(proxy_name: str) -> int:
+    """Legacy login-budget deduction. Caller must hold ``_login_budget_lock``."""
+    global login_total_budget
+    if proxy_name in _login_budget_deducted_proxies:
+        return 0
+    if login_total_budget <= 0:
+        _login_budget_deducted_proxies.add(proxy_name)
+        return 0
+
+    used = login_attempts_per_proxy.get(proxy_name, 0)
+    remaining = LOGIN_ATTEMPTS_PER_PROXY_LIMIT - used
+    if remaining <= 0:
+        _login_budget_deducted_proxies.add(proxy_name)
+        return 0
+
+    new_budget = max(login_total_attempts, login_total_budget - remaining)
+    actually_deducted = login_total_budget - new_budget
+    login_total_budget = new_budget
+    _login_budget_deducted_proxies.add(proxy_name)
+    return actually_deducted
 
 
 def _sync_legacy_globals_from_runtime(runtime: SpiderRuntime) -> None:

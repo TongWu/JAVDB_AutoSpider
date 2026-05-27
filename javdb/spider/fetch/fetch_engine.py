@@ -589,7 +589,7 @@ class _EngineWorker(threading.Thread):
             coordinator=(
                 self._runtime.services.proxy_coordinator
                 if self._runtime is not None
-                else state.global_proxy_coordinator
+                else state.get_legacy_proxy_coordinator()
             ),
             proxy_id=self._coordinator_proxy_id,
             runtime=self._runtime,
@@ -609,7 +609,7 @@ class _EngineWorker(threading.Thread):
         coordinator = (
             self._runtime.services.proxy_coordinator
             if self._runtime is not None
-            else state.global_proxy_coordinator
+            else state.get_legacy_proxy_coordinator()
         )
         coord_proxy_id = self._coordinator_proxy_id
         if coordinator is not None and coord_proxy_id:
@@ -689,8 +689,10 @@ class _EngineWorker(threading.Thread):
         )
 
     def _should_shortcircuit_cf(self) -> bool:
-        proxy_ctx = self._runtime.proxy if self._runtime is not None else state
-        abt = proxy_ctx.always_bypass_time
+        if self._runtime is not None:
+            abt = self._runtime.proxy.always_bypass_time
+        else:
+            abt, _, _ = state.get_legacy_cf_bypass_state()
         if abt is None or self._cf_bypass_since is None:
             return False
         if abt == 0:
@@ -702,8 +704,10 @@ class _EngineWorker(threading.Thread):
         return False
 
     def _mark_cf_bypass(self) -> None:
-        proxy_ctx = self._runtime.proxy if self._runtime is not None else state
-        abt = proxy_ctx.always_bypass_time
+        if self._runtime is not None:
+            abt = self._runtime.proxy.always_bypass_time
+        else:
+            abt, _, _ = state.get_legacy_cf_bypass_state()
         if abt is None:
             return
         self._cf_bypass_since = time.time()
@@ -1308,17 +1312,25 @@ class ParallelFetchBackend(FetchBackend):
         # Recompute the global login budget so it reflects only the proxies
         # we will actually run (matches the per-proxy x active rule used at
         # state-init time).  Only safe before any login attempt has fired.
-        login_ctx = self._runtime.login if self._runtime is not None else state
-        if login_ctx.login_total_attempts == 0:
+        if self._runtime is not None:
+            login_ctx = self._runtime.login
+            total_attempts = login_ctx.login_total_attempts
+            total_budget = login_ctx.login_total_budget
+        else:
+            total_attempts, total_budget = state.get_legacy_login_budget()
+        if total_attempts == 0:
             new_budget = len(active_configs) * LOGIN_ATTEMPTS_PER_PROXY_LIMIT
-            if new_budget != login_ctx.login_total_budget:
+            if new_budget != total_budget:
                 logger.info(
                     "Login budget adjusted at startup: %d -> %d "
                     "(%d active proxies, %d pre-banned)",
-                    login_ctx.login_total_budget, new_budget,
+                    total_budget, new_budget,
                     len(active_configs), pre_banned_count,
                 )
-                login_ctx.login_total_budget = new_budget
+                if self._runtime is not None:
+                    login_ctx.login_total_budget = new_budget
+                else:
+                    state.set_legacy_login_total_budget(new_budget)
             for name in pre_banned_names:
                 # Mark as already accounted for so a later runtime ban is a no-op.
                 if self._runtime is not None:
@@ -1398,11 +1410,11 @@ class ParallelFetchBackend(FetchBackend):
            runner may have already published a fresh cookie via
            :class:`GlobalLoginState`.  Pulling it here lets this runner
            skip its own re-login entirely on startup, mirroring the
-           cookie + proxy_name into ``state`` so the existing per-worker
+           cookie + proxy_name into the active runtime so the existing per-worker
            injection path below picks it up.
         2. **Index phase** (legacy single-runtime path): when the index
            fetcher inside *this* runner just performed a login, the
-           cookie is already in ``state.refreshed_session_cookie``.
+           cookie is already in the runtime login state.
 
         DO failures fall through silently — the legacy path remains the
         source of truth in that case (per the fail-open contract).
@@ -1413,12 +1425,17 @@ class ParallelFetchBackend(FetchBackend):
         #    configured or when this runner has already observed the
         #    same version (e.g. via a poller tick that happened earlier).
         runtime = getattr(self, "_runtime", None)
-        login_ctx = runtime.login if runtime is not None else state
         do_client = (
             runtime.services.login_state_client
             if runtime is not None
-            else state.global_login_state_client
+            else state.get_legacy_login_state_client()
         )
+        if runtime is not None:
+            login_proxy_name = runtime.login.logged_in_proxy_name
+            login_cookie = runtime.login.refreshed_session_cookie
+            login_version = runtime.login.current_login_state_version
+        else:
+            login_proxy_name, login_cookie, login_version = state.get_legacy_login_state()
         if do_client is not None:
             try:
                 snapshot = do_client.get_state()
@@ -1436,15 +1453,25 @@ class ParallelFetchBackend(FetchBackend):
                     exc_info=True,
                 )
             else:
-                already_local = login_ctx.current_login_state_version or 0
+                already_local = login_version or 0
                 if (
                     snapshot.proxy_name
                     and snapshot.cookie
                     and snapshot.version > already_local
                 ):
-                    login_ctx.logged_in_proxy_name = snapshot.proxy_name
-                    login_ctx.refreshed_session_cookie = snapshot.cookie
-                    login_ctx.current_login_state_version = snapshot.version
+                    login_proxy_name = snapshot.proxy_name
+                    login_cookie = snapshot.cookie
+                    login_version = snapshot.version
+                    if runtime is not None:
+                        runtime.login.logged_in_proxy_name = snapshot.proxy_name
+                        runtime.login.refreshed_session_cookie = snapshot.cookie
+                        runtime.login.current_login_state_version = snapshot.version
+                    else:
+                        state.set_legacy_login_state(
+                            proxy_name=snapshot.proxy_name,
+                            cookie=snapshot.cookie,
+                            version=snapshot.version,
+                        )
                     logger.info(
                         "Engine startup: adopted cross-runtime login state "
                         "from DO (proxy=%s, version=%d)",
@@ -1452,25 +1479,25 @@ class ParallelFetchBackend(FetchBackend):
                     )
 
         if not (
-            login_ctx.logged_in_proxy_name
-            and login_ctx.refreshed_session_cookie
+            login_proxy_name
+            and login_cookie
         ):
             return
 
         if (
             LOGIN_PROXY_NAME
-            and login_ctx.logged_in_proxy_name != LOGIN_PROXY_NAME
+            and login_proxy_name != LOGIN_PROXY_NAME
         ):
             logger.warning(
                 "Index login proxy [%s] differs from LOGIN_PROXY_NAME [%s] "
                 "— session may not match engine workers",
-                login_ctx.logged_in_proxy_name, LOGIN_PROXY_NAME,
+                login_proxy_name, LOGIN_PROXY_NAME,
             )
 
         for w in self._workers:
-            if w.proxy_name == login_ctx.logged_in_proxy_name:
+            if w.proxy_name == login_proxy_name:
                 w._handler.config.javdb_session_cookie = (
-                    login_ctx.refreshed_session_cookie
+                    login_cookie
                 )
                 self._coordinator.logged_in_worker_id = w.worker_id
                 logger.info(
@@ -1482,7 +1509,7 @@ class ParallelFetchBackend(FetchBackend):
 
         logger.warning(
             "Index login via [%s] but no matching engine worker found",
-            login_ctx.logged_in_proxy_name,
+            login_proxy_name,
         )
 
     def _inherit_global_volume(self, num_workers: int) -> None:
@@ -1685,13 +1712,14 @@ class ParallelFetchBackend(FetchBackend):
             if w.worker_id == lid:
                 cookie = w._handler.config.javdb_session_cookie
                 if cookie:
-                    login_ctx = (
-                        self._runtime.login
-                        if self._runtime is not None
-                        else state
-                    )
-                    login_ctx.logged_in_proxy_name = w.proxy_name
-                    login_ctx.refreshed_session_cookie = cookie
+                    if self._runtime is not None:
+                        self._runtime.login.logged_in_proxy_name = w.proxy_name
+                        self._runtime.login.refreshed_session_cookie = cookie
+                    else:
+                        state.set_legacy_login_state(
+                            proxy_name=w.proxy_name,
+                            cookie=cookie,
+                        )
                     logger.info(
                         "Exported engine login state: proxy=%s",
                         w.proxy_name,
