@@ -231,6 +231,7 @@ def test_create_detail_backend_selects_parallel(monkeypatch):
     assert backend is sentinel
     assert calls == [
         {
+            'runtime': None,
             'use_cookie': True,
             'use_proxy': True,
             'use_cf_bypass': False,
@@ -275,6 +276,7 @@ def test_create_detail_backend_selects_sequential(monkeypatch):
         (
             (session,),
             {
+                'runtime': None,
                 'use_cookie': False,
                 'is_adhoc_mode': True,
                 'use_proxy': False,

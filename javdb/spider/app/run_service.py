@@ -6,7 +6,7 @@ import os
 import sys
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 import requests
 from datetime import datetime
@@ -39,6 +39,7 @@ from javdb.spider.runtime.config import (
     RCLONE_INVENTORY_CSV, DEDUP_CSV, DEDUP_DIR,
     ENABLE_REDOWNLOAD, REDOWNLOAD_SIZE_THRESHOLD,
 )
+from javdb.spider.runtime.context import SpiderRuntime
 from javdb.spider.services.dedup import (
     load_rclone_inventory,
     should_skip_from_rclone,
@@ -47,7 +48,7 @@ from javdb.spider.services.dedup import (
 )
 from javdb.spider.app.cli import parse_arguments, OUTPUT_CSV
 from javdb.spider.app.options import SpiderRunOptions, spider_options_from_args
-from javdb.spider.runtime.sleep import movie_sleep_mgr
+from javdb.spider.runtime.sleep import ensure_sleep_runtime, movie_sleep_mgr
 from javdb.spider.fetch.index import fetch_all_index_pages
 from javdb.spider.detail.parallel_mode import build_parallel_detail_backend
 from javdb.spider.detail.runner import process_detail_entries
@@ -87,6 +88,10 @@ def _get_result_context() -> _SpiderResultContext | None:
         return _result_context.get()
     except LookupError:
         return None
+
+
+def _fetch_index_for_runtime(*, runtime: SpiderRuntime, **kwargs: Any) -> dict[str, Any]:
+    return fetch_all_index_pages(runtime=runtime, **kwargs)
 
 
 def _page_range(start_page: int, end_page: int, parse_all: bool) -> str:
@@ -147,6 +152,7 @@ def _write_failure_result_sidecar(exc: BaseException) -> None:
 
 def create_detail_backend(
     *,
+    runtime=None,
     use_parallel: bool,
     use_cookie: bool,
     is_adhoc_mode: bool,
@@ -158,6 +164,7 @@ def create_detail_backend(
 
     if use_parallel:
         return build_parallel_detail_backend(
+            runtime=runtime,
             use_cookie=use_cookie,
             use_proxy=use_proxy,
             use_cf_bypass=use_cf_bypass,
@@ -165,11 +172,19 @@ def create_detail_backend(
 
     return build_sequential_detail_backend(
         session,
+        runtime=runtime,
         use_cookie=use_cookie,
         is_adhoc_mode=is_adhoc_mode,
         use_proxy=use_proxy,
         use_cf_bypass=use_cf_bypass,
     )
+
+
+def _sleep_manager(runtime=None):
+    runtime = runtime or state.get_active_runtime()
+    if runtime is not None:
+        return ensure_sleep_runtime(runtime).movie_sleep_mgr
+    return movie_sleep_mgr
 
 
 def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
@@ -221,7 +236,12 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
         logger.error("--always-bypass-time must be >= 0")
         sys.exit(2)
 
-    state.always_bypass_time = always_bypass_time
+    runtime = state.get_active_runtime()
+    if runtime is not None:
+        runtime.proxy.always_bypass_time = always_bypass_time
+        state.sync_legacy_globals_from_runtime(runtime)
+    else:
+        state.always_bypass_time = always_bypass_time
 
     if options.disable_all_filters:
         ignore_history = True
@@ -288,8 +308,10 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
         logger.info("CF Bypass: Globally disabled via CF_BYPASS_ENABLED=False in config.py")
 
     if use_proxy:
-        if state.global_proxy_pool is not None:
-            stats = state.global_proxy_pool.get_statistics()
+        runtime = state.get_active_runtime()
+        proxy_pool = runtime.services.proxy_pool if runtime else state.global_proxy_pool
+        if proxy_pool is not None:
+            stats = proxy_pool.get_statistics()
             if PROXY_MODE == 'pool':
                 logger.info(f"PROXY POOL MODE: {stats['total_proxies']} proxies configured with automatic failover")
             elif PROXY_MODE == 'single':
@@ -402,7 +424,8 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
     # Fetch all index pages
     # ======================================================================
     try:
-        idx_result = fetch_all_index_pages(
+        idx_result = _fetch_index_for_runtime(
+            runtime=state.get_active_runtime(),
             session=session, start_page=start_page, end_page=end_page,
             parse_all=parse_all, phase_mode=phase_mode, custom_url=custom_url,
             ignore_release_date=ignore_release_date, use_proxy=use_proxy,
@@ -613,6 +636,7 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
         total_entries_phase1 = len(all_index_results_phase1)
 
         p1_backend = create_detail_backend(
+            runtime=state.get_active_runtime(),
             use_parallel=use_parallel,
             use_cookie=custom_url is not None,
             is_adhoc_mode=custom_url is not None,
@@ -621,6 +645,7 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
             use_cf_bypass=use_cf_bypass,
         )
         p1_result = process_detail_entries(
+            runtime=state.get_active_runtime(),
             backend=p1_backend,
             entries=all_index_results_phase1,
             phase=1,
@@ -661,7 +686,7 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
     if phase_mode in ['2', 'all']:
         if phase_mode == 'all':
             if total_entries_phase1 > 0:
-                t = movie_sleep_mgr.sleep()
+                t = _sleep_manager(runtime).sleep()
                 logger.info("Phase transition cooldown: %.1fs before Phase 2", t)
             else:
                 logger.info("Phase 1 had no entries to process, skipping phase transition cooldown")
@@ -683,6 +708,7 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
         log_section(logger, phase2_title, emoji='🎬')
 
         p2_backend = create_detail_backend(
+            runtime=state.get_active_runtime(),
             use_parallel=use_parallel,
             use_cookie=custom_url is not None,
             is_adhoc_mode=custom_url is not None,
@@ -691,6 +717,7 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
             use_cf_bypass=use_cf_bypass,
         )
         p2_result = process_detail_entries(
+            runtime=state.get_active_runtime(),
             backend=p2_backend,
             entries=all_index_results_phase2,
             phase=2,
@@ -729,6 +756,7 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
         logger.info(f"CSV file written incrementally to: {csv_path}")
 
     generate_summary_report(
+        runtime=state.get_active_runtime(),
         phase_mode=phase_mode, parse_all=parse_all,
         start_page=start_page, end_page=end_page,
         max_consecutive_empty=max_consecutive_empty,
@@ -853,6 +881,14 @@ def _run_spider_impl(options: SpiderRunOptions) -> SpiderRunResult:
 
 
 def run_spider(options: SpiderRunOptions) -> SpiderRunResult:
+    runtime = state.get_active_runtime()
+    owns_runtime = runtime is None
+    if owns_runtime:
+        runtime = SpiderRuntime()
+        state.bind_active_runtime(runtime)
+    # When SpiderRunService already bound a runtime, owns_runtime is false:
+    # run_spider uses it without closing or clearing the external owner.
+
     result_context = _SpiderResultContext(
         result_json=options.result_json,
         mode="adhoc" if options.url else "daily",
@@ -912,6 +948,11 @@ def run_spider(options: SpiderRunOptions) -> SpiderRunResult:
                 f"Could not clear db audit session context on exit: {_e}"
             )
         _result_context.reset(token)
+        if owns_runtime:
+            try:
+                runtime.close()
+            finally:
+                state.clear_active_runtime(runtime)
 
 
 def main():
@@ -931,10 +972,11 @@ class SpiderRunService:
     """Application-service wrapper for the spider runtime."""
 
     def run(self):
-        from javdb.spider.runtime.context import SpiderRuntime
         from javdb.spider.runtime import state as runtime_state
 
         runtime = SpiderRuntime()
+        # SpiderRunService owns this runtime; run_spider detects the active
+        # binding and leaves close/clear responsibility to this finally block.
         runtime_state.bind_active_runtime(runtime)
         try:
             return main()

@@ -17,12 +17,21 @@ from javdb.pipeline.policies import (
 
 import javdb.spider.runtime.state as state
 from javdb.spider.fetch.fallback import get_page_url, fetch_index_page_with_fallback
-from javdb.spider.runtime.sleep import movie_sleep_mgr
+from javdb.spider.runtime.sleep import ensure_sleep_runtime, movie_sleep_mgr
 
 logger = get_logger(__name__)
 
 
+def _sleep_manager(runtime=None):
+    runtime = runtime or state.get_active_runtime()
+    if runtime is not None:
+        return ensure_sleep_runtime(runtime).movie_sleep_mgr
+    return movie_sleep_mgr
+
+
 def fetch_all_index_pages(
+    *,
+    runtime=None,
     session, start_page: int, end_page: int, parse_all: bool,
     phase_mode: str, custom_url: Optional[str], ignore_release_date: bool,
     use_proxy: bool, use_cf_bypass: bool, max_consecutive_empty: int,
@@ -58,6 +67,7 @@ def fetch_all_index_pages(
             fetch_all_index_pages_parallel,
         )
         idx_result = fetch_all_index_pages_parallel(
+            runtime=runtime,
             start_page=start_page, end_page=end_page,
             parse_all=parse_all, phase_mode=phase_mode,
             custom_url=custom_url, ignore_release_date=ignore_release_date,
@@ -71,9 +81,11 @@ def fetch_all_index_pages(
             idx_result, custom_url,
             parsed_movies_history_phase1, parsed_movies_history_phase2,
             num_workers=active_workers,
+            runtime=runtime,
         )
 
     return _fetch_all_index_pages_sequential(
+        runtime=runtime,
         session=session, start_page=start_page, end_page=end_page,
         parse_all=parse_all, phase_mode=phase_mode, custom_url=custom_url,
         ignore_release_date=ignore_release_date, use_proxy=use_proxy,
@@ -89,7 +101,7 @@ def fetch_all_index_pages(
 
 
 def _fetch_all_index_pages_sequential(
-    session, start_page: int, end_page: int, parse_all: bool,
+    runtime, session, start_page: int, end_page: int, parse_all: bool,
     phase_mode: str, custom_url: Optional[str], ignore_release_date: bool,
     use_proxy: bool, use_cf_bypass: bool, max_consecutive_empty: int,
     output_csv: str, output_dated_dir: str, csv_path: str,
@@ -124,6 +136,7 @@ def _fetch_all_index_pages_sequential(
             use_cf_bypass=use_cf_bypass,
             page_num=page_num,
             is_adhoc_mode=custom_url is not None,
+            runtime=runtime,
         )
 
         if has_movie_list and effective_use_cf_bypass != use_cf_bypass:
@@ -209,7 +222,7 @@ def _fetch_all_index_pages_sequential(
             break
 
         page_num += 1
-        movie_sleep_mgr.sleep()
+        _sleep_manager(runtime).sleep()
 
     logger.info(f"Fetched and parsed {last_valid_page - start_page + 1 if last_valid_page >= start_page else 0} pages")
 
@@ -227,6 +240,7 @@ def _fetch_all_index_pages_sequential(
         parsed_movies_history_phase1,
         parsed_movies_history_phase2,
         num_workers=num_workers,
+        runtime=runtime,
     )
 
 
@@ -237,6 +251,7 @@ def _post_process_index_results(
     parsed_movies_history_phase2: dict,
     *,
     num_workers: int = 1,
+    runtime=None,
 ) -> dict:
     """Estimate processing volume and apply the sleep volume multiplier."""
     all_p1 = idx_result['all_index_results_phase1']
@@ -265,7 +280,7 @@ def _post_process_index_results(
         "Estimated processing volume: N=%d (total=%d, pre-skip=%d)",
         _est_n, len(all_p1) + len(all_p2), _est_skip,
     )
-    movie_sleep_mgr.apply_volume_multiplier(
+    _sleep_manager(runtime).apply_volume_multiplier(
         _est_n, num_workers=max(1, num_workers),
     )
 

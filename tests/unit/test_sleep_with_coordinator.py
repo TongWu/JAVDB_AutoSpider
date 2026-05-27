@@ -576,6 +576,11 @@ class TestSetCoordinator:
         coord = MagicMock()
         mgr.set_coordinator(coord)
         assert mgr._coordinator is coord
+        assert mgr.has_coordinator() is True
+
+    def test_has_coordinator_false_when_unconfigured(self):
+        mgr = MovieSleepManager(0.01, 0.02, throttle=None)
+        assert mgr.has_coordinator() is False
 
     def test_set_coordinator_resets_circuit_breaker(self):
         mgr = MovieSleepManager(0.01, 0.02, throttle=None)
