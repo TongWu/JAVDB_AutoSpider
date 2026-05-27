@@ -393,6 +393,8 @@ def test_sleep_runtime_copies_existing_coordinator_binding():
     legacy_mgr = sleep_module.movie_sleep_mgr
     legacy_coordinator = legacy_mgr._coordinator
     legacy_proxy_id = legacy_mgr._proxy_id
+    legacy_coord_failures = legacy_mgr._coord_failures
+    legacy_degraded = legacy_mgr._degraded
 
     try:
         legacy_mgr.set_coordinator(coordinator, proxy_id="proxy-runtime")
@@ -405,6 +407,36 @@ def test_sleep_runtime_copies_existing_coordinator_binding():
     finally:
         legacy_mgr._coordinator = legacy_coordinator
         legacy_mgr._proxy_id = legacy_proxy_id
+        legacy_mgr._coord_failures = legacy_coord_failures
+        legacy_mgr._degraded = legacy_degraded
+
+
+def test_sleep_runtime_does_not_copy_legacy_proxy_id_for_runtime_coordinator():
+    from javdb.spider.runtime import sleep as sleep_module
+
+    runtime = SpiderRuntime()
+    runtime_coordinator = MagicMock()
+    legacy_coordinator = MagicMock()
+    runtime.services.proxy_coordinator = runtime_coordinator
+    legacy_mgr = sleep_module.movie_sleep_mgr
+    legacy_original_coordinator = legacy_mgr._coordinator
+    legacy_proxy_id = legacy_mgr._proxy_id
+    legacy_coord_failures = legacy_mgr._coord_failures
+    legacy_degraded = legacy_mgr._degraded
+
+    try:
+        legacy_mgr.set_coordinator(legacy_coordinator, proxy_id="stale-proxy")
+
+        sleep_ctx = ensure_sleep_runtime(runtime)
+
+        assert sleep_ctx.movie_sleep_mgr.has_coordinator() is True
+        assert sleep_ctx.movie_sleep_mgr._coordinator is runtime_coordinator
+        assert sleep_ctx.movie_sleep_mgr._proxy_id is None
+    finally:
+        legacy_mgr._coordinator = legacy_original_coordinator
+        legacy_mgr._proxy_id = legacy_proxy_id
+        legacy_mgr._coord_failures = legacy_coord_failures
+        legacy_mgr._degraded = legacy_degraded
 
 
 def test_explicit_runtime_fallback_fetch_uses_runtime_request_handler(monkeypatch):
