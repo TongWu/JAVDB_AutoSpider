@@ -246,6 +246,111 @@ from javdb.spider.runtime.active import (  # noqa: E402
 from javdb.spider.runtime.context import SpiderRuntime  # noqa: E402
 
 
+def get_legacy_proxy_pool():
+    """Compatibility boundary for legacy proxy-pool reads."""
+    return global_proxy_pool
+
+
+def get_legacy_proxy_coordinator():
+    """Compatibility boundary for legacy proxy-coordinator reads."""
+    return global_proxy_coordinator
+
+
+def get_legacy_login_state_client():
+    """Compatibility boundary for legacy login-state client reads."""
+    return global_login_state_client
+
+
+def get_legacy_movie_claim_client():
+    """Compatibility boundary for legacy movie-claim client reads."""
+    return global_movie_claim_client
+
+
+def get_legacy_work_distributor_client():
+    """Compatibility boundary for legacy work-distributor client reads."""
+    return global_work_distributor_client
+
+
+def get_legacy_runtime_holder_id() -> str:
+    """Compatibility boundary for the legacy runner holder id."""
+    return runtime_holder_id
+
+
+def get_legacy_parsed_links() -> set:
+    """Compatibility boundary for legacy parsed-link reads."""
+    return parsed_links
+
+
+def get_legacy_proxy_ban_html_files() -> list:
+    """Compatibility boundary for legacy proxy-ban HTML file reads."""
+    return proxy_ban_html_files
+
+
+def set_legacy_always_bypass_time(value: Optional[int]) -> None:
+    """Compatibility boundary for legacy CF-bypass duration writes."""
+    global always_bypass_time
+    always_bypass_time = value
+
+
+def get_legacy_cf_bypass_state():
+    """Return legacy CF-bypass duration, lock, and proxy marker map."""
+    return always_bypass_time, _cf_bypass_lock, proxies_requiring_cf_bypass
+
+
+def get_legacy_login_budget() -> tuple[int, int]:
+    """Return legacy ``(total_attempts, total_budget)``."""
+    return login_total_attempts, login_total_budget
+
+
+def set_legacy_login_total_budget(value: int) -> None:
+    """Compatibility boundary for legacy login budget writes."""
+    global login_total_budget
+    login_total_budget = value
+
+
+def get_legacy_login_state() -> tuple[Optional[str], Optional[str], Optional[int]]:
+    """Return legacy ``(proxy_name, cookie, version)`` login state."""
+    return logged_in_proxy_name, refreshed_session_cookie, current_login_state_version
+
+
+def set_legacy_login_state(
+    *,
+    proxy_name: Optional[str] = None,
+    cookie: Optional[str] = None,
+    version: Optional[int] = None,
+) -> None:
+    """Compatibility boundary for legacy login-state writes."""
+    global logged_in_proxy_name, refreshed_session_cookie, current_login_state_version
+    if proxy_name is not None:
+        logged_in_proxy_name = proxy_name
+    if cookie is not None:
+        refreshed_session_cookie = cookie
+    if version is not None:
+        current_login_state_version = version
+
+
+def _deduct_legacy_proxy_login_budget_locked(proxy_name: str) -> int:
+    """Legacy login-budget deduction. Caller must hold ``_login_budget_lock``."""
+    global login_total_budget
+    if proxy_name in _login_budget_deducted_proxies:
+        return 0
+    if login_total_budget <= 0:
+        _login_budget_deducted_proxies.add(proxy_name)
+        return 0
+
+    used = login_attempts_per_proxy.get(proxy_name, 0)
+    remaining = LOGIN_ATTEMPTS_PER_PROXY_LIMIT - used
+    if remaining <= 0:
+        _login_budget_deducted_proxies.add(proxy_name)
+        return 0
+
+    new_budget = max(login_total_attempts, login_total_budget - remaining)
+    actually_deducted = login_total_budget - new_budget
+    login_total_budget = new_budget
+    _login_budget_deducted_proxies.add(proxy_name)
+    return actually_deducted
+
+
 def _sync_legacy_globals_from_runtime(runtime: SpiderRuntime) -> None:
     global parsed_links, proxy_ban_html_files, runtime_holder_id
     global _runner_session, _runner_heartbeat_thread, _runner_unregistered

@@ -40,7 +40,7 @@ def _runtime_holder_id(runtime=None) -> str:
     runtime = _resolve_runtime(runtime)
     if runtime is not None:
         return runtime.runner_registry.holder_id
-    return getattr(state, "runtime_holder_id")
+    return state.get_legacy_runtime_holder_id()
 
 
 def _publish_login_state_to_do(
@@ -208,7 +208,11 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None,
             login_proxies = named_proxies
             used_proxy_name = named_nm
 
-    proxy_pool = services.proxy_pool if runtime is not None else services.global_proxy_pool
+    proxy_pool = (
+        services.proxy_pool
+        if runtime is not None
+        else state.get_legacy_proxy_pool()
+    )
     if login_proxies is None and spider_uses_proxy and proxy_pool is not None:
         current_proxy = proxy_pool.get_current_proxy()
         if current_proxy:

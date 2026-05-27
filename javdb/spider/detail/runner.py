@@ -53,25 +53,23 @@ def _detail_state(runtime=None):
 
 def _movie_claim_client(runtime=None):
     runtime = _resolve_runtime(runtime)
-    services = runtime.services if runtime is not None else state
     if runtime is None:
-        return services.global_movie_claim_client
+        return state.get_legacy_movie_claim_client()
     return runtime.movie_claim.client_public
 
 
 def _work_distributor_client(runtime=None):
     runtime = _resolve_runtime(runtime)
-    services = runtime.services if runtime is not None else state
     if runtime is None:
-        return services.global_work_distributor_client
-    return services.work_distributor_client
+        return state.get_legacy_work_distributor_client()
+    return runtime.services.work_distributor_client
 
 
 def _holder_id(runtime=None) -> str:
     runtime = _resolve_runtime(runtime)
     if runtime is not None:
         return runtime.runner_registry.holder_id
-    return getattr(state, "runtime_holder_id")
+    return state.get_legacy_runtime_holder_id()
 
 
 def _claim_detail_candidates(
