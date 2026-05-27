@@ -201,18 +201,18 @@ class LoginCoordinator:
         return self._lock
 
     def _login_state(self):
-        return self._runtime.login if self._runtime is not None else state
+        if self._runtime is not None:
+            return self._runtime.login
+        return state.get_legacy_login_context()
 
     def _services(self):
-        return self._runtime.services if self._runtime is not None else state
+        if self._runtime is not None:
+            return self._runtime.services
+        return state.get_legacy_runtime_services()
 
     def _login_state_client(self):
         services = self._services()
-        return (
-            services.login_state_client
-            if self._runtime is not None
-            else services.global_login_state_client
-        )
+        return services.login_state_client
 
     def _holder_id(self) -> str:
         if self._runtime is not None:
@@ -221,11 +221,7 @@ class LoginCoordinator:
 
     def _shared_request_handler(self):
         services = self._services()
-        return (
-            services.request_handler
-            if self._runtime is not None
-            else services.global_request_handler
-        )
+        return services.request_handler
 
     # -- DO lease / park / poll helpers ------------------------------------
 

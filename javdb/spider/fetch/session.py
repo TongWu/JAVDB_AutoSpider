@@ -28,12 +28,16 @@ def _resolve_runtime(runtime=None):
 
 def _login_state(runtime=None):
     runtime = _resolve_runtime(runtime)
-    return runtime.login if runtime is not None else state
+    return runtime.login if runtime is not None else state.get_legacy_login_context()
 
 
 def _runtime_services(runtime=None):
     runtime = _resolve_runtime(runtime)
-    return runtime.services if runtime is not None else state
+    return (
+        runtime.services
+        if runtime is not None
+        else state.get_legacy_runtime_services()
+    )
 
 
 def _runtime_holder_id(runtime=None) -> str:
@@ -72,11 +76,7 @@ def _publish_login_state_to_do(
     runtime = _resolve_runtime(runtime)
     login_ctx = _login_state(runtime)
     services = _runtime_services(runtime)
-    client = (
-        services.login_state_client
-        if runtime is not None
-        else services.global_login_state_client
-    )
+    client = services.login_state_client
     if client is None or not cookie:
         return
     publish_proxy_name = proxy_name or DIRECT_LOGIN_PROXY_NAME
@@ -208,11 +208,7 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None,
             login_proxies = named_proxies
             used_proxy_name = named_nm
 
-    proxy_pool = (
-        services.proxy_pool
-        if runtime is not None
-        else state.get_legacy_proxy_pool()
-    )
+    proxy_pool = services.proxy_pool
     if login_proxies is None and spider_uses_proxy and proxy_pool is not None:
         current_proxy = proxy_pool.get_current_proxy()
         if current_proxy:
@@ -283,11 +279,7 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None,
                 new_cookie = getattr(config, 'JAVDB_SESSION_COOKIE', session_cookie)
                 login_ctx.refreshed_session_cookie = new_cookie
                 logger.info("✓ Reloaded config.py with new session cookie")
-                request_handler = (
-                    services.request_handler
-                    if runtime is not None
-                    else services.global_request_handler
-                )
+                request_handler = services.request_handler
                 if request_handler:
                     request_handler.config.javdb_session_cookie = new_cookie
                     logger.info("✓ Updated request handler with new session cookie")
@@ -299,11 +291,7 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None,
             else:
                 logger.warning("Failed to update config.py, using cookie directly for this run")
                 login_ctx.refreshed_session_cookie = session_cookie
-                request_handler = (
-                    services.request_handler
-                    if runtime is not None
-                    else services.global_request_handler
-                )
+                request_handler = services.request_handler
                 if request_handler:
                     request_handler.config.javdb_session_cookie = session_cookie
                     logger.info("✓ Updated request handler with new session cookie")
