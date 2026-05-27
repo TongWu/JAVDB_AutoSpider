@@ -131,6 +131,7 @@ def _legacy_state_field_offenders(text: str, source: str) -> list[str]:
             for alias in node.names:
                 if alias.name == "javdb.spider.runtime.state":
                     self.aliases.add(alias.asname or "javdb")
+                    self.aliases.add(alias.asname or alias.name)
 
         def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
             if node.module == "javdb.spider.runtime":
@@ -286,6 +287,23 @@ def test_architecture_guard_catches_full_import_chain_field_access():
 
     assert offenders == [
         "example.py:2: pool = javdb.spider.runtime.state.global_proxy_pool",
+    ]
+
+
+def test_architecture_guard_catches_function_scoped_full_import_chain():
+    offenders = _legacy_state_field_offenders(
+        "\n".join(
+            [
+                "def helper():",
+                "    import javdb.spider.runtime.state",
+                "    return javdb.spider.runtime.state.global_proxy_pool",
+            ]
+        ),
+        "example.py",
+    )
+
+    assert offenders == [
+        "example.py:3: return javdb.spider.runtime.state.global_proxy_pool",
     ]
 
 
