@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 
+import pytest
+
 from javdb.ops.diagnosis import collectors
 from javdb.ops.diagnosis.collectors import collect_incident_bundle
 
@@ -41,4 +43,28 @@ def test_collect_bundle_falls_back_when_log_snippet_limit_config_is_invalid(monk
         )
 
     assert bundle.log_snippets == ["pipeline.log: ERROR failed spider"]
+    assert any("OPS_DIAGNOSIS_MAX_LOG_SNIPPETS" in record.message for record in caplog.records)
+
+
+@pytest.mark.parametrize("raw_limit", ["0", "-3"])
+def test_collect_bundle_falls_back_when_log_snippet_limit_config_is_non_positive(
+    monkeypatch,
+    caplog,
+    tmp_path,
+    raw_limit,
+):
+    monkeypatch.setattr(collectors, "cfg", lambda _name, _default: raw_limit)
+    log = tmp_path / "pipeline.log"
+    log.write_text("ERROR first\nWARNING second\n", encoding="utf-8")
+
+    with caplog.at_level(logging.WARNING):
+        bundle = collect_incident_bundle(
+            trigger_source="manual_cli",
+            log_paths=[log],
+        )
+
+    assert bundle.log_snippets == [
+        "pipeline.log: ERROR first",
+        "pipeline.log: WARNING second",
+    ]
     assert any("OPS_DIAGNOSIS_MAX_LOG_SNIPPETS" in record.message for record in caplog.records)

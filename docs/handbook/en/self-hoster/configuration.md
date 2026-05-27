@@ -387,7 +387,7 @@ download" priority inside torrents.
 
 These variables are set in `.env` files rather than `config.py`.
 
-### 14.1 Root `.env` (Docker / cron entrypoint)
+### 15.1 Root `.env` (Docker / cron entrypoint)
 
 Defined in `.env.example` at the repository root. **Bare-metal uvicorn does
 not auto-load this file** — `apps/api/services/context.py` deliberately omits
@@ -451,7 +451,7 @@ All cron expressions use the standard five-field format:
 | `MAX_LOG_SIZE` | `str` | *(none)* | Maximum log file size before rotation, e.g. `100M`. |
 | `MAX_LOG_FILES` | `int` | *(none)* | Maximum number of rotated log files to keep. |
 
-### 14.2 Shell / CI Environment Variables
+### 15.2 Shell / CI Environment Variables
 
 These are set in the shell or in GitHub Actions workflow files and are read at
 runtime by various modules.
@@ -473,7 +473,7 @@ runtime by various modules.
 | `LOG_GITHUB_GROUPS` | `str` | `'auto'` | GitHub Actions log grouping. `'on'` -- always emit `::group::` markers. `'off'` -- never. `'auto'` -- detect CI environment. |
 | `VAR_MOVIE_SLEEP` | `str` | *(none)* | Override adaptive sleep range as `"min,max"` in seconds, e.g. `"0,0"` for CI. |
 
-### 14.3 Docker-Specific `.env` (`docker/.env.example`)
+### 15.3 Docker-Specific `.env` (`docker/.env.example`)
 
 The `docker/.env.example` file provides a simplified cron configuration format
 for the Docker container. It uses the same variables described in
