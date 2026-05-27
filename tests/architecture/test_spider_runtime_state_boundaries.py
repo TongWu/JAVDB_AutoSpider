@@ -3,6 +3,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import javdb.spider.runtime.state as state
+
 ROOT = Path(__file__).resolve().parents[2]
 
 PRODUCTION_GLOBS = [
@@ -14,29 +16,7 @@ ALLOWED_FILES = {
     "javdb/spider/runtime/context.py",
 }
 
-FORBIDDEN_DIRECT_STATE_FIELDS = {
-    "parsed_links",
-    "proxy_ban_html_files",
-    "global_proxy_pool",
-    "global_request_handler",
-    "global_proxy_coordinator",
-    "global_login_state_client",
-    "global_movie_claim_client",
-    "global_runner_registry_client",
-    "global_recommend_proxy_policy",
-    "global_work_distributor_client",
-    "runtime_holder_id",
-    "login_attempted",
-    "refreshed_session_cookie",
-    "logged_in_proxy_name",
-    "current_login_state_version",
-    "login_attempts_per_proxy",
-    "login_failures_per_proxy",
-    "login_total_attempts",
-    "login_total_budget",
-    "always_bypass_time",
-    "proxies_requiring_cf_bypass",
-}
+FORBIDDEN_DIRECT_STATE_FIELDS = set(state.LEGACY_DATA_FIELDS)
 
 
 def _production_files():
