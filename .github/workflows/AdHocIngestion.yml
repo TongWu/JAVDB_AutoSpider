@@ -1175,9 +1175,11 @@ jobs:
           fi
           "${CMD_ARGS[@]}" > reports/ops/latest_ops_diagnosis.json
           DIAG_EXIT=$?
-          echo "json_path=reports/ops/latest_ops_diagnosis.json" >> "$GITHUB_OUTPUT"
-          if [ $DIAG_EXIT -gt 2 ]; then
-            echo "::warning::ADR-026 diagnosis failed with exit code $DIAG_EXIT"
+          DIAG_JSON=reports/ops/latest_ops_diagnosis.json
+          if [ $DIAG_EXIT -le 1 ] && [ -s "$DIAG_JSON" ] && python3 -m json.tool "$DIAG_JSON" >/dev/null; then
+            echo "json_path=$DIAG_JSON" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::ADR-026 diagnosis did not produce valid JSON (exit=$DIAG_EXIT, path=$DIAG_JSON)"
           fi
           exit 0
 

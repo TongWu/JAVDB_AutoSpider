@@ -37,6 +37,21 @@ def test_detector_classifies_d1_drift_from_known_verdict():
     assert "Do not rollback the committed session." in result.unsafe_actions
 
 
+def test_detector_treats_clean_drift_verdict_as_non_incident():
+    bundle = IncidentBundle(
+        trigger_source="manual_cli",
+        workflow_result="failure",
+        session_id="sid",
+        drift_verdict="CLEAN",
+    )
+
+    result = detect_incident(bundle)
+
+    assert result.incident_type == "failed_ingestion"
+    assert "Drift diagnosis verdict is CLEAN." in result.confirmed_findings
+    assert all("drift_diagnose apply" not in action for action in result.recommended_next_actions)
+
+
 def test_detector_flags_dead_lettered_recovery_outbox():
     bundle = IncidentBundle(
         trigger_source="manual_cli",

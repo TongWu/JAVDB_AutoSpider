@@ -165,6 +165,9 @@ def list_ops_incidents(
     _user: Dict[str, Any] = Depends(_require_auth),
 ) -> OpsIncidentListResponse:
     """Return persisted read-only operations diagnosis incidents."""
+    if limit <= 0:
+        raise HTTPException(status_code=400, detail="limit must be a positive integer")
+
     items = _list_ops_incident_records(
         status=status,
         run_id=run_id,

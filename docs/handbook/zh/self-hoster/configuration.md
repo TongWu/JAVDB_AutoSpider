@@ -4,7 +4,7 @@ JAVDB AutoSpider 所有配置变量的完整参考。
 
 主配置文件为 **`config.py`**。将 `config.py.example` 复制为 `config.py` 并填入你的值。该文件已被 git 忽略，因此凭据不会被提交。
 
-Web API 和 Docker 的环境变量在[第 14 节](#14-环境变量)中介绍。
+Web API 和 Docker 的环境变量在[第 15 节](#15-环境变量)中介绍。
 
 ---
 
@@ -17,13 +17,14 @@ Web API 和 Docker 的环境变量在[第 14 节](#14-环境变量)中介绍。
 5. [CloudFlare 绕过](#5-cloudflare-绕过)
 6. [爬虫配置](#6-爬虫配置)
 7. [JavDB 登录](#7-javdb-登录)
-8. [日志](#8-日志)
-9. [解析 / 洗版](#9-解析--洗版)
-10. [文件路径 / 数据库路径](#10-文件路径--数据库路径)
-11. [PikPak](#11-pikpak)
-12. [Rclone / 去重](#12-rclone--去重)
-13. [qBittorrent 文件过滤器](#13-qbittorrent-文件过滤器)
-14. [环境变量](#14-环境变量)
+8. [AI 运维诊断](#8-ai-运维诊断)
+9. [日志](#9-日志)
+10. [解析 / 洗版](#10-解析--洗版)
+11. [文件路径 / 数据库路径](#11-文件路径--数据库路径)
+12. [PikPak](#12-pikpak)
+13. [Rclone / 去重](#13-rclone--去重)
+14. [qBittorrent 文件过滤器](#14-qbittorrent-文件过滤器)
+15. [环境变量](#15-环境变量)
 
 ---
 
@@ -240,7 +241,21 @@ PROXY_POOL = [
 
 ---
 
-## 8. 日志
+## 8. AI 运维诊断
+
+ADR-026 新增了一个只读运维诊断助手，用于失败的 ingestion run 和 D1 事件。Phase 1 不会执行 rollback、rerun、drift apply、qB 清理或 recovery mutation；它只收集证据、分类并持久化一条 `OpsIncidents` 记录或 JSONL 后备文件。
+
+| 变量 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `OPS_DIAGNOSIS_AI_ENABLED` | `bool` | `False` | 启用可选的 AI 综合层。禁用时，确定性 detector 后备仍会产出诊断。 |
+| `OPS_DIAGNOSIS_API_URL` | `str` | `''` | 可选诊断综合层使用的 OpenAI 兼容 chat completions 端点。留空则仅使用确定性后备。 |
+| `OPS_DIAGNOSIS_API_KEY` | `str` | `''` | 可选诊断综合层端点的 API 密钥。除非启用 `OPS_DIAGNOSIS_AI_ENABLED`，否则请保持为空。 |
+| `OPS_DIAGNOSIS_MODEL` | `str` | `'deterministic-fallback-v1'` | 写入诊断输出的模型标识。默认值说明未使用远程模型。 |
+| `OPS_DIAGNOSIS_MAX_LOG_SNIPPETS` | `int` | `20` | 收集到紧凑 evidence bundle 中的最大匹配日志行数。无效值会回退到 `20`。 |
+
+---
+
+## 9. 日志
 
 | 变量 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
@@ -250,13 +265,13 @@ PROXY_POOL = [
 | `PIPELINE_LOG_FILE` | `str` | `'logs/pipeline.log'` | 流水线编排器的日志文件路径。 |
 | `EMAIL_NOTIFICATION_LOG_FILE` | `str` | `'logs/email_notification.log'` | 邮件通知的日志文件路径。 |
 
-其他日志行为由环境变量控制（见[第 14 节](#14-环境变量)）：
+其他日志行为由环境变量控制（见[第 15 节](#15-环境变量)）：
 `LOG_STYLE`（`compact` | `plain` | `verbose`）和
 `LOG_GITHUB_GROUPS`（`on` | `off` | `auto`）。
 
 ---
 
-## 9. 解析 / 洗版
+## 10. 解析 / 洗版
 
 控制哪些影片包含在报告中，以及洗版逻辑是否启用。
 
@@ -269,7 +284,7 @@ PROXY_POOL = [
 
 ---
 
-## 10. 文件路径 / 数据库路径
+## 11. 文件路径 / 数据库路径
 
 除非给出绝对路径，否则所有路径相对于仓库根目录。
 
@@ -299,7 +314,7 @@ PROXY_POOL = [
 
 ---
 
-## 11. PikPak
+## 12. PikPak
 
 PikPak 云下载桥接的配置。桥接从 qBittorrent 读取磁力链接并将其作为离线下载提交到 PikPak。
 
@@ -313,7 +328,7 @@ PikPak 云下载桥接的配置。桥接从 qBittorrent 读取磁力链接并将
 
 ---
 
-## 12. Rclone / 去重
+## 13. Rclone / 去重
 
 Google Drive 库存扫描和重复文件清理的设置。
 
@@ -334,7 +349,7 @@ Google Drive 库存扫描和重复文件清理的设置。
 
 ---
 
-## 13. qBittorrent 文件过滤器
+## 14. qBittorrent 文件过滤器
 
 文件过滤器将种子中的小文件（NFO、样本、截图等）设为"不下载"优先级。
 
@@ -345,7 +360,7 @@ Google Drive 库存扫描和重复文件清理的设置。
 
 ---
 
-## 14. 环境变量
+## 15. 环境变量
 
 这些变量在 `.env` 文件中设置，而非 `config.py`。
 
