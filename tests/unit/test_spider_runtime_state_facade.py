@@ -32,6 +32,12 @@ FINAL_FACADE_ENTRIES = (
     "save_proxy_ban_html",
 )
 
+DEFAULT_LOGIN_TOTAL_BUDGET = (
+    len(state.PROXY_POOL) * state.LOGIN_ATTEMPTS_PER_PROXY_LIMIT
+    if state.PROXY_POOL
+    else 0
+)
+
 
 @pytest.fixture(autouse=True)
 def _reset_active_runtime():
@@ -39,6 +45,7 @@ def _reset_active_runtime():
     state.login_attempts_per_proxy.clear()
     state.login_failures_per_proxy.clear()
     state.login_total_attempts = 0
+    state.login_total_budget = DEFAULT_LOGIN_TOTAL_BUDGET
     active = state.get_active_runtime()
     if active is not None:
         state.clear_active_runtime(active)
@@ -47,6 +54,7 @@ def _reset_active_runtime():
     state.login_attempts_per_proxy.clear()
     state.login_failures_per_proxy.clear()
     state.login_total_attempts = 0
+    state.login_total_budget = DEFAULT_LOGIN_TOTAL_BUDGET
     active = state.get_active_runtime()
     if active is not None:
         state.clear_active_runtime(active)
