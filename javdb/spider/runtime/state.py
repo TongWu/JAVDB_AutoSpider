@@ -307,9 +307,6 @@ def bind_active_runtime(runtime: SpiderRuntime) -> SpiderRuntime:
 
 
 def _clear_runtime_service_globals(runtime: SpiderRuntime) -> None:
-    global global_proxy_pool, global_request_handler, global_proxy_coordinator
-    global global_login_state_client, global_runner_registry_client
-    global global_recommend_proxy_policy, global_work_distributor_client
     global global_movie_claim_client
 
     service_globals = (
