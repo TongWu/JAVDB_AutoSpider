@@ -49,6 +49,8 @@ def process_phase_entries_sequential(
     dedup_csv_path: str = '',
     enable_redownload: bool = False,
     redownload_threshold: float = 0.30,
+    *,
+    runtime=None,
 ) -> dict:
     """Process detail entries sequentially (single-threaded mode).
 
@@ -58,12 +60,14 @@ def process_phase_entries_sequential(
     """
     backend = build_sequential_detail_backend(
         session,
+        runtime=runtime,
         use_cookie=use_cookie,
         is_adhoc_mode=is_adhoc_mode,
         use_proxy=use_proxy,
         use_cf_bypass=use_cf_bypass,
     )
     return process_detail_entries(
+        runtime=runtime,
         backend=backend,
         entries=entries,
         phase=phase,

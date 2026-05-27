@@ -458,6 +458,10 @@ class MovieSleepManager:
         self._coord_failures = 0
         self._degraded = False
 
+    def has_coordinator(self) -> bool:
+        """Return whether a coordinator has been injected."""
+        return self._coordinator is not None
+
     def set_active_runners(self, count: int) -> None:
         """Scale local throttle windows by runner count for degraded-mode safety."""
         if self._throttle is not None:
@@ -921,6 +925,16 @@ def ensure_sleep_runtime(runtime):
             throttle=runtime.sleep.triple_window_throttle,
             runtime=runtime,
         )
+    coordinator = getattr(runtime.services, "proxy_coordinator", None)
+    source_mgr = globals().get("movie_sleep_mgr")
+    if coordinator is None and source_mgr is not None:
+        coordinator = getattr(source_mgr, "_coordinator", None)
+    if (
+        coordinator is not None
+        and not runtime.sleep.movie_sleep_mgr.has_coordinator()
+    ):
+        proxy_id = getattr(source_mgr, "_proxy_id", None) if source_mgr is not None else None
+        runtime.sleep.movie_sleep_mgr.set_coordinator(coordinator, proxy_id=proxy_id)
     return runtime.sleep
 
 

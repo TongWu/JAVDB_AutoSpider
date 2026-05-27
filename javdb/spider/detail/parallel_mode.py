@@ -100,6 +100,8 @@ def process_detail_entries_parallel(
     dedup_csv_path: str = '',
     enable_redownload: bool = False,
     redownload_threshold: float = 0.30,
+    *,
+    runtime=None,
 ) -> dict:
     """Process detail entries in parallel using one worker per proxy.
 
@@ -107,9 +109,11 @@ def process_detail_entries_parallel(
         rows, skipped_history, failed, failed_movies, no_new_torrents
     """
     backend = build_parallel_detail_backend(
+        runtime=runtime,
         use_cookie=use_cookie,
     )
     return process_detail_entries(
+        runtime=runtime,
         backend=backend,
         entries=entries,
         phase=phase,

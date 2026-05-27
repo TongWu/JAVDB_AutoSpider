@@ -610,7 +610,12 @@ class SpiderRuntime:
             from javdb.spider.runtime.sleep import ensure_sleep_runtime
             ensure_sleep_runtime(self).movie_sleep_mgr.set_active_runners(count)
         except Exception:  # noqa: BLE001
-            pass
+            import javdb.spider.runtime.state as legacy_state
+            legacy_state.logger.debug(
+                "Failed to apply sleep runner count: %d",
+                count,
+                exc_info=True,
+            )
 
     def _maybe_honour_pipeline_pause(self, *, pipeline_paused_until_ms: int, reason: Optional[str]) -> None:
         import javdb.spider.runtime.state as legacy_state
@@ -872,13 +877,13 @@ class SpiderRuntime:
             url,
         )
         self.services.proxy_coordinator = client
-        legacy_state.set_remote_ban_hook(lambda name: client.mark_proxy_banned(name))
-        legacy_state.set_remote_unban_hook(lambda name: client.mark_proxy_unbanned(name))
+        legacy_state.set_remote_ban_hook(client.mark_proxy_banned)
+        legacy_state.set_remote_unban_hook(client.mark_proxy_unbanned)
 
         try:
             from javdb.spider.runtime.sleep import ensure_sleep_runtime
             _mgr = ensure_sleep_runtime(self).movie_sleep_mgr
-            if _mgr._coordinator is None:
+            if not _mgr.has_coordinator():
                 _mgr.set_coordinator(client)
                 legacy_state.logger.debug("Coordinator injected into movie_sleep_mgr")
         except Exception:

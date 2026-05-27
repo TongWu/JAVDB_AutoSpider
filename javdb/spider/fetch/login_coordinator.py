@@ -219,6 +219,14 @@ class LoginCoordinator:
             return self._runtime.runner_registry.holder_id
         return state.runtime_holder_id
 
+    def _shared_request_handler(self):
+        services = self._services()
+        return (
+            services.request_handler
+            if self._runtime is not None
+            else services.global_request_handler
+        )
+
     # -- DO lease / park / poll helpers ------------------------------------
 
     def _try_acquire_login_lease(self, hint_proxy_name: str) -> bool:
@@ -733,6 +741,9 @@ class LoginCoordinator:
         login_ctx = self._login_state()
         login_ctx.refreshed_session_cookie = None
         login_ctx.logged_in_proxy_name = None
+        request_handler = self._shared_request_handler()
+        if request_handler is not None:
+            request_handler.config.javdb_session_cookie = ''
         return False, None
 
     def _worker_for_id(self, worker_id: int):
