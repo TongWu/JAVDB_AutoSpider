@@ -38,8 +38,50 @@ class JavdbSessionRefreshResponse(BaseModel):
     error: Optional[str] = None
 
 
+class EvidenceRefSchema(BaseModel):
+    """Evidence reference attached to an operations diagnosis."""
+
+    kind: str
+    ref: str
+    label: Optional[str] = None
+
+
+class OpsIncidentSchema(BaseModel):
+    """Persisted ADR-026 operations incident summary."""
+
+    incident_id: str
+    trigger_source: str
+    run_id: Optional[str] = None
+    run_attempt: Optional[int] = None
+    session_id: Optional[str] = None
+    incident_type: str
+    status: str
+    persistence_status: str
+    model_version: str
+    detector_version: str
+    confidence: str
+    confirmed_findings: list[str]
+    likely_causes: list[str]
+    unknowns: list[str]
+    recommended_next_actions: list[str]
+    unsafe_actions: list[str]
+    evidence_refs: list[EvidenceRefSchema]
+    created_at: str
+    updated_at: str
+    resolved_at: Optional[str] = None
+
+
+class OpsIncidentListResponse(BaseModel):
+    """List response for operations incidents."""
+
+    items: list[OpsIncidentSchema]
+
+
 __all__ = [
+    "EvidenceRefSchema",
     "JavdbSessionRefreshRequest",
     "JavdbSessionRefreshResponse",
     "JavdbSessionStatus",
+    "OpsIncidentListResponse",
+    "OpsIncidentSchema",
 ]

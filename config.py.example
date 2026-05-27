@@ -258,6 +258,15 @@ JAVDB_PASSWORD = ''  # Your JavDB password
 GPT_API_URL = 'https://api.gpt.ge/v1/chat/completions'  # API endpoint
 GPT_API_KEY = ''  # Your API key (e.g., sk-xxx)
 
+# AI operations diagnosis assistant (ADR-026)
+# Phase 1 remains read-only. When disabled or not configured, the assistant
+# still produces deterministic detector-based diagnoses.
+OPS_DIAGNOSIS_AI_ENABLED = False
+OPS_DIAGNOSIS_API_URL = ''
+OPS_DIAGNOSIS_API_KEY = ''
+OPS_DIAGNOSIS_MODEL = 'deterministic-fallback-v1'
+OPS_DIAGNOSIS_MAX_LOG_SNIPPETS = 20
+
 # JavDB session cookie (can be auto-updated by scripts/login.py)
 # Manual method: Get from browser → Developer Tools → Application → Cookies → _jdb_session
 # Automatic method: Set credentials above and run: python3 scripts/login.py

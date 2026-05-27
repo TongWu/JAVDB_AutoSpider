@@ -526,6 +526,25 @@ jobs:
             echo "  parsed_movies_history.csv: NOT FOUND"
           fi
 
+      - name: Smoke test ops diagnosis CLI (ADR-026)
+        if: always()
+        env:
+          STORAGE_BACKEND: sqlite
+        run: |
+          set +e
+          mkdir -p reports/ops
+          python3 -m apps.cli.ops.diagnose_run \
+            --trigger-source workflow_failure \
+            --run-id "${{ github.run_id }}" \
+            --attempt "${{ github.run_attempt }}" \
+            --workflow-name TestIngestion \
+            --workflow-result "${{ job.status }}" \
+            --json > reports/ops/test_ops_diagnosis.json
+          EXIT_CODE=$?
+          if [ $EXIT_CODE -gt 2 ]; then
+            exit $EXIT_CODE
+          fi
+
       - name: Encrypt and upload logs artifact
         if: always()
         env:

@@ -63,6 +63,14 @@ This document is the operator's reference for rolling back partial Cloudflare D1
 - **Stale-session cron:** [`StaleSessionCleanup.yml`](../../../../.github/workflows/StaleSessionCleanup.yml) runs daily at 02:00 UTC and unwinds any session stuck `in_progress` for more than 48h, tagging them `FailureReason='stale_timeout'`. The same job now also calls `apps.cli.sweep_movie_claim_stages` to clean up Phase-1 orphaned `staged_complete{}` entries on the MovieClaim Durable Object (cutoff 48h, server-floored to ≥ 1h).
 - **MovieClaim cross-session rollback safety (Phase 1):** detail-page completions are now staged per-session on the MovieClaim DO before they enter the permanent `completed_committed[]` list. `apps.cli.commit_session` promotes the stage on success; `apps.cli.rollback` calls `rollback_staged_movies` (with up to 3 retries) before completing the DB rollback. A failed peer session no longer blocks an ad-hoc retry on the same href in another session — only `completed_committed[]` does. See [`docs/handbook/zh/self-hoster/proxy-coordinator.md` §15.2](../../zh/self-hoster/proxy-coordinator.md) for the protocol and `JAVDB_AutoSpider.wiki/Cross-Runner-State.md` §2.3 for the runtime semantics.
 
+For a structured advisory before deciding whether rollback is safe, run the ADR-026 diagnosis assistant:
+
+```bash
+python3 -m apps.cli.ops.diagnose_run --run-id <run_id> --attempt <attempt> --session-id <session_id> --workflow-result failure --json
+```
+
+The assistant is read-only and does not replace the rollback safety matrix.
+
 ---
 
 ## D1 Recovery Outbox
