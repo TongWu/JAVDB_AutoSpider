@@ -744,6 +744,36 @@
         "title": "EmailTestRequest",
         "type": "object"
       },
+      "EvidenceRefSchema": {
+        "description": "Evidence reference attached to an operations diagnosis.",
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "ref"
+        ],
+        "title": "EvidenceRefSchema",
+        "type": "object"
+      },
       "ExploreCookiePayload": {
         "properties": {
           "cookie": {
@@ -1983,6 +2013,174 @@
           "message"
         ],
         "title": "OnboardingTestResponse",
+        "type": "object"
+      },
+      "OpsIncidentListResponse": {
+        "description": "List response for operations incidents.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OpsIncidentSchema"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "OpsIncidentListResponse",
+        "type": "object"
+      },
+      "OpsIncidentSchema": {
+        "description": "Persisted ADR-026 operations incident summary.",
+        "properties": {
+          "confidence": {
+            "title": "Confidence",
+            "type": "string"
+          },
+          "confirmed_findings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Confirmed Findings",
+            "type": "array"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "detector_version": {
+            "title": "Detector Version",
+            "type": "string"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRefSchema"
+            },
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "incident_id": {
+            "title": "Incident Id",
+            "type": "string"
+          },
+          "incident_type": {
+            "title": "Incident Type",
+            "type": "string"
+          },
+          "likely_causes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Likely Causes",
+            "type": "array"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "persistence_status": {
+            "title": "Persistence Status",
+            "type": "string"
+          },
+          "recommended_next_actions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Recommended Next Actions",
+            "type": "array"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "run_attempt": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Attempt"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "trigger_source": {
+            "title": "Trigger Source",
+            "type": "string"
+          },
+          "unknowns": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unknowns",
+            "type": "array"
+          },
+          "unsafe_actions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unsafe Actions",
+            "type": "array"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "incident_id",
+          "trigger_source",
+          "incident_type",
+          "status",
+          "persistence_status",
+          "model_version",
+          "detector_version",
+          "confidence",
+          "confirmed_findings",
+          "likely_causes",
+          "unknowns",
+          "recommended_next_actions",
+          "unsafe_actions",
+          "evidence_refs",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "OpsIncidentSchema",
         "type": "object"
       },
       "PikPakQueueItem": {
@@ -4151,6 +4349,141 @@
           }
         },
         "summary": "Refresh Javdb Session Diag",
+        "tags": [
+          "diagnostics"
+        ]
+      }
+    },
+    "/api/diag/ops-incidents": {
+      "get": {
+        "description": "Return persisted read-only operations diagnosis incidents.",
+        "operationId": "list_ops_incidents_api_diag_ops_incidents_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpsIncidentListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Ops Incidents",
+        "tags": [
+          "diagnostics"
+        ]
+      }
+    },
+    "/api/diag/ops-incidents/{incident_id}": {
+      "get": {
+        "description": "Return one persisted read-only operations diagnosis incident.",
+        "operationId": "get_ops_incident_api_diag_ops_incidents__incident_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpsIncidentSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Ops Incident",
         "tags": [
           "diagnostics"
         ]
