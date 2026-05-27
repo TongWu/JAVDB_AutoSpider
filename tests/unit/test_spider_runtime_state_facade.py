@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Generator
+
 import pytest
 
 import javdb.spider.runtime.state as state
@@ -40,7 +42,7 @@ DEFAULT_LOGIN_TOTAL_BUDGET = (
 
 
 @pytest.fixture(autouse=True)
-def _reset_active_runtime():
+def _reset_active_runtime() -> Generator[None, None, None]:
     state.login_attempted = False
     state.login_attempts_per_proxy.clear()
     state.login_failures_per_proxy.clear()
