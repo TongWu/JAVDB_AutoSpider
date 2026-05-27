@@ -50,7 +50,7 @@ def _production_files():
             yield path
 
 
-def test_production_code_does_not_directly_use_legacy_state_fields():
+def _legacy_state_field_offenders(text: str, source: str) -> list[str]:
     field_group = "|".join(
         re.escape(name) for name in sorted(FORBIDDEN_DIRECT_STATE_FIELDS)
     )
@@ -65,7 +65,8 @@ def test_production_code_does_not_directly_use_legacy_state_fields():
         + r")['\"]"
     )
     alias_pattern = re.compile(
-        r"\b([A-Za-z_][A-Za-z0-9_]*)\s*=.*\b(?:else\s+|=\s*)(?:state|_state)\b"
+        r"\b([A-Za-z_][A-Za-z0-9_]*)\s*="
+        r"(?:\s*(?:state|_state)\b|.*\belse\s+(?:state|_state)\b)"
     )
     indirect_template = (
         r"\b(?:{aliases})\.("
@@ -73,28 +74,58 @@ def test_production_code_does_not_directly_use_legacy_state_fields():
         + r")\b"
     )
     offenders: list[str] = []
+    state_aliases = {
+        match.group(1)
+        for match in alias_pattern.finditer(text)
+        if match.group(1) not in {"state", "_state"}
+    }
+    indirect_pattern = (
+        re.compile(
+            indirect_template.format(
+                aliases="|".join(re.escape(alias) for alias in sorted(state_aliases))
+            )
+        )
+        if state_aliases
+        else None
+    )
+    for line_no, line in enumerate(text.splitlines(), start=1):
+        if (
+            direct_pattern.search(line)
+            or getattr_pattern.search(line)
+            or (indirect_pattern is not None and indirect_pattern.search(line))
+        ):
+            offenders.append(f"{source}:{line_no}: {line.strip()}")
+    return offenders
+
+
+def test_architecture_guard_catches_direct_state_alias_assignments():
+    offenders = _legacy_state_field_offenders(
+        "\n".join(
+            [
+                "services = state",
+                "pool = services.global_proxy_pool",
+                "legacy = _state",
+                "holder = legacy.runtime_holder_id",
+            ]
+        ),
+        "example.py",
+    )
+
+    assert offenders == [
+        "example.py:2: pool = services.global_proxy_pool",
+        "example.py:4: holder = legacy.runtime_holder_id",
+    ]
+
+
+def test_production_code_does_not_directly_use_legacy_state_fields():
+    offenders: list[str] = []
     for path in _production_files():
         text = path.read_text(encoding="utf-8")
-        state_aliases = {
-            match.group(1)
-            for match in alias_pattern.finditer(text)
-            if match.group(1) not in {"state", "_state"}
-        }
-        indirect_pattern = (
-            re.compile(
-                indirect_template.format(
-                    aliases="|".join(re.escape(alias) for alias in sorted(state_aliases))
-                )
+        offenders.extend(
+            _legacy_state_field_offenders(
+                text,
+                path.relative_to(ROOT).as_posix(),
             )
-            if state_aliases
-            else None
         )
-        for line_no, line in enumerate(text.splitlines(), start=1):
-            if (
-                direct_pattern.search(line)
-                or getattr_pattern.search(line)
-                or (indirect_pattern is not None and indirect_pattern.search(line))
-            ):
-                offenders.append(f"{path.relative_to(ROOT)}:{line_no}: {line.strip()}")
 
     assert offenders == []
