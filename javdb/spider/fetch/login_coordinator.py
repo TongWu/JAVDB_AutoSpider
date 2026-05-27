@@ -217,7 +217,7 @@ class LoginCoordinator:
     def _holder_id(self) -> str:
         if self._runtime is not None:
             return self._runtime.runner_registry.holder_id
-        return getattr(state, "runtime_holder_id")
+        return state.get_legacy_runtime_holder_id()
 
     def _shared_request_handler(self):
         services = self._services()
