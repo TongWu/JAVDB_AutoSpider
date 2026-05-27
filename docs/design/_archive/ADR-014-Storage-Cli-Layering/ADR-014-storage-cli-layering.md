@@ -1,37 +1,30 @@
 # ADR-014: Storage CLI Layering
 
-**Status**: Accepted - Phases 1-2 delivered; Phase 3 pending
+**Status**: Completed — all phases delivered 2026-05-27
 **Date**: 2026-05-20
 **Deciders**: Storage CLI layering brainstorming and grill session
-**Related Implementation Plans**: [IMP-ADR014-01](IMP-ADR014-01-storage-cli-layering-phase1-guard.md) (Phase 1 - guard and direct storage imports — **Completed 2026-05-26**), [IMP-ADR014-02](IMP-ADR014-02-storage-cli-layering-phase2-lifecycle-helpers.md) (Phase 2 - canonical lifecycle helpers — **Completed 2026-05-26**), [IMP-ADR014-03](IMP-ADR014-03-storage-cli-layering-phase3-delete-legacy-wrappers.md) (Phase 3 - delete legacy wrappers)
+**Related Implementation Plans**: [IMP-ADR014-01](IMP-ADR014-01-storage-cli-layering-phase1-guard.md) (Phase 1 - guard and direct storage imports — **Completed 2026-05-26**), [IMP-ADR014-02](IMP-ADR014-02-storage-cli-layering-phase2-lifecycle-helpers.md) (Phase 2 - canonical lifecycle helpers — **Completed 2026-05-26**), [IMP-ADR014-03](IMP-ADR014-03-storage-cli-layering-phase3-delete-legacy-wrappers.md) (Phase 3 - delete legacy wrappers — **Completed 2026-05-27**)
 
 ## Outstanding Work
 
 - ~~Phase 1 - add the storage-to-CLI import guard, move the remaining commit-session CLI helper import to the storage helper, and update stale ADR/IMP notes.~~ **Completed 2026-05-26** (IMP-ADR014-01).
 - ~~Phase 2 - move the shared helper implementation to `javdb.storage.sessions.lifecycle_helpers` and migrate production callers to the canonical path.~~ **Completed 2026-05-26** (IMP-ADR014-02).
-- Phase 3 - delete `apps.cli.db._session_helpers` and `javdb.storage.rollback.session_helpers`, then guard against both paths returning.
+- ~~Phase 3 - delete `apps.cli.db._session_helpers` and `javdb.storage.rollback.session_helpers`, then guard against both paths returning.~~ **Completed 2026-05-27** (IMP-ADR014-03).
 
 ---
 
 ## Context
 
 ADR-008 identified a storage layering inversion: rollback library code imported
-helper code from `apps.cli.db._session_helpers`. That original issue has been
-partially fixed:
+helper code from `apps.cli.db._session_helpers`. That original issue is now
+fully resolved: the helper implementation lives at
+`javdb.storage.sessions.lifecycle_helpers`, production callers use that
+canonical path, and Phase 3 deleted both legacy wrapper paths.
 
-- `javdb.storage.rollback.core` now imports from
-  `javdb.storage.rollback.session_helpers`;
-- `apps.cli.db._session_helpers` is a re-export shim;
-- the helper implementation lives under `javdb.storage.rollback`.
-
-The remaining issue is smaller but still important:
-
-- `apps.cli.db.commit_session` still imports from the CLI shim;
-- the canonical helper path is named as rollback-specific even though the code
-  is shared by rollback, commit, API commit side effects, and session lifecycle
-  operations;
-- no architecture guard prevents `javdb.storage.*` from importing
-  `apps.cli.*` again.
+Earlier phases used `javdb.storage.rollback.session_helpers` as an interim
+storage-side helper path and kept `apps.cli.db._session_helpers` as a
+compatibility shim. Those paths are now historical and were deleted by
+ADR-014 Phase 3.
 
 ## Non-Negotiable Layering Invariant
 
@@ -79,10 +72,16 @@ documentation can still mention CLI module names.
 
 ### D3. Complete The Remaining Direct Import Cleanup In Phase 1
 
-`apps.cli.db.commit_session` stops importing from `apps.cli.db._session_helpers`
-and imports directly from `javdb.storage.rollback.session_helpers`.
+During Phase 1, `apps.cli.db.commit_session` stopped importing from
+`apps.cli.db._session_helpers` and imported directly from the interim
+`javdb.storage.rollback.session_helpers` path.
 
-`apps.cli.db._session_helpers` remains as a temporary CLI compatibility shim.
+`apps.cli.db._session_helpers` was kept as a temporary CLI compatibility shim
+for that phase.
+
+**Result:** This was an interim Phase 1 state only. Phase 2 moved production
+callers to `javdb.storage.sessions.lifecycle_helpers`, and Phase 3 deleted both
+legacy wrapper paths.
 
 ### D4. Use A Neutral Canonical Helper Module In Phase 2
 
@@ -105,6 +104,9 @@ Phase 2 keeps both legacy paths as re-export wrappers:
 Production callers migrate to `javdb.storage.sessions.lifecycle_helpers` in the
 same phase.
 
+**Result:** The wrappers were retained only during Phase 2 and were deleted by
+ADR-014 Phase 3 on 2026-05-27.
+
 ### D6. Delete Both Legacy Wrappers In Phase 3
 
 Phase 3 deletes:
@@ -114,6 +116,9 @@ Phase 3 deletes:
 
 Tests, monkeypatch targets, docs, and README references move to
 `javdb.storage.sessions.lifecycle_helpers`.
+
+**Result:** Completed 2026-05-27 by IMP-ADR014-03. Both legacy wrapper paths are
+deleted and must remain historical-only references.
 
 ### D7. Keep `write_github_output` In The Lifecycle Helper For This ADR
 
@@ -185,12 +190,12 @@ javdb.storage.* -> apps.cli.*
 - Storage/library code no longer depends on CLI helper modules.
 - Shared session lifecycle helpers get a neutral canonical home.
 - Architecture tests make the layering rule executable.
-- Legacy wrappers have a defined deletion phase.
+- Legacy wrappers were deleted in the defined Phase 3.
 
 ### Negative
 
-- Phase 2 and Phase 3 require import churn across production code and tests.
-- Compatibility wrappers exist for one phase after the canonical move.
+- Phase 2 and Phase 3 required import churn across production code and tests.
+- Compatibility wrappers existed for one phase after the canonical move.
 - `write_github_output` remains in a storage-adjacent helper until a separate
   workflow-side-effect ADR handles it.
 
