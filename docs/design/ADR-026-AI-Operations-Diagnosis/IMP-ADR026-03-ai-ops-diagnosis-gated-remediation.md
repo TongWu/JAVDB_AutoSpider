@@ -14,6 +14,21 @@
 
 **Non-negotiable:** Phase 3 is not fully automatic remediation. It must not execute rollback, rerun workflows, modify D1 recovery state, delete qBittorrent tasks, or apply drift fixes directly. It may only produce auditable proposals and record human decisions about those proposals.
 
+## Table of Contents
+
+- [File Map](#file-map)
+- [Scope Boundaries](#scope-boundaries)
+- [Task 1: D1 Proposal Ledger](#task-1-d1-proposal-ledger)
+- [Task 2: Proposal Models](#task-2-proposal-models)
+- [Task 3: Deterministic Remediation Policy](#task-3-deterministic-remediation-policy)
+- [Task 4: Proposal Repository](#task-4-proposal-repository)
+- [Task 5: Service Integration](#task-5-service-integration)
+- [Task 6: Python API Proposal Surface](#task-6-python-api-proposal-surface)
+- [Task 7: Cloudflare Worker API Parity](#task-7-cloudflare-worker-api-parity)
+- [Task 8: Web Proposal Review UX](#task-8-web-proposal-review-ux)
+- [Task 9: Documentation And Workflow Review](#task-9-documentation-and-workflow-review)
+- [Task 10: Verification And Closeout](#task-10-verification-and-closeout)
+
 ---
 
 ## File Map
@@ -180,7 +195,7 @@ def test_proposal_serializes_evidence_and_required_checks():
         safety_level="requires_review",
         title="Prepare rollback workflow",
         rationale="Session failed before commit and rollback safety is not blocked.",
-        command_preview="gh workflow run RollbackD1.yml -f session_id=sid",
+        command_preview="gh workflow run RollbackD1.yml -f session_id=20260527T120000.000000Z-0001-0001",
         runbook_ref="docs/handbook/en/ops/d1-rollback.md",
         evidence_refs=[EvidenceRef(kind="incident", ref="opsinc_abc")],
         required_checks=["Confirm session status is failed."],
@@ -305,7 +320,11 @@ from javdb.ops.diagnosis.models import DiagnosisResult, IncidentBundle, OpsIncid
 from javdb.ops.diagnosis.remediation import propose_remediation
 
 
-def _record(incident_type: str, unsafe_actions: list[str], session_id: str | None = "sid") -> OpsIncidentRecord:
+def _record(
+    incident_type: str,
+    unsafe_actions: list[str],
+    session_id: str | None = "20260527T120000.000000Z-0001-0001",
+) -> OpsIncidentRecord:
     result = DiagnosisResult(
         incident_type=incident_type,
         confidence="medium",
@@ -720,7 +739,7 @@ def test_service_can_generate_remediation_proposals():
     bundle = IncidentBundle(
         trigger_source="manual_cli",
         workflow_result="failure",
-        session_id="sid",
+        session_id="20260527T120000.000000Z-0001-0001",
     )
 
     record = diagnose_incident(
@@ -1267,7 +1286,7 @@ test.describe('Ops remediation proposal review', () => {
             trigger_source: 'workflow_failure',
             run_id: '100',
             run_attempt: 1,
-            session_id: 'sid',
+            session_id: '20260527T120000.000000Z-0001-0001',
             incident_type: 'failed_ingestion',
             status: 'open',
             persistence_status: 'd1_written',

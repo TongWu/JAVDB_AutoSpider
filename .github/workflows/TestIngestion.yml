@@ -541,9 +541,10 @@ jobs:
             --workflow-result "${{ job.status }}" \
             --json > reports/ops/test_ops_diagnosis.json
           EXIT_CODE=$?
-          if [ $EXIT_CODE -gt 2 ]; then
+          if [ $EXIT_CODE -gt 1 ]; then
             exit $EXIT_CODE
           fi
+          python3 -m json.tool reports/ops/test_ops_diagnosis.json >/dev/null
 
       - name: Encrypt and upload logs artifact
         if: always()

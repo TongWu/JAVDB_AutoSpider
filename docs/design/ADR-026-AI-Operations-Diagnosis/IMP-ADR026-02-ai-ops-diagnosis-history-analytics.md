@@ -14,6 +14,21 @@
 
 **Non-negotiable:** Phase 2 remains read-only. It must not roll back sessions, rerun workflows, modify D1 except for storing derived read-model metadata, delete qBittorrent tasks, approve remediation, or mark recovery events resolved.
 
+## Table of Contents
+
+- [File Map](#file-map)
+- [Scope Boundaries](#scope-boundaries)
+- [Task 1: D1 Feature Read Model](#task-1-d1-feature-read-model)
+- [Task 2: Feature Extraction Contracts](#task-2-feature-extraction-contracts)
+- [Task 3: Repository Search And Feature Persistence](#task-3-repository-search-and-feature-persistence)
+- [Task 4: Similarity Scoring](#task-4-similarity-scoring)
+- [Task 5: Analytics Aggregation](#task-5-analytics-aggregation)
+- [Task 6: Python API Read Endpoints](#task-6-python-api-read-endpoints)
+- [Task 7: Cloudflare Worker API Parity](#task-7-cloudflare-worker-api-parity)
+- [Task 8: Frontend API Client And UI](#task-8-frontend-api-client-and-ui)
+- [Task 9: Documentation And Workflow Review](#task-9-documentation-and-workflow-review)
+- [Task 10: Verification And Closeout](#task-10-verification-and-closeout)
+
 ---
 
 ## File Map
@@ -530,7 +545,7 @@ def test_service_persists_feature_row_when_incident_is_written():
         trigger_source="workflow_failure",
         workflow_name="DailyIngestion",
         workflow_result="failure",
-        session_id="sid",
+        session_id="20260527T120000.000000Z-0001-0001",
     )
 
     record = diagnose_incident(bundle, repo=repo)
@@ -1060,7 +1075,7 @@ async function seedOpsIncidentTables(db: D1Database) {
       unsafe_actions_json, evidence_refs_json, created_at, updated_at, resolved_at
     )
     VALUES (
-      'opsinc_test', 'workflow_failure', '100', 1, 'sid', 'failed_ingestion', 'open',
+      'opsinc_test', 'workflow_failure', '100', 1, '20260527T000000.000000Z-0000-0000', 'failed_ingestion', 'open',
       'd1_written', 'fallback-v1', 'detectors-v1', 'bundle-v1', 'low',
       '["Workflow result is failure."]', '[]', '[]', '["Inspect logs."]',
       '[]', '[]', '2026-05-27T00:00:00Z', '2026-05-27T00:00:00Z', NULL
@@ -1407,7 +1422,7 @@ test.describe('Ops incidents diagnostics', () => {
             trigger_source: 'workflow_failure',
             run_id: '100',
             run_attempt: 1,
-            session_id: 'sid',
+            session_id: '20260527T120000.000000Z-0001-0001',
             incident_type: 'failed_ingestion',
             status: 'open',
             persistence_status: 'd1_written',

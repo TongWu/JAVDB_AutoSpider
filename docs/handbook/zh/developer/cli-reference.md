@@ -20,6 +20,7 @@ python3 -m apps.cli.<command> [options]
 - [Migration CLI](#migration-cli)（`apps.cli.migration`）
 - [Login CLI](#login-cli)（`apps.cli.login`）
 - [Rollback CLI](#rollback-cli)（`apps.cli.rollback`）
+- [运维诊断 CLI](#运维诊断-cli)（`apps.cli.ops.diagnose_run`）
 - [Config Generator CLI](#config-generator-cli)（`apps.cli.config_generator`）
 - [Spider 完整参数参考](#spider-完整参数参考)
 
@@ -539,6 +540,53 @@ python3 -m apps.cli.rollback --session-id 42 --apply --force
 # 遗留清扫（包含时间窗口内的孤立 session）
 python3 -m apps.cli.rollback --session-id 42 \
   --run-started-at 2026-05-04T19:30:00Z --include-orphaned
+```
+
+---
+
+## 运维诊断 CLI
+
+**模块：** `apps.cli.ops.diagnose_run`
+
+为失败的 workflow run、session、D1 drift 检查或 recovery 排查收集只读证据，并持久化一条 `OpsIncidents` 记录。该命令会输出结构化摘要，`DailyIngestion.yml` 和 `AdHocIngestion.yml` 会在发送邮件通知前调用它。
+
+### 参数
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--run-id` | 关联到 incident 的 GitHub Actions run ID。未提供 `--session-id` 时必填。 | `None` |
+| `--attempt` | GitHub Actions run attempt，存为 `run_attempt`。 | `None` |
+| `--session-id` | Pipeline session ID，格式为 `YYYYMMDDTHHMMSS.ffffffZ-TTTT-SSSS`。未提供 `--run-id` 时必填。 | `None` |
+| `--workflow-name` | Workflow 名称，例如 `DailyIngestion`、`AdHocIngestion` 或 `TestIngestion`。 | `None` |
+| `--workflow-result` | Workflow 结果。可选：`success`、`failure`、`cancelled`、`skipped`。 | `None` |
+| `--trigger-source` | 诊断触发来源标签，例如 `manual_cli` 或 `workflow_failure`。 | `manual_cli` |
+| `--session-status` | 可选 session lifecycle 状态，作为证据写入。 | `None` |
+| `--drift-verdict` | 可选 D1 drift verdict，作为证据写入，例如 `CLEAN`、`SAFE_TO_APPLY` 或升级排查类 verdict。 | `None` |
+| `--log` | 扫描错误片段的日志文件，可重复传入。 | `[]` |
+| `--json` | 输出 JSON payload，而非文本摘要。 | `False` |
+| `--log-level` | 日志级别。可选：`DEBUG`、`INFO`、`WARNING`、`ERROR`。 | `INFO` |
+
+退出码 `0` 表示未检测到已知 incident 类型。退出码 `1` 表示已为已知 incident 类型生成诊断。退出码 `2` 表示缺少必需的 run/session 标识，`3` 表示诊断发生意外失败。
+
+### 示例
+
+```bash
+# 诊断失败 workflow run，并输出 JSON 供后续邮件/API 使用
+python3 -m apps.cli.ops.diagnose_run \
+  --trigger-source workflow_failure \
+  --run-id 123456789 \
+  --attempt 1 \
+  --session-id 20260527T120000.000000Z-0001-0001 \
+  --workflow-name DailyIngestion \
+  --workflow-result failure \
+  --json \
+  --log logs/pipeline.log \
+  --log logs/spider.log
+
+# 将 CLEAN drift 检查作为证据记录，但不把它分类为 D1 drift incident
+python3 -m apps.cli.ops.diagnose_run \
+  --run-id 123456789 \
+  --drift-verdict CLEAN
 ```
 
 ---

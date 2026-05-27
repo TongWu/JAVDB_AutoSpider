@@ -20,6 +20,7 @@ python3 -m apps.cli.<command> [options]
 - [Migration CLI](#migration-cli) (`apps.cli.migration`)
 - [Login CLI](#login-cli) (`apps.cli.login`)
 - [Rollback CLI](#rollback-cli) (`apps.cli.rollback`)
+- [Operations Diagnosis CLI](#operations-diagnosis-cli) (`apps.cli.ops.diagnose_run`)
 - [Config Generator CLI](#config-generator-cli) (`apps.cli.config_generator`)
 - [Complete Spider Argument Reference](#complete-spider-argument-reference)
 
@@ -539,6 +540,59 @@ python3 -m apps.cli.rollback --session-id 42 --apply --force
 # Legacy sweep (include orphaned sessions in window)
 python3 -m apps.cli.rollback --session-id 42 \
   --run-started-at 2026-05-04T19:30:00Z --include-orphaned
+```
+
+---
+
+## Operations Diagnosis CLI
+
+**Module:** `apps.cli.ops.diagnose_run`
+
+Collects read-only evidence for a failed workflow run, session, D1 drift check,
+or recovery investigation, then persists an `OpsIncidents` record. The command
+prints a structured summary and is used by `DailyIngestion.yml` and
+`AdHocIngestion.yml` before email notification.
+
+### Arguments
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--run-id` | GitHub Actions run ID to associate with the incident. Required unless `--session-id` is provided. | `None` |
+| `--attempt` | GitHub Actions run attempt. Stored as `run_attempt`. | `None` |
+| `--session-id` | Pipeline session ID in `YYYYMMDDTHHMMSS.ffffffZ-TTTT-SSSS` format. Required unless `--run-id` is provided. | `None` |
+| `--workflow-name` | Workflow name, such as `DailyIngestion`, `AdHocIngestion`, or `TestIngestion`. | `None` |
+| `--workflow-result` | Workflow result. Choices: `success`, `failure`, `cancelled`, `skipped`. | `None` |
+| `--trigger-source` | Diagnosis trigger label, for example `manual_cli` or `workflow_failure`. | `manual_cli` |
+| `--session-status` | Optional session lifecycle status to include as evidence. | `None` |
+| `--drift-verdict` | Optional D1 drift verdict to include as evidence, such as `CLEAN`, `SAFE_TO_APPLY`, or an escalation verdict. | `None` |
+| `--log` | Log file to scan for error snippets. May be repeated. | `[]` |
+| `--json` | Print JSON payload instead of a text summary. | `False` |
+| `--log-level` | Logging level. Choices: `DEBUG`, `INFO`, `WARNING`, `ERROR`. | `INFO` |
+
+Exit code `0` means no known incident type was detected. Exit code `1` means
+a diagnosis was produced for a known incident type. Exit code `2` means the
+required run/session identifier was missing, and `3` means an unexpected
+diagnosis failure occurred.
+
+### Examples
+
+```bash
+# Diagnose a failed workflow run and print JSON for downstream email/API use
+python3 -m apps.cli.ops.diagnose_run \
+  --trigger-source workflow_failure \
+  --run-id 123456789 \
+  --attempt 1 \
+  --session-id 20260527T120000.000000Z-0001-0001 \
+  --workflow-name DailyIngestion \
+  --workflow-result failure \
+  --json \
+  --log logs/pipeline.log \
+  --log logs/spider.log
+
+# Record a clean drift check as evidence without classifying it as D1 drift
+python3 -m apps.cli.ops.diagnose_run \
+  --run-id 123456789 \
+  --drift-verdict CLEAN
 ```
 
 ---

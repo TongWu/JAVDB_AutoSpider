@@ -66,6 +66,25 @@ def test_ops_incident_schema_from_record(monkeypatch, admin_client: TestClient):
     assert payload["items"][0]["confirmed_findings"] == ["workflow failed"]
 
 
+def test_ops_incident_list_rejects_non_positive_limit(monkeypatch, admin_client: TestClient):
+    from apps.api.routers import diagnostics
+
+    called = False
+
+    def fake_list(**_kwargs):
+        nonlocal called
+        called = True
+        return []
+
+    monkeypatch.setattr(diagnostics, "_list_ops_incident_records", fake_list)
+
+    response = admin_client.get("/api/diag/ops-incidents?limit=0")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "limit must be a positive integer"
+    assert called is False
+
+
 def test_ops_incident_detail_returns_404(monkeypatch, admin_client: TestClient):
     from apps.api.routers import diagnostics
 

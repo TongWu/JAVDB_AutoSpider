@@ -1687,10 +1687,16 @@ def _build_ops_diagnosis_advisory(path: str | None) -> str:
     incident_id = payload.get("incident_id", "unknown")
     incident_type = payload.get("incident_type", "unknown")
     confidence = payload.get("confidence", "low")
+    persistence_status = payload.get("persistence_status", "")
     findings = payload.get("confirmed_findings") or []
     actions = payload.get("recommended_next_actions") or []
     first_finding = findings[0] if findings else "No confirmed finding recorded."
     first_action = actions[0] if actions else "Review the persisted diagnosis record."
+    full_diagnosis = (
+        f"/api/diag/ops-incidents/{incident_id}"
+        if persistence_status == "d1_written"
+        else "Stored in the workflow artifact JSONL fallback; the API record may be unavailable."
+    )
 
     return f"""
 ─── Operations Diagnosis ───
@@ -1699,7 +1705,7 @@ Type: {incident_type}
 Confidence: {confidence}
 Finding: {first_finding}
 Next action: {first_action}
-Full diagnosis: /api/diag/ops-incidents/{incident_id}
+Full diagnosis: {full_diagnosis}
 
 """
 

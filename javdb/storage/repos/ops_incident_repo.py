@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from typing import Any
 
 from javdb.ops.diagnosis.models import OpsIncidentRecord
 
+
+logger = logging.getLogger(__name__)
 
 _COLUMNS = (
     "incident_id",
@@ -34,8 +37,6 @@ _COLUMNS = (
 
 
 def _row_get(row: Any, column: str):
-    if isinstance(row, dict):
-        return row[column]
     return row[column]
 
 
@@ -49,7 +50,7 @@ class OpsIncidentRepo:
         try:
             self._conn.row_factory = sqlite3.Row
         except Exception:
-            pass
+            logger.debug("Failed to set row_factory on ops incident connection", exc_info=True)
 
     def upsert(self, record: OpsIncidentRecord) -> None:
         values = [getattr(record, column) for column in _COLUMNS]

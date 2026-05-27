@@ -105,6 +105,19 @@ def test_repo_lists_newest_first():
     assert [item.incident_id for item in items] == ["opsinc_second", first.incident_id]
 
 
+def test_repo_logs_row_factory_failure(caplog):
+    class BrokenRowFactoryConnection:
+        def __setattr__(self, name, value):
+            if name == "row_factory":
+                raise RuntimeError("closed connection")
+            object.__setattr__(self, name, value)
+
+    with caplog.at_level("DEBUG"):
+        OpsIncidentRepo(BrokenRowFactoryConnection())
+
+    assert "Failed to set row_factory" in caplog.text
+
+
 def test_persist_incident_falls_back_to_jsonl_when_d1_fails(tmp_path):
     class FailingRepo:
         def upsert(self, record):

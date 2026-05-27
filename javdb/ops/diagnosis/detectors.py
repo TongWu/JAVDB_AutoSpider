@@ -32,7 +32,6 @@ def detect_incident(bundle: IncidentBundle) -> DiagnosisResult:
         causes.append("The ingestion workflow did not complete successfully.")
 
     if bundle.drift_verdict:
-        incident_type = "d1_drift"
         findings.append(f"Drift diagnosis verdict is {bundle.drift_verdict}.")
         evidence.append(
             EvidenceRef(
@@ -41,10 +40,12 @@ def detect_incident(bundle: IncidentBundle) -> DiagnosisResult:
             )
         )
         if bundle.drift_verdict == "SAFE_TO_APPLY":
+            incident_type = "d1_drift"
             confidence = "medium"
             actions.append("Run drift_diagnose apply only after reviewing the suggested session id.")
             unsafe.append("Do not rollback the committed session.")
         elif bundle.drift_verdict != "CLEAN":
+            incident_type = "d1_drift"
             actions.append("Escalate D1 drift investigation before any cleanup.")
             unsafe.append("Do not apply D1 deletes for non-SAFE_TO_APPLY drift verdicts.")
 
