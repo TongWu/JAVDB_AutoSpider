@@ -20,7 +20,15 @@ def _collect_log_snippets(
     max_lines: int | None = None,
 ) -> list[str]:
     snippets: list[str] = []
-    limit = max_lines if max_lines is not None else int(cfg("OPS_DIAGNOSIS_MAX_LOG_SNIPPETS", 20) or 20)
+    if max_lines is not None:
+        limit = max_lines
+    else:
+        raw_limit = cfg("OPS_DIAGNOSIS_MAX_LOG_SNIPPETS", 20)
+        try:
+            limit = int(raw_limit or 20)
+        except (TypeError, ValueError):
+            logger.warning("Invalid OPS_DIAGNOSIS_MAX_LOG_SNIPPETS=%r; falling back to 20", raw_limit)
+            limit = 20
     for raw_path in paths:
         path = Path(raw_path)
         try:

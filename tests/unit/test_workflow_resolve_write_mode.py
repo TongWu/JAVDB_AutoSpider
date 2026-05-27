@@ -939,6 +939,8 @@ def test_daily_ingestion_runs_ops_diagnosis_before_email():
     assert "--workflow-name DailyIngestion" in text
     assert "OPS_DIAGNOSIS_JSON" in text
     assert "steps.status.outputs.has_failure == 'true'" in text
+    assert text.index("Diagnose failed run (ADR-026)") < text.index("OPS_DIAGNOSIS_JSON")
+    assert "python3 -m json.tool \"$DIAG_JSON\"" in text
 
 
 def test_adhoc_ingestion_runs_ops_diagnosis_before_email():
@@ -948,6 +950,8 @@ def test_adhoc_ingestion_runs_ops_diagnosis_before_email():
     assert "--workflow-name AdHocIngestion" in text
     assert "OPS_DIAGNOSIS_JSON" in text
     assert "steps.status.outputs.has_failure == 'true'" in text
+    assert text.index("Diagnose failed run (ADR-026)") < text.index("OPS_DIAGNOSIS_JSON")
+    assert "python3 -m json.tool \"$DIAG_JSON\"" in text
 
 
 def test_test_ingestion_smokes_ops_diagnosis_without_d1():
@@ -956,3 +960,5 @@ def test_test_ingestion_smokes_ops_diagnosis_without_d1():
     assert "python3 -m apps.cli.ops.diagnose_run" in text
     assert "--workflow-name TestIngestion" in text
     assert "STORAGE_BACKEND: sqlite" in text
+    assert "if [ $EXIT_CODE -gt 1 ]" in text
+    assert "python3 -m json.tool reports/ops/test_ops_diagnosis.json" in text
