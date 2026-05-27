@@ -111,16 +111,19 @@ def generate_summary_report(
         print(f"SPIDER_STAT_NO_NEW={no_new_torrents_count}")
 
     runtime = runtime or state.get_active_runtime()
-    detail_ctx = runtime.detail if runtime is not None else state
     if ignore_history:
         logger.info("History reading was disabled (--ignore-history); results still saved to history")
-    logger.debug("Current parsed links in memory: %d", len(detail_ctx.parsed_links))
-
-    services = runtime.services if runtime is not None else state
-    proxy_pool = (
-        services.proxy_pool
+    parsed_links = (
+        runtime.detail.parsed_links
         if runtime is not None
-        else services.global_proxy_pool
+        else state.get_legacy_parsed_links()
+    )
+    logger.debug("Current parsed links in memory: %d", len(parsed_links))
+
+    proxy_pool = (
+        runtime.services.proxy_pool
+        if runtime is not None
+        else state.get_legacy_proxy_pool()
     )
 
     if use_proxy and PROXY_MODE in ('pool', 'single') and proxy_pool is not None:
@@ -135,8 +138,11 @@ def generate_summary_report(
             log_section(logger, "PROXY BAN STATUS", emoji='🛡')
             logger.info(ban_summary)
 
-    proxy_ctx = runtime.proxy if runtime is not None else state
-    proxy_ban_html_files = proxy_ctx.proxy_ban_html_files
+    proxy_ban_html_files = (
+        runtime.proxy.proxy_ban_html_files
+        if runtime is not None
+        else state.get_legacy_proxy_ban_html_files()
+    )
     if proxy_ban_html_files:
         log_section(logger, "PROXY BAN HTML FILES", emoji='🛡')
         logger.info("Saved %d proxy ban HTML file(s) for debugging:", len(proxy_ban_html_files))
