@@ -4,6 +4,10 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**2026-05-27 supersession note:** This completed Phase 2 plan is historical.
+ADR-014 Phase 3 later deleted both legacy wrapper paths. Current helper imports
+must use `javdb.storage.sessions.lifecycle_helpers`.
+
 **Goal:** Ship ADR-014 Phase 2 by moving the shared session helper implementation to `javdb.storage.sessions.lifecycle_helpers`, keeping legacy wrappers temporarily, and migrating production callers to the canonical path.
 
 **Architecture:** `javdb.storage.sessions.lifecycle_helpers` becomes the single implementation module for shared session lifecycle scaffolding. Rollback and CLI helper paths become compatibility wrappers for this phase only.
