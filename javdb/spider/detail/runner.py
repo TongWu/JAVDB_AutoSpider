@@ -48,7 +48,9 @@ def _resolve_runtime(runtime=None):
 
 def _detail_state(runtime=None):
     runtime = _resolve_runtime(runtime)
-    return runtime.detail if runtime is not None else state
+    if runtime is not None:
+        return runtime.detail
+    return state.get_legacy_detail_context()
 
 
 def _movie_claim_client(runtime=None):

@@ -1,7 +1,8 @@
-"""Global mutable state for the spider package.
+"""Legacy compatibility facade for spider runtime state.
 
-Every module that needs to read or *mutate* shared state should
-``import javdb.spider.runtime.state as state`` and access ``state.<var>``.
+New production code should receive ``SpiderRuntime`` or focused runtime-owned
+objects explicitly. Keep legacy module-field reads and writes behind the
+compatibility helpers in this module until the facade is frozen or removed.
 """
 
 import atexit
@@ -63,6 +64,7 @@ from javdb.spider.runtime.config import (
 )
 
 logger = get_logger(__name__)
+_UNSET = object()
 
 # ---------------------------------------------------------------------------
 # Mutable globals
@@ -286,6 +288,110 @@ def get_legacy_proxy_ban_html_files() -> list:
     return proxy_ban_html_files
 
 
+class _LegacyDetailContext:
+    @property
+    def parsed_links(self) -> set:
+        return parsed_links
+
+
+class _LegacyRuntimeServices:
+    @property
+    def proxy_pool(self):
+        return global_proxy_pool
+
+    @property
+    def request_handler(self):
+        return global_request_handler
+
+    @property
+    def login_state_client(self):
+        return global_login_state_client
+
+
+class _LegacyLoginContext:
+    @property
+    def login_attempted(self) -> bool:
+        return login_attempted
+
+    @login_attempted.setter
+    def login_attempted(self, value: bool) -> None:
+        global login_attempted
+        login_attempted = value
+
+    @property
+    def refreshed_session_cookie(self) -> Optional[str]:
+        return refreshed_session_cookie
+
+    @refreshed_session_cookie.setter
+    def refreshed_session_cookie(self, value: Optional[str]) -> None:
+        global refreshed_session_cookie
+        refreshed_session_cookie = value
+
+    @property
+    def logged_in_proxy_name(self) -> Optional[str]:
+        return logged_in_proxy_name
+
+    @logged_in_proxy_name.setter
+    def logged_in_proxy_name(self, value: Optional[str]) -> None:
+        global logged_in_proxy_name
+        logged_in_proxy_name = value
+
+    @property
+    def current_login_state_version(self) -> Optional[int]:
+        return current_login_state_version
+
+    @current_login_state_version.setter
+    def current_login_state_version(self, value: Optional[int]) -> None:
+        global current_login_state_version
+        current_login_state_version = value
+
+    @property
+    def login_attempts_per_proxy(self) -> Dict[str, int]:
+        return login_attempts_per_proxy
+
+    @property
+    def login_failures_per_proxy(self) -> Dict[str, int]:
+        return login_failures_per_proxy
+
+    @property
+    def login_total_attempts(self) -> int:
+        return login_total_attempts
+
+    @login_total_attempts.setter
+    def login_total_attempts(self, value: int) -> None:
+        global login_total_attempts
+        login_total_attempts = value
+
+    @property
+    def login_total_budget(self) -> int:
+        return login_total_budget
+
+    @login_total_budget.setter
+    def login_total_budget(self, value: int) -> None:
+        global login_total_budget
+        login_total_budget = value
+
+
+_legacy_detail_context = _LegacyDetailContext()
+_legacy_runtime_services = _LegacyRuntimeServices()
+_legacy_login_context = _LegacyLoginContext()
+
+
+def get_legacy_detail_context():
+    """Return a focused legacy detail-state adapter."""
+    return _legacy_detail_context
+
+
+def get_legacy_runtime_services():
+    """Return a focused legacy service-handle adapter."""
+    return _legacy_runtime_services
+
+
+def get_legacy_login_context():
+    """Return a focused legacy login-state adapter."""
+    return _legacy_login_context
+
+
 def set_legacy_always_bypass_time(value: Optional[int]) -> None:
     """Compatibility boundary for legacy CF-bypass duration writes."""
     global always_bypass_time
@@ -315,17 +421,17 @@ def get_legacy_login_state() -> tuple[Optional[str], Optional[str], Optional[int
 
 def set_legacy_login_state(
     *,
-    proxy_name: Optional[str] = None,
-    cookie: Optional[str] = None,
-    version: Optional[int] = None,
+    proxy_name=_UNSET,
+    cookie=_UNSET,
+    version=_UNSET,
 ) -> None:
     """Compatibility boundary for legacy login-state writes."""
     global logged_in_proxy_name, refreshed_session_cookie, current_login_state_version
-    if proxy_name is not None:
+    if proxy_name is not _UNSET:
         logged_in_proxy_name = proxy_name
-    if cookie is not None:
+    if cookie is not _UNSET:
         refreshed_session_cookie = cookie
-    if version is not None:
+    if version is not _UNSET:
         current_login_state_version = version
 
 
