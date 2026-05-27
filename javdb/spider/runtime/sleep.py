@@ -927,13 +927,17 @@ def ensure_sleep_runtime(runtime):
         )
     coordinator = getattr(runtime.services, "proxy_coordinator", None)
     source_mgr = globals().get("movie_sleep_mgr")
+    coordinator_from_source = False
     if coordinator is None and source_mgr is not None:
         coordinator = getattr(source_mgr, "_coordinator", None)
+        coordinator_from_source = coordinator is not None
     if (
         coordinator is not None
         and not runtime.sleep.movie_sleep_mgr.has_coordinator()
     ):
-        proxy_id = getattr(source_mgr, "_proxy_id", None) if source_mgr is not None else None
+        proxy_id = None
+        if coordinator_from_source and source_mgr is not None:
+            proxy_id = getattr(source_mgr, "_proxy_id", None)
         runtime.sleep.movie_sleep_mgr.set_coordinator(coordinator, proxy_id=proxy_id)
     return runtime.sleep
 
