@@ -299,6 +299,40 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_uploaderstats_session
     ON UploaderStats(SessionId);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_pikpakstats_session
     ON PikpakStats(SessionId);
+
+CREATE TABLE IF NOT EXISTS OpsIncidents (
+    incident_id TEXT PRIMARY KEY,
+    trigger_source TEXT NOT NULL,
+    run_id TEXT,
+    run_attempt INTEGER,
+    session_id TEXT,
+    incident_type TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open'
+        CHECK (status IN ('open', 'acknowledged', 'resolved', 'dismissed')),
+    persistence_status TEXT NOT NULL DEFAULT 'd1_written',
+    model_version TEXT NOT NULL,
+    detector_version TEXT NOT NULL,
+    bundle_schema_version TEXT NOT NULL,
+    confidence TEXT NOT NULL DEFAULT 'low'
+        CHECK (confidence IN ('low', 'medium', 'high')),
+    confirmed_findings_json TEXT NOT NULL DEFAULT '[]',
+    likely_causes_json TEXT NOT NULL DEFAULT '[]',
+    unknowns_json TEXT NOT NULL DEFAULT '[]',
+    recommended_next_actions_json TEXT NOT NULL DEFAULT '[]',
+    unsafe_actions_json TEXT NOT NULL DEFAULT '[]',
+    evidence_refs_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    resolved_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_ops_incidents_created
+    ON OpsIncidents(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ops_incidents_run
+    ON OpsIncidents(run_id, run_attempt);
+CREATE INDEX IF NOT EXISTS idx_ops_incidents_session
+    ON OpsIncidents(session_id);
+CREATE INDEX IF NOT EXISTS idx_ops_incidents_status_type
+    ON OpsIncidents(status, incident_type);
 """
 
 _OPERATIONS_DDL = _SCHEMA_VERSION_DDL + """
@@ -1401,7 +1435,7 @@ def _migrate_single_to_split():
         (HISTORY_DB_PATH, _HISTORY_DDL, ['MovieHistory', 'TorrentHistory']),
         (REPORTS_DB_PATH, _REPORTS_DDL, [
             'ReportSessions', 'ReportMovies', 'ReportTorrents',
-            'SpiderStats', 'UploaderStats', 'PikpakStats',
+            'SpiderStats', 'UploaderStats', 'PikpakStats', 'OpsIncidents',
         ]),
         (OPERATIONS_DB_PATH, _OPERATIONS_DDL, [
             'RcloneInventory', 'DedupRecords', 'PikpakHistory',

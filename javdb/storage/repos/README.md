@@ -13,6 +13,7 @@ Two Repo shapes coexist (ADR-005 amendment 2):
 |---|---|
 | `history_repo.py` | Module-level history helpers + `HistoryRepo` class wrapping `db_history_read` / `db_history_write`. |
 | `operations_repo.py` | Module-level rclone staging helpers + `OperationsRepo` class wrapping `db_operations`. |
+| `ops_incident_repo.py` | `OpsIncidentRepo` class for persisted ADR-026 operations diagnosis incidents in `reports.db`. |
 | `stats_repo.py` | `StatsRepo` class wrapping `db_stats` (SpiderStats / UploaderStats / PikpakStats). |
 | `sessions_repo.py` | Cursor-paginated listing and per-session detail queries over `ReportSessions`. |
 | `system_state_repo.py` | Generic key-value store against the `system_state` table in `operations.db`. |

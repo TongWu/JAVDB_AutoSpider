@@ -1672,6 +1672,38 @@ def _build_drift_diagnosis_section():
     return '\n'.join(lines) + '\n', suspects
 
 
+def _build_ops_diagnosis_advisory(path: str | None) -> str:
+    """Return a short ADR-026 advisory from a diagnosis JSON payload."""
+    if not path:
+        return ""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+    except Exception:
+        return ""
+    if not isinstance(payload, dict):
+        return ""
+
+    incident_id = payload.get("incident_id", "unknown")
+    incident_type = payload.get("incident_type", "unknown")
+    confidence = payload.get("confidence", "low")
+    findings = payload.get("confirmed_findings") or []
+    actions = payload.get("recommended_next_actions") or []
+    first_finding = findings[0] if findings else "No confirmed finding recorded."
+    first_action = actions[0] if actions else "Review the persisted diagnosis record."
+
+    return f"""
+─── Operations Diagnosis ───
+Incident: {incident_id}
+Type: {incident_type}
+Confidence: {confidence}
+Finding: {first_finding}
+Next action: {first_action}
+Full diagnosis: /api/diag/ops-incidents/{incident_id}
+
+"""
+
+
 def _drift_diagnosis_subject_prefix(suspects):
     """Return a subject-line prefix tag based on drift diagnosis verdicts.
 
@@ -2535,6 +2567,12 @@ Check attached logs for details.
             # ADR-009 D6: tag subject with drift verdict
             drift_prefix = _drift_diagnosis_subject_prefix(diag_suspects)
             subject = f'{drift_prefix}{subject}'
+
+    ops_advisory = _build_ops_diagnosis_advisory(
+        os.environ.get("OPS_DIAGNOSIS_JSON")
+    )
+    if ops_advisory:
+        body = ops_advisory + body
 
     # Send email
     email_sent = send_email(subject, body, attachments, args.dry_run)
