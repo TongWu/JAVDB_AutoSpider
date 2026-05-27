@@ -1,5 +1,16 @@
 # IMP-ADR013-03: ADR-013 Phase 3 - Explicit Runtime Callers
 
+## Table of Contents
+
+- [Files](#files)
+- [Task 1: Add Runtime-Owned Sleep Factory](#task-1-add-runtime-owned-sleep-factory)
+- [Task 2: Pass Runtime Through `run_service`](#task-2-pass-runtime-through-run_service)
+- [Task 3: Migrate Proxy And Request Service Access](#task-3-migrate-proxy-and-request-service-access)
+- [Task 4: Migrate Login And Detail State Access](#task-4-migrate-login-and-detail-state-access)
+- [Task 5: Phase 3 Gate](#task-5-phase-3-gate)
+
+**Status:** Completed — delivered 2026-05-27.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Move production Spider callers away from implicit module-level runtime state and toward explicit `SpiderRuntime` / state / service access.

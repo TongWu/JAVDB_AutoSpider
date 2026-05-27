@@ -927,6 +927,31 @@ class TestDeferPublish:
         assert verified is True
         mock_publish.assert_called_once_with("P1", "cookie-Y")
 
+    def test_verification_failure_clears_runtime_shared_handler_cookie(self):
+        from javdb.spider.runtime.context import SpiderRuntime
+
+        runtime = SpiderRuntime()
+        shared_handler = SimpleNamespace(
+            config=SimpleNamespace(javdb_session_cookie="cookie-rejected")
+        )
+        runtime.services.request_handler = shared_handler
+        worker = _make_worker(0, "P1")
+        coord = LoginCoordinator(all_workers=[worker], runtime=runtime)
+
+        with (
+            patch.object(coord, "_do_login_for_proxy", return_value=(True, "cookie-rejected", "P1")),
+            patch.object(lc_mod, "verify_login_via_fixed_pages", return_value=False),
+            patch.object(lc_mod, "LOGIN_VERIFICATION_URLS", ["https://example.com/check"]),
+        ):
+            verified, cookie = coord._login_and_verify(worker)
+
+        assert verified is False
+        assert cookie is None
+        assert worker._handler.config.javdb_session_cookie == ''
+        assert shared_handler.config.javdb_session_cookie == ''
+        assert runtime.login.refreshed_session_cookie is None
+        assert runtime.login.logged_in_proxy_name is None
+
 
 # ── _find_and_login_next_worker return type ───────────────────────────────────
 

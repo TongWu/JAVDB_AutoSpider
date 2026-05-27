@@ -63,6 +63,7 @@ from javdb.spider.fetch.session import is_login_page
 from javdb.spider.fetch.login_coordinator import LoginCoordinator, requeue_front
 from javdb.spider.fetch.backend import FetchBackend, FetchRuntimeState
 from javdb.spider.runtime.sleep import (
+    ensure_sleep_runtime,
     MovieSleepManager,
     movie_sleep_mgr as _global_sleep_mgr,
     PenaltyTracker,
@@ -102,6 +103,68 @@ _REQUEUE_BACKOFF_CAP = 2.0
 # Emitted when :meth:`ParallelFetchBackend.results` drains tasks left in queue
 # after every worker thread has stopped (e.g. per-worker task cap).
 PER_WORKER_TASK_CAP_ERROR = "per_worker_task_cap"
+
+
+def _deduct_proxy_login_budget_for_runtime(
+    proxy_name: str | None,
+    *,
+    runtime=None,
+) -> int:
+    """Deduct a banned proxy's unused login budget from runtime or legacy state."""
+    if runtime is None:
+        return state.deduct_proxy_login_budget(proxy_name)
+    if not proxy_name:
+        return 0
+
+    login_ctx = runtime.login
+    with login_ctx.login_budget_lock:
+        if proxy_name in login_ctx.login_budget_deducted_proxies:
+            return 0
+        if login_ctx.login_total_budget <= 0:
+            login_ctx.login_budget_deducted_proxies.add(proxy_name)
+            return 0
+
+        used = login_ctx.login_attempts_per_proxy.get(proxy_name, 0)
+        remaining = LOGIN_ATTEMPTS_PER_PROXY_LIMIT - used
+        if remaining <= 0:
+            login_ctx.login_budget_deducted_proxies.add(proxy_name)
+            return 0
+
+        new_budget = max(
+            login_ctx.login_total_attempts,
+            login_ctx.login_total_budget - remaining,
+        )
+        actually_deducted = login_ctx.login_total_budget - new_budget
+        login_ctx.login_total_budget = new_budget
+        login_ctx.login_budget_deducted_proxies.add(proxy_name)
+        if actually_deducted > 0:
+            logger.info(
+                "Login budget reduced by %d for banned proxy '%s' "
+                "(now %d, attempts so far %d)",
+                actually_deducted, proxy_name, new_budget,
+                login_ctx.login_total_attempts,
+            )
+        return actually_deducted
+
+
+def _sleep_runtime(runtime=None):
+    runtime = runtime or state.get_active_runtime()
+    return ensure_sleep_runtime(runtime) if runtime is not None else None
+
+
+def _sleep_defaults(runtime=None):
+    sleep_ctx = _sleep_runtime(runtime)
+    mgr = sleep_ctx.movie_sleep_mgr if sleep_ctx is not None else _global_sleep_mgr
+    return mgr.base_min, mgr.base_max
+
+
+def _shared_penalty_for_runtime(runtime=None):
+    sleep_ctx = _sleep_runtime(runtime)
+    return (
+        sleep_ctx.penalty_tracker
+        if sleep_ctx is not None
+        else _shared_penalty_tracker
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -464,6 +527,7 @@ class _EngineWorker(threading.Thread):
         in_flight_lock: Optional[threading.Lock] = None,
         completed_entries: Optional[set] = None,
         completed_lock: Optional[threading.Lock] = None,
+        runtime=None,
     ):
         super().__init__(
             daemon=True,
@@ -474,6 +538,7 @@ class _EngineWorker(threading.Thread):
         self._per_worker_completed = 0
         self._task_timeout = max(0.0, float(task_timeout))
         self.proxy_config = proxy_config
+        self._runtime = runtime or state.get_active_runtime()
         # proxy_name is the human-readable label (logs, ban manager, thread
         # name) and intentionally falls back to the ordinal index. The
         # coordinator addressing key is computed separately by
@@ -521,8 +586,13 @@ class _EngineWorker(threading.Thread):
             penalty_tracker=penalty_tracker,
             throttle=TripleWindowThrottle(),
             proxy_label=self.proxy_name,
-            coordinator=state.global_proxy_coordinator,
+            coordinator=(
+                self._runtime.services.proxy_coordinator
+                if self._runtime is not None
+                else state.global_proxy_coordinator
+            ),
             proxy_id=self._coordinator_proxy_id,
+            runtime=self._runtime,
         )
 
         self._proxy_pool = create_proxy_pool_from_config(
@@ -536,7 +606,11 @@ class _EngineWorker(threading.Thread):
         # also see the elevated penalty_factor on their next /lease call.
         # Captures the STABLE coordinator id (NOT proxy_name, which can fall
         # back to an ordinal index) so reports route to the same DO every run.
-        coordinator = state.global_proxy_coordinator
+        coordinator = (
+            self._runtime.services.proxy_coordinator
+            if self._runtime is not None
+            else state.global_proxy_coordinator
+        )
         coord_proxy_id = self._coordinator_proxy_id
         if coordinator is not None and coord_proxy_id:
             # Per-worker callback is pinned to a single proxy via closure;
@@ -615,7 +689,8 @@ class _EngineWorker(threading.Thread):
         )
 
     def _should_shortcircuit_cf(self) -> bool:
-        abt = state.always_bypass_time
+        proxy_ctx = self._runtime.proxy if self._runtime is not None else state
+        abt = proxy_ctx.always_bypass_time
         if abt is None or self._cf_bypass_since is None:
             return False
         if abt == 0:
@@ -627,7 +702,8 @@ class _EngineWorker(threading.Thread):
         return False
 
     def _mark_cf_bypass(self) -> None:
-        abt = state.always_bypass_time
+        proxy_ctx = self._runtime.proxy if self._runtime is not None else state
+        abt = proxy_ctx.always_bypass_time
         if abt is None:
             return
         self._cf_bypass_since = time.time()
@@ -1019,7 +1095,9 @@ class _EngineWorker(threading.Thread):
 
         # Reclaim this proxy's unused login attempts from the global budget
         # so banned workers no longer reserve credits they cannot spend.
-        state.deduct_proxy_login_budget(self.proxy_name)
+        _deduct_proxy_login_budget_for_runtime(
+            self.proxy_name, runtime=self._runtime,
+        )
 
         with self._drain_lock:
             self._banned_proxies.add(self.proxy_name)
@@ -1144,17 +1222,20 @@ class ParallelFetchBackend(FetchBackend):
         use_priority_queue: bool = False,
         per_worker_task_limit: int = 0,
         task_timeout: float = 0,
+        runtime=None,
     ):
         self._process_fn = process_fn
         self._use_cookie = use_cookie
         self._per_worker_task_limit = max(0, int(per_worker_task_limit))
         self._task_timeout = max(0.0, float(task_timeout))
+        self._runtime = runtime or state.get_active_runtime()
         self._stop_event = stop_event or threading.Event()
+        default_sleep_min, default_sleep_max = _sleep_defaults(self._runtime)
         self._sleep_min = (
-            sleep_min if sleep_min is not None else _global_sleep_mgr.base_min
+            sleep_min if sleep_min is not None else default_sleep_min
         )
         self._sleep_max = (
-            sleep_max if sleep_max is not None else _global_sleep_mgr.base_max
+            sleep_max if sleep_max is not None else default_sleep_max
         )
 
         self._task_queue: _TaskQueue = (
@@ -1227,37 +1308,42 @@ class ParallelFetchBackend(FetchBackend):
         # Recompute the global login budget so it reflects only the proxies
         # we will actually run (matches the per-proxy x active rule used at
         # state-init time).  Only safe before any login attempt has fired.
-        if state.login_total_attempts == 0:
+        login_ctx = self._runtime.login if self._runtime is not None else state
+        if login_ctx.login_total_attempts == 0:
             new_budget = len(active_configs) * LOGIN_ATTEMPTS_PER_PROXY_LIMIT
-            if new_budget != state.login_total_budget:
+            if new_budget != login_ctx.login_total_budget:
                 logger.info(
                     "Login budget adjusted at startup: %d -> %d "
                     "(%d active proxies, %d pre-banned)",
-                    state.login_total_budget, new_budget,
+                    login_ctx.login_total_budget, new_budget,
                     len(active_configs), pre_banned_count,
                 )
-                state.login_total_budget = new_budget
+                login_ctx.login_total_budget = new_budget
             for name in pre_banned_names:
                 # Mark as already accounted for so a later runtime ban is a no-op.
-                state._login_budget_deducted_proxies.add(name)
+                if self._runtime is not None:
+                    login_ctx.login_budget_deducted_proxies.add(name)
+                else:
+                    state._login_budget_deducted_proxies.add(name)
         else:
             for name in pre_banned_names:
-                state.deduct_proxy_login_budget(name)
+                _deduct_proxy_login_budget_for_runtime(
+                    name, runtime=self._runtime,
+                )
 
         total_workers = len(active_configs)
 
         self._coordinator = LoginCoordinator(
             all_workers=self._workers,
             login_proxy_name=LOGIN_PROXY_NAME,
+            runtime=self._runtime,
         )
 
         capped_proxies: set = set()
         drain_lock = threading.Lock()
         drain_done: List[bool] = [False]
 
-        # Same instance as movie_sleep_mgr.penalty_tracker: all engine workers
-        # share CF/failure history for coordinated backoff; aligns with other
-        # spider stages using the module sleep manager (thread-safe).
+        shared_penalty_tracker = _shared_penalty_for_runtime(self._runtime)
         for idx, proxy_cfg in enumerate(active_configs):
             w = _EngineWorker(
                 worker_id=idx,
@@ -1272,7 +1358,7 @@ class ParallelFetchBackend(FetchBackend):
                 coordinator=self._coordinator,
                 sleep_min=self._sleep_min,
                 sleep_max=self._sleep_max,
-                penalty_tracker=_shared_penalty_tracker,
+                penalty_tracker=shared_penalty_tracker,
                 banned_proxies=banned_proxies,
                 capped_proxies=capped_proxies,
                 drain_lock=drain_lock,
@@ -1284,6 +1370,7 @@ class ParallelFetchBackend(FetchBackend):
                 in_flight_lock=self._in_flight_lock,
                 completed_entries=self._completed_entries,
                 completed_lock=self._completed_lock,
+                runtime=self._runtime,
             )
             self._workers.append(w)
 
@@ -1325,7 +1412,13 @@ class ParallelFetchBackend(FetchBackend):
         #    the cost of its own login.  Skip when the DO is not
         #    configured or when this runner has already observed the
         #    same version (e.g. via a poller tick that happened earlier).
-        do_client = state.global_login_state_client
+        runtime = getattr(self, "_runtime", None)
+        login_ctx = runtime.login if runtime is not None else state
+        do_client = (
+            runtime.services.login_state_client
+            if runtime is not None
+            else state.global_login_state_client
+        )
         if do_client is not None:
             try:
                 snapshot = do_client.get_state()
@@ -1343,38 +1436,41 @@ class ParallelFetchBackend(FetchBackend):
                     exc_info=True,
                 )
             else:
-                already_local = state.current_login_state_version or 0
+                already_local = login_ctx.current_login_state_version or 0
                 if (
                     snapshot.proxy_name
                     and snapshot.cookie
                     and snapshot.version > already_local
                 ):
-                    state.logged_in_proxy_name = snapshot.proxy_name
-                    state.refreshed_session_cookie = snapshot.cookie
-                    state.current_login_state_version = snapshot.version
+                    login_ctx.logged_in_proxy_name = snapshot.proxy_name
+                    login_ctx.refreshed_session_cookie = snapshot.cookie
+                    login_ctx.current_login_state_version = snapshot.version
                     logger.info(
                         "Engine startup: adopted cross-runtime login state "
                         "from DO (proxy=%s, version=%d)",
                         snapshot.proxy_name, snapshot.version,
                     )
 
-        if not (state.logged_in_proxy_name and state.refreshed_session_cookie):
+        if not (
+            login_ctx.logged_in_proxy_name
+            and login_ctx.refreshed_session_cookie
+        ):
             return
 
         if (
             LOGIN_PROXY_NAME
-            and state.logged_in_proxy_name != LOGIN_PROXY_NAME
+            and login_ctx.logged_in_proxy_name != LOGIN_PROXY_NAME
         ):
             logger.warning(
                 "Index login proxy [%s] differs from LOGIN_PROXY_NAME [%s] "
                 "— session may not match engine workers",
-                state.logged_in_proxy_name, LOGIN_PROXY_NAME,
+                login_ctx.logged_in_proxy_name, LOGIN_PROXY_NAME,
             )
 
         for w in self._workers:
-            if w.proxy_name == state.logged_in_proxy_name:
+            if w.proxy_name == login_ctx.logged_in_proxy_name:
                 w._handler.config.javdb_session_cookie = (
-                    state.refreshed_session_cookie
+                    login_ctx.refreshed_session_cookie
                 )
                 self._coordinator.logged_in_worker_id = w.worker_id
                 logger.info(
@@ -1386,7 +1482,7 @@ class ParallelFetchBackend(FetchBackend):
 
         logger.warning(
             "Index login via [%s] but no matching engine worker found",
-            state.logged_in_proxy_name,
+            login_ctx.logged_in_proxy_name,
         )
 
     def _inherit_global_volume(self, num_workers: int) -> None:
@@ -1398,7 +1494,8 @@ class ParallelFetchBackend(FetchBackend):
         (copying ``_last_per_worker_n`` from a different worker count would
         under-throttle).
         """
-        gm = _global_sleep_mgr
+        sleep_ctx = _sleep_runtime(self._runtime)
+        gm = sleep_ctx.movie_sleep_mgr if sleep_ctx is not None else _global_sleep_mgr
         with gm._lock:
             vol_min = gm._volume_min_mult
             vol_max = gm._volume_max_mult
@@ -1588,8 +1685,13 @@ class ParallelFetchBackend(FetchBackend):
             if w.worker_id == lid:
                 cookie = w._handler.config.javdb_session_cookie
                 if cookie:
-                    state.logged_in_proxy_name = w.proxy_name
-                    state.refreshed_session_cookie = cookie
+                    login_ctx = (
+                        self._runtime.login
+                        if self._runtime is not None
+                        else state
+                    )
+                    login_ctx.logged_in_proxy_name = w.proxy_name
+                    login_ctx.refreshed_session_cookie = cookie
                     logger.info(
                         "Exported engine login state: proxy=%s",
                         w.proxy_name,

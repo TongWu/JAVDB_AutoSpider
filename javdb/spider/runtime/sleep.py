@@ -403,6 +403,7 @@ class MovieSleepManager:
         proxy_label: Optional[str] = None,
         coordinator: Optional["ProxyCoordinatorClient"] = None,
         proxy_id: Optional[str] = None,
+        runtime=None,
         remote_factor_ttl_sec: float = 10.0,
     ):
         drift = random.uniform(-0.5, 0.5)
@@ -428,6 +429,7 @@ class MovieSleepManager:
         self._throttle = throttle
         self._proxy_label = proxy_label
         self._coordinator = coordinator
+        self._runtime = runtime
         # When proxy_id is omitted, fall back to proxy_label so the DO
         # addressing matches the human-readable label that already appears
         # in logs.  All runners must agree on this string for the per-proxy
@@ -455,6 +457,10 @@ class MovieSleepManager:
             self._proxy_id = proxy_id
         self._coord_failures = 0
         self._degraded = False
+
+    def has_coordinator(self) -> bool:
+        """Return whether a coordinator has been injected."""
+        return self._coordinator is not None
 
     def set_active_runners(self, count: int) -> None:
         """Scale local throttle windows by runner count for degraded-mode safety."""
@@ -669,7 +675,12 @@ class MovieSleepManager:
         """
         try:
             from javdb.spider.runtime import state as _state
-            pool = _state.global_proxy_pool
+            runtime = self._runtime or _state.get_active_runtime()
+            pool = (
+                runtime.services.proxy_pool
+                if runtime is not None
+                else _state.global_proxy_pool
+            )
             if pool is None:
                 # Without a pool there's nowhere to mark the ban locally; we
                 # still record the proxy in the global ban manager so any
@@ -702,10 +713,21 @@ class MovieSleepManager:
             # populate ``proxies_requiring_cf_bypass`` with no consumers and
             # surprise the operator who explicitly disabled CF bypass via
             # ``always_bypass_time is None``.
-            if _state.always_bypass_time is None:
+            runtime = self._runtime or _state.get_active_runtime()
+            if runtime is not None:
+                always_bypass_time = runtime.proxy.always_bypass_time
+                cf_bypass_lock = runtime.proxy.cf_bypass_lock
+                proxies_requiring_cf_bypass = (
+                    runtime.proxy.proxies_requiring_cf_bypass
+                )
+            else:
+                always_bypass_time = _state.always_bypass_time
+                cf_bypass_lock = _state._cf_bypass_lock
+                proxies_requiring_cf_bypass = _state.proxies_requiring_cf_bypass
+            if always_bypass_time is None:
                 return
-            with _state._cf_bypass_lock:
-                _state.proxies_requiring_cf_bypass[proxy_id] = time.time()
+            with cf_bypass_lock:
+                proxies_requiring_cf_bypass[proxy_id] = time.time()
         except Exception:  # noqa: BLE001
             logger.warning(
                 "Failed to mirror remote CF bypass marker for '%s' locally",
@@ -886,6 +908,39 @@ def _resolve_base_range():
 
 
 _resolved_min, _resolved_max = _resolve_base_range()
+
+
+def ensure_sleep_runtime(runtime):
+    """Populate runtime-owned sleep services without touching module singletons."""
+    if runtime.sleep.penalty_tracker is None:
+        runtime.sleep.penalty_tracker = PenaltyTracker()
+    if runtime.sleep.triple_window_throttle is None:
+        runtime.sleep.triple_window_throttle = TripleWindowThrottle()
+    runtime.sleep.dual_window_throttle = runtime.sleep.triple_window_throttle
+    if runtime.sleep.movie_sleep_mgr is None:
+        runtime.sleep.movie_sleep_mgr = MovieSleepManager(
+            _resolved_min,
+            _resolved_max,
+            penalty_tracker=runtime.sleep.penalty_tracker,
+            throttle=runtime.sleep.triple_window_throttle,
+            runtime=runtime,
+        )
+    coordinator = getattr(runtime.services, "proxy_coordinator", None)
+    source_mgr = globals().get("movie_sleep_mgr")
+    coordinator_from_source = False
+    if coordinator is None and source_mgr is not None:
+        coordinator = getattr(source_mgr, "_coordinator", None)
+        coordinator_from_source = coordinator is not None
+    if (
+        coordinator is not None
+        and not runtime.sleep.movie_sleep_mgr.has_coordinator()
+    ):
+        proxy_id = None
+        if coordinator_from_source and source_mgr is not None:
+            proxy_id = getattr(source_mgr, "_proxy_id", None)
+        runtime.sleep.movie_sleep_mgr.set_coordinator(coordinator, proxy_id=proxy_id)
+    return runtime.sleep
+
 
 # Module-level singleton
 movie_sleep_mgr = MovieSleepManager(

@@ -69,6 +69,7 @@ def _index_parse_fn(html: str, task: EngineTask) -> Optional[dict]:
 
 def build_parallel_index_backend(
     *,
+    runtime=None,
     use_cookie: bool,
     use_proxy: bool = True,
     use_cf_bypass: bool = False,
@@ -88,6 +89,7 @@ def build_parallel_index_backend(
             use_proxy=use_proxy,
             use_cf_bypass=use_cf_bypass,
         ),
+        runtime=runtime,
     )
 
 
@@ -97,6 +99,7 @@ def build_parallel_index_backend(
 
 def fetch_all_index_pages_parallel(
     *,
+    runtime=None,
     start_page: int,
     end_page: int,
     parse_all: bool,
@@ -122,6 +125,7 @@ def fetch_all_index_pages_parallel(
     """
 
     backend = build_parallel_index_backend(
+        runtime=runtime,
         use_cookie=custom_url is not None,
         use_proxy=use_proxy,
         use_cf_bypass=use_cf_bypass,

@@ -10,7 +10,7 @@ from javdb.infra.logging import get_logger
 from javdb.spider.fetch.backend import FetchBackend, FetchRuntimeState
 from javdb.spider.fetch.fallback import fetch_detail_page_with_fallback
 from javdb.spider.fetch.fetch_engine import EngineResult, EngineTask
-from javdb.spider.runtime.sleep import movie_sleep_mgr
+from javdb.spider.runtime.sleep import ensure_sleep_runtime, movie_sleep_mgr
 
 logger = get_logger(__name__)
 
@@ -22,11 +22,13 @@ class SequentialFetchBackend(FetchBackend):
         self,
         session,
         *,
+        runtime=None,
         use_proxy: bool,
         use_cf_bypass: bool,
         use_cookie: bool,
         is_adhoc_mode: bool,
     ):
+        self._runtime = runtime
         self._session = session
         self._use_cookie = use_cookie
         self._is_adhoc_mode = is_adhoc_mode
@@ -42,6 +44,11 @@ class SequentialFetchBackend(FetchBackend):
     @property
     def worker_count(self) -> int:
         return 1
+
+    def _sleep_manager(self):
+        if self._runtime is not None:
+            return ensure_sleep_runtime(self._runtime).movie_sleep_mgr
+        return movie_sleep_mgr
 
     def start(self) -> None:
         self._started = True
@@ -71,7 +78,7 @@ class SequentialFetchBackend(FetchBackend):
                 return
 
             if self._pending_movie_sleep:
-                movie_sleep_mgr.sleep()
+                self._sleep_manager().sleep()
                 self._pending_movie_sleep = False
 
             yield self._process_task(task)
@@ -106,6 +113,7 @@ class SequentialFetchBackend(FetchBackend):
             use_cf_bypass=self._runtime_state.use_cf_bypass,
             entry_index=task.entry_index,
             is_adhoc_mode=self._is_adhoc_mode,
+            runtime=self._runtime,
         )
 
         if parse_success:
@@ -150,7 +158,7 @@ class SequentialFetchBackend(FetchBackend):
             return
 
         if runtime_state_changed:
-            movie_sleep_mgr.sleep()
+            self._sleep_manager().sleep()
             self._pending_movie_sleep = False
             return
 
