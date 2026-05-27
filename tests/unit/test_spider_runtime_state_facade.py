@@ -7,6 +7,55 @@ from javdb.proxy.coordinator.runner_registry_client import ConfigSnapshot, Signa
 from javdb.proxy.coordinator.movie_claim_client import MOVIE_CLAIM_MODE_AUTO
 from javdb.spider.runtime.context import SpiderRuntime
 
+FINAL_FACADE_ENTRIES = (
+    "bind_active_runtime",
+    "clear_active_runtime",
+    "get_active_runtime",
+    "setup_proxy_pool",
+    "initialize_request_handler",
+    "get_page",
+    "should_use_proxy_for_module",
+    "extract_ip_from_proxy_url",
+    "get_cf_bypass_service_url",
+    "is_cf_bypass_failure",
+    "set_active_runner_session",
+    "setup_runner_registry_client",
+    "setup_movie_claim_client",
+    "setup_login_state_client",
+    "setup_proxy_coordinator",
+    "setup_work_distributor_client",
+    "proxy_needs_cf_bypass",
+    "mark_proxy_cf_bypass",
+    "deduct_proxy_login_budget",
+    "ensure_reports_dir",
+    "ensure_report_dated_dir",
+    "save_proxy_ban_html",
+)
+
+EXPECTED_LEGACY_DATA_FIELDS = (
+    "always_bypass_time",
+    "current_login_state_version",
+    "global_login_state_client",
+    "global_movie_claim_client",
+    "global_proxy_coordinator",
+    "global_proxy_pool",
+    "global_recommend_proxy_policy",
+    "global_request_handler",
+    "global_runner_registry_client",
+    "global_work_distributor_client",
+    "logged_in_proxy_name",
+    "login_attempted",
+    "login_attempts_per_proxy",
+    "login_failures_per_proxy",
+    "login_total_attempts",
+    "login_total_budget",
+    "parsed_links",
+    "proxies_requiring_cf_bypass",
+    "proxy_ban_html_files",
+    "refreshed_session_cookie",
+    "runtime_holder_id",
+)
+
 
 @pytest.fixture(autouse=True)
 def _reset_active_runtime():
@@ -19,44 +68,29 @@ def _reset_active_runtime():
         state.clear_active_runtime(active)
 
 
-def test_bind_active_runtime_rebinds_mutable_detail_state():
-    first = SpiderRuntime()
-    second = SpiderRuntime()
-
-    state.bind_active_runtime(first)
-    state.parsed_links.add("/v/first")
-    assert first.detail.parsed_links == {"/v/first"}
-
-    state.bind_active_runtime(second)
-    assert state.parsed_links is second.detail.parsed_links
-    assert state.parsed_links == set()
-
-
-def test_bind_active_runtime_rebinds_proxy_ban_html_files():
+def test_state_facade_keeps_runtime_binding_functions():
     runtime = SpiderRuntime()
 
-    state.bind_active_runtime(runtime)
-    state.proxy_ban_html_files.append("logs/proxy_ban.txt")
-
-    assert runtime.proxy.proxy_ban_html_files == ["logs/proxy_ban.txt"]
-
-
-def test_bind_active_runtime_exposes_runtime_holder_id():
-    runtime = SpiderRuntime()
-
-    state.bind_active_runtime(runtime)
-
-    assert state.runtime_holder_id == runtime.runner_registry.holder_id
-
-
-def test_clear_active_runtime_leaves_facade_importable():
-    runtime = SpiderRuntime()
-
-    state.bind_active_runtime(runtime)
+    assert state.bind_active_runtime(runtime) is runtime
+    assert state.get_active_runtime() is runtime
     state.clear_active_runtime(runtime)
-
     assert state.get_active_runtime() is None
-    assert isinstance(state.parsed_links, set)
+
+
+def test_state_facade_exports_final_function_contract():
+    public_contract = getattr(state, "__all__", [])
+
+    assert tuple(public_contract) == FINAL_FACADE_ENTRIES
+
+
+def test_legacy_direct_field_compatibility_is_documented_not_public():
+    public_contract = getattr(state, "__all__", [])
+    legacy_data_fields = getattr(state, "LEGACY_DATA_FIELDS", ())
+
+    assert tuple(legacy_data_fields) == EXPECTED_LEGACY_DATA_FIELDS
+    assert set(legacy_data_fields).isdisjoint(public_contract)
+    assert "parsed_links" not in public_contract
+    assert "global_proxy_pool" not in public_contract
 
 
 def test_legacy_login_state_can_explicitly_clear_none_values():
