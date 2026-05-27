@@ -91,6 +91,7 @@ policy 会把最终排序分数拆成三部分：
 | Phase 1 | [IMP-ADR023-01](IMP-ADR023-01-shadowscore-confidence-fields.md) | Shadow scoring、reward 聚合、confidence 和可选解释字段 | 暂不改变排序 |
 | Phase 2 | [IMP-ADR023-02](IMP-ADR023-02-policy-rollout-flag.md) | 在 feature flag 下启用 policy 排序，并保留 heuristic fallback | 不做自动调参和离线训练 |
 | Phase 3 | [IMP-ADR023-03](IMP-ADR023-03-observability-rollout-hardening.md) | 围绕全局/局部健康信号做可观测性和 rollout 加固 | 不引入重量级 ML runtime 或 LLM 选路 |
+| Phase 4 | [IMP-ADR023-04](IMP-ADR023-04-python-selection-signal.md) | Python Selection Signal 模块负责 score adapter 选择、freshness、逐 proxy fallback 和 runtime lifecycle | 不改 `ProxyPool` 接口，不消费 rank/model score，不改 ban/cooldown 语义 |
 
 ## 参考
 
@@ -102,3 +103,4 @@ policy 会把最终排序分数拆成三部分：
 ## 状态日志
 
 - 2026-05-27：以 ADR-023 提出。
+- 2026-05-27：新增 Python Selection Signal 深化工作的 Phase 4 实施计划。

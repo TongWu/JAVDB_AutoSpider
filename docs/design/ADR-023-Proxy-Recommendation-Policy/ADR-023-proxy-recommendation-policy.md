@@ -91,6 +91,7 @@ When the policy has low confidence, the heuristic dominates. When the policy has
 | Phase 1 | [IMP-ADR023-01](IMP-ADR023-01-shadowscore-confidence-fields.md) | Shadow scoring, reward aggregation, confidence, and optional explainability fields | No ranking change yet |
 | Phase 2 | [IMP-ADR023-02](IMP-ADR023-02-policy-rollout-flag.md) | Policy-driven ordering behind a feature flag with heuristic fallback | Full automation of tuning and offline training |
 | Phase 3 | [IMP-ADR023-03](IMP-ADR023-03-observability-rollout-hardening.md) | Observability and rollout hardening for global-vs-local health signals | Any heavyweight ML runtime or LLM-based selection |
+| Phase 4 | [IMP-ADR023-04](IMP-ADR023-04-python-selection-signal.md) | Python Selection Signal module owns score adapter selection, freshness, per-proxy fallback, and runtime lifecycle | No `ProxyPool` interface change, no rank/model score consumption, no ban/cooldown semantic change |
 
 ## References
 
@@ -102,3 +103,4 @@ When the policy has low confidence, the heuristic dominates. When the policy has
 ## Status Log
 
 - 2026-05-27: Proposed as ADR-023.
+- 2026-05-27: Added Phase 4 plan for the Python Selection Signal deepening.
