@@ -66,6 +66,57 @@ from javdb.spider.runtime.config import (
 logger = get_logger(__name__)
 _UNSET = object()
 
+__all__ = (
+    "bind_active_runtime",
+    "clear_active_runtime",
+    "get_active_runtime",
+    "setup_proxy_pool",
+    "initialize_request_handler",
+    "get_page",
+    "should_use_proxy_for_module",
+    "extract_ip_from_proxy_url",
+    "get_cf_bypass_service_url",
+    "is_cf_bypass_failure",
+    "set_active_runner_session",
+    "setup_runner_registry_client",
+    "setup_movie_claim_client",
+    "setup_login_state_client",
+    "setup_proxy_coordinator",
+    "setup_work_distributor_client",
+    "proxy_needs_cf_bypass",
+    "mark_proxy_cf_bypass",
+    "deduct_proxy_login_budget",
+    "ensure_reports_dir",
+    "ensure_report_dated_dir",
+    "save_proxy_ban_html",
+)
+
+# Temporary module data retained for state.py/context.py fallback internals only.
+# New production callers must use SpiderRuntime or the function facade above.
+LEGACY_DATA_FIELDS = (
+    "always_bypass_time",
+    "current_login_state_version",
+    "global_login_state_client",
+    "global_movie_claim_client",
+    "global_proxy_coordinator",
+    "global_proxy_pool",
+    "global_recommend_proxy_policy",
+    "global_request_handler",
+    "global_runner_registry_client",
+    "global_work_distributor_client",
+    "logged_in_proxy_name",
+    "login_attempted",
+    "login_attempts_per_proxy",
+    "login_failures_per_proxy",
+    "login_total_attempts",
+    "login_total_budget",
+    "parsed_links",
+    "proxies_requiring_cf_bypass",
+    "proxy_ban_html_files",
+    "refreshed_session_cookie",
+    "runtime_holder_id",
+)
+
 # ---------------------------------------------------------------------------
 # Mutable globals
 # ---------------------------------------------------------------------------
