@@ -35,10 +35,18 @@ FINAL_FACADE_ENTRIES = (
 
 @pytest.fixture(autouse=True)
 def _reset_active_runtime():
+    state.login_attempted = False
+    state.login_attempts_per_proxy.clear()
+    state.login_failures_per_proxy.clear()
+    state.login_total_attempts = 0
     active = state.get_active_runtime()
     if active is not None:
         state.clear_active_runtime(active)
     yield
+    state.login_attempted = False
+    state.login_attempts_per_proxy.clear()
+    state.login_failures_per_proxy.clear()
+    state.login_total_attempts = 0
     active = state.get_active_runtime()
     if active is not None:
         state.clear_active_runtime(active)
