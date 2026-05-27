@@ -59,6 +59,36 @@ def test_clear_active_runtime_leaves_facade_importable():
     assert isinstance(state.parsed_links, set)
 
 
+def test_legacy_login_state_can_explicitly_clear_none_values():
+    state.set_legacy_login_state(
+        proxy_name="proxy-a",
+        cookie="cookie-a",
+        version=3,
+    )
+
+    assert state.get_legacy_login_state() == ("proxy-a", "cookie-a", 3)
+
+    state.set_legacy_login_state(proxy_name=None, cookie=None, version=None)
+
+    assert state.get_legacy_login_state() == (None, None, None)
+
+
+def test_legacy_login_context_adapter_updates_module_state():
+    login_ctx = state.get_legacy_login_context()
+
+    login_ctx.login_attempted = True
+    login_ctx.login_total_attempts = 2
+    login_ctx.login_total_budget = 5
+    login_ctx.login_attempts_per_proxy["proxy-a"] = 1
+    login_ctx.login_failures_per_proxy["proxy-a"] = 0
+
+    assert state.login_attempted is True
+    assert state.login_total_attempts == 2
+    assert state.login_total_budget == 5
+    assert state.login_attempts_per_proxy == {"proxy-a": 1}
+    assert state.login_failures_per_proxy == {"proxy-a": 0}
+
+
 def test_bound_runtime_owns_runner_session_facade():
     runtime = SpiderRuntime()
     state.bind_active_runtime(runtime)
