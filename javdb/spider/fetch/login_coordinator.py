@@ -5,7 +5,7 @@ Used by ``ProxyWorker`` (spider), ``BackfillWorker`` (migration), and
 login retry / proxy-switch / budget logic.
 
 When the cross-runtime ``GlobalLoginState`` Durable Object is configured
-(:data:`state.global_login_state_client` is not ``None``), all calls into
+(the runtime login-state client is not ``None``), all calls into
 :meth:`_login_and_verify` are wrapped in a DO ``acquire_lease`` ↔
 ``release_lease`` mutex so that **at most one runner globally** performs
 the actual login at a time.  Runners that lose the race **park** the
@@ -217,7 +217,7 @@ class LoginCoordinator:
     def _holder_id(self) -> str:
         if self._runtime is not None:
             return self._runtime.runner_registry.holder_id
-        return state.runtime_holder_id
+        return getattr(state, "runtime_holder_id")
 
     def _shared_request_handler(self):
         services = self._services()
@@ -687,9 +687,8 @@ class LoginCoordinator:
         check uses the very session the spider will subsequently use.
 
         On verification failure the freshly issued cookie is cleared from
-        both the worker's request handler *and* the global login state
-        (:data:`state.refreshed_session_cookie` and
-        :data:`state.logged_in_proxy_name`).  This prevents downstream code
+        both the worker's request handler *and* the runtime login state.
+        This prevents downstream code
         (e.g. ``fetch_engine`` cookie seeding) from handing a rejected
         cookie to other workers.
 

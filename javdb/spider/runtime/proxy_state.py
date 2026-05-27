@@ -23,11 +23,12 @@ def _deduct_proxy_login_budget_locked(proxy_name: str) -> int:
     """Core deduction logic. Caller must hold ``state._login_budget_lock``."""
     if proxy_name in state._login_budget_deducted_proxies:
         return 0
-    if state.login_total_budget <= 0:
+    login_ctx = state
+    if login_ctx.login_total_budget <= 0:
         state._login_budget_deducted_proxies.add(proxy_name)
         return 0
 
-    used = state.login_attempts_per_proxy.get(proxy_name, 0)
+    used = login_ctx.login_attempts_per_proxy.get(proxy_name, 0)
     remaining = LOGIN_ATTEMPTS_PER_PROXY_LIMIT - used
     if remaining <= 0:
         state._login_budget_deducted_proxies.add(proxy_name)
@@ -36,18 +37,18 @@ def _deduct_proxy_login_budget_locked(proxy_name: str) -> int:
     # Never let the global budget drop below total attempts already spent
     # (otherwise downstream budget checks would falsely report "exhausted").
     new_budget = max(
-        state.login_total_attempts,
-        state.login_total_budget - remaining,
+        login_ctx.login_total_attempts,
+        login_ctx.login_total_budget - remaining,
     )
-    actually_deducted = state.login_total_budget - new_budget
-    state.login_total_budget = new_budget
+    actually_deducted = login_ctx.login_total_budget - new_budget
+    login_ctx.login_total_budget = new_budget
     state._login_budget_deducted_proxies.add(proxy_name)
     if actually_deducted > 0:
         logger.info(
             "Login budget reduced by %d for banned proxy '%s' "
             "(now %d, attempts so far %d)",
             actually_deducted, proxy_name, new_budget,
-            state.login_total_attempts,
+            login_ctx.login_total_attempts,
         )
     return actually_deducted
 
@@ -58,7 +59,7 @@ def deduct_proxy_login_budget(proxy_name: Optional[str]) -> int:
     Called when a proxy is banned (either pre-banned at startup or banned
     during runtime).  The proxy's *remaining* per-proxy budget
     (``LOGIN_ATTEMPTS_PER_PROXY_LIMIT - login_attempts_per_proxy[proxy]``,
-    floored at 0) is subtracted from :data:`state.login_total_budget` so
+    floored at 0) is subtracted from the runtime login budget so
     that banned workers no longer reserve login credits they cannot use.
 
     Idempotent per ``proxy_name`` — repeated calls for the same proxy are
@@ -94,10 +95,11 @@ def _proxy_ctx(runtime=None):
 
 def _proxy_coordinator(runtime=None):
     runtime = _resolve_runtime(runtime)
+    services = runtime.services if runtime is not None else state
     return (
-        runtime.services.proxy_coordinator
+        services.proxy_coordinator
         if runtime is not None
-        else state.global_proxy_coordinator
+        else services.global_proxy_coordinator
     )
 
 

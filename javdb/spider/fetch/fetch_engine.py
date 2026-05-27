@@ -589,7 +589,7 @@ class _EngineWorker(threading.Thread):
             coordinator=(
                 self._runtime.services.proxy_coordinator
                 if self._runtime is not None
-                else state.global_proxy_coordinator
+                else getattr(state, "global_proxy_coordinator")
             ),
             proxy_id=self._coordinator_proxy_id,
             runtime=self._runtime,
@@ -609,7 +609,7 @@ class _EngineWorker(threading.Thread):
         coordinator = (
             self._runtime.services.proxy_coordinator
             if self._runtime is not None
-            else state.global_proxy_coordinator
+            else getattr(state, "global_proxy_coordinator")
         )
         coord_proxy_id = self._coordinator_proxy_id
         if coordinator is not None and coord_proxy_id:
@@ -1398,11 +1398,11 @@ class ParallelFetchBackend(FetchBackend):
            runner may have already published a fresh cookie via
            :class:`GlobalLoginState`.  Pulling it here lets this runner
            skip its own re-login entirely on startup, mirroring the
-           cookie + proxy_name into ``state`` so the existing per-worker
+           cookie + proxy_name into the active runtime so the existing per-worker
            injection path below picks it up.
         2. **Index phase** (legacy single-runtime path): when the index
            fetcher inside *this* runner just performed a login, the
-           cookie is already in ``state.refreshed_session_cookie``.
+           cookie is already in the runtime login state.
 
         DO failures fall through silently — the legacy path remains the
         source of truth in that case (per the fail-open contract).
@@ -1417,7 +1417,7 @@ class ParallelFetchBackend(FetchBackend):
         do_client = (
             runtime.services.login_state_client
             if runtime is not None
-            else state.global_login_state_client
+            else getattr(state, "global_login_state_client")
         )
         if do_client is not None:
             try:

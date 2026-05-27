@@ -237,11 +237,10 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
         sys.exit(2)
 
     runtime = state.get_active_runtime()
+    proxy_ctx = runtime.proxy if runtime is not None else state
+    proxy_ctx.always_bypass_time = always_bypass_time
     if runtime is not None:
-        runtime.proxy.always_bypass_time = always_bypass_time
         state.sync_legacy_globals_from_runtime(runtime)
-    else:
-        state.always_bypass_time = always_bypass_time
 
     if options.disable_all_filters:
         ignore_history = True
@@ -309,7 +308,12 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
 
     if use_proxy:
         runtime = state.get_active_runtime()
-        proxy_pool = runtime.services.proxy_pool if runtime else state.global_proxy_pool
+        services = runtime.services if runtime is not None else state
+        proxy_pool = (
+            services.proxy_pool
+            if runtime is not None
+            else services.global_proxy_pool
+        )
         if proxy_pool is not None:
             stats = proxy_pool.get_statistics()
             if PROXY_MODE == 'pool':

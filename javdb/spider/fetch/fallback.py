@@ -25,7 +25,12 @@ def _resolve_runtime(runtime=None):
 
 def _resolve_proxy_pool(runtime=None):
     runtime = _resolve_runtime(runtime)
-    return runtime.services.proxy_pool if runtime is not None else state.global_proxy_pool
+    services = runtime.services if runtime is not None else state
+    return (
+        services.proxy_pool
+        if runtime is not None
+        else services.global_proxy_pool
+    )
 
 
 def _sleep_manager(runtime=None):
@@ -47,8 +52,9 @@ def _save_proxy_ban_html(html_content, proxy_name, page_num, *, runtime=None):
     path = state.save_proxy_ban_html(html_content, proxy_name, page_num)
     runtime = _resolve_runtime(runtime)
     if runtime is not None and path is not None:
-        if path in state.proxy_ban_html_files:
-            state.proxy_ban_html_files.remove(path)
+        legacy_proxy_ban_html_files = getattr(state, "proxy_ban_html_files")
+        if path in legacy_proxy_ban_html_files:
+            legacy_proxy_ban_html_files.remove(path)
         runtime.proxy.proxy_ban_html_files.append(path)
     return path
 
