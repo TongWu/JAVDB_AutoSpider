@@ -53,21 +53,25 @@ def _detail_state(runtime=None):
 
 def _movie_claim_client(runtime=None):
     runtime = _resolve_runtime(runtime)
+    services = runtime.services if runtime is not None else state
     if runtime is None:
-        return state.global_movie_claim_client
+        return services.global_movie_claim_client
     return runtime.movie_claim.client_public
 
 
 def _work_distributor_client(runtime=None):
     runtime = _resolve_runtime(runtime)
+    services = runtime.services if runtime is not None else state
     if runtime is None:
-        return state.global_work_distributor_client
-    return runtime.services.work_distributor_client
+        return services.global_work_distributor_client
+    return services.work_distributor_client
 
 
 def _holder_id(runtime=None) -> str:
     runtime = _resolve_runtime(runtime)
-    return runtime.runner_registry.holder_id if runtime is not None else state.runtime_holder_id
+    if runtime is not None:
+        return runtime.runner_registry.holder_id
+    return getattr(state, "runtime_holder_id")
 
 
 def _claim_detail_candidates(
@@ -77,7 +81,7 @@ def _claim_detail_candidates(
 ) -> Tuple[List["DetailEntryCandidate"], int, int, Optional[str], Set[str]]:
     """Acquire MovieClaim leases for *candidates* before submitting fetches.
 
-    P1-B integration point: when ``state.global_movie_claim_client`` is
+    P1-B integration point: when the runtime movie-claim client is
     configured, every candidate is run through ``claim_movie`` so peer
     runners observe one of the three exhaustive outcomes from
     :class:`ClaimResult`:
@@ -89,7 +93,7 @@ def _claim_detail_candidates(
     2. ``acquired=False, already_completed=True`` → another runner has
        already finished the href in this shard.  Drop locally, count as
        skipped (so the phase report stays accurate) and add to
-       :data:`state.parsed_links` to short-circuit subsequent same-run
+       the runtime parsed-links set to short-circuit subsequent same-run
        calls.
     3. ``acquired=False, already_completed=False`` → another runner is
        *currently* working on it.  Drop locally and skip (the back-off is
@@ -495,7 +499,7 @@ def process_detail_entries(
     if work_client is not None:
         # Consumer path: pull from queue and dispatch only the items
         # this runner is allowed to process (each item carries a
-        # visibility lease tied to ``state.runtime_holder_id``).
+        # visibility lease tied to the runtime holder id).
         prepared_by_href = {c.href: c for c in prepared_entries}
         pull_batch_size = max(10, min(50, len(prepared_entries) or 10))
         try:
