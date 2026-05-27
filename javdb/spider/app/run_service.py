@@ -6,7 +6,7 @@ import os
 import sys
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 import requests
 from datetime import datetime
@@ -90,7 +90,7 @@ def _get_result_context() -> _SpiderResultContext | None:
         return None
 
 
-def _fetch_index_for_runtime(*, runtime, **kwargs):
+def _fetch_index_for_runtime(*, runtime: SpiderRuntime, **kwargs: Any) -> dict[str, Any]:
     return fetch_all_index_pages(runtime=runtime, **kwargs)
 
 
@@ -239,7 +239,7 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
     runtime = state.get_active_runtime()
     if runtime is not None:
         runtime.proxy.always_bypass_time = always_bypass_time
-        state._sync_legacy_globals_from_runtime(runtime)
+        state.sync_legacy_globals_from_runtime(runtime)
     else:
         state.always_bypass_time = always_bypass_time
 
@@ -886,6 +886,8 @@ def run_spider(options: SpiderRunOptions) -> SpiderRunResult:
     if owns_runtime:
         runtime = SpiderRuntime()
         state.bind_active_runtime(runtime)
+    # When SpiderRunService already bound a runtime, owns_runtime is false:
+    # run_spider uses it without closing or clearing the external owner.
 
     result_context = _SpiderResultContext(
         result_json=options.result_json,
@@ -973,6 +975,8 @@ class SpiderRunService:
         from javdb.spider.runtime import state as runtime_state
 
         runtime = SpiderRuntime()
+        # SpiderRunService owns this runtime; run_spider detects the active
+        # binding and leaves close/clear responsibility to this finally block.
         runtime_state.bind_active_runtime(runtime)
         try:
             return main()
