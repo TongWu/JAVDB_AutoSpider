@@ -111,12 +111,20 @@ def generate_summary_report(
         print(f"SPIDER_STAT_NO_NEW={no_new_torrents_count}")
 
     runtime = runtime or state.get_active_runtime()
-    detail_ctx = runtime.detail if runtime is not None else state
     if ignore_history:
         logger.info("History reading was disabled (--ignore-history); results still saved to history")
-    logger.debug("Current parsed links in memory: %d", len(detail_ctx.parsed_links))
+    parsed_links = (
+        runtime.detail.parsed_links
+        if runtime is not None
+        else state.get_legacy_parsed_links()
+    )
+    logger.debug("Current parsed links in memory: %d", len(parsed_links))
 
-    proxy_pool = runtime.services.proxy_pool if runtime else state.global_proxy_pool
+    proxy_pool = (
+        runtime.services.proxy_pool
+        if runtime is not None
+        else state.get_legacy_proxy_pool()
+    )
 
     if use_proxy and PROXY_MODE in ('pool', 'single') and proxy_pool is not None:
         # ``log_statistics`` itself emits a one-line INFO summary;
@@ -130,12 +138,17 @@ def generate_summary_report(
             log_section(logger, "PROXY BAN STATUS", emoji='🛡')
             logger.info(ban_summary)
 
-    if state.proxy_ban_html_files:
+    proxy_ban_html_files = (
+        runtime.proxy.proxy_ban_html_files
+        if runtime is not None
+        else state.get_legacy_proxy_ban_html_files()
+    )
+    if proxy_ban_html_files:
         log_section(logger, "PROXY BAN HTML FILES", emoji='🛡')
-        logger.info("Saved %d proxy ban HTML file(s) for debugging:", len(state.proxy_ban_html_files))
-        for html_file in state.proxy_ban_html_files:
+        logger.info("Saved %d proxy ban HTML file(s) for debugging:", len(proxy_ban_html_files))
+        for html_file in proxy_ban_html_files:
             logger.info("  - %s", html_file)
-        print(f"PROXY_BAN_HTML_FILES={','.join(state.proxy_ban_html_files)}")
+        print(f"PROXY_BAN_HTML_FILES={','.join(proxy_ban_html_files)}")
 
     proxies_were_banned = False
     if phase_mode in ['1', 'all']:

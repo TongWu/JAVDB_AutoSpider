@@ -28,17 +28,23 @@ def _resolve_runtime(runtime=None):
 
 def _login_state(runtime=None):
     runtime = _resolve_runtime(runtime)
-    return runtime.login if runtime is not None else state
+    return runtime.login if runtime is not None else state.get_legacy_login_context()
 
 
 def _runtime_services(runtime=None):
     runtime = _resolve_runtime(runtime)
-    return runtime.services if runtime is not None else state
+    return (
+        runtime.services
+        if runtime is not None
+        else state.get_legacy_runtime_services()
+    )
 
 
 def _runtime_holder_id(runtime=None) -> str:
     runtime = _resolve_runtime(runtime)
-    return runtime.runner_registry.holder_id if runtime is not None else state.runtime_holder_id
+    if runtime is not None:
+        return runtime.runner_registry.holder_id
+    return state.get_legacy_runtime_holder_id()
 
 
 def _publish_login_state_to_do(
@@ -50,7 +56,7 @@ def _publish_login_state_to_do(
     """Best-effort publish of a freshly-obtained cookie to the GlobalLoginState DO.
 
     Called after every successful :func:`attempt_login_refresh`; silently
-    no-ops when the DO is not configured (``state.global_login_state_client
+    no-ops when the DO is not configured (the legacy login-state client
     is None`` is the supported "per-runner login only" path).
 
     Failure modes that are explicitly tolerated:
@@ -63,18 +69,14 @@ def _publish_login_state_to_do(
       ``fetch/fallback.py``.  The :class:`LoginCoordinator` parallel path
       always acquires the lease before login, so its publishes succeed.
 
-    On success, :data:`state.current_login_state_version` is updated so
+    On success, the runtime login-state version is updated so
     downstream :meth:`LoginStateClient.invalidate` calls have the correct
     optimistic-lock token.
     """
     runtime = _resolve_runtime(runtime)
     login_ctx = _login_state(runtime)
     services = _runtime_services(runtime)
-    client = (
-        services.login_state_client
-        if runtime is not None
-        else services.global_login_state_client
-    )
+    client = services.login_state_client
     if client is None or not cookie:
         return
     publish_proxy_name = proxy_name or DIRECT_LOGIN_PROXY_NAME
@@ -147,11 +149,10 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None,
 
     Can be called multiple times within a session, subject to per-proxy
     (``LOGIN_ATTEMPTS_PER_PROXY_LIMIT``) and global
-    (``state.login_total_budget``) budget constraints.  Counters are tracked
-    in ``state.login_attempts_per_proxy`` / ``state.login_total_attempts``.
+    global budget constraints. Counters are tracked in runtime login state.
 
     The cookie obtained is bound to the proxy/server that performed the login.
-    ``state.logged_in_proxy_name`` is set so that parallel workers know which
+    The runtime login proxy name is set so that parallel workers know which
     server holds the valid session.
 
     When ``spider_uses_proxy`` is ``False`` (i.e. spider is running with
@@ -207,7 +208,7 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None,
             login_proxies = named_proxies
             used_proxy_name = named_nm
 
-    proxy_pool = services.proxy_pool if runtime is not None else services.global_proxy_pool
+    proxy_pool = services.proxy_pool
     if login_proxies is None and spider_uses_proxy and proxy_pool is not None:
         current_proxy = proxy_pool.get_current_proxy()
         if current_proxy:
@@ -278,11 +279,7 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None,
                 new_cookie = getattr(config, 'JAVDB_SESSION_COOKIE', session_cookie)
                 login_ctx.refreshed_session_cookie = new_cookie
                 logger.info("✓ Reloaded config.py with new session cookie")
-                request_handler = (
-                    services.request_handler
-                    if runtime is not None
-                    else services.global_request_handler
-                )
+                request_handler = services.request_handler
                 if request_handler:
                     request_handler.config.javdb_session_cookie = new_cookie
                     logger.info("✓ Updated request handler with new session cookie")
@@ -294,11 +291,7 @@ def attempt_login_refresh(explicit_proxies=None, explicit_proxy_name=None,
             else:
                 logger.warning("Failed to update config.py, using cookie directly for this run")
                 login_ctx.refreshed_session_cookie = session_cookie
-                request_handler = (
-                    services.request_handler
-                    if runtime is not None
-                    else services.global_request_handler
-                )
+                request_handler = services.request_handler
                 if request_handler:
                     request_handler.config.javdb_session_cookie = session_cookie
                     logger.info("✓ Updated request handler with new session cookie")

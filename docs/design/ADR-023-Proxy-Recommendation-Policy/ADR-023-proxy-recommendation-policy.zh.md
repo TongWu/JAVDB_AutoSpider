@@ -5,7 +5,7 @@
 | **状态**    | Proposed                                                              |
 | **日期**    | 2026-05-27                                                            |
 | **作者**    | Ted                                                                   |
-| **关联**    | [ADR-004](../_archive/ADR-004-Proxy-Discovery/ADR-004-proxy-discovery-via-runner-pool-upload.md), [ADR-013](../ADR-013-Runner-Runtime-State/ADR-013-runner-runtime-state-consolidation.md) |
+| **关联**    | [ADR-004](../_archive/ADR-004-Proxy-Discovery/ADR-004-proxy-discovery-via-runner-pool-upload.md), [ADR-013](../_archive/ADR-013-Runner-Runtime-State/ADR-013-runner-runtime-state-consolidation.md) |
 
 ## 背景
 
