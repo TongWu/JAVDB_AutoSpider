@@ -64,6 +64,7 @@ def _legacy_state_field_offenders(text: str, source: str) -> list[str]:
                 for alias in node.names:
                     if alias.name == "javdb.spider.runtime.state":
                         aliases.add(alias.asname or "javdb")
+                        aliases.add(alias.asname or alias.name)
             elif (
                 isinstance(node, ast.ImportFrom)
                 and node.module == "javdb.spider.runtime"
@@ -75,9 +76,36 @@ def _legacy_state_field_offenders(text: str, source: str) -> list[str]:
 
     imported_state_aliases = import_state_aliases(tree)
 
+    def dotted_name(node: ast.AST) -> str | None:
+        if isinstance(node, ast.Name):
+            return node.id
+        if isinstance(node, ast.Attribute):
+            prefix = dotted_name(node.value)
+            if prefix is None:
+                return None
+            return f"{prefix}.{node.attr}"
+        return None
+
+    def module_level_state_aliases(root: ast.Module) -> set[str]:
+        aliases = set(imported_state_aliases)
+        for node in root.body:
+            if isinstance(node, ast.Assign) and state_alias_value(node.value, aliases):
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        aliases.add(target.id)
+            elif (
+                isinstance(node, ast.AnnAssign)
+                and node.value is not None
+                and state_alias_value(node.value, aliases)
+                and isinstance(node.target, ast.Name)
+            ):
+                aliases.add(node.target.id)
+        return aliases
+
     def state_alias_value(value: ast.AST, aliases: set[str]) -> bool:
-        if isinstance(value, ast.Name):
-            return value.id in aliases
+        name = dotted_name(value)
+        if name is not None:
+            return name in aliases
         if isinstance(value, ast.IfExp):
             return state_alias_value(value.body, aliases) or state_alias_value(
                 value.orelse,
@@ -98,13 +126,14 @@ def _legacy_state_field_offenders(text: str, source: str) -> list[str]:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
         and returns_state_module(node)
     }
+    module_state_aliases = module_level_state_aliases(tree)
 
     offenders: list[str] = []
     seen_offenders: set[tuple[int, str]] = set()
 
     class StateBoundaryVisitor(ast.NodeVisitor):
         def __init__(self) -> None:
-            self.alias_stack: list[set[str]] = [set(imported_state_aliases)]
+            self.alias_stack: list[set[str]] = [set(module_state_aliases)]
 
         @property
         def aliases(self) -> set[str]:
@@ -134,7 +163,7 @@ def _legacy_state_field_offenders(text: str, source: str) -> list[str]:
                         self.add_offender(node)
 
         def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-            self.alias_stack.append(set(imported_state_aliases))
+            self.alias_stack.append(set(module_state_aliases))
             self.generic_visit(node)
             self.alias_stack.pop()
 
@@ -160,8 +189,7 @@ def _legacy_state_field_offenders(text: str, source: str) -> list[str]:
 
         def visit_Attribute(self, node: ast.Attribute) -> None:
             if (
-                isinstance(node.value, ast.Name)
-                and node.value.id in self.aliases
+                self._state_alias_value(node.value)
                 and node.attr in FORBIDDEN_DIRECT_STATE_FIELDS
             ):
                 self.add_offender(node)
@@ -243,6 +271,41 @@ def test_architecture_guard_catches_import_aliases_from_imports_and_returned_sta
         "example.py:13: pool = services.global_request_handler",
         "example.py:14: holder = runtime_state.runtime_holder_id",
         "example.py:15: coordinator = conditional_services.global_proxy_coordinator",
+    ]
+
+
+def test_architecture_guard_keeps_module_aliases_inside_functions():
+    offenders = _legacy_state_field_offenders(
+        "\n".join(
+            [
+                "import javdb.spider.runtime.state as runtime_state",
+                "services = runtime_state",
+                "",
+                "def f():",
+                "    return services.global_proxy_pool",
+            ]
+        ),
+        "example.py",
+    )
+
+    assert offenders == [
+        "example.py:5: return services.global_proxy_pool",
+    ]
+
+
+def test_architecture_guard_catches_full_import_chain_field_access():
+    offenders = _legacy_state_field_offenders(
+        "\n".join(
+            [
+                "import javdb.spider.runtime.state",
+                "pool = javdb.spider.runtime.state.global_proxy_pool",
+            ]
+        ),
+        "example.py",
+    )
+
+    assert offenders == [
+        "example.py:2: pool = javdb.spider.runtime.state.global_proxy_pool",
     ]
 
 
