@@ -163,7 +163,7 @@ def _legacy_state_field_offenders(text: str, source: str) -> list[str]:
                         self.add_offender(node)
 
         def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-            self.alias_stack.append(set(module_state_aliases))
+            self.alias_stack.append(set(self.aliases))
             self.generic_visit(node)
             self.alias_stack.pop()
 
@@ -306,6 +306,27 @@ def test_architecture_guard_catches_full_import_chain_field_access():
 
     assert offenders == [
         "example.py:2: pool = javdb.spider.runtime.state.global_proxy_pool",
+    ]
+
+
+def test_architecture_guard_keeps_enclosing_function_aliases_in_nested_functions():
+    offenders = _legacy_state_field_offenders(
+        "\n".join(
+            [
+                "import javdb.spider.runtime.state as runtime_state",
+                "",
+                "def outer():",
+                "    services = runtime_state",
+                "    def inner():",
+                "        return services.global_proxy_pool",
+                "    return inner",
+            ]
+        ),
+        "example.py",
+    )
+
+    assert offenders == [
+        "example.py:6: return services.global_proxy_pool",
     ]
 
 
