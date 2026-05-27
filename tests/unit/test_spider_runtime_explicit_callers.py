@@ -32,6 +32,7 @@ def test_runtime_request_handler_uses_runtime_sleep(monkeypatch):
 
     runtime = SpiderRuntime()
     ensure_sleep_runtime(runtime)
+    original_handler = state.global_request_handler
 
     class CapturingRequestHandler:
         created = None
@@ -42,14 +43,17 @@ def test_runtime_request_handler_uses_runtime_sleep(monkeypatch):
 
     monkeypatch.setattr(state, "RequestHandler", CapturingRequestHandler)
 
-    runtime.initialize_request_handler()
+    try:
+        runtime.initialize_request_handler()
 
-    handler = CapturingRequestHandler.created
-    assert handler.kwargs["penalty_tracker"] is runtime.sleep.penalty_tracker
-    assert (
-        handler.kwargs["config"].between_attempt_sleep
-        == runtime.sleep.movie_sleep_mgr.sleep
-    )
+        handler = CapturingRequestHandler.created
+        assert handler.kwargs["penalty_tracker"] is runtime.sleep.penalty_tracker
+        assert (
+            handler.kwargs["config"].between_attempt_sleep
+            == runtime.sleep.movie_sleep_mgr.sleep
+        )
+    finally:
+        state.global_request_handler = original_handler
 
 
 def test_run_service_passes_runtime_to_index_fetch(monkeypatch):
@@ -138,6 +142,7 @@ def test_runtime_request_handler_callbacks_use_runtime_coordinator(monkeypatch):
     runtime = SpiderRuntime()
     coordinator = MagicMock()
     runtime.services.proxy_coordinator = coordinator
+    original_handler = state.global_request_handler
 
     class CapturingRequestHandler:
         created = None
@@ -148,16 +153,19 @@ def test_runtime_request_handler_callbacks_use_runtime_coordinator(monkeypatch):
 
     monkeypatch.setattr(state, "RequestHandler", CapturingRequestHandler)
 
-    runtime.initialize_request_handler()
-    handler = CapturingRequestHandler.created
+    try:
+        runtime.initialize_request_handler()
+        handler = CapturingRequestHandler.created
 
-    handler.kwargs["on_cf_event"]("proxy-a")
-    handler.kwargs["on_request_complete"]("proxy-a", "success", 123)
+        handler.kwargs["on_cf_event"]("proxy-a")
+        handler.kwargs["on_request_complete"]("proxy-a", "success", 123)
 
-    coordinator.report_async.assert_any_call("proxy-a", "cf")
-    coordinator.report_async.assert_any_call("proxy-a", "success", latency_ms=123)
-    assert runtime.services.request_handler is handler
-    assert state.global_request_handler is handler
+        coordinator.report_async.assert_any_call("proxy-a", "cf")
+        coordinator.report_async.assert_any_call("proxy-a", "success", latency_ms=123)
+        assert runtime.services.request_handler is handler
+        assert state.global_request_handler is handler
+    finally:
+        state.global_request_handler = original_handler
 
 
 def test_runtime_registry_signals_update_runtime_sleep_not_legacy():
@@ -375,6 +383,28 @@ def test_runtime_proxy_coordinator_injects_runtime_sleep(monkeypatch):
 
     assert runtime.sleep.movie_sleep_mgr._coordinator is client
     assert legacy_mgr._coordinator is legacy_coordinator
+
+
+def test_sleep_runtime_copies_existing_coordinator_binding():
+    from javdb.spider.runtime import sleep as sleep_module
+
+    runtime = SpiderRuntime()
+    coordinator = MagicMock()
+    legacy_mgr = sleep_module.movie_sleep_mgr
+    legacy_coordinator = legacy_mgr._coordinator
+    legacy_proxy_id = legacy_mgr._proxy_id
+
+    try:
+        legacy_mgr.set_coordinator(coordinator, proxy_id="proxy-runtime")
+
+        sleep_ctx = ensure_sleep_runtime(runtime)
+
+        assert sleep_ctx.movie_sleep_mgr.has_coordinator() is True
+        assert sleep_ctx.movie_sleep_mgr._coordinator is coordinator
+        assert sleep_ctx.movie_sleep_mgr._proxy_id == "proxy-runtime"
+    finally:
+        legacy_mgr._coordinator = legacy_coordinator
+        legacy_mgr._proxy_id = legacy_proxy_id
 
 
 def test_explicit_runtime_fallback_fetch_uses_runtime_request_handler(monkeypatch):
@@ -712,6 +742,111 @@ def test_process_detail_entries_uses_explicit_runtime_detail_and_services(monkey
     assert ("runtime-holder", ["/v/peer"]) in release_calls
     assert "/v/runtime" in runtime.detail.parsed_links
     assert state.parsed_links == set()
+
+
+def test_parallel_detail_wrapper_forwards_explicit_runtime(monkeypatch):
+    from javdb.spider.detail import parallel_mode
+
+    runtime = SpiderRuntime()
+    backend = object()
+    observed = {}
+
+    def fake_build_parallel_detail_backend(**kwargs):
+        observed["build"] = kwargs
+        return backend
+
+    def fake_process_detail_entries(**kwargs):
+        observed["process"] = kwargs
+        return {"rows": 0}
+
+    monkeypatch.setattr(
+        parallel_mode,
+        "build_parallel_detail_backend",
+        fake_build_parallel_detail_backend,
+    )
+    monkeypatch.setattr(
+        parallel_mode,
+        "process_detail_entries",
+        fake_process_detail_entries,
+    )
+
+    result = parallel_mode.process_detail_entries_parallel(
+        entries=[],
+        phase=1,
+        history_data={},
+        history_file="history.csv",
+        csv_path="out.csv",
+        fieldnames=[],
+        dry_run=True,
+        use_history_for_saving=False,
+        use_cookie=True,
+        is_adhoc_mode=False,
+        runtime=runtime,
+    )
+
+    assert result == {"rows": 0}
+    assert observed["build"]["runtime"] is runtime
+    assert observed["build"]["use_cookie"] is True
+    assert observed["process"]["runtime"] is runtime
+    assert observed["process"]["backend"] is backend
+    assert observed["process"]["include_recent_release_filters"] is True
+
+
+def test_sequential_detail_wrapper_forwards_explicit_runtime(monkeypatch):
+    from javdb.spider.detail import sequential_mode
+
+    runtime = SpiderRuntime()
+    session = object()
+    backend = object()
+    observed = {}
+
+    def fake_build_sequential_detail_backend(*args, **kwargs):
+        observed["build_args"] = args
+        observed["build"] = kwargs
+        return backend
+
+    def fake_process_detail_entries(**kwargs):
+        observed["process"] = kwargs
+        return {"rows": 0}
+
+    monkeypatch.setattr(
+        sequential_mode,
+        "build_sequential_detail_backend",
+        fake_build_sequential_detail_backend,
+    )
+    monkeypatch.setattr(
+        sequential_mode,
+        "process_detail_entries",
+        fake_process_detail_entries,
+    )
+
+    result = sequential_mode.process_phase_entries_sequential(
+        entries=[],
+        phase=2,
+        history_data={},
+        history_file="history.csv",
+        csv_path="out.csv",
+        fieldnames=[],
+        dry_run=True,
+        use_history_for_saving=False,
+        use_cookie=True,
+        is_adhoc_mode=True,
+        session=session,
+        use_proxy=True,
+        use_cf_bypass=False,
+        runtime=runtime,
+    )
+
+    assert result == {"rows": 0}
+    assert observed["build_args"] == (session,)
+    assert observed["build"]["runtime"] is runtime
+    assert observed["build"]["use_cookie"] is True
+    assert observed["build"]["is_adhoc_mode"] is True
+    assert observed["build"]["use_proxy"] is True
+    assert observed["process"]["runtime"] is runtime
+    assert observed["process"]["backend"] is backend
+    assert observed["process"]["include_recent_release_filters"] is False
+    assert observed["process"]["log_duplicate_skips"] is True
 
 
 def test_parallel_fetch_backend_start_adjusts_runtime_login_budget(monkeypatch):

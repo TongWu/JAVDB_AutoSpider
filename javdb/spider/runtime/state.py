@@ -299,6 +299,11 @@ def _sync_legacy_globals_from_runtime(runtime: SpiderRuntime) -> None:
     _movie_claim_swept_at_exit = runtime.movie_claim.swept_at_exit
 
 
+def sync_legacy_globals_from_runtime(runtime: SpiderRuntime) -> None:
+    """Refresh the temporary legacy facade from a runtime-owned state graph."""
+    _sync_legacy_globals_from_runtime(runtime)
+
+
 def bind_active_runtime(runtime: SpiderRuntime) -> SpiderRuntime:
     """Bind a runtime before any setup_* calls or concurrent spider startup."""
     bound = _bind_active_runtime(runtime)
