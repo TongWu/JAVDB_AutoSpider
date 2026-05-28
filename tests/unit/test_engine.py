@@ -127,6 +127,36 @@ class TestEngineSimpleMode:
         assert results[0].data == {'title': 'A'}
         assert results[0].task.meta == {'code': 'A'}
 
+    def test_consecutive_none_returns_soft_ban_worker(self):
+        from javdb.spider.fetch.fetch_engine import FetchEngine
+
+        ban_mgr = _make_ban_manager_stub()
+
+        with patch('javdb.spider.fetch.fetch_engine.RequestHandler', side_effect=_make_handler_stub), \
+                patch('javdb.spider.fetch.fetch_engine.create_proxy_pool_from_config', return_value=MagicMock()), \
+                patch('javdb.spider.fetch.fetch_engine.get_ban_manager', return_value=ban_mgr), \
+                patch('javdb.spider.fetch.fetch_engine.PROXY_POOL', [
+                    {'name': 'proxy-a', 'http': 'http://a:1', 'https': 'http://a:1'},
+                ]), \
+                patch('javdb.spider.fetch.fetch_engine.LOGIN_PROXY_NAME', None):
+            engine = FetchEngine(
+                process_fn=lambda _ctx, _task: None,
+                use_cookie=False,
+                sleep_min=0.01,
+                sleep_max=0.02,
+            )
+            engine.start()
+            _patch_workers(engine, lambda url, _cf: '<html></html>')
+
+            engine.submit('https://javdb.com/v/none-1', entry_index='none-1')
+            engine.submit('https://javdb.com/v/none-2', entry_index='none-2')
+            engine.mark_done()
+            results = list(engine.results())
+            engine.shutdown()
+
+        ban_mgr.add_ban.assert_called_once_with('proxy-a', 'http://a:1')
+        assert any(result.error == 'all_proxies_banned' for result in results)
+
     @_engine_patches
     def test_parse_failure_retries_on_other_proxy(self, *_mocks):
         from javdb.spider.fetch.fetch_engine import FetchEngine, EngineTask

@@ -1456,7 +1456,7 @@ def db_commit_session_history(
     *,
     history_db_path: Optional[str] = None,
     reports_db_path: Optional[str] = None,
-) -> Dict[str, int]:
+) -> Dict[str, Any]:
     """Drain pending writes for *session_id* into MovieHistory / TorrentHistory.
 
     State transitions executed:
@@ -1522,6 +1522,7 @@ def db_commit_session_history(
                 (cur_m.rowcount or 0) + (cur_t.rowcount or 0)
             )
         _d1_retry_pending_cleanup(session_id)
+        counts["residual_cleanup"] = True
         return counts
 
     if status == "in_progress":

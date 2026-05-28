@@ -19,6 +19,7 @@ import logging
 import argparse
 import sys
 import os
+import time
 from pathlib import Path
 from datetime import datetime, timedelta
 from urllib.parse import urlsplit
@@ -49,6 +50,9 @@ PROXY_POOL_MAX_FAILURES = cfg('PROXY_POOL_MAX_FAILURES', 3)
 # File filter
 QB_FILE_FILTER_MIN_SIZE_MB = cfg('QB_FILE_FILTER_MIN_SIZE_MB', 100)
 QB_FILE_FILTER_LOG_FILE = cfg('QB_FILE_FILTER_LOG_FILE', 'logs/qb_file_filter.log')
+QB_FILE_FILTER_METADATA_WAIT_SECONDS = 90
+QB_FILE_FILTER_METADATA_POLL_INTERVAL_SECONDS = 10
+QB_FILE_FILTER_RECENT_METADATA_WINDOW_SECONDS = 15 * 60
 
 # Configure logging
 from javdb.infra.logging import setup_logging, get_logger
@@ -530,7 +534,110 @@ def format_size(size_bytes):
     return f"{size_bytes:.2f} PB"
 
 
-def filter_small_files(session, torrents, min_size_mb, dry_run=False, use_proxy=False, delete_local_files_flag=False):
+def _recent_metadata_candidates(torrents, *, now=None, window_seconds=None):
+    """Return recently added torrents worth waiting on for metadata."""
+    if now is None:
+        now = time.time()
+    if window_seconds is None:
+        window_seconds = QB_FILE_FILTER_RECENT_METADATA_WINDOW_SECONDS
+    cutoff = now - max(0, window_seconds)
+    candidates = []
+    for torrent in torrents:
+        if not torrent.get('hash'):
+            continue
+        try:
+            added_on = int(float(torrent.get('added_on') or 0))
+        except (TypeError, ValueError):
+            continue
+        if added_on >= cutoff:
+            candidates.append(torrent)
+    return candidates
+
+
+def wait_for_metadata_readiness(
+    session,
+    torrents,
+    *,
+    use_proxy=False,
+    max_wait_seconds=QB_FILE_FILTER_METADATA_WAIT_SECONDS,
+    poll_interval_seconds=QB_FILE_FILTER_METADATA_POLL_INTERVAL_SECONDS,
+    recent_window_seconds=QB_FILE_FILTER_RECENT_METADATA_WINDOW_SECONDS,
+):
+    """Poll qBittorrent until most newly added torrents expose file metadata."""
+    candidates = _recent_metadata_candidates(
+        torrents,
+        window_seconds=recent_window_seconds,
+    )
+    if not candidates or max_wait_seconds <= 0:
+        return {
+            'checked': len(candidates),
+            'ready': 0,
+            'pending': 0,
+            'api_failures': 0,
+            'waited_seconds': 0,
+        }
+
+    ready_needed = (len(candidates) // 2) + 1
+    deadline = time.monotonic() + max_wait_seconds
+    waited_seconds = 0.0
+
+    while True:
+        ready = 0
+        pending = 0
+        api_failures = 0
+        for torrent in candidates:
+            files = get_torrent_files(session, torrent.get('hash', ''), use_proxy)
+            if files is None:
+                api_failures += 1
+            elif len(files) == 0:
+                pending += 1
+            else:
+                ready += 1
+
+        logger.info(
+            "Metadata readiness: ready=%d pending=%d api_failures=%d "
+            "target=%d/%d",
+            ready, pending, api_failures, ready_needed, len(candidates),
+        )
+        if pending == 0 or ready >= ready_needed:
+            return {
+                'checked': len(candidates),
+                'ready': ready,
+                'pending': pending,
+                'api_failures': api_failures,
+                'waited_seconds': int(waited_seconds),
+            }
+
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return {
+                'checked': len(candidates),
+                'ready': ready,
+                'pending': pending,
+                'api_failures': api_failures,
+                'waited_seconds': int(waited_seconds),
+            }
+
+        sleep_for = min(max(1, poll_interval_seconds), remaining)
+        logger.info(
+            "Waiting %.0fs for qBittorrent metadata (%d/%d ready)",
+            sleep_for, ready, len(candidates),
+        )
+        time.sleep(sleep_for)
+        waited_seconds += sleep_for
+
+
+def filter_small_files(
+    session,
+    torrents,
+    min_size_mb,
+    dry_run=False,
+    use_proxy=False,
+    delete_local_files_flag=False,
+    metadata_wait_seconds=QB_FILE_FILTER_METADATA_WAIT_SECONDS,
+    metadata_poll_interval_seconds=QB_FILE_FILTER_METADATA_POLL_INTERVAL_SECONDS,
+    metadata_recent_window_seconds=QB_FILE_FILTER_RECENT_METADATA_WINDOW_SECONDS,
+):
     """
     Filter out small files from torrents.
     
@@ -546,6 +653,24 @@ def filter_small_files(session, torrents, min_size_mb, dry_run=False, use_proxy=
         dict: Statistics about the filtering operation
     """
     min_size_bytes = min_size_mb * 1024 * 1024  # Convert MB to bytes
+    wait_summary = wait_for_metadata_readiness(
+        session,
+        torrents,
+        use_proxy=use_proxy,
+        max_wait_seconds=metadata_wait_seconds,
+        poll_interval_seconds=metadata_poll_interval_seconds,
+        recent_window_seconds=metadata_recent_window_seconds,
+    )
+    if wait_summary['checked']:
+        logger.info(
+            "Metadata wait complete: checked=%d ready=%d pending=%d "
+            "api_failures=%d waited=%ds",
+            wait_summary['checked'],
+            wait_summary['ready'],
+            wait_summary['pending'],
+            wait_summary['api_failures'],
+            wait_summary['waited_seconds'],
+        )
     
     stats = {
         'torrents_processed': 0,

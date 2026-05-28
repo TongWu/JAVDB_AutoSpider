@@ -536,6 +536,8 @@ class _EngineWorker(threading.Thread):
         self.worker_id = worker_id
         self._per_worker_task_limit = max(0, int(per_worker_task_limit))
         self._per_worker_completed = 0
+        self._consecutive_none_count = 0
+        self._none_ban_threshold = 2
         self._task_timeout = max(0.0, float(task_timeout))
         self.proxy_config = proxy_config
         self._runtime = runtime or state.get_active_runtime()
@@ -989,6 +991,7 @@ class _EngineWorker(threading.Thread):
             try:
                 data = self._process_fn(ctx, task)
                 if data is not None:
+                    self._consecutive_none_count = 0
                     if not self._mark_entry_completed(task.entry_index):
                         # Another worker (speculative or original) already
                         # produced a result for this entry — discard ours.
@@ -1030,13 +1033,33 @@ class _EngineWorker(threading.Thread):
                         continue
                     task.failed_proxies.add(self.proxy_name)
                     task.retry_count += 1
-                    requeue_front(self.task_queue, task)
+                    self._consecutive_none_count += 1
                     logger.info(
                         "%s Process returned None, re-queued "
-                        "(%d/%d proxies)",
+                        "(%d/%d proxies, consecutive_none=%d)",
                         _task_worker_ctx(task.entry_index, self.proxy_name),
                         len(task.failed_proxies), self._active_workers,
+                        self._consecutive_none_count,
                     )
+                    if self._consecutive_none_count >= self._none_ban_threshold:
+                        get_ban_manager().add_ban(
+                            self.proxy_name,
+                            self.proxy_config.get("http")
+                            or self.proxy_config.get("https"),
+                        )
+                        logger.warning(
+                            "%s Soft-banned after %d consecutive None returns",
+                            self.proxy_name, self._consecutive_none_count,
+                        )
+                        self._handle_proxy_banned(
+                            task,
+                            reason=(
+                                f"{self._consecutive_none_count} consecutive "
+                                "None returns"
+                            ),
+                        )
+                        break
+                    requeue_front(self.task_queue, task)
             except LoginRequired:
                 if not task._speculative:
                     self._handle_login_required(task)
@@ -1084,7 +1107,13 @@ class _EngineWorker(threading.Thread):
             finally:
                 self._unregister_in_flight(task)
 
-    def _handle_proxy_banned(self, task: EngineTask, *, _requeue: bool = True) -> None:
+    def _handle_proxy_banned(
+        self,
+        task: EngineTask,
+        *,
+        _requeue: bool = True,
+        reason: str = "HTTP 403",
+    ) -> None:
         """Handle proxy ban: stop this worker and re-route tasks.
 
         When active workers remain, dynamically re-calculate and apply
@@ -1108,9 +1137,9 @@ class _EngineWorker(threading.Thread):
             active = self._active_workers
 
             logger.warning(
-                "[worker=%s] Proxy banned (HTTP 403) — worker stopped "
+                "[worker=%s] Proxy banned (%s) — worker stopped "
                 "(%d active workers remain)",
-                self.proxy_name, active,
+                self.proxy_name, reason, active,
             )
 
             if active > 0:

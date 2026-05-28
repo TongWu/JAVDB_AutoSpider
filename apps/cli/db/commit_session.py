@@ -382,19 +382,28 @@ def main(argv: Optional[List[str]] = None) -> int:
         drain: Optional[Dict[str, Any]] = None
         commit_started_at: Optional[float] = None
         commit_duration_ms: Optional[int] = None
+        drained_pending_session = False
         if write_mode == 'pending' and sess_status != 'committed':
             try:
                 commit_started_at = time.monotonic()
                 drain = db_commit_session_history(sid)
+                drained_pending_session = True
                 commit_duration_ms = int(
                     (time.monotonic() - commit_started_at) * 1000,
                 )
                 drain['session_id'] = sid
                 pending_drains.append(drain)
-                logger.info(
-                    "Pending session committed: id=%s mode=%s drain=%s",
-                    sid, write_mode, drain,
-                )
+                if drain.get("residual_cleanup"):
+                    logger.info(
+                        "Pending session cleanup (already committed): id=%s "
+                        "residual_deleted=%d",
+                        sid, drain.get("pending_deleted", 0),
+                    )
+                else:
+                    logger.info(
+                        "Pending session committed: id=%s mode=%s drain=%s",
+                        sid, write_mode, drain,
+                    )
             except Exception as e:
                 logger.error(
                     "db_commit_session_history failed for pending session "
@@ -433,7 +442,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                     shadow_audit=_shadow_audit_enabled(args),
                 )
             continue
-        if n > 0:
+        if n > 0 or drained_pending_session:
             committed.append(sid)
         else:
             # Already committed — that's fine, idempotent.
