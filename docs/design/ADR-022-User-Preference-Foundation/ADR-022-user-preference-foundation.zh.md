@@ -16,7 +16,7 @@ JAVDB AutoSpider 当前完全依赖基于规则的启发式逻辑运行，对用
 2. 已经解析的有价值元数据（类别、导演、片商）在每次运行时被静默丢弃。
 3. 没有机制让用户对单部影片或内容维度（演员、类别、片商）表达偏好。
 
-本 ADR 的目标是建立**数据基础层**，为未来的偏好模型提供数据支撑。模型训练本身推迟到 ADR-B，在积累足够评分数据之前无法进行有意义的模型架构设计。
+本 ADR 的目标是建立**数据基础层**，为未来的偏好模型提供数据支撑。模型训练本身推迟到 [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.zh.md)，其可训练阶段依赖足够评分数据。
 
 ---
 
@@ -91,7 +91,7 @@ CREATE TABLE ContentPreferences (
   content_id    TEXT NOT NULL,   -- href slug 或标准化名称
   content_name  TEXT NOT NULL,
   hearted       INTEGER DEFAULT 0,  -- 1 = 已红心
-  weight        REAL DEFAULT 1.0,   -- 保留给 ADR-B 爬取优先级使用
+  weight        REAL DEFAULT 1.0,   -- 保留给 ADR-025 爬取优先级使用
   PRIMARY KEY (content_type, content_id)
 );
 ```
@@ -132,10 +132,10 @@ CREATE TABLE ContentPreferences (
 
 ---
 
-### 5. 下游消费（ADR-B 前使用基于规则的占位逻辑）
+### 5. 下游消费（ADR-025 前使用基于规则的占位逻辑）
 
 **B2 — 上传过滤 hook：**  
-在 qBittorrent 上传决策路径中加入偏好门控。在 ADR-022 阶段，门控使用简单规则：若影片主演在 `ContentPreferences` 中有 `hearted = false` 的明确记录，则跳过上传。该 hook 点已按接口设计，ADR-B 可以直接用模型分数替换此规则，无需额外重构。
+在 qBittorrent 上传决策路径中加入偏好门控。在 ADR-022 阶段，门控使用简单规则：若影片主演在 `ContentPreferences` 中有 `hearted = false` 的明确记录，则跳过上传。该 hook 点已按接口设计，[ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.zh.md) 可以直接用模型分数替换此规则，无需额外重构。
 
 **B3 — 控制台偏好分展示：**  
 `/data` 和 `/browse` 页面在每条历史记录旁显示计算出的偏好分。在 ADR-022 阶段，分数采用加权平均的规则计算：
@@ -146,16 +146,16 @@ score = (movie_rating / 5.0) * 0.5
       + (category_match_ratio) * 0.2
 ```
 
-此基于规则的分数是占位逻辑；ADR-B 将用训练好的模型输出替换它。
+此基于规则的分数是占位逻辑；[ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.zh.md) 将用训练好的模型输出替换它。
 
 **B1 — 动态爬取优先级调整：**  
-推迟至 ADR-B。`ContentPreferences` 表中的 `weight` 列为此功能预留。
+推迟至 [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.zh.md)。`ContentPreferences` 表中的 `weight` 列为此功能预留。
 
 ---
 
 ## 阶段边界
 
-| 能力 | ADR-022（本 ADR） | ADR-B（推迟） |
+| 能力 | ADR-022（本 ADR） | ADR-025（推迟） |
 |------|-----------------|--------------|
 | `MovieMetadata` 表 + 解析器接入 | ✅ | — |
 | `MovieRatings` + `ContentPreferences` 表 | ✅ | — |
@@ -169,7 +169,7 @@ score = (movie_rating / 5.0) * 0.5
 | 模型服务 / 推理 | — | ✅ |
 | C2 邮件评分提示 | — | ✅ |
 
-ADR-B 应在通过 C1/C3 收集到 ≥ 200 条影片评分后再撰写，届时才有足够信号支撑有意义的模型架构决策。
+[ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.zh.md) 已定义模型方向。其可训练模型阶段仍应等待通过 C1/C3 收集至少 200 条影片评分后再实施，届时才有足够信号支撑有意义的模型训练。
 
 ---
 
@@ -204,14 +204,14 @@ python3 -m apps.cli.db.sync_d1_to_sqlite --apply --force-overwrite-all
 ## 影响
 
 **正面：**
-- 所有有价值的详情页字段从第一次实施起即被保留，避免在撰写 ADR-B 时进行第二轮 schema 迁移。
+- 所有有价值的详情页字段从第一次实施起即被保留，避免在实施 ADR-025 时进行第二轮 schema 迁移。
 - 偏好数据模型简单，无需 ML 基础设施即可直接查询。
 - `MovieHistory` 保持纯粹的去重/追踪职责，不增加额外复杂度。
 - B2 和 B3 从第一天起即以基于规则的逻辑提供实际效用，同时在后台积累评分数据。
 
 **负面 / 权衡：**
 - `MovieMetadata` 在会话流程之外写入，运行失败时可能留下不完整的元数据。可接受——元数据仅为补充信息，下次爬取时自动重试。
-- 基于规则的 B2/B3 占位逻辑是会被 ADR-B 替换的临时代码；这是有意为之的脚手架，而非浪费。
+- 基于规则的 B2/B3 占位逻辑是会被 ADR-025 替换的临时代码；这是有意为之的脚手架，而非浪费。
 - TypeScript 后端（`javdb-autospider-web/server/`）必须在同一 PR 或紧跟的后续 PR 中更新，以通过共享 D1 查询层暴露 `MovieMetadata`、`MovieRatings` 和 `ContentPreferences`。
 
 ---
@@ -222,4 +222,4 @@ python3 -m apps.cli.db.sync_d1_to_sqlite --apply --force-overwrite-all
 - [ADR-011](../_archive/ADR-011-Parsing-Module/ADR-011-parsing-module.md) — 解析模块结构与 `MovieDetail` 数据类
 - [ADR-014](../ADR-014-Storage-Cli-Layering/ADR-014-storage-cli-layering.md) — 存储 / CLI 分层
 - [ADR-019](../ADR-019-Web-Feature-Parity/ADR-019-web-feature-parity.md) — Web 控制台功能对齐
-- ADR-B（用户偏好模型）— 尚未撰写；依赖本 ADR
+- [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.zh.md) — 用户偏好模型；依赖本 ADR
