@@ -679,7 +679,7 @@ class MovieSleepManager:
             pool = (
                 runtime.services.proxy_pool
                 if runtime is not None
-                else _state.global_proxy_pool
+                else _state.get_legacy_proxy_pool()
             )
             if pool is None:
                 # Without a pool there's nowhere to mark the ban locally; we
@@ -721,9 +721,11 @@ class MovieSleepManager:
                     runtime.proxy.proxies_requiring_cf_bypass
                 )
             else:
-                always_bypass_time = _state.always_bypass_time
-                cf_bypass_lock = _state._cf_bypass_lock
-                proxies_requiring_cf_bypass = _state.proxies_requiring_cf_bypass
+                (
+                    always_bypass_time,
+                    cf_bypass_lock,
+                    proxies_requiring_cf_bypass,
+                ) = _state.get_legacy_cf_bypass_state()
             if always_bypass_time is None:
                 return
             with cf_bypass_lock:

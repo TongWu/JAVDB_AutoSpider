@@ -63,6 +63,14 @@
 - **过期 session 定时任务：** [`StaleSessionCleanup.yml`](../../../../.github/workflows/StaleSessionCleanup.yml) 每天 UTC 02:00 运行，清理任何停留在 `in_progress` 超过 48 小时的 session，标记为 `FailureReason='stale_timeout'`。同一任务现在还调用 `apps.cli.sweep_movie_claim_stages` 清理 Phase-1 中在 MovieClaim Durable Object 上孤立的 `staged_complete{}` 条目（截止 48h，服务器端下限 ≥ 1h）。
 - **MovieClaim 跨 session rollback 安全性（Phase 1）：** 详情页完成状态现在在 MovieClaim DO 上按 session 暂存，然后再进入永久的 `completed_committed[]` 列表。`apps.cli.commit_session` 在成功时提升暂存状态；`apps.cli.rollback` 在完成 DB 回滚前调用 `rollback_staged_movies`（最多重试 3 次）。一个失败的对等 session 不再阻止另一个 session 对同一 href 的临时重试——只有 `completed_committed[]` 才有阻止效果。参见 [`docs/handbook/zh/self-hoster/proxy-coordinator.md` §15.2](../../zh/self-hoster/proxy-coordinator.md) 了解协议及 `JAVDB_AutoSpider.wiki/Cross-Runner-State.md` §2.3 了解运行时语义。
 
+在判断 rollback 是否安全之前，如需结构化建议，可运行 ADR-026 诊断助手：
+
+```bash
+python3 -m apps.cli.ops.diagnose_run --run-id <run_id> --attempt <attempt> --session-id <session_id> --workflow-result failure --json
+```
+
+该助手是只读的，不能替代 rollback 安全矩阵。
+
 ---
 
 ## D1 Recovery Outbox

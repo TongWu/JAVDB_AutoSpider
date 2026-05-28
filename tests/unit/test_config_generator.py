@@ -435,6 +435,14 @@ class TestMaskSensitiveValues:
         assert "LOG_LEVEL = 'INFO'" in masked
         assert "PAGE_START = 1" in masked
 
+    def test_masks_api_key_values(self):
+        """Should mask generic API key values."""
+        content = "OPS_DIAGNOSIS_API_KEY = 'ops-secret'\nOPS_DIAGNOSIS_MODEL = 'fallback'"
+        masked = mask_sensitive_values(content)
+        assert "ops-secret" not in masked
+        assert "OPS_DIAGNOSIS_API_KEY = '***MASKED***'" in masked
+        assert "OPS_DIAGNOSIS_MODEL = 'fallback'" in masked
+
 
 class TestWriteConfig:
     """Tests for write_config function."""
