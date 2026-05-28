@@ -96,7 +96,7 @@ global_proxy_pool = None
 global_proxy_helper = None
 
 # Categories to process (from config)
-CATEGORIES = [TORRENT_CATEGORY, TORRENT_CATEGORY_ADHOC]
+CATEGORIES = [TORRENT_CATEGORY, TORRENT_CATEGORY_ADHOC, "顶级"]
 PIKPAK_HISTORY_FILE = os.path.join(REPORTS_DIR, "pikpak_bridge_history.csv")
 
 
