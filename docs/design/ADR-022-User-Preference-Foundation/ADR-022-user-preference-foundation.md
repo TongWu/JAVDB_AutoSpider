@@ -16,7 +16,7 @@ This means:
 2. Valuable metadata (categories, directors, maker) that is already parsed is silently thrown away on every run.
 3. There is no mechanism for the user to express preferences about individual movies or content dimensions (actors, categories, makers).
 
-The goal of this ADR is to establish the **data foundation layer** that will eventually feed a preference model. Model training itself is deferred to ADR-B, which cannot be designed meaningfully until sufficient rating data has accumulated.
+The goal of this ADR is to establish the **data foundation layer** that will eventually feed a preference model. Model training itself is deferred to [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), whose trainable phase depends on sufficient rating data.
 
 ---
 
@@ -91,7 +91,7 @@ CREATE TABLE ContentPreferences (
   content_id    TEXT NOT NULL,   -- href slug or normalized name
   content_name  TEXT NOT NULL,
   hearted       INTEGER DEFAULT 0,  -- 1 = hearted
-  weight        REAL DEFAULT 1.0,   -- reserved for ADR-B crawl-priority use
+  weight        REAL DEFAULT 1.0,   -- reserved for ADR-025 crawl-priority use
   PRIMARY KEY (content_type, content_id)
 );
 ```
@@ -132,10 +132,10 @@ The vocabulary is defined as a constant in the Python backend and mirrored in th
 
 ---
 
-### 5. Downstream consumers (rule-based placeholders until ADR-B)
+### 5. Downstream consumers (rule-based placeholders until ADR-025)
 
 **B2 — Upload filter hook:**  
-A preference gate is added to the qBittorrent upload decision path. For ADR-022, the gate uses a simple rule: skip upload if the movie's lead actor has an explicit `hearted = false` entry in `ContentPreferences`. The hook point is implemented so that ADR-B can replace this rule with a model score without further refactoring.
+A preference gate is added to the qBittorrent upload decision path. For ADR-022, the gate uses a simple rule: skip upload if the movie's lead actor has an explicit `hearted = false` entry in `ContentPreferences`. The hook point is implemented so that [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md) can replace this rule with a model score without further refactoring.
 
 **B3 — Web console preference score:**  
 `/data` and `/browse` pages display a computed preference score alongside each history entry. For ADR-022, the score is a weighted average:
@@ -146,16 +146,16 @@ score = (movie_rating / 5.0) * 0.5
       + (category_match_ratio) * 0.2
 ```
 
-This rule-based score is a placeholder; ADR-B replaces it with a trained model output.
+This rule-based score is a placeholder; [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md) replaces it with a trained model output.
 
 **B1 — Dynamic crawl-priority adjustment:**  
-Deferred to ADR-B. The `weight` column in `ContentPreferences` is reserved for this purpose.
+Deferred to [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md). The `weight` column in `ContentPreferences` is reserved for this purpose.
 
 ---
 
 ## Phase Boundary
 
-| Capability | ADR-022 (this ADR) | ADR-B (deferred) |
+| Capability | ADR-022 (this ADR) | ADR-025 (deferred) |
 |------------|-------------------|-----------------|
 | `MovieMetadata` table + parser wiring | ✅ | — |
 | `MovieRatings` + `ContentPreferences` tables | ✅ | — |
@@ -169,7 +169,7 @@ Deferred to ADR-B. The `weight` column in `ContentPreferences` is reserved for t
 | Model serving / inference | — | ✅ |
 | C2 email rating prompts | — | ✅ |
 
-ADR-B should be written only after ≥ 200 movie ratings have been collected via C1/C3, giving enough signal to make meaningful model architecture decisions.
+[ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md) defines the model direction. Its trainable model phase should still wait until at least 200 movie ratings have been collected via C1/C3, giving enough signal for meaningful model training.
 
 ---
 
@@ -204,14 +204,14 @@ Encode actor/category preferences as special tags (e.g., `actor_hearted:EvkJ`).
 ## Consequences
 
 **Positive:**
-- All valuable detail page fields are preserved from the first implementation, avoiding a second round of schema migration when ADR-B is written.
+- All valuable detail page fields are preserved from the first implementation, avoiding a second round of schema migration when ADR-025 implementation starts.
 - The preference data model is simple and queryable without ML infrastructure.
 - `MovieHistory` remains a pure dedup/tracking table with no added complexity.
 - B2 and B3 are functional from day one with rule-based logic, providing immediate utility while ratings accumulate.
 
 **Negative / Trade-offs:**
 - `MovieMetadata` is written outside the session flow, so a failed run may leave partial metadata. Acceptable because metadata is enrichment-only and retried on next scrape.
-- The rule-based B2/B3 placeholders add code that will be replaced by ADR-B; this is intentional scaffolding, not waste.
+- The rule-based B2/B3 placeholders add code that will be replaced by ADR-025; this is intentional scaffolding, not waste.
 - The TypeScript backend (`javdb-autospider-web/server/`) must be updated in the same PR or a linked follow-up to expose `MovieMetadata`, `MovieRatings`, and `ContentPreferences` via the shared D1 query surface.
 
 ---
@@ -222,4 +222,4 @@ Encode actor/category preferences as special tags (e.g., `actor_hearted:EvkJ`).
 - [ADR-011](../_archive/ADR-011-Parsing-Module/ADR-011-parsing-module.md) — Parsing module structure and `MovieDetail` dataclass
 - [ADR-014](../ADR-014-Storage-Cli-Layering/ADR-014-storage-cli-layering.md) — Storage / CLI layering
 - [ADR-019](../ADR-019-Web-Feature-Parity/ADR-019-web-feature-parity.md) — Web console feature parity
-- ADR-B (User Preference Model) — not yet written; depends on this ADR
+- [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md) — User Preference Model; depends on this ADR
