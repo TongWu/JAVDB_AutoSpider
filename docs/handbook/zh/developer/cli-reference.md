@@ -287,7 +287,7 @@ python3 -m apps.cli.qb_uploader --mode adhoc --category "Custom Category"
 
 **模块：** `apps.cli.qb_file_filter`
 
-过滤 qBittorrent 中最近添加的种子中的小文件。将低于大小阈值的不需要的文件设置为"不下载"优先级。
+过滤 qBittorrent 中最近添加的种子中的小文件。将低于大小阈值的不需要的文件设置为"不下载"优先级。对于刚添加的种子，过滤器会最多等待 90 秒让 qBittorrent metadata 就绪，以便小文件在开始下载前就被过滤。
 
 ### 参数
 

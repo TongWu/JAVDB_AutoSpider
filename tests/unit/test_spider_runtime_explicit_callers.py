@@ -7,6 +7,18 @@ from javdb.spider.runtime.context import SpiderRuntime
 from javdb.spider.runtime.sleep import ensure_sleep_runtime
 
 
+def test_derive_phase1_history_excludes_csv_phase2_records():
+    history = {
+        "/v/phase-1": {"phase": "1", "torrent_types": ["subtitle"]},
+        "/v/phase-2": {"phase": "2", "torrent_types": ["subtitle"]},
+        "/v/db-row": {"torrent_types": ["subtitle"]},
+    }
+
+    result = run_service._derive_phase1_history(history)
+
+    assert set(result) == {"/v/phase-1", "/v/db-row"}
+
+
 def test_each_runtime_gets_its_own_sleep_state():
     first = SpiderRuntime()
     second = SpiderRuntime()
