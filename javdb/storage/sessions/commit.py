@@ -166,6 +166,7 @@ def commit_session(req: CommitRequest) -> CommitResult:
     pending_dropped = 0
     drain: Optional[Dict[str, Any]] = None
     commit_duration_ms: Optional[int] = None
+    drained_pending_session = False
 
     # For pending-mode sessions, drain staged writes (or drop them).
     if write_mode == "pending" and current_status != "committed":
@@ -191,11 +192,20 @@ def commit_session(req: CommitRequest) -> CommitResult:
             try:
                 t0 = time.monotonic()
                 drain = db_commit_session_history(req.session_id)
+                drained_pending_session = True
                 commit_duration_ms = int((time.monotonic() - t0) * 1000)
-                logger.info(
-                    "Pending session drained: id=%s drain=%s",
-                    req.session_id, drain,
-                )
+                if drain.get("residual_cleanup"):
+                    logger.info(
+                        "Pending session cleanup (already committed): "
+                        "id=%s residual_deleted=%d",
+                        req.session_id,
+                        drain.get("pending_deleted", 0),
+                    )
+                else:
+                    logger.info(
+                        "Pending session drained: id=%s drain=%s",
+                        req.session_id, drain,
+                    )
             except Exception as exc:
                 raise RuntimeError(
                     f"db_commit_session_history failed for {req.session_id!r}: {exc}"
@@ -209,7 +219,12 @@ def commit_session(req: CommitRequest) -> CommitResult:
             f"db_mark_session_committed failed for {req.session_id!r}: {exc}"
         ) from exc
 
-    if n == 0:
+    if n == 0 and drained_pending_session:
+        logger.info(
+            "Session %s was marked committed by pending drain",
+            req.session_id,
+        )
+    elif n == 0:
         logger.info("Session %s already committed (idempotent)", req.session_id)
 
     claim_results: List[Dict[str, Any]] = []

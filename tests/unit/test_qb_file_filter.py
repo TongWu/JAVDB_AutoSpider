@@ -40,6 +40,7 @@ from apps.cli.qb.file_filter import (
     get_torrent_properties,
     delete_local_file,
     cleanup_completed_torrents,
+    wait_for_metadata_readiness,
 )
 
 
@@ -74,6 +75,48 @@ class TestFormatSize:
         """Test formatting negative size."""
         result = format_size(-1024)
         assert "KB" in result
+
+
+class TestMetadataReadinessWait:
+    """Test cases for qBittorrent metadata readiness polling."""
+
+    @patch('apps.cli.qb.file_filter.time.sleep')
+    @patch('apps.cli.qb.file_filter.get_torrent_files')
+    def test_waits_until_majority_of_recent_torrents_are_ready(
+        self,
+        mock_get_files,
+        mock_sleep,
+    ):
+        calls = {'n': 0}
+
+        def get_files(_session, torrent_hash, use_proxy=False):
+            poll = calls['n'] // 3
+            calls['n'] += 1
+            if poll == 0:
+                return []
+            if torrent_hash in {'hash-a', 'hash-b'}:
+                return [{'name': 'video.mp4', 'size': 1024, 'priority': 1}]
+            return []
+
+        mock_get_files.side_effect = get_files
+        torrents = [
+            {'hash': 'hash-a', 'name': 'A', 'added_on': 100},
+            {'hash': 'hash-b', 'name': 'B', 'added_on': 100},
+            {'hash': 'hash-c', 'name': 'C', 'added_on': 100},
+        ]
+
+        summary = wait_for_metadata_readiness(
+            MagicMock(),
+            torrents,
+            max_wait_seconds=30,
+            poll_interval_seconds=10,
+            recent_window_seconds=10**12,
+        )
+
+        assert summary['ready'] == 2
+        assert summary['pending'] == 1
+        assert summary['waited_seconds'] == 10
+        mock_sleep.assert_called_once_with(10)
 
 
 class TestGetRecentTorrents:
