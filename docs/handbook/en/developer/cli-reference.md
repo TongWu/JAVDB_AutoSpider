@@ -287,7 +287,7 @@ python3 -m apps.cli.qb_uploader --mode adhoc --category "Custom Category"
 
 **Module:** `apps.cli.qb_file_filter`
 
-Filters out small files from recently added torrents in qBittorrent. Sets unwanted files (below the size threshold) to "do not download" priority.
+Filters out small files from recently added torrents in qBittorrent. Sets unwanted files (below the size threshold) to "do not download" priority. For newly added torrents, the filter waits up to 90 seconds for qBittorrent metadata before processing so small files can be filtered before they download.
 
 ### Arguments
 

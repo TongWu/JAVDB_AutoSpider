@@ -723,6 +723,7 @@ jobs:
         env:
           ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
           REPORTS_DIR: ${{ vars.REPORTS_DIR || 'reports' }}
+          DEDUP_CSV_PATH: ${{ steps.spider.outputs.dedup_csv_path }}
         run: |
           # Guard: fail workflow if ARTIFACT_KEY is not configured (prevent unencrypted artifacts)
           if [ -z "$ARTIFACT_KEY" ]; then
@@ -746,8 +747,22 @@ jobs:
             echo "Including CSV: $CSV_PATH"
           fi
           
-          # Add history files and database if they exist
-          for HIST_FILE in "$REPORTS_DIR/parsed_movies_history.csv" "$REPORTS_DIR/pikpak_bridge_history.csv" "$REPORTS_DIR/rclone_inventory.csv" "$REPORTS_DIR/history.db" "$REPORTS_DIR/reports.db" "$REPORTS_DIR/operations.db"; do
+          # Add history files and database if they exist. In D1 mode the
+          # SQLite mirrors and legacy parsed history CSV are rebuildable
+          # outputs, so keep them out of the encrypted report bundle.
+          HISTORY_FILES=(
+            "$REPORTS_DIR/pikpak_bridge_history.csv"
+            "$REPORTS_DIR/rclone_inventory.csv"
+          )
+          if [ "$STORAGE_BACKEND" != "d1" ]; then
+            HISTORY_FILES+=(
+              "$REPORTS_DIR/parsed_movies_history.csv"
+              "$REPORTS_DIR/history.db"
+              "$REPORTS_DIR/reports.db"
+              "$REPORTS_DIR/operations.db"
+            )
+          fi
+          for HIST_FILE in "${HISTORY_FILES[@]}"; do
             if [ -f "$HIST_FILE" ]; then
               FILES_TO_ARCHIVE="$FILES_TO_ARCHIVE $HIST_FILE"
               echo "Including: $HIST_FILE"
@@ -768,12 +783,10 @@ jobs:
               echo "Including: $D1_STATE_FILE"
             fi
           done
-          # Add dedup reports (reports/Dedup/YYYY/MM/*.csv)
-          if [ -d "$REPORTS_DIR/Dedup" ]; then
-            while IFS= read -r f; do
-              FILES_TO_ARCHIVE="$FILES_TO_ARCHIVE $f"
-              echo "Including: $f"
-            done < <(find "$REPORTS_DIR/Dedup" -name "*.csv" -type f 2>/dev/null || true)
+          # Add only the current run's dedup report, when one was produced.
+          if [ -n "$DEDUP_CSV_PATH" ] && [ -f "$DEDUP_CSV_PATH" ]; then
+            FILES_TO_ARCHIVE="$FILES_TO_ARCHIVE $DEDUP_CSV_PATH"
+            echo "Including: $DEDUP_CSV_PATH"
           fi
           
           if [ -n "$FILES_TO_ARCHIVE" ]; then

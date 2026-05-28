@@ -26,6 +26,7 @@ Covers the core pending-mode categories:
 
 from __future__ import annotations
 
+import json
 import os
 from typing import Dict, List, Tuple
 
@@ -684,7 +685,11 @@ class TestCommitSessionCLIDrainsPending:
             "--no-claim-commit",
             "--log-level", "WARNING",
         ])
-        assert rc == 0, capsys.readouterr().err
+        captured = capsys.readouterr()
+        assert rc == 0, captured.err
+        summary = json.loads(captured.out)
+        assert sid in summary["committed"]
+        assert sid not in summary["already_committed_or_missing"]
 
         state = db_get_session_status(sid)
         assert state == ("pending", "committed")

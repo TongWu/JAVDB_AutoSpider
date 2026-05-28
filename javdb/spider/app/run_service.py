@@ -83,6 +83,15 @@ _result_context: ContextVar[_SpiderResultContext] = ContextVar(
 )
 
 
+def _derive_phase1_history(history_data: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Return the history view used by phase 1 pre-skip checks."""
+    return {
+        href: record
+        for href, record in history_data.items()
+        if str(record.get("phase", "")) != "2"
+    }
+
+
 def _get_result_context() -> _SpiderResultContext | None:
     try:
         return _result_context.get()
@@ -363,8 +372,8 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
             parsed_movies_history_phase1 = {}
             parsed_movies_history_phase2 = {}
         else:
-            parsed_movies_history_phase1 = load_parsed_movies_history(history_file, phase=1)
             parsed_movies_history_phase2 = load_parsed_movies_history(history_file, phase=None)
+            parsed_movies_history_phase1 = _derive_phase1_history(parsed_movies_history_phase2)
     else:
         if use_history_for_saving and not os.path.exists(history_file):
             with open(history_file, 'w', encoding='utf-8-sig', newline='') as f:

@@ -26,6 +26,7 @@ from javdb.spider.services.dedup import (
     _raw_csv_read,
 )
 from javdb.storage.db import db_replace_rclone_inventory, db_load_dedup_records
+from javdb.spider.detail.runner import _dedup_log_variant_label
 
 
 # ============================================================================
@@ -47,6 +48,23 @@ def _inventory_row(code, sensor='有码', subtitle='中字', path='gdrive:/r/202
         'file_count': count,
         'scan_datetime': '2026-01-01 00:00:00',
     }
+
+
+def test_dedup_log_variant_label_includes_sensor_and_subtitle():
+    record = DedupRecord(
+        "ABC-123",
+        "有码",
+        "无字",
+        "gdrive:/ABC-123/有码-无字",
+        100,
+        "subtitle",
+        "Subtitle upgrade",
+        "2026-05-28 00:00:00",
+        "False",
+        "",
+    )
+
+    assert _dedup_log_variant_label(record) == "有码-无字"
 
 
 # ============================================================================
