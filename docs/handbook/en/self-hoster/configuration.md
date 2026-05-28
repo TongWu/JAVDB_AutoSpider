@@ -374,7 +374,8 @@ Settings for Google Drive inventory scanning and duplicate file cleanup.
 ## 14. qBittorrent File Filter
 
 The file filter sets small files (NFO, samples, screenshots, etc.) to "do not
-download" priority inside torrents.
+download" priority inside torrents. For newly added torrents, it waits up to
+90 seconds for qBittorrent metadata before filtering.
 
 | Variable | Type | Default | Description |
 |---|---|---|---|

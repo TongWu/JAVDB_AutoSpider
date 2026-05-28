@@ -32,6 +32,7 @@ from javdb.pipeline.policies import (
     should_skip_recent_yesterday_release,
 )
 from javdb.spider.services.dedup import (
+    DedupRecord,
     should_skip_from_rclone,
     append_dedup_record,
 )
@@ -40,6 +41,15 @@ from javdb.spider.fetch.fetch_engine import EngineTask
 from javdb.spider.runtime.config import BASE_URL
 
 logger = get_logger(__name__)
+
+
+def _dedup_log_variant_label(record: DedupRecord) -> str:
+    """Return a compact variant label for DEDUP operator logs."""
+    sensor = (record.existing_sensor or "").strip()
+    subtitle = (record.existing_subtitle or "").strip()
+    if sensor and subtitle:
+        return f"{sensor}-{subtitle}"
+    return sensor or subtitle or "unknown"
 
 
 def _resolve_runtime(runtime=None):
@@ -1019,9 +1029,10 @@ def persist_parsed_detail_result(
         if not dry_run and dedup_csv_path:
             append_dedup_record(dedup_csv_path, rec)
         if entry_index:
+            variant = _dedup_log_variant_label(rec)
             logger.info(
-                f"[{entry_index}] {worker_tag}DEDUP: {rec.video_code} - "
-                f"{rec.deletion_reason}"
+                f"[{entry_index}] {worker_tag}DEDUP: {rec.video_code} "
+                f"[{variant}] - {rec.deletion_reason}"
             )
 
     row = plan.report_row
