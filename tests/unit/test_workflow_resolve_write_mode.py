@@ -649,6 +649,17 @@ def test_d1_state_artifacts_are_archived_for_ingestion_workflows(workflow):
     assert 'FILES_TO_ARCHIVE="$FILES_TO_ARCHIVE $D1_STATE_FILE"' in text
 
 
+def test_daily_reports_artifact_skips_rebuildable_d1_outputs():
+    text = _workflow_text(WORKFLOWS[0])
+
+    assert 'if [ "$STORAGE_BACKEND" != "d1" ]; then' in text
+    assert '"$REPORTS_DIR/parsed_movies_history.csv"' in text
+    assert '"$REPORTS_DIR/history.db"' in text
+    assert 'DEDUP_CSV_PATH: ${{ steps.spider.outputs.dedup_csv_path }}' in text
+    assert 'if [ -n "$DEDUP_CSV_PATH" ] && [ -f "$DEDUP_CSV_PATH" ]; then' in text
+    assert 'find "$REPORTS_DIR/Dedup" -name "*.csv" -type f' not in text
+
+
 @pytest.mark.parametrize("workflow", D1_STAGING_WORKFLOWS, ids=lambda p: p.name)
 def test_d1_state_files_are_staged_for_private_workflows(workflow):
     text = _workflow_text(workflow)
