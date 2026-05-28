@@ -2,7 +2,7 @@
 
 | Field       | Value                                    |
 | ----------- | ---------------------------------------- |
-| **Status**  | Approved                                 |
+| **Status**  | Completed — implementation delivered 2026-05-28 |
 | **Created** | 2026-05-28                               |
 | **Author**  | Ted                                      |
 | **Related** | [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md) |

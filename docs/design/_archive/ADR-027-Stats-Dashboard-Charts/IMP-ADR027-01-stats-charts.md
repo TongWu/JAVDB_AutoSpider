@@ -1,10 +1,10 @@
 # Stats Dashboard Chart Expansion — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** This IMP has been completed. The checklist below is preserved as the implementation record.
 
 | Field       | Value                                                        |
 | ----------- | ------------------------------------------------------------ |
-| **Status**  | Draft                                                        |
+| **Status**  | Completed                                                    |
 | **Related** | [ADR-027](ADR-027-stats-dashboard-charts.md)                 |
 
 **Goal:** Add ~15 new charts to the StatsPage covering spider efficiency, content quality, upload performance, and operations health.
@@ -62,7 +62,7 @@
 
 ### Step 1: Write the failing tests
 
-- [ ] Add a test block for spider metrics in `server/__tests__/stats-routes.test.ts`. Insert this after the existing `seedTables()` function body (before the closing `}`), to seed the `SpiderStats` table:
+- [x] Add a test block for spider metrics in `server/__tests__/stats-routes.test.ts`. Insert this after the existing `seedTables()` function body (before the closing `}`), to seed the `SpiderStats` table:
 
 ```typescript
   // SpiderStats (REPORTS_DB)
@@ -85,7 +85,7 @@
   ).run();
 ```
 
-- [ ] Add these test cases inside the existing `describe("Stats routes", ...)` block:
+- [x] Add these test cases inside the existing `describe("Stats routes", ...)` block:
 
 ```typescript
   it("GET /api/stats/trend?metric=spider_processed returns daily totals", async () => {
@@ -147,7 +147,7 @@
 
 ### Step 2: Run tests to verify they fail
 
-- [ ] Run from the web repo root:
+- [x] Run from the web repo root:
 
 ```bash
 cd /Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web
@@ -158,7 +158,7 @@ Expected: 4 new tests FAIL with `400` status (invalid metric).
 
 ### Step 3: Implement spider metrics in the backend
 
-- [ ] In `server/routes/stats.ts`, expand the `VALID_METRICS` set. Replace the existing line:
+- [x] In `server/routes/stats.ts`, expand the `VALID_METRICS` set. Replace the existing line:
 
 ```typescript
 const VALID_METRICS = new Set([
@@ -197,7 +197,7 @@ const VALID_METRICS = new Set([
 ]);
 ```
 
-- [ ] In the same file's `switch (metric)` block, add these cases **before** the `default:` case:
+- [x] In the same file's `switch (metric)` block, add these cases **before** the `default:` case:
 
 ```typescript
       // --- Spider raw counts (A1 stacked bar series) ---
@@ -265,7 +265,7 @@ const VALID_METRICS = new Set([
 
 ### Step 4: Run tests to verify they pass
 
-- [ ] Run:
+- [x] Run:
 
 ```bash
 npm run test:server -- --reporter=verbose 2>&1 | tail -30
@@ -275,7 +275,7 @@ Expected: All 4 new tests PASS. All existing tests still PASS.
 
 ### Step 5: Commit
 
-- [ ] Commit:
+- [x] Commit:
 
 ```bash
 git add server/routes/stats.ts server/__tests__/stats-routes.test.ts
@@ -292,7 +292,7 @@ git commit -m "feat(stats): add spider trend metrics (A1-A4)"
 
 ### Step 1: Write the failing tests
 
-- [ ] Add seed data in `seedTables()`. Insert this after the SpiderStats seed from Task 1:
+- [x] Add seed data in `seedTables()`. Insert this after the SpiderStats seed from Task 1:
 
 ```typescript
   // UploaderStats (REPORTS_DB)
@@ -410,7 +410,7 @@ git commit -m "feat(stats): add spider trend metrics (A1-A4)"
   ).run();
 ```
 
-- [ ] Add these test cases inside the existing `describe`:
+- [x] Add these test cases inside the existing `describe`:
 
 ```typescript
   // --- Content metrics ---
@@ -541,7 +541,7 @@ git commit -m "feat(stats): add spider trend metrics (A1-A4)"
 
 ### Step 2: Run tests to verify they fail
 
-- [ ] Run:
+- [x] Run:
 
 ```bash
 npm run test:server -- --reporter=verbose 2>&1 | tail -40
@@ -551,7 +551,7 @@ Expected: 9 new tests FAIL with `400` status.
 
 ### Step 3: Implement remaining trend metrics
 
-- [ ] In `server/routes/stats.ts`, expand `VALID_METRICS` to its final form. Replace the entire set with:
+- [x] In `server/routes/stats.ts`, expand `VALID_METRICS` to its final form. Replace the entire set with:
 
 ```typescript
 const VALID_METRICS = new Set([
@@ -591,7 +591,7 @@ const VALID_METRICS = new Set([
 ]);
 ```
 
-- [ ] Add the remaining `switch` cases before the `default:` case. These go after the spider cases added in Task 1:
+- [x] Add the remaining `switch` cases before the `default:` case. These go after the spider cases added in Task 1:
 
 ```typescript
       // --- Content: avg rating (B1) ---
@@ -725,7 +725,7 @@ const VALID_METRICS = new Set([
 
 ### Step 4: Run tests to verify they pass
 
-- [ ] Run:
+- [x] Run:
 
 ```bash
 npm run test:server -- --reporter=verbose 2>&1 | tail -40
@@ -735,7 +735,7 @@ Expected: All 9 new tests PASS. All previous tests still PASS.
 
 ### Step 5: Commit
 
-- [ ] Commit:
+- [x] Commit:
 
 ```bash
 git add server/routes/stats.ts server/__tests__/stats-routes.test.ts
@@ -752,7 +752,7 @@ git commit -m "feat(stats): add content, upload, and system trend metrics"
 
 ### Step 1: Write the failing tests
 
-- [ ] Add these test cases inside the existing `describe`:
+- [x] Add these test cases inside the existing `describe`:
 
 ```typescript
   // --- Distribution endpoint ---
@@ -808,7 +808,7 @@ git commit -m "feat(stats): add content, upload, and system trend metrics"
 
 ### Step 2: Run tests to verify they fail
 
-- [ ] Run:
+- [x] Run:
 
 ```bash
 npm run test:server -- --reporter=verbose 2>&1 | tail -20
@@ -818,7 +818,7 @@ Expected: 3 new tests FAIL (404 — route does not exist yet).
 
 ### Step 3: Implement the distribution endpoint
 
-- [ ] Add the following at the **end** of `server/routes/stats.ts` (after the existing `/trend` route):
+- [x] Add the following at the **end** of `server/routes/stats.ts` (after the existing `/trend` route):
 
 ```typescript
 // --- GET /distribution ---
@@ -918,7 +918,7 @@ statsRoutes.get("/distribution", async (c) => {
 
 ### Step 4: Run tests to verify they pass
 
-- [ ] Run:
+- [x] Run:
 
 ```bash
 npm run test:server -- --reporter=verbose 2>&1 | tail -20
@@ -928,7 +928,7 @@ Expected: All 3 new tests PASS. All previous tests still PASS.
 
 ### Step 5: Commit
 
-- [ ] Commit:
+- [x] Commit:
 
 ```bash
 git add server/routes/stats.ts server/__tests__/stats-routes.test.ts
@@ -944,7 +944,7 @@ git commit -m "feat(stats): add /distribution endpoint for rating and resolution
 
 ### Step 1: Add the distribution types and function
 
-- [ ] In `src/api/stats.ts`, add after the existing `TrendResponse` interface:
+- [x] In `src/api/stats.ts`, add after the existing `TrendResponse` interface:
 
 ```typescript
 export interface DistributionBucket {
@@ -959,7 +959,7 @@ export interface DistributionResponse {
 }
 ```
 
-- [ ] Add after the existing `getStatsTrend` function:
+- [x] Add after the existing `getStatsTrend` function:
 
 ```typescript
 export async function getStatsDistribution(
@@ -975,7 +975,7 @@ export async function getStatsDistribution(
 
 ### Step 2: Commit
 
-- [ ] Commit:
+- [x] Commit:
 
 ```bash
 git add src/api/stats.ts
@@ -991,7 +991,7 @@ git commit -m "feat(stats): add distribution API client types and function"
 
 ### Step 1: Create the shared chart options file
 
-- [ ] Create `src/pages/stats/chartOptions.ts` with all reusable chart option presets:
+- [x] Create `src/pages/stats/chartOptions.ts` with all reusable chart option presets:
 
 ```typescript
 import type { ChartOptions, TooltipItem } from 'chart.js'
@@ -1127,7 +1127,7 @@ export const doughnutOptions: ChartOptions<'doughnut'> = {
 
 ### Step 2: Commit
 
-- [ ] Commit:
+- [x] Commit:
 
 ```bash
 git add src/pages/stats/chartOptions.ts
@@ -1145,7 +1145,7 @@ git commit -m "refactor(stats): extract shared chart option presets"
 
 ### Step 1: Add English i18n keys
 
-- [ ] In `src/i18n/locales/en.json`, replace the existing `"stats"` object with:
+- [x] In `src/i18n/locales/en.json`, replace the existing `"stats"` object with:
 
 ```json
   "stats": {
@@ -1211,7 +1211,7 @@ git commit -m "refactor(stats): extract shared chart option presets"
 
 ### Step 2: Add Chinese i18n keys
 
-- [ ] In `src/i18n/locales/zh-CN.json`, replace the existing `"stats"` object with the Chinese translations. Mirror the same key structure; translate display strings to Chinese while preserving code-like values (metric names, units) verbatim. Example subset — apply the same pattern for all keys:
+- [x] In `src/i18n/locales/zh-CN.json`, replace the existing `"stats"` object with the Chinese translations. Mirror the same key structure; translate display strings to Chinese while preserving code-like values (metric names, units) verbatim. Example subset — apply the same pattern for all keys:
 
 ```json
   "stats": {
@@ -1277,7 +1277,7 @@ git commit -m "refactor(stats): extract shared chart option presets"
 
 ### Step 3: Add Japanese i18n keys
 
-- [ ] In `src/i18n/locales/ja.json`, replace the existing `"stats"` object with the Japanese translations using the same key structure:
+- [x] In `src/i18n/locales/ja.json`, replace the existing `"stats"` object with the Japanese translations using the same key structure:
 
 ```json
   "stats": {
@@ -1343,7 +1343,7 @@ git commit -m "refactor(stats): extract shared chart option presets"
 
 ### Step 4: Commit
 
-- [ ] Commit:
+- [x] Commit:
 
 ```bash
 git add src/i18n/locales/en.json src/i18n/locales/zh-CN.json src/i18n/locales/ja.json
@@ -1362,7 +1362,7 @@ This task extracts the existing charts from the monolithic `StatsPage.vue` into 
 
 ### Step 1: Create RunsOverviewTab.vue
 
-- [ ] Create `src/pages/stats/tabs/RunsOverviewTab.vue`:
+- [x] Create `src/pages/stats/tabs/RunsOverviewTab.vue`:
 
 ```vue
 <script setup lang="ts">
@@ -1473,7 +1473,7 @@ const torrentsChartData = computed(() => ({
 
 ### Step 2: Create SystemInfraTab.vue
 
-- [ ] Create `src/pages/stats/tabs/SystemInfraTab.vue`:
+- [x] Create `src/pages/stats/tabs/SystemInfraTab.vue`:
 
 ```vue
 <script setup lang="ts">
@@ -1541,7 +1541,7 @@ const dedupChartData = computed(() => ({
 
 ### Step 3: Commit
 
-- [ ] Commit:
+- [x] Commit:
 
 ```bash
 git add src/pages/stats/tabs/RunsOverviewTab.vue src/pages/stats/tabs/SystemInfraTab.vue
@@ -1557,7 +1557,7 @@ git commit -m "refactor(stats): extract RunsOverview and SystemInfra tab compone
 
 ### Step 1: Create SpiderDetailTab.vue
 
-- [ ] Create `src/pages/stats/tabs/SpiderDetailTab.vue`:
+- [x] Create `src/pages/stats/tabs/SpiderDetailTab.vue`:
 
 ```vue
 <script setup lang="ts">
@@ -1693,7 +1693,7 @@ const hasBreakdownData = computed(() => (processedTrend.value?.data_points.lengt
 
 ### Step 2: Commit
 
-- [ ] Commit:
+- [x] Commit:
 
 ```bash
 git add src/pages/stats/tabs/SpiderDetailTab.vue
@@ -1710,7 +1710,7 @@ git commit -m "feat(stats): add SpiderDetailTab component (A1-A4)"
 
 ### Step 1: Create ContentQualityTab.vue
 
-- [ ] Create `src/pages/stats/tabs/ContentQualityTab.vue`:
+- [x] Create `src/pages/stats/tabs/ContentQualityTab.vue`:
 
 ```vue
 <script setup lang="ts">
@@ -1804,7 +1804,7 @@ const ratingDistData = computed(() => ({
 
 ### Step 2: Create ContentCoverageTab.vue
 
-- [ ] Create `src/pages/stats/tabs/ContentCoverageTab.vue`:
+- [x] Create `src/pages/stats/tabs/ContentCoverageTab.vue`:
 
 ```vue
 <script setup lang="ts">
@@ -1937,7 +1937,7 @@ const hiresMatchData = computed(() => {
 
 ### Step 3: Commit
 
-- [ ] Commit:
+- [x] Commit:
 
 ```bash
 git add src/pages/stats/tabs/ContentQualityTab.vue src/pages/stats/tabs/ContentCoverageTab.vue
@@ -1954,7 +1954,7 @@ git commit -m "feat(stats): add Content Quality and Coverage tab components (B1-
 
 ### Step 1: Create UploadQbTab.vue
 
-- [ ] Create `src/pages/stats/tabs/UploadQbTab.vue`:
+- [x] Create `src/pages/stats/tabs/UploadQbTab.vue`:
 
 ```vue
 <script setup lang="ts">
@@ -2045,7 +2045,7 @@ const duplicateRateData = computed(() => ({
 
 ### Step 2: Create UploadPikpakTab.vue
 
-- [ ] Create `src/pages/stats/tabs/UploadPikpakTab.vue`:
+- [x] Create `src/pages/stats/tabs/UploadPikpakTab.vue`:
 
 ```vue
 <script setup lang="ts">
@@ -2145,7 +2145,7 @@ const failureDetailData = computed(() => {
 
 ### Step 3: Commit
 
-- [ ] Commit:
+- [x] Commit:
 
 ```bash
 git add src/pages/stats/tabs/UploadQbTab.vue src/pages/stats/tabs/UploadPikpakTab.vue
@@ -2161,7 +2161,7 @@ git commit -m "feat(stats): add Upload QB and PikPak tab components (C1-C4)"
 
 ### Step 1: Create SystemOpsTab.vue
 
-- [ ] Create `src/pages/stats/tabs/SystemOpsTab.vue`:
+- [x] Create `src/pages/stats/tabs/SystemOpsTab.vue`:
 
 ```vue
 <script setup lang="ts">
@@ -2269,7 +2269,7 @@ const incidentsData = computed(() => ({
 
 ### Step 2: Commit
 
-- [ ] Commit:
+- [x] Commit:
 
 ```bash
 git add src/pages/stats/tabs/SystemOpsTab.vue
@@ -2285,7 +2285,7 @@ git commit -m "feat(stats): add System Operations tab component (D1-D2)"
 
 ### Step 1: Rewrite StatsPage.vue
 
-- [ ] Replace the **entire** contents of `src/pages/stats/StatsPage.vue` with:
+- [x] Replace the **entire** contents of `src/pages/stats/StatsPage.vue` with:
 
 ```vue
 <script setup lang="ts">
@@ -2691,7 +2691,7 @@ Note: The Growth tab uses the `Line` component from `vue-chartjs` directly with 
 
 ### Step 2: Verify the app builds
 
-- [ ] Run:
+- [x] Run:
 
 ```bash
 cd /Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web
@@ -2702,7 +2702,7 @@ Expected: No type errors. If there are type errors related to `Line` usage in th
 
 ### Step 3: Commit
 
-- [ ] Commit:
+- [x] Commit:
 
 ```bash
 git add src/pages/stats/StatsPage.vue
@@ -2715,7 +2715,7 @@ git commit -m "feat(stats): rewrite StatsPage with 5 main tabs and sub-tab layou
 
 ### Step 1: Run backend tests
 
-- [ ] Run:
+- [x] Run:
 
 ```bash
 cd /Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web
@@ -2726,7 +2726,7 @@ Expected: All tests PASS (existing + new).
 
 ### Step 2: Run typecheck
 
-- [ ] Run:
+- [x] Run:
 
 ```bash
 npx vue-tsc --noEmit 2>&1 | tail -20
@@ -2736,7 +2736,7 @@ Expected: No type errors.
 
 ### Step 3: Run lint
 
-- [ ] Run:
+- [x] Run:
 
 ```bash
 npm run lint 2>&1 | tail -20
@@ -2746,7 +2746,7 @@ Expected: No new lint errors. Fix any that appear (likely formatting).
 
 ### Step 4: Fix any issues found and commit
 
-- [ ] If fixes were needed:
+- [x] If fixes were needed:
 
 ```bash
 git add -A
