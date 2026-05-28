@@ -1036,7 +1036,7 @@ jobs:
           echo "HEALTH_CHECK_STATUS=$HEALTH_STATUS" >> logs/job_status.txt
           echo "PIPELINE_STATUS=$PIPELINE_STATUS" >> logs/job_status.txt
           
-          if [[ "$SETUP_STATUS" == "failure" ]] || [[ "$HEALTH_STATUS" == "failure" ]] || [[ "$PIPELINE_STATUS" == "failure" ]]; then
+          if [[ "$SETUP_STATUS" == "failure" ]] || [[ "$HEALTH_STATUS" == "failure" ]] || [[ "$PIPELINE_STATUS" == "failure" ]] || [[ "$PIPELINE_STATUS" == "cancelled" ]]; then
             echo "has_failure=true" >> $GITHUB_OUTPUT
             echo "Pipeline had failures"
           else
@@ -1060,9 +1060,45 @@ jobs:
           python3 -m apps.cli.db.pending_health \
             --window-hours 24 || true
 
+      - name: Diagnose failed run (ADR-026)
+        id: ops_diagnosis
+        if: ${{ steps.status.outputs.has_failure == 'true' }}
+        env:
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          SESSION_ID: ${{ needs.run-pipeline.outputs.session_id }}
+          WORKFLOW_RESULT: ${{ needs.run-pipeline.result }}
+        run: |
+          set +e
+          mkdir -p reports/ops
+          CMD_ARGS=(
+            python3 -m apps.cli.ops.diagnose_run
+            --trigger-source workflow_failure
+            --run-id "$RUN_ID"
+            --attempt "$RUN_ATTEMPT"
+            --workflow-name DailyIngestion
+            --workflow-result "$WORKFLOW_RESULT"
+            --json
+            --log logs/pipeline.log
+            --log logs/spider.log
+          )
+          if [ -n "$SESSION_ID" ]; then
+            CMD_ARGS+=(--session-id "$SESSION_ID")
+          fi
+          "${CMD_ARGS[@]}" > reports/ops/latest_ops_diagnosis.json
+          DIAG_EXIT=$?
+          DIAG_JSON=reports/ops/latest_ops_diagnosis.json
+          if [ $DIAG_EXIT -le 1 ] && [ -s "$DIAG_JSON" ] && python3 -m json.tool "$DIAG_JSON" >/dev/null; then
+            echo "json_path=$DIAG_JSON" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::ADR-026 diagnosis did not produce valid JSON (exit=$DIAG_EXIT, path=$DIAG_JSON)"
+          fi
+          exit 0
+
       - name: Run Email Notification
         env:
           PIPELINE_HAS_FAILURE: ${{ steps.status.outputs.has_failure }}
+          OPS_DIAGNOSIS_JSON: ${{ steps.ops_diagnosis.outputs.json_path }}
         run: |
           set -e  # Exit on error
           set -o pipefail  # Exit on error in pipeline

@@ -7,6 +7,7 @@ Operator tooling — workflow bootstrap, debugging, health checks, profiling, an
 | File | Purpose |
 |---|---|
 | `config_generator.py` | Generate `config.py` from secrets / environment at the start of every workflow job. Aliases `javdb.infra.config_generator`. Invoked as `python3 -m apps.cli.config_generator --github-actions`. |
+| `diagnose_run.py` | Read-only ADR-026 operations diagnosis for failed workflow runs, sessions, D1 drift, recovery outbox state, and qB side-effect evidence. |
 | `fetch_page.py` | Standalone JAVDB page fetcher (debugging / fixture capture). Aliases `javdb.infra.fetch_page`. |
 | `health_check.py` | Pre-flight check for required services (qBittorrent, proxies, JAVDB reachability). Aliases `javdb.infra.health_check`. Workflows call this before the spider step. |
 | `profile_hot_paths.py` | Micro-benchmark spider hot paths to locate the next Rust acceleration target. Offline fixtures only; outputs `pstats` dumps under `reports/profiling/`. |
@@ -16,6 +17,7 @@ Operator tooling — workflow bootstrap, debugging, health checks, profiling, an
 
 - **`DailyIngestion.yml` / `AdHocIngestion.yml` / `AuditArchive.yml` / `StaleSessionCleanup.yml` / `RollbackD1.yml`** — every workflow runs `python3 -m apps.cli.config_generator --github-actions` as its bootstrap step.
 - **`DailyIngestion.yml` / `AdHocIngestion.yml`** — `python3 -m apps.cli.health_check` before the spider step.
+- **`DailyIngestion.yml` / `AdHocIngestion.yml`** — on failed or cancelled runs, `python3 -m apps.cli.ops.diagnose_run` creates a persisted read-only incident record for email/API review.
 - `profile_hot_paths`, `dump_openapi`, `fetch_page` are operator-run on demand.
 
 ## Related

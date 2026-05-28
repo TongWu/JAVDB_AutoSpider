@@ -25,6 +25,12 @@ JavDB scraping runtime: fetches index/detail pages, parses HTML, runs parallel/s
 - `auth/` — JavDB login session refresh.
 - `compat/` — Explicit backwards-compatibility helpers (`csv_builder.py`).
 
+## Runtime State Rule
+
+`SpiderRunService` owns one `SpiderRuntime` per run. Runtime state is split into focused objects such as `DetailRunState`, `ProxyRunState`, `LoginRunState`, `RunnerRegistryState`, `MovieClaimRuntimeState`, and `SleepRuntimeState`.
+
+New production code should accept runtime state/services explicitly instead of importing mutable fields from `javdb.spider.runtime.state`. The `state.py` module is a compatibility facade for legacy entrypoints.
+
 ## Depends on
 
 - Upstream callers: `javdb.pipeline`, `apps.cli.spider`, `apps.api`.

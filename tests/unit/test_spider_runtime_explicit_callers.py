@@ -1129,6 +1129,7 @@ def test_sequential_backend_sleeps_with_explicit_runtime(monkeypatch):
 def test_clear_active_runtime_clears_runtime_service_globals_only():
     import javdb.spider.runtime.state as state
 
+    original_handler = state.global_request_handler
     runtime = SpiderRuntime()
     runtime.services.proxy_pool = object()
     runtime.services.request_handler = object()
@@ -1139,21 +1140,24 @@ def test_clear_active_runtime_clears_runtime_service_globals_only():
     runtime.services.work_distributor_client = object()
     runtime.movie_claim.client_public = object()
 
-    state.bind_active_runtime(runtime)
-    assert state.global_proxy_pool is runtime.services.proxy_pool
-    assert state.global_request_handler is runtime.services.request_handler
+    try:
+        state.bind_active_runtime(runtime)
+        assert state.global_proxy_pool is runtime.services.proxy_pool
+        assert state.global_request_handler is runtime.services.request_handler
 
-    replacement_handler = object()
-    state.global_request_handler = replacement_handler
+        replacement_handler = object()
+        state.global_request_handler = replacement_handler
 
-    state.clear_active_runtime(runtime)
+        state.clear_active_runtime(runtime)
 
-    assert state.get_active_runtime() is None
-    assert state.global_proxy_pool is None
-    assert state.global_proxy_coordinator is None
-    assert state.global_login_state_client is None
-    assert state.global_runner_registry_client is None
-    assert state.global_recommend_proxy_policy is None
-    assert state.global_work_distributor_client is None
-    assert state.global_movie_claim_client is None
-    assert state.global_request_handler is replacement_handler
+        assert state.get_active_runtime() is None
+        assert state.global_proxy_pool is None
+        assert state.global_proxy_coordinator is None
+        assert state.global_login_state_client is None
+        assert state.global_runner_registry_client is None
+        assert state.global_recommend_proxy_policy is None
+        assert state.global_work_distributor_client is None
+        assert state.global_movie_claim_client is None
+        assert state.global_request_handler is replacement_handler
+    finally:
+        state.global_request_handler = original_handler

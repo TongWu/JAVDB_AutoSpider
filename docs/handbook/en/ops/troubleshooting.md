@@ -207,3 +207,21 @@ LOG_LEVEL = 'DEBUG'
 - Check the rollback log artifact (14-day retention).
 - Manual rollback: **Actions > RollbackD1 > Run workflow** with the session ID.
 - See [d1-rollback.md](d1-rollback.md) for the full SOP and dispatch matrix.
+
+## AI Operations Diagnosis
+
+ADR-026 adds a read-only diagnosis assistant for failed ingestion runs and D1 operational incidents. It collects a compact evidence bundle, runs deterministic detectors, optionally uses an AI synthesis adapter, persists an `OpsIncidents` record, and prints a structured summary.
+
+Manual run:
+
+```bash
+python3 -m apps.cli.ops.diagnose_run \
+  --run-id 123456789 \
+  --attempt 1 \
+  --session-id 20260527T120000.000000Z-abcd-0001 \
+  --workflow-name DailyIngestion \
+  --workflow-result failure \
+  --json
+```
+
+The assistant is advisory only. It does not roll back sessions, rerun workflows, modify D1, or delete qBittorrent tasks.
