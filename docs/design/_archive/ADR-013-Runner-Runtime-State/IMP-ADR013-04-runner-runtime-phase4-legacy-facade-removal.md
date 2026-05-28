@@ -1,5 +1,7 @@
 # IMP-ADR013-04: ADR-013 Phase 4 - Legacy Facade Freeze Or Removal
 
+**Status:** Completed — delivered 2026-05-27.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Finish ADR-013 by freezing or deleting legacy direct-mutation `state.py` compatibility after production callers have migrated to explicit runtime/context access.
@@ -32,7 +34,7 @@
 **Files:**
 - Create: `tests/architecture/test_spider_runtime_state_boundaries.py`
 
-- [ ] **Step 1: Write failing architecture test**
+- [x] **Step 1: Write failing architecture test**
 
 Create `tests/architecture/test_spider_runtime_state_boundaries.py`:
 
@@ -105,7 +107,7 @@ def test_production_code_does_not_directly_use_legacy_state_fields():
     assert offenders == []
 ```
 
-- [ ] **Step 2: Run test and capture remaining offenders**
+- [x] **Step 2: Run test and capture remaining offenders**
 
 Run:
 
@@ -124,7 +126,7 @@ Fix every listed production offender before removing wrappers.
 - Modify: `javdb/spider/runtime/state.py`
 - Modify: `tests/unit/test_spider_runtime_state_facade.py`
 
-- [ ] **Step 1: Define final allowed facade entries**
+- [x] **Step 1: Define final allowed facade entries**
 
 Keep these function-style compatibility entries in `state.py`:
 
@@ -154,7 +156,7 @@ Keep these function-style compatibility entries in `state.py`:
 Delete or freeze broad public data-field compatibility after tests prove
 production callers no longer use it.
 
-- [ ] **Step 2: Update facade tests to the final contract**
+- [x] **Step 2: Update facade tests to the final contract**
 
 Replace direct-field tests in `tests/unit/test_spider_runtime_state_facade.py`
 with explicit final contract tests:
@@ -186,7 +188,7 @@ If a field must remain for external compatibility, add it to a documented
 `LEGACY_DATA_FIELDS` tuple in `state.py` and make the test assert it is listed
 there. Do not leave undocumented data fields.
 
-- [ ] **Step 3: Run facade tests**
+- [x] **Step 3: Run facade tests**
 
 Run:
 
@@ -204,7 +206,7 @@ Expected: PASS.
 - Modify: `docs/design/architecture/spider-baseline.md`
 - Modify: `javdb/spider/README.md`
 
-- [ ] **Step 1: Update architecture baseline**
+- [x] **Step 1: Update architecture baseline**
 
 In `docs/design/architecture/spider-baseline.md`, replace the runtime state row
 with:
@@ -225,7 +227,7 @@ Add this usage rule:
 New Spider production code must receive `SpiderRuntime` or a focused state/service object explicitly. Do not add new direct `state.<field>` dependencies. `state.py` exists only for documented compatibility functions and transitional tests.
 ```
 
-- [ ] **Step 2: Update Spider README**
+- [x] **Step 2: Update Spider README**
 
 Add to `javdb/spider/README.md`:
 
@@ -237,7 +239,7 @@ Add to `javdb/spider/README.md`:
 New production code should accept runtime state/services explicitly instead of importing mutable fields from `javdb.spider.runtime.state`. The `state.py` module is a compatibility facade for legacy entrypoints.
 ```
 
-- [ ] **Step 3: Run doc link sanity checks**
+- [x] **Step 3: Run doc link sanity checks**
 
 Run:
 
@@ -260,25 +262,25 @@ Expected: command exits 0.
 
 ## Task 4: Phase 4 Gate
 
-- [ ] Run architecture guard:
+- [x] Run architecture guard:
 
 ```bash
 pytest tests/architecture/test_spider_runtime_state_boundaries.py -v
 ```
 
-- [ ] Run final runtime and smoke tests:
+- [x] Run final runtime and smoke tests:
 
 ```bash
 pytest tests/unit/test_spider_runtime_context.py tests/unit/test_spider_runtime_state_facade.py tests/unit/test_spider_runtime_registry_lifecycle.py tests/unit/test_spider_runtime_explicit_callers.py tests/smoke/test_spider.py tests/smoke/test_spider_detail_runner.py tests/smoke/test_spider_app_main.py -v
 ```
 
-- [ ] Run related runtime behavior suites:
+- [x] Run related runtime behavior suites:
 
 ```bash
 pytest tests/unit/test_engine.py tests/unit/test_login_coordinator_park.py tests/unit/test_sleep_with_coordinator.py tests/unit/test_setup_runner_registry_client.py tests/unit/test_runner_heartbeat_dynamic_interval.py tests/unit/test_setup_movie_claim_client.py tests/unit/test_movie_claim_auto_toggle.py tests/unit/test_detail_runner_movie_claim.py tests/unit/test_detail_runner_work_distributor.py -v
 ```
 
-- [ ] Confirm no production direct field dependencies remain:
+- [x] Confirm no production direct field dependencies remain:
 
 ```bash
 rg -n "state\\.(parsed_links|proxy_ban_html_files|global_proxy_pool|global_request_handler|global_movie_claim_client|global_work_distributor_client|runtime_holder_id|login_total_attempts|login_total_budget|always_bypass_time)" javdb/spider -g '*.py'
@@ -286,7 +288,7 @@ rg -n "state\\.(parsed_links|proxy_ban_html_files|global_proxy_pool|global_reque
 
 Expected: output is empty or limited to `javdb/spider/runtime/state.py`.
 
-- [ ] Commit:
+- [x] Commit:
 
 ```bash
 git add javdb/spider/runtime/state.py javdb/spider/runtime/context.py tests/architecture/test_spider_runtime_state_boundaries.py tests/unit/test_spider_runtime_state_facade.py docs/design/architecture/spider-baseline.md javdb/spider/README.md

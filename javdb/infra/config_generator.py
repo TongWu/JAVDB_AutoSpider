@@ -362,6 +362,12 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         # GPT API Configuration (optional - for automatic captcha solving during login)
         ('GPT_API_URL', 'GPT_API_URL', get_env, '', 'JAVDB LOGIN CONFIGURATION'),
         ('GPT_API_KEY', 'GPT_API_KEY', get_env, '', 'JAVDB LOGIN CONFIGURATION'),
+        # AI operations diagnosis assistant (ADR-026)
+        ('OPS_DIAGNOSIS_AI_ENABLED', 'OPS_DIAGNOSIS_AI_ENABLED', get_env_bool, False, 'AI OPERATIONS DIAGNOSIS'),
+        ('OPS_DIAGNOSIS_API_URL', 'OPS_DIAGNOSIS_API_URL', get_env, '', 'AI OPERATIONS DIAGNOSIS'),
+        ('OPS_DIAGNOSIS_API_KEY', 'OPS_DIAGNOSIS_API_KEY', get_env, '', 'AI OPERATIONS DIAGNOSIS'),
+        ('OPS_DIAGNOSIS_MODEL', 'OPS_DIAGNOSIS_MODEL', get_env, 'deterministic-fallback-v1', 'AI OPERATIONS DIAGNOSIS'),
+        ('OPS_DIAGNOSIS_MAX_LOG_SNIPPETS', 'OPS_DIAGNOSIS_MAX_LOG_SNIPPETS', get_env_int, 20, 'AI OPERATIONS DIAGNOSIS'),
         # Request Timing Configuration
         ('MOVIE_SLEEP_MIN', 'MOVIE_SLEEP', get_env_range_min, None, 'REQUEST TIMING CONFIGURATION'),
         ('MOVIE_SLEEP_MAX', 'MOVIE_SLEEP', get_env_range_max, None, 'REQUEST TIMING CONFIGURATION'),
@@ -524,6 +530,9 @@ def mask_sensitive_values(content: str) -> str:
     # Mask passwords - use \s* instead of .* to avoid greedy matching across fields
     masked = re.sub(r"(PASSWORD\s*=\s*')[^']*(')", r"\1***MASKED***\2", masked)
     masked = re.sub(r'(PASSWORD\s*=\s*")[^"]*(")', r"\1***MASKED***\2", masked)
+    # Mask generic API keys such as OPS_DIAGNOSIS_API_KEY.
+    masked = re.sub(r"([A-Z0-9_]*API_KEY\s*=\s*')[^']*(')", r"\1***MASKED***\2", masked)
+    masked = re.sub(r'([A-Z0-9_]*API_KEY\s*=\s*")[^"]*(")', r"\1***MASKED***\2", masked)
     # Mask GitHub tokens
     masked = re.sub(r"(ghp_)[a-zA-Z0-9]+", r"\1***MASKED***", masked)
     # Mask cookies - use \s* instead of .* to avoid greedy matching
