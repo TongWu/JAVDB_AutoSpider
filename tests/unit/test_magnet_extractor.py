@@ -1,5 +1,6 @@
 """
-Unit tests for utils/domain/magnet_extractor.py functions.
+Unit tests for javdb/spider/magnet_extractor.py (re-export of
+javdb/parsing/magnet_categorize.py) functions.
 """
 import os
 import sys
