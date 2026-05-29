@@ -10,7 +10,7 @@
 
 **Related:** [ADR-018](ADR-018-dual-backend-query-contract.md)
 
-**Status:** Proposed
+**Status:** Completed (2026-05-29) — `_build_session_query` extracted; cases + `normalize_sql` + golden generator + committed golden (`docs/api/contract/query-builders.golden.json`) + pytest pin landed. Every builder branch covered (incl. both `uncensored` clauses); generator idempotent; negative check confirmed the guard catches drift. Shipped in the ADR-018 Phase-1 PR. `stats` deferred to Phase 2.
 
 ---
 
@@ -42,7 +42,7 @@ This deviation is reflected back into the ADR roadmap (Phase 1 = history + sessi
 
 Both the generator and the test must use the **identical** case set and normalizer, or the guard guards nothing.
 
-- [ ] Create `apps/cli/ops/query_contract_cases.py`:
+- [x] Create `apps/cli/ops/query_contract_cases.py`:
 
 ```python
 """Shared fixtures for the dual-backend query Contract Golden (ADR-018)."""
@@ -81,8 +81,8 @@ SESSION_QUERY_CASES = [
 ]
 ```
 
-- [ ] Cover **every** filter branch (one case per `if` in each builder) so a removed/changed branch is caught. Cross-check against `_build_movie_filters` (L211-269) and `_build_torrent_filters` (L272+).
-- [ ] For `state_and_cursor`, generate the `<ENCODED>` value at runtime via `sessions_repo._encode_cursor(...)` rather than hardcoding — keeps the cursor scheme itself in the loop.
+- [x] Cover **every** filter branch (one case per `if` in each builder) so a removed/changed branch is caught. Cross-check against `_build_movie_filters` (L211-269) and `_build_torrent_filters` (L272+).
+- [x] For `state_and_cursor`, generate the `<ENCODED>` value at runtime via `sessions_repo._encode_cursor(...)` rather than hardcoding — keeps the cursor scheme itself in the loop.
 
 **Verify:** `python -c "from apps.cli.ops.query_contract_cases import normalize_sql; print(normalize_sql('  a   b\n c '))"` → `a b c`.
 
@@ -92,7 +92,7 @@ SESSION_QUERY_CASES = [
 
 `SessionsRepo.list` (sessions_repo.py:69) builds SQL inline. Extract the assembly so it is pin-able, preserving behavior.
 
-- [ ] Add a module-level function:
+- [x] Add a module-level function:
 
 ```python
 def _build_session_query(*, state: str | None, cursor: str | None, limit: int) -> Tuple[str, list]:
@@ -114,14 +114,14 @@ def _build_session_query(*, state: str | None, cursor: str | None, limit: int) -
     return sql, params
 ```
 
-- [ ] Refactor `SessionsRepo.list` to call `_build_session_query(...)` then execute — **no behavior change** (same SQL, same params, same ordering/limit as today). Match the exact current SQL skeleton (including the existing `ORDER BY Id DESC LIMIT ?`).
-- [ ] **Verify (regression):** `pytest tests/unit -k "session" -q` — existing sessions tests pass unchanged.
+- [x] Refactor `SessionsRepo.list` to call `_build_session_query(...)` then execute — **no behavior change** (same SQL, same params, same ordering/limit as today). Match the exact current SQL skeleton (including the existing `ORDER BY Id DESC LIMIT ?`).
+- [x] **Verify (regression):** `pytest tests/unit -k "session" -q` — existing sessions tests pass unchanged.
 
 ---
 
 ## Task 3: The golden generator CLI
 
-- [ ] Create `apps/cli/ops/dump_query_contract.py`, mirroring `dump_openapi.py` (REPO_ROOT bootstrap, `main() -> int`, `__main__`):
+- [x] Create `apps/cli/ops/dump_query_contract.py`, mirroring `dump_openapi.py` (REPO_ROOT bootstrap, `main() -> int`, `__main__`):
 
 ```python
 """Dump the dual-backend query Contract Golden to docs/api/contract/ (ADR-018)."""
@@ -174,15 +174,15 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-- [ ] **Generate:** `python -m apps.cli.ops.dump_query_contract` → writes `docs/api/contract/query-builders.golden.json`.
-- [ ] Eyeball the golden: confirm the movie `q_and_perfect_match` case shows the headline duplicated clause `(m.VideoCode LIKE ? OR m.ActorName LIKE ? OR m.SupportingActors LIKE ?) AND m.PerfectMatchIndicator = ?` with bindings `["%ABC%","%ABC%","%ABC%",1]`.
-- [ ] Commit the golden (it is a reviewed artifact, like `openapi.json`).
+- [x] **Generate:** `python -m apps.cli.ops.dump_query_contract` → writes `docs/api/contract/query-builders.golden.json`.
+- [x] Eyeball the golden: confirm the movie `q_and_perfect_match` case shows the headline duplicated clause `(m.VideoCode LIKE ? OR m.ActorName LIKE ? OR m.SupportingActors LIKE ?) AND m.PerfectMatchIndicator = ?` with bindings `["%ABC%","%ABC%","%ABC%",1]`.
+- [x] Commit the golden (it is a reviewed artifact, like `openapi.json`).
 
 ---
 
 ## Task 4: pytest pins the Python side to the golden
 
-- [ ] Create `tests/unit/test_query_contract_golden.py`:
+- [x] Create `tests/unit/test_query_contract_golden.py`:
 
 ```python
 """ADR-018 Phase 1: pin Python query builders to the committed Contract Golden."""
@@ -208,17 +208,17 @@ def test_golden_covers_all_builders():
 
 > Note: `case["params"]` is already the resolved kwargs (cursor pre-encoded) written by the generator, so the test re-runs the live builder against the same inputs the golden was built from. A builder change without regen → `sql`/`bindings` mismatch → red.
 
-- [ ] **Verify:** `pytest tests/unit/test_query_contract_golden.py -v` — all cases green.
+- [x] **Verify:** `pytest tests/unit/test_query_contract_golden.py -v` — all cases green.
 
 ---
 
 ## Task 5: Verification gates
 
-- [ ] `python -m apps.cli.ops.dump_query_contract` runs clean and is idempotent (re-running produces no git diff).
-- [ ] `pytest tests/unit/test_query_contract_golden.py -v` — green.
-- [ ] `pytest tests/unit -k "session or history" -q` — existing builder/repo tests unaffected by the Task-2 extraction.
-- [ ] **Negative check (manual, revert after):** temporarily change a clause in `_build_movie_filters` (e.g. `m.ActorName` → `m.Actor`), run the test **without** regenerating → confirm it fails with a clear `SQL drift` message. Revert.
-- [ ] Update this IMP's `Status` to `Completed` and check off `IMP-ADR018-01` in the ADR roadmap.
+- [x] `python -m apps.cli.ops.dump_query_contract` runs clean and is idempotent (re-running produces no git diff).
+- [x] `pytest tests/unit/test_query_contract_golden.py -v` — green.
+- [x] `pytest tests/unit -k "session or history" -q` — existing builder/repo tests unaffected by the Task-2 extraction.
+- [x] **Negative check (manual, revert after):** temporarily change a clause in `_build_movie_filters` (e.g. `m.ActorName` → `m.Actor`), run the test **without** regenerating → confirm it fails with a clear `SQL drift` message. Revert.
+- [x] Update this IMP's `Status` to `Completed` and check off `IMP-ADR018-01` in the ADR roadmap.
 
 ---
 

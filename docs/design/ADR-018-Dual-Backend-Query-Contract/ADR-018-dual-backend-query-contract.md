@@ -2,7 +2,7 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Proposed                                                              |
+| **Status**  | Accepted — Phase 1 (Python golden) implemented 2026-05-29; Phase 2 (TS consume) pending |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
 | **Related** | [ADR-029](../ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md) (auth hardening — owns token revocation), [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md) (dual-backend split), [ADR-010](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.md) (D1 access port) |
@@ -102,3 +102,4 @@ Introduce a **Contract Golden**: Python-generated, language-neutral golden fixtu
 
 - 2026-05-29: Proposed (from architecture review Candidate B grilling).
 - 2026-05-29: D6 revised after grilling — mirror the `openapi.json` / `api.gen.ts` pattern (vendored golden + CI freshness-diff, accept the main-branch race); re-vendor automated via `repository_dispatch`; golden `version` = content hash. Earlier "pin to version/SHA" idea rejected as inconsistent with the house pattern.
+- 2026-05-29: Phase 1 implemented ([IMP-ADR018-01](IMP-ADR018-01-python-golden-generator.md)). `_build_session_query` extracted from `SessionsRepo.list` (behavior-preserving); the golden generator (`apps/cli/ops/dump_query_contract.py`), shared cases + `normalize_sql` (`query_contract_cases.py`), the committed golden (`docs/api/contract/query-builders.golden.json`, content-hash `version`), and the pytest pin (`tests/unit/test_query_contract_golden.py`) all landed. Covers history movie+torrent filters + sessions query; every builder branch is pinned. **`stats` confirmed deferred to Phase 2** (its aggregations are inline in `apps/api/routers/stats.py`, needing a router→builder extraction first). Phase 1 roadmap row = history + sessions, as planned.
