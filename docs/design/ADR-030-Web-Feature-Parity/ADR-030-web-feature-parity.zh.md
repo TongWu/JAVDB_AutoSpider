@@ -1,4 +1,4 @@
-# ADR-030: Web 后端功能对齐 — 配置、统计与密码管理
+# ADR-030: Web 后端功能对齐 — 配置、统计、密码管理与能力诚实性
 
 | 字段       | 值                                                                     |
 | ---------- | --------------------------------------------------------------------- |
@@ -193,12 +193,20 @@ export async function findUser(env: Env, db: D1Database): Promise<User | undefin
 **需要 `await` 的调用点：**
 - `server/routes/auth.ts`：login handler、refresh handler
 
+### 能力诚实性：GitHub Actions 覆盖与 `INGESTION_MODE`
+
+并入自 [ADR-028](../ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md) 的工作流 WS-A（P0）。两个对等缺口损害了*能力诚实性*——平台宣称了它无法追踪或执行的工作。
+
+**Cloudflare — 未追踪的 GitHub Actions workflow。** `Migration.yml`、`WeeklyDedup.yml`、`TestIngestion.yml` 没有类型化调度端点。它们只能通过通用的 `POST /api/gh-actions/runs`（要求 `GH_ACTIONS_TIER=admin` 且已知 workflow 文件名）触达，且**不会**写入 `job_runs`，因此永不出现在 Tasks 列表或统计里。为这三个 workflow 补类型化调度端点 + `job_runs` 追踪，沿用 `DailyIngestion` / `QBFileFilter` / `RcloneManager` / `StaleSessionCleanup` 的现有模式。
+
+**Python — `INGESTION_MODE` 上报却未实现。** `GET /api/capabilities` 上报 `github` / `dual` 的 `ingestion_mode`，但 `apps/api/services/task_service.py` 没有 GitHub 调度分支——`trigger_daily_task` / `trigger_adhoc_task` 无视 `INGESTION_MODE` 永远跑本地子进程。解决方式二选一：(a) 在 `task_service` 里为 `github` / `dual` 模式实现 GitHub 调度；(b) 让 `/api/capabilities` 只上报执行层兑现的模式。**默认选 (b)**，除非明确希望从 Python 后端发起 GitHub 调度，因为 Cloudflare 后端已经持有调度拓扑。
+
 ## 不在范围内
 
 - **33 个本地部署专用 key**（`*_LOG_FILE`、`*_DB_PATH`、`*_DIR`、`*_CSV`）— 与 Cloudflare Workers 无关。
 - **15 个 Cloudflare/协调 key** — 未来 capabilities 端点增强。
 - **前端页面修改** — Config UI 从 `/config/meta` 自动渲染；无需手动页面工作。
-- **Python 后端修改** — 本 ADR 仅针对 TS 后端。
+- **Python 后端修改** — 除 WS-A 的 `INGESTION_MODE` 能力诚实性修复（见 Decision）外不在范围内；其余仅针对 TS 后端。
 - **Admin 通过此端点修改只读用户密码** — 使用 `PUT /api/config` 配合 `READONLY_PASSWORD_HASH`。
 
 ## 影响
@@ -210,6 +218,7 @@ export async function findUser(env: Env, db: D1Database): Promise<User | undefin
 - 用户可通过 UI 更改密码，无需 CLI 访问。
 - Stats trend 仪表板显示 job 时长数据；proxy_bans 明确标记为不可用而非静默为空。
 - Alias fallback 零停机 — 现有 D1 config 值在过渡期间继续工作。
+- 能力诚实性缺口（未追踪的 GH Actions workflow；上报却未实现的 `INGESTION_MODE`）被关闭，console 不再示意它无法追踪或执行的工作。
 
 ### 负面
 
