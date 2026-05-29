@@ -24,7 +24,7 @@ Canonical command-line entry points for JAVDB AutoSpider — all user-facing CLI
 ## Conventions
 
 - All entries are runnable via `python3 -m apps.cli.<subdir>.<name>`.
-- `apps.cli.*` is the only user-facing CLI surface. Some integration wrappers still alias `javdb.integrations.*` during the [ADR-015](../../docs/design/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md) migration; those aliases are tracked by architecture allowlists and are removed by IMP-ADR015-02 through IMP-ADR015-07.
+- `apps.cli.*` is the only user-facing CLI surface. The [ADR-015](../../docs/design/_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md) migration is complete: `javdb.integrations.*` no longer exposes any CLI surface or `sys.modules` alias, and the architecture allowlists (`tests/architecture/test_integrations_interface_boundary.py`) are empty.
 - Workflow invocations live in `.github/workflows/*.yml`; per-subdir READMEs note which CLIs are workflow-invoked.
 
 ## Related

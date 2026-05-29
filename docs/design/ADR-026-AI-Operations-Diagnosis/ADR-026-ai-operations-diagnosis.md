@@ -5,7 +5,7 @@
 | **Status**  | Accepted - Phase 1 delivered; Phases 2-3 pending                     |
 | **Date**    | 2026-05-27                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-009](../_archive/ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md), [ADR-010](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-015](../ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md) |
+| **Related** | [ADR-009](../_archive/ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md), [ADR-010](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md) |
 
 ## Related
 
@@ -14,7 +14,7 @@
 - [IMP-ADR026-03](IMP-ADR026-03-ai-ops-diagnosis-gated-remediation.md)
 - [ADR-009](../_archive/ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md)
 - [ADR-010](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.md)
-- [ADR-015](../ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md)
+- [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md)
 
 ## Context
 

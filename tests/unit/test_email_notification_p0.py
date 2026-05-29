@@ -23,8 +23,6 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-import pytest
-
 # Add project root so the spider imports resolve.
 project_root = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -37,7 +35,7 @@ if project_root not in sys.path:
 
 
 def test_drift_advisory_returns_empty_when_jsonl_missing(tmp_path):
-    from javdb.integrations.notify.email import (
+    from javdb.integrations.notify.email.log_analysis import (
         _build_dual_drift_advisory,
     )
 
@@ -47,7 +45,7 @@ def test_drift_advisory_returns_empty_when_jsonl_missing(tmp_path):
 
 
 def test_drift_advisory_returns_empty_when_jsonl_has_no_today_records(tmp_path):
-    from javdb.integrations.notify.email import (
+    from javdb.integrations.notify.email.log_analysis import (
         _build_dual_drift_advisory,
     )
 
@@ -70,7 +68,7 @@ def test_drift_advisory_returns_empty_when_jsonl_has_no_today_records(tmp_path):
 
 
 def test_drift_advisory_surfaces_todays_records(tmp_path):
-    from javdb.integrations.notify.email import (
+    from javdb.integrations.notify.email.log_analysis import (
         _build_dual_drift_advisory,
     )
 
@@ -98,9 +96,61 @@ def test_drift_advisory_surfaces_todays_records(tmp_path):
     assert "ReportSessions" in advisory
 
 
+def test_drift_advisory_skips_malformed_records(tmp_path):
+    """A malformed JSONL record (non-int counts / non-string ts) must be
+    skipped without raising, while well-formed records still aggregate."""
+    from javdb.integrations.notify.email.log_analysis import (
+        _build_dual_drift_advisory,
+    )
+
+    drift_dir = tmp_path / "D1"
+    drift_dir.mkdir()
+    jsonl = drift_dir / "d1_drift.jsonl"
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    lines = [
+        # Non-object JSON lines (a list, a bare number) have no .get() — they
+        # must be skipped, not raise AttributeError.
+        json.dumps(["not", "a", "dict"]),
+        json.dumps(42),
+        # Malformed: failure_count is non-numeric — must be skipped, not crash.
+        json.dumps({
+            "ts": today,
+            "db": "history",
+            "failure_count": "x",
+            "uncommitted_d1_writes": 0,
+        }),
+        # Malformed: ts is a non-string (int) — str() coercion must avoid a
+        # ``startswith`` AttributeError; record is filtered out as not-today.
+        json.dumps({
+            "ts": 20260101,
+            "db": "history",
+            "failure_count": 5,
+            "uncommitted_d1_writes": 5,
+        }),
+        # Well-formed today record — must still aggregate.
+        json.dumps({
+            "ts": today,
+            "db": "history",
+            "committed": True,
+            "failure_count": 2,
+            "uncommitted_d1_writes": 3,
+            "first_failed_sql": "INSERT INTO ReportSessions ...",
+            "first_error": "RuntimeError: simulated",
+        }),
+    ]
+    jsonl.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    advisory = _build_dual_drift_advisory(str(tmp_path))
+    assert "D1 DRIFT ADVISORY" in advisory
+    # Only the single well-formed record counts (1, not 2 or 3).
+    assert "1 drift record(s)" in advisory
+    assert "cumulative D1 write failures today: 2" in advisory
+    assert "rows D1 kept after SQLite rollback today: 3" in advisory
+
+
 def test_drift_advisory_returns_empty_for_clean_pending_verify(tmp_path):
     """A pending_session_verify record with zero residuals is informational, not drift."""
-    from javdb.integrations.notify.email import (
+    from javdb.integrations.notify.email.log_analysis import (
         _build_dual_drift_advisory,
     )
 
@@ -178,16 +228,18 @@ def test_main_exits_nonzero_on_smtp_failure(monkeypatch, tmp_path):
 
     Patching the heavy collaborators is unavoidable here because the
     ``main()`` function pulls in a lot of file-IO / state setup, but
-    the key contract — "SMTP raised → sys.exit(2)" — is what we lock
+    the key contract — "SMTP failure → exit code 2" — is what we lock
     down. The rest of the function is exercised by
     ``test_email_notification_extended.py``.
     """
-    from javdb.integrations.notify import email as en
+    import apps.cli.notify.email as cli
+    from javdb.integrations.notify.email import service as en
 
     # Stub send_email to return False so the new exit path triggers.
     monkeypatch.setattr(en, "send_email", lambda *a, **kw: False)
-    # Stub everything else main() needs so the call doesn't actually
-    # walk real files / dbs. We only care that the exit code propagates.
+    # Stub everything else the orchestration needs so the call doesn't
+    # actually walk real files / dbs. We only care that the exit code
+    # propagates.
     monkeypatch.setattr(en, "_resolve_default_verify_jsonl", lambda x: None)
     monkeypatch.setattr(en, "_resolve_default_health_snapshot", lambda x: None)
     monkeypatch.setattr(en, "find_proxy_ban_html_files", lambda d=None: [])
@@ -204,28 +256,24 @@ def test_main_exits_nonzero_on_smtp_failure(monkeypatch, tmp_path):
     monkeypatch.setattr(en, "find_latest_adhoc_csv", lambda d: None)
     monkeypatch.setattr(en, "find_latest_daily_csv", lambda d: None)
     monkeypatch.setattr(en, "_load_pending_verify_records", lambda *a, **k: [])
-    # No dry-run so the SMTP path runs.
-    monkeypatch.setattr(
-        sys, "argv",
-        ["email_notification", "--mode", "daily"],
-    )
 
-    with pytest.raises(SystemExit) as exc_info:
-        en.main()
+    # No dry-run so the SMTP path runs.
+    code = cli.main(["--mode", "daily"])
 
     # P0-5 contract: must NOT be 0 when send_email returns False.
-    assert exc_info.value.code != 0, (
+    assert code != 0, (
         "P0-5 regression: email_notification main() returned 0 even though "
         "send_email reported failure."
     )
-    assert exc_info.value.code == 2, (
-        f"expected exit code 2 on SMTP failure, got {exc_info.value.code}"
+    assert code == 2, (
+        f"expected exit code 2 on SMTP failure, got {code}"
     )
 
 
 def test_main_exits_zero_when_email_succeeds(monkeypatch):
     """Mirror of the test above: ``True`` return → exit 0."""
-    from javdb.integrations.notify import email as en
+    import apps.cli.notify.email as cli
+    from javdb.integrations.notify.email import service as en
 
     monkeypatch.setattr(en, "send_email", lambda *a, **kw: True)
     monkeypatch.setattr(en, "_resolve_default_verify_jsonl", lambda x: None)
@@ -244,14 +292,8 @@ def test_main_exits_zero_when_email_succeeds(monkeypatch):
     monkeypatch.setattr(en, "find_latest_adhoc_csv", lambda d: None)
     monkeypatch.setattr(en, "find_latest_daily_csv", lambda d: None)
     monkeypatch.setattr(en, "_load_pending_verify_records", lambda *a, **k: [])
-    monkeypatch.setattr(
-        sys, "argv",
-        ["email_notification", "--mode", "daily"],
-    )
 
-    with pytest.raises(SystemExit) as exc_info:
-        en.main()
-    assert exc_info.value.code == 0
+    assert cli.main(["--mode", "daily"]) == 0
 
 
 # ── Drift advisory backend gating ────────────────────────────────────────
@@ -314,7 +356,8 @@ def test_drift_advisory_not_prepended_in_d1_only_mode(monkeypatch, tmp_path):
     tooling like ``commit_session._emit_pending_verify`` writes to the
     same file), the email body must NOT prepend the DRIFT ADVISORY banner.
     """
-    from javdb.integrations.notify import email as en
+    import apps.cli.notify.email as cli
+    from javdb.integrations.notify.email import service as en
 
     _seed_drift_jsonl(tmp_path)
     monkeypatch.setenv("STORAGE_BACKEND", "d1")
@@ -322,11 +365,8 @@ def test_drift_advisory_not_prepended_in_d1_only_mode(monkeypatch, tmp_path):
 
     captured = []
     _install_main_stubs(monkeypatch, en, captured)
-    monkeypatch.setattr(sys, "argv", ["email_notification", "--mode", "daily"])
 
-    with pytest.raises(SystemExit) as exc_info:
-        en.main()
-    assert exc_info.value.code == 0
+    assert cli.main(["--mode", "daily"]) == 0
     assert captured, "send_email was not invoked"
     assert "D1 DRIFT ADVISORY" not in captured[0], (
         "d1-only mode must not surface SQLite-vs-D1 drift banner; "
@@ -336,7 +376,8 @@ def test_drift_advisory_not_prepended_in_d1_only_mode(monkeypatch, tmp_path):
 
 def test_drift_advisory_prepended_in_dual_mode(monkeypatch, tmp_path):
     """STORAGE_BACKEND=dual: drift banner must still surface (mirror test)."""
-    from javdb.integrations.notify import email as en
+    import apps.cli.notify.email as cli
+    from javdb.integrations.notify.email import service as en
 
     _seed_drift_jsonl(tmp_path)
     monkeypatch.setenv("STORAGE_BACKEND", "dual")
@@ -344,11 +385,8 @@ def test_drift_advisory_prepended_in_dual_mode(monkeypatch, tmp_path):
 
     captured = []
     _install_main_stubs(monkeypatch, en, captured)
-    monkeypatch.setattr(sys, "argv", ["email_notification", "--mode", "daily"])
 
-    with pytest.raises(SystemExit) as exc_info:
-        en.main()
-    assert exc_info.value.code == 0
+    assert cli.main(["--mode", "daily"]) == 0
     assert captured, "send_email was not invoked"
     assert "D1 DRIFT ADVISORY" in captured[0], (
         "dual mode must continue to surface the drift advisory banner."

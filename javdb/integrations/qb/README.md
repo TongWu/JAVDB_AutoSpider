@@ -6,14 +6,15 @@ qBittorrent integration: shared Web API client, daily/adhoc torrent uploader, sm
 
 | File | Purpose |
 |---|---|
-| `client.py` | Shared qBittorrent Web API client (login, list, delete) consolidating logic previously duplicated across consumers. |
-| `config.py` | Shared connection configuration helpers (URL normalisation, masked logging). |
-| `uploader.py` | Torrent uploader CLI implementation (daily + ad-hoc modes); reads CSV and adds magnets to qB. |
-| `file_filter.py` | Filters out small files (default 100 MB threshold) from recently-added torrents by setting per-file priority 0. |
+| `client.py` | qB Web API primitives — shared client (login, list, delete) consolidating logic previously duplicated across consumers. |
+| `config.py` | qB connection config — shared helpers (URL normalisation, masked logging). |
 
 ## Subdirectories
 
-(none)
+| Directory | Purpose |
+|---|---|
+| `uploader/` | Uploader service package (`options.py`, `result.py`, `service.py`); reads CSV and adds magnets to qB (daily + ad-hoc modes). No CLI surface — the CLI lives in `apps.cli.qb.uploader`. |
+| `file_filter/` | File-filter service package (`options.py`, `result.py`, `service.py`); filters out small files (default 100 MB threshold) from recently-added torrents by setting per-file priority 0. The package-level `run_file_filter` is the legacy programmatic API consumed by the REST layer. No CLI surface — the CLI lives in `apps.cli.qb.file_filter`. |
 
 ## Depends on
 

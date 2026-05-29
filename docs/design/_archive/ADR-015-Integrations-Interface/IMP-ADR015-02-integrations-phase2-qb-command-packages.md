@@ -77,12 +77,23 @@ __all__ = ["QbUploaderOptions", "QbUploaderResult", "run_uploader"]
 
 Create `javdb/integrations/qb/file_filter/__init__.py`:
 
+> **Implementation note (deviation):** the name `run_file_filter` was already
+> taken by the legacy programmatic API (`run_file_filter(min_size_mb=..., ...) -> dict`)
+> consumed by `apps/api/routers/operations.py` and patched in
+> `tests/unit/test_operations_endpoints.py` at
+> `javdb.integrations.qb.file_filter.run_file_filter`. To avoid a name collision,
+> the legacy dict API is renamed `run_file_filter_api` and re-exported at the
+> package level as `run_file_filter` (preserving the REST import verbatim), while
+> the new CLI service is named `run_file_filter_cli(options) -> QbFileFilterResult`.
+
 ```python
 """qB file-filter service package."""
 
 from javdb.integrations.qb.file_filter.options import QbFileFilterOptions
 from javdb.integrations.qb.file_filter.result import QbFileFilterResult
-from javdb.integrations.qb.file_filter.service import run_file_filter
+
+# Package-level ``run_file_filter`` stays the legacy dict API (REST consumers).
+from javdb.integrations.qb.file_filter.service import run_file_filter_api as run_file_filter
 
 __all__ = ["QbFileFilterOptions", "QbFileFilterResult", "run_file_filter"]
 ```
@@ -350,10 +361,15 @@ from __future__ import annotations
 import argparse
 import json
 
-from javdb.integrations.qb.config import QB_FILE_FILTER_MIN_SIZE_MB
+from javdb.infra.config import cfg
 from javdb.integrations.qb.file_filter.options import QbFileFilterOptions
-from javdb.integrations.qb.file_filter.service import run_file_filter
+from javdb.integrations.qb.file_filter.service import run_file_filter_cli
 from javdb.proxy.policy import add_proxy_arguments, resolve_proxy_override
+
+# Mirror the legacy module-level default sourcing (was file_filter.py:51).
+# QB_FILE_FILTER_MIN_SIZE_MB is NOT exported from javdb.integrations.qb.config;
+# the original file computed it via cfg() at import time. Preserve that exactly.
+QB_FILE_FILTER_MIN_SIZE_MB = cfg("QB_FILE_FILTER_MIN_SIZE_MB", 100)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -400,7 +416,7 @@ def main(argv: list[str] | None = None) -> int:
         options = options_from_args(parse_args(argv))
     except (json.JSONDecodeError, argparse.ArgumentTypeError) as exc:
         raise SystemExit(str(exc)) from exc
-    return run_file_filter(options).exit_code
+    return run_file_filter_cli(options).exit_code
 
 
 if __name__ == "__main__":
@@ -455,7 +471,9 @@ commit/push.
 - [ ] **Step 2: Create file-filter service.**
 
 Create `javdb/integrations/qb/file_filter/service.py` by moving the body of
-`_legacy.main()` into `run_file_filter(options: QbFileFilterOptions) -> QbFileFilterResult`.
+`_legacy.main()` into `run_file_filter_cli(options: QbFileFilterOptions) -> QbFileFilterResult`
+(named `_cli` to avoid colliding with the legacy dict API `run_file_filter_api`;
+see the deviation note in Task 1 Step 2).
 
 Required conversions:
 
