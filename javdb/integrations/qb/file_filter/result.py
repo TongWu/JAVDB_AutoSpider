@@ -14,7 +14,11 @@ class QbFileFilterResult:
     local_size_deleted: int = 0
     pending_metadata: int = 0
     errors: int = 0
-    details: list[dict[str, object]] = field(default_factory=list)
+    # Per-torrent rows copied verbatim from the legacy stats dict, which stores
+    # tuples: (torrent_name, filtered_files_count, filtered_size, deleted_count,
+    # deleted_size). No consumer reads this field today (only ``exit_code`` is
+    # used); kept for parity with the legacy summary payload.
+    details: list[tuple] = field(default_factory=list)
 
     @property
     def exit_code(self) -> int:

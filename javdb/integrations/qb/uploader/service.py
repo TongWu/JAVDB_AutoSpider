@@ -1,4 +1,3 @@
-import csv
 import requests
 import logging
 from datetime import datetime

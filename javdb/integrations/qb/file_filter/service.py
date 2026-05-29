@@ -867,7 +867,7 @@ def run_file_filter_api(
     }
 
 
-def run_file_filter(options: QbFileFilterOptions) -> QbFileFilterResult:
+def run_file_filter_cli(options: QbFileFilterOptions) -> QbFileFilterResult:
     """Run the file-filter sweep for the CLI.
 
     Behaviour-preserving extraction of the former ``main()`` flow. Instead of
