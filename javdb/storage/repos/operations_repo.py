@@ -295,9 +295,14 @@ class OperationsRepo:
 
     def replace_rclone_inventory(self, entries: List[dict]) -> int:
         """Replace the full RcloneInventory atomically. Returns row count."""
-        from javdb.storage.db import db_replace_rclone_inventory
+        from javdb.storage.db import (
+            db_replace_rclone_inventory,
+            get_active_session_id,
+        )
         return db_replace_rclone_inventory(
-            entries=entries, db_path=self._db_path,
+            entries=entries,
+            db_path=self._db_path,
+            session_id=get_active_session_id(),
         )
 
     def swap_rclone_inventory(self, session_id: str) -> int:

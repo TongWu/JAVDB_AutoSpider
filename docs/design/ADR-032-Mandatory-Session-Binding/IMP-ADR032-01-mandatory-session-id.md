@@ -10,7 +10,7 @@
 
 **Related:** [ADR-032](ADR-032-mandatory-session-binding.md)
 
-**Status:** Proposed
+**Status:** Completed — implemented & verified 2026-05-29 (`session_id` made mandatory on the `_db_operations` functions + the two `_db_history_write` batch functions; callers threaded; "no silent global" test added; the `_resolve_session_id` fallback is unreachable from these write functions). Phase 2 (IMP-ADR032-02, single-Repo interface) pending.
 
 ---
 
