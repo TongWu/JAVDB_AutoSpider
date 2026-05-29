@@ -603,6 +603,24 @@ git add server/routes/auth.ts server/__tests__/auth-routes.test.ts
 git commit -m "feat(auth): integrate rate limiting, session counting, revocation, CSRF refresh, plain: rejection"
 ```
 
+> **Implementation note (2026-05-29 — plan divergence, design-feedback-loop):**
+> Adding the rate limiter broke 55 *unrelated* route tests in the full suite. Root
+> cause: `@cloudflare/vitest-pool-workers` (0.16.9, via the `cloudflareTest()` plugin)
+> does **not** isolate KV storage per `it`, and miniflare requests carry no
+> `CF-Connecting-IP`/`X-Forwarded-For`, so `getClientIp()` returns `"unknown"` for
+> every test — all tests share one rate-limit bucket and one `sessions:admin` list.
+> After 5 logins in a file, the `login()`/`getToken()` helper is throttled (429),
+> returns `access_token: undefined`, and downstream requests fail auth with 401.
+> **Fix (test-infra only, no production change):** a new
+> `server/__tests__/setup.ts` clears `AUTH_KV` in a `beforeEach`, wired via
+> `test.setupFiles` in `vitest.server.config.ts`. The plan's rate-limit test still
+> passes because it issues all 6 requests inside a single `it`.
+> Two extra tests were also added (the original Step-1 `plain:` block was an empty
+> placeholder): `verifyPassword` is now exported and unit-tested for the
+> `ENVIRONMENT=production` rejection path, and a session-limit test asserts the 4th
+> login returns 429 `session_limit`. Commits: `e38e965` (integration), `cb9086d`
+> (test isolation), `fe2c1b6` (added coverage).
+
 ---
 
 ## Task 5: Token Revocation Check in Auth Middleware
@@ -1253,3 +1271,45 @@ Expected: Successful deployment.
 git add wrangler.toml
 git commit -m "chore: update wrangler.toml with production KV namespace IDs"
 ```
+
+---
+
+## Implementation Status (2026-05-29)
+
+Executed via `superpowers:subagent-driven-development` on branch
+`claude/adr-028-web-completeness` (worktree of the web repo).
+
+**Tasks 1–8 — DONE & verified.** All code changes landed on the branch
+(11 commits, `b0b178a` … `28cbf27`). Verification gate (Task 10 Steps 1–2):
+`npm run test:server` → **145 passed, 0 failures** (19 files); `npm run
+typecheck:server` → clean.
+
+Two divergences from the written plan, both recorded inline:
+- **Task 4:** the rate limiter broke 55 unrelated tests because vitest-pool-workers
+  doesn't isolate KV per-test and all test requests share IP `"unknown"`. Fixed
+  with a test-only `server/__tests__/setup.ts` that clears `AUTH_KV` in
+  `beforeEach` (commit `cb9086d`); also added missing coverage for the `plain:`
+  production-rejection path and the session limit (`fe2c1b6`). See the Task 4 note.
+- **Task 7:** accepted the plan's broad `catch {}` around the pending-delete batch
+  as-is (a `"no such table"` string-match alternative was judged too brittle for a
+  1–2 user system); the 207 partial-failure path is not unit-tested because the D1
+  binding can't be cleanly mocked under vitest-pool-workers. Both noted as known
+  limitations.
+
+**Task 9 + Task 10 Steps 3–6 — DEFERRED to the operator (not auto-run).** These are
+outward-facing production operations requiring Cloudflare credentials and are unsafe
+to run from an implementation agent:
+- **Task 9** — create D1 indexes on the live `javdb-history` / `javdb-reports`
+  databases (`wrangler d1 execute …`). The exact `CREATE INDEX IF NOT EXISTS`
+  commands are in Task 9 above. (Idempotent; for canonical-source compliance these
+  indexes should ideally also be codified as a D1 migration under the monorepo's
+  `javdb/migrations/d1/` — tracked as a follow-up.)
+- **Task 10 Step 3** — `wrangler kv namespace create AUTH_KV` (+ `--preview`); the
+  `wrangler.toml` `[[kv_namespaces]]` block currently holds **placeholder** ids
+  (`placeholder-create-before-deploy`) that MUST be replaced with the real ids
+  before first deploy.
+- **Task 10 Steps 4–6** — `wrangler deploy`, production smoke test, and the final
+  `wrangler.toml` commit with real KV ids.
+
+➡️ **Before deploying:** run Task 9, then Task 10 Step 3 (create KV namespace and
+paste real ids into `wrangler.toml`), then Steps 4–6.
