@@ -156,9 +156,9 @@ def bench_parse_detail_canonical(iterations: int) -> Dict[str, float]:
 def bench_parse_detail_wrapper(iterations: int) -> Dict[str, float]:
     """Finished-object path: parse_detail_page + categorize the detail's magnets.
 
-    Categorises via the parsing-layer categoriser on
-    ``detail.get_magnets_as_legacy()`` (the Rust-safe equivalent of
-    ``MovieDetail.categorize_magnets()``), so the benchmark exercises the same
+    Categorises via the parsing-layer free function `categorize(...)` on
+    ``detail.get_magnets_as_legacy()`` — the canonical interface, uniform across
+    the Rust and Python detail objects — so the benchmark exercises the same
     finished-object path production callers use.
     """
     from javdb.parsing import parse_detail_page
