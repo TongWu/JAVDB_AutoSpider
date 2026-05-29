@@ -45,7 +45,8 @@
 - [ ] **Step 1: Move service orchestration out of `_legacy.py`.**
 
 Move `_legacy.run_email_notification_from_options(options)` into
-`service.py`.
+`service.py` (it becomes the body of, or is called by,
+`run_email_notification`).
 
 Keep the public signature
 `run_email_notification(options: EmailNotificationOptions) -> EmailNotificationResult`.
@@ -55,6 +56,19 @@ The result must preserve:
 - exit code `2` when SMTP send fails and `dry_run` is false;
 - exit code `0` for dry runs;
 - current success/failure subject construction.
+
+> **Implementation note (patchability + no CLI surface).** The orchestration
+> calls many helpers (`send_email`, `analyze_*`, `extract_*`,
+> `find_proxy_ban_html_files`, `extract_proxy_ban_summary`, `find_latest_*`,
+> `_resolve_default_*`, `_load_pending_verify_records`, the report/section
+> builders, etc.). Import them INTO `service.py` from their responsibility
+> modules (`delivery`/`log_analysis`/`report_builder`) and reference them as
+> `service`-module globals, so the `test_email_notification_p0.py` tests can
+> monkeypatch them at `javdb.integrations.notify.email.service.<name>`. Do NOT
+> bring `argparse`, `parse_arguments`, `main`, the `__main__` block, or
+> `sys.exit` into `service.py` (verified: `sys.exit` lives ONLY in
+> `_legacy.main()`; the orchestration returns an `EmailNotificationResult` and
+> never calls `sys.exit`). After the move `service.py` must have no CLI surface.
 
 - [ ] **Step 2: Move remaining helper functions.**
 
@@ -79,6 +93,16 @@ calling `_legacy.py`.
 
 - [ ] **Step 1: Replace `__init__.py` with final exports.**
 
+> **Implementation note (retain `send_email` re-export).** `send_email` has live
+> PRODUCTION callers that import it from the package path and must stay
+> re-exported (the ADR-015 boundary allows "non-CLI helper exports where
+> intentionally retained"): `apps/api/routers/operations.py` (lines 227, 292,
+> `from javdb.integrations.notify.email import send_email`) and
+> `tests/unit/test_operations_endpoints.py` (patches
+> `javdb.integrations.notify.email.send_email`). It now lives in `delivery.py`.
+> Dropping it breaks the REST email-test endpoint and those tests. Do NOT edit
+> operations.py or test_operations_endpoints.py.
+
 Use:
 
 ```python
@@ -87,8 +111,14 @@ Use:
 from javdb.integrations.notify.email.options import EmailNotificationOptions
 from javdb.integrations.notify.email.result import EmailNotificationResult
 from javdb.integrations.notify.email.service import run_email_notification
+from javdb.integrations.notify.email.delivery import send_email
 
-__all__ = ["EmailNotificationOptions", "EmailNotificationResult", "run_email_notification"]
+__all__ = [
+    "EmailNotificationOptions",
+    "EmailNotificationResult",
+    "run_email_notification",
+    "send_email",
+]
 ```
 
 - [ ] **Step 2: Delete `_legacy.py`.**
@@ -129,6 +159,24 @@ javdb.integrations.notify.email.delivery
 ```
 
 for domain behavior tests.
+
+> **Implementation note (`test_email_notification_p0.py` migration — it currently
+> targets the deleted `_legacy`).** Phase 6 left p0 doing
+> `from javdb.integrations.notify.email import _legacy as en`, patching ~17
+> helpers on `en` (`send_email`, `analyze_*`, `extract_*`,
+> `find_proxy_ban_html_files`, `extract_proxy_ban_summary`, `find_latest_*`,
+> `_resolve_default_*`, `_load_pending_verify_records`), and calling `en.main()`
+> (which `sys.exit`s) inside `with pytest.raises(SystemExit)`. After Phase 7:
+> - rebind `en` to `javdb.integrations.notify.email.service` and patch the
+>   helpers at `service.<name>` (the orchestration now resolves them there);
+> - replace `en.main()` with `apps.cli.notify.email.main([])`, which RETURNS the
+>   int exit code (it does not `sys.exit`; only the adapter's `__main__` wraps it
+>   in `SystemExit`). So change `with pytest.raises(SystemExit) as exc: en.main()`
+>   / `assert exc.value.code == N` to `assert apps.cli.notify.email.main([]) == N`.
+>   Keep asserting exit code 2 on SMTP failure (outside dry-run) and 0 otherwise.
+> Confirm `tests/unit/test_email_notification_extended.py` and
+> `tests/integration/test_pipeline.py` have no remaining `_legacy` references
+> (Phase 6 already pointed them at the responsibility submodules).
 
 - [ ] **Step 2: Remove notify allowlist entries.**
 
@@ -206,7 +254,8 @@ git add javdb/integrations/notify/email \
         tests/unit/test_email_notification_extended.py \
         tests/integration/test_pipeline.py \
         apps/cli/notify/README.md \
-        javdb/integrations/notify/README.md
+        javdb/integrations/notify/README.md \
+        docs/design/ADR-015-Integrations-Interface/IMP-ADR015-07-integrations-phase7-notify-cleanup.md
 git add -u javdb/integrations/notify/email/_legacy.py
 git commit -m "refactor(integrations): remove notify email bake wrapper"
 ```

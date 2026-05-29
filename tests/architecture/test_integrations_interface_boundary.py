@@ -8,19 +8,9 @@ ROOT = Path(__file__).resolve().parents[2]
 INTEGRATIONS_ROOT = ROOT / "javdb" / "integrations"
 APPS_CLI_ROOT = ROOT / "apps" / "cli"
 
-INTEGRATION_CLI_SURFACE_ALLOWLIST = {
-    "javdb/integrations/notify/email/_legacy.py": {
-        "argparse_import",
-        "parse_arguments",
-        "main",
-        "dunder_main",
-        "sys_exit",
-    },
-}
+INTEGRATION_CLI_SURFACE_ALLOWLIST: dict[str, set[str]] = {}
 
-APPS_CLI_INTEGRATION_ALIAS_ALLOWLIST = {
-    "apps/cli/notify/email.py",
-}
+APPS_CLI_INTEGRATION_ALIAS_ALLOWLIST: set[str] = set()
 
 
 def _python_files(root: Path) -> list[Path]:
