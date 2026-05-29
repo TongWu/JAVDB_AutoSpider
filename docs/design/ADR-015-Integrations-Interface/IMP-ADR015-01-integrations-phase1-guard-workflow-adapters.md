@@ -57,12 +57,14 @@ INTEGRATION_CLI_SURFACE_ALLOWLIST = {
         "parse_arguments",
         "main",
         "dunder_main",
+        "sys_exit",
     },
     "javdb/integrations/qb/file_filter.py": {
         "argparse_import",
         "parse_arguments",
         "main",
         "dunder_main",
+        "sys_exit",
     },
     "javdb/integrations/pikpak/bridge.py": {
         "argparse_import",
@@ -75,12 +77,14 @@ INTEGRATION_CLI_SURFACE_ALLOWLIST = {
         "main",
         "dunder_main",
         "argparse_namespace_annotation",
+        "sys_exit",
     },
     "javdb/integrations/notify/email.py": {
         "argparse_import",
         "parse_arguments",
         "main",
         "dunder_main",
+        "sys_exit",
     },
 }
 
@@ -192,6 +196,8 @@ def _assigns_to_sys_modules_dunder_name(tree: ast.AST) -> bool:
             if target.value.value.id != "sys":
                 continue
             key = target.slice
+            if isinstance(key, ast.Name) and key.id == "__name__":
+                return True
             if isinstance(key, ast.Constant) and key.value == "__name__":
                 return True
     return False
@@ -534,25 +540,25 @@ def _use_sqlite() -> bool:
 
 
 def _init_db() -> None:
-    from javdb.storage.db.db_migrations import init_db
+    from javdb.storage.db import init_db
 
     init_db()
 
 
 def _current_backend() -> str:
-    from javdb.storage.db.db_connection import current_backend
+    from javdb.storage.db import current_backend
 
     return current_backend()
 
 
 def _db_save_uploader_stats(session_id: str, payload: dict[str, Any]) -> None:
-    from javdb.storage.db.db_stats import db_save_uploader_stats
+    from javdb.storage.db import db_save_uploader_stats
 
     db_save_uploader_stats(session_id, payload)
 
 
 def _db_save_pikpak_stats(session_id: str, payload: dict[str, Any]) -> None:
-    from javdb.storage.db.db_stats import db_save_pikpak_stats
+    from javdb.storage.db import db_save_pikpak_stats
 
     db_save_pikpak_stats(session_id, payload)
 
