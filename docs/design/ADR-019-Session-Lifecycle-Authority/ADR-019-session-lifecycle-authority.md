@@ -2,7 +2,7 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Proposed                                                              |
+| **Status**  | Accepted — Phase 1 implemented 2026-05-29; Phase 2 (CommitPipeline) deferred |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
 | **Related** | [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md) (Repo pattern, pending-mode commit/rollback), [ADR-012](../_archive/ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md) (run boundary) |
@@ -99,3 +99,4 @@ failed    → committed ── ILLEGAL → raise IllegalTransition
 ## Status Log
 
 - 2026-05-29: Proposed (from architecture review Candidate E grilling).
+- 2026-05-29: Phase 1 implemented & verified ([IMP-ADR019-01](IMP-ADR019-01-session-lifecycle.md)) — `SessionLifecycle` authority + all status writes rerouted; `committed→failed` / `failed→committed` now raise. Phase 2 (CommitPipeline) deferred pending production verification.

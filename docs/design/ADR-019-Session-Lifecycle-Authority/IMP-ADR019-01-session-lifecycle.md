@@ -10,7 +10,7 @@
 
 **Related:** [ADR-019](ADR-019-session-lifecycle-authority.md)
 
-**Status:** Proposed
+**Status:** Completed — implemented and verified on 2026-05-29 (commits `e3edd774` module + tests, `4fa58171` reroute, `c623e1a3` review nits; full storage/rollback/rclone/lifecycle suite green; `committed→failed` now provably blocked).
 
 ---
 
@@ -159,6 +159,12 @@ def transition(session_id: str, to: str, *, db_path: Optional[str] = None, reaso
 - [ ] Update this IMP's `Status` to `Completed` and check off `IMP-ADR019-01` in the ADR roadmap.
 
 ---
+
+## Implementation notes (discovered during Phase 1, accepted)
+
+- **+1 `get_state` read per status flip.** Routing through `transition` adds an indexed single-row `SELECT ReportSessions` before each dispatch (≈ +2 reads per commit, +1 per rclone flip). A conscious trade of a cheap read for centralized legality; acceptable at this scale.
+- **`failed→failed` no longer re-writes `FailureReason`.** The old `db_mark_session_failed` ran an unconditional `UPDATE`; `transition` treats same-state as an idempotent no-op (returns 0). So re-rolling-back an already-`failed` session keeps the *first* failure reason (canonical) rather than overwriting it. Marginal, and arguably better.
+- **`commit.py` `failed→committed` now raises** instead of silently flipping — the intended ADR-019 corruption refusal. The committed/failed terminal states are unreachable as commit sources in normal flow; the raise is a backstop.
 
 ## Out of scope
 
