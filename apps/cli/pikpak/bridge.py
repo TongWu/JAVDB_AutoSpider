@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+# Establish repo-root cwd BEFORE importing the integration package: its __init__
+# imports the service whose module-level setup_logging()/cfg() must run at repo root.
+os.chdir(REPO_ROOT)
 
 from javdb.integrations.pikpak.bridge.options import PikPakBridgeOptions
 from javdb.integrations.pikpak.bridge.service import run_bridge
 from javdb.proxy.policy import add_proxy_arguments, resolve_proxy_override
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -43,9 +47,6 @@ def options_from_args(args: argparse.Namespace) -> PikPakBridgeOptions:
 
 
 def main(argv: list[str] | None = None) -> int:
-    import os
-
-    os.chdir(REPO_ROOT)
     # Preserve the legacy CLI lifecycle: ensure the DB connection is closed at
     # process exit (the former bridge.main() registered this).
     import atexit

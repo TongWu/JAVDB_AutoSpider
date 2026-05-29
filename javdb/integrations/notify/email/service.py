@@ -276,9 +276,13 @@ def run_email_notification(
         session_start_time = None
         if _sid is not None:
             try:
-                from javdb.storage.db import get_db, REPORTS_DB_PATH
+                # Email stats are intentionally sqlite-local (must not paper over
+                # D1 lag), and SessionsRepo requires a raw sqlite3.Connection, so
+                # use get_local_sqlite_db (always local SQLite, never D1) rather
+                # than the backend-routing get_db().
+                from javdb.storage.db import get_local_sqlite_db, REPORTS_DB_PATH
                 from javdb.storage.repos.sessions_repo import SessionsRepo
-                with get_db(REPORTS_DB_PATH) as _conn:
+                with get_local_sqlite_db(REPORTS_DB_PATH) as _conn:
                     _row = SessionsRepo(_conn).get(_sid)
                     if _row is not None:
                         session_start_time = _row.created_at

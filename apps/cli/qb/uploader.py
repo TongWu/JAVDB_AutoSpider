@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+# Establish repo-root cwd BEFORE importing the integration package: importing any
+# submodule runs the package __init__, which imports the service whose
+# module-level setup_logging()/cfg() must run with cwd == repo root.
+os.chdir(REPO_ROOT)
 
 from javdb.integrations.qb.uploader.options import QbUploaderOptions
 from javdb.integrations.qb.uploader.service import run_uploader
 from javdb.proxy.policy import add_proxy_arguments, resolve_proxy_override
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -37,9 +42,6 @@ def options_from_args(args: argparse.Namespace) -> QbUploaderOptions:
 
 
 def main(argv: list[str] | None = None) -> int:
-    import os
-
-    os.chdir(REPO_ROOT)
     return run_uploader(options_from_args(parse_args(argv))).exit_code
 
 
