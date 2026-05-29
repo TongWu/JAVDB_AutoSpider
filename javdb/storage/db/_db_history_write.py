@@ -26,7 +26,6 @@ _REPORTS_DB_PATH = None
 _generate_session_id = None
 _get_active_run_identity = None
 _SESSION_ID_PATTERN = None
-_resolve_session_id = None
 _get_active_write_mode = None
 _execute_backend_batch = None
 _movie_href_lookup_values = None
@@ -42,7 +41,7 @@ def _ensure_imports():
     """Lazy import to avoid circular dependency."""
     global _get_db, _HISTORY_DB_PATH, _REPORTS_DB_PATH, _generate_session_id
     global _get_active_run_identity, _SESSION_ID_PATTERN
-    global _resolve_session_id, _get_active_write_mode
+    global _get_active_write_mode
     global _execute_backend_batch
     global _movie_href_lookup_values, _javdb_absolute_url
     global _absolutize_supporting_actors_json
@@ -59,7 +58,6 @@ def _ensure_imports():
             generate_session_id,
             get_active_run_identity,
             SESSION_ID_PATTERN,
-            _resolve_session_id as rsi,
             get_active_write_mode,
         )
         from javdb.parsing.common import (
@@ -79,7 +77,6 @@ def _ensure_imports():
         _generate_session_id = generate_session_id
         _get_active_run_identity = get_active_run_identity
         _SESSION_ID_PATTERN = SESSION_ID_PATTERN
-        _resolve_session_id = rsi
         _get_active_write_mode = get_active_write_mode
         _execute_backend_batch = ebb
         _movie_href_lookup_values = movie_href_lookup_values
@@ -334,9 +331,8 @@ def _upsert_one_history_on_conn(
     """Per-row upsert body, factored out so a batch caller can reuse one
     connection across many rows without re-opening / re-committing per row.
 
-    ``session_id`` here is the already-resolved value (not the sentinel) —
-    callers must run it through :func:`_resolve_session_id` first so the
-    batch wrapper does not pay that resolution cost N times.
+    ``session_id`` here is the required, explicit value (no sentinel/global
+    fallback) — callers pass it directly.
     """
     _ensure_imports()
     base_url = cfg('BASE_URL', 'https://javdb.com')
