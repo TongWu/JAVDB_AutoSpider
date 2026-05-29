@@ -186,7 +186,8 @@ class TestPikpakBridgeLogic:
     """Test cases for pikpak_bridge function logic."""
 
     def test_clears_active_session_id_after_impl_returns(self, monkeypatch):
-        import apps.cli.pikpak.bridge as pikpak_mod
+        import javdb.integrations.pikpak.bridge as pikpak_mod
+        import javdb.integrations.pikpak.bridge.service as pikpak_service
         import javdb.storage.db._db_session as db_sess
 
         def fake_impl(*_args, **_kwargs):
@@ -194,7 +195,7 @@ class TestPikpakBridgeLogic:
             return "done"
 
         db_sess.set_active_session_id(999)
-        monkeypatch.setattr(pikpak_mod, "_pikpak_bridge_impl", fake_impl)
+        monkeypatch.setattr(pikpak_service, "_pikpak_bridge_impl", fake_impl)
 
         assert pikpak_mod.pikpak_bridge(
             3, True, session_id=42, root_folder="/root",
@@ -422,7 +423,7 @@ class TestProcessPikpakBatchRouting:
         fake_client.offline_download = AsyncMock(return_value={'task': {'id': 't1'}})
 
         with patch(
-            'javdb.integrations.pikpak.bridge.PikPakApi',
+            'javdb.integrations.pikpak.bridge.service.PikPakApi',
             return_value=fake_client,
         ):
             success, failed = asyncio.run(
@@ -460,7 +461,7 @@ class TestProcessPikpakBatchRouting:
         fake_client.offline_download = AsyncMock(return_value={'task': {'id': 't1'}})
 
         with patch(
-            'javdb.integrations.pikpak.bridge.PikPakApi',
+            'javdb.integrations.pikpak.bridge.service.PikPakApi',
             return_value=fake_client,
         ):
             success, failed = asyncio.run(
@@ -498,7 +499,7 @@ class TestProcessPikpakBatchRouting:
         fake_client.offline_download = AsyncMock(return_value={'task': {'id': 't1'}})
 
         with patch(
-            'javdb.integrations.pikpak.bridge.PikPakApi',
+            'javdb.integrations.pikpak.bridge.service.PikPakApi',
             return_value=fake_client,
         ):
             success, failed = asyncio.run(

@@ -1,21 +1,22 @@
-import csv
 import requests
 import logging
 from datetime import datetime
 import time
 import os
-import argparse
 import sys
 from pathlib import Path
 from urllib.parse import urlsplit
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = Path(__file__).resolve().parents[4]
 os.chdir(REPO_ROOT)
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 # Import unified configuration
 from javdb.infra.config import cfg
+
+from javdb.integrations.qb.uploader.options import QbUploaderOptions
+from javdb.integrations.qb.uploader.result import QbUploaderResult
 
 QB_HOST = cfg('QB_HOST', 'your_qbittorrent_ip')
 QB_PORT = cfg('QB_PORT', 'your_qbittorrent_port')
@@ -57,9 +58,7 @@ except ImportError:
 # Import path helper for dated subdirectories
 from javdb.infra.paths import get_dated_report_path, get_dated_subdir, find_latest_report_in_dated_dirs
 from javdb.proxy.policy import (
-    add_proxy_arguments,
     describe_proxy_override,
-    resolve_proxy_override,
     should_proxy_module,
 )
 
@@ -68,8 +67,17 @@ from javdb.infra.logging import setup_logging, get_logger
 setup_logging(UPLOADER_LOG_FILE, LOG_LEVEL)
 logger = get_logger(__name__)
 
-# Import git helper
-from javdb.infra.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
+# Workflow adapters (IMP-ADR015-01)
+from javdb.workflow.artifact_inputs import (
+    resolve_qb_uploader_csv_path,
+    read_torrent_csv,
+)
+from javdb.workflow.stats_sink import UploaderStats, save_uploader_stats
+from javdb.workflow.git_side_effects import GitCommitRequest, commit_workflow_outputs
+
+# ``has_git_credentials`` mirrors the legacy "Committing…/Skipping…" log gate;
+# the actual commit + flush is handled by ``commit_workflow_outputs``.
+from javdb.infra.git_helper import has_git_credentials
 
 # Import masking utilities
 from javdb.infra.masking import mask_error, mask_username
@@ -128,51 +136,37 @@ def _ordered_qb_base_urls():
             ordered.append(candidate)
     return ordered
 
-def parse_arguments():
-    parser = argparse.ArgumentParser(description='qBittorrent Uploader')
-    parser.add_argument('--mode', choices=['adhoc', 'daily'], default='daily', help='Upload mode: adhoc (Ad Hoc folder) or daily (Daily Report folder)')
-    parser.add_argument('--input-file', type=str, help='Specify input CSV file name (overrides default date-based name)')
-    add_proxy_arguments(
-        parser,
-        use_help='Force-enable proxy for qBittorrent API requests',
-        no_help='Force-disable proxy for qBittorrent API requests',
-    )
-    parser.add_argument('--from-pipeline', action='store_true', help='Running from pipeline.py - use GIT_USERNAME for commits')
-    parser.add_argument('--category', type=str, help='Override qBittorrent category (defaults to TORRENT_CATEGORY_ADHOC for adhoc mode, TORRENT_CATEGORY for daily mode)')
-    parser.add_argument('--session-id', type=str, default=None, help='Report session ID for saving uploader stats to SQLite')
-    return parser.parse_args()
-
 
 def get_proxies_dict(module_name, use_proxy_flag):
     """
     Get proxies dictionary for requests if module should use proxy.
     Delegated to global_proxy_helper.
-    
+
     Args:
         module_name: Name of the module
         use_proxy_flag: Whether --use-proxy flag is enabled
-    
+
     Returns:
         dict or None: Proxies dictionary for requests, or None
     """
     if global_proxy_helper is None:
         logger.warning(f"[{module_name}] Proxy helper not initialized")
         return None
-    
+
     return global_proxy_helper.get_proxies_dict(module_name, use_proxy_flag)
 
 def find_latest_adhoc_csv():
     """
     Find the most recently created/modified AdHoc CSV file.
-    
+
     This function handles the case where spider generates a custom-named CSV file
     (e.g., Javdb_AdHoc_actors_森日向子_20251224.csv) and qb_uploader needs to find it.
-    
-    Note: This function uses wildcard patterns (not date-specific) to handle 
-    cross-midnight scenarios where spider runs before midnight but qb_uploader 
-    runs after midnight. It relies on file modification time to find the most 
+
+    Note: This function uses wildcard patterns (not date-specific) to handle
+    cross-midnight scenarios where spider runs before midnight but qb_uploader
+    runs after midnight. It relies on file modification time to find the most
     recent file.
-    
+
     Returns:
         str or None: Path to the most recent AdHoc CSV file, or None if not found
     """
@@ -181,12 +175,12 @@ def find_latest_adhoc_csv():
     # This handles cross-midnight scenarios where spider generates file on day N
     # but qb_uploader runs on day N+1
     adhoc_pattern = 'Javdb_AdHoc_*.csv'
-    
+
     latest_file = find_latest_report_in_dated_dirs(AD_HOC_DIR, adhoc_pattern)
-    
+
     if latest_file:
         return latest_file
-    
+
     # Fallback: try to find any CSV file (legacy pattern)
     legacy_pattern = 'Javdb_*.csv'
     return find_latest_report_in_dated_dirs(AD_HOC_DIR, legacy_pattern)
@@ -195,41 +189,41 @@ def find_latest_adhoc_csv():
 def find_latest_daily_csv():
     """
     Find the most recently created/modified Daily CSV file.
-    
-    This function uses wildcard patterns (not date-specific) to handle 
-    cross-midnight scenarios where spider runs before midnight but qb_uploader 
-    runs after midnight. It relies on file modification time to find the most 
+
+    This function uses wildcard patterns (not date-specific) to handle
+    cross-midnight scenarios where spider runs before midnight but qb_uploader
+    runs after midnight. It relies on file modification time to find the most
     recent file.
-    
+
     Returns:
         str or None: Path to the most recent Daily CSV file, or None if not found
     """
     # Use wildcard pattern to find the most recent Daily CSV file
     # Pattern: Javdb_TodayTitle_*.csv (any date)
     daily_pattern = 'Javdb_TodayTitle_*.csv'
-    
+
     return find_latest_report_in_dated_dirs(DAILY_REPORT_DIR, daily_pattern)
 
 
 def get_csv_filename(mode='daily'):
     """
     Get the CSV filename for the specified mode with dated subdirectory (YYYY/MM).
-    
+
     This function auto-discovers the most recent CSV file using wildcard patterns,
     which handles cross-midnight scenarios where spider runs before midnight but
     qb_uploader runs after midnight.
-    
+
     For adhoc mode: looks for Javdb_AdHoc_*.csv files
     For daily mode: looks for Javdb_TodayTitle_*.csv files
-    
+
     Args:
         mode: 'daily' or 'adhoc'
-    
+
     Returns:
         str: Path to the CSV file (auto-discovered or fallback to date-based naming)
     """
     current_date = datetime.now().strftime("%Y%m%d")
-    
+
     if mode == 'adhoc':
         # Try to auto-discover the latest adhoc CSV
         latest_adhoc = find_latest_adhoc_csv()
@@ -406,74 +400,73 @@ def read_csv_file(filename):
     """
     torrents = []
     skipped_count = 0
-    
-    if not os.path.exists(filename):
+
+    # Delegate the raw row read to the workflow adapter so CSV resolution and
+    # reading share one implementation across the workflow. ``read_torrent_csv``
+    # returns ``([], False)`` when the file is missing and ``(partial, False)``
+    # when an exception is raised mid-read; both map to the legacy ok=False.
+    rows, ok = read_torrent_csv(filename)
+
+    if not ok and not rows:
         logger.error(f"CSV file not found: {filename}")
         logger.info("Make sure you have run the spider script first to generate the CSV file")
         return torrents, False  # Return tuple indicating file not found
-    
-    try:
-        with open(filename, 'r', encoding='utf-8-sig') as f:
-            reader = csv.DictReader(f)
-            
-            # Iterate over the four torrent columns per row.  The earlier
-            # implementation used per-column ``continue`` inside this for-loop,
-            # which short-circuited the *remaining* columns whenever the first
-            # populated column was already-downloaded — so a row that had
-            # ``hacked_subtitle`` (downloaded) plus ``subtitle`` (not
-            # downloaded) silently dropped the second torrent.  Iterating over
-            # a tuple of (column, label, type) lets per-column skip stay local.
-            torrent_columns = (
-                ('hacked_subtitle', 'Hacked+Subtitle', 'hacked_subtitle'),
-                ('hacked_no_subtitle', 'Hacked-NoSubtitle', 'hacked_no_subtitle'),
-                ('subtitle', 'Subtitle', 'subtitle'),
-                ('no_subtitle', 'NoSubtitle', 'no_subtitle'),
-            )
-            for row in reader:
-                href = row.get('href', '')
-                video_code = row.get('video_code', '')
 
-                for col, label, ttype in torrent_columns:
-                    raw = row.get(col)
-                    if not raw:
-                        continue
-                    magnet = raw.strip()
-                    if not magnet:
-                        continue
-                    if is_downloaded_torrent(magnet):
-                        logger.debug(
-                            f"Skipping downloaded torrent: {video_code} [{label}]"
-                        )
-                        skipped_count += 1
-                        continue
-                    torrents.append({
-                        'magnet': magnet,
-                        'title': f"{video_code} [{label}]",
-                        'page': row.get('page', 'N/A'),
-                        'type': ttype,
-                        'href': href,
-                        'video_code': video_code,
-                    })
-        
-        logger.info(f"Found {len(torrents)} torrent links in {filename}")
-        if skipped_count > 0:
-            logger.info(f"Skipped {skipped_count} already downloaded torrents")
-        return torrents, True  # File exists
-        
-    except Exception as e:
-        # P1: previously returned ``(torrents, True)`` here, which lied
-        # to the caller — partial CSV reads were silently treated as
-        # "file exists, here are the rows" and the uploader proceeded
-        # with whatever subset had parsed before the exception. Surface
-        # the failure as ``(partial_rows, False)`` so the workflow can
-        # fail-fast and the operator can re-fetch the upstream CSV.
-        logger.error(f"Error reading CSV file: {e}")
+    # Iterate over the four torrent columns per row.  The earlier
+    # implementation used per-column ``continue`` inside this for-loop,
+    # which short-circuited the *remaining* columns whenever the first
+    # populated column was already-downloaded — so a row that had
+    # ``hacked_subtitle`` (downloaded) plus ``subtitle`` (not
+    # downloaded) silently dropped the second torrent.  Iterating over
+    # a tuple of (column, label, type) lets per-column skip stay local.
+    torrent_columns = (
+        ('hacked_subtitle', 'Hacked+Subtitle', 'hacked_subtitle'),
+        ('hacked_no_subtitle', 'Hacked-NoSubtitle', 'hacked_no_subtitle'),
+        ('subtitle', 'Subtitle', 'subtitle'),
+        ('no_subtitle', 'NoSubtitle', 'no_subtitle'),
+    )
+    for row in rows:
+        href = row.get('href', '')
+        video_code = row.get('video_code', '')
+
+        for col, label, ttype in torrent_columns:
+            raw = row.get(col)
+            if not raw:
+                continue
+            magnet = raw.strip()
+            if not magnet:
+                continue
+            if is_downloaded_torrent(magnet):
+                logger.debug(
+                    f"Skipping downloaded torrent: {video_code} [{label}]"
+                )
+                skipped_count += 1
+                continue
+            torrents.append({
+                'magnet': magnet,
+                'title': f"{video_code} [{label}]",
+                'page': row.get('page', 'N/A'),
+                'type': ttype,
+                'href': href,
+                'video_code': video_code,
+            })
+
+    if not ok:
+        # P1: partial CSV reads (file existed but read raised) surface as
+        # ``(partial_rows, False)`` so the workflow can fail-fast and the
+        # operator can re-fetch the upstream CSV.
+        logger.error("Error reading CSV file: read did not complete")
         return torrents, False
+
+    logger.info(f"Found {len(torrents)} torrent links in {filename}")
+    if skipped_count > 0:
+        logger.info(f"Skipped {skipped_count} already downloaded torrents")
+    return torrents, True  # File exists
 
 def initialize_proxy_helper(proxy_override):
     """Initialize global proxy pool and proxy helper."""
     global global_proxy_pool, global_proxy_helper
-    
+
     if proxy_override is False:
         global_proxy_pool = None
         # When use_proxy=False, don't pass proxy configs to ensure no proxy is used
@@ -485,7 +478,7 @@ def initialize_proxy_helper(proxy_override):
             proxy_https=None
         )
         return
-    
+
     # Check if we have PROXY_POOL configuration
     if PROXY_POOL and len(PROXY_POOL) > 0:
         if PROXY_MODE == 'pool':
@@ -516,7 +509,7 @@ def initialize_proxy_helper(proxy_override):
     else:
         logger.warning("Proxy enabled but no proxy configuration found")
         global_proxy_pool = None
-    
+
     # Create proxy helper with the initialized pool
     global_proxy_helper = create_proxy_helper_from_config(
         proxy_pool=global_proxy_pool,
@@ -528,30 +521,35 @@ def initialize_proxy_helper(proxy_override):
     logger.info("Proxy helper initialized successfully")
 
 
-def main():
+def run_uploader(options: QbUploaderOptions) -> QbUploaderResult:
+    """Upload torrents from a resolved CSV into qBittorrent.
+
+    Behaviour-preserving extraction of the former ``main()`` flow. Instead of
+    calling ``sys.exit`` it returns a :class:`QbUploaderResult` whose
+    ``exit_code`` reproduces the original CLI return codes.
+    """
     import atexit
     from javdb.storage.db import close_db
     atexit.register(close_db)
 
-    args = parse_arguments()
-    mode = args.mode
-    proxy_override = resolve_proxy_override(args.use_proxy, args.no_proxy)
+    mode = options.mode
+    proxy_override = options.proxy_override
     use_proxy = proxy_override
     proxy_active = should_proxy_module('qbittorrent', proxy_override, PROXY_MODULES, proxy_mode=PROXY_MODE)
-    category_override = args.category
+    category_override = options.category
     logger.info("Starting qBittorrent uploader...")
     if category_override:
         logger.info(f"Using custom category: {category_override}")
-    
+
     # Initialize proxy helper
     initialize_proxy_helper(proxy_override)
-    
+
     logger.info(f"Proxy policy for qBittorrent: {describe_proxy_override(proxy_override)}")
 
     if proxy_active:
         if global_proxy_helper is not None:
             stats = global_proxy_helper.get_statistics()
-            
+
             if PROXY_MODE == 'pool':
                 logger.info(f"PROXY POOL MODE for qBittorrent: {stats['total_proxies']} proxies with automatic failover")
             elif PROXY_MODE == 'single':
@@ -563,32 +561,36 @@ def main():
             logger.warning("PROXY ENABLED: But no proxy configured")
     else:
         logger.info("Proxy disabled for qBittorrent requests")
-    
+
     # Test qBittorrent connection first
     if not test_qbittorrent_connection(use_proxy):
         logger.error("Cannot connect to qBittorrent. Please check:")
         logger.error("1. qBittorrent is running")
         logger.error("2. Web UI is enabled")
         logger.error("3. Host and port settings in config.py")
-        sys.exit(1)
-    
-    # Get CSV filename
-    if args.input_file:
-        # Check if input_file is already a full path (contains directory separator)
-        if os.path.sep in args.input_file or args.input_file.startswith('reports'):
-            # Already a full path, use as-is
-            csv_filename = args.input_file
-        else:
-            # Just a filename, build full path with dated subdirectory
-            if mode == 'adhoc':
-                csv_filename = get_dated_report_path(AD_HOC_DIR, args.input_file)
-            else:
-                csv_filename = get_dated_report_path(DAILY_REPORT_DIR, args.input_file)
-        logger.info(f"Using specified input file: {csv_filename}")
-    else:
+        return QbUploaderResult(error_reason="qb-unreachable")
+
+    # Get CSV filename via the shared workflow resolver. The explicit-path /
+    # explicit-name branches map 1:1 onto the legacy ``--input-file`` handling;
+    # for the "latest" branch we defer to ``get_csv_filename`` which carries the
+    # auto-discovery + fallback logging and the date-based fallback path that
+    # the adapter intentionally leaves out.
+    resolution = resolve_qb_uploader_csv_path(
+        mode=mode,
+        input_file=options.input_file,
+        daily_report_dir=DAILY_REPORT_DIR,
+        adhoc_dir=AD_HOC_DIR,
+        dated_path_resolver=get_dated_report_path,
+        latest_daily_finder=find_latest_daily_csv,
+        latest_adhoc_finder=find_latest_adhoc_csv,
+    )
+    if resolution.source == "latest":
         csv_filename = get_csv_filename(mode)
         logger.info(f"Looking for CSV file: {csv_filename}")
-    
+    else:
+        csv_filename = resolution.path
+        logger.info(f"Using specified input file: {csv_filename}")
+
     # Read torrent links from CSV. P1: ``csv_ok`` is False for both
     # "file not found" and "file existed but read raised" — the second
     # case used to be silently swallowed and the partial subset was
@@ -605,24 +607,24 @@ def main():
             "Re-run the spider step that produces this CSV, or supply "
             "--csv-input with a known-good copy."
         )
-        sys.exit(1)
-    
+        return QbUploaderResult(csv_path=csv_filename, csv_ok=False)
+
     if not torrents:
         logger.warning("No torrent links found in CSV file")
         # File exists but no torrents to add - this is not an error, just no work to do
-        return
-    
+        return QbUploaderResult(csv_path=csv_filename, csv_ok=True)
+
     # Create session for qBittorrent
     session = requests.Session()
-    
+
     # Login to qBittorrent
     if not login_to_qbittorrent(session, use_proxy):
         logger.error("Failed to login to qBittorrent. Please check username and password.")
-        sys.exit(1)
-    
+        return QbUploaderResult(csv_path=csv_filename, error_reason="qb-login-failed")
+
     # Get existing torrents to check for duplicates
     existing_hashes = get_existing_torrents(session, use_proxy)
-    
+
     # Add torrents to qBittorrent
     hacked_subtitle_count = 0
     hacked_no_subtitle_count = 0
@@ -631,21 +633,21 @@ def main():
     failed_count = 0
     duplicate_count = 0
     total_torrents = len(torrents)
-    
+
     logger.info(f"Starting to add {total_torrents} torrents to qBittorrent...")
-    
+
     for i, torrent in enumerate(torrents, 1):
         # Check if torrent already exists in qBittorrent
         if is_torrent_exists(torrent['magnet'], existing_hashes):
             logger.info(f"[{i}/{total_torrents}] Skipping (already in qBittorrent): {torrent['title']}")
             duplicate_count += 1
             continue
-        
+
         logger.info(f"[{i}/{total_torrents}] Adding: {torrent['title']}")
-        
+
         success = add_torrent_to_qbittorrent(session, torrent['magnet'], torrent['title'], mode, use_proxy, category_override)
-        
-        if success:            
+
+        if success:
             if torrent['type'] == 'hacked_subtitle':
                 hacked_subtitle_count += 1
             elif torrent['type'] == 'hacked_no_subtitle':
@@ -654,21 +656,21 @@ def main():
                 subtitle_count += 1
             elif torrent['type'] == 'no_subtitle':
                 no_subtitle_count += 1
-            
+
             # Add newly added torrent hash to existing set to avoid re-adding in same session
             new_hash = extract_hash_from_magnet(torrent['magnet'])
             if new_hash:
                 existing_hashes.add(new_hash)
         else:
             failed_count += 1
-        
+
         # Small delay between additions
         time.sleep(DELAY_BETWEEN_ADDITIONS)
-    
+
     # Generate summary
     successfully_added = hacked_subtitle_count + hacked_no_subtitle_count + subtitle_count + no_subtitle_count
     attempted = total_torrents - duplicate_count
-    
+
     logger.info("=" * 50)
     logger.info("UPLOAD SUMMARY")
     logger.info("=" * 50)
@@ -689,58 +691,66 @@ def main():
     logger.info("=" * 50)
 
     # Save uploader stats to SQLite if session_id provided
-    _session_id = getattr(args, 'session_id', None)
+    _session_id = options.session_id
     if _session_id:
-        try:
-            from javdb.infra.config import use_sqlite as _use_sqlite
-            if _use_sqlite():
-                from javdb.storage.db import init_db, db_save_uploader_stats
-                init_db()
-                _rate = (successfully_added / attempted * 100) if attempted > 0 else 0.0
-                db_save_uploader_stats(_session_id, {
-                    'total_torrents': total_torrents,
-                    'duplicate_count': duplicate_count,
-                    'attempted': attempted,
-                    'successfully_added': successfully_added,
-                    'failed_count': failed_count,
-                    'hacked_sub': hacked_subtitle_count,
-                    'hacked_nosub': hacked_no_subtitle_count,
-                    'subtitle_count': subtitle_count,
-                    'no_subtitle_count': no_subtitle_count,
-                    'success_rate': _rate,
-                })
-                from javdb.storage.db import current_backend
-                logger.info(f"Uploader stats saved to {current_backend()} backend (session_id={_session_id})")
-        except Exception as e:
-            logger.warning(f"Failed to save uploader stats to db backend: {e}")
+        _rate = (successfully_added / attempted * 100) if attempted > 0 else 0.0
+        sink = save_uploader_stats(_session_id, UploaderStats(
+            total_torrents=total_torrents,
+            duplicate_count=duplicate_count,
+            attempted=attempted,
+            successfully_added=successfully_added,
+            failed_count=failed_count,
+            hacked_sub=hacked_subtitle_count,
+            hacked_nosub=hacked_no_subtitle_count,
+            subtitle_count=subtitle_count,
+            no_subtitle_count=no_subtitle_count,
+            success_rate=_rate,
+        ))
+        if sink.saved:
+            logger.info(f"Uploader stats saved to {sink.backend} backend (session_id={_session_id})")
+        elif sink.error:
+            logger.warning(f"Failed to save uploader stats to db backend: {sink.error}")
 
-    # Git commit uploader results (only if credentials are available)
-    from_pipeline = args.from_pipeline if hasattr(args, 'from_pipeline') else False
-    
+    # Git commit uploader results (only if credentials are available).
+    # ``commit_workflow_outputs`` re-checks credentials and flushes log
+    # handlers internally before committing; we mirror the legacy log lines
+    # (the "Committing…" notice is emitted *before* the commit so it lands in
+    # the flushed-and-committed log).
+    from_pipeline = options.from_pipeline
+
     if has_git_credentials(GIT_USERNAME, GIT_PASSWORD):
         logger.info("Committing uploader results...")
-        # Flush log handlers to ensure all logs are written before commit
-        flush_log_handlers()
-        
-        files_to_commit = ['logs/']
-        commit_message = f"Auto-commit: Uploader results {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-        
-        git_commit_and_push(
-            files_to_add=files_to_commit,
-            commit_message=commit_message,
-            from_pipeline=from_pipeline,
-            git_username=GIT_USERNAME,
-            git_password=GIT_PASSWORD,
-            git_repo_url=GIT_REPO_URL,
-            git_branch=GIT_BRANCH
-        )
     else:
         logger.info("Skipping git commit - no credentials provided (commit will be handled by workflow)")
-    
-    # Exit with error code if all torrent additions failed (when there were attempts)
+
+    commit_message = f"Auto-commit: Uploader results {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    commit_workflow_outputs(GitCommitRequest(
+        files_to_add=['logs/'],
+        commit_message=commit_message,
+        from_pipeline=from_pipeline,
+        git_username=GIT_USERNAME,
+        git_password=GIT_PASSWORD,
+        git_repo_url=GIT_REPO_URL,
+        git_branch=GIT_BRANCH,
+    ))
+
+    result = QbUploaderResult(
+        total_torrents=total_torrents,
+        duplicate_count=duplicate_count,
+        attempted=attempted,
+        successfully_added=successfully_added,
+        failed_count=failed_count,
+        hacked_subtitle_count=hacked_subtitle_count,
+        hacked_no_subtitle_count=hacked_no_subtitle_count,
+        subtitle_count=subtitle_count,
+        no_subtitle_count=no_subtitle_count,
+        csv_path=csv_filename,
+        csv_ok=True,
+    )
+
+    # Log error if all torrent additions failed (when there were attempts);
+    # the exit code is carried by ``result.exit_code``.
     if attempted > 0 and successfully_added == 0:
         logger.error("All torrent additions failed!")
-        sys.exit(1)
 
-if __name__ == '__main__':
-    main() 
+    return result

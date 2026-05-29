@@ -21,6 +21,7 @@
 | `javdb/integrations/rclone/manager/__init__.py` | Remove bake wrapper exports. |
 | `javdb/integrations/rclone/manager/_legacy.py` | Delete after remaining implementation has moved into service/private helpers. |
 | `javdb/integrations/rclone/manager/service.py` | Own final manager orchestration. |
+| `apps/cli/rclone/manager.py` | Remove the Phase 4 bake re-export block; keep the real adapter (`parse_args`/`options_from_args`/`main`). |
 | `tests/architecture/test_integrations_interface_boundary.py` | Remove rclone allowlist entries. |
 | `tests/unit/test_rclone_manager.py` | Update imports and monkeypatch targets. |
 | `apps/cli/rclone/README.md` | Remove bake wrapper note. |
@@ -52,6 +53,39 @@ are used only by `run_manager`.
 Keep reusable non-CLI functions in focused modules or re-export them explicitly
 from `__init__.py` only when tests or production callers still use them.
 
+> **Implementation note (move EVERYTHING non-CLI into `service.py`).** Practically,
+> `_legacy.py` is deleted in Task 2, so every non-CLI top-level symbol it defines
+> must land in `service.py`: the module constants (`RCLONE_FOLDER_PATH`,
+> `REPORTS_DIR`, `RCLONE_INVENTORY_CSV`, `DEDUP_*`, `SOFT_DELETE_*`,
+> `INVENTORY_FIELDNAMES`, `ORPHAN_REASON_SUFFIX`, `*_ORPHAN_FIELDNAMES`,
+> `_YEAR_RE`, `REPO_ROOT`), every helper (`parse_root_path`, `resolve_rclone_root`,
+> `_folder_to_row`, `_process_year`, `scan_inventory`, `export_db_to_csv`,
+> `load_inventory_as_folder_structure`, `run_report_from_inventory`,
+> `_persist_dedup_records`, `_write_*_orphan_csv`,
+> `validate_dedup_records_against_inventory`, `_list_remote_dirs_for_year`,
+> `list_remote_truth_paths`, `run_validate_inventory`, `export_dedup_history`,
+> `migrate_strip_drive_names`, `_assert_remote_drive_resolved`,
+> `resolve_latest_dedup_file`, `run_execute_from_csv`,
+> `run_execute_soft_delete_from_csv`, `run_execute_inventory_purge_from_csv`,
+> `run_rclone_manager`, `run_manager_from_options`, `_describe_mode`), and the
+> `REPO_ROOT`/`os.chdir(... )` bootstrap. `service.py` is one dir deeper than
+> `manager.py` was but SAME depth as `_legacy.py`, so keep `REPO_ROOT =
+> Path(__file__).resolve().parents[4]`.
+>
+> **CLI-surface MUST NOT come along (the guard checks `service.py` with no
+> allowlist):**
+> - Do NOT move `parse_arguments`, `main`, `_options_from_arguments`, the
+>   `if __name__ == "__main__"` block, `import argparse`, or the `sys.exit(main())`
+>   line. (Verified: `sys.exit` appears ONLY in the `__main__` block, so once it
+>   and `main()` are dropped, `service.py` has no `sys.exit`.)
+> - `_describe_mode` IS used by `run_manager_from_options` (production path), so it
+>   moves — but its current signature is `_describe_mode(args: argparse.Namespace)`.
+>   Change the annotation to `_describe_mode(options: "RcloneManagerOptions")`
+>   (it is already called with `options` and only reads mode flags that exist on
+>   both types). Leaving `argparse.Namespace` would import `argparse` into
+>   `service.py` and trip the guard's `argparse_namespace_annotation` token.
+> - After the move, `service.py` must contain no `import argparse`.
+
 ---
 
 ## Task 2: Delete CLI Surface And Bake Wrapper
@@ -62,6 +96,22 @@ from `__init__.py` only when tests or production callers still use them.
 
 - [ ] **Step 1: Replace `__init__.py` with final exports.**
 
+> **Implementation note (retained programmatic exports):** two non-CLI functions
+> have live PRODUCTION callers that import them from the package path and must
+> stay re-exported (the ADR-015 boundary explicitly allows "non-CLI helper
+> exports where intentionally retained"):
+>
+> - `run_rclone_manager` — imported by `apps/api/routers/operations.py`
+>   (`from javdb.integrations.rclone.manager import run_rclone_manager`) and
+>   patched in `tests/unit/test_operations_rclone_cleanup.py` at
+>   `javdb.integrations.rclone.manager.run_rclone_manager`.
+> - `run_execute_inventory_purge_from_csv` — imported by
+>   `javdb/migrations/tools/align_inventory_with_moviehistory.py`.
+>
+> Both now live in `service.py` (moved from `_legacy.py` in Task 1). Re-export
+> them from `__init__.py`. Dropping them breaks the REST router, the migrations
+> tool, and the operations-cleanup tests.
+
 Use:
 
 ```python
@@ -69,9 +119,19 @@ Use:
 
 from javdb.integrations.rclone.manager.options import RcloneManagerOptions
 from javdb.integrations.rclone.manager.result import RcloneManagerResult
-from javdb.integrations.rclone.manager.service import run_manager
+from javdb.integrations.rclone.manager.service import (
+    run_manager,
+    run_execute_inventory_purge_from_csv,
+    run_rclone_manager,
+)
 
-__all__ = ["RcloneManagerOptions", "RcloneManagerResult", "run_manager"]
+__all__ = [
+    "RcloneManagerOptions",
+    "RcloneManagerResult",
+    "run_manager",
+    "run_execute_inventory_purge_from_csv",
+    "run_rclone_manager",
+]
 ```
 
 - [ ] **Step 2: Delete `_legacy.py`.**
@@ -81,6 +141,17 @@ Run:
 ```bash
 git rm javdb/integrations/rclone/manager/_legacy.py
 ```
+
+- [ ] **Step 3: Remove the Phase 4 bake re-export from the CLI adapter.**
+
+Delete the temporary bake re-export block at the bottom of
+`apps/cli/rclone/manager.py` (the
+`from javdb.integrations.rclone.manager import (load_inventory_as_folder_structure, …)`
+block added in Phase 4). The adapter keeps only `parse_args`, `_parse_years`,
+`options_from_args`, `main`, and the `if __name__ == "__main__"` block, importing
+just `RcloneManagerOptions` and `run_manager`. After this, no test should import
+domain helpers from `apps.cli.rclone.manager` (Task 3 migrates them to
+`.service`). Update the adapter module docstring to drop the bake note.
 
 ---
 
@@ -176,10 +247,12 @@ Expected: no results.
 
 ```bash
 git add javdb/integrations/rclone/manager \
+        apps/cli/rclone/manager.py \
         tests/architecture/test_integrations_interface_boundary.py \
         tests/unit/test_rclone_manager.py \
         apps/cli/rclone/README.md \
-        javdb/integrations/rclone/README.md
+        javdb/integrations/rclone/README.md \
+        docs/design/ADR-015-Integrations-Interface/IMP-ADR015-05-integrations-phase5-rclone-cleanup.md
 git add -u javdb/integrations/rclone/manager/_legacy.py
 git commit -m "refactor(integrations): remove rclone manager bake wrapper"
 ```

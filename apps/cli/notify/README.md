@@ -6,12 +6,12 @@ Notification CLIs — currently just the post-pipeline email sender.
 
 | File | Purpose |
 |---|---|
-| `email.py` | Render and send the pipeline summary email (daily / adhoc / weekly modes). Aliases `javdb.integrations.notify.email`. Reads `reports/D1/pending_health_24h.json` for the Pending Mode Health Snapshot section. |
+| `email.py` | Real CLI adapter (ADR-015): owns argparse parsing + exit-code mapping, maps args to `EmailNotificationOptions`, and calls `javdb.integrations.notify.email.service.run_email_notification`. Reads `reports/D1/pending_health_24h.json` for the Pending Mode Health Snapshot section. |
 
 ## Invoked by
 
-- **`DailyIngestion.yml`** — `python3 -m apps.cli.email_notification --mode daily` (canonical: `apps.cli.notify.email`).
-- **`AdHocIngestion.yml`** — `python3 -m apps.cli.email_notification --mode adhoc`.
+- **`DailyIngestion.yml`** — `python3 -m apps.cli.notify.email --mode daily`.
+- **`AdHocIngestion.yml`** — `python3 -m apps.cli.notify.email --mode adhoc`.
 
 ## Related
 

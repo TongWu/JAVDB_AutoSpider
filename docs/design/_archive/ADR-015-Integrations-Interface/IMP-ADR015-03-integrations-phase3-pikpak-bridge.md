@@ -52,14 +52,27 @@ git mv javdb/integrations/pikpak/bridge_legacy_tmp.py javdb/integrations/pikpak/
 
 Create `javdb/integrations/pikpak/bridge/__init__.py`:
 
+> **Implementation note (deviation):** `pikpak_bridge(days, dry_run, ...)` is the
+> existing programmatic entry point consumed by the REST layer
+> (`apps/api/routers/operations.py` imports `pikpak_bridge` and
+> `tests/unit/test_operations_endpoints.py` patches
+> `javdb.integrations.pikpak.bridge.pikpak_bridge`). It MUST remain importable at
+> the package level with its current signature and the session set/clear wrapper.
+> `run_bridge(options)` is the new CLI service and is a thin wrapper that calls
+> `pikpak_bridge(...)` — it does NOT replace it. The package therefore re-exports
+> both. Domain helpers that existing tests import from the package
+> (`_build_pikpak_target_path`, `PIKPAK_ROOT_FOLDER_DEFAULT`,
+> `process_pikpak_batch`, …) either stay re-exported here or the tests are updated
+> to import them from `.service` (see Task 5).
+
 ```python
 """PikPak bridge service package."""
 
 from javdb.integrations.pikpak.bridge.options import PikPakBridgeOptions
 from javdb.integrations.pikpak.bridge.result import PikPakBridgeResult
-from javdb.integrations.pikpak.bridge.service import run_bridge
+from javdb.integrations.pikpak.bridge.service import pikpak_bridge, run_bridge
 
-__all__ = ["PikPakBridgeOptions", "PikPakBridgeResult", "run_bridge"]
+__all__ = ["PikPakBridgeOptions", "PikPakBridgeResult", "pikpak_bridge", "run_bridge"]
 ```
 
 ---
@@ -208,6 +221,13 @@ def options_from_args(args: argparse.Namespace) -> PikPakBridgeOptions:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Preserve the legacy CLI lifecycle: ensure the DB connection is closed at
+    # process exit (the former bridge.main() registered this).
+    import atexit
+
+    from javdb.storage.db import close_db
+
+    atexit.register(close_db)
     return run_bridge(options_from_args(parse_args(argv))).exit_code
 
 
@@ -225,13 +245,23 @@ if __name__ == "__main__":
 
 - [ ] **Step 1: Create `run_bridge`.**
 
-Create `javdb/integrations/pikpak/bridge/service.py` by moving the body of the
-current `pikpak_bridge` and `_pikpak_bridge_impl` orchestration into
+Create `javdb/integrations/pikpak/bridge/service.py` to hold the full former
+bridge body — `pikpak_bridge`, `_pikpak_bridge_impl`, and all domain helpers —
+**unchanged in signature/behavior**, plus a NEW thin wrapper
 `run_bridge(options: PikPakBridgeOptions) -> PikPakBridgeResult`.
 
-Use these mappings:
+> **Deviation from the original wording:** do NOT collapse `pikpak_bridge` /
+> `_pikpak_bridge_impl` into `run_bridge`. `pikpak_bridge` is the REST
+> programmatic API and must keep its exact signature + the session set/clear
+> wrapper (covered by `tests/unit/test_pikpak_bridge.py::test_clears_active_session_id_after_impl_returns`
+> and `tests/unit/test_operations_endpoints.py`). `run_bridge` simply calls
+> `pikpak_bridge(...)` and returns a `PikPakBridgeResult` (whose `exit_code` is
+> always `0`, matching the current always-exit-0 CLI behavior — `main()` never
+> called `sys.exit`).
 
-| Old parameter | New source |
+`run_bridge` maps options → the existing `pikpak_bridge` call:
+
+| `pikpak_bridge` parameter | New source |
 |---|---|
 | `days` | `options.days` |
 | `dry_run` | `options.dry_run` |
@@ -241,10 +271,23 @@ Use these mappings:
 | `session_id` | `options.session_id` |
 | `root_folder` | `options.root_folder` |
 
-Use `javdb.workflow.stats_sink.save_pikpak_stats` for stats persistence.
+Route the side effects currently embedded in `_pikpak_bridge_impl` through the
+Phase 1 workflow adapters, **keeping the existing `not dry_run` guards at the
+call sites** (the adapters do NOT know about dry-run):
 
-Use `javdb.workflow.git_side_effects.commit_workflow_outputs` for git
-commit/push.
+- Replace the inline `db_save_pikpak_stats(session_id, {...})` block with
+  `javdb.workflow.stats_sink.save_pikpak_stats(session_id, PikPakStats(...))`,
+  preserving the `if session_id and not dry_run:` guard. Field mapping:
+  `threshold_days=days`, `total_torrents=len(torrents)`,
+  `filtered_old=len(old_torrents)`, `successful_count`, `failed_count`,
+  `uploaded_count=successful_count + delete_failed_count`,
+  `delete_failed_count`. Preserve the success log line naming the backend.
+- Replace the inline `git_commit_and_push(...)` call with
+  `javdb.workflow.git_side_effects.commit_workflow_outputs(GitCommitRequest(...))`,
+  preserving the exact branching: `if not dry_run and has_git_credentials(...)`
+  → log "Committing PikPak bridge results...", flush, commit with
+  `files_to_add=['logs/', REPORTS_DIR]` and the same `commit_message`;
+  `elif not dry_run:` → log the "Skipping git commit - no credentials" message.
 
 - [ ] **Step 2: Remove bridge CLI surface.**
 
