@@ -6,7 +6,7 @@ Rclone-backed cloud-storage tooling — the canonical manager plus the JAV-Sync 
 
 | File | Purpose |
 |---|---|
-| `manager.py` | Canonical rclone manager CLI — drives the dedup / sync flow. Aliases `javdb.integrations.rclone.manager` so tests can patch module-level attributes (e.g. `RCLONE_FOLDER_PATH`). |
+| `manager.py` | Canonical rclone manager CLI — real adapter (ADR-015 Phase 4): owns argparse parsing (`parse_args`), `options_from_args`, and exit-code mapping, delegating orchestration to `javdb.integrations.rclone.manager.service.run_manager`. No longer a `sys.modules` alias. During the Phase 4 bake it also re-exports selected legacy helpers from the manager package; IMP-ADR015-05 removes those re-exports. |
 | `cleanup_empty_dirs.py` | Remove empty subdirectories under year / 未知 folders on an rclone remote via `rclone rmdirs --leave-root`. |
 | `flatten_by_size.py` | Bucket files by size: large files (≥ `--min-mib`, default 200 MiB) get hoisted to the root of their group, smaller ones are deleted. Handles name collisions by prefixing. |
 | `group_jav.py` | Reorganise JAV-Sync layout by inserting a per-番号 directory at level 3 — turns `<root>/<年份>/<演员>/<番号 [打码-字幕]>` into `<root>/<年份>/<演员>/<番号>/<打码-字幕>`. |
