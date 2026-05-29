@@ -9,20 +9,6 @@ INTEGRATIONS_ROOT = ROOT / "javdb" / "integrations"
 APPS_CLI_ROOT = ROOT / "apps" / "cli"
 
 INTEGRATION_CLI_SURFACE_ALLOWLIST = {
-    "javdb/integrations/qb/uploader.py": {
-        "argparse_import",
-        "parse_arguments",
-        "main",
-        "dunder_main",
-        "sys_exit",
-    },
-    "javdb/integrations/qb/file_filter.py": {
-        "argparse_import",
-        "parse_arguments",
-        "main",
-        "dunder_main",
-        "sys_exit",
-    },
     "javdb/integrations/pikpak/bridge.py": {
         "argparse_import",
         "main",
@@ -46,8 +32,6 @@ INTEGRATION_CLI_SURFACE_ALLOWLIST = {
 }
 
 APPS_CLI_INTEGRATION_ALIAS_ALLOWLIST = {
-    "apps/cli/qb/uploader.py",
-    "apps/cli/qb/file_filter.py",
     "apps/cli/pikpak/bridge.py",
     "apps/cli/rclone/manager.py",
     "apps/cli/notify/email.py",

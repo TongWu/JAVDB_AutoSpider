@@ -6,8 +6,8 @@ qBittorrent integration CLIs — torrent upload and small-file filtering.
 
 | File | Purpose |
 |---|---|
-| `uploader.py` | Upload `.torrent` files to qBittorrent Web UI. Modes: `daily` (default) and `adhoc`. Aliases `javdb.integrations.qb.uploader`. |
-| `file_filter.py` | Filter out small files inside already-added torrents (default 100 MiB threshold). Supports `--min-size` and `--dry-run`. Aliases `javdb.integrations.qb.file_filter`. |
+| `uploader.py` | Real CLI adapter (argparse + exit-code mapping) for the uploader service `javdb.integrations.qb.uploader`. Modes: `daily` (default) and `adhoc`. |
+| `file_filter.py` | Real CLI adapter (argparse + exit-code mapping) for the file-filter service `javdb.integrations.qb.file_filter` (default 100 MiB threshold). Supports `--min-size` and `--dry-run`. |
 
 ## Invoked by
 
