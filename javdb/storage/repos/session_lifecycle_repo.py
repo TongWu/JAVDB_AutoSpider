@@ -43,9 +43,14 @@ class SessionLifecycleRepo:
         )
 
     def mark_session_committed(self, session_id: str) -> int:
-        from javdb.storage.db import db_mark_session_committed
+        # Route through the SessionLifecycle authority (ADR-019) so the legal
+        # transition graph is enforced for every caller — e.g. a failed→committed
+        # edge raises IllegalTransition instead of silently resurrecting a failed
+        # session, and finalizing→committed uses the strict primitive. Lazy import
+        # avoids an import cycle (lifecycle imports the _db_reports primitives).
+        from javdb.storage.sessions.lifecycle import transition
 
-        return db_mark_session_committed(session_id, db_path=self._db_path)
+        return transition(session_id, "committed", db_path=self._db_path)
 
     def mark_session_failed(
         self,
@@ -53,10 +58,8 @@ class SessionLifecycleRepo:
         *,
         reason: Optional[str] = None,
     ) -> int:
-        from javdb.storage.db import db_mark_session_failed
+        # Route through the SessionLifecycle authority (ADR-019): a committed→failed
+        # edge raises IllegalTransition rather than corrupting a committed session.
+        from javdb.storage.sessions.lifecycle import transition
 
-        return db_mark_session_failed(
-            session_id,
-            db_path=self._db_path,
-            reason=reason,
-        )
+        return transition(session_id, "failed", db_path=self._db_path, reason=reason)
