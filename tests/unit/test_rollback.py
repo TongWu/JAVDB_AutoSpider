@@ -94,6 +94,30 @@ class TestSessionStatusLifecycle:
             ).fetchone()
         assert row["Status"] == "failed"
 
+    def test_transition_committed_to_failed_blocked_against_real_db(self):
+        """Bug-fix proof (ADR-019): the committed→failed corruption edge is
+        now refused end-to-end against a real ReportSessions row.
+
+        Before SessionLifecycle centralised legality, the loose
+        ``db_mark_session_failed`` SQL ``WHERE`` clause would silently flip a
+        successfully committed session to ``failed``. Routing every status
+        write through :func:`transition` makes that edge raise.
+        """
+        from javdb.storage.sessions.lifecycle import (
+            transition,
+            IllegalTransition,
+        )
+
+        sid = _create_session(status="committed")
+        with pytest.raises(IllegalTransition):
+            transition(sid, "failed")
+        # The committed row is untouched — no silent corruption.
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT Status FROM ReportSessions WHERE Id=?", (sid,)
+            ).fetchone()
+        assert row["Status"] == "committed"
+
 
 # ── In-progress lookup ───────────────────────────────────────────────────
 
