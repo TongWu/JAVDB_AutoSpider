@@ -36,11 +36,11 @@ from javdb.storage.history_manager import load_parsed_movies_history, save_parse
     determine_torrent_types, get_missing_torrent_types, validate_history_file, has_complete_subtitles
 from javdb.infra.config import use_sqlite
 from javdb.storage.repos.history_repo import HistoryRepo
-from javdb.spider.parse_legacy_adapters import parse_index, parse_detail
 from javdb.spider.magnet_extractor import extract_magnets
 
 from javdb.parsing import parse_index_page as api_parse_index_page
 from javdb.parsing import parse_detail_page as api_parse_detail_page
+from javdb.pipeline.index_selection import select_index_entries
 from javdb.parsing import parse_category_page as api_parse_category_page
 from javdb.parsing import parse_top_page as api_parse_top_page
 from javdb.infra.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
@@ -145,6 +145,86 @@ try:
         logger.debug("⚠️  Spider using Python history manager - Rust not available")
 except Exception:
     logger.info("⚠️  Could not determine history manager implementation status")
+
+
+def _legacy_parse_index(html_content, page_num, phase=1, disable_new_releases_filter=False, is_adhoc_mode=False):
+    """Parse the index page to extract entries with required tags.
+
+    Self-contained legacy wrapper. Delegates HTML parsing to
+    ``javdb.parsing.parse_index_page`` and applies the spider's business
+    filtering via ``javdb.pipeline.index_selection``.
+
+    Args:
+        html_content: HTML content to parse
+        page_num: Current page number
+        phase: 1 for subtitle entries, 2 for non-subtitle entries
+        disable_new_releases_filter: If True, disable release date filter
+            but keep other filters
+        is_adhoc_mode: If True, bypass only the new-release date filter for
+            custom URL mode. Entry selection still delegates to
+            ``select_index_entries()``, so phase subtitle/non-subtitle
+            filtering and magnet-tag skips still apply.
+    """
+    page_result = api_parse_index_page(html_content, page_num)
+    if not page_result.has_movie_list:
+        logger.warning(f'[Page {page_num}] No movie list found!')
+        # Preserve the original debug output for diagnostics
+        soup = BeautifulSoup(html_content, 'html.parser')
+        logger.debug(f'[Page {page_num}] HTML content length: {len(html_content)}')
+        title_tag = soup.find('title')
+        page_title = title_tag.get_text() if title_tag else "No title"
+        logger.debug(f'[Page {page_num}] Page title: {page_title}')
+        return []
+
+    return select_index_entries(
+        page_result,
+        page_num=page_num,
+        phase=phase,
+        disable_new_releases_filter=disable_new_releases_filter,
+        is_adhoc_mode=is_adhoc_mode,
+    )
+
+
+def _legacy_parse_detail(html_content, index=None):
+    """Parse the detail page to extract magnet links and actor information.
+
+    Self-contained legacy wrapper. Delegates HTML parsing to
+    ``javdb.parsing.parse_detail_page`` and converts the result to the legacy
+    tuple format.
+
+    Note: video_code is extracted from the index/catalog page, not from
+    the detail page.
+
+    Args:
+        html_content: HTML content of the detail page
+        index: Index number for logging prefix
+
+    Returns:
+        tuple: (magnets, actor_info, actor_gender, actor_link, supporting_actors, parse_success)
+    """
+    prefix = f"[{index}]" if index is not None else ""
+
+    # Delegate to the new API parser
+    detail = api_parse_detail_page(html_content)
+
+    # Convert actor info (lead + supporting JSON)
+    actor_info = detail.get_first_actor_name()
+    actor_gender = detail.get_first_actor_gender()
+    actor_link = detail.get_first_actor_href()
+    supporting_actors = detail.get_supporting_actors_json()
+    if actor_info:
+        logger.debug(f"{prefix} Found actor: {actor_info}")
+
+    # Convert magnets to legacy dict format
+    magnets = detail.get_magnets_as_legacy()
+
+    parse_success = detail.parse_success
+    if not parse_success:
+        logger.debug(f"{prefix} No magnets content found in detail page")
+
+    logger.debug(f"{prefix} Found {len(magnets)} magnet links")
+    return magnets, actor_info, actor_gender, actor_link, supporting_actors, parse_success
+
 
 # Import masking utilities
 from javdb.infra.masking import mask_ip_address, mask_username, mask_full, mask_proxy_url
@@ -1010,7 +1090,7 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy, 
                                             use_proxy=u_proxy, module_name='spider',
                                             max_retries=1, use_cf_bypass=u_cf)
                             if html and not is_login_page(html):
-                                m = parse_detail(html, entry_index, skip_sleep=skip_sleep)
+                                m = _legacy_parse_detail(html, entry_index)
                                 magnets, actor_info, actor_gender, actor_link, supporting, parse_success = m
                                 if parse_success:
                                     logger.info(f"[{entry_index}] Login refresh succeeded: {context_msg}")
@@ -1022,7 +1102,7 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy, 
                                 logger.warning(f"[{entry_index}] Still login page after refresh")
                     return [], '', '', '', '', False
 
-                m = parse_detail(html, entry_index, skip_sleep=skip_sleep)
+                m = _legacy_parse_detail(html, entry_index)
                 magnets, actor_info, actor_gender, actor_link, supporting, parse_success = m
                 if parse_success:
                     logger.debug(f"[{entry_index}] Success: {context_msg}")
@@ -1247,7 +1327,7 @@ class ProxyWorker(threading.Thread):
                         if self._try_login_refresh():
                             html = self._fetch_html(task.url, use_cf)
                             if html and not is_login_page(html):
-                                m = parse_detail(html, task.entry_index, skip_sleep=True)
+                                m = _legacy_parse_detail(html, task.entry_index)
                                 magnets, actor_info, ag, al, sup, ok = m
                                 if ok:
                                     logger.info(
@@ -1260,7 +1340,7 @@ class ProxyWorker(threading.Thread):
                                     f"Still login page after refresh")
                     return [], '', '', '', '', False
 
-                m = parse_detail(html, task.entry_index, skip_sleep=True)
+                m = _legacy_parse_detail(html, task.entry_index)
                 magnets, actor_info, ag, al, sup, ok = m
                 if ok:
                     return magnets, actor_info, ag, al, sup, True
@@ -1916,7 +1996,7 @@ def fetch_all_index_pages(
         p2_count = 0
 
         if phase_mode in ['1', 'all']:
-            page_results = parse_index(index_html, page_num, phase=1,
+            page_results = _legacy_parse_index(index_html, page_num, phase=1,
                                        disable_new_releases_filter=(custom_url is not None or ignore_release_date),
                                        is_adhoc_mode=(custom_url is not None))
             p1_count = len(page_results)
@@ -1924,7 +2004,7 @@ def fetch_all_index_pages(
                 all_index_results_phase1.extend(page_results)
 
         if phase_mode in ['2', 'all']:
-            page_results_p2 = parse_index(index_html, page_num, phase=2,
+            page_results_p2 = _legacy_parse_index(index_html, page_num, phase=2,
                                           disable_new_releases_filter=(custom_url is not None or ignore_release_date),
                                           is_adhoc_mode=(custom_url is not None))
             p2_count = len(page_results_p2)
