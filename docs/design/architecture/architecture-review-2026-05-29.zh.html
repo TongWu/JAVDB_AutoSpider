@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>架构审查 — JAVDB AutoSpider</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+    </script>
+    <style>
+      .seam { stroke-dasharray: 4 4; }
+      .deep { background: linear-gradient(135deg, #0f172a, #1e293b); }
+      .mod { font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase; }
+      .codebox { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.7rem; line-height: 1.05rem; }
+      details > summary { cursor: pointer; list-style: none; }
+      details > summary::-webkit-details-marker { display: none; }
+    </style>
+  </head>
+  <body class="bg-stone-50 text-slate-900 font-sans">
+    <main class="max-w-5xl mx-auto px-6 py-12 space-y-12">
+
+      <!-- HEADER -->
+      <header class="space-y-4">
+        <p class="text-xs uppercase tracking-widest text-slate-400">架构审查</p>
+        <h1 class="text-4xl font-serif font-semibold text-slate-900">JAVDB AutoSpider — 深化机会</h1>
+        <p class="text-sm text-slate-500">2026-05-29 · 依据 CONTEXT.md 领域语言 + 活跃 ADR</p>
+        <div class="flex flex-wrap gap-4 text-xs text-slate-600 pt-2 border-t border-slate-200">
+          <span class="flex items-center gap-2"><span class="inline-block w-5 h-3 border-2 border-slate-700 bg-white"></span> 模块（module）</span>
+          <span class="flex items-center gap-2"><svg width="32" height="8"><line x1="0" y1="4" x2="32" y2="4" stroke="#475569" stroke-width="2" stroke-dasharray="4 4"/></svg> 接缝（seam）</span>
+          <span class="flex items-center gap-2"><svg width="32" height="8"><line x1="0" y1="4" x2="28" y2="4" stroke="#dc2626" stroke-width="2"/><polygon points="28,1 32,4 28,7" fill="#dc2626"/></svg> 泄漏（leakage）</span>
+          <span class="flex items-center gap-2"><span class="inline-block w-5 h-3 deep rounded-sm"></span> 深模块（deep module）</span>
+        </div>
+      </header>
+
+      <!-- ADR STATUS STRIP -->
+      <section class="rounded-xl border border-slate-200 bg-white p-6 space-y-4">
+        <h2 class="text-lg font-serif font-semibold">未完成的 ADR 落在何处</h2>
+        <p class="text-sm text-slate-600">下面的候选项都扎根于<em>已接受但未落地</em>的设计记录，或扎根于尚无 ADR 命名过的摩擦。</p>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="text-xs uppercase tracking-wider text-slate-400 border-b border-slate-200">
+              <tr><th class="text-left py-2 pr-4">ADR</th><th class="text-left py-2 pr-4">主题</th><th class="text-left py-2 pr-4">状态</th><th class="text-left py-2">对应候选</th></tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <tr><td class="py-2 pr-4 font-mono text-xs">ADR-015</td><td class="py-2 pr-4">Integrations 接口边界</td><td class="py-2 pr-4"><span class="text-amber-700">已接受 · 7 个 IMP 全未建</span></td><td class="py-2 font-medium">A（首选）</td></tr>
+              <tr><td class="py-2 pr-4 font-mono text-xs">ADR-017</td><td class="py-2 pr-4">Cloudflare 优先双后端</td><td class="py-2 pr-4"><span class="text-slate-500">已归档 — 但同步规则在泄漏</span></td><td class="py-2 font-medium">B</td></tr>
+              <tr><td class="py-2 pr-4 font-mono text-xs">ADR-005</td><td class="py-2 pr-4">db.py 退役 / Repo 模式</td><td class="py-2 pr-4"><span class="text-slate-500">已归档 — 门面只退役一半</span></td><td class="py-2 font-medium">C</td></tr>
+              <tr><td class="py-2 pr-4 font-mono text-xs">ADR-011</td><td class="py-2 pr-4">Parsing 模块</td><td class="py-2 pr-4"><span class="text-slate-500">已归档 — shim 仍在生产使用</span></td><td class="py-2 font-medium">D</td></tr>
+              <tr><td class="py-2 pr-4 font-mono text-xs">ADR-010</td><td class="py-2 pr-4">统一 D1 访问端口</td><td class="py-2 pr-4"><span class="text-amber-700">已接受 · 等待默认提升</span></td><td class="py-2 font-medium">F（相关）</td></tr>
+              <tr><td class="py-2 pr-4 font-mono text-xs">ADR-028</td><td class="py-2 pr-4">Web 平台路线图</td><td class="py-2 pr-4"><span class="text-rose-700">空文件夹 — 无文档</span></td><td class="py-2 text-slate-400">清理项</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="candidates" class="space-y-12">
+
+        <!-- ============ CANDIDATE A ============ -->
+        <article class="rounded-xl border border-slate-200 bg-white p-6 space-y-5 scroll-mt-6" id="cand-a">
+          <div class="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p class="text-xs uppercase tracking-widest text-emerald-600">候选 A</p>
+              <h2 class="text-2xl font-serif font-semibold">给 integrations 一个真正的接缝 — 停止别名整个模块</h2>
+            </div>
+            <div class="flex gap-2 flex-wrap">
+              <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">Strong（强烈推荐）</span>
+              <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600">ports &amp; adapters</span>
+            </div>
+          </div>
+
+          <p class="text-sm font-mono text-slate-500">apps/cli/{qb,pikpak,rclone,notify}/*.py · javdb/integrations/{qb,pikpak,rclone,notify}/*.py · apps/api/routers/operations.py</p>
+
+          <!-- before / after -->
+          <div class="grid md:grid-cols-2 gap-4">
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+              <p class="mod text-slate-400 mb-2">之前 — 接缝被压塌</p>
+              <pre class="mermaid">
+flowchart TB
+  CLI["apps.cli.notify.email"]
+  API["apps.api.routers.operations"]
+  IMP["javdb.integrations.notify.email<br/>argparse · main() · sys.exit · SMTP · git"]
+  CLI -. "sys.modules[__name__]=_module" .-> IMP
+  API -- "imports, hits sys.exit" --> IMP
+  classDef leak stroke:#dc2626,stroke-width:2px,fill:#fef2f2;
+  class CLI,IMP leak
+              </pre>
+              <p class="text-xs text-slate-500 mt-2">CLI 模块直接<em>变成</em>了 integration 模块。两者之间没有接口。integration 自带 argparse 和 <code>sys.exit</code>，所以 API 无法在进程内复用它。</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+              <p class="mod text-slate-400 mb-2">之后 — 一个 Options→Result 接口</p>
+              <pre class="mermaid">
+flowchart TB
+  CLI2["apps.cli.notify.email<br/>parse args · raise SystemExit(code)"]
+  API2["apps.api.routers.operations"]
+  SVC["javdb.integrations.notify<br/>service.run(Options) → Result"]
+  CLI2 -- Options --> SVC
+  API2 -- Options --> SVC
+  classDef deep fill:#0f172a,color:#e2e8f0,stroke:#0f172a;
+  class SVC deep
+              </pre>
+              <p class="text-xs text-slate-500 mt-2">两个适配器（CLI + API）现在让接缝成立。领域逻辑藏在带类型的 <code>Options→Result</code> 之后；进程层关切（<code>argparse</code>、退出码）只活在 CLI 适配器里。</p>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-4 text-sm">
+            <div><p class="font-semibold text-slate-700">问题</p><p class="text-slate-600">五个 CLI 文件执行 <code class="text-xs">sys.modules[__name__] = _module</code> —— 入口只是个穿透；而 integration 自带 <code>main()</code>/<code>sys.exit()</code>，调用方无法复用。</p></div>
+            <div><p class="font-semibold text-slate-700">方案</p><p class="text-slate-600">把 <code>argparse</code>/退出码移进 CLI 适配器；让每个 integration 暴露带类型的 <code>service.run(Options)→Result</code>。这正是 ADR-015 已经规定好的。</p></div>
+          </div>
+
+          <ul class="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-sm text-slate-700 list-disc list-inside">
+            <li>杠杆（leverage）：一个接口，两个适配器</li>
+            <li>局部性（locality）：进程关切移出库</li>
+            <li>API 可在进程内复用 integrations</li>
+            <li>测试打到 Options→Result，而非 <code>sys.exit</code></li>
+          </ul>
+
+          <div class="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-900">
+            ✓ <strong>与 ADR-015 一致</strong>（已接受，0/7 个 IMP 已建）。诊断、分阶段计划、架构守卫都已写好 —— 这是执行，不是新设计。
+          </div>
+        </article>
+
+        <!-- ============ CANDIDATE B ============ -->
+        <article class="rounded-xl border border-slate-200 bg-white p-6 space-y-5 scroll-mt-6" id="cand-b">
+          <div class="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p class="text-xs uppercase tracking-widest text-amber-600">候选 B</p>
+              <h2 class="text-2xl font-serif font-semibold">D1 查询面的单一真相源</h2>
+            </div>
+            <div class="flex gap-2 flex-wrap">
+              <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">Worth exploring（值得探索）</span>
+              <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600">ports &amp; adapters</span>
+            </div>
+          </div>
+
+          <p class="text-sm font-mono text-slate-500">javdb/storage/repos/history_repo.py · apps/api/infra/auth.py · JAVDB_AutoSpider_Web/server/routes/*.ts · server/services/jwt.ts</p>
+
+          <!-- side by side duplication -->
+          <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+            <p class="mod text-slate-400 mb-3">之前 — 同一段 SQL，写两遍，靠手工保持同步</p>
+            <div class="grid md:grid-cols-2 gap-3 relative">
+              <div class="rounded border border-slate-300 bg-white p-3">
+                <p class="mod text-slate-400 mb-1">history_repo.py:240 · Python</p>
+                <pre class="codebox text-slate-700 whitespace-pre-wrap">wheres.append(
+ "(m.VideoCode LIKE ? OR m.ActorName
+   LIKE ? OR m.SupportingActors LIKE ?)")
+...
+wheres.append("m.PerfectMatchIndicator = ?")</pre>
+              </div>
+              <div class="rounded border border-slate-300 bg-white p-3">
+                <p class="mod text-slate-400 mb-1">history.ts:69 · TypeScript</p>
+                <pre class="codebox text-slate-700 whitespace-pre-wrap">conditions.push(
+ "(m.VideoCode LIKE ? OR m.ActorName
+   LIKE ? OR m.SupportingActors LIKE ?)");
+...
+conditions.push("m.PerfectMatchIndicator = ?");</pre>
+              </div>
+            </div>
+            <div class="flex items-center justify-center mt-3">
+              <svg width="220" height="26"><line x1="0" y1="13" x2="216" y2="13" stroke="#dc2626" stroke-width="2" stroke-dasharray="4 4"/><polygon points="0,9 0,17 5,13" fill="#dc2626"/><polygon points="220,9 220,17 215,13" fill="#dc2626"/></svg>
+              <span class="absolute bg-stone-50 px-2 text-xs text-rose-700 font-medium">"保持同步" —— 一条 CLAUDE.md 规则，不是接缝</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-2">约 15–20 条 D1 查询并行维护。JWT 签名也一样 —— 只是 Python 端追踪已撤销的 JTI，而 TS 后端<strong>没有撤销路径</strong>：一处无声的安全漂移。</p>
+          </div>
+
+          <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+            <p class="mod text-slate-400 mb-2">之后 — 一份共享定义，两个薄读取方</p>
+            <pre class="mermaid">
+flowchart LR
+  Q["shared query / contract<br/>(.sql files or codegen from openapi.json)"]
+  P["Python repo adapter"]
+  T["TS route adapter"]
+  Q --> P
+  Q --> T
+  classDef deep fill:#0f172a,color:#e2e8f0,stroke:#0f172a;
+  class Q deep
+            </pre>
+            <p class="text-xs text-slate-500 mt-2"><code>openapi.json</code> 已经从 Python 应用生成、被 TS 单向消费用于类型。再往前推一步：一个两个后端都读取的真正接缝，而非两份手抄实现。</p>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-4 text-sm">
+            <div><p class="font-semibold text-slate-700">问题</p><p class="text-slate-600">auth 规则和约 15–20 条 D1 查询在两个后端逐字存在；唯一让它们对齐的只是一条散文规则。撤销逻辑已经漂移。</p></div>
+            <div><p class="font-semibold text-slate-700">方案</p><p class="text-slate-600">把重合的查询 + auth 契约提到一个共享接缝（共享 <code>.sql</code> + codegen，或从 <code>openapi.json</code> 生成一侧后端）。两个后端都变成它之上的适配器。</p></div>
+          </div>
+
+          <ul class="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-sm text-slate-700 list-disc list-inside">
+            <li>局部性：查询改动只在一处</li>
+            <li>修复 JWT 撤销漂移</li>
+            <li>删除手工"两边同步"的规则</li>
+            <li>杠杆：契约驱动两个适配器</li>
+          </ul>
+
+          <div class="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-900">
+            ⚠ <strong>会重新打开 ADR-017 的双后端拆分。</strong>拆分本身是合理的（Python 执行，Worker 派发）—— 但<em>共享查询面</em>被留成了手工同步。值得立一个新 ADR 来选定接缝（共享 SQL vs codegen vs Worker 代理 Python）。比 A 更重；安全漂移让它不只是表面工作。
+          </div>
+        </article>
+
+        <!-- ============ CANDIDATE C ============ -->
+        <article class="rounded-xl border border-slate-200 bg-white p-6 space-y-5 scroll-mt-6" id="cand-c">
+          <div class="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p class="text-xs uppercase tracking-widest text-emerald-600">候选 C</p>
+              <h2 class="text-2xl font-serif font-semibold">让 Repo 变深 — 退役 <code>db_*</code> 函数门面</h2>
+            </div>
+            <div class="flex gap-2 flex-wrap">
+              <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">Strong（强烈推荐）</span>
+              <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600">in-process</span>
+            </div>
+          </div>
+
+          <p class="text-sm font-mono text-slate-500">javdb/storage/repos/history_repo.py · javdb/storage/db/_db_history_write.py · javdb/storage/db/_db_session.py</p>
+
+          <!-- mass diagram -->
+          <div class="grid md:grid-cols-2 gap-4">
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+              <p class="mod text-slate-400 mb-3">之前 — 两个公开入口；Repo 是浅的</p>
+              <div class="flex gap-4 items-end justify-center h-56">
+                <div class="flex flex-col items-center">
+                  <div class="w-24 bg-slate-300 border-2 border-slate-400 text-center text-xs py-1" style="height:40px">HistoryRepo<br/>接口</div>
+                  <div class="w-24 bg-slate-100 border-2 border-t-0 border-slate-300 text-center text-[10px] py-1 text-slate-400" style="height:28px">委托 ↓</div>
+                  <span class="mod text-slate-400 mt-1">shallow（浅）</span>
+                </div>
+                <div class="flex flex-col items-center">
+                  <div class="w-28 bg-rose-200 border-2 border-rose-400 text-center text-xs py-1" style="height:40px">db_* 函数<br/>接口</div>
+                  <div class="w-28 deep border-2 border-t-0 border-slate-700 text-center text-[10px] py-1 text-slate-300 flex items-center justify-center" style="height:150px">_db_history_write<br/>1000+ 行<br/>（真正实现）</div>
+                  <span class="mod text-rose-500 mt-1">也是公开的</span>
+                </div>
+              </div>
+              <p class="text-xs text-slate-500 mt-2"><code>stage_history_write→db_stage_history_write</code>、<code>commit_session→db_commit_session_history</code>。测试直接打到 <code>db_*</code> 函数；<code>session_id</code> 经哨兵退回进程全局状态。</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+              <p class="mod text-slate-400 mb-3">之后 — 一个接口吸收实现</p>
+              <div class="flex items-end justify-center h-56">
+                <div class="flex flex-col items-center">
+                  <div class="w-32 bg-emerald-200 border-2 border-emerald-500 text-center text-xs py-1" style="height:34px">HistoryRepo(session_id)<br/>接口</div>
+                  <div class="w-32 deep border-2 border-t-0 border-slate-700 text-center text-[10px] py-1 text-slate-300 flex items-center justify-center" style="height:160px">commit / stage / rollback<br/>实现转为内部<br/><span class="opacity-50">（db_* 淡入其中）</span></div>
+                  <span class="mod text-emerald-600 mt-1">deep（深）</span>
+                </div>
+              </div>
+              <p class="text-xs text-slate-500 mt-2">一个接口，一个测试面。<code>session_id</code> 在构造时绑定且为必填 —— 全局哨兵消失。</p>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-4 text-sm">
+            <div><p class="font-semibold text-slate-700">问题</p><p class="text-slate-600">Repo 类（ADR-005 设定的接口）直接委托给模块级 <code>db_*</code> 函数，而后者<em>同样</em>是公开的。写历史有两条路；测试打补丁到函数；<code>session_id</code> 泄漏到全局。</p></div>
+            <div><p class="font-semibold text-slate-700">方案</p><p class="text-slate-600">把实现移到 Repo 之后，让 <code>db_*</code> 私有化，<code>session_id</code> 构造时绑定并设为必填。完成 ADR-005 起的头。</p></div>
+          </div>
+
+          <ul class="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-sm text-slate-700 list-disc list-inside">
+            <li>接口收窄；实现把它吸收进去</li>
+            <li>局部性：演进写入只有一处</li>
+            <li>消灭隐式全局 session 状态</li>
+            <li>测试只跨一个接缝，而非两个</li>
+          </ul>
+
+          <div class="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-900">
+            ✓ <strong>完成 ADR-005 的方向。</strong>引入 Repo 接缝是为了干掉旧的 <code>db.py</code> 巨石模块；函数门面是旧接口仍与之并列暴露的最后残留。
+          </div>
+        </article>
+
+        <!-- ============ CANDIDATE D ============ -->
+        <article class="rounded-xl border border-slate-200 bg-white p-6 space-y-5 scroll-mt-6" id="cand-d">
+          <div class="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p class="text-xs uppercase tracking-widest text-amber-600">候选 D</p>
+              <h2 class="text-2xl font-serif font-semibold">折叠 parser shim 与两步 magnet 流程</h2>
+            </div>
+            <div class="flex gap-2 flex-wrap">
+              <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">Worth exploring（值得探索）</span>
+              <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600">in-process</span>
+            </div>
+          </div>
+
+          <p class="text-sm font-mono text-slate-500">javdb/spider/parse_legacy_adapters.py · javdb/spider/magnet_extractor.py · javdb/parsing/* · javdb/pipeline/index_selection.py</p>
+
+          <div class="grid md:grid-cols-2 gap-4">
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+              <p class="mod text-slate-400 mb-2">之前 — 调用方在多个模块间来回跳</p>
+              <pre class="mermaid">
+flowchart TB
+  C["detail/runner · fetch/fallback<br/>parallel_mode (5 callers)"]
+  L["parse_legacy_adapters<br/>(shim: reshape + filter)"]
+  P["javdb.parsing.parse_detail"]
+  S["pipeline.index_selection"]
+  M["magnet_extractor.extract_magnets"]
+  C --> L
+  L --> P
+  L -. reaches into .-> S
+  C -- "then, separately" --> M
+  classDef leak stroke:#dc2626,stroke-width:2px,fill:#fef2f2;
+  class L,M leak
+              </pre>
+              <p class="text-xs text-slate-500 mt-2">两个 parser 入口（<code>javdb.parsing</code> + shim），而"解析详情页"还需第二次调用 <code>extract_magnets</code> 才能归类种子。</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+              <p class="mod text-slate-400 mb-2">之后 — parsing 直接返回成品结果</p>
+              <pre class="mermaid">
+flowchart TB
+  C2["5 callers"]
+  P2["javdb.parsing<br/>parse_detail → categorised magnets<br/>parse_index → selected entries"]
+  C2 --> P2
+  classDef deep fill:#0f172a,color:#e2e8f0,stroke:#0f172a;
+  class P2 deep
+              </pre>
+              <p class="text-xs text-slate-500 mt-2">一个 parser 接口。magnet 归类和 index 选择移到它<em>之后</em> —— 调用方拿到成品领域对象。</p>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-4 text-sm">
+            <div><p class="font-semibold text-slate-700">问题</p><p class="text-slate-600"><code>parse_legacy_adapters.py</code> 仍有 5 个生产调用方，并对结果重新整形 + 伸手进 pipeline 过滤。magnet 归类是每个调用方都得记得做的独立后续步骤。</p></div>
+            <div><p class="font-semibold text-slate-700">方案</p><p class="text-slate-600">把归类 + index 选择折进 <code>javdb.parsing</code>，返回成品对象，迁移 5 个调用方，删掉 shim。</p></div>
+          </div>
+
+          <ul class="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-sm text-slate-700 list-disc list-inside">
+            <li>一个 parser 接口，而非两个</li>
+            <li>删除一个 118 行的穿透层</li>
+            <li>局部性："我们抽取什么"集中在一处</li>
+            <li>不再有"先 parse 再 extract"两步</li>
+          </ul>
+
+          <div class="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-900">
+            ⚠ <strong>ADR-011（已归档）本就打算删除它</strong>，但 5 个调用方 + 迁移工具仍在 import 这个 shim。爆炸半径小于 A/C；下次动 spider 时顺手做。
+          </div>
+        </article>
+
+        <!-- ============ CANDIDATE E ============ -->
+        <article class="rounded-xl border border-slate-200 bg-white p-6 space-y-5 scroll-mt-6" id="cand-e">
+          <div class="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p class="text-xs uppercase tracking-widest text-amber-600">候选 E</p>
+              <h2 class="text-2xl font-serif font-semibold">让 session 生命周期归一个模块所有</h2>
+            </div>
+            <div class="flex gap-2 flex-wrap">
+              <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">Worth exploring（值得探索）</span>
+              <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600">in-process</span>
+            </div>
+          </div>
+
+          <p class="text-sm font-mono text-slate-500">javdb/storage/db/_db_reports.py · _db_history_write.py · javdb/storage/sessions/commit.py · javdb/storage/rollback/core.py</p>
+
+          <!-- cross-section -->
+          <div class="grid md:grid-cols-2 gap-4">
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+              <p class="mod text-slate-400 mb-3">之前 — 状态机被摊薄铺开</p>
+              <div class="space-y-1">
+                <div class="h-9 border-l-4 border-rose-400 bg-white px-3 flex items-center text-xs">_db_reports · <span class="text-slate-400 ml-1">读 Status/WriteMode</span></div>
+                <div class="h-9 border-l-4 border-rose-400 bg-white px-3 flex items-center text-xs">_db_history_write · <span class="text-slate-400 ml-1">翻转 → finalizing/committed</span></div>
+                <div class="h-9 border-l-4 border-rose-400 bg-white px-3 flex items-center text-xs">sessions/commit.py · <span class="text-slate-400 ml-1">并行提交路径</span></div>
+                <div class="h-9 border-l-4 border-rose-400 bg-white px-3 flex items-center text-xs">rollback/core.py · <span class="text-slate-400 ml-1">决定 resume 还是 roll back</span></div>
+              </div>
+              <p class="text-xs text-slate-500 mt-2">没有单一所有者来管"哪个转换是合法的"。调用方可能乱序翻转状态；commit 编排是跨 6 个函数的 1000+ 行。</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+              <p class="mod text-slate-400 mb-3">之后 — 一个条带拥有所有转换</p>
+              <div class="flex items-center justify-center h-44">
+                <div class="w-full deep rounded-lg text-slate-200 p-4 text-center">
+                  <p class="text-sm font-semibold">SessionLifecycle</p>
+                  <p class="text-[11px] opacity-70 mt-1">can_transition · transition · get_state</p>
+                  <p class="text-[11px] opacity-70">in_progress → finalizing → committed / failed</p>
+                  <p class="text-[10px] opacity-50 mt-2">commit + rollback 都读这一个接口</p>
+                </div>
+              </div>
+              <p class="text-xs text-slate-500 mt-2">非法转换变得无法表达；commit/rollback 共享一个校验器。</p>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-4 text-sm">
+            <div><p class="font-semibold text-slate-700">问题</p><p class="text-slate-600"><code>in_progress→finalizing→committed/failed</code> 生命周期被 4+ 个模块修改，没有共享校验器；commit 是一个 1000 行的过程，只能对着真实 DB 测试。</p></div>
+            <div><p class="font-semibold text-slate-700">方案</p><p class="text-slate-600">用一个 <code>SessionLifecycle</code> 模块拥有状态查询 + 转换，再加一个由小而可测步骤组成的 <code>CommitPipeline</code> 藏在它之后。</p></div>
+          </div>
+
+          <ul class="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-sm text-slate-700 list-disc list-inside">
+            <li>局部性：转换集中在一个模块</li>
+            <li>非法转换无法表达</li>
+            <li>commit 步骤可隔离测试</li>
+            <li>rollback + commit 共享一个接缝</li>
+          </ul>
+        </article>
+
+        <!-- ============ CANDIDATE F ============ -->
+        <article class="rounded-xl border border-slate-200 bg-white p-6 space-y-5 scroll-mt-6" id="cand-f">
+          <div class="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p class="text-xs uppercase tracking-widest text-slate-500">候选 F</p>
+              <h2 class="text-2xl font-serif font-semibold">把后端身份藏到连接接缝之后</h2>
+            </div>
+            <div class="flex gap-2 flex-wrap">
+              <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-200 text-slate-700">Speculative（探索性）</span>
+              <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600">local-substitutable</span>
+            </div>
+          </div>
+
+          <p class="text-sm font-mono text-slate-500">javdb/storage/db/_db_connection.py · _db_history_write.py · javdb/spider/services/dedup.py · javdb/integrations/{pikpak,qb}/*.py</p>
+
+          <div class="grid md:grid-cols-2 gap-4">
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+              <p class="mod text-slate-400 mb-2">之前 — 调用方在问"我们是不是在 D1 上？"</p>
+              <pre class="mermaid">
+flowchart TB
+  D["dedup"] --> CB{"current_backend()"}
+  PK["pikpak bridge"] --> CB
+  QB["qb uploader"] --> CB
+  RV["d1 recovery paths"] --> CB
+  CB -->|sqlite| X[" "]
+  CB -->|d1| Y[" "]
+  classDef leak stroke:#dc2626,stroke-width:2px,fill:#fef2f2;
+  class CB,D,PK,QB,RV leak
+              </pre>
+              <p class="text-xs text-slate-500 mt-2">后端身份（sqlite/d1/dual）跨连接接缝泄漏 —— N 个调用方对它分支。新增一个后端要动到所有这些地方。</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+              <p class="mod text-slate-400 mb-2">之后 — 行为活在适配器之后</p>
+              <pre class="mermaid">
+flowchart TB
+  D2["dedup"] --> C["connection adapter"]
+  PK2["pikpak"] --> C
+  QB2["qb"] --> C
+  C -.->|sqlite/d1/dual<br/>chosen internally| C
+  classDef deep fill:#0f172a,color:#e2e8f0,stroke:#0f172a;
+  class C deep
+              </pre>
+              <p class="text-xs text-slate-500 mt-2">恢复/重试行为移到连接适配器之后；调用方从不检视后端。</p>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-4 text-sm">
+            <div><p class="font-semibold text-slate-700">问题</p><p class="text-slate-600">若干调用方为了日志 + D1 恢复决策而对 <code>current_backend()</code> 分支 —— 内部细节穿过了接缝。</p></div>
+            <div><p class="font-semibold text-slate-700">方案</p><p class="text-slate-600">把后端特定的恢复折到连接适配器之后；暴露意图（<code>flush_recovery()</code>）而非身份。</p></div>
+          </div>
+
+          <ul class="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-sm text-slate-700 list-disc list-inside">
+            <li>杠杆：换后端 = 改一处</li>
+            <li>测试不再 mock STORAGE_BACKEND</li>
+            <li>局部性：恢复逻辑集中</li>
+          </ul>
+
+          <div class="rounded-lg bg-slate-100 border border-slate-300 p-3 text-sm text-slate-700">
+            紧迫度最低 —— 泄漏多在日志/恢复路径，且 SQLite 镜像正在退役（见 CONTEXT.md / ADR-010）。适合顺手并入，而非单独立项。
+          </div>
+        </article>
+
+      </section>
+
+      <!-- TOP RECOMMENDATION -->
+      <section id="top-recommendation" class="rounded-xl deep text-slate-100 p-8 space-y-4">
+        <p class="text-xs uppercase tracking-widest text-emerald-300">首选推荐</p>
+        <h2 class="text-2xl font-serif font-semibold">从候选 A 开始 —— integrations 接缝（ADR-015）。</h2>
+        <p class="text-sm text-slate-300 max-w-3xl">它是唯一一个设计<em>已接受且已完整规划</em>的候选（7 个分阶段 IMP + 架构守卫均已写好），因此没有设计风险 —— 只剩执行。摩擦具体且已核实：五个 CLI 文件通过 <code class="text-xs bg-slate-800 px-1 rounded">sys.modules[__name__] = _module</code> 别名其 integration 模块，而 integrations 自带 <code>argparse</code>/<code>sys.exit</code>，这正是 API 和 pipeline 无法进程内复用它们的原因。在这里深化会造出一个真正的 Options→Result 接缝、带两个适配器（CLI + API），进而解开 pipeline 仅靠 subprocess 的耦合。</p>
+        <p class="text-sm text-slate-400">之后做候选 C（退役 <code>db_*</code> 门面、完成 ADR-005 的 Repo），它在存储核心带来最高的可测试性收益。把候选 B（双后端）当作独立 ADR 处理 —— 它带着真实的安全漂移，但接缝怎么选值得先做决定再动代码。</p>
+        <a href="#cand-a" class="inline-block text-sm font-medium text-emerald-300 hover:text-emerald-200">跳到候选 A ↑</a>
+      </section>
+
+      <!-- HOUSEKEEPING -->
+      <section class="rounded-xl border border-dashed border-slate-300 bg-white p-6 space-y-2">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500">清理项（不是深化 —— 只是清理）</h2>
+        <ul class="text-sm text-slate-600 list-disc list-inside space-y-1">
+          <li>仓库根目录的 <code>utils/</code> 已死 —— 只有过期的 <code>__pycache__</code>，无源码，零 import（ADR-007 Phase 3 已退役它）。可安全删除。</li>
+          <li><code>docs/design/ADR-028-Web-Platform-Completeness-Roadmap/</code> 是个空文件夹，里面没有 ADR 文档。要么写它，要么删它。</li>
+          <li><code>CONTEXT.md</code> 仍把 Repo 写在 <code>db_layer/</code> 下；它们实际位于 <code>javdb/storage/repos/</code>。轻微文档漂移。</li>
+        </ul>
+      </section>
+
+    </main>
+  </body>
+</html>
