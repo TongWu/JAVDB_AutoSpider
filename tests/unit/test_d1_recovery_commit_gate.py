@@ -117,13 +117,21 @@ def test_pending_commit_runs_gate_before_finalizing(monkeypatch):
     )
     # Status flips now route through SessionLifecycle.transition (ADR-019),
     # which reads status and dispatches via its own import-time aliases.
-    # Stub those so the call ordering is observable without a real DB. The
-    # status stays in_progress, so the committed flip takes the loose
-    # in_progress->committed primitive; record "committed" from either path.
+    # Stub those so the call ordering is observable without a real DB.
+    # Mirror the real state machine: the first read sees in_progress (so the
+    # first flip is in_progress->finalizing) and the second sees finalizing
+    # (so the committed flip takes the STRICT finalizing->committed primitive,
+    # matching the real in_progress->finalizing->committed path).
+    status_reads = {"n": 0}
+
+    def _staged_status(_sid, db_path=None):
+        status_reads["n"] += 1
+        return ("pending", "in_progress" if status_reads["n"] == 1 else "finalizing")
+
     monkeypatch.setattr(
         lifecycle,
         "_db_get_session_status",
-        lambda _sid, db_path=None: ("pending", "in_progress"),
+        _staged_status,
     )
     monkeypatch.setattr(
         lifecycle,
