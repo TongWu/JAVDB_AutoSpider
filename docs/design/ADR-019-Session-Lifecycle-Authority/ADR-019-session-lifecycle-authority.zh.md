@@ -44,7 +44,7 @@
 
 **D2. 合法图；非法边抛异常、幂等边返回 0。**
 
-```
+```text
 in_progress → finalizing        in_progress → committed（staging 快路径，rclone/commit 必需）
 in_progress → failed            finalizing  → committed        finalizing → failed
 X → X（幂等，返回 0）           committed/failed 已在目标态 → 返回 0

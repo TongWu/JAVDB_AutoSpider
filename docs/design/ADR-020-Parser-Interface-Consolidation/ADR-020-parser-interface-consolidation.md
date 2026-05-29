@@ -5,7 +5,7 @@
 | **Status**  | Proposed                                                              |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-011](../_archive/ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) (the parsing module; intended this shim's deletion) |
+| **Related** | [ADR-011](../_archive/ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) (the parsing module; intended this shim's deletion); [IMP-ADR020-01](IMP-ADR020-01-consolidate-parser.md) (Phase 1 — execution) |
 
 > Originated from the 2026-05-29 architecture review (Candidate D): [architecture-review-2026-05-29.html](../architecture/architecture-review-2026-05-29.html).
 
