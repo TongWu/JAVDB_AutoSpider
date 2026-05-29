@@ -6,7 +6,7 @@ PikPak bridge CLI — transfers older torrents to PikPak when the qBittorrent pa
 
 | File | Purpose |
 |---|---|
-| `bridge.py` | Run the PikPak bridge. Supports `--days <N>` (age threshold), `--dry-run`, and `--mode individual`. Aliases `javdb.integrations.pikpak.bridge`. |
+| `bridge.py` | Real CLI adapter (argparse + exit-code mapping) for the bridge service `javdb.integrations.pikpak.bridge`. Supports `--days <N>` (age threshold), `--dry-run`, `--individual`, proxy flags, `--from-pipeline`, `--session-id`, and `--root-folder`. |
 
 ## Invoked by
 

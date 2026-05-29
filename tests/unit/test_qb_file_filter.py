@@ -31,7 +31,7 @@ mock_config.QB_FILE_FILTER_LOG_FILE = 'logs/qb_file_filter.log'
 sys.modules['config'] = mock_config
 
 # Import the functions to test
-from apps.cli.qb.file_filter import (
+from javdb.integrations.qb.file_filter.service import (
     format_size,
     filter_small_files,
     get_recent_torrents,
@@ -80,8 +80,8 @@ class TestFormatSize:
 class TestMetadataReadinessWait:
     """Test cases for qBittorrent metadata readiness polling."""
 
-    @patch('apps.cli.qb.file_filter.time.sleep')
-    @patch('apps.cli.qb.file_filter.get_torrent_files')
+    @patch('javdb.integrations.qb.file_filter.service.time.sleep')
+    @patch('javdb.integrations.qb.file_filter.service.get_torrent_files')
     def test_waits_until_majority_of_recent_torrents_are_ready(
         self,
         mock_get_files,
@@ -122,7 +122,7 @@ class TestMetadataReadinessWait:
 class TestGetRecentTorrents:
     """Test cases for get_recent_torrents function."""
 
-    @patch('apps.cli.qb.file_filter.get_proxies_dict')
+    @patch('javdb.integrations.qb.file_filter.service.get_proxies_dict')
     def test_get_recent_torrents_success(self, mock_proxies):
         """Test successful retrieval of recent torrents."""
         mock_proxies.return_value = None
@@ -143,7 +143,7 @@ class TestGetRecentTorrents:
 
         assert len(result) == 2
 
-    @patch('apps.cli.qb.file_filter.get_proxies_dict')
+    @patch('javdb.integrations.qb.file_filter.service.get_proxies_dict')
     def test_get_recent_torrents_filters_old(self, mock_proxies):
         """Test that old torrents are filtered out."""
         mock_proxies.return_value = None
@@ -166,7 +166,7 @@ class TestGetRecentTorrents:
         assert len(result) == 1
         assert result[0]['name'] == 'Recent'
 
-    @patch('apps.cli.qb.file_filter.get_proxies_dict')
+    @patch('javdb.integrations.qb.file_filter.service.get_proxies_dict')
     def test_get_recent_torrents_api_failure(self, mock_proxies):
         """Test handling of API failure."""
         mock_proxies.return_value = None
@@ -180,7 +180,7 @@ class TestGetRecentTorrents:
 
         assert result == []
 
-    @patch('apps.cli.qb.file_filter.get_proxies_dict')
+    @patch('javdb.integrations.qb.file_filter.service.get_proxies_dict')
     def test_get_recent_torrents_network_error(self, mock_proxies):
         """Test handling of network error."""
         import requests
@@ -193,7 +193,7 @@ class TestGetRecentTorrents:
 
         assert result == []
 
-    @patch('apps.cli.qb.file_filter.get_proxies_dict')
+    @patch('javdb.integrations.qb.file_filter.service.get_proxies_dict')
     def test_get_recent_torrents_with_category(self, mock_proxies):
         """Test filtering by single category (backward compatibility)."""
         mock_proxies.return_value = None
@@ -216,7 +216,7 @@ class TestGetRecentTorrents:
         assert result[0]['name'] == 'Torrent 1'
         assert result[0]['category'] == 'JavDB'
 
-    @patch('apps.cli.qb.file_filter.get_proxies_dict')
+    @patch('javdb.integrations.qb.file_filter.service.get_proxies_dict')
     def test_get_recent_torrents_with_categories_list(self, mock_proxies):
         """Test filtering by multiple categories."""
         mock_proxies.return_value = None
@@ -242,7 +242,7 @@ class TestGetRecentTorrents:
         assert result[0]['category'] == 'Ad Hoc'
         assert result[1]['category'] == 'Daily Ingestion'
 
-    @patch('apps.cli.qb.file_filter.get_proxies_dict')
+    @patch('javdb.integrations.qb.file_filter.service.get_proxies_dict')
     def test_get_recent_torrents_categories_overrides_category(self, mock_proxies):
         """Test that categories parameter overrides category parameter."""
         mock_proxies.return_value = None
@@ -267,7 +267,7 @@ class TestGetRecentTorrents:
         assert len(result) == 1
         assert result[0]['category'] == 'Ad Hoc'
 
-    @patch('apps.cli.qb.file_filter.get_proxies_dict')
+    @patch('javdb.integrations.qb.file_filter.service.get_proxies_dict')
     def test_get_recent_torrents_no_category_filter(self, mock_proxies):
         """Test that all torrents are returned when no category filter is specified."""
         mock_proxies.return_value = None
@@ -293,7 +293,7 @@ class TestGetRecentTorrents:
 class TestGetTorrentFiles:
     """Test cases for get_torrent_files function."""
 
-    @patch('apps.cli.qb.file_filter.get_proxies_dict')
+    @patch('javdb.integrations.qb.file_filter.service.get_proxies_dict')
     def test_get_torrent_files_success(self, mock_proxies):
         """Test successful retrieval of torrent files."""
         mock_proxies.return_value = None
@@ -313,7 +313,7 @@ class TestGetTorrentFiles:
         assert len(result) == 3
         assert result[0]['name'] == 'video.mp4'
 
-    @patch('apps.cli.qb.file_filter.get_proxies_dict')
+    @patch('javdb.integrations.qb.file_filter.service.get_proxies_dict')
     def test_get_torrent_files_api_failure(self, mock_proxies):
         """Test handling of API failure (non-200 status).
         
@@ -330,7 +330,7 @@ class TestGetTorrentFiles:
 
         assert result is None
 
-    @patch('apps.cli.qb.file_filter.get_proxies_dict')
+    @patch('javdb.integrations.qb.file_filter.service.get_proxies_dict')
     def test_get_torrent_files_network_error(self, mock_proxies):
         """Test handling of network error (exception).
         
@@ -350,7 +350,7 @@ class TestGetTorrentFiles:
 class TestSetFilePriority:
     """Test cases for set_file_priority function."""
 
-    @patch('apps.cli.qb.file_filter.get_proxies_dict')
+    @patch('javdb.integrations.qb.file_filter.service.get_proxies_dict')
     def test_set_file_priority_success(self, mock_proxies):
         """Test successful priority setting."""
         mock_proxies.return_value = None
@@ -370,7 +370,7 @@ class TestSetFilePriority:
         assert call_args[1]['data']['id'] == '0|1|2'
         assert call_args[1]['data']['priority'] == 0
 
-    @patch('apps.cli.qb.file_filter.get_proxies_dict')
+    @patch('javdb.integrations.qb.file_filter.service.get_proxies_dict')
     def test_set_file_priority_failure(self, mock_proxies):
         """Test handling of API failure."""
         mock_proxies.return_value = None
@@ -384,7 +384,7 @@ class TestSetFilePriority:
 
         assert result is False
 
-    @patch('apps.cli.qb.file_filter.get_proxies_dict')
+    @patch('javdb.integrations.qb.file_filter.service.get_proxies_dict')
     def test_set_file_priority_network_error(self, mock_proxies):
         """Test handling of network error."""
         import requests
@@ -401,8 +401,8 @@ class TestSetFilePriority:
 class TestFilterSmallFiles:
     """Test cases for filter_small_files function."""
 
-    @patch('apps.cli.qb.file_filter.get_torrent_files')
-    @patch('apps.cli.qb.file_filter.set_file_priority')
+    @patch('javdb.integrations.qb.file_filter.service.get_torrent_files')
+    @patch('javdb.integrations.qb.file_filter.service.set_file_priority')
     def test_filter_small_files_basic(self, mock_set_priority, mock_get_files):
         """Test basic small file filtering."""
         mock_get_files.return_value = [
@@ -422,8 +422,8 @@ class TestFilterSmallFiles:
         assert stats['files_kept'] == 1      # video.mp4
         assert stats['torrents_with_filtered_files'] == 1
 
-    @patch('apps.cli.qb.file_filter.get_torrent_files')
-    @patch('apps.cli.qb.file_filter.set_file_priority')
+    @patch('javdb.integrations.qb.file_filter.service.get_torrent_files')
+    @patch('javdb.integrations.qb.file_filter.service.set_file_priority')
     def test_filter_small_files_dry_run(self, mock_set_priority, mock_get_files):
         """Test dry run mode doesn't make changes."""
         mock_get_files.return_value = [
@@ -440,8 +440,8 @@ class TestFilterSmallFiles:
         mock_set_priority.assert_not_called()
         assert stats['files_filtered'] == 1
 
-    @patch('apps.cli.qb.file_filter.get_torrent_files')
-    @patch('apps.cli.qb.file_filter.set_file_priority')
+    @patch('javdb.integrations.qb.file_filter.service.get_torrent_files')
+    @patch('javdb.integrations.qb.file_filter.service.set_file_priority')
     def test_filter_small_files_no_small_files(self, mock_set_priority, mock_get_files):
         """Test when no files are below threshold."""
         mock_get_files.return_value = [
@@ -459,8 +459,8 @@ class TestFilterSmallFiles:
         assert stats['torrents_with_filtered_files'] == 0
         mock_set_priority.assert_not_called()
 
-    @patch('apps.cli.qb.file_filter.get_torrent_files')
-    @patch('apps.cli.qb.file_filter.set_file_priority')
+    @patch('javdb.integrations.qb.file_filter.service.get_torrent_files')
+    @patch('javdb.integrations.qb.file_filter.service.set_file_priority')
     def test_filter_small_files_skips_already_filtered(self, mock_set_priority, mock_get_files):
         """Test that already filtered files (priority=0) are skipped."""
         mock_get_files.return_value = [
@@ -477,8 +477,8 @@ class TestFilterSmallFiles:
         assert stats['files_filtered'] == 0
         assert stats['files_kept'] == 1
 
-    @patch('apps.cli.qb.file_filter.get_torrent_files')
-    @patch('apps.cli.qb.file_filter.set_file_priority')
+    @patch('javdb.integrations.qb.file_filter.service.get_torrent_files')
+    @patch('javdb.integrations.qb.file_filter.service.set_file_priority')
     def test_filter_small_files_multiple_torrents(self, mock_set_priority, mock_get_files):
         """Test filtering across multiple torrents."""
         def get_files_side_effect(session, torrent_hash, use_proxy=False):
@@ -508,8 +508,8 @@ class TestFilterSmallFiles:
         assert stats['files_filtered'] == 1
         assert stats['files_kept'] == 2
 
-    @patch('apps.cli.qb.file_filter.get_torrent_files')
-    @patch('apps.cli.qb.file_filter.set_file_priority')
+    @patch('javdb.integrations.qb.file_filter.service.get_torrent_files')
+    @patch('javdb.integrations.qb.file_filter.service.set_file_priority')
     def test_filter_small_files_pending_metadata(self, mock_set_priority, mock_get_files):
         """Test handling when metadata is not yet available (empty file list).
         
@@ -527,8 +527,8 @@ class TestFilterSmallFiles:
         assert stats['errors'] == 0
         assert stats['torrents_processed'] == 0
 
-    @patch('apps.cli.qb.file_filter.get_torrent_files')
-    @patch('apps.cli.qb.file_filter.set_file_priority')
+    @patch('javdb.integrations.qb.file_filter.service.get_torrent_files')
+    @patch('javdb.integrations.qb.file_filter.service.set_file_priority')
     def test_filter_small_files_api_failure(self, mock_set_priority, mock_get_files):
         """Test error handling when API call fails (returns None).
         
@@ -547,8 +547,8 @@ class TestFilterSmallFiles:
         assert stats['pending_metadata'] == 0
         assert stats['torrents_processed'] == 0
 
-    @patch('apps.cli.qb.file_filter.get_torrent_files')
-    @patch('apps.cli.qb.file_filter.set_file_priority')
+    @patch('javdb.integrations.qb.file_filter.service.get_torrent_files')
+    @patch('javdb.integrations.qb.file_filter.service.set_file_priority')
     def test_filter_small_files_set_priority_failure(self, mock_set_priority, mock_get_files):
         """Test handling when set_file_priority fails."""
         mock_get_files.return_value = [
@@ -564,8 +564,8 @@ class TestFilterSmallFiles:
 
         assert stats['errors'] == 1
 
-    @patch('apps.cli.qb.file_filter.get_torrent_files')
-    @patch('apps.cli.qb.file_filter.set_file_priority')
+    @patch('javdb.integrations.qb.file_filter.service.get_torrent_files')
+    @patch('javdb.integrations.qb.file_filter.service.set_file_priority')
     def test_filter_small_files_size_saved_calculation(self, mock_set_priority, mock_get_files):
         """Test that size_saved is calculated correctly."""
         mock_get_files.return_value = [
@@ -588,7 +588,7 @@ class TestFilterSmallFiles:
 class TestGetTorrentProperties:
     """Test cases for get_torrent_properties function."""
 
-    @patch('apps.cli.qb.file_filter.get_proxies_dict')
+    @patch('javdb.integrations.qb.file_filter.service.get_proxies_dict')
     def test_get_torrent_properties_success(self, mock_proxies):
         """Test successful retrieval of torrent properties."""
         mock_proxies.return_value = None
@@ -608,7 +608,7 @@ class TestGetTorrentProperties:
         assert result['save_path'] == '/downloads/torrents'
         assert result['total_size'] == 1024 * 1024 * 100
 
-    @patch('apps.cli.qb.file_filter.get_proxies_dict')
+    @patch('javdb.integrations.qb.file_filter.service.get_proxies_dict')
     def test_get_torrent_properties_api_failure(self, mock_proxies):
         """Test handling of API failure."""
         mock_proxies.return_value = None
@@ -622,7 +622,7 @@ class TestGetTorrentProperties:
 
         assert result == {}
 
-    @patch('apps.cli.qb.file_filter.get_proxies_dict')
+    @patch('javdb.integrations.qb.file_filter.service.get_proxies_dict')
     def test_get_torrent_properties_network_error(self, mock_proxies):
         """Test handling of network error."""
         import requests
@@ -693,9 +693,9 @@ class TestDeleteLocalFile:
 class TestFilterSmallFilesWithDeletion:
     """Test cases for filter_small_files with delete_local_files_flag enabled."""
 
-    @patch('apps.cli.qb.file_filter.get_torrent_files')
-    @patch('apps.cli.qb.file_filter.set_file_priority')
-    @patch('apps.cli.qb.file_filter.delete_local_file')
+    @patch('javdb.integrations.qb.file_filter.service.get_torrent_files')
+    @patch('javdb.integrations.qb.file_filter.service.set_file_priority')
+    @patch('javdb.integrations.qb.file_filter.service.delete_local_file')
     def test_filter_with_delete_downloaded_files(self, mock_delete, mock_set_priority, mock_get_files):
         """Test filtering and deleting files that have been downloaded."""
         mock_get_files.return_value = [
@@ -718,9 +718,9 @@ class TestFilterSmallFilesWithDeletion:
         # delete_local_file should be called for both small files with progress > 0
         assert mock_delete.call_count == 2
 
-    @patch('apps.cli.qb.file_filter.get_torrent_files')
-    @patch('apps.cli.qb.file_filter.set_file_priority')
-    @patch('apps.cli.qb.file_filter.delete_local_file')
+    @patch('javdb.integrations.qb.file_filter.service.get_torrent_files')
+    @patch('javdb.integrations.qb.file_filter.service.set_file_priority')
+    @patch('javdb.integrations.qb.file_filter.service.delete_local_file')
     def test_filter_with_delete_not_downloaded_files(self, mock_delete, mock_set_priority, mock_get_files):
         """Test filtering files that haven't been downloaded yet (progress=0)."""
         mock_get_files.return_value = [
@@ -740,9 +740,9 @@ class TestFilterSmallFilesWithDeletion:
         assert stats['local_files_deleted'] == 0  # No files to delete (progress=0)
         mock_delete.assert_not_called()
 
-    @patch('apps.cli.qb.file_filter.get_torrent_files')
-    @patch('apps.cli.qb.file_filter.set_file_priority')
-    @patch('apps.cli.qb.file_filter.delete_local_file')
+    @patch('javdb.integrations.qb.file_filter.service.get_torrent_files')
+    @patch('javdb.integrations.qb.file_filter.service.set_file_priority')
+    @patch('javdb.integrations.qb.file_filter.service.delete_local_file')
     def test_filter_with_delete_dry_run(self, mock_delete, mock_set_priority, mock_get_files):
         """Test dry run mode doesn't delete files."""
         mock_get_files.return_value = [
@@ -762,9 +762,9 @@ class TestFilterSmallFilesWithDeletion:
         mock_delete.assert_not_called()
         assert stats['files_filtered'] == 1
 
-    @patch('apps.cli.qb.file_filter.get_torrent_files')
-    @patch('apps.cli.qb.file_filter.set_file_priority')
-    @patch('apps.cli.qb.file_filter.delete_local_file')
+    @patch('javdb.integrations.qb.file_filter.service.get_torrent_files')
+    @patch('javdb.integrations.qb.file_filter.service.set_file_priority')
+    @patch('javdb.integrations.qb.file_filter.service.delete_local_file')
     def test_filter_delete_flag_disabled(self, mock_delete, mock_set_priority, mock_get_files):
         """Test that files are not deleted when delete_local_files_flag is False."""
         mock_get_files.return_value = [
@@ -785,9 +785,9 @@ class TestFilterSmallFilesWithDeletion:
         mock_delete.assert_not_called()
         assert stats['local_files_deleted'] == 0
 
-    @patch('apps.cli.qb.file_filter.get_torrent_files')
-    @patch('apps.cli.qb.file_filter.set_file_priority')
-    @patch('apps.cli.qb.file_filter.delete_local_file')
+    @patch('javdb.integrations.qb.file_filter.service.get_torrent_files')
+    @patch('javdb.integrations.qb.file_filter.service.set_file_priority')
+    @patch('javdb.integrations.qb.file_filter.service.delete_local_file')
     def test_filter_delete_tracks_size_correctly(self, mock_delete, mock_set_priority, mock_get_files):
         """Test that local_size_deleted is tracked correctly."""
         mock_get_files.return_value = [
@@ -812,9 +812,9 @@ class TestFilterSmallFilesWithDeletion:
         assert stats['local_files_deleted'] == 2
         assert stats['local_size_deleted'] == (10 * 1024 * 1024) + 2048
 
-    @patch('apps.cli.qb.file_filter.get_torrent_files')
-    @patch('apps.cli.qb.file_filter.set_file_priority')
-    @patch('apps.cli.qb.file_filter.delete_local_file')
+    @patch('javdb.integrations.qb.file_filter.service.get_torrent_files')
+    @patch('javdb.integrations.qb.file_filter.service.set_file_priority')
+    @patch('javdb.integrations.qb.file_filter.service.delete_local_file')
     def test_filter_delete_partial_failure(self, mock_delete, mock_set_priority, mock_get_files):
         """Test handling when some files fail to delete."""
         mock_get_files.return_value = [
@@ -839,9 +839,9 @@ class TestFilterSmallFilesWithDeletion:
         assert stats['local_files_deleted'] == 1
         assert stats['local_size_deleted'] == 5 * 1024 * 1024
 
-    @patch('apps.cli.qb.file_filter.get_torrent_files')
-    @patch('apps.cli.qb.file_filter.set_file_priority')
-    @patch('apps.cli.qb.file_filter.delete_local_file')
+    @patch('javdb.integrations.qb.file_filter.service.get_torrent_files')
+    @patch('javdb.integrations.qb.file_filter.service.set_file_priority')
+    @patch('javdb.integrations.qb.file_filter.service.delete_local_file')
     def test_filter_delete_skipped_when_save_path_empty(self, mock_delete, mock_set_priority, mock_get_files):
         """Test that deletion is skipped when save_path is empty to prevent accidental deletion."""
         mock_get_files.return_value = [
@@ -863,9 +863,9 @@ class TestFilterSmallFilesWithDeletion:
         assert stats['local_files_deleted'] == 0
         mock_delete.assert_not_called()
 
-    @patch('apps.cli.qb.file_filter.get_torrent_files')
-    @patch('apps.cli.qb.file_filter.set_file_priority')
-    @patch('apps.cli.qb.file_filter.delete_local_file')
+    @patch('javdb.integrations.qb.file_filter.service.get_torrent_files')
+    @patch('javdb.integrations.qb.file_filter.service.set_file_priority')
+    @patch('javdb.integrations.qb.file_filter.service.delete_local_file')
     def test_filter_delete_skipped_when_save_path_relative(self, mock_delete, mock_set_priority, mock_get_files):
         """Test that deletion is skipped when save_path is not absolute to prevent accidental deletion."""
         mock_get_files.return_value = [
@@ -887,9 +887,9 @@ class TestFilterSmallFilesWithDeletion:
         assert stats['local_files_deleted'] == 0
         mock_delete.assert_not_called()
 
-    @patch('apps.cli.qb.file_filter.get_torrent_files')
-    @patch('apps.cli.qb.file_filter.set_file_priority')
-    @patch('apps.cli.qb.file_filter.delete_local_file')
+    @patch('javdb.integrations.qb.file_filter.service.get_torrent_files')
+    @patch('javdb.integrations.qb.file_filter.service.set_file_priority')
+    @patch('javdb.integrations.qb.file_filter.service.delete_local_file')
     def test_filter_delete_skipped_when_priority_fails(self, mock_delete, mock_set_priority, mock_get_files):
         """Test that deletion is skipped when set_file_priority fails to prevent data loss."""
         mock_get_files.return_value = [
@@ -917,8 +917,8 @@ class TestFilterSmallFilesWithDeletion:
 class TestFilterIntegration:
     """Integration tests for the file filter workflow."""
 
-    @patch('apps.cli.qb.file_filter.get_torrent_files')
-    @patch('apps.cli.qb.file_filter.set_file_priority')
+    @patch('javdb.integrations.qb.file_filter.service.get_torrent_files')
+    @patch('javdb.integrations.qb.file_filter.service.set_file_priority')
     def test_complete_filter_workflow(self, mock_set_priority, mock_get_files):
         """Test complete workflow with multiple scenarios."""
         # Setup: 3 torrents with different file scenarios
@@ -957,9 +957,9 @@ class TestFilterIntegration:
         assert stats['files_kept'] == 2  # main.mp4 from hash1 and hash2
         assert len(stats['details']) == 2  # Only torrents with filtered files
 
-    @patch('apps.cli.qb.file_filter.get_torrent_files')
-    @patch('apps.cli.qb.file_filter.set_file_priority')
-    @patch('apps.cli.qb.file_filter.delete_local_file')
+    @patch('javdb.integrations.qb.file_filter.service.get_torrent_files')
+    @patch('javdb.integrations.qb.file_filter.service.set_file_priority')
+    @patch('javdb.integrations.qb.file_filter.service.delete_local_file')
     def test_complete_filter_workflow_with_deletion(self, mock_delete, mock_set_priority, mock_get_files):
         """Test complete workflow with file deletion enabled."""
         def get_files_side_effect(session, torrent_hash, use_proxy=False):
@@ -1006,7 +1006,7 @@ class TestCleanupCompletedTorrentsAdapter:
     ``qb_client.remove_completed_torrents_keep_files`` into qb_file_filter's
     existing requests.Session."""
 
-    @patch('apps.cli.qb.file_filter.get_proxies_dict')
+    @patch('javdb.integrations.qb.file_filter.service.get_proxies_dict')
     def test_empty_categories_short_circuits(self, mock_proxies):
         mock_proxies.return_value = None
 
@@ -1020,7 +1020,7 @@ class TestCleanupCompletedTorrentsAdapter:
         mock_session.post.assert_not_called()
 
     @patch('javdb.integrations.qb.client.remove_completed_torrents_keep_files')
-    @patch('apps.cli.qb.file_filter.get_proxies_dict')
+    @patch('javdb.integrations.qb.file_filter.service.get_proxies_dict')
     def test_delegates_to_shared_implementation(self, mock_proxies, mock_shared):
         mock_proxies.return_value = None
         mock_shared.return_value = {'scanned': 1, 'deleted': 1, 'hashes': ['h1']}

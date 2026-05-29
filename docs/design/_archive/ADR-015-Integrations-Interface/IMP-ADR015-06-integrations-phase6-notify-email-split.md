@@ -1,6 +1,6 @@
 # IMP-ADR015-06: ADR-015 Phase 6 - Notify Email Split
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Ship ADR-015 Phase 6 by splitting notify email into a typed command package with separate log analysis, report building, delivery, and service orchestration modules while keeping a short bake wrapper.
 
@@ -42,7 +42,7 @@
 - Move: `javdb/integrations/notify/email.py`
 - Create: `javdb/integrations/notify/email/__init__.py`
 
-- [ ] **Step 1: Move current implementation.**
+- [x] **Step 1: Move current implementation.**
 
 Run:
 
@@ -52,7 +52,7 @@ mkdir -p javdb/integrations/notify/email
 git mv javdb/integrations/notify/email_legacy_tmp.py javdb/integrations/notify/email/_legacy.py
 ```
 
-- [ ] **Step 2: Add bake wrapper exports.**
+- [x] **Step 2: Add bake wrapper exports.**
 
 Create `javdb/integrations/notify/email/__init__.py`:
 
@@ -116,6 +116,32 @@ __all__ = [
 ]
 ```
 
+> **Implementation note (sequencing + `__init__` sourcing).** Task 1 Step 2 above
+> writes the bake `__init__` importing from `._legacy` because at that point
+> every function still lives in `_legacy.py`. Task 4 MOVES those functions into
+> submodules (`log_analysis`/`report_builder`/`delivery`/`service`), after which
+> `from ._legacy import <fn>` would break for any name `_legacy` no longer
+> defines. So **after Task 4, re-point each bake re-export in `__init__.py` to the
+> function's NEW home** (e.g. `from .delivery import send_email, convert_log_to_txt`,
+> `from .log_analysis import analyze_spider_log, …`, `from .report_builder import
+> format_email_report, …`). Equivalently, do the split first and write `__init__`
+> against the final locations. Do NOT rely on `_legacy` transitively re-exporting
+> moved names.
+>
+> **Implementation note (the move lists in Task 4 are NOT exhaustive).** Move
+> EVERY non-CLI, non-orchestration symbol out of `_legacy.py` into the right
+> submodule — including ones the Task 4 lists omit, e.g.
+> `_build_drift_diagnosis_section` and `_drift_diagnosis_subject_prefix` (they call
+> `subprocess.run` to invoke `drift_diagnose` and build a report section/subject
+> prefix → put them in `report_builder.py` alongside the other section builders;
+> import `subprocess` there), `_read_capped`, and any other private helpers. After
+> Task 4, `_legacy.py` should retain ONLY: module-level config constants still used
+> by orchestration, `run_email_notification_from_options`, `parse_arguments`,
+> `main`, the `__main__` block, and whatever imports it needs from the submodules.
+> The architecture guard scans every package file with no allowlist except the
+> moved `_legacy.py` key (see Task 5), so the submodules must contain NO
+> `argparse`/`parse_arguments`/`main`/`sys.exit`/`__main__`.
+
 ---
 
 ## Task 2: Add Notify Contract
@@ -125,7 +151,7 @@ __all__ = [
 - Create: `javdb/integrations/notify/email/result.py`
 - Create: `tests/unit/test_email_notification_options.py`
 
-- [ ] **Step 1: Write options/result tests.**
+- [x] **Step 1: Write options/result tests.**
 
 Create `tests/unit/test_email_notification_options.py`:
 
@@ -188,7 +214,7 @@ def test_email_result_exit_code_for_dry_run():
     assert result.exit_code == 0
 ```
 
-- [ ] **Step 2: Implement options/result.**
+- [x] **Step 2: Implement options/result.**
 
 Create `javdb/integrations/notify/email/options.py`:
 
@@ -242,7 +268,7 @@ class EmailNotificationResult:
 **Files:**
 - Modify: `apps/cli/notify/email.py`
 
-- [ ] **Step 1: Replace `apps/cli/notify/email.py`.**
+- [x] **Step 1: Replace `apps/cli/notify/email.py`.**
 
 Use:
 
@@ -298,7 +324,7 @@ if __name__ == "__main__":
 - Create: `javdb/integrations/notify/email/service.py`
 - Modify: `javdb/integrations/notify/email/_legacy.py`
 
-- [ ] **Step 1: Move log analysis functions.**
+- [x] **Step 1: Move log analysis functions.**
 
 Move these functions from `_legacy.py` to `log_analysis.py`:
 
@@ -320,7 +346,7 @@ _evaluate_pending_alerts
 _build_dual_drift_advisory
 ```
 
-- [ ] **Step 2: Move report-building functions.**
+- [x] **Step 2: Move report-building functions.**
 
 Move these functions to `report_builder.py`:
 
@@ -337,7 +363,7 @@ _format_health_snapshot_section
 _build_pending_subject_prefix
 ```
 
-- [ ] **Step 3: Move delivery functions.**
+- [x] **Step 3: Move delivery functions.**
 
 Move these functions to `delivery.py`:
 
@@ -346,7 +372,7 @@ send_email
 convert_log_to_txt
 ```
 
-- [ ] **Step 4: Create orchestration service.**
+- [x] **Step 4: Create orchestration service.**
 
 Create `service.py` with:
 
@@ -363,7 +389,7 @@ def run_email_notification(options: EmailNotificationOptions) -> EmailNotificati
     return _legacy.run_email_notification_from_options(options)
 ```
 
-- [ ] **Step 5: Extract legacy main body into `run_email_notification_from_options`.**
+- [x] **Step 5: Extract legacy main body into `run_email_notification_from_options`.**
 
 In `_legacy.py`, extract the current body of `main()` after argument parsing
 into `run_email_notification_from_options(options: EmailNotificationOptions) -> EmailNotificationResult`.
@@ -379,13 +405,27 @@ wrapper. IMP-ADR015-07 removes them.
 ## Task 5: Update Tests And Docs
 
 **Files:**
+- Modify: `tests/architecture/test_integrations_interface_boundary.py`
 - Modify: `tests/unit/test_email_notification_p0.py`
 - Modify: `tests/unit/test_email_notification_extended.py`
+- Modify: `tests/unit/test_email_drift_integration.py`
 - Modify: `tests/integration/test_pipeline.py`
 - Modify: `apps/cli/notify/README.md`
 - Modify: `javdb/integrations/notify/README.md`
 
-- [ ] **Step 1: Update tests by responsibility.**
+- [x] **Step 0: Move the notify guard allowlist key to the bake path.**
+
+Like Phase 4 (rclone), `_legacy.py` keeps the legacy CLI surface during the bake.
+Move the `INTEGRATION_CLI_SURFACE_ALLOWLIST` key in
+`tests/architecture/test_integrations_interface_boundary.py` from
+`"javdb/integrations/notify/email.py"` to
+`"javdb/integrations/notify/email/_legacy.py"` (SAME token set:
+`argparse_import`, `parse_arguments`, `main`, `dunder_main`, `sys_exit`). Leave the
+`APPS_CLI_INTEGRATION_ALIAS_ALLOWLIST` entry `"apps/cli/notify/email.py"` in place
+(the real adapter is not an alias so the guard won't flag it; IMP-ADR015-07 removes
+the now-unused entry). IMP-ADR015-07 removes the `_legacy.py` allowlist key too.
+
+- [x] **Step 1: Update tests by responsibility.**
 
 Use:
 
@@ -419,12 +459,32 @@ apps.cli.notify.email
 
 for parser and CLI exit-code tests.
 
-- [ ] **Step 2: Keep wrapper compatibility tests.**
+- [x] **Step 2: Keep wrapper compatibility tests.**
 
 Keep imports from `javdb.integrations.notify.email` working during Phase 6.
 These imports are migrated and the wrapper is deleted in IMP-ADR015-07.
 
-- [ ] **Step 3: Update READMEs.**
+- [x] **Step 2a: Migrate `tests/unit/test_email_drift_integration.py` (the plan's other test files miss it).**
+
+This file imports `_build_drift_diagnosis_section` and `_drift_diagnosis_subject_prefix`
+from `javdb.integrations.notify.email` and patches `javdb.integrations.notify.email.subprocess.run`
+(8 sites). Both functions move to `report_builder.py` in Task 4, and `subprocess`
+moves with them. Update this test so:
+- the two imports come from `javdb.integrations.notify.email.report_builder`
+  (or keep them on the package only if you add them to the bake `__all__` — but
+  they are private, so prefer importing from `.report_builder`);
+- every `@patch("javdb.integrations.notify.email.subprocess.run")` becomes
+  `@patch("javdb.integrations.notify.email.report_builder.subprocess.run")`
+  (wherever `_build_drift_diagnosis_section` now resolves `subprocess`).
+
+Also verify (no change expected, but confirm they still pass):
+- `tests/unit/test_operations_endpoints.py` patches `javdb.integrations.notify.email.send_email`
+  — works because the bake `__init__` re-exports `send_email` and the REST router
+  re-imports it lazily.
+- `tests/unit/test_pipeline_service.py` references `apps.cli.notify.email` only as a
+  subprocess command string — unaffected.
+
+- [x] **Step 3: Update READMEs.**
 
 Document that notify is in a Phase 6 bake state: real CLI adapter exists under
 `apps.cli.notify.email`, while selected legacy package exports remain until
@@ -434,7 +494,7 @@ IMP-ADR015-07.
 
 ## Task 6: Verify Phase 6
 
-- [ ] **Step 1: Run focused tests.**
+- [x] **Step 1: Run focused tests.**
 
 ```bash
 pytest tests/unit/test_email_notification_options.py -v
@@ -446,7 +506,7 @@ pytest tests/architecture/test_integrations_interface_boundary.py -v
 
 Expected: PASS.
 
-- [ ] **Step 2: Verify apps CLI alias is gone.**
+- [x] **Step 2: Verify apps CLI alias is gone.**
 
 ```bash
 rg -n "sys\\.modules\\[__name__\\]|import_module\\(\"javdb\\.integrations\\.notify\\.email" apps/cli/notify/email.py
@@ -454,7 +514,7 @@ rg -n "sys\\.modules\\[__name__\\]|import_module\\(\"javdb\\.integrations\\.noti
 
 Expected: no results.
 
-- [ ] **Step 3: Review workflows and docs.**
+- [x] **Step 3: Review workflows and docs.**
 
 ```bash
 rg -n "apps\\.cli\\.notify|email_notification|notify\\.email" .github/workflows README.md JAVDB_AutoSpider.wiki 2>/dev/null
@@ -462,17 +522,20 @@ rg -n "apps\\.cli\\.notify|email_notification|notify\\.email" .github/workflows 
 
 Expected: workflow command invocations remain unchanged.
 
-- [ ] **Step 4: Commit.**
+- [x] **Step 4: Commit.**
 
 ```bash
 git add javdb/integrations/notify/email \
         apps/cli/notify/email.py \
+        tests/architecture/test_integrations_interface_boundary.py \
         tests/unit/test_email_notification_options.py \
         tests/unit/test_email_notification_p0.py \
         tests/unit/test_email_notification_extended.py \
+        tests/unit/test_email_drift_integration.py \
         tests/integration/test_pipeline.py \
         apps/cli/notify/README.md \
-        javdb/integrations/notify/README.md
+        javdb/integrations/notify/README.md \
+        docs/design/ADR-015-Integrations-Interface/IMP-ADR015-06-integrations-phase6-notify-email-split.md
 git add -u javdb/integrations/notify/email.py
 git commit -m "refactor(integrations): split notify email service"
 ```

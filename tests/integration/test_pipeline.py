@@ -12,9 +12,9 @@ from zoneinfo import ZoneInfo
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-# Import functions from email_notification script
-import apps.cli.notify.email as email_notification
-from apps.cli.notify.email import (
+# Import functions from the notify email package, by responsibility (ADR-015 Phase 6).
+import javdb.integrations.notify.email.log_analysis as email_notification
+from javdb.integrations.notify.email.log_analysis import (
     analyze_spider_log,
     analyze_uploader_log,
     analyze_pikpak_log,
@@ -23,9 +23,11 @@ from apps.cli.notify.email import (
     extract_spider_statistics,
     extract_uploader_statistics,
     extract_pikpak_statistics,
+    _extract_last_dedup_executor_run,
+)
+from javdb.integrations.notify.email.report_builder import (
     format_email_report,
     get_report_display_datetime,
-    _extract_last_dedup_executor_run,
 )
 
 # Import mask_sensitive_info from git_helper (it's now the canonical location)
@@ -607,7 +609,7 @@ class TestExtractDedupStatistics:
 
     def test_extract_dedup_statistics_filters_items_to_executor_window(self, temp_dir, monkeypatch):
         import javdb.infra.config as config_helper
-        import apps.cli.notify.email as email_notification
+        import javdb.integrations.notify.email.log_analysis as email_notification
 
         monkeypatch.setattr(config_helper, 'use_sqlite', lambda: False)
 
