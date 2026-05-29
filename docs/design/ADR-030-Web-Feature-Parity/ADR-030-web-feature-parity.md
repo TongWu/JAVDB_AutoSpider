@@ -1,11 +1,11 @@
-# ADR-019: Web Backend Feature Parity — Config, Stats, and Password Management
+# ADR-030: Web Backend Feature Parity — Config, Stats, and Password Management
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
 | **Status**  | Accepted                                                              |
 | **Date**    | 2026-05-24                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md), [ADR-018](../ADR-018-Web-Security-Hardening/ADR-018-web-security-hardening.md) |
+| **Related** | [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md), [ADR-029](../ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md) |
 
 ## Context
 

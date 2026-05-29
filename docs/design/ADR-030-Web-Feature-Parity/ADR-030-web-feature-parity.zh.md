@@ -1,11 +1,11 @@
-# ADR-019: Web 后端功能对齐 — 配置、统计与密码管理
+# ADR-030: Web 后端功能对齐 — 配置、统计与密码管理
 
 | 字段       | 值                                                                     |
 | ---------- | --------------------------------------------------------------------- |
 | **状态**   | Accepted                                                              |
 | **日期**   | 2026-05-24                                                            |
 | **作者**   | Ted                                                                   |
-| **关联**   | [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md), [ADR-018](../ADR-018-Web-Security-Hardening/ADR-018-web-security-hardening.md) |
+| **关联**   | [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md), [ADR-029](../ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md) |
 
 ## 背景
 
