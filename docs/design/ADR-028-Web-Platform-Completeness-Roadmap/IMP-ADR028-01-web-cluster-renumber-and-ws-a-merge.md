@@ -8,6 +8,8 @@
 
 **Tech Stack:** Markdown docs under `docs/design/`, `git mv`, `perl -pi -e`, `grep`, `bash`.
 
+**Status:** Completed — executed and verified on 2026-05-29 (renumber + cross-ref fixes + WS-A merge; all verification gates passed).
+
 **Related:** [ADR-028](ADR-028-web-platform-completeness-roadmap.md)
 
 ---
