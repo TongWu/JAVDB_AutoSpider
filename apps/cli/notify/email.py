@@ -44,6 +44,9 @@ def options_from_args(args: argparse.Namespace) -> EmailNotificationOptions:
 
 
 def main(argv: list[str] | None = None) -> int:
+    import os
+
+    os.chdir(REPO_ROOT)
     return run_email_notification(options_from_args(parse_args(argv))).exit_code
 
 

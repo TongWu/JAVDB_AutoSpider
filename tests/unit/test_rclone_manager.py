@@ -530,6 +530,105 @@ def test_scan_does_not_mark_local_session_committed_when_swap_fails(
     )
 
 
+def test_scan_failure_does_not_mark_inherited_session_failed(
+    monkeypatch, tmp_path, storage_mode_db
+):
+    """An inherited upstream session must not be flipped to ``failed`` by the
+    rclone step, but its per-session staging table must still be dropped."""
+    import javdb.integrations.rclone.manager.service as rm
+
+    output = tmp_path / "inventory.csv"
+    incoming = {field: "" for field in INVENTORY_FIELDNAMES}
+    incoming.update({
+        "video_code": "NEW-001",
+        "folder_path": "2026/new/NEW-001",
+        "folder_size": 1,
+        "file_count": 1,
+        "scan_datetime": "2026-05-05 00:00:00",
+    })
+    order = []
+
+    def fake_scan(*_args, row_callback=None, **_kwargs):
+        row_callback([incoming])
+        return 1, 1  # second value = scan error count -> failure path
+
+    monkeypatch.setattr(rm, "RCLONE_CONFIG_BASE64", "")
+    monkeypatch.setattr(rm, "check_rclone_installed", lambda: (True, "ok"))
+    monkeypatch.setattr(rm, "check_remote_exists", lambda _remote: (True, "ok"))
+    monkeypatch.setattr(rm, "scan_inventory", fake_scan)
+    _patch_rclone_repo_mocks(monkeypatch, rm, order, overrides={
+        # Inherited session id: _created_local_staging_session stays False.
+        "get_active_session_id": lambda: "inherited-1",
+    })
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "rclone_manager",
+            "--scan",
+            "--root-path",
+            "gdrive:/root",
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert main() == 1
+    # No "create_session" because the active session was inherited.
+    assert "create_session" not in order
+    # Inherited session must NOT be marked failed.
+    assert not any(item[0] == "mark_failed" for item in order if isinstance(item, tuple))
+    # The per-session staging table WE opened must still be dropped.
+    assert ("drop_staging", "inherited-1") in order
+
+
+def test_scan_failure_marks_locally_created_session_failed(
+    monkeypatch, tmp_path, storage_mode_db
+):
+    """A session this run created locally is marked ``failed`` on scan error."""
+    import javdb.integrations.rclone.manager.service as rm
+
+    output = tmp_path / "inventory.csv"
+    incoming = {field: "" for field in INVENTORY_FIELDNAMES}
+    incoming.update({
+        "video_code": "NEW-001",
+        "folder_path": "2026/new/NEW-001",
+        "folder_size": 1,
+        "file_count": 1,
+        "scan_datetime": "2026-05-05 00:00:00",
+    })
+    order = []
+
+    def fake_scan(*_args, row_callback=None, **_kwargs):
+        row_callback([incoming])
+        return 1, 1  # second value = scan error count -> failure path
+
+    monkeypatch.setattr(rm, "RCLONE_CONFIG_BASE64", "")
+    monkeypatch.setattr(rm, "check_rclone_installed", lambda: (True, "ok"))
+    monkeypatch.setattr(rm, "check_remote_exists", lambda _remote: (True, "ok"))
+    monkeypatch.setattr(rm, "scan_inventory", fake_scan)
+    # Default mocks: get_active_session_id -> None, so a local session (id=123)
+    # is created and _created_local_staging_session becomes True.
+    _patch_rclone_repo_mocks(monkeypatch, rm, order)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "rclone_manager",
+            "--scan",
+            "--root-path",
+            "gdrive:/root",
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert main() == 1
+    assert "create_session" in order
+    assert ("mark_failed", 123) in order
+    assert ("drop_staging", 123) in order
+
+
 def test_scan_succeeds_when_post_swap_commit_marking_fails(
     monkeypatch, tmp_path, storage_mode_db
 ):

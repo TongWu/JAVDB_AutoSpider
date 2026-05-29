@@ -96,6 +96,54 @@ def test_drift_advisory_surfaces_todays_records(tmp_path):
     assert "ReportSessions" in advisory
 
 
+def test_drift_advisory_skips_malformed_records(tmp_path):
+    """A malformed JSONL record (non-int counts / non-string ts) must be
+    skipped without raising, while well-formed records still aggregate."""
+    from javdb.integrations.notify.email.log_analysis import (
+        _build_dual_drift_advisory,
+    )
+
+    drift_dir = tmp_path / "D1"
+    drift_dir.mkdir()
+    jsonl = drift_dir / "d1_drift.jsonl"
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    lines = [
+        # Malformed: failure_count is non-numeric — must be skipped, not crash.
+        json.dumps({
+            "ts": today,
+            "db": "history",
+            "failure_count": "x",
+            "uncommitted_d1_writes": 0,
+        }),
+        # Malformed: ts is a non-string (int) — str() coercion must avoid a
+        # ``startswith`` AttributeError; record is filtered out as not-today.
+        json.dumps({
+            "ts": 20260101,
+            "db": "history",
+            "failure_count": 5,
+            "uncommitted_d1_writes": 5,
+        }),
+        # Well-formed today record — must still aggregate.
+        json.dumps({
+            "ts": today,
+            "db": "history",
+            "committed": True,
+            "failure_count": 2,
+            "uncommitted_d1_writes": 3,
+            "first_failed_sql": "INSERT INTO ReportSessions ...",
+            "first_error": "RuntimeError: simulated",
+        }),
+    ]
+    jsonl.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    advisory = _build_dual_drift_advisory(str(tmp_path))
+    assert "D1 DRIFT ADVISORY" in advisory
+    # Only the single well-formed record counts (1, not 2 or 3).
+    assert "1 drift record(s)" in advisory
+    assert "cumulative D1 write failures today: 2" in advisory
+    assert "rows D1 kept after SQLite rollback today: 3" in advisory
+
+
 def test_drift_advisory_returns_empty_for_clean_pending_verify(tmp_path):
     """A pending_session_verify record with zero residuals is informational, not drift."""
     from javdb.integrations.notify.email.log_analysis import (

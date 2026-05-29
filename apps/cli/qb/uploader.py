@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
 from javdb.integrations.qb.uploader.options import QbUploaderOptions
 from javdb.integrations.qb.uploader.service import run_uploader
 from javdb.proxy.policy import add_proxy_arguments, resolve_proxy_override
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -34,6 +37,9 @@ def options_from_args(args: argparse.Namespace) -> QbUploaderOptions:
 
 
 def main(argv: list[str] | None = None) -> int:
+    import os
+
+    os.chdir(REPO_ROOT)
     return run_uploader(options_from_args(parse_args(argv))).exit_code
 
 
