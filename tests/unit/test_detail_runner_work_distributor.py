@@ -122,7 +122,7 @@ def _success(entry: dict) -> _StubResult:
     return _StubResult(
         task=_StubTask(entry, entry_index="1/1"),
         success=True,
-        data={"magnets": [], "actor_info": "", "actor_gender": "",
+        data={"magnet_links": {}, "actor_info": "", "actor_gender": "",
               "actor_link": "", "supporting": ""},
     )
 
@@ -209,7 +209,6 @@ def _patch_pipeline(monkeypatch):
         ),
     )
     monkeypatch.setattr(detail_runner, "finalize_detail_phase", lambda **kw: None)
-    monkeypatch.setattr(detail_runner, "extract_magnets", lambda *a, **kw: {})
 
 
 def _common_kwargs() -> dict:

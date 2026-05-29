@@ -154,12 +154,25 @@ def bench_parse_detail_canonical(iterations: int) -> Dict[str, float]:
 
 
 def bench_parse_detail_wrapper(iterations: int) -> Dict[str, float]:
-    """Spider-side wrapper: parse_detail (includes tuple reshape)."""
-    from javdb.spider.parse_legacy_adapters import parse_detail
+    """Finished-object path: parse_detail_page + categorize the detail's magnets.
+
+    Categorises via the parsing-layer free function `categorize(...)` on
+    ``detail.get_magnets_as_legacy()`` — the canonical interface, uniform across
+    the Rust and Python detail objects — so the benchmark exercises the same
+    finished-object path production callers use.
+    """
+    from javdb.parsing import parse_detail_page
+    from javdb.parsing.magnet_categorize import categorize
     html = _load_fixture("detail_page_AVSW-067.html")
+
+    def _parse_and_categorize():
+        detail = parse_detail_page(html)
+        categorize(detail.get_magnets_as_legacy(), index=1)
+        return detail
+
     return _bench(
         "parse_detail_wrapper", iterations,
-        lambda: parse_detail(html, index=1, skip_sleep=True),
+        _parse_and_categorize,
     )
 
 

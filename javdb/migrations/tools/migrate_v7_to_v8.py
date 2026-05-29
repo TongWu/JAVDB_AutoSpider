@@ -463,22 +463,20 @@ def run_actor_backfill(
     # ------------------------------------------------------------------
     if use_proxy and PROXY_POOL:
         from javdb.spider.fetch.fetch_engine import FetchEngine, EngineTask
-        from javdb.spider.parse_legacy_adapters import parse_detail
+        from javdb.parsing import parse_detail_page
 
         completed_ids: set[int] = set()
         stop_event = threading.Event()
 
         def _backfill_parse(html: str, task: EngineTask):
-            _m, actor_name, actor_gender, actor_link, supporting, ok = (
-                parse_detail(html, task.entry_index, skip_sleep=True)
-            )
-            if not ok:
+            detail = parse_detail_page(html)
+            if not detail.parse_success:
                 return None
             return {
-                'actor_name': actor_name or '',
-                'actor_gender': actor_gender or '',
-                'actor_link': actor_link or '',
-                'supporting': supporting or '',
+                'actor_name': detail.get_first_actor_name() or '',
+                'actor_gender': detail.get_first_actor_gender() or '',
+                'actor_link': detail.get_first_actor_href() or '',
+                'supporting': detail.get_supporting_actors_json() or '',
             }
 
         engine = FetchEngine.simple(

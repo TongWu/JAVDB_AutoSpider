@@ -2,7 +2,7 @@
 
 | 字段       | 值                                                                    |
 | ---------- | --------------------------------------------------------------------- |
-| **状态**   | Proposed                                                              |
+| **状态**   | Implemented                                                          |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
 | **关联**   | [ADR-011](../_archive/ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md)（parsing 模块；本就计划删除此 shim）；[IMP-ADR020-01](IMP-ADR020-01-consolidate-parser.md)（Phase 1 — 执行） |
@@ -26,9 +26,9 @@
 
 **D1. 一个解析器接口；删 shim。** `javdb.parsing`（`parse_detail_page` / `parse_index_page` + `MovieDetail` 访问器）是唯一入口。`extract_video_code` 直接从 `javdb.parsing.common` import。所有调用方迁移后，删掉 `javdb/spider/parse_legacy_adapters.py`。
 
-**D2. magnet 归类移入 parsing 层。** 把纯归类算法**及其 Rust-first dispatch** 从 `javdb/spider/magnet_extractor.py` 移到 `javdb/parsing/magnet_categorize.py`。这是分层合法且**地道**的——`javdb/parsing/` 对其解析器本就采用完全相同的"优先 `javdb.rust_core`、回退到 frozen Python 镜像"模式（`parsing/__init__.py`、`parsing/fallback/`）。`javdb/spider/magnet_extractor.py` 退化为薄 **re-export**，保留 `extract_magnets` 与 `_parse_size`（被 `javdb/pipeline/policies.py:10` 消费）。成品接口是新增的 `MovieDetail.categorize_magnets(index=None) -> dict`（在 `models.py:199` 的 `get_magnets_as_legacy` 旁）。
+**D2. magnet 归类移入 parsing 层。** 把纯归类算法**及其 Rust-first dispatch** 从 `javdb/spider/magnet_extractor.py` 移到 `javdb/parsing/magnet_categorize.py`。这是分层合法且**地道**的——`javdb/parsing/` 对其解析器本就采用完全相同的"优先 `javdb.rust_core`、回退到 frozen Python 镜像"模式（`parsing/__init__.py`、`parsing/fallback/`）。`javdb/spider/magnet_extractor.py` 退化为薄 **re-export**，保留 `extract_magnets` 与 `_parse_size`（被 `javdb/pipeline/policies.py:10` 消费）。归类入口是 parsing 层的**自由函数** `magnet_categorize.categorize(magnets)`，调用方对 `detail.get_magnets_as_legacy()` 施用。**方法不能作为接口**——生产中 `parse_detail_page()` 返回 Rust 的 `RustMovieDetail`，无法携带 Python 的 `categorize_magnets()` 方法；只有 `get_magnets_as_legacy()` 在 Rust 与 Python 两种 detail 对象上统一。（这纠正了原"成品对象方法"的表述——见状态日志。）
 
-**D3. 折叠热路径两步。** fetch backends 直接产出**预归类**的 `data['magnet_links']`（经 `MovieDetail.categorize_magnets`）而非原始 `data['magnets']`；`runner.py:700` 直接读取，删掉那次独立的 `extract_magnets`。这消灭生产路径上最后的"解析后再 extract"两步。作为**可独立 revert 的提交**交付，以便隔离 smoke 测试差异。
+**D3. 折叠热路径两步。** fetch backends 直接产出**预归类**的 `data['magnet_links']`（经 `magnet_categorize.categorize(detail.get_magnets_as_legacy())`）而非原始 `data['magnets']`；`runner.py:700` 直接读取，删掉那次独立的 `extract_magnets`。这消灭生产路径上最后的"解析后再 extract"两步。作为**可独立 revert 的提交**交付，以便隔离 smoke 测试差异。
 
 **D4. index 选择留在 `javdb.pipeline`。** `select_index_entries` 读 config（`PHASE2_MIN_RATE` 等）——是业务策略，不是解析。把它移进 `javdb.parsing` 会**反转**干净的依赖方向（`pipeline → spider → parsing`）。需要选中条目的调用方直接 `parse_index_page` + `select_index_entries`（测试早就这么做）。shim 相对此的唯一附加值——一行空列表诊断日志——内联到真正需要的地方。
 
@@ -73,3 +73,5 @@
 ## 状态日志（Status Log）
 
 - 2026-05-29：Proposed（源自架构审查候选 D 的 grilling）。
+- 2026-05-29：设计纠正（实现 Phase 2 期间）。`MovieDetail.categorize_magnets()`（原 D2 的"成品对象方法"）在**生产路径上死掉**——`parse_detail_page()` 返回 Rust 的 `RustMovieDetail`，没有该方法。已修订 D2/D3：正式接口为 parsing 层自由函数 `magnet_categorize.categorize(detail.get_magnets_as_legacy())`（对 Rust/Python 两种 detail 对象统一，与 `runner.py:700` 一致）。死方法及其测试已删除。
+- 2026-05-29：已实现（全部阶段）。Phase 1-2（归类下沉到 `javdb/parsing/magnet_categorize.py`；非 spider 调用方迁移）随 PR #123 交付。Phase 3-5（spider 详情流迁移 + 折叠热路径两步，backends 直接产出预归类的 `data['magnet_links']`；legacy spider import 替换；`test_parser.py` repoint；**删除 `parse_legacy_adapters.py`** + 移除日志别名）随 stacked 的 Phase 3-5 PR 交付。`grep -rn parse_legacy_adapters javdb apps tests` 为空；`test_magnet_parity.py` 全程绿（D6 Rust dispatch 保留）。状态 → Implemented；两个 PR 合并后归档整个文件夹。

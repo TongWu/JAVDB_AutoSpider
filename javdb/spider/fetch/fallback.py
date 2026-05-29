@@ -1,7 +1,7 @@
 """Multi-level fallback logic for fetching index and detail pages."""
 
 from javdb.infra.logging import get_logger
-from javdb.spider.parse_legacy_adapters import parse_detail
+from javdb.parsing import parse_detail_page
 from javdb.spider.html_validators import validate_index_html as _validate_index_html_fast
 from javdb.spider.url_helper import get_page_url as _url_helper_get_page_url
 from javdb.infra.request import ProxyBannedError, ProxyExhaustedError
@@ -17,6 +17,23 @@ from javdb.proxy.policy import is_cf_bypass_reachable
 from javdb.spider.runtime.sleep import ensure_sleep_runtime, movie_sleep_mgr as _sleep_mgr
 
 logger = get_logger(__name__)
+
+
+def _parse_detail_to_tuple(html):
+    """Parse detail HTML into the spider's legacy 6-tuple.
+
+    Returns ``(magnets, actor_info, actor_gender, actor_link, supporting,
+    parse_success)`` sourced directly from ``parse_detail_page``.
+    """
+    detail = parse_detail_page(html)
+    return (
+        detail.get_magnets_as_legacy(),
+        detail.get_first_actor_name(),
+        detail.get_first_actor_gender() or '',
+        detail.get_first_actor_href() or '',
+        detail.get_supporting_actors_json() or '',
+        detail.parse_success,
+    )
 
 
 def _resolve_runtime(runtime=None):
@@ -503,7 +520,7 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
                                              max_retries=1, use_cf_bypass=u_cf,
                                              runtime=runtime)
                             if html and not is_login_page(html):
-                                m = parse_detail(html, entry_index, skip_sleep=skip_sleep)
+                                m = _parse_detail_to_tuple(html)
                                 magnets, actor_info, actor_gender, actor_link, supporting, parse_success = m
                                 if parse_success:
                                     logger.info(f"[{entry_index}] Login refresh succeeded: {context_msg}")
@@ -515,7 +532,7 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
                                 logger.warning(f"[{entry_index}] Still login page after refresh")
                     return [], '', '', '', '', False
 
-                m = parse_detail(html, entry_index, skip_sleep=skip_sleep)
+                m = _parse_detail_to_tuple(html)
                 magnets, actor_info, actor_gender, actor_link, supporting, parse_success = m
                 if parse_success:
                     logger.debug(f"[{entry_index}] Success: {context_msg}")

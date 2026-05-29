@@ -292,7 +292,7 @@ class TestDetailLoginRetrySendsCookie:
             ]
         )
 
-        def parse_side_effect(html, entry_index, **kwargs):
+        def parse_side_effect(html):
             return next(parse_seq)
 
         with patch.object(state_mod, 'global_proxy_pool', None), \
@@ -302,7 +302,7 @@ class TestDetailLoginRetrySendsCookie:
              patch.object(fallback_mod, '_sleep_between_fetches'), \
              patch.object(fallback_mod, 'is_login_page', return_value=False), \
              patch.object(state_mod, 'get_page', side_effect=get_page_tracked), \
-             patch.object(fallback_mod, 'parse_detail', side_effect=parse_side_effect):
+             patch.object(fallback_mod, '_parse_detail_to_tuple', side_effect=parse_side_effect):
             result = fallback_mod.fetch_detail_page_with_fallback(
                 detail_url='http://javdb.com/v/abc',
                 session=MagicMock(),

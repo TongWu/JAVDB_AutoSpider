@@ -30,8 +30,8 @@ from javdb.storage.history_manager import (
     save_parsed_movie_to_history,
     validate_history_file
 )
-from javdb.spider.parse_legacy_adapters import parse_detail
-from javdb.spider.magnet_extractor import extract_magnets
+from javdb.parsing import parse_detail_page
+from javdb.parsing.magnet_categorize import categorize as categorize_magnets
 from javdb.infra.logging import setup_logging, get_logger
 from javdb.spider.spider_gateway import create_gateway
 
@@ -62,15 +62,17 @@ def extract_magnet_links_from_detail(detail_html, video_code):
     try:
         # Parse detail page (ignore parse_success flag for migration script)
         # Note: video_code is passed for logging purposes only, not extracted from detail page
-        magnets, actor_info, _ag, _al, _sup, _ = parse_detail(
-            detail_html, video_code, skip_sleep=True)
-        
-        if not magnets:
+        detail = parse_detail_page(detail_html)
+
+        if not detail.magnets:
             logger.warning(f"No magnets found for {video_code}")
             return {}
-        
-        # Extract magnet links using existing function
-        magnet_links = extract_magnets(magnets)
+
+        # Categorise the finished object's magnets. Uses the parsing-layer
+        # categoriser on detail.get_magnets_as_legacy() (works on both the Rust
+        # and pure-Python detail types, and is byte-for-byte equal to the legacy
+        # parse_detail-then-extract_magnets path).
+        magnet_links = categorize_magnets(detail.get_magnets_as_legacy(), index=video_code)
         
         # Filter out empty magnet links and size information
         filtered_links = {}

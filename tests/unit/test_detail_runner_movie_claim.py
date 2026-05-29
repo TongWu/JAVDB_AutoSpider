@@ -212,8 +212,6 @@ def _patch_persist(monkeypatch):
     )
     # finalize_detail_phase touches sqlite/history; stub it out.
     monkeypatch.setattr(detail_runner, "finalize_detail_phase", lambda **kw: None)
-    # extract_magnets is called on result.data['magnets']; we stub data so it's safe.
-    monkeypatch.setattr(detail_runner, "extract_magnets", lambda *a, **kw: {})
 
 
 def _make_success_result(entry: dict) -> _StubResult:
@@ -222,7 +220,7 @@ def _make_success_result(entry: dict) -> _StubResult:
         task=task,
         success=True,
         data={
-            "magnets": [],
+            "magnet_links": {},
             "actor_info": "",
             "actor_gender": "",
             "actor_link": "",
