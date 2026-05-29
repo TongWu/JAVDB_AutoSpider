@@ -12,7 +12,7 @@
 
 **Tech Stack:** Vue 3, Naive UI (`NRate`, `NCheckboxGroup`, `NButton`, `NIcon`), Pinia, Axios, TypeScript.
 
-**Related:** [ADR-022](../JAVDB_AutoSpider_CICD/docs/design/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md) · [IMP-ADR022-05](IMP-ADR022-05-typescript-sync.md)
+**Related:** [ADR-022](ADR-022-user-preference-foundation.md) · [IMP-ADR022-05](IMP-ADR022-05-typescript-sync.md)
 
 **Depends on:** IMP-ADR022-05 (Hono routes must be deployed or running in dev).
 

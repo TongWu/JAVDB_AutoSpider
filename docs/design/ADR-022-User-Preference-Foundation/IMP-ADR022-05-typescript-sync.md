@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript, Hono, Cloudflare D1, Cloudflare Workers.
 
-**Related:** [ADR-022](../JAVDB_AutoSpider_CICD/docs/design/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md) · [IMP-ADR022-03](../JAVDB_AutoSpider_CICD/docs/design/ADR-022-User-Preference-Foundation/IMP-ADR022-03-preference-repo.md)
+**Related:** [ADR-022](ADR-022-user-preference-foundation.md) · [IMP-ADR022-03](IMP-ADR022-03-preference-repo.md)
 
 **Depends on:** IMP-ADR022-03 (Python CRUD API must be final — SQL and response shapes must not change after this phase).
 
