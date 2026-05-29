@@ -1039,6 +1039,12 @@ class DualConnection:
         self._record_flushed_cursors(cursors)
         return cursors
 
+    def assert_recovery_drained(self, *, ordering_key: str) -> None:
+        self._d1.assert_recovery_drained(ordering_key=ordering_key)
+
+    def drain_recovery_residue(self, *, session_id: str) -> None:
+        self._d1.drain_recovery_residue(session_id=session_id)
+
     def close(self):
         try:
             self._sqlite.close()
