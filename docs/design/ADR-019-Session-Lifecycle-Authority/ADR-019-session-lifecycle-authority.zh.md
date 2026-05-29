@@ -100,4 +100,7 @@ failed    → committed ── 非法 → 抛 IllegalTransition
 
 - 2026-05-29：Proposed（源自架构审查候选 E 的 grilling）。
 - 2026-05-29：Phase 1 已实现并验证（[IMP-ADR019-01](IMP-ADR019-01-session-lifecycle.md)）——`SessionLifecycle` 权威 + 所有状态写入已改道；`committed→failed` / `failed→committed` 现在抛错。Phase 2（CommitPipeline）延后至生产验证后。
-- 2026-05-29：与 ADR-015 的 `SessionLifecycleRepo`（并发的 integrations 重构）协调。该 repo 的 `mark_session_committed` / `mark_session_failed` 现委托给 `transition`，使 rclone staging 路径——及任何未来的 `SessionLifecycleRepo` 调用方——经由单一合法性权威，而非直调松守卫的 `db_*` 原语。闭合本分支与 ADR-015 合并时暴露的重叠。
+- 2026-05-29：与 ADR-015 的 `SessionLifecycleRepo`（并发的 integrations 重构）协调。
+  - `mark_session_committed` / `mark_session_failed` 现委托给 `transition`。
+  - rclone staging 路径及未来 `SessionLifecycleRepo` 调用方均经由单一合法性权威，不再直调松守卫的 `db_*` 原语。
+  - 闭合本分支与 ADR-015 合并时暴露的重叠。
