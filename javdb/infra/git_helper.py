@@ -54,6 +54,22 @@ def is_github_actions():
     return os.environ.get('GITHUB_ACTIONS') == 'true'
 
 
+_TRUTHY_ENV_VALUES = {'1', 'true', 'yes', 'on'}
+
+
+def git_side_effects_disabled():
+    """Return True when real git mutations must be suppressed.
+
+    Controlled by the ``JAVDB_DISABLE_GIT_SIDE_EFFECTS`` environment variable.
+    Default (unset) keeps normal behavior, so GitHub Actions and self-hosters
+    running the pipeline are unaffected. The test suite sets it (via an autouse
+    fixture in ``tests/conftest.py``) so that running tests — including ones that
+    spawn pipeline CLI subprocesses, which inherit this env var — never mutates
+    the real repository's git config or creates commits.
+    """
+    return os.environ.get('JAVDB_DISABLE_GIT_SIDE_EFFECTS', '').strip().lower() in _TRUTHY_ENV_VALUES
+
+
 def mask_sensitive_info(text):
     """Mask sensitive information in text to prevent exposure in logs"""
     if not text:
@@ -156,6 +172,17 @@ def git_commit_and_push(files_to_add, commit_message, from_pipeline=False,
         bool: True if successful, False otherwise
     """
     try:
+        # Test-isolation guard: when disabled (set by the test suite), perform no
+        # git config / add / commit / push so test runs never mutate the real
+        # repo's identity or history. Return True so callers treat the step as a
+        # successful no-op. Default (unset) preserves normal production behavior.
+        if git_side_effects_disabled():
+            safe_log_info(
+                "Git side effects disabled via JAVDB_DISABLE_GIT_SIDE_EFFECTS; "
+                "skipping git config/commit/push"
+            )
+            return True
+
         # Determine the branch to use
         current_branch = git_branch or get_current_branch()
         safe_log_info(f"Git commit/push: branch={current_branch}, from_pipeline={from_pipeline}")
