@@ -554,12 +554,14 @@ def _update_movie_indicators(
 def db_batch_update_last_visited(
     hrefs: List[str],
     db_path: Optional[str] = None,
-    session_id: Any = None,
+    *,
+    session_id: Any,
 ) -> int:
     """Update DateTimeVisited for a batch of hrefs.
 
-    When *session_id* is set (or :func:`get_active_session_id` returns a
-    value), each affected MovieHistory row also gets ``SessionId=?``.
+    When *session_id* is set, each affected MovieHistory row also gets
+    ``SessionId=?``. *session_id* is required — callers must thread the
+    active session id (or ``None`` when intentionally untagged) explicitly.
 
     Ingestion Perfect Rollback (Phase 2): when the active session runs
     under ``WriteMode='pending'`` the visit timestamps are staged into
@@ -567,12 +569,9 @@ def db_batch_update_last_visited(
     row per href) and applied to live in :func:`db_commit_session_history`.
     """
     _ensure_imports()
-    from javdb.storage.db._db_session import _SESSION_ID_SENTINEL
-    if session_id is None:
-        session_id = _SESSION_ID_SENTINEL
     if not hrefs:
         return 0
-    sid = _resolve_session_id(session_id)
+    sid = session_id
     if sid is not None and _get_active_write_mode() == 'pending':
         # Pending route: dedupe + stage one sparse pending movie row
         # per href.  ``_pending_movie_overlay`` will sparse-merge this
@@ -633,15 +632,17 @@ def db_batch_update_last_visited(
 def db_batch_update_movie_actors(
     updates: List[Tuple[str, str, str, str, str]],
     db_path: Optional[str] = None,
-    session_id: Any = None,
+    *,
+    session_id: Any,
 ) -> int:
     """Set actor columns and DateTimeUpdated for each
     ``(href, actor_name, actor_gender, actor_link, supporting_actors)``.
 
     Returns the number of rows matched by UPDATE (may be 0 for unknown hrefs).
 
-    When *session_id* is set (or :func:`get_active_session_id` returns a
-    value), each affected MovieHistory row also gets ``SessionId=?``.
+    When *session_id* is set, each affected MovieHistory row also gets
+    ``SessionId=?``. *session_id* is required — callers must thread the
+    active session id (or ``None`` when intentionally untagged) explicitly.
 
     Ingestion Perfect Rollback (Phase 2): pending-mode sessions stage a
     sparse "actor fields only" pending movie row per href instead of
@@ -649,12 +650,9 @@ def db_batch_update_movie_actors(
     session.
     """
     _ensure_imports()
-    from javdb.storage.db._db_session import _SESSION_ID_SENTINEL
-    if session_id is None:
-        session_id = _SESSION_ID_SENTINEL
     if not updates:
         return 0
-    sid = _resolve_session_id(session_id)
+    sid = session_id
     if sid is not None and _get_active_write_mode() == 'pending':
         for href, actor_name, actor_gender, actor_link, supporting_actors in (
             updates
