@@ -7,10 +7,9 @@
 | **作者**   | Ted                                                                   |
 | **关联**   | [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md), [ADR-029](../ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md), [ADR-030](../ADR-030-Web-Feature-Parity/ADR-030-web-feature-parity.md), [ADR-031](../ADR-031-Web-Operational-Polish/ADR-031-web-operational-polish.md), [ADR-026](../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md), [ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-023](../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.md), [ADR-024](../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md), [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md) |
 
-> **重编号待执行。** 本伞型 ADR 治理一个正在重编号的 web 平台集群（见
-> [重编号计划](#重编号计划)）。在 `IMP-ADR028-01` 执行之前，三个子 ADR 仍位于其**旧**路径：
-> ADR-029 → `ADR-018-Web-Security-Hardening/`，ADR-030 → `ADR-019-Web-Feature-Parity/`，
-> ADR-031 → `ADR-020-Web-Operational-Polish/`。上方链接使用重编号后的新号。
+> **重编号已完成（2026-05-29）。** web 集群已由 `IMP-ADR028-01` 重编号：
+> ADR-029（`ADR-029-Web-Security-Hardening/`）、ADR-030（`ADR-030-Web-Feature-Parity/`）、
+> ADR-031（`ADR-031-Web-Operational-Polish/`）。下方[重编号计划](#重编号计划)保留旧→新映射作为历史记录。
 
 ## 背景
 
@@ -183,3 +182,4 @@ ADR-028  (伞型路线图)
 ## 状态日志
 
 - 2026-05-29：已接受。创建伞型路线图；web 集群重编号与 WS-A 范围合并下放给 `IMP-ADR028-01`。
+- 2026-05-29：`IMP-ADR028-01` 执行完毕——web 集群已重编号（018/019/020 → 029/030/031）；WS-A 能力诚实性范围已并入 ADR-030。
