@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from javdb.integrations.notify import email
+from javdb.integrations.notify.email import report_builder
 
 
 def test_build_ops_diagnosis_advisory_from_json_file(tmp_path):
@@ -16,7 +16,7 @@ def test_build_ops_diagnosis_advisory_from_json_file(tmp_path):
         "recommended_next_actions": ["Inspect failed job logs."],
     }), encoding="utf-8")
 
-    advisory = email._build_ops_diagnosis_advisory(str(path))
+    advisory = report_builder._build_ops_diagnosis_advisory(str(path))
 
     assert "Operations Diagnosis" in advisory
     assert "opsinc_test" in advisory
@@ -36,18 +36,18 @@ def test_build_ops_diagnosis_advisory_for_jsonl_fallback_avoids_dead_api_link(tm
         "recommended_next_actions": ["Inspect failed job logs."],
     }), encoding="utf-8")
 
-    advisory = email._build_ops_diagnosis_advisory(str(path))
+    advisory = report_builder._build_ops_diagnosis_advisory(str(path))
 
     assert "/api/diag/ops-incidents/opsinc_test" not in advisory
     assert "workflow artifact JSONL fallback" in advisory
 
 
 def test_build_ops_diagnosis_advisory_missing_file_is_empty(tmp_path):
-    assert email._build_ops_diagnosis_advisory(str(tmp_path / "missing.json")) == ""
+    assert report_builder._build_ops_diagnosis_advisory(str(tmp_path / "missing.json")) == ""
 
 
 def test_build_ops_diagnosis_advisory_non_object_json_is_empty(tmp_path):
     path = tmp_path / "ops_diagnosis.json"
     path.write_text(json.dumps(["not", "an", "object"]), encoding="utf-8")
 
-    assert email._build_ops_diagnosis_advisory(str(path)) == ""
+    assert report_builder._build_ops_diagnosis_advisory(str(path)) == ""
