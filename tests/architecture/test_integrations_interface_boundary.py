@@ -153,6 +153,8 @@ def _assigns_to_sys_modules_dunder_name(tree: ast.AST) -> bool:
             if target.value.value.id != "sys":
                 continue
             key = target.slice
+            if isinstance(key, ast.Name) and key.id == "__name__":
+                return True
             if isinstance(key, ast.Constant) and key.value == "__name__":
                 return True
     return False
