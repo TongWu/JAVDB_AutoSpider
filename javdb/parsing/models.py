@@ -200,17 +200,6 @@ class MovieDetail:
         """Return magnets in the legacy list-of-dicts format."""
         return [m.to_dict() for m in self.magnets]
 
-    def categorize_magnets(self, index=None) -> dict:
-        """Categorise this detail's magnets into download buckets.
-
-        Feeds the legacy list-of-dicts magnet shape through the parsing-layer
-        categoriser (Rust-first dispatch with pure-Python fallback). Returns a
-        dict byte-for-byte equal to ``extract_magnets(self.get_magnets_as_legacy())``.
-        """
-        from javdb.parsing.magnet_categorize import categorize
-
-        return categorize(self.get_magnets_as_legacy(), index=index)
-
 
 # ---------------------------------------------------------------------------
 # Page-level result containers

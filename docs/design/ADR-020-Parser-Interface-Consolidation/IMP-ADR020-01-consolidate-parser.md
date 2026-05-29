@@ -4,7 +4,9 @@
 
 **Goal:** Make `javdb.parsing` the single parser interface returning finished domain objects, eliminate the parse-then-extract two-step (including in the hot path), migrate every caller, and delete `javdb/spider/parse_legacy_adapters.py`.
 
-**Architecture:** Move magnet categorization (with its Rust-first dispatch) down into `javdb/parsing/magnet_categorize.py`; `MovieDetail.categorize_magnets()` becomes the finished-object interface; `javdb/spider/magnet_extractor.py` becomes a re-export. Index selection stays in `javdb.pipeline`. Each phase is independently shippable; the shim dies last.
+**Architecture:** Move magnet categorization (with its Rust-first dispatch) down into `javdb/parsing/magnet_categorize.py`, exposed as the free function `categorize(magnets)`; callers apply it to `detail.get_magnets_as_legacy()`; `javdb/spider/magnet_extractor.py` becomes a re-export. Index selection stays in `javdb.pipeline`. Each phase is independently shippable; the shim dies last.
+
+> **Design correction (2026-05-29, during Phase 2):** `MovieDetail.categorize_magnets()` is **dead on the production path** — `parse_detail_page()` returns a Rust `RustMovieDetail` that lacks the method (only `get_magnets_as_legacy()` is uniform across the Rust and Python detail objects). The canonical interface is the free function `magnet_categorize.categorize(detail.get_magnets_as_legacy())` (matches `runner.py:700`). **Every `categorize_magnets()` reference below means that free function** — the method was removed.
 
 **Tech Stack:** Python 3.11+, pytest, maturin/Rust (parity only — no Rust edits). Single repo.
 
@@ -62,7 +64,7 @@
 
 ## Phase 3 — Migrate the spider detail flow + collapse the two-step (the real work)
 
-- [ ] `spider/detail/parallel_mode.py:41-58` (`_spider_parse_fn`) → `detail = parse_detail_page(html)`; build `data` from `detail.get_*()`; set `data['magnet_links'] = detail.categorize_magnets(idx)` (**pre-categorized**, D3).
+- [ ] `spider/detail/parallel_mode.py:41-58` (`_spider_parse_fn`) → `detail = parse_detail_page(html)`; build `data` from `detail.get_*()`; set `data['magnet_links'] = categorize(detail.get_magnets_as_legacy(), idx)` (from `javdb.parsing.magnet_categorize`; **pre-categorized**, D3).
 - [ ] `spider/fetch/fallback.py:4,506-665` → replace `parse_detail` with `parse_detail_page` + accessors, sourcing the existing internal 6-tuple from `MovieDetail` (keep the tuple as fallback.py's internal contract across its ~20 return sites; only change its *source*). Drop the shim import (`:4`).
 - [ ] `spider/detail/runner.py:700` → read `data['magnet_links']` directly; **delete** the `extract_magnets(data['magnets'], …)` call. This is the separately-revertible "collapse" commit (D3).
 - [ ] Update test monkeypatch targets that stub `runner.extract_magnets` (`tests/smoke/test_spider_detail_runner.py:313,420`, detail-runner unit tests) — categorization now happens in the backend, so the stub target moves (or the tests assert on `data['magnet_links']`).
