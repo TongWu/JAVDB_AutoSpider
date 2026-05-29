@@ -2,8 +2,8 @@
 
 These module-level constants were historically defined at the top of the
 single-file ``email.py`` module. They are gathered here so the responsibility
-submodules (``log_analysis``, ``report_builder``, ``delivery``) and the bake
-``_legacy`` orchestration can share a single source without circular imports.
+submodules (``log_analysis``, ``report_builder``, ``delivery``) and the
+``service`` orchestration can share a single source without circular imports.
 
 Behaviour is byte-for-byte identical to the pre-split module: same ``cfg()``
 keys, defaults, repo-root chdir, ``sys.path`` insert, and one-time
