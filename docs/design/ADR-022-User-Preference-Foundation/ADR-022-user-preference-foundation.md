@@ -221,5 +221,5 @@ Encode actor/category preferences as special tags (e.g., `actor_hearted:EvkJ`).
 - [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md) — Pending mode write flow
 - [ADR-011](../_archive/ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) — Parsing module structure and `MovieDetail` dataclass
 - [ADR-014](../_archive/ADR-014-Storage-Cli-Layering/ADR-014-storage-cli-layering.md) — Storage / CLI layering
-- [ADR-030](../ADR-030-Web-Feature-Parity/ADR-030-web-feature-parity.md) — Web console feature parity
+- [ADR-030](../_archive/ADR-030-Web-Feature-Parity/ADR-030-web-feature-parity.md) — Web console feature parity
 - [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md) — User Preference Model; depends on this ADR
