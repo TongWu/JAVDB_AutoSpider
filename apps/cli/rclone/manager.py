@@ -8,11 +8,15 @@ from __future__ import annotations
 
 from pathlib import Path
 import argparse
+import os
 import sys
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+# Establish repo-root cwd BEFORE importing the integration package: its __init__
+# imports the service whose module-level setup_logging()/cfg() must run at repo root.
+os.chdir(REPO_ROOT)
 
 from javdb.integrations.rclone.manager.options import RcloneManagerOptions
 from javdb.integrations.rclone.manager.service import run_manager
@@ -117,9 +121,6 @@ def options_from_args(args: argparse.Namespace) -> RcloneManagerOptions:
 
 
 def main(argv: list[str] | None = None) -> int:
-    import os
-
-    os.chdir(REPO_ROOT)
     return run_manager(options_from_args(parse_args(argv))).exit_code
 
 

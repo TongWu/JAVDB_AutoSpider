@@ -108,6 +108,10 @@ def test_drift_advisory_skips_malformed_records(tmp_path):
     jsonl = drift_dir / "d1_drift.jsonl"
     today = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     lines = [
+        # Non-object JSON lines (a list, a bare number) have no .get() — they
+        # must be skipped, not raise AttributeError.
+        json.dumps(["not", "a", "dict"]),
+        json.dumps(42),
         # Malformed: failure_count is non-numeric — must be skipped, not crash.
         json.dumps({
             "ts": today,

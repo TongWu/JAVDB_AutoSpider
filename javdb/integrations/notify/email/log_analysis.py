@@ -1109,6 +1109,10 @@ def _build_dual_drift_advisory(reports_dir: str) -> str:
                     rec = json.loads(line)
                 except (ValueError, TypeError):
                     continue
+                if not isinstance(rec, dict):
+                    # A non-object JSON line (list/str/number) has no .get();
+                    # skip it instead of raising AttributeError.
+                    continue
                 ts = str(rec.get('ts') or '')
                 if not ts.startswith(today_utc):
                     continue
