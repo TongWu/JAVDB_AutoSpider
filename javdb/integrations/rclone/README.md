@@ -12,9 +12,9 @@ Rclone integration: shared scan/parse/health-check primitives plus the unified s
 
 | Subdirectory | Purpose |
 |---|---|
-| `manager/` | Unified rclone manager command-service package (ADR-015). `options.py`/`result.py` hold the `RcloneManagerOptions`/`RcloneManagerResult` contract; `service.py` owns all scan/report/execute/execute-soft-delete/validate orchestration and exposes `run_manager` (plus `run_rclone_manager`/`run_execute_inventory_purge_from_csv` for programmatic callers). CLI parsing + exit-code mapping live in `apps.cli.rclone.manager`. Scan persistence routes through `OperationsRepo` + `SessionLifecycleRepo` (Issue #79). |
+| `manager/` | Unified rclone manager command-service package (ADR-015):<br>• **Contract** — `options.py` / `result.py` (`RcloneManagerOptions` / `RcloneManagerResult`).<br>• **Orchestration** — `service.py` owns scan / report / execute / execute-soft-delete / validate and exposes `run_manager` (plus `run_rclone_manager` and `run_execute_inventory_purge_from_csv` for programmatic callers).<br>• **CLI boundary** — parsing + exit-code mapping in `apps.cli.rclone.manager`.<br>• **Persistence** — scan routes through `OperationsRepo` + `SessionLifecycleRepo` (Issue #79). |
 
 ## Depends on
 
-- Upstream callers: `apps.cli.rclone_manager`, weekly dedup workflow.
+- Upstream callers: `apps.cli.rclone.manager`, weekly dedup workflow.
 - Downstream: `javdb.storage` (RcloneInventory, DedupRecords), `javdb.infra.config`, `javdb.infra.logging`, `javdb.infra.paths`.

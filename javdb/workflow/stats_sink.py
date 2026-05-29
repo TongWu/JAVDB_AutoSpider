@@ -27,7 +27,10 @@ class UploaderStats:
 
 @dataclass(frozen=True)
 class PikPakStats:
-    threshold_days: int = 0
+    # Default mirrors db_save_pikpak_stats' semantic default (3 days). Callers
+    # (the PikPak bridge) always pass an explicit value, so this only affects
+    # bare PikPakStats() construction.
+    threshold_days: int = 3
     total_torrents: int = 0
     filtered_old: int = 0
     successful_count: int = 0
