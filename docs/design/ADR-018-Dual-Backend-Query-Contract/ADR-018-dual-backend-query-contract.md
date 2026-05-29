@@ -30,7 +30,7 @@ The **dynamic query builders** are duplicated verbatim across the two repos with
 - Python: `javdb/storage/repos/history_repo.py:240` — `_build_movie_filters()`
 - TypeScript: `JAVDB_AutoSpider_Web/server/routes/history.ts:69` — `buildMovieQuery()`
 
-```
+```sql
 # both backends, character-identical:
 (m.VideoCode LIKE ? OR m.ActorName LIKE ? OR m.SupportingActors LIKE ?)
 ... m.PerfectMatchIndicator = ? ...
