@@ -2,6 +2,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+# Establish repo-root cwd BEFORE importing the integration package: its __init__
+# imports the service whose module-level setup_logging()/cfg() must run at repo root.
+os.chdir(REPO_ROOT)
 
 from javdb.infra.config import cfg
 from javdb.integrations.qb.file_filter.options import QbFileFilterOptions
