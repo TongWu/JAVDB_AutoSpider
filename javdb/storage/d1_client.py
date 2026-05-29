@@ -334,6 +334,62 @@ class D1Connection:
             self._total_changes += cursor.rowcount
         return cursors
 
+    def assert_recovery_drained(self, *, ordering_key: str) -> None:
+        """Raise if unresolved D1 recovery work blocks *ordering_key*.
+
+        Reads only the local recovery outbox (no network) and refuses to
+        proceed when pending or dead-lettered groups remain for the key.
+        """
+        from javdb.storage.d1_port import recovery_outbox_path
+        from javdb.storage.d1_recovery import outbox_status
+
+        status = outbox_status(recovery_outbox_path())
+        pending = status["pending_groups"].get(ordering_key, [])
+        dead_lettered = status["dead_lettered_groups"].get(ordering_key, [])
+        if pending or dead_lettered:
+            raise RuntimeError(
+                f"unresolved D1 recovery work for ordering key {ordering_key}; "
+                "drain it before committing the session"
+            )
+
+    def drain_recovery_residue(self, *, session_id: str) -> None:
+        """Best-effort D1-direct retry for pending-row cleanup.
+
+        After the normal commit flow, any D1-side failures on the ApplyState
+        UPDATE or the final DELETE leave orphaned 'pending' rows in D1. Since
+        the session is already committed and the live tables are consistent,
+        we can safely mark remaining pending rows as applied and delete them
+        directly on D1. Opens its own port connection because the caller's
+        ``with _get_db(...)`` block has already committed/closed.
+        """
+        from javdb.storage.d1_client import make_d1_connection
+
+        d1 = None
+        try:
+            d1 = make_d1_connection('history')
+            for table in ('PendingMovieHistoryWrites', 'PendingTorrentHistoryWrites'):
+                d1.execute(
+                    f"UPDATE {table} SET ApplyState='applied' "
+                    f"WHERE SessionId=? AND ApplyState='pending'",
+                    (session_id,),
+                )
+                d1.execute(
+                    f"DELETE FROM {table} "
+                    f"WHERE SessionId=? AND ApplyState='applied'",
+                    (session_id,),
+                )
+        except Exception as exc:
+            logger.warning(
+                "D1 retry pending cleanup failed for session %s: %s",
+                session_id, exc,
+            )
+        finally:
+            if d1 is not None:
+                try:
+                    d1.close()
+                except Exception:
+                    pass
+
     def close(self) -> None:
         close_exc: Exception | None = None
         try:

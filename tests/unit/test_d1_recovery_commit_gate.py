@@ -5,7 +5,6 @@ from contextlib import contextmanager
 import pytest
 
 import javdb.storage.db._db_history_write as history_write
-import javdb.storage.db._db_connection as db_connection
 import javdb.storage.db._db_reports as reports
 from javdb.storage.db import (
     db_commit_session_history,
@@ -18,11 +17,6 @@ from javdb.storage.d1_recovery import RecoveryEvent, RecoveryPolicy, append_even
 
 def test_pending_commit_refuses_unresolved_recovery_key(monkeypatch, tmp_path):
     monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
-    monkeypatch.setattr(
-        db_connection,
-        "current_backend",
-        lambda: "d1",
-    )
     sid = db_create_report_session(
         report_type="DailyReport",
         report_date="2026-05-19",
@@ -55,6 +49,32 @@ def test_pending_commit_refuses_unresolved_recovery_key(monkeypatch, tmp_path):
             "timeout",
         ),
     )
+
+    # Drive the gate through a connection exposing the recovery facade
+    # (not a backend string). A real D1Connection built with dummy creds
+    # needs no network: assert_recovery_drained reads only the local
+    # recovery outbox, so the test's real outbox drives the raise without
+    # duplicating the check logic. flush/execute are no-ops so the pre-gate
+    # _flush_pending_d1_batch and any commit SQL reached don't hit D1.
+    from javdb.storage.d1_client import D1Connection
+
+    real_d1 = D1Connection("acc", "db", "tok")
+
+    class GateConn:
+        def assert_recovery_drained(self, *, ordering_key):
+            real_d1.assert_recovery_drained(ordering_key=ordering_key)
+
+        def flush(self, ordering_key=None):
+            return []
+
+        def execute(self, *args, **kwargs):
+            return None
+
+    @contextmanager
+    def fake_get_db(_path=None):
+        yield GateConn()
+
+    monkeypatch.setattr(history_write, "_get_db", fake_get_db)
 
     with pytest.raises(RuntimeError, match="unresolved D1 recovery"):
         db_commit_session_history(sid)
