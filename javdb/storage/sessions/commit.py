@@ -135,8 +135,8 @@ def commit_session(req: CommitRequest) -> CommitResult:
         get_db,
         REPORTS_DB_PATH,
         db_commit_session_history,
-        db_mark_session_committed,
     )
+    from javdb.storage.sessions.lifecycle import transition
     from javdb.infra.logging import get_logger
 
     logger = get_logger(__name__)
@@ -213,10 +213,10 @@ def commit_session(req: CommitRequest) -> CommitResult:
 
     # Flip the status row.
     try:
-        n = db_mark_session_committed(req.session_id)
+        n = transition(req.session_id, "committed")
     except Exception as exc:
         raise RuntimeError(
-            f"db_mark_session_committed failed for {req.session_id!r}: {exc}"
+            f"transition to committed failed for {req.session_id!r}: {exc}"
         ) from exc
 
     if n == 0 and drained_pending_session:

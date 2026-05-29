@@ -79,10 +79,12 @@ def test_commit_session_explicit_id_survives_window_lookup_failure(monkeypatch):
         "db_find_in_progress_sessions",
         lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("lookup failed")),
     )
+    # Session status flips now route through SessionLifecycle.transition
+    # (ADR-019); commit_session imports it as a module-level `transition`.
     monkeypatch.setattr(
         commit_session,
-        "db_mark_session_committed",
-        lambda sid: marked.append(sid) or 1,
+        "transition",
+        lambda sid, to, **_kwargs: marked.append(sid) or 1,
     )
 
     rc = commit_session.main([
