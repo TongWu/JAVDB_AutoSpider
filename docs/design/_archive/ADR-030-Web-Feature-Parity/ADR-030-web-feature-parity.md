@@ -2,10 +2,10 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Accepted — IMP-ADR030-01 implemented & verified (206 tests); PR TongWu/JAVDB_AutoSpider_Web#9 open, pending merge |
+| **Status**  | Completed                                                              |
 | **Date**    | 2026-05-24                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md), [ADR-029](../ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md) |
+| **Related** | [ADR-017](../ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md), [ADR-029](../ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md) |
 
 ## Context
 
@@ -195,7 +195,7 @@ export async function findUser(env: Env, db: D1Database): Promise<User | undefin
 
 ### Capability Honesty: GitHub Actions Coverage and `INGESTION_MODE`
 
-Merged from [ADR-028](../ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md) workstream WS-A (P0). Two parity gaps undermine *capability honesty* — the platform advertising work it cannot track or execute.
+Merged from [ADR-028](../../ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md) workstream WS-A (P0). Two parity gaps undermine *capability honesty* — the platform advertising work it cannot track or execute.
 
 **Cloudflare — untracked GitHub Actions workflows.** `Migration.yml`, `WeeklyDedup.yml`, and `TestIngestion.yml` have no typed dispatch endpoint. They are reachable only via the generic `POST /api/gh-actions/runs` (requires `GH_ACTIONS_TIER=admin` plus a known workflow filename) and are **not** written to `job_runs`, so they never appear in the Tasks list or stats. Add typed dispatch endpoints plus `job_runs` tracking for these three workflows, mirroring the existing pattern for `DailyIngestion` / `QBFileFilter` / `RcloneManager` / `StaleSessionCleanup`.
 
