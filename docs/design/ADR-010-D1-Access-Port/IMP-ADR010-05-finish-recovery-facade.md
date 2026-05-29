@@ -12,7 +12,7 @@
 
 **Related:** [ADR-010](ADR-010-d1-access-port.md) (D1/D2 — the port owns recovery)
 
-**Status:** Proposed
+**Status:** Completed (2026-05-29) — facade methods added to `D1Connection`/`DualConnection`; both commit-path helpers duck-type; `current_backend` removed from `_db_history_write.py`; gate test rewritten. ADR-010 anchor suites green. Shipped in the ADR-010 Phase-5 PR.
 
 ---
 
@@ -40,28 +40,28 @@
 
 ## Task 1: Add the facade methods
 
-- [ ] `D1Connection.assert_recovery_drained(self, *, ordering_key)` (`d1_client.py`, near `flush` at `:330`): the outbox-status check currently inlined at `_db_history_write._assert_no_blocking_d1_recovery:121-129` — inspect the recovery outbox for blocking work and raise if found.
-- [ ] A residue-cleanup method (e.g. `drain_recovery_residue(self, *, ordering_key)` or fold into the existing `drain_recovery`, `d1_port.py:305`) wrapping the cleanup UPDATE/DELETE pair from `_d1_retry_pending_cleanup:1419-1430`. **Preserve its lifecycle:** that helper deliberately opens a *separate* `make_d1_connection` because the surrounding `with _get_db(...)` block has already committed/closed — the facade method opens its own port connection internally.
-- [ ] Mirror both on `DualConnection` (`dual_connection.py:1034`, delegate to the D1 side).
-- [ ] **Do NOT** add them to `sqlite3.Connection` — absence is the signal, consistent with `hasattr(conn, "flush")` (`_db_history_write.py:108`).
+- [x] `D1Connection.assert_recovery_drained(self, *, ordering_key)` (`d1_client.py`, near `flush` at `:330`): the outbox-status check currently inlined at `_db_history_write._assert_no_blocking_d1_recovery:121-129` — inspect the recovery outbox for blocking work and raise if found.
+- [x] `D1Connection.drain_recovery_residue(self, *, session_id)` wraps the cleanup UPDATE/DELETE pair from `_d1_retry_pending_cleanup`. **As shipped:** it runs the pair on `self.execute(...)`, so it targets exactly the database this facade is bound to (no hardcoded `'history'`, no cross-DB footgun). The lifecycle is preserved by the *caller*: `_d1_retry_pending_cleanup` opens a fresh `with _get_db(...)` connection post-commit (the commit's own block has already closed), and that live connection is what the method runs on. `DualConnection.drain_recovery_residue` mirrors it, delegating to its D1 side so the residual cleanup stays D1-direct.
+- [x] Mirror both on `DualConnection` (`dual_connection.py:1034`, delegate to the D1 side).
+- [x] **Do NOT** add them to `sqlite3.Connection` — absence is the signal, consistent with `hasattr(conn, "flush")` (`_db_history_write.py:108`).
 
 ## Task 2: Rewrite the two helpers to duck-type
 
-- [ ] `_assert_no_blocking_d1_recovery` (`:114-129`): open the connection, `fn = getattr(conn, "assert_recovery_drained", None); if fn: fn(ordering_key=...)`. **Delete** the `current_backend() not in ("d1","dual")` guard (`:119`) and the `current_backend` import.
+- [x] `_assert_no_blocking_d1_recovery` (`:114-129`): open the connection, `fn = getattr(conn, "assert_recovery_drained", None); if fn: fn(ordering_key=...)`. **Delete** the `current_backend() not in ("d1","dual")` guard (`:119`) and the `current_backend` import.
   - **Caveat:** if the port instance does not already hold the outbox handle the check needs, keep the helper reading `recovery_outbox_path()` (same path the port writes) but swap *only* the `current_backend()` guard for `hasattr(conn, "flush")` as the "is-this-a-D1-conn" signal. Either way, the `current_backend()` read is gone.
-- [ ] `_d1_retry_pending_cleanup` (`:1401-1441`): same duck-typed pattern via the residue-cleanup facade method; drop the `make_d1_connection` re-open from the business layer (it moves inside the facade method) and the `current_backend()` check (`:1411`).
-- [ ] `_flush_pending_d1_batch` (`:132-136`) is already correct (`getattr(conn, "flush", None)`) — leave it as the reference pattern. Call sites (`:1524,1533-1534,1634-1635,1651`) are unchanged.
+- [x] `_d1_retry_pending_cleanup` (`:1401-1441`): same duck-typed pattern via the residue-cleanup facade method; drop the `make_d1_connection` re-open from the business layer (it moves inside the facade method) and the `current_backend()` check (`:1411`).
+- [x] `_flush_pending_d1_batch` (`:132-136`) is already correct (`getattr(conn, "flush", None)`) — leave it as the reference pattern. Call sites (`:1524,1533-1534,1634-1635,1651`) are unchanged.
 
 ## Task 3: Rewrite the test to stop mocking the backend
 
-- [ ] `tests/unit/test_d1_recovery_commit_gate.py:21-25`: replace `monkeypatch.setattr(db_connection, "current_backend", lambda: "d1")` with a **fake connection** that exposes (or omits) `assert_recovery_drained` — the concrete "tests stop mocking `STORAGE_BACKEND`" deliverable. The gate behavior (raise when recovery is blocked) is now driven by the facade method, not by a backend string.
+- [x] `tests/unit/test_d1_recovery_commit_gate.py:21-25`: replace `monkeypatch.setattr(db_connection, "current_backend", lambda: "d1")` with a **fake connection** that exposes (or omits) `assert_recovery_drained` — the concrete "tests stop mocking `STORAGE_BACKEND`" deliverable. The gate behavior (raise when recovery is blocked) is now driven by the facade method, not by a backend string.
 
 ## Task 4: Verification gates
 
-- [ ] `grep -n "current_backend" javdb/storage/db/_db_history_write.py` returns **nothing** (the business layer no longer reads backend identity).
-- [ ] `pytest tests/unit/test_d1_recovery_commit_gate.py tests/unit/test_commit_session_bulk.py tests/unit/test_d1_dual.py tests/unit/test_d1_port.py -q` — green (ADR-010 anchors).
-- [ ] Full storage suite green; a sqlite-mode commit and a (mocked) d1-mode commit both behave as before.
-- [ ] Update this IMP's `Status` to `Completed`; check off `IMP-ADR010-05` in the ADR-010 roadmap.
+- [x] `grep -n "current_backend" javdb/storage/db/_db_history_write.py` returns **nothing** (the business layer no longer reads backend identity).
+- [x] `pytest tests/unit/test_d1_recovery_commit_gate.py tests/unit/test_commit_session_bulk.py tests/unit/test_d1_dual.py tests/unit/test_d1_port.py -q` — green (ADR-010 anchors).
+- [x] Full storage suite green; a sqlite-mode commit and a (mocked) d1-mode commit both behave as before.
+- [x] Update this IMP's `Status` to `Completed`; check off `IMP-ADR010-05` in the ADR-010 roadmap.
 
 ## Risks
 
