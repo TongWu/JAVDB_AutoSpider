@@ -136,6 +136,9 @@ def commit_session(req: CommitRequest) -> CommitResult:
         REPORTS_DB_PATH,
         db_commit_session_history,
     )
+    # Lazy import: lifecycle imports the _db_reports primitives at module top,
+    # so importing it here (rather than at module top) avoids a circular import
+    # while javdb.storage.db is still initializing.
     from javdb.storage.sessions.lifecycle import transition
     from javdb.infra.logging import get_logger
 
@@ -211,7 +214,10 @@ def commit_session(req: CommitRequest) -> CommitResult:
                     f"db_commit_session_history failed for {req.session_id!r}: {exc}"
                 ) from exc
 
-    # Flip the status row.
+    # Flip the status row. Routing through transition refuses illegal edges
+    # per ADR-019 (e.g. a failed->committed source would raise
+    # IllegalTransition rather than silently flip); the n==0 branch below
+    # still handles the idempotent committed->committed no-op.
     try:
         n = transition(req.session_id, "committed")
     except Exception as exc:
