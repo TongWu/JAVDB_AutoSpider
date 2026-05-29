@@ -316,6 +316,25 @@ class TestLoggerNameMapping:
     def test_shorten_unknown_module_returned_as_is(self):
         assert _shorten_logger_name('some.other.lib') == 'some.other.lib'
 
+    def test_shorten_command_package_submodule_uses_parent_label(self):
+        # ADR-015 command packages log under submodules one level below a mapped
+        # package; the parent package's short label must still apply regardless
+        # of the submodule name (service / delivery / report_builder / ...).
+        assert _shorten_logger_name('javdb.integrations.qb.uploader.service') == 'QBUploader'
+        assert _shorten_logger_name('javdb.integrations.qb.file_filter.service') == 'QBFilter'
+        assert _shorten_logger_name('javdb.integrations.pikpak.bridge.service') == 'PikPak'
+        assert _shorten_logger_name('javdb.integrations.rclone.manager.service') == 'Rclone'
+        # Notify email split (Phase 6) produces several submodules:
+        assert _shorten_logger_name('javdb.integrations.notify.email.delivery') == 'Email'
+        assert _shorten_logger_name('javdb.integrations.notify.email.report_builder') == 'Email'
+        assert _shorten_logger_name('javdb.integrations.notify.email.log_analysis') == 'Email'
+        assert _shorten_logger_name('javdb.integrations.notify.email.service') == 'Email'
+
+    def test_shorten_submodule_without_mapped_parent_returned_as_is(self):
+        # A submodule whose immediate parent is not mapped falls through to the
+        # default behavior (returned unchanged).
+        assert _shorten_logger_name('some.unmapped.module.thing') == 'some.unmapped.module.thing'
+
     def test_get_logger_name_mapping_returns_dict(self):
         mapping = get_logger_name_mapping()
         assert isinstance(mapping, dict)

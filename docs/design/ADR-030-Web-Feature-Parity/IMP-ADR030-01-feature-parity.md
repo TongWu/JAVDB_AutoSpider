@@ -1087,3 +1087,44 @@ git commit -m "fix(tests): update findUser callers for async D1 signature"
 - `stats.ts` line 143: duplicate `const metric` → should be `const period` (fixed in Task 5)
 - `config-schema.ts` line 29: duplicate `TORRENT_CATEGORY_ADHOC` entry (fixed in Task 1)
 - `GPT_API_KEY` was in section `advanced` — ADR-030 specifies `javdb` (fixed in Task 1)
+
+---
+
+## Implementation Status (2026-05-29)
+
+Executed via `superpowers:subagent-driven-development` on branch
+`claude/adr-028-web-completeness` (web-repo worktree), after IMP-ADR029-01.
+
+**All 7 tasks DONE & verified.** Final gate: `npm run test:server` → **168 passed,
+0 failures** (23 files); `npm run typecheck:server` → clean. Commits `6800358` …
+`8c3cd2b` (+ a security fix `41d2a53`).
+
+Divergences from the written plan (corrected during execution):
+- **Task 4 (change-password):** the plan's handler called `verifyPassword(old, hash)`
+  with 2 args, but ADR-029 made it 3-arg `(password, hash, environment)` — corrected
+  to pass `c.env.ENVIRONMENT`. The plan's test omitted the `csrf_token` cookie, so the
+  authenticated cases would have hit ADR-029's CSRF double-submit guard (403); added
+  `Cookie: csrf_token=…` to those requests. Code review additionally found that
+  change-password writes `ADMIN_PASSWORD_HASH` into D1 `api_config`, which `GET
+  /api/config` would return UNMASKED to non-admins (it was missing from
+  `SENSITIVE_KEYS` while `READONLY_PASSWORD_HASH` was present) — fixed by adding
+  `ADMIN_PASSWORD_HASH` to `SENSITIVE_KEYS` (`41d2a53`). Password hashes remain stored
+  UNENCRYPTED (findUser reads them raw + `JSON.parse`); `SENSITIVE_KEYS` controls
+  masking only.
+- **Task 5 (stats trend):** the plan's "line 143 duplicate `const metric` bug" did NOT
+  exist in current code (handler already declares both `const metric` and `const
+  period`); that no-fix was skipped. Edits were located by `case` label, not the plan's
+  stale line numbers.
+- **Task 6 (`CORS_ORIGINS` env):** already added by IMP-ADR029-01 Task 6 — no-op here.
+- **Task 7 (test compatibility):** suite stayed green throughout; the only `findUser`
+  callers (auth.ts ×3, users.test.ts) all use the new `(env, db, username)` signature —
+  no fixes needed.
+
+**Cross-backend follow-up (ADR-017 parity, tracked separately):** Task 5 added an
+`available` boolean (and `reason` for unavailable metrics) to the Worker's
+`/api/stats/trend` response. The Python FastAPI backend's `TrendResponse`
+(`apps/api/schemas/stats.py`) does not yet expose `available`/`reason`. Per the
+"Dual Backend Sync" rule this must be reconciled in a linked follow-up (the TS
+contract test `contract-compliance.test.ts` uses non-exclusive `assertHasKeys`, so it
+is not broken today, but should assert `available` once both backends + `openapi.json`
+agree).

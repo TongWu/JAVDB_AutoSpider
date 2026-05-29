@@ -142,6 +142,14 @@ def _shorten_logger_name(name):
     """Return the short display name for a module, or a truncated fallback."""
     if name in _MODULE_SHORT_NAMES:
         return _MODULE_SHORT_NAMES[name]
+    # ADR-015 command packages log under submodules one level below a mapped
+    # package (e.g. ``javdb.integrations.qb.uploader.service``,
+    # ``javdb.integrations.notify.email.delivery``). Fall back to the immediate
+    # parent package's short label so the display name survives the
+    # integration→package split instead of rendering the full dotted path.
+    parent = name.rpartition('.')[0]
+    if parent and parent in _MODULE_SHORT_NAMES:
+        return _MODULE_SHORT_NAMES[parent]
     # For unmapped modules, strip common prefixes for readability
     for prefix in ('packages.python.', 'apps.cli.', 'scripts.'):
         if name.startswith(prefix):
