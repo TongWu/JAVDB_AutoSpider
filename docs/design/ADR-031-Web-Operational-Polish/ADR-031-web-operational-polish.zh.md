@@ -2,7 +2,7 @@
 
 | 字段       | 值                                                                     |
 | ---------- | --------------------------------------------------------------------- |
-| **状态**   | Accepted                                                              |
+| **状态**   | Accepted — IMP-ADR031-01 已实现并验证（206 测试）；PR TongWu/JAVDB_AutoSpider_Web#9 已开启，待合并 |
 | **日期**   | 2026-05-24                                                            |
 | **作者**   | Ted                                                                   |
 | **关联**   | [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md), [ADR-029](../ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md), [ADR-030](../ADR-030-Web-Feature-Parity/ADR-030-web-feature-parity.md) |
