@@ -106,6 +106,8 @@ def test_pending_commit_flushes_safe_batch_before_finalizing(monkeypatch):
 
 
 def test_pending_commit_runs_gate_before_finalizing(monkeypatch):
+    import javdb.storage.sessions.lifecycle as lifecycle
+
     calls = []
 
     monkeypatch.setattr(
@@ -113,14 +115,29 @@ def test_pending_commit_runs_gate_before_finalizing(monkeypatch):
         "db_get_session_status",
         lambda _sid, db_path=None: ("pending", "in_progress"),
     )
+    # Status flips now route through SessionLifecycle.transition (ADR-019),
+    # which reads status and dispatches via its own import-time aliases.
+    # Stub those so the call ordering is observable without a real DB. The
+    # status stays in_progress, so the committed flip takes the loose
+    # in_progress->committed primitive; record "committed" from either path.
     monkeypatch.setattr(
-        reports,
-        "db_begin_finalize_session",
+        lifecycle,
+        "_db_get_session_status",
+        lambda _sid, db_path=None: ("pending", "in_progress"),
+    )
+    monkeypatch.setattr(
+        lifecycle,
+        "_db_begin_finalize_session",
         lambda _sid, db_path=None: calls.append("finalizing"),
     )
     monkeypatch.setattr(
-        reports,
-        "db_finish_commit_session",
+        lifecycle,
+        "_db_finish_commit_session",
+        lambda _sid, db_path=None: calls.append("committed"),
+    )
+    monkeypatch.setattr(
+        lifecycle,
+        "_db_mark_session_committed",
         lambda _sid, db_path=None: calls.append("committed"),
     )
     monkeypatch.setattr(

@@ -255,6 +255,7 @@ def _patch_rclone_db_mocks(monkeypatch, order, overrides=None):
     import javdb.storage.db._db_reports as _rep
     import javdb.storage.db._db_operations as _ops
     import javdb.storage.db._db_session as _sess
+    import javdb.storage.sessions.lifecycle as _lifecycle
 
     defaults = {
         "init_db": lambda *_a, **_kw: order.append("init_db"),
@@ -275,8 +276,6 @@ def _patch_rclone_db_mocks(monkeypatch, order, overrides=None):
         "init_db": [(_mig, "init_db"), (_db_pkg, "init_db")],
         "get_active_session_id": [(_sess, "get_active_session_id"), (_db_pkg, "get_active_session_id")],
         "db_create_report_session": [(_rep, "db_create_report_session"), (_db_pkg, "db_create_report_session")],
-        "db_mark_session_committed": [(_rep, "db_mark_session_committed"), (_db_pkg, "db_mark_session_committed")],
-        "db_mark_session_failed": [(_rep, "db_mark_session_failed"), (_db_pkg, "db_mark_session_failed")],
         "db_open_rclone_staging": [(_ops, "db_open_rclone_staging"), (_db_pkg, "db_open_rclone_staging")],
         "db_append_rclone_staging": [(_ops, "db_append_rclone_staging"), (_db_pkg, "db_append_rclone_staging")],
         "db_swap_rclone_inventory": [(_ops, "db_swap_rclone_inventory"), (_db_pkg, "db_swap_rclone_inventory")],
@@ -287,6 +286,35 @@ def _patch_rclone_db_mocks(monkeypatch, order, overrides=None):
     for name, mock_fn in defaults.items():
         for mod, attr in module_map.get(name, []):
             monkeypatch.setattr(mod, attr, mock_fn)
+
+    # The rclone manager now routes session-status flips through
+    # SessionLifecycle.transition (ADR-019). transition reads the current
+    # status via lifecycle._db_get_session_status, then dispatches to the
+    # lifecycle._db_mark_session_* aliases bound at import time. Patch those
+    # aliases (not the _db_reports originals) so the mocks above still record,
+    # and seed the status read so the in_progress->committed/failed edges
+    # validate as legal against a freshly created staging session.
+    monkeypatch.setattr(
+        _lifecycle, "_db_get_session_status",
+        lambda session_id, *, db_path=None: ("pending", "in_progress"),
+    )
+
+    def _adapt(mock_fn):
+        # transition() calls the primitive as fn(sid, db_path=..., reason=...);
+        # the test mocks only accept fn(sid), so absorb the extra kwargs.
+        def _wrapped(session_id, *, db_path=None, **_kw):
+            return mock_fn(session_id)
+
+        return _wrapped
+
+    monkeypatch.setattr(
+        _lifecycle, "_db_mark_session_committed",
+        _adapt(defaults["db_mark_session_committed"]),
+    )
+    monkeypatch.setattr(
+        _lifecycle, "_db_mark_session_failed",
+        _adapt(defaults["db_mark_session_failed"]),
+    )
 
 
 def test_scan_marks_local_session_committed_after_inventory_swap(

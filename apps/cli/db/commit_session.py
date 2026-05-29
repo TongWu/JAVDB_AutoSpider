@@ -46,10 +46,10 @@ from javdb.storage.db import (
     close_db,
     db_commit_session_history,
     db_find_in_progress_sessions,
-    db_mark_session_committed,
     db_pending_session_stats,
     init_db,
 )
+from javdb.storage.sessions.lifecycle import transition
 from javdb.infra.logging import (
     get_logger,
     setup_logging,
@@ -427,7 +427,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                     )
                 continue
         try:
-            n = db_mark_session_committed(sid)
+            n = transition(sid, "committed")
         except Exception as e:
             logger.error("Failed to commit session %s: %s", sid, e)
             failed_commits.append(sid)
