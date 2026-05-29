@@ -33,6 +33,33 @@ import javdb.storage.db._db_rollback as _db_rollback_mod
 import javdb.storage.db._db_stats as _db_stats_mod
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _disable_git_side_effects():
+    """Prevent the test suite from mutating the real repo's git state.
+
+    ``javdb.infra.git_helper.git_commit_and_push`` writes ``git config
+    user.name/email`` (local) and creates commits/pushes. Tests that exercise it
+    — directly, or by spawning pipeline CLI subprocesses that auto-commit
+    logs/reports — would otherwise overwrite the developer's local git identity
+    (to the ``config.py`` placeholder) and leave stray ``Auto-commit`` commits on
+    the working branch.
+
+    Setting the env var in ``os.environ`` (not via monkeypatch) ensures it is
+    inherited by subprocesses spawned during tests (``subprocess.Popen`` in
+    ``javdb/pipeline/step_runner.py`` passes no ``env=``, so it inherits the
+    parent environment). Tests that genuinely exercise ``git_commit_and_push``
+    (with mocked ``subprocess.run``) opt out by deleting the var — see
+    ``tests/unit/test_git_helper.py``.
+    """
+    prior = os.environ.get("JAVDB_DISABLE_GIT_SIDE_EFFECTS")
+    os.environ["JAVDB_DISABLE_GIT_SIDE_EFFECTS"] = "1"
+    yield
+    if prior is None:
+        os.environ.pop("JAVDB_DISABLE_GIT_SIDE_EFFECTS", None)
+    else:
+        os.environ["JAVDB_DISABLE_GIT_SIDE_EFFECTS"] = prior
+
+
 @pytest.fixture(autouse=True)
 def _isolate_sqlite(tmp_path):
     """Give every test a fresh, empty SQLite database.

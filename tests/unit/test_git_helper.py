@@ -20,6 +20,19 @@ from javdb.infra.git_helper import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _allow_git_side_effects(monkeypatch):
+    """Opt this module out of the session-wide git side-effect kill switch.
+
+    ``tests/conftest.py`` sets ``JAVDB_DISABLE_GIT_SIDE_EFFECTS=1`` so the suite
+    never mutates the real repo. The tests here exercise ``git_commit_and_push``
+    with a mocked ``subprocess.run`` (no real git runs), so they must see the
+    normal code path — delete the flag for each test. The dedicated
+    ``TestGitSideEffectsDisabled`` test re-sets it explicitly.
+    """
+    monkeypatch.delenv("JAVDB_DISABLE_GIT_SIDE_EFFECTS", raising=False)
+
+
 class TestIsGitHubActions:
     """Tests for is_github_actions function."""
     
@@ -747,4 +760,47 @@ class TestGitPushBasicAuthNoPlaintextInArgv:
         # The repo URL is passed verbatim (no embedded credentials).
         assert "https://github.com/user/repo.git" in argv
         assert "https://myuser:" not in joined
+
+
+class TestGitSideEffectsDisabled:
+    """The JAVDB_DISABLE_GIT_SIDE_EFFECTS kill switch (test isolation).
+
+    When set, git_commit_and_push must perform NO git subprocess calls
+    (no ``git config``, ``add``, ``commit``, or ``push``) and return True,
+    so running the test suite never mutates the real repo's identity or history.
+    """
+
+    def test_disabled_flag_skips_all_git_subprocess_calls(self, monkeypatch):
+        from javdb.infra.git_helper import git_commit_and_push
+
+        monkeypatch.setenv("JAVDB_DISABLE_GIT_SIDE_EFFECTS", "1")
+        with patch("subprocess.run") as mock_run:
+            result = git_commit_and_push(
+                files_to_add=["test.txt"],
+                commit_message="Test commit",
+                from_pipeline=True,
+                git_username="user",
+                git_password="pass",
+                git_repo_url="https://github.com/user/repo.git",
+            )
+
+        assert result is True
+        mock_run.assert_not_called()
+
+    def test_disabled_flag_accepts_truthy_spellings(self, monkeypatch):
+        from javdb.infra.git_helper import git_side_effects_disabled
+
+        for value in ("1", "true", "TRUE", "yes", "on", " On "):
+            monkeypatch.setenv("JAVDB_DISABLE_GIT_SIDE_EFFECTS", value)
+            assert git_side_effects_disabled() is True
+
+        for value in ("", "0", "false", "no", "off"):
+            monkeypatch.setenv("JAVDB_DISABLE_GIT_SIDE_EFFECTS", value)
+            assert git_side_effects_disabled() is False
+
+    def test_unset_flag_keeps_normal_behavior(self, monkeypatch):
+        from javdb.infra.git_helper import git_side_effects_disabled
+
+        monkeypatch.delenv("JAVDB_DISABLE_GIT_SIDE_EFFECTS", raising=False)
+        assert git_side_effects_disabled() is False
 
