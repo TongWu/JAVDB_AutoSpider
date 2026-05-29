@@ -286,7 +286,7 @@ def test_process_detail_entries_handles_backend_results(monkeypatch):
                 task=self.tasks[0],
                 success=True,
                 data={
-                    'magnets': ['magnet-1'],
+                    'magnet_links': {'subtitle': 'magnet-1'},
                     'actor_info': 'Actor',
                     'actor_gender': '',
                     'actor_link': '',
@@ -309,10 +309,6 @@ def test_process_detail_entries_handles_backend_results(monkeypatch):
         make_entry('DEF-456', href='/v/def456'),
     ]
 
-    monkeypatch.setattr(
-        'javdb.spider.detail.runner.extract_magnets',
-        lambda magnets, _idx: {'subtitle': magnets[0]},
-    )
     monkeypatch.setattr(
         'javdb.spider.detail.runner.persist_parsed_detail_result',
         lambda **kwargs: DetailPersistOutcome(
@@ -384,7 +380,7 @@ def test_process_detail_entries_acknowledges_runtime_state_changes(monkeypatch):
                 task=self.tasks[0],
                 success=True,
                 data={
-                    'magnets': ['magnet-1'],
+                    'magnet_links': {'subtitle': 'magnet-1'},
                     'actor_info': 'Actor',
                     'actor_gender': '',
                     'actor_link': '',
@@ -397,7 +393,7 @@ def test_process_detail_entries_acknowledges_runtime_state_changes(monkeypatch):
                 task=self.tasks[1],
                 success=True,
                 data={
-                    'magnets': ['magnet-2'],
+                    'magnet_links': {'subtitle': 'magnet-2'},
                     'actor_info': 'Actor',
                     'actor_gender': '',
                     'actor_link': '',
@@ -416,10 +412,6 @@ def test_process_detail_entries_acknowledges_runtime_state_changes(monkeypatch):
         ]
     )
 
-    monkeypatch.setattr(
-        'javdb.spider.detail.runner.extract_magnets',
-        lambda magnets, _idx: {'subtitle': magnets[0]},
-    )
     monkeypatch.setattr(
         'javdb.spider.detail.runner.persist_parsed_detail_result',
         lambda **_kwargs: next(outcomes),
