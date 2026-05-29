@@ -37,7 +37,7 @@ if project_root not in sys.path:
 
 
 def test_drift_advisory_returns_empty_when_jsonl_missing(tmp_path):
-    from javdb.integrations.notify.email import (
+    from javdb.integrations.notify.email.log_analysis import (
         _build_dual_drift_advisory,
     )
 
@@ -47,7 +47,7 @@ def test_drift_advisory_returns_empty_when_jsonl_missing(tmp_path):
 
 
 def test_drift_advisory_returns_empty_when_jsonl_has_no_today_records(tmp_path):
-    from javdb.integrations.notify.email import (
+    from javdb.integrations.notify.email.log_analysis import (
         _build_dual_drift_advisory,
     )
 
@@ -70,7 +70,7 @@ def test_drift_advisory_returns_empty_when_jsonl_has_no_today_records(tmp_path):
 
 
 def test_drift_advisory_surfaces_todays_records(tmp_path):
-    from javdb.integrations.notify.email import (
+    from javdb.integrations.notify.email.log_analysis import (
         _build_dual_drift_advisory,
     )
 
@@ -100,7 +100,7 @@ def test_drift_advisory_surfaces_todays_records(tmp_path):
 
 def test_drift_advisory_returns_empty_for_clean_pending_verify(tmp_path):
     """A pending_session_verify record with zero residuals is informational, not drift."""
-    from javdb.integrations.notify.email import (
+    from javdb.integrations.notify.email.log_analysis import (
         _build_dual_drift_advisory,
     )
 
@@ -182,7 +182,7 @@ def test_main_exits_nonzero_on_smtp_failure(monkeypatch, tmp_path):
     down. The rest of the function is exercised by
     ``test_email_notification_extended.py``.
     """
-    from javdb.integrations.notify import email as en
+    from javdb.integrations.notify.email import _legacy as en
 
     # Stub send_email to return False so the new exit path triggers.
     monkeypatch.setattr(en, "send_email", lambda *a, **kw: False)
@@ -225,7 +225,7 @@ def test_main_exits_nonzero_on_smtp_failure(monkeypatch, tmp_path):
 
 def test_main_exits_zero_when_email_succeeds(monkeypatch):
     """Mirror of the test above: ``True`` return → exit 0."""
-    from javdb.integrations.notify import email as en
+    from javdb.integrations.notify.email import _legacy as en
 
     monkeypatch.setattr(en, "send_email", lambda *a, **kw: True)
     monkeypatch.setattr(en, "_resolve_default_verify_jsonl", lambda x: None)
@@ -314,7 +314,7 @@ def test_drift_advisory_not_prepended_in_d1_only_mode(monkeypatch, tmp_path):
     tooling like ``commit_session._emit_pending_verify`` writes to the
     same file), the email body must NOT prepend the DRIFT ADVISORY banner.
     """
-    from javdb.integrations.notify import email as en
+    from javdb.integrations.notify.email import _legacy as en
 
     _seed_drift_jsonl(tmp_path)
     monkeypatch.setenv("STORAGE_BACKEND", "d1")
@@ -336,7 +336,7 @@ def test_drift_advisory_not_prepended_in_d1_only_mode(monkeypatch, tmp_path):
 
 def test_drift_advisory_prepended_in_dual_mode(monkeypatch, tmp_path):
     """STORAGE_BACKEND=dual: drift banner must still surface (mirror test)."""
-    from javdb.integrations.notify import email as en
+    from javdb.integrations.notify.email import _legacy as en
 
     _seed_drift_jsonl(tmp_path)
     monkeypatch.setenv("STORAGE_BACKEND", "dual")

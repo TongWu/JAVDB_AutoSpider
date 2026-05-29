@@ -9,7 +9,7 @@ INTEGRATIONS_ROOT = ROOT / "javdb" / "integrations"
 APPS_CLI_ROOT = ROOT / "apps" / "cli"
 
 INTEGRATION_CLI_SURFACE_ALLOWLIST = {
-    "javdb/integrations/notify/email.py": {
+    "javdb/integrations/notify/email/_legacy.py": {
         "argparse_import",
         "parse_arguments",
         "main",
