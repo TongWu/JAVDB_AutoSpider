@@ -5,7 +5,7 @@
 | **状态**   | Proposed                                                              |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
-| **关联**   | [ADR-011](../_archive/ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md)（parsing 模块；本就计划删除此 shim） |
+| **关联**   | [ADR-011](../_archive/ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md)（parsing 模块；本就计划删除此 shim）；[IMP-ADR020-01](IMP-ADR020-01-consolidate-parser.md)（Phase 1 — 执行） |
 
 > 源自 2026-05-29 架构审查（候选 D）：[architecture-review-2026-05-29.zh.html](../architecture/architecture-review-2026-05-29.zh.html)。
 

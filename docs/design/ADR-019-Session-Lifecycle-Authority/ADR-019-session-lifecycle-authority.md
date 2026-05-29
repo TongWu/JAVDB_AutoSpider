@@ -44,7 +44,7 @@ Introduce **`SessionLifecycle`** as the single authority for legal session-statu
 
 **D2. The legal graph; illegal edges raise, idempotent edges return 0.**
 
-```
+```text
 in_progress → finalizing        in_progress → committed (staging fast-path, required by rclone/commit)
 in_progress → failed            finalizing  → committed        finalizing → failed
 X → X (idempotent, return 0)    committed/failed already-in-target → return 0

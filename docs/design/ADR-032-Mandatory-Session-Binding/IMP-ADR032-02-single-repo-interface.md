@@ -62,7 +62,7 @@
 ## Task 5: Tests
 
 - [ ] For each migrated module, add the `_raw_db_forbidden` boundary test (pattern: `tests/unit/test_adr005_pr3a_repo_callers.py:9-13` — monkeypatch the raw `db_*` to raise, assert the caller still works through the Repo).
-- [ ] Migrate the `db_*`-targeted contract tests onto Repo methods first (today ~42 test files reference `db_*` directly vs ~12 the Repo): `test_db.py`, `test_commit_session_bulk.py`, `test_pending_torrent_overlay_merge.py`, `test_d1_dual.py` etc. — rewrite against Repo methods so the function family can be de-exported without losing coverage.
+- [ ] Migrate the `db_*`-targeted contract tests onto Repo methods first (today far more test files reference `db_*` directly than reference the Repo): `test_db.py`, `test_commit_session_bulk.py`, `test_pending_torrent_overlay_merge.py`, `test_d1_dual.py` etc. — rewrite against Repo methods so the function family can be de-exported without losing coverage.
 - [ ] **Regression:** `pytest tests/unit/test_operations_endpoints.py tests/unit/test_rclone_manager.py tests/unit/test_commit_session_bulk.py tests/unit/test_adr005_pr3a_repo_callers.py -q`.
 
 ## Task 6: Verification gates
