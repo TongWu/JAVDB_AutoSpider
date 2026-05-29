@@ -30,7 +30,7 @@ This is **not** a reversal of amendment-2. Per-method `session_id` (amendment-2'
 
 ### Scope correction (from grounding)
 
-`HistoryRepo` is **not** a thin pass-through — it already owns deep SQL (`search_movies`, `search_torrents`, `export_*`, `load_history_joined`, the real `batch_update_movie_actors`). Only ~5 methods are thin delegates. `db_stage_history_write` / `db_commit_session_history` already take a **mandatory** `session_id` (no global fallback). So the genuine friction is narrower than "the Repo is shallow": it is (a) the surviving global fallback in operations + 2 batch functions, and (b) the dual public interface.
+`HistoryRepo` is **not** a thin pass-through — it already owns deep SQL (`search_movies`, `search_torrents`, `export_*`, `load_history_joined`, the real `batch_update_movie_actors`). Only a handful of its methods are thin delegates (the exact set enumerated during implementation). `db_stage_history_write` / `db_commit_session_history` already take a **mandatory** `session_id` (no global fallback). So the genuine friction is narrower than "the Repo is shallow": it is (a) the surviving global fallback in operations + 2 batch functions, and (b) the dual public interface.
 
 ## Decision
 
@@ -44,7 +44,7 @@ Complete amendment-2's goal and consolidate to a single public storage interface
 
 **D3. Mandatory-raise is a behavior change, intentionally.** For callers that already pass `session_id` (the production write paths — `history_manager.py:177`, `rclone/manager.py:1255`, dedup via `OperationsRepo`) this is behavior-preserving. For any caller relying on the implicit global, the new failure mode (raise) is the desired hardening; each such site is audited and threaded explicitly (the one to verify: `pikpak/bridge.py` `db_append_pikpak_history`).
 
-**D4. Phase 3 (delete the global readers) is deferred / gated.** Removing `set/get_active_session_id` entirely would require threading `session_id` through ~9 orchestration readers including the **cross-process** detail-runner MovieClaim DO call (`detail/runner.py:155`) and subprocess workers. High risk, low marginal value once D1 makes the fallback unreachable from writes. Out of scope here; revisit separately.
+**D4. Phase 3 (delete the global readers) is deferred / gated.** Removing `set/get_active_session_id` entirely would require threading `session_id` through the orchestration readers (enumerated in Phase 1) including the **cross-process** detail-runner MovieClaim DO call (`detail/runner.py:155`) and subprocess workers. High risk, low marginal value once D1 makes the fallback unreachable from writes. Out of scope here; revisit separately.
 
 **D5. Phase 4 (constructor binding) is rejected.** It would reverse amendment-2, add interface surface (constructor *plus* per-method override), and serve no caller that exists. Explicitly not done.
 
