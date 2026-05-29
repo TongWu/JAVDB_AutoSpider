@@ -1225,14 +1225,13 @@ def run_rclone_manager(
         from javdb.storage.db import (
             init_db,
             db_create_report_session,
-            db_mark_session_committed,
-            db_mark_session_failed,
             db_open_rclone_staging,
             db_append_rclone_staging,
             db_swap_rclone_inventory,
             db_drop_rclone_staging,
             get_active_session_id,
         )
+        from javdb.storage.sessions.lifecycle import transition
 
         init_db()
         staging_sid = get_active_session_id()
@@ -1259,18 +1258,18 @@ def run_rclone_manager(
             if error_count == 0:
                 db_swap_rclone_inventory(session_id=staging_sid)
                 if created_local_session:
-                    db_mark_session_committed(staging_sid)
+                    transition(staging_sid, "committed")
             else:
                 # Partial scan — drop staging, leave live inventory untouched.
                 db_drop_rclone_staging(staging_sid)
                 if created_local_session:
-                    db_mark_session_failed(staging_sid)
+                    transition(staging_sid, "failed")
         except Exception:
             # scan_inventory / swap raised — never leave the staging table or
             # the report session dangling in an in-progress state.
             db_drop_rclone_staging(staging_sid)
             if created_local_session:
-                db_mark_session_failed(staging_sid)
+                transition(staging_sid, "failed")
             raise
         phase_results["scan"] = {
             "exit_code": 0 if error_count == 0 else 1,
@@ -1501,8 +1500,6 @@ def main() -> int:
                 from javdb.storage.db import (
                     init_db,
                     db_create_report_session,
-                    db_mark_session_committed,
-                    db_mark_session_failed,
                     db_open_rclone_staging,
                     db_append_rclone_staging,
                     db_swap_rclone_inventory,
@@ -1510,6 +1507,7 @@ def main() -> int:
                     db_drop_rclone_staging,
                     get_active_session_id,
                 )
+                from javdb.storage.sessions.lifecycle import transition
                 init_db()
                 _staging_session_id = get_active_session_id()
                 if _staging_session_id is None:
@@ -1533,7 +1531,7 @@ def main() -> int:
                 logger.error(f"Failed initializing SQLite for rclone inventory; aborting scan: {e}")
                 if _staging_session_id is not None:
                     try:
-                        db_mark_session_failed(_staging_session_id)
+                        transition(_staging_session_id, "failed")
                     except Exception as mark_error:
                         logger.warning(
                             "Failed to mark rclone inventory staging session "
@@ -1606,7 +1604,7 @@ def main() -> int:
         finally:
             if scan_failed and _sqlite_ok and _staging_session_id is not None:
                 try:
-                    db_mark_session_failed(_staging_session_id)
+                    transition(_staging_session_id, "failed")
                 except Exception as mark_error:
                     logger.warning(
                         "Failed to mark rclone inventory staging session "
@@ -1657,7 +1655,7 @@ def main() -> int:
                     f"main table left UNCHANGED: {e}"
                 )
                 try:
-                    db_mark_session_failed(_staging_session_id)
+                    transition(_staging_session_id, "failed")
                 except Exception as mark_error:
                     logger.warning(
                         "Failed to mark rclone inventory staging session "
@@ -1684,7 +1682,7 @@ def main() -> int:
                 cleanup_failed = True
                 for attempt in range(1, 4):
                     try:
-                        db_mark_session_committed(_staging_session_id)
+                        transition(_staging_session_id, "committed")
                     except Exception as e:
                         logger.warning(
                             "Failed to mark rclone inventory session committed "

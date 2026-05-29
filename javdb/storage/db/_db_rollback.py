@@ -384,9 +384,12 @@ def db_rollback_session(
     _ensure_imports()
     from javdb.storage.db._db_reports import (
         db_get_session_status,
-        db_mark_session_failed,
     )
     from javdb.storage.db._db_history_write import db_resume_finalizing_session
+    # Lazy import: lifecycle imports the _db_reports primitives at module top,
+    # so importing it here (rather than at module top) avoids a circular import
+    # while javdb.storage.db is still initializing.
+    from javdb.storage.sessions.lifecycle import transition
 
     if scope not in ('reports', 'operations', 'history', 'all'):
         raise ValueError(
@@ -427,8 +430,9 @@ def db_rollback_session(
     ):
         # Best-effort flag — failure here shouldn't block the rollback.
         try:
-            db_mark_session_failed(
+            transition(
                 session_id,
+                "failed",
                 db_path=reports_db_path,
                 reason=failure_reason,
             )

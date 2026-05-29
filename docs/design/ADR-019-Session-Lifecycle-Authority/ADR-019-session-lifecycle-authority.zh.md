@@ -2,7 +2,7 @@
 
 | 字段       | 值                                                                    |
 | ---------- | --------------------------------------------------------------------- |
-| **状态**   | Proposed                                                              |
+| **状态**   | Accepted — Phase 1 已实现 2026-05-29；Phase 2（CommitPipeline）延后 |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
 | **关联**   | [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md)（Repo 模式、pending 模式 commit/rollback）、[ADR-012](../_archive/ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md)（run 边界） |
@@ -99,3 +99,4 @@ failed    → committed ── 非法 → 抛 IllegalTransition
 ## 状态日志（Status Log）
 
 - 2026-05-29：Proposed（源自架构审查候选 E 的 grilling）。
+- 2026-05-29：Phase 1 已实现并验证（[IMP-ADR019-01](IMP-ADR019-01-session-lifecycle.md)）——`SessionLifecycle` 权威 + 所有状态写入已改道；`committed→failed` / `failed→committed` 现在抛错。Phase 2（CommitPipeline）延后至生产验证后。
