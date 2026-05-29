@@ -15,10 +15,6 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 from javdb.infra.logging import get_logger
-from javdb.storage.db._db_session import (
-    _SESSION_ID_SENTINEL,
-    _resolve_session_id,
-)
 
 logger = get_logger(__name__)
 
@@ -92,7 +88,8 @@ def db_load_rclone_inventory(
 def db_replace_rclone_inventory(
     entries: List[dict],
     db_path: Optional[str] = None,
-    session_id: Any = _SESSION_ID_SENTINEL,
+    *,
+    session_id: Any,
 ) -> int:
     """Replace the entire RcloneInventory table (full scan refresh).
 
@@ -101,26 +98,25 @@ def db_replace_rclone_inventory(
     swap into the live table once everything has been written. A failed
     or stalled run leaves the main table untouched.
     """
-    sid = _resolve_session_id(session_id)
     _ensure_imports()
     with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
-        return _replace_rclone_inventory(conn, entries, session_id=sid)
+        return _replace_rclone_inventory(conn, entries, session_id=session_id)
 
 
 def db_swap_rclone_inventory(
-    session_id: Any = _SESSION_ID_SENTINEL,
+    *,
+    session_id: Any,
     db_path: Optional[str] = None,
 ) -> int:
     """Atomically swap this session's staging into the live RcloneInventory."""
-    sid = _resolve_session_id(session_id)
-    if sid is None:
+    if session_id is None:
         raise ValueError(
-            "db_swap_rclone_inventory requires an active session_id "
+            "db_swap_rclone_inventory requires a session_id "
             "(set via set_active_session_id or pass explicitly)."
         )
     _ensure_imports()
     with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
-        return _swap_rclone_inventory(conn, sid)
+        return _swap_rclone_inventory(conn, session_id)
 
 
 def db_clear_rclone_inventory(db_path: Optional[str] = None) -> None:
@@ -247,14 +243,15 @@ def db_save_dedup_records(rows: List[dict], db_path: Optional[str] = None) -> No
 def db_append_pikpak_history(
     record: dict,
     db_path: Optional[str] = None,
-    session_id: Any = _SESSION_ID_SENTINEL,
+    *,
+    session_id: Any,
 ) -> int:
     """Append a PikPak transfer record.
 
-    *session_id*: tags the row for X3 rollback; defaults to
-    :func:`get_active_session_id`.
+    *session_id*: tags the row for X3 rollback. Required — callers must
+    thread the active session id (or ``None`` when intentionally
+    untagged) explicitly.
     """
-    sid = _resolve_session_id(session_id)
     _ensure_imports()
     with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
         cur = conn.execute(
@@ -273,7 +270,7 @@ def db_append_pikpak_history(
              record.get('DateTimeUploadedToPikpak', record.get('uploaded_to_pikpak_date')),
              record.get('TransferStatus', record.get('transfer_status')),
              record.get('ErrorMessage', record.get('error_message')),
-             sid),
+             session_id),
         )
         return cur.lastrowid
 
@@ -319,11 +316,11 @@ def rollback_operations_for_session(
 def db_append_dedup_record(
     record: dict,
     db_path: Optional[str] = None,
-    session_id: Any = _SESSION_ID_SENTINEL,
+    *,
+    session_id: Any,
 ) -> int:
     """Append a single dedup record. Returns the new row id, or -1 if duplicate."""
     _ensure_imports()
-    sid = _resolve_session_id(session_id)
     with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
         cur = conn.execute(
             """INSERT OR IGNORE INTO DedupRecords
@@ -342,7 +339,7 @@ def db_append_dedup_record(
              record.get('DateTimeDetected', record.get('detect_datetime')),
              1 if str(record.get('IsDeleted', record.get('is_deleted', 'False'))).lower() in ('true', '1') else 0,
              record.get('DateTimeDeleted', record.get('delete_datetime')),
-             sid),
+             session_id),
         )
         if cur.rowcount == 0:
             return -1
@@ -352,7 +349,8 @@ def db_append_dedup_record(
 def db_mark_records_deleted(
     path_datetime_pairs: List[Tuple[str, str]],
     db_path: Optional[str] = None,
-    session_id: Any = _SESSION_ID_SENTINEL,
+    *,
+    session_id: Any,
 ) -> int:
     """Mark specific dedup records as deleted by gdrive path."""
     if not path_datetime_pairs:
@@ -365,7 +363,6 @@ def db_mark_records_deleted(
     if not grouped:
         return 0
     _ensure_imports()
-    sid = _resolve_session_id(session_id)
     CHUNK = 90
     with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
         updated = 0
@@ -373,18 +370,18 @@ def db_mark_records_deleted(
             for i in range(0, len(paths), CHUNK):
                 chunk = paths[i:i + CHUNK]
                 placeholders = ','.join('?' for _ in chunk)
-                if sid is not None:
+                if session_id is not None:
                     rows = conn.execute(
                         f"SELECT * FROM DedupRecords "
                         f"WHERE ExistingGdrivePath IN ({placeholders}) AND IsDeleted=0",
                         chunk,
                     ).fetchall()
-                    _snapshot_dedup_rows_for_rollback(conn, sid, rows)
+                    _snapshot_dedup_rows_for_rollback(conn, session_id, rows)
                     cur = conn.execute(
                         f"UPDATE DedupRecords "
                         f"SET IsDeleted=1, DateTimeDeleted=?, SessionId=? "
                         f"WHERE ExistingGdrivePath IN ({placeholders}) AND IsDeleted=0",
-                        [dt, sid] + chunk,
+                        [dt, session_id] + chunk,
                     )
                 else:
                     cur = conn.execute(
@@ -417,24 +414,24 @@ def db_mark_orphan_records(
     reason_suffix: str,
     when: str,
     db_path: Optional[str] = None,
-    session_id: Any = _SESSION_ID_SENTINEL,
+    *,
+    session_id: Any,
 ) -> int:
     """Mark dedup pending rows as deleted with custom reason suffix appended."""
     path_list = [p for p in paths if p]
     if not path_list:
         return 0
     _ensure_imports()
-    sid = _resolve_session_id(session_id)
     with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
         updated = 0
         for path in path_list:
-            if sid is not None:
+            if session_id is not None:
                 rows = conn.execute(
                     "SELECT * FROM DedupRecords "
                     "WHERE ExistingGdrivePath = ? AND IsDeleted = 0",
                     (path,),
                 ).fetchall()
-                _snapshot_dedup_rows_for_rollback(conn, sid, rows)
+                _snapshot_dedup_rows_for_rollback(conn, session_id, rows)
                 cur = conn.execute(
                     """UPDATE DedupRecords
                        SET IsDeleted = 1,
@@ -444,7 +441,7 @@ def db_mark_orphan_records(
                            ),
                            SessionId = ?
                        WHERE ExistingGdrivePath = ? AND IsDeleted = 0""",
-                    (when, reason_suffix, sid, path),
+                    (when, reason_suffix, session_id, path),
                 )
             else:
                 cur = conn.execute(
@@ -462,7 +459,8 @@ def db_mark_orphan_records(
 
 
 def db_open_rclone_staging(
-    session_id: Any = _SESSION_ID_SENTINEL,
+    *,
+    session_id: Any,
     db_path: Optional[str] = None,
 ) -> Optional[str]:
     """Initialise this session's RcloneInventory staging table.
@@ -471,25 +469,24 @@ def db_open_rclone_staging(
     available — callers in that case should keep using the legacy
     clear+append flow.
     """
-    sid = _resolve_session_id(session_id)
-    if sid is None:
+    if session_id is None:
         return None
     _ensure_imports()
     with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
-        return _open_rclone_staging(conn, sid)
+        return _open_rclone_staging(conn, session_id)
 
 
 def db_append_rclone_staging(
     entries: List[dict],
-    session_id: Any = _SESSION_ID_SENTINEL,
+    *,
+    session_id: Any,
     db_path: Optional[str] = None,
 ) -> int:
     """Append rows to this session's RcloneInventory staging table."""
     if not entries:
         return 0
-    sid = _resolve_session_id(session_id)
     _ensure_imports()
-    if sid is None:
+    if session_id is None:
         with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
             conn.executemany(
                 """INSERT INTO RcloneInventory
@@ -509,26 +506,26 @@ def db_append_rclone_staging(
             )
             return len(entries)
     with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
-        return _append_rclone_staging(conn, entries, sid)
+        return _append_rclone_staging(conn, entries, session_id)
 
 
 def db_merge_rclone_inventory_from_stage(
-    session_id: Any = _SESSION_ID_SENTINEL,
+    *,
+    session_id: Any,
     years: Optional[Iterable[str]] = None,
     db_path: Optional[str] = None,
 ) -> int:
     """Merge this session's staging rows into selected RcloneInventory years."""
-    sid = _resolve_session_id(session_id)
-    if sid is None:
+    if session_id is None:
         raise ValueError(
-            "db_merge_rclone_inventory_from_stage requires an active "
+            "db_merge_rclone_inventory_from_stage requires a "
             "session_id (set via set_active_session_id or pass explicitly)."
         )
     if years is None:
         raise ValueError("db_merge_rclone_inventory_from_stage requires years")
     _ensure_imports()
     with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
-        return _merge_rclone_inventory_from_stage(conn, sid, years)
+        return _merge_rclone_inventory_from_stage(conn, session_id, years)
 
 
 def db_drop_rclone_staging(
@@ -574,10 +571,10 @@ def db_upsert_align_no_exact_match(
     video_code: str,
     reason: str = 'exact_video_code_not_found',
     db_path: Optional[str] = None,
-    session_id: Any = _SESSION_ID_SENTINEL,
+    *,
+    session_id: Any,
 ) -> None:
     """Record a video code that had no exact match on JavDB search."""
-    sid = _resolve_session_id(session_id)
     normalized = video_code.strip().upper()
     if not normalized:
         return
@@ -594,7 +591,7 @@ def db_upsert_align_no_exact_match(
                    SessionId = excluded.SessionId
                WHERE InventoryAlignNoExactMatch.Reason
                      IS NOT excluded.Reason""",
-            (normalized, reason, now, sid),
+            (normalized, reason, now, session_id),
         )
 
 

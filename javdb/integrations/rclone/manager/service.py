@@ -603,7 +603,10 @@ def validate_dedup_records_against_inventory() -> Tuple[int, List[dict]]:
         return 0, []
 
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    updated = db_mark_orphan_records(orphan_paths, ORPHAN_REASON_SUFFIX, now_str)
+    updated = db_mark_orphan_records(
+        orphan_paths, ORPHAN_REASON_SUFFIX, now_str,
+        session_id=SessionLifecycleRepo().get_active_session_id(),
+    )
     for r in orphans:
         r['DateTimeDeleted'] = now_str
         existing_reason = (r.get('DeletionReason') or '').strip()
