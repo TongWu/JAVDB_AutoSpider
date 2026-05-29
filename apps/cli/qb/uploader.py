@@ -1,6 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import os
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+# Establish repo-root cwd BEFORE importing the integration package: importing any
+# submodule runs the package __init__, which imports the service whose
+# module-level setup_logging()/cfg() must run with cwd == repo root.
+os.chdir(REPO_ROOT)
 
 from javdb.integrations.qb.uploader.options import QbUploaderOptions
 from javdb.integrations.qb.uploader.service import run_uploader

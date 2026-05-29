@@ -3,16 +3,12 @@ import csv
 import hashlib
 import os
 import time
-import sys
 from pathlib import Path
 from datetime import datetime, timedelta
 import requests
 from pikpakapi import PikPakApi
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
-os.chdir(REPO_ROOT)
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
 
 from javdb.infra.config import cfg
 
@@ -574,7 +570,14 @@ def _pikpak_bridge_impl(days, dry_run, batch_mode=True, use_proxy=None, from_pip
 
     if not old_torrents:
         logger.info("No torrents to process.")
-        return
+        return {
+            'total_torrents': len(torrents),
+            'filtered_old': 0,
+            'successful_count': 0,
+            'failed_count': 0,
+            'uploaded_count': 0,
+            'delete_failed_count': 0,
+        }
 
     if dry_run:
         logger.info(f"[Dry-Run] Would process {len(old_torrents)} torrents:")
@@ -607,8 +610,15 @@ def _pikpak_bridge_impl(days, dry_run, batch_mode=True, use_proxy=None, from_pip
         logger.info("")
         logger.info("Note: This was a dry-run. No actual transfers were performed.")
         logger.info("=" * 60)
-        return
-    
+        return {
+            'total_torrents': len(torrents),
+            'filtered_old': len(old_torrents),
+            'successful_count': 0,
+            'failed_count': 0,
+            'uploaded_count': 0,
+            'delete_failed_count': 0,
+        }
+
     successfully_transferred = []
     failed_transfers = []
     delete_failed_count = 0
@@ -830,16 +840,25 @@ def _pikpak_bridge_impl(days, dry_run, batch_mode=True, use_proxy=None, from_pip
     elif not dry_run:
         logger.info("Skipping git commit - no credentials provided (commit will be handled by workflow)")
 
+    return {
+        'total_torrents': len(torrents),
+        'filtered_old': len(old_torrents),
+        'successful_count': successful_count,
+        'failed_count': failed_count,
+        'uploaded_count': successful_count + delete_failed_count,
+        'delete_failed_count': delete_failed_count,
+    }
+
 
 def run_bridge(options: PikPakBridgeOptions) -> PikPakBridgeResult:
     """Run the PikPak bridge for the given options.
 
     Thin wrapper over :func:`pikpak_bridge` (the programmatic entry point used
-    by the REST layer). ``pikpak_bridge`` returns ``None`` and never raised
-    ``SystemExit`` historically, so the CLI always exited 0 — preserved here
-    via ``PikPakBridgeResult.exit_code``.
+    by the REST layer). ``pikpak_bridge`` returns a stats dict (or ``None`` if
+    nothing ran) and never raised ``SystemExit`` historically, so the CLI
+    always exited 0 — preserved here via ``PikPakBridgeResult.exit_code``.
     """
-    pikpak_bridge(
+    stats = pikpak_bridge(
         options.days,
         options.dry_run,
         options.batch_mode,
@@ -847,5 +866,13 @@ def run_bridge(options: PikPakBridgeOptions) -> PikPakBridgeResult:
         options.from_pipeline,
         session_id=options.session_id,
         root_folder=options.root_folder,
+    ) or {}
+    return PikPakBridgeResult(
+        dry_run=options.dry_run,
+        total_torrents=stats.get('total_torrents', 0),
+        filtered_old=stats.get('filtered_old', 0),
+        successful_count=stats.get('successful_count', 0),
+        failed_count=stats.get('failed_count', 0),
+        uploaded_count=stats.get('uploaded_count', 0),
+        delete_failed_count=stats.get('delete_failed_count', 0),
     )
-    return PikPakBridgeResult(dry_run=options.dry_run)

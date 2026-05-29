@@ -23,7 +23,6 @@ Invalid: ``scan + execute`` without ``report``.
 
 import os
 import re
-import sys
 import csv
 import gc
 import tempfile
@@ -34,9 +33,6 @@ from typing import Dict, List, Optional, Tuple
 _YEAR_RE = re.compile(r"^\d{4}$")
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
-os.chdir(REPO_ROOT)
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
 
 from javdb.infra.config import cfg
 from javdb.infra.logging import setup_logging, get_logger
@@ -1442,17 +1438,18 @@ def run_manager_from_options(options: "RcloneManagerOptions") -> int:
             except Exception as e:
                 logger.error(f"Failed initializing SQLite for rclone inventory; aborting scan: {e}")
                 if _staging_session_id is not None:
-                    try:
-                        session_repo.mark_session_failed(
-                            _staging_session_id,
-                            reason="rclone_scan_error",
-                        )
-                    except Exception as mark_error:
-                        logger.warning(
-                            "Failed to mark rclone inventory staging session "
-                            "failed after init error: %s",
-                            mark_error,
-                        )
+                    if _created_local_staging_session:
+                        try:
+                            session_repo.mark_session_failed(
+                                _staging_session_id,
+                                reason="rclone_scan_error",
+                            )
+                        except Exception as mark_error:
+                            logger.warning(
+                                "Failed to mark rclone inventory staging session "
+                                "failed after init error: %s",
+                                mark_error,
+                            )
                     try:
                         operations_repo.drop_rclone_staging(_staging_session_id)
                     except Exception as drop_error:
@@ -1520,17 +1517,18 @@ def run_manager_from_options(options: "RcloneManagerOptions") -> int:
             raise
         finally:
             if scan_failed and _sqlite_ok and _staging_session_id is not None:
-                try:
-                    session_repo.mark_session_failed(
-                        _staging_session_id,
-                        reason="rclone_scan_error",
-                    )
-                except Exception as mark_error:
-                    logger.warning(
-                        "Failed to mark rclone inventory staging session "
-                        "failed after scan error: %s",
-                        mark_error,
-                    )
+                if _created_local_staging_session:
+                    try:
+                        session_repo.mark_session_failed(
+                            _staging_session_id,
+                            reason="rclone_scan_error",
+                        )
+                    except Exception as mark_error:
+                        logger.warning(
+                            "Failed to mark rclone inventory staging session "
+                            "failed after scan error: %s",
+                            mark_error,
+                        )
                 try:
                     operations_repo.drop_rclone_staging(_staging_session_id)
                     logger.info(
@@ -1574,17 +1572,18 @@ def run_manager_from_options(options: "RcloneManagerOptions") -> int:
                     f"Failed to {action} RcloneInventory staging — "
                     f"main table left UNCHANGED: {e}"
                 )
-                try:
-                    session_repo.mark_session_failed(
-                        _staging_session_id,
-                        reason="rclone_scan_error",
-                    )
-                except Exception as mark_error:
-                    logger.warning(
-                        "Failed to mark rclone inventory staging session "
-                        "failed after swap error: %s",
-                        mark_error,
-                    )
+                if _created_local_staging_session:
+                    try:
+                        session_repo.mark_session_failed(
+                            _staging_session_id,
+                            reason="rclone_scan_error",
+                        )
+                    except Exception as mark_error:
+                        logger.warning(
+                            "Failed to mark rclone inventory staging session "
+                            "failed after swap error: %s",
+                            mark_error,
+                        )
                 try:
                     operations_repo.drop_rclone_staging(_staging_session_id)
                 except Exception as drop_error:

@@ -202,6 +202,54 @@ class TestPikpakBridgeLogic:
         ) == "done"
         assert db_sess.get_active_session_id() is None
 
+    def test_run_bridge_populates_result_from_stats(self, monkeypatch):
+        """``run_bridge`` must surface the stats dict returned by
+        ``pikpak_bridge`` on the ``PikPakBridgeResult``."""
+        import javdb.integrations.pikpak.bridge.service as pikpak_service
+        from javdb.integrations.pikpak.bridge.options import PikPakBridgeOptions
+        from javdb.integrations.pikpak.bridge.result import PikPakBridgeResult
+
+        stats = {
+            "total_torrents": 10,
+            "filtered_old": 4,
+            "successful_count": 3,
+            "failed_count": 1,
+            "uploaded_count": 3,
+            "delete_failed_count": 0,
+        }
+        monkeypatch.setattr(pikpak_service, "pikpak_bridge", lambda *a, **k: stats)
+
+        result = pikpak_service.run_bridge(
+            PikPakBridgeOptions(days=3, dry_run=False)
+        )
+        assert isinstance(result, PikPakBridgeResult)
+        assert result.total_torrents == 10
+        assert result.filtered_old == 4
+        assert result.successful_count == 3
+        assert result.failed_count == 1
+        assert result.uploaded_count == 3
+        assert result.delete_failed_count == 0
+        assert result.dry_run is False
+        assert result.exit_code == 0
+
+    def test_run_bridge_handles_none_stats(self, monkeypatch):
+        """If ``pikpak_bridge`` returns ``None`` (nothing ran), the result
+        falls back to zeros without raising."""
+        import javdb.integrations.pikpak.bridge.service as pikpak_service
+        from javdb.integrations.pikpak.bridge.options import PikPakBridgeOptions
+        from javdb.integrations.pikpak.bridge.result import PikPakBridgeResult
+
+        monkeypatch.setattr(pikpak_service, "pikpak_bridge", lambda *a, **k: None)
+
+        result = pikpak_service.run_bridge(
+            PikPakBridgeOptions(days=3, dry_run=True)
+        )
+        assert isinstance(result, PikPakBridgeResult)
+        assert result.total_torrents == 0
+        assert result.successful_count == 0
+        assert result.dry_run is True
+        assert result.exit_code == 0
+
     def test_filter_old_torrents(self):
         """Test filtering old torrents by date."""
         days = 3
