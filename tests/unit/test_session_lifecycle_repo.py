@@ -22,23 +22,26 @@ def test_create_report_session_delegates_with_db_path():
     )
 
 
-def test_mark_session_committed_delegates():
+def test_mark_session_committed_routes_through_transition():
+    # ADR-019: status writes go through the SessionLifecycle authority, not the
+    # loose db_* primitive directly. The repo is a thin facade over transition().
     repo = SessionLifecycleRepo()
 
-    with patch("javdb.storage.db.db_mark_session_committed", return_value=1) as mock_fn:
+    with patch("javdb.storage.sessions.lifecycle.transition", return_value=1) as mock_fn:
         assert repo.mark_session_committed("sess-1") == 1
 
-    mock_fn.assert_called_once_with("sess-1", db_path=None)
+    mock_fn.assert_called_once_with("sess-1", "committed", db_path=None)
 
 
-def test_mark_session_failed_delegates_with_reason():
+def test_mark_session_failed_routes_through_transition():
     repo = SessionLifecycleRepo(db_path="/tmp/reports.db")
 
-    with patch("javdb.storage.db.db_mark_session_failed", return_value=1) as mock_fn:
+    with patch("javdb.storage.sessions.lifecycle.transition", return_value=1) as mock_fn:
         assert repo.mark_session_failed("sess-1", reason="scan_failed") == 1
 
     mock_fn.assert_called_once_with(
         "sess-1",
+        "failed",
         db_path="/tmp/reports.db",
         reason="scan_failed",
     )

@@ -43,9 +43,17 @@ def test_rclone_scan_persistence_does_not_import_raw_db_helpers():
     import ast
     from pathlib import Path
 
-    source = Path("javdb/integrations/rclone/manager/service.py").read_text(
-        encoding="utf-8"
-    )
+    # Resolve relative to this test file, not the process cwd: the impact-based
+    # CI run shares a process with tests that change cwd, so a cwd-relative path
+    # here raised FileNotFoundError. __file__-relative is cwd-independent.
+    source = (
+        Path(__file__).resolve().parents[2]
+        / "javdb"
+        / "integrations"
+        / "rclone"
+        / "manager"
+        / "service.py"
+    ).read_text(encoding="utf-8")
     tree = ast.parse(source)
     forbidden = {
         "db_create_report_session",
