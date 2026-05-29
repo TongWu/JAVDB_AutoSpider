@@ -9,11 +9,6 @@ INTEGRATIONS_ROOT = ROOT / "javdb" / "integrations"
 APPS_CLI_ROOT = ROOT / "apps" / "cli"
 
 INTEGRATION_CLI_SURFACE_ALLOWLIST = {
-    "javdb/integrations/pikpak/bridge.py": {
-        "argparse_import",
-        "main",
-        "dunder_main",
-    },
     "javdb/integrations/rclone/manager.py": {
         "argparse_import",
         "parse_arguments",
@@ -32,7 +27,6 @@ INTEGRATION_CLI_SURFACE_ALLOWLIST = {
 }
 
 APPS_CLI_INTEGRATION_ALIAS_ALLOWLIST = {
-    "apps/cli/pikpak/bridge.py",
     "apps/cli/rclone/manager.py",
     "apps/cli/notify/email.py",
 }
