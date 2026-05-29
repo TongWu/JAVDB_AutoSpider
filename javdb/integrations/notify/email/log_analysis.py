@@ -1109,13 +1109,23 @@ def _build_dual_drift_advisory(reports_dir: str) -> str:
                     rec = json.loads(line)
                 except (ValueError, TypeError):
                     continue
-                ts = rec.get('ts') or ''
+                if not isinstance(rec, dict):
+                    # A non-object JSON line (list/str/number) has no .get();
+                    # skip it instead of raising AttributeError.
+                    continue
+                ts = str(rec.get('ts') or '')
                 if not ts.startswith(today_utc):
                     continue
+                try:
+                    failure_count = int(rec.get('failure_count') or 0)
+                    uncommitted_d1_writes = int(rec.get('uncommitted_d1_writes') or 0)
+                    pending_residual_count = int(rec.get('pending_residual_count') or 0)
+                except (TypeError, ValueError):
+                    continue
                 todays_records += 1
-                failure_count_total += int(rec.get('failure_count') or 0)
-                rollback_drift_rows += int(rec.get('uncommitted_d1_writes') or 0)
-                pending_residual_total += int(rec.get('pending_residual_count') or 0)
+                failure_count_total += failure_count
+                rollback_drift_rows += uncommitted_d1_writes
+                pending_residual_total += pending_residual_count
                 if sample_first_sql is None and rec.get('first_failed_sql'):
                     sample_first_sql = rec.get('first_failed_sql')
                     sample_db = rec.get('db')
