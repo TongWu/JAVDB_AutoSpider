@@ -86,8 +86,6 @@ from javdb.integrations.notify.email.report_builder import (
     _build_ops_diagnosis_advisory,
     _build_pending_subject_prefix,
     _drift_diagnosis_subject_prefix,
-    _format_health_snapshot_section,
-    _format_pending_verify_section,
     _resolve_default_health_snapshot,
     _resolve_default_verify_jsonl,
 )
