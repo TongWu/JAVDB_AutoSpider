@@ -28,7 +28,7 @@ project_root = os.path.dirname(
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from javdb.integrations.notify.email import (
+from javdb.integrations.notify.email.report_builder import (
     _build_drift_diagnosis_section,
     _drift_diagnosis_subject_prefix,
 )
@@ -102,7 +102,7 @@ class TestBuildDriftDiagnosisSection:
     The function returns ``(section_text, suspects_list)``.
     """
 
-    @patch("javdb.integrations.notify.email.subprocess.run")
+    @patch("javdb.integrations.notify.email.report_builder.subprocess.run")
     def test_safe_to_apply_renders_section_with_suggested_command(self, mock_run):
         suspect = _safe_suspect()
         mock_run.return_value = MagicMock(
@@ -125,7 +125,7 @@ class TestBuildDriftDiagnosisSection:
         call_args = mock_run.call_args[0][0]
         assert "--apply" not in call_args
 
-    @patch("javdb.integrations.notify.email.subprocess.run")
+    @patch("javdb.integrations.notify.email.report_builder.subprocess.run")
     def test_escalate_renders_section(self, mock_run):
         suspect = _escalate_suspect()
         mock_run.return_value = MagicMock(
@@ -141,7 +141,7 @@ class TestBuildDriftDiagnosisSection:
         assert "ESCALATE_LIVE_DIVERGENCE" in section
         assert len(suspects) == 1
 
-    @patch("javdb.integrations.notify.email.subprocess.run")
+    @patch("javdb.integrations.notify.email.report_builder.subprocess.run")
     def test_no_suspects_returns_empty(self, mock_run):
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -154,7 +154,7 @@ class TestBuildDriftDiagnosisSection:
         assert section == ""
         assert suspects == []
 
-    @patch("javdb.integrations.notify.email.subprocess.run")
+    @patch("javdb.integrations.notify.email.report_builder.subprocess.run")
     def test_subprocess_timeout_returns_fallback(self, mock_run):
         mock_run.side_effect = subprocess.TimeoutExpired(
             cmd="drift_diagnose", timeout=60,
@@ -167,7 +167,7 @@ class TestBuildDriftDiagnosisSection:
         assert "apps.cli.db.drift_diagnose" in section
         assert suspects == []
 
-    @patch("javdb.integrations.notify.email.subprocess.run")
+    @patch("javdb.integrations.notify.email.report_builder.subprocess.run")
     def test_subprocess_non_json_output_returns_fallback(self, mock_run):
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -181,7 +181,7 @@ class TestBuildDriftDiagnosisSection:
         assert "apps.cli.db.drift_diagnose" in section
         assert suspects == []
 
-    @patch("javdb.integrations.notify.email.subprocess.run")
+    @patch("javdb.integrations.notify.email.report_builder.subprocess.run")
     def test_subprocess_unexpected_exit_code_returns_fallback(self, mock_run):
         """Only drift_diagnose exit codes 0/1/2 are valid diagnose results."""
         mock_run.return_value = MagicMock(
@@ -197,7 +197,7 @@ class TestBuildDriftDiagnosisSection:
         assert "apps.cli.db.drift_diagnose" in section
         assert suspects == []
 
-    @patch("javdb.integrations.notify.email.subprocess.run")
+    @patch("javdb.integrations.notify.email.report_builder.subprocess.run")
     def test_subprocess_invalid_json_schema_returns_fallback(self, mock_run):
         for stdout in ("[]", "null"):
             mock_run.return_value = MagicMock(
@@ -212,7 +212,7 @@ class TestBuildDriftDiagnosisSection:
             assert "apps.cli.db.drift_diagnose" in section
             assert suspects == []
 
-    @patch("javdb.integrations.notify.email.subprocess.run")
+    @patch("javdb.integrations.notify.email.report_builder.subprocess.run")
     def test_subprocess_crash_returns_fallback(self, mock_run):
         mock_run.side_effect = OSError("No such file or directory")
 
@@ -222,7 +222,7 @@ class TestBuildDriftDiagnosisSection:
         assert "apps.cli.db.drift_diagnose" in section
         assert suspects == []
 
-    @patch("javdb.integrations.notify.email.subprocess.run")
+    @patch("javdb.integrations.notify.email.report_builder.subprocess.run")
     def test_exit_code_0_1_2_all_handled(self, mock_run):
         """Exit codes 0/1/2 are all valid diagnose-mode exits."""
         for exit_code, verdict in [(0, "CLEAN"), (1, "SAFE_TO_APPLY"), (2, "ESCALATE_LIVE_DIVERGENCE")]:
@@ -243,7 +243,7 @@ class TestBuildDriftDiagnosisSection:
             # Should not produce a fallback message for valid exit codes
             assert "unavailable" not in section
 
-    @patch("javdb.integrations.notify.email.subprocess.run")
+    @patch("javdb.integrations.notify.email.report_builder.subprocess.run")
     def test_multiple_suspects_all_rendered(self, mock_run):
         suspects = [_safe_suspect(), _escalate_suspect()]
         mock_run.return_value = MagicMock(
@@ -258,7 +258,7 @@ class TestBuildDriftDiagnosisSection:
             assert s["session_id"] in section
         assert len(returned_suspects) == 2
 
-    @patch("javdb.integrations.notify.email.subprocess.run")
+    @patch("javdb.integrations.notify.email.report_builder.subprocess.run")
     def test_subprocess_uses_sys_executable(self, mock_run):
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -271,7 +271,7 @@ class TestBuildDriftDiagnosisSection:
         call_args = mock_run.call_args[0][0]
         assert call_args[0] == sys.executable
 
-    @patch("javdb.integrations.notify.email.subprocess.run")
+    @patch("javdb.integrations.notify.email.report_builder.subprocess.run")
     def test_subprocess_has_timeout_60(self, mock_run):
         mock_run.return_value = MagicMock(
             returncode=0,
@@ -283,7 +283,7 @@ class TestBuildDriftDiagnosisSection:
 
         assert mock_run.call_args[1]["timeout"] == 60
 
-    @patch("javdb.integrations.notify.email.subprocess.run")
+    @patch("javdb.integrations.notify.email.report_builder.subprocess.run")
     def test_note_field_rendered_when_present(self, mock_run):
         suspect = _unexpected_suspect()
         mock_run.return_value = MagicMock(
