@@ -47,6 +47,40 @@ def _decode_cursor(cursor: str) -> str:
     return json.loads(base64.urlsafe_b64decode(cursor.encode())).get("sid")
 
 
+def _build_session_query(
+    *,
+    state: str | None,
+    cursor: str | None,
+    limit: int,
+) -> tuple[str, list]:
+    """Assemble the cursor-paginated ReportSessions list query.
+
+    Pure (no DB access): returns the exact SQL string and params list that
+    ``SessionsRepo.list`` executes, including the ``limit + 1`` over-fetch used
+    for pagination. Pinned by ADR-018 golden fixtures so the Python and TS
+    backends cannot silently drift.
+    """
+    sql = (
+        "SELECT Id, Status, WriteMode, RunId, RunAttempt, DateTimeCreated, "
+        "ReportType, ReportDate, FailureReason "
+        "FROM ReportSessions"
+    )
+    params: list = []
+    clauses: list[str] = []
+    if state:
+        clauses.append("Status = ?")
+        params.append(state)
+    if cursor:
+        last_sid = _decode_cursor(cursor)
+        clauses.append("Id < ?")
+        params.append(last_sid)
+    if clauses:
+        sql += " WHERE " + " AND ".join(clauses)
+    sql += " ORDER BY Id DESC LIMIT ?"
+    params.append(limit + 1)
+    return sql, params
+
+
 def _row_to_session(r: sqlite3.Row) -> SessionRow:
     return SessionRow(
         session_id=r["Id"],
@@ -73,24 +107,7 @@ class SessionsRepo:
         cursor: str | None = None,
         limit: int = 50,
     ) -> SessionList:
-        sql = (
-            "SELECT Id, Status, WriteMode, RunId, RunAttempt, DateTimeCreated, "
-            "ReportType, ReportDate, FailureReason "
-            "FROM ReportSessions"
-        )
-        params: list = []
-        clauses: list[str] = []
-        if state:
-            clauses.append("Status = ?")
-            params.append(state)
-        if cursor:
-            last_sid = _decode_cursor(cursor)
-            clauses.append("Id < ?")
-            params.append(last_sid)
-        if clauses:
-            sql += " WHERE " + " AND ".join(clauses)
-        sql += " ORDER BY Id DESC LIMIT ?"
-        params.append(limit + 1)
+        sql, params = _build_session_query(state=state, cursor=cursor, limit=limit)
 
         rows = self._conn.execute(sql, params).fetchall()
         items = [_row_to_session(r) for r in rows[:limit]]
