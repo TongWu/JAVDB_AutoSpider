@@ -5,7 +5,7 @@
 | **Status**  | Accepted                                                              |
 | **Date**    | 2026-05-24                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-018](../ADR-018-Web-Security-Hardening/ADR-018-web-security-hardening.md) |
+| **Related** | [ADR-029](../../ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md) |
 
 ## Context
 
