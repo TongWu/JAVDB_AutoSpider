@@ -112,21 +112,10 @@ def _execute_pending_stage(conn, sql: str, params: tuple, policy) -> None:
 
 
 def _assert_no_blocking_d1_recovery(session_id: str) -> None:
-    from javdb.storage.db._db_connection import current_backend
-    from javdb.storage.d1_port import recovery_outbox_path
-    from javdb.storage.d1_recovery import outbox_status
-
-    if current_backend() not in ("d1", "dual"):
-        return
-    ordering_key = f"history:{session_id}"
-    status = outbox_status(recovery_outbox_path())
-    pending = status["pending_groups"].get(ordering_key, [])
-    dead_lettered = status["dead_lettered_groups"].get(ordering_key, [])
-    if pending or dead_lettered:
-        raise RuntimeError(
-            f"unresolved D1 recovery work for ordering key {ordering_key}; "
-            "drain it before committing the session"
-        )
+    with _get_db(_HISTORY_DB_PATH) as conn:
+        fn = getattr(conn, "assert_recovery_drained", None)
+        if callable(fn):
+            fn(ordering_key=f"history:{session_id}")
 
 
 def _flush_pending_d1_batch(session_id: str, history_db_path: Optional[str]) -> None:
@@ -1407,38 +1396,10 @@ def _d1_retry_pending_cleanup(session_id: str) -> None:
     tables are consistent, we can safely mark remaining pending rows as
     applied and delete them directly on D1.
     """
-    from javdb.storage.db._db_connection import current_backend
-    if current_backend() not in ('d1', 'dual'):
-        return
-    try:
-        from javdb.storage.d1_client import make_d1_connection
-    except Exception:
-        return
-    d1 = None
-    try:
-        d1 = make_d1_connection('history')
-        for table in ('PendingMovieHistoryWrites', 'PendingTorrentHistoryWrites'):
-            d1.execute(
-                f"UPDATE {table} SET ApplyState='applied' "
-                f"WHERE SessionId=? AND ApplyState='pending'",
-                (session_id,),
-            )
-            d1.execute(
-                f"DELETE FROM {table} "
-                f"WHERE SessionId=? AND ApplyState='applied'",
-                (session_id,),
-            )
-    except Exception as exc:
-        logger.warning(
-            "D1 retry pending cleanup failed for session %s: %s",
-            session_id, exc,
-        )
-    finally:
-        if d1 is not None:
-            try:
-                d1.close()
-            except Exception:
-                pass
+    with _get_db(_HISTORY_DB_PATH) as conn:
+        fn = getattr(conn, "drain_recovery_residue", None)
+        if callable(fn):
+            fn(session_id=session_id)
 
 
 # ── Main commit entry point ──────────────────────────────────────────────
