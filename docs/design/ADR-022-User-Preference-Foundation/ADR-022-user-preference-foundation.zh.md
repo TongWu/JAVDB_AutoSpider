@@ -218,8 +218,8 @@ python3 -m apps.cli.db.sync_d1_to_sqlite --apply --force-overwrite-all
 
 ## 相关文档
 
-- [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement.md) — Pending 写入流程
-- [ADR-011](../_archive/ADR-011-Parsing-Module/ADR-011-parsing-module.md) — 解析模块结构与 `MovieDetail` 数据类
-- [ADR-014](../ADR-014-Storage-Cli-Layering/ADR-014-storage-cli-layering.md) — 存储 / CLI 分层
-- [ADR-019](../ADR-019-Web-Feature-Parity/ADR-019-web-feature-parity.md) — Web 控制台功能对齐
+- [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md) — Pending 写入流程
+- [ADR-011](../_archive/ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) — 解析模块结构与 `MovieDetail` 数据类
+- [ADR-014](../_archive/ADR-014-Storage-Cli-Layering/ADR-014-storage-cli-layering.md) — 存储 / CLI 分层
+- [ADR-030](../ADR-030-Web-Feature-Parity/ADR-030-web-feature-parity.md) — Web 控制台功能对齐
 - [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.zh.md) — 用户偏好模型；依赖本 ADR

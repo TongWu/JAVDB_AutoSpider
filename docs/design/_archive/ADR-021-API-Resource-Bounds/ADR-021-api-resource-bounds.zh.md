@@ -5,7 +5,7 @@
 | **状态**   | 已接受                                                                  |
 | **日期**   | 2026-05-24                                                              |
 | **作者**   | Ted                                                                     |
-| **关联**   | [ADR-018](../ADR-018-Web-Security-Hardening/ADR-018-web-security-hardening.md) |
+| **关联**   | [ADR-029](../../ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md) |
 
 ## 背景
 

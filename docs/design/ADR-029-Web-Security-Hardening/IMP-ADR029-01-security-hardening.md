@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript, Hono, Cloudflare Workers KV, D1, Vitest + `@cloudflare/vitest-pool-workers`
 
-**Related:** [ADR-018](ADR-018-web-security-hardening.md)
+**Related:** [ADR-029](ADR-029-web-security-hardening.md)
 
 ---
 

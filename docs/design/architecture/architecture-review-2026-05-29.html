@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Architecture review — JAVDB AutoSpider</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+    </script>
+    <style>
+      .seam { stroke-dasharray: 4 4; }
+      .deep { background: linear-gradient(135deg, #0f172a, #1e293b); }
+      .mod { font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase; }
+      .codebox { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.7rem; line-height: 1.05rem; }
+      details > summary { cursor: pointer; list-style: none; }
+      details > summary::-webkit-details-marker { display: none; }
+    </style>
+  </head>
+  <body class="bg-stone-50 text-slate-900 font-sans">
+    <main class="max-w-5xl mx-auto px-6 py-12 space-y-12">
+
+      <!-- HEADER -->
+      <header class="space-y-4">
+        <p class="text-xs uppercase tracking-widest text-slate-400">Architecture review</p>
+        <h1 class="text-4xl font-serif font-semibold text-slate-900">JAVDB AutoSpider — deepening opportunities</h1>
+        <p class="text-sm text-slate-500">2026-05-29 · informed by CONTEXT.md domain language + active ADRs</p>
+        <div class="flex flex-wrap gap-4 text-xs text-slate-600 pt-2 border-t border-slate-200">
+          <span class="flex items-center gap-2"><span class="inline-block w-5 h-3 border-2 border-slate-700 bg-white"></span> module</span>
+          <span class="flex items-center gap-2"><svg width="32" height="8"><line x1="0" y1="4" x2="32" y2="4" stroke="#475569" stroke-width="2" stroke-dasharray="4 4"/></svg> seam</span>
+          <span class="flex items-center gap-2"><svg width="32" height="8"><line x1="0" y1="4" x2="28" y2="4" stroke="#dc2626" stroke-width="2"/><polygon points="28,1 32,4 28,7" fill="#dc2626"/></svg> leakage</span>
+          <span class="flex items-center gap-2"><span class="inline-block w-5 h-3 deep rounded-sm"></span> deep module</span>
+        </div>
+      </header>
+
+      <!-- ADR STATUS STRIP -->
+      <section class="rounded-xl border border-slate-200 bg-white p-6 space-y-4">
+        <h2 class="text-lg font-serif font-semibold">Where the unfinished ADRs sit</h2>
+        <p class="text-sm text-slate-600">The candidates below are grounded in design records that are <em>accepted but unbuilt</em>, or in friction no ADR has named yet.</p>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="text-xs uppercase tracking-wider text-slate-400 border-b border-slate-200">
+              <tr><th class="text-left py-2 pr-4">ADR</th><th class="text-left py-2 pr-4">Topic</th><th class="text-left py-2 pr-4">Status</th><th class="text-left py-2">Maps to candidate</th></tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <tr><td class="py-2 pr-4 font-mono text-xs">ADR-015</td><td class="py-2 pr-4">Integrations Interface Boundary</td><td class="py-2 pr-4"><span class="text-amber-700">Accepted · 0 / 7 IMPs built</span></td><td class="py-2 font-medium">A (top pick)</td></tr>
+              <tr><td class="py-2 pr-4 font-mono text-xs">ADR-017</td><td class="py-2 pr-4">Cloudflare-first dual backend</td><td class="py-2 pr-4"><span class="text-slate-500">Archived — but its sync rule leaks</span></td><td class="py-2 font-medium">B</td></tr>
+              <tr><td class="py-2 pr-4 font-mono text-xs">ADR-005</td><td class="py-2 pr-4">db.py retirement / Repo pattern</td><td class="py-2 pr-4"><span class="text-slate-500">Archived — facade half-retired</span></td><td class="py-2 font-medium">C</td></tr>
+              <tr><td class="py-2 pr-4 font-mono text-xs">ADR-011</td><td class="py-2 pr-4">Parsing module</td><td class="py-2 pr-4"><span class="text-slate-500">Archived — shim still live</span></td><td class="py-2 font-medium">D</td></tr>
+              <tr><td class="py-2 pr-4 font-mono text-xs">ADR-010</td><td class="py-2 pr-4">Unified D1 access port</td><td class="py-2 pr-4"><span class="text-amber-700">Accepted · pending promotion</span></td><td class="py-2 font-medium">F (related)</td></tr>
+              <tr><td class="py-2 pr-4 font-mono text-xs">ADR-028</td><td class="py-2 pr-4">Web platform roadmap</td><td class="py-2 pr-4"><span class="text-rose-700">Empty folder — no doc</span></td><td class="py-2 text-slate-400">housekeeping</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="candidates" class="space-y-12">
+
+        <!-- ============ CANDIDATE A ============ -->
+        <article class="rounded-xl border border-slate-200 bg-white p-6 space-y-5 scroll-mt-6" id="cand-a">
+          <div class="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p class="text-xs uppercase tracking-widest text-emerald-600">Candidate A</p>
+              <h2 class="text-2xl font-serif font-semibold">Give the integrations a real seam — stop aliasing modules</h2>
+            </div>
+            <div class="flex gap-2 flex-wrap">
+              <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">Strong</span>
+              <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600">ports &amp; adapters</span>
+            </div>
+          </div>
+
+          <p class="text-sm font-mono text-slate-500">apps/cli/{qb,pikpak,rclone,notify}/*.py · javdb/integrations/{qb,pikpak,rclone,notify}/*.py · apps/api/routers/operations.py</p>
+
+          <!-- before / after -->
+          <div class="grid md:grid-cols-2 gap-4">
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+              <p class="mod text-slate-400 mb-2">Before — the seam is collapsed</p>
+              <pre class="mermaid">
+flowchart TB
+  CLI["apps.cli.notify.email"]
+  API["apps.api.routers.operations"]
+  IMP["javdb.integrations.notify.email<br/>argparse · main() · sys.exit · SMTP · git"]
+  CLI -. "sys.modules[__name__]=_module" .-> IMP
+  API -- "imports, hits sys.exit" --> IMP
+  classDef leak stroke:#dc2626,stroke-width:2px,fill:#fef2f2;
+  class CLI,IMP leak
+              </pre>
+              <p class="text-xs text-slate-500 mt-2">The CLI module <em>becomes</em> the integration module. No interface sits between them. The integration owns argparse + <code>sys.exit</code>, so the API can't reuse it in-process.</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+              <p class="mod text-slate-400 mb-2">After — one Options→Result interface</p>
+              <pre class="mermaid">
+flowchart TB
+  CLI2["apps.cli.notify.email<br/>parse args · raise SystemExit(code)"]
+  API2["apps.api.routers.operations"]
+  SVC["javdb.integrations.notify<br/>service.run(Options) → Result"]
+  CLI2 -- Options --> SVC
+  API2 -- Options --> SVC
+  classDef deep fill:#0f172a,color:#e2e8f0,stroke:#0f172a;
+  class SVC deep
+              </pre>
+              <p class="text-xs text-slate-500 mt-2">Two adapters (CLI + API) now justify the seam. Domain logic sits behind a typed <code>Options→Result</code>; process concerns (<code>argparse</code>, exit codes) live only in the CLI adapter.</p>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-4 text-sm">
+            <div><p class="font-semibold text-slate-700">Problem</p><p class="text-slate-600">Five CLI files do <code class="text-xs">sys.modules[__name__] = _module</code> — the entrypoint is a pass-through, and the integration owns <code>main()</code>/<code>sys.exit()</code>, so callers can't reuse it.</p></div>
+            <div><p class="font-semibold text-slate-700">Solution</p><p class="text-slate-600">Move <code>argparse</code>/exit into the CLI adapter; expose a typed <code>service.run(Options)→Result</code> from each integration. Exactly what ADR-015 already specifies.</p></div>
+          </div>
+
+          <ul class="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-sm text-slate-700 list-disc list-inside">
+            <li>leverage: one interface, two adapters</li>
+            <li>locality: process concerns leave the library</li>
+            <li>API reuses integrations in-process</li>
+            <li>tests hit Options→Result, not <code>sys.exit</code></li>
+          </ul>
+
+          <div class="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-900">
+            ✓ <strong>Aligns with ADR-015</strong> (Accepted, 0/7 IMPs built). The diagnosis, phased plan, and architecture guards are already written — this is execution, not new design.
+          </div>
+        </article>
+
+        <!-- ============ CANDIDATE B ============ -->
+        <article class="rounded-xl border border-slate-200 bg-white p-6 space-y-5 scroll-mt-6" id="cand-b">
+          <div class="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p class="text-xs uppercase tracking-widest text-amber-600">Candidate B</p>
+              <h2 class="text-2xl font-serif font-semibold">One source of truth for the D1 query surface</h2>
+            </div>
+            <div class="flex gap-2 flex-wrap">
+              <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">Worth exploring</span>
+              <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600">ports &amp; adapters</span>
+            </div>
+          </div>
+
+          <p class="text-sm font-mono text-slate-500">javdb/storage/repos/history_repo.py · apps/api/infra/auth.py · JAVDB_AutoSpider_Web/server/routes/*.ts · server/services/jwt.ts</p>
+
+          <!-- side by side duplication -->
+          <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+            <p class="mod text-slate-400 mb-3">Before — the same SQL, written twice, kept in sync by hand</p>
+            <div class="grid md:grid-cols-2 gap-3 relative">
+              <div class="rounded border border-slate-300 bg-white p-3">
+                <p class="mod text-slate-400 mb-1">history_repo.py:240 · Python</p>
+                <pre class="codebox text-slate-700 whitespace-pre-wrap">wheres.append(
+ "(m.VideoCode LIKE ? OR m.ActorName
+   LIKE ? OR m.SupportingActors LIKE ?)")
+...
+wheres.append("m.PerfectMatchIndicator = ?")</pre>
+              </div>
+              <div class="rounded border border-slate-300 bg-white p-3">
+                <p class="mod text-slate-400 mb-1">history.ts:69 · TypeScript</p>
+                <pre class="codebox text-slate-700 whitespace-pre-wrap">conditions.push(
+ "(m.VideoCode LIKE ? OR m.ActorName
+   LIKE ? OR m.SupportingActors LIKE ?)");
+...
+conditions.push("m.PerfectMatchIndicator = ?");</pre>
+              </div>
+            </div>
+            <div class="flex items-center justify-center mt-3">
+              <svg width="220" height="26"><line x1="0" y1="13" x2="216" y2="13" stroke="#dc2626" stroke-width="2" stroke-dasharray="4 4"/><polygon points="0,9 0,17 5,13" fill="#dc2626"/><polygon points="220,9 220,17 215,13" fill="#dc2626"/></svg>
+              <span class="absolute bg-stone-50 px-2 text-xs text-rose-700 font-medium">"keep in sync" — a CLAUDE.md rule, not a seam</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-2">~15–20 D1 queries are parallel-maintained. JWT signing matches too — except Python tracks revoked JTIs and the TS backend has <strong>no revocation path</strong>: a silent security drift.</p>
+          </div>
+
+          <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+            <p class="mod text-slate-400 mb-2">After — one shared definition, two thin readers</p>
+            <pre class="mermaid">
+flowchart LR
+  Q["shared query / contract<br/>(.sql files or codegen from openapi.json)"]
+  P["Python repo adapter"]
+  T["TS route adapter"]
+  Q --> P
+  Q --> T
+  classDef deep fill:#0f172a,color:#e2e8f0,stroke:#0f172a;
+  class Q deep
+            </pre>
+            <p class="text-xs text-slate-500 mt-2"><code>openapi.json</code> is already generated from the Python app and consumed one-way by TS for types. Push that further: a real seam both backends read from, instead of two hand-copied implementations.</p>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-4 text-sm">
+            <div><p class="font-semibold text-slate-700">Problem</p><p class="text-slate-600">Auth rules and ~15–20 D1 queries exist verbatim in both backends; the only thing keeping them aligned is a prose rule. Revocation logic has already drifted.</p></div>
+            <div><p class="font-semibold text-slate-700">Solution</p><p class="text-slate-600">Lift the overlapping queries + auth contract into a shared seam (shared <code>.sql</code> + codegen, or generate one backend from <code>openapi.json</code>). Both backends become adapters over it.</p></div>
+          </div>
+
+          <ul class="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-sm text-slate-700 list-disc list-inside">
+            <li>locality: query change in one place</li>
+            <li>closes the JWT revocation drift</li>
+            <li>deletes the manual "sync both" rule</li>
+            <li>leverage: contract drives both adapters</li>
+          </ul>
+
+          <div class="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-900">
+            ⚠ <strong>Reopens ADR-017's two-backend split.</strong> The split itself is sound (Python executes, Worker dispatches) — but the <em>shared query surface</em> was left as manual sync. Worth a new ADR to pick the seam (shared SQL vs codegen vs Worker-proxies-Python). Heavier than A; the security drift makes it more than cosmetic.
+          </div>
+        </article>
+
+        <!-- ============ CANDIDATE C ============ -->
+        <article class="rounded-xl border border-slate-200 bg-white p-6 space-y-5 scroll-mt-6" id="cand-c">
+          <div class="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p class="text-xs uppercase tracking-widest text-emerald-600">Candidate C</p>
+              <h2 class="text-2xl font-serif font-semibold">Make the Repo deep — retire the <code>db_*</code> function facade</h2>
+            </div>
+            <div class="flex gap-2 flex-wrap">
+              <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">Strong</span>
+              <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600">in-process</span>
+            </div>
+          </div>
+
+          <p class="text-sm font-mono text-slate-500">javdb/storage/repos/history_repo.py · javdb/storage/db/_db_history_write.py · javdb/storage/db/_db_session.py</p>
+
+          <!-- mass diagram -->
+          <div class="grid md:grid-cols-2 gap-4">
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+              <p class="mod text-slate-400 mb-3">Before — two public ways in; Repo is shallow</p>
+              <div class="flex gap-4 items-end justify-center h-56">
+                <div class="flex flex-col items-center">
+                  <div class="w-24 bg-slate-300 border-2 border-slate-400 text-center text-xs py-1" style="height:40px">HistoryRepo<br/>interface</div>
+                  <div class="w-24 bg-slate-100 border-2 border-t-0 border-slate-300 text-center text-[10px] py-1 text-slate-400" style="height:28px">delegates ↓</div>
+                  <span class="mod text-slate-400 mt-1">shallow</span>
+                </div>
+                <div class="flex flex-col items-center">
+                  <div class="w-28 bg-rose-200 border-2 border-rose-400 text-center text-xs py-1" style="height:40px">db_* funcs<br/>interface</div>
+                  <div class="w-28 deep border-2 border-t-0 border-slate-700 text-center text-[10px] py-1 text-slate-300 flex items-center justify-center" style="height:150px">_db_history_write<br/>1000+ lines<br/>(real impl)</div>
+                  <span class="mod text-rose-500 mt-1">also public</span>
+                </div>
+              </div>
+              <p class="text-xs text-slate-500 mt-2"><code>stage_history_write→db_stage_history_write</code>, <code>commit_session→db_commit_session_history</code>. Tests target the <code>db_*</code> functions directly; <code>session_id</code> falls back to process-global state via a sentinel.</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+              <p class="mod text-slate-400 mb-3">After — one interface absorbs the implementation</p>
+              <div class="flex items-end justify-center h-56">
+                <div class="flex flex-col items-center">
+                  <div class="w-32 bg-emerald-200 border-2 border-emerald-500 text-center text-xs py-1" style="height:34px">HistoryRepo(session_id)<br/>interface</div>
+                  <div class="w-32 deep border-2 border-t-0 border-slate-700 text-center text-[10px] py-1 text-slate-300 flex items-center justify-center" style="height:160px">commit / stage / rollback<br/>impl now internal<br/><span class="opacity-50">(db_* faded inside)</span></div>
+                  <span class="mod text-emerald-600 mt-1">deep</span>
+                </div>
+              </div>
+              <p class="text-xs text-slate-500 mt-2">One interface, one test surface. <code>session_id</code> bound at construction and mandatory — the global sentinel disappears.</p>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-4 text-sm">
+            <div><p class="font-semibold text-slate-700">Problem</p><p class="text-slate-600">The Repo classes (ADR-005's intended interface) delegate straight to module-level <code>db_*</code> functions that are <em>also</em> public. Two ways to write history; tests patch the functions; <code>session_id</code> leaks to a global.</p></div>
+            <div><p class="font-semibold text-slate-700">Solution</p><p class="text-slate-600">Move the implementation behind the Repo, make <code>db_*</code> private, bind <code>session_id</code> at construction and require it. Finish what ADR-005 started.</p></div>
+          </div>
+
+          <ul class="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-sm text-slate-700 list-disc list-inside">
+            <li>interface shrinks; implementation absorbs it</li>
+            <li>locality: one place to evolve writes</li>
+            <li>kills implicit global session state</li>
+            <li>tests cross one seam, not two</li>
+          </ul>
+
+          <div class="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-900">
+            ✓ <strong>Completes ADR-005's direction.</strong> The Repo seam was introduced to kill the old <code>db.py</code> god-module; the function facade is the last remnant of the old interface still exposed alongside it.
+          </div>
+        </article>
+
+        <!-- ============ CANDIDATE D ============ -->
+        <article class="rounded-xl border border-slate-200 bg-white p-6 space-y-5 scroll-mt-6" id="cand-d">
+          <div class="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p class="text-xs uppercase tracking-widest text-amber-600">Candidate D</p>
+              <h2 class="text-2xl font-serif font-semibold">Collapse the parser shim &amp; the two-step magnet dance</h2>
+            </div>
+            <div class="flex gap-2 flex-wrap">
+              <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">Worth exploring</span>
+              <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600">in-process</span>
+            </div>
+          </div>
+
+          <p class="text-sm font-mono text-slate-500">javdb/spider/parse_legacy_adapters.py · javdb/spider/magnet_extractor.py · javdb/parsing/* · javdb/pipeline/index_selection.py</p>
+
+          <div class="grid md:grid-cols-2 gap-4">
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+              <p class="mod text-slate-400 mb-2">Before — caller bounces across modules</p>
+              <pre class="mermaid">
+flowchart TB
+  C["detail/runner · fetch/fallback<br/>parallel_mode (5 callers)"]
+  L["parse_legacy_adapters<br/>(shim: reshape + filter)"]
+  P["javdb.parsing.parse_detail"]
+  S["pipeline.index_selection"]
+  M["magnet_extractor.extract_magnets"]
+  C --> L
+  L --> P
+  L -. reaches into .-> S
+  C -- "then, separately" --> M
+  classDef leak stroke:#dc2626,stroke-width:2px,fill:#fef2f2;
+  class L,M leak
+              </pre>
+              <p class="text-xs text-slate-500 mt-2">Two parser entrypoints (<code>javdb.parsing</code> + the shim), and "parse a detail page" needs a second <code>extract_magnets</code> call to categorise torrents.</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+              <p class="mod text-slate-400 mb-2">After — parsing returns finished results</p>
+              <pre class="mermaid">
+flowchart TB
+  C2["5 callers"]
+  P2["javdb.parsing<br/>parse_detail → categorised magnets<br/>parse_index → selected entries"]
+  C2 --> P2
+  classDef deep fill:#0f172a,color:#e2e8f0,stroke:#0f172a;
+  class P2 deep
+              </pre>
+              <p class="text-xs text-slate-500 mt-2">One parser interface. Magnet categorisation and index selection move <em>behind</em> it — callers get finished domain objects.</p>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-4 text-sm">
+            <div><p class="font-semibold text-slate-700">Problem</p><p class="text-slate-600"><code>parse_legacy_adapters.py</code> still has 5 live production callers and reshapes results + reaches into pipeline filtering. Magnet categorisation is a separate post-step every caller must remember.</p></div>
+            <div><p class="font-semibold text-slate-700">Solution</p><p class="text-slate-600">Fold categorisation + index selection into <code>javdb.parsing</code>, return finished objects, migrate the 5 callers, delete the shim.</p></div>
+          </div>
+
+          <ul class="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-sm text-slate-700 list-disc list-inside">
+            <li>one parser interface, not two</li>
+            <li>deletes a 118-line pass-through</li>
+            <li>locality: "what we extract" in one place</li>
+            <li>no parse-then-extract two-step</li>
+          </ul>
+
+          <div class="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-900">
+            ⚠ <strong>ADR-011 (archived) intended this deletion</strong> but 5 callers + migration tools still import the shim. Smaller blast radius than A/C; do it when touching the spider next.
+          </div>
+        </article>
+
+        <!-- ============ CANDIDATE E ============ -->
+        <article class="rounded-xl border border-slate-200 bg-white p-6 space-y-5 scroll-mt-6" id="cand-e">
+          <div class="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p class="text-xs uppercase tracking-widest text-amber-600">Candidate E</p>
+              <h2 class="text-2xl font-serif font-semibold">Own the session lifecycle in one module</h2>
+            </div>
+            <div class="flex gap-2 flex-wrap">
+              <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">Worth exploring</span>
+              <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600">in-process</span>
+            </div>
+          </div>
+
+          <p class="text-sm font-mono text-slate-500">javdb/storage/db/_db_reports.py · _db_history_write.py · javdb/storage/sessions/commit.py · javdb/storage/rollback/core.py</p>
+
+          <!-- cross-section -->
+          <div class="grid md:grid-cols-2 gap-4">
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+              <p class="mod text-slate-400 mb-3">Before — the state machine is spread thin</p>
+              <div class="space-y-1">
+                <div class="h-9 border-l-4 border-rose-400 bg-white px-3 flex items-center text-xs">_db_reports · <span class="text-slate-400 ml-1">read Status/WriteMode</span></div>
+                <div class="h-9 border-l-4 border-rose-400 bg-white px-3 flex items-center text-xs">_db_history_write · <span class="text-slate-400 ml-1">flip → finalizing/committed</span></div>
+                <div class="h-9 border-l-4 border-rose-400 bg-white px-3 flex items-center text-xs">sessions/commit.py · <span class="text-slate-400 ml-1">parallel commit path</span></div>
+                <div class="h-9 border-l-4 border-rose-400 bg-white px-3 flex items-center text-xs">rollback/core.py · <span class="text-slate-400 ml-1">decide resume vs roll back</span></div>
+              </div>
+              <p class="text-xs text-slate-500 mt-2">No single owner of "which transition is legal." Callers can flip status out of order; commit orchestration is 1000+ lines across 6 functions.</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+              <p class="mod text-slate-400 mb-3">After — one band owns the transitions</p>
+              <div class="flex items-center justify-center h-44">
+                <div class="w-full deep rounded-lg text-slate-200 p-4 text-center">
+                  <p class="text-sm font-semibold">SessionLifecycle</p>
+                  <p class="text-[11px] opacity-70 mt-1">can_transition · transition · get_state</p>
+                  <p class="text-[11px] opacity-70">in_progress → finalizing → committed / failed</p>
+                  <p class="text-[10px] opacity-50 mt-2">commit + rollback read this one interface</p>
+                </div>
+              </div>
+              <p class="text-xs text-slate-500 mt-2">Illegal transitions become impossible to express; commit/rollback share one validator.</p>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-4 text-sm">
+            <div><p class="font-semibold text-slate-700">Problem</p><p class="text-slate-600">The <code>in_progress→finalizing→committed/failed</code> lifecycle is mutated from 4+ modules with no shared validator; commit is a 1000-line procedure only testable against a real DB.</p></div>
+            <div><p class="font-semibold text-slate-700">Solution</p><p class="text-slate-600">A <code>SessionLifecycle</code> module owning state queries + transitions, plus a <code>CommitPipeline</code> of small testable steps behind it.</p></div>
+          </div>
+
+          <ul class="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-sm text-slate-700 list-disc list-inside">
+            <li>locality: transitions in one module</li>
+            <li>illegal transitions unrepresentable</li>
+            <li>commit steps testable in isolation</li>
+            <li>rollback + commit share one seam</li>
+          </ul>
+        </article>
+
+        <!-- ============ CANDIDATE F ============ -->
+        <article class="rounded-xl border border-slate-200 bg-white p-6 space-y-5 scroll-mt-6" id="cand-f">
+          <div class="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p class="text-xs uppercase tracking-widest text-slate-500">Candidate F</p>
+              <h2 class="text-2xl font-serif font-semibold">Hide backend identity behind the connection seam</h2>
+            </div>
+            <div class="flex gap-2 flex-wrap">
+              <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-200 text-slate-700">Speculative</span>
+              <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600">local-substitutable</span>
+            </div>
+          </div>
+
+          <p class="text-sm font-mono text-slate-500">javdb/storage/db/_db_connection.py · _db_history_write.py · javdb/spider/services/dedup.py · javdb/integrations/{pikpak,qb}/*.py</p>
+
+          <div class="grid md:grid-cols-2 gap-4">
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+              <p class="mod text-slate-400 mb-2">Before — callers ask "are we on D1?"</p>
+              <pre class="mermaid">
+flowchart TB
+  D["dedup"] --> CB{"current_backend()"}
+  PK["pikpak bridge"] --> CB
+  QB["qb uploader"] --> CB
+  RV["d1 recovery paths"] --> CB
+  CB -->|sqlite| X[" "]
+  CB -->|d1| Y[" "]
+  classDef leak stroke:#dc2626,stroke-width:2px,fill:#fef2f2;
+  class CB,D,PK,QB,RV leak
+              </pre>
+              <p class="text-xs text-slate-500 mt-2">Backend identity (sqlite/d1/dual) leaks across the connection seam — N callers branch on it. A new backend touches all of them.</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+              <p class="mod text-slate-400 mb-2">After — behaviour lives behind the adapter</p>
+              <pre class="mermaid">
+flowchart TB
+  D2["dedup"] --> C["connection adapter"]
+  PK2["pikpak"] --> C
+  QB2["qb"] --> C
+  C -.->|sqlite/d1/dual<br/>chosen internally| C
+  classDef deep fill:#0f172a,color:#e2e8f0,stroke:#0f172a;
+  class C deep
+              </pre>
+              <p class="text-xs text-slate-500 mt-2">Recovery/retry behaviour moves behind the connection adapter; callers never inspect the backend.</p>
+            </div>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-4 text-sm">
+            <div><p class="font-semibold text-slate-700">Problem</p><p class="text-slate-600">Several callers branch on <code>current_backend()</code> for logging + D1-recovery decisions — internal detail crossing the seam.</p></div>
+            <div><p class="font-semibold text-slate-700">Solution</p><p class="text-slate-600">Fold backend-specific recovery behind the connection adapter; expose intent (<code>flush_recovery()</code>) not identity.</p></div>
+          </div>
+
+          <ul class="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-sm text-slate-700 list-disc list-inside">
+            <li>leverage: backend swap = one place</li>
+            <li>tests stop mocking STORAGE_BACKEND</li>
+            <li>locality: recovery logic concentrated</li>
+          </ul>
+
+          <div class="rounded-lg bg-slate-100 border border-slate-300 p-3 text-sm text-slate-700">
+            Lowest urgency — leaks are mostly in logging/recovery, and the SQLite mirror is being retired (per CONTEXT.md / ADR-010). Worth folding in opportunistically rather than as its own project.
+          </div>
+        </article>
+
+      </section>
+
+      <!-- TOP RECOMMENDATION -->
+      <section id="top-recommendation" class="rounded-xl deep text-slate-100 p-8 space-y-4">
+        <p class="text-xs uppercase tracking-widest text-emerald-300">Top recommendation</p>
+        <h2 class="text-2xl font-serif font-semibold">Start with Candidate A — the integrations seam (ADR-015).</h2>
+        <p class="text-sm text-slate-300 max-w-3xl">It is the only candidate where the design is already <em>accepted and fully planned</em> (7 phased IMPs + architecture guards written), so there is no design risk — just execution. The friction is concrete and verified: five CLI files alias their integration module via <code class="text-xs bg-slate-800 px-1 rounded">sys.modules[__name__] = _module</code>, and the integrations own <code>argparse</code>/<code>sys.exit</code>, which is why the API and the pipeline can't reuse them in-process. Deepening here creates a real Options→Result seam with two adapters (CLI + API), which in turn unblocks killing the subprocess-only pipeline coupling.</p>
+        <p class="text-sm text-slate-400">Then Candidate C (finish ADR-005's Repo by retiring the <code>db_*</code> facade) for the highest testability gain in the storage core. Treat Candidate B (dual-backend) as its own ADR — it carries a real security drift, but the seam choice deserves a decision before code.</p>
+        <a href="#cand-a" class="inline-block text-sm font-medium text-emerald-300 hover:text-emerald-200">Jump to Candidate A ↑</a>
+      </section>
+
+      <!-- HOUSEKEEPING -->
+      <section class="rounded-xl border border-dashed border-slate-300 bg-white p-6 space-y-2">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500">Housekeeping (not deepening — just cleanup)</h2>
+        <ul class="text-sm text-slate-600 list-disc list-inside space-y-1">
+          <li><code>utils/</code> at repo root is dead — only stale <code>__pycache__</code>, no source, zero importers (ADR-007 Phase 3 retired it). Safe to delete.</li>
+          <li><code>docs/design/ADR-028-Web-Platform-Completeness-Roadmap/</code> is an empty folder with no ADR doc inside. Either write it or remove it.</li>
+          <li><code>CONTEXT.md</code> still names the Repos under <code>db_layer/</code>; they actually live at <code>javdb/storage/repos/</code>. Minor doc drift.</li>
+        </ul>
+      </section>
+
+    </main>
+  </body>
+</html>

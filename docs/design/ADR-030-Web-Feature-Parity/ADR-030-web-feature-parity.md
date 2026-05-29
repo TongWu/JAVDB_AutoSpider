@@ -1,11 +1,11 @@
-# ADR-019: Web Backend Feature Parity — Config, Stats, and Password Management
+# ADR-030: Web Backend Feature Parity — Config, Stats, Password Management, and Capability Honesty
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
 | **Status**  | Accepted                                                              |
 | **Date**    | 2026-05-24                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md), [ADR-018](../ADR-018-Web-Security-Hardening/ADR-018-web-security-hardening.md) |
+| **Related** | [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md), [ADR-029](../ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md) |
 
 ## Context
 
@@ -193,12 +193,20 @@ export async function findUser(env: Env, db: D1Database): Promise<User | undefin
 **Call sites requiring `await`:**
 - `server/routes/auth.ts`: login handler, refresh handler
 
+### Capability Honesty: GitHub Actions Coverage and `INGESTION_MODE`
+
+Merged from [ADR-028](../ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md) workstream WS-A (P0). Two parity gaps undermine *capability honesty* — the platform advertising work it cannot track or execute.
+
+**Cloudflare — untracked GitHub Actions workflows.** `Migration.yml`, `WeeklyDedup.yml`, and `TestIngestion.yml` have no typed dispatch endpoint. They are reachable only via the generic `POST /api/gh-actions/runs` (requires `GH_ACTIONS_TIER=admin` plus a known workflow filename) and are **not** written to `job_runs`, so they never appear in the Tasks list or stats. Add typed dispatch endpoints plus `job_runs` tracking for these three workflows, mirroring the existing pattern for `DailyIngestion` / `QBFileFilter` / `RcloneManager` / `StaleSessionCleanup`.
+
+**Python — `INGESTION_MODE` advertised but unimplemented.** `GET /api/capabilities` reports an `ingestion_mode` of `github` / `dual`, but `apps/api/services/task_service.py` has no GitHub-dispatch branch — `trigger_daily_task` / `trigger_adhoc_task` always run a local subprocess regardless of `INGESTION_MODE`. Resolve by either (a) implementing GitHub dispatch in `task_service` for the `github` / `dual` modes, or (b) restricting `/api/capabilities` to advertise only modes the execution layer honors. **Default to (b)** unless GitHub dispatch from the Python backend is explicitly wanted, since the Cloudflare backend already owns the dispatch topology.
+
 ## Out of Scope
 
 - **33 local-deployment-only keys** (`*_LOG_FILE`, `*_DB_PATH`, `*_DIR`, `*_CSV`) — irrelevant to Cloudflare Workers.
 - **15 Cloudflare/coordination keys** — future capabilities endpoint enhancement.
 - **Frontend page changes** — Config UI auto-renders from `/config/meta`; no manual page work needed.
-- **Python backend changes** — This ADR targets TS backend only.
+- **Python backend changes** — Out of scope except the WS-A `INGESTION_MODE` capability-honesty fix (see Decision); everything else targets the TS backend only.
 - **Password change for readonly users via admin** — Use `PUT /api/config` with `READONLY_PASSWORD_HASH`.
 
 ## Consequences
@@ -210,6 +218,7 @@ export async function findUser(env: Env, db: D1Database): Promise<User | undefin
 - Users can change passwords through the UI without CLI access.
 - Stats trend dashboard shows job duration data; proxy_bans explicitly marked as unavailable rather than silently empty.
 - Alias fallback is zero-downtime — existing D1 config values keep working during transition.
+- Capability-honesty gaps (untracked GH Actions workflows; an advertised-but-unimplemented `INGESTION_MODE`) are closed, so the console no longer signals work it cannot track or perform.
 
 ### Negative
 
