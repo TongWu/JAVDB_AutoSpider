@@ -2,7 +2,7 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Proposed                                                              |
+| **Status**  | Implemented                                                          |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
 | **Related** | [ADR-011](../_archive/ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) (the parsing module; intended this shim's deletion); [IMP-ADR020-01](IMP-ADR020-01-consolidate-parser.md) (Phase 1 — execution) |
@@ -74,3 +74,4 @@ Consolidate to **one parser interface** — `javdb.parsing` returns *finished do
 
 - 2026-05-29: Proposed (from architecture review Candidate D grilling).
 - 2026-05-29: Design correction (during implementation, Phase 2). `MovieDetail.categorize_magnets()` (the original D2 "finished-object method") is **dead on the production path** — `parse_detail_page()` returns a Rust `RustMovieDetail` that lacks the method. D2/D3 amended: the canonical interface is the parsing-layer free function `magnet_categorize.categorize(detail.get_magnets_as_legacy())` (uniform across Rust/Python detail objects, matches `runner.py:700`). The dead method + its test were removed.
+- 2026-05-29: Implemented (all phases). Phases 1-2 (categorization relocated to `javdb/parsing/magnet_categorize.py`; non-spider callers migrated) shipped in PR #123. Phases 3-5 (spider detail flow migrated + hot-path two-step collapsed so backends emit pre-categorized `data['magnet_links']`; legacy spider import-swapped; `test_parser.py` repointed; **`parse_legacy_adapters.py` deleted** + logging alias removed) shipped in the stacked Phase 3-5 PR. `grep -rn parse_legacy_adapters javdb apps tests` is empty; `test_magnet_parity.py` green throughout (D6 Rust dispatch preserved). Status → Implemented; folder archives once both PRs merge.
