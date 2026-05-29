@@ -8,9 +8,9 @@
 
 **Tech Stack:** TypeScript, Hono, Cloudflare Workers, D1, bcryptjs, Vitest + `@cloudflare/vitest-pool-workers`
 
-**Related:** [ADR-019](ADR-019-web-feature-parity.md), [IMP-ADR018-01](../ADR-018-Web-Security-Hardening/IMP-ADR018-01-security-hardening.md)
+**Related:** [ADR-030](ADR-030-web-feature-parity.md), [IMP-ADR029-01](../ADR-029-Web-Security-Hardening/IMP-ADR029-01-security-hardening.md)
 
-**Dependency:** This plan assumes IMP-ADR018-01 has been implemented first. Several tasks build on ADR-018 changes (e.g. `findUser()` is already called with `await` in auth routes after ADR-018, `AUTH_KV` exists in env). If implementing before ADR-018, the auth route modifications in Tasks 4–5 will need adjustment.
+**Dependency:** This plan assumes IMP-ADR029-01 has been implemented first. Several tasks build on ADR-029 changes (e.g. `findUser()` is already called with `await` in auth routes after ADR-029, `AUTH_KV` exists in env). If implementing before ADR-029, the auth route modifications in Tasks 4–5 will need adjustment.
 
 ---
 
@@ -24,7 +24,7 @@
 | Modify | `server/routes/auth.ts` | `await findUser()`, add change-password endpoint |
 | Modify | `server/routes/stats.ts` | `duration` from `job_runs`, `proxy_bans` → `available: false` |
 | Modify | `server/app.ts` | Mount change-password route (if not already under `/api/auth`) |
-| Modify | `server/env.ts` | Add `CORS_ORIGINS` to Env interface (ADR-019 spec) |
+| Modify | `server/env.ts` | Add `CORS_ORIGINS` to Env interface (ADR-030 spec) |
 | Create | `server/__tests__/config-alias.test.ts` | Tests for alias fallback loading + canonical saving |
 | Create | `server/__tests__/change-password.test.ts` | Tests for change-password endpoint |
 | Modify | `server/__tests__/auth-routes.test.ts` | Update tests for async `findUser()` |
@@ -48,7 +48,7 @@ import { CONFIG_META_FIELDS, SENSITIVE_KEYS, ALIAS_MAP } from "../services/confi
 describe("config-schema", () => {
   const fieldKeys = CONFIG_META_FIELDS.map((f) => f.key);
 
-  it("contains all 26 new keys from ADR-019", () => {
+  it("contains all 26 new keys from ADR-030", () => {
     const requiredKeys = [
       "PAGE_START", "PAGE_END", "PHASE2_MIN_RATE", "PHASE2_MIN_COMMENTS", "BASE_URL",
       "QB_URL_ADHOC", "QB_USERNAME_ADHOC", "QB_PASSWORD_ADHOC", "QB_ALLOW_INSECURE_HTTP",
@@ -267,7 +267,7 @@ Expected: PASS
 
 ```bash
 git add server/services/config-schema.ts server/__tests__/config-schema.test.ts
-git commit -m "feat(config): add 26 config keys and alias map from ADR-019"
+git commit -m "feat(config): add 26 config keys and alias map from ADR-030"
 ```
 
 ---
@@ -1016,11 +1016,11 @@ git commit -m "feat(stats): implement duration trend from job_runs, mark proxy_b
 In `server/env.ts`, add after the `JAVDB_SESSION_COOKIE` line:
 
 ```typescript
-  // CORS (ADR-018 whitelist, configured in wrangler.toml or env)
+  // CORS (ADR-029 whitelist, configured in wrangler.toml or env)
   CORS_ORIGINS?: string;
 ```
 
-This env var is consumed by the CORS middleware (ADR-018 implementation). Adding it here ensures TypeScript recognizes it.
+This env var is consumed by the CORS middleware (ADR-029 implementation). Adding it here ensures TypeScript recognizes it.
 
 - [ ] **Step 2: Verify typecheck passes**
 
@@ -1086,4 +1086,4 @@ git commit -m "fix(tests): update findUser callers for async D1 signature"
 **4. Bugs found and fixed in plan:**
 - `stats.ts` line 143: duplicate `const metric` → should be `const period` (fixed in Task 5)
 - `config-schema.ts` line 29: duplicate `TORRENT_CATEGORY_ADHOC` entry (fixed in Task 1)
-- `GPT_API_KEY` was in section `advanced` — ADR-019 specifies `javdb` (fixed in Task 1)
+- `GPT_API_KEY` was in section `advanced` — ADR-030 specifies `javdb` (fixed in Task 1)
