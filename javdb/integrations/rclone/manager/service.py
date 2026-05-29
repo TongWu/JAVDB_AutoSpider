@@ -1092,7 +1092,7 @@ def run_execute_inventory_purge_from_csv(
     """Purge folders listed in an inventory-alignment plan CSV (``rclone purge``).
 
     Expects rows with a ``source_path`` (or ``SourcePath``) column — the same
-    shape produced by ``packages/python/javdb_migrations/tools/align_inventory_with_moviehistory.py``.
+    shape produced by ``javdb/migrations/tools/align_inventory_with_moviehistory.py``.
     """
     if not os.path.exists(purge_plan_csv):
         logger.info(f"Purge-plan CSV not found: {purge_plan_csv}")
