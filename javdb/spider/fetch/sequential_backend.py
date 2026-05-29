@@ -11,6 +11,7 @@ from javdb.spider.fetch.backend import FetchBackend, FetchRuntimeState
 from javdb.spider.fetch.fallback import fetch_detail_page_with_fallback
 from javdb.spider.fetch.fetch_engine import EngineResult, EngineTask
 from javdb.spider.runtime.sleep import ensure_sleep_runtime, movie_sleep_mgr
+from javdb.parsing.magnet_categorize import categorize
 
 logger = get_logger(__name__)
 
@@ -125,7 +126,7 @@ class SequentialFetchBackend(FetchBackend):
                 task=task,
                 success=True,
                 data={
-                    "magnets": magnets,
+                    "magnet_links": categorize(magnets, task.entry_index),
                     "actor_info": actor_info or "",
                     "actor_gender": actor_gender or "",
                     "actor_link": actor_link or "",
