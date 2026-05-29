@@ -61,6 +61,18 @@ FORCE_FULL_GLOBS = (
     "tests/**/conftest.py",
 )
 
+# Contract guards that must run on every selective build, regardless of impact
+# analysis — their whole purpose is to catch drift the selector would otherwise
+# skip. The ADR-018 query-builder golden is the motivating case: a SQL-only edit
+# to a covered builder (history/sessions filter builders) is classified
+# "string-literal-only" and pruned from impact analysis (see
+# `is_docstring_only_change`) — which is exactly the drift the golden guards. So
+# it cannot rely on impact selection and is force-selected here. (Cheap: a
+# sub-second, DB-free string comparison.) In full-python runs it runs anyway.
+ALWAYS_RUN_TESTS = (
+    "tests/unit/test_query_contract_golden.py",
+)
+
 RUST_ADAPTER_GLOBS = (
     # Phase-1 (ADR-007) distributed the rust_adapter shims into their
     # consumer modules under javdb/spider/, so any change to the Rust
@@ -673,6 +685,15 @@ def select_for_changed_files(
             if tests:
                 selected_tests.update(tests)
                 reason.append(f"{rule.name} impact rule added {len(tests)} test file(s)")
+
+    # Force-select contract guards (ADR-018): they must run even when impact
+    # analysis would skip them (e.g. a SQL-only builder edit pruned as a
+    # string-literal-only change). Only matters in selective mode — a
+    # run_full_python build clears selected_targets and runs everything anyway.
+    for path in ALWAYS_RUN_TESTS:
+        if path not in selected_tests and (repo_root / path).exists():
+            selected_tests.add(path)
+            reason.append(f"{path} always runs (contract guard)")
 
     run_rust = any(is_rust_source_change(path) for path in changed)
     rust_full = any(
