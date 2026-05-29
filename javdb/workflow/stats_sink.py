@@ -66,16 +66,12 @@ def _db_save_pikpak_stats(session_id: str, payload: dict[str, Any]) -> None:
     db_save_pikpak_stats(session_id, payload)
 
 
-def _compact_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    return {key: value for key, value in payload.items() if value not in (0, 0.0, None)}
-
-
 def save_uploader_stats(session_id: str | None, stats: UploaderStats) -> StatsSinkResult:
     if not session_id or not _use_sqlite():
         return StatsSinkResult(saved=False, backend=None, error=None)
     try:
         _init_db()
-        _db_save_uploader_stats(session_id, _compact_payload(asdict(stats)))
+        _db_save_uploader_stats(session_id, asdict(stats))
         return StatsSinkResult(saved=True, backend=_current_backend(), error=None)
     except Exception as exc:
         return StatsSinkResult(saved=False, backend=None, error=str(exc))
@@ -86,7 +82,7 @@ def save_pikpak_stats(session_id: str | None, stats: PikPakStats) -> StatsSinkRe
         return StatsSinkResult(saved=False, backend=None, error=None)
     try:
         _init_db()
-        _db_save_pikpak_stats(session_id, _compact_payload(asdict(stats)))
+        _db_save_pikpak_stats(session_id, asdict(stats))
         return StatsSinkResult(saved=True, backend=_current_backend(), error=None)
     except Exception as exc:
         return StatsSinkResult(saved=False, backend=None, error=str(exc))
