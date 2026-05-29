@@ -2,10 +2,10 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Accepted — IMP-ADR029-01 implemented & verified (206 tests); PR TongWu/JAVDB_AutoSpider_Web#9 open, pending merge |
+| **Status**  | Completed                                                              |
 | **Date**    | 2026-05-24                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md) |
+| **Related** | [ADR-017](../ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md) |
 
 ## Context
 

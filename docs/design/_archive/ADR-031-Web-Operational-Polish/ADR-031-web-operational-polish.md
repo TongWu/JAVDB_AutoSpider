@@ -2,10 +2,10 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Accepted — IMP-ADR031-01 implemented & verified (206 tests); PR TongWu/JAVDB_AutoSpider_Web#9 open, pending merge |
+| **Status**  | Completed                                                              |
 | **Date**    | 2026-05-24                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md), [ADR-029](../ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md), [ADR-030](../ADR-030-Web-Feature-Parity/ADR-030-web-feature-parity.md) |
+| **Related** | [ADR-017](../ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md), [ADR-029](../ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md), [ADR-030](../ADR-030-Web-Feature-Parity/ADR-030-web-feature-parity.md) |
 
 ## Context
 
