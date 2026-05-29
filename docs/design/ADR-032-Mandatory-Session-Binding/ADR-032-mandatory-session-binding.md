@@ -2,7 +2,7 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Proposed                                                              |
+| **Status**  | Accepted — Phase 1 implemented 2026-05-29; Phase 2 pending, Phase 3 deferred |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
 | **Related** | [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md) (this completes ADR-005 amendment-2's stated goal; see ADR-005 amendment-8) |
@@ -86,3 +86,4 @@ Complete amendment-2's goal and consolidate to a single public storage interface
 ## Status Log
 
 - 2026-05-29: Proposed (from architecture review Candidate C grilling). Recorded as a pointer in ADR-005 amendment-8.
+- 2026-05-29: Phase 1 implemented & verified ([IMP-ADR032-01](IMP-ADR032-01-mandatory-session-id.md)) — `session_id` is now mandatory on the `_db_operations` write functions + the two `_db_history_write` batch functions; the process-global fallback is unreachable from them; callers threaded; a "no silent global" test was added. Phase 2 (single-Repo interface) and Phase 3 (delete the global) remain.
