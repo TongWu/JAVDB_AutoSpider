@@ -41,7 +41,7 @@
 ## Task 1: Add the facade methods
 
 - [x] `D1Connection.assert_recovery_drained(self, *, ordering_key)` (`d1_client.py`, near `flush` at `:330`): the outbox-status check currently inlined at `_db_history_write._assert_no_blocking_d1_recovery:121-129` — inspect the recovery outbox for blocking work and raise if found.
-- [x] A residue-cleanup method (e.g. `drain_recovery_residue(self, *, ordering_key)` or fold into the existing `drain_recovery`, `d1_port.py:305`) wrapping the cleanup UPDATE/DELETE pair from `_d1_retry_pending_cleanup:1419-1430`. **Preserve its lifecycle:** that helper deliberately opens a *separate* `make_d1_connection` because the surrounding `with _get_db(...)` block has already committed/closed — the facade method opens its own port connection internally.
+- [x] `D1Connection.drain_recovery_residue(self, *, session_id)` wraps the cleanup UPDATE/DELETE pair from `_d1_retry_pending_cleanup`. **As shipped:** it runs the pair on `self.execute(...)`, so it targets exactly the database this facade is bound to (no hardcoded `'history'`, no cross-DB footgun). The lifecycle is preserved by the *caller*: `_d1_retry_pending_cleanup` opens a fresh `with _get_db(...)` connection post-commit (the commit's own block has already closed), and that live connection is what the method runs on. `DualConnection.drain_recovery_residue` mirrors it, delegating to its D1 side so the residual cleanup stays D1-direct.
 - [x] Mirror both on `DualConnection` (`dual_connection.py:1034`, delegate to the D1 side).
 - [x] **Do NOT** add them to `sqlite3.Connection` — absence is the signal, consistent with `hasattr(conn, "flush")` (`_db_history_write.py:108`).
 

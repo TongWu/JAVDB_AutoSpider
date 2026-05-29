@@ -353,27 +353,23 @@ class D1Connection:
             )
 
     def drain_recovery_residue(self, *, session_id: str) -> None:
-        """Best-effort D1-direct retry for pending-row cleanup.
+        """Best-effort retry for pending-row cleanup, on this connection's DB.
 
         After the normal commit flow, any D1-side failures on the ApplyState
-        UPDATE or the final DELETE leave orphaned 'pending' rows in D1. Since
-        the session is already committed and the live tables are consistent,
-        we can safely mark remaining pending rows as applied and delete them
-        directly on D1. Opens its own port connection because the caller's
-        ``with _get_db(...)`` block has already committed/closed.
+        UPDATE or the final DELETE leave orphaned 'pending' rows. Since the
+        session is already committed and the live tables are consistent, mark
+        any remaining pending rows as applied and delete them. Runs directly on
+        ``self`` (the caller opens a fresh post-commit connection) so it targets
+        exactly the database this facade is bound to — never a hardcoded one.
         """
-        from javdb.storage.d1_client import make_d1_connection
-
-        d1 = None
         try:
-            d1 = make_d1_connection('history')
             for table in ('PendingMovieHistoryWrites', 'PendingTorrentHistoryWrites'):
-                d1.execute(
+                self.execute(
                     f"UPDATE {table} SET ApplyState='applied' "
                     f"WHERE SessionId=? AND ApplyState='pending'",
                     (session_id,),
                 )
-                d1.execute(
+                self.execute(
                     f"DELETE FROM {table} "
                     f"WHERE SessionId=? AND ApplyState='applied'",
                     (session_id,),
@@ -383,12 +379,6 @@ class D1Connection:
                 "D1 retry pending cleanup failed for session %s: %s",
                 session_id, exc,
             )
-        finally:
-            if d1 is not None:
-                try:
-                    d1.close()
-                except Exception:
-                    pass
 
     def close(self) -> None:
         close_exc: Exception | None = None
