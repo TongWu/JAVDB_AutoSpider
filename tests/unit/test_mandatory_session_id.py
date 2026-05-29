@@ -74,3 +74,33 @@ def test_omitting_session_id_raises_type_error(name, args):
         f"{name} TypeError should name the missing session_id argument: "
         f"{exc.value}"
     )
+
+
+# Review hardening: making ``session_id`` *required* stops accidental omission,
+# but an explicit ``session_id=None`` under pending mode (the only supported
+# mode) would still bypass PendingMovieHistoryWrites staging and write an
+# unrollbackable, untagged live row — the very hazard ADR-032 removes. The two
+# history-batch helpers reject that combination with ``ValueError`` raised
+# before any DB access (non-empty payload so the guard, not the empty-input
+# early-return, is exercised).
+_PENDING_NONE_CASES = [
+    ("db_batch_update_last_visited", (["/v/ABC-123"],)),
+    (
+        "db_batch_update_movie_actors",
+        ([("/v/ABC-123", "Actor", "female", "/actors/x", "[]")],),
+    ),
+]
+
+
+@pytest.mark.parametrize("name,args", _PENDING_NONE_CASES)
+def test_explicit_none_session_id_raises_value_error_in_pending_mode(name, args):
+    """``session_id=None`` under pending mode raises ``ValueError`` before any
+    row is written — a None session must not bypass staging into a live row."""
+    assert db.get_active_write_mode() == "pending"
+    fn = getattr(db, name)
+    with pytest.raises(ValueError) as exc:
+        fn(*args, session_id=None)
+    assert "session_id" in str(exc.value), (
+        f"{name} ValueError should name the session_id requirement: "
+        f"{exc.value}"
+    )
