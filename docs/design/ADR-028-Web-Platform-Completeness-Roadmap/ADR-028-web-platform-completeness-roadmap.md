@@ -7,11 +7,10 @@
 | **Authors** | Ted                                                                   |
 | **Related** | [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md), [ADR-029](../ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md), [ADR-030](../ADR-030-Web-Feature-Parity/ADR-030-web-feature-parity.md), [ADR-031](../ADR-031-Web-Operational-Polish/ADR-031-web-operational-polish.md), [ADR-026](../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md), [ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-023](../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.md), [ADR-024](../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md), [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md) |
 
-> **Renumber pending.** This umbrella governs a web-platform cluster that is being
-> renumbered (see [Renumbering Plan](#renumbering-plan)). Until `IMP-ADR028-01`
-> executes, the three child ADRs still live at their **old** paths:
-> ADR-029 → `ADR-018-Web-Security-Hardening/`, ADR-030 → `ADR-019-Web-Feature-Parity/`,
-> ADR-031 → `ADR-020-Web-Operational-Polish/`. Links above use the post-renumber numbers.
+> **Renumber complete (2026-05-29).** The web cluster was renumbered by
+> `IMP-ADR028-01`: ADR-029 (`ADR-029-Web-Security-Hardening/`),
+> ADR-030 (`ADR-030-Web-Feature-Parity/`), ADR-031 (`ADR-031-Web-Operational-Polish/`).
+> The [Renumbering Plan](#renumbering-plan) below retains the old→new mapping as the historical record.
 
 ## Context
 
@@ -212,3 +211,4 @@ worktrees and are out of scope.
 
 - 2026-05-29: Accepted. Umbrella roadmap created; web-cluster renumber and WS-A
   scope-merge delegated to `IMP-ADR028-01`.
+- 2026-05-29: `IMP-ADR028-01` executed — web cluster renumbered (018/019/020 → 029/030/031); WS-A capability-honesty scope merged into ADR-030.
