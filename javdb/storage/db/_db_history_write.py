@@ -1471,9 +1471,11 @@ def db_commit_session_history(
     _ensure_imports()
     from javdb.storage.db._db_reports import (
         db_get_session_status,
-        db_begin_finalize_session,
-        db_finish_commit_session,
     )
+    # Lazy import: lifecycle imports the _db_reports primitives at module top,
+    # so importing it here (rather than at module top) avoids a circular import
+    # while javdb.storage.db is still initializing.
+    from javdb.storage.sessions.lifecycle import transition
 
     when = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     counts = {
@@ -1532,7 +1534,7 @@ def db_commit_session_history(
         # the session has crossed into finalizing.
         _flush_pending_d1_batch(session_id, history_db_path)
         _assert_no_blocking_d1_recovery(session_id)
-        db_begin_finalize_session(session_id, db_path=reports_db_path)
+        transition(session_id, "finalizing", db_path=reports_db_path)
 
     use_bulk = _commit_session_bulk_enabled()
 
@@ -1633,7 +1635,7 @@ def db_commit_session_history(
     # which any "stuck session" alert misreads as a hung commit.
     _flush_pending_d1_batch(session_id, history_db_path)
     _assert_no_blocking_d1_recovery(session_id)
-    db_finish_commit_session(session_id, db_path=reports_db_path)
+    transition(session_id, "committed", db_path=reports_db_path)
 
     with _get_db(history_db_path or _HISTORY_DB_PATH) as conn:
         cur_m = conn.execute(
