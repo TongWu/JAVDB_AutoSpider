@@ -1,15 +1,15 @@
-# ADR-020: Web Backend Operational Polish — Workflow UI, Rollback, Onboarding & Architecture
+# ADR-031: Web Backend Operational Polish — Workflow UI, Rollback, Onboarding & Architecture
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
 | **Status**  | Accepted                                                              |
 | **Date**    | 2026-05-24                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md), [ADR-018](../ADR-018-Web-Security-Hardening/ADR-018-web-security-hardening.md), [ADR-019](../ADR-019-Web-Feature-Parity/ADR-019-web-feature-parity.md) |
+| **Related** | [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md), [ADR-029](../ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md), [ADR-030](../ADR-030-Web-Feature-Parity/ADR-030-web-feature-parity.md) |
 
 ## Context
 
-After ADR-018 (security hardening) and ADR-019 (feature parity), a final audit pass identified five architecture-level improvements that reduce operational friction and complete the web UI's coverage of the system's operational surface:
+After ADR-029 (security hardening) and ADR-030 (feature parity), a final audit pass identified five architecture-level improvements that reduce operational friction and complete the web UI's coverage of the system's operational surface:
 
 1. **Missing workflow UI dispatch** — Three GitHub Actions workflows (`WeeklyDedup`, `Migration`, `TestIngestion`) cannot be triggered from the web UI. The existing `POST /api/gh-actions/runs` endpoint can dispatch any workflow, but the frontend has no way to know each workflow's parameter schema, types, defaults, or validation rules.
 

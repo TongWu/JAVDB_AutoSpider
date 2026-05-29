@@ -1,15 +1,15 @@
-# ADR-020: Web 后端运维打磨 — Workflow UI、回滚、Onboarding 与架构
+# ADR-031: Web 后端运维打磨 — Workflow UI、回滚、Onboarding 与架构
 
 | 字段       | 值                                                                     |
 | ---------- | --------------------------------------------------------------------- |
 | **状态**   | Accepted                                                              |
 | **日期**   | 2026-05-24                                                            |
 | **作者**   | Ted                                                                   |
-| **关联**   | [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md), [ADR-018](../ADR-018-Web-Security-Hardening/ADR-018-web-security-hardening.md), [ADR-019](../ADR-019-Web-Feature-Parity/ADR-019-web-feature-parity.md) |
+| **关联**   | [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md), [ADR-029](../ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md), [ADR-030](../ADR-030-Web-Feature-Parity/ADR-030-web-feature-parity.md) |
 
 ## 背景
 
-ADR-018（安全加固）和 ADR-019（功能对齐）之后，最终审计发现了五个架构层面的改进，用于减少运维摩擦并完成 Web UI 对系统运维表面的覆盖：
+ADR-029（安全加固）和 ADR-030（功能对齐）之后，最终审计发现了五个架构层面的改进，用于减少运维摩擦并完成 Web UI 对系统运维表面的覆盖：
 
 1. **缺失 workflow 的 UI 调度** — 三个 GitHub Actions workflow（`WeeklyDedup`、`Migration`、`TestIngestion`）无法从 Web UI 触发。现有的 `POST /api/gh-actions/runs` 端点可以调度任何 workflow，但前端无法获知每个 workflow 的参数 schema、类型、默认值或验证规则。
 
