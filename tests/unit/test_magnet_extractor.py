@@ -10,6 +10,37 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 sys.path.insert(0, project_root)
 
 from javdb.spider.magnet_extractor import extract_magnets
+from javdb.parsing.models import MagnetInfo, MovieDetail
+
+
+class TestMovieDetailCategorizeMagnets:
+    """MovieDetail.categorize_magnets() must equal extract_magnets(get_magnets_as_legacy())."""
+
+    def test_categorize_matches_extract_magnets(self, sample_magnets):
+        """On a populated detail, the convenience method matches the free function."""
+        detail = MovieDetail(
+            video_code='ABC-123',
+            magnets=[MagnetInfo(**m) for m in sample_magnets],
+        )
+
+        assert detail.categorize_magnets() == extract_magnets(detail.get_magnets_as_legacy())
+
+    def test_categorize_passes_index_through(self, sample_magnets):
+        """Passing an index yields the same dict as extract_magnets with that index."""
+        detail = MovieDetail(
+            video_code='ABC-123',
+            magnets=[MagnetInfo(**m) for m in sample_magnets],
+        )
+
+        assert detail.categorize_magnets(index=3) == extract_magnets(
+            detail.get_magnets_as_legacy(), index=3
+        )
+
+    def test_categorize_empty_magnets(self):
+        """A detail with no magnets returns the same empty-bucket dict."""
+        detail = MovieDetail(video_code='ABC-123', magnets=[])
+
+        assert detail.categorize_magnets() == extract_magnets([])
 
 
 class TestExtractMagnets:
