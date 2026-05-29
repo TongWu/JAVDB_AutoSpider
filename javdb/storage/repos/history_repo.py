@@ -419,16 +419,30 @@ class HistoryRepo:
 
     def batch_update_last_visited(self, hrefs: List[str]) -> int:
         """Bump LastVisited on each href; staging-aware under pending mode."""
-        from javdb.storage.db import db_batch_update_last_visited
-        return db_batch_update_last_visited(hrefs, db_path=self._db_path)
+        from javdb.storage.db import (
+            db_batch_update_last_visited,
+            get_active_session_id,
+        )
+        return db_batch_update_last_visited(
+            hrefs,
+            db_path=self._db_path,
+            session_id=get_active_session_id(),
+        )
 
     def batch_update_movie_actors(
         self, updates: List[Tuple[str, str, str, str, str]],
     ) -> int:
         """Bulk overwrite actor fields, preserving pending-mode staging."""
         # The db.py facade owns pending-mode staging for actor-only writes.
-        from javdb.storage.db import db_batch_update_movie_actors
-        return db_batch_update_movie_actors(updates, db_path=self._db_path)
+        from javdb.storage.db import (
+            db_batch_update_movie_actors,
+            get_active_session_id,
+        )
+        return db_batch_update_movie_actors(
+            updates,
+            db_path=self._db_path,
+            session_id=get_active_session_id(),
+        )
 
     # ── Search / export (Phase 2, Task 1) ────────────────────────────
 

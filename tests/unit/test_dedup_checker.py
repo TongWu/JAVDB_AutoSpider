@@ -35,7 +35,7 @@ from javdb.spider.detail.runner import _dedup_log_variant_label
 
 def _seed_inventory(rows):
     """Seed SQLite rclone_inventory with the given list-of-dicts."""
-    db_replace_rclone_inventory(rows)
+    db_replace_rclone_inventory(rows, session_id=None)
 
 
 def _inventory_row(code, sensor='有码', subtitle='中字', path='gdrive:/r/2025/a/f', size=1000, count=2):
