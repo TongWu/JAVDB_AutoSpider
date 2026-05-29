@@ -36,7 +36,8 @@ class TestOperationsRepoRcloneInventory:
         repo = OperationsRepo()
         entries = [{"VideoCode": "X"}]
         assert repo.replace_rclone_inventory(entries) == 5
-        mock_fn.assert_called_once_with(entries=entries, db_path=None)
+        mock_fn.assert_called_once_with(
+            entries=entries, db_path=None, session_id=None)
 
     @patch(
         "javdb.storage.db.db_swap_rclone_inventory",

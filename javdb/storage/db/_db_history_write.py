@@ -26,7 +26,6 @@ _REPORTS_DB_PATH = None
 _generate_session_id = None
 _get_active_run_identity = None
 _SESSION_ID_PATTERN = None
-_resolve_session_id = None
 _get_active_write_mode = None
 _execute_backend_batch = None
 _movie_href_lookup_values = None
@@ -42,7 +41,7 @@ def _ensure_imports():
     """Lazy import to avoid circular dependency."""
     global _get_db, _HISTORY_DB_PATH, _REPORTS_DB_PATH, _generate_session_id
     global _get_active_run_identity, _SESSION_ID_PATTERN
-    global _resolve_session_id, _get_active_write_mode
+    global _get_active_write_mode
     global _execute_backend_batch
     global _movie_href_lookup_values, _javdb_absolute_url
     global _absolutize_supporting_actors_json
@@ -59,7 +58,6 @@ def _ensure_imports():
             generate_session_id,
             get_active_run_identity,
             SESSION_ID_PATTERN,
-            _resolve_session_id as rsi,
             get_active_write_mode,
         )
         from javdb.parsing.common import (
@@ -79,7 +77,6 @@ def _ensure_imports():
         _generate_session_id = generate_session_id
         _get_active_run_identity = get_active_run_identity
         _SESSION_ID_PATTERN = SESSION_ID_PATTERN
-        _resolve_session_id = rsi
         _get_active_write_mode = get_active_write_mode
         _execute_backend_batch = ebb
         _movie_href_lookup_values = movie_href_lookup_values
@@ -334,9 +331,8 @@ def _upsert_one_history_on_conn(
     """Per-row upsert body, factored out so a batch caller can reuse one
     connection across many rows without re-opening / re-committing per row.
 
-    ``session_id`` here is the already-resolved value (not the sentinel) —
-    callers must run it through :func:`_resolve_session_id` first so the
-    batch wrapper does not pay that resolution cost N times.
+    ``session_id`` here is the required, explicit value (no sentinel/global
+    fallback) — callers pass it directly.
     """
     _ensure_imports()
     base_url = cfg('BASE_URL', 'https://javdb.com')
@@ -554,12 +550,21 @@ def _update_movie_indicators(
 def db_batch_update_last_visited(
     hrefs: List[str],
     db_path: Optional[str] = None,
-    session_id: Any = None,
+    *,
+    session_id: Any,
 ) -> int:
     """Update DateTimeVisited for a batch of hrefs.
 
-    When *session_id* is set (or :func:`get_active_session_id` returns a
-    value), each affected MovieHistory row also gets ``SessionId=?``.
+    When *session_id* is set, each affected MovieHistory row also gets
+    ``SessionId=?``. *session_id* is required — callers must thread the
+    active session id explicitly.
+
+    Under ``WriteMode='pending'`` (the only supported mode) *session_id*
+    must be non-``None``: a ``None`` session would bypass
+    :data:`PendingMovieHistoryWrites` staging and write an unrollbackable,
+    untagged live row, re-introducing exactly the hazard ADR-032 removes.
+    Passing ``None`` in pending mode raises ``ValueError`` (a ``None``
+    session is only meaningful under a non-pending write mode).
 
     Ingestion Perfect Rollback (Phase 2): when the active session runs
     under ``WriteMode='pending'`` the visit timestamps are staged into
@@ -567,13 +572,18 @@ def db_batch_update_last_visited(
     row per href) and applied to live in :func:`db_commit_session_history`.
     """
     _ensure_imports()
-    from javdb.storage.db._db_session import _SESSION_ID_SENTINEL
-    if session_id is None:
-        session_id = _SESSION_ID_SENTINEL
     if not hrefs:
         return 0
-    sid = _resolve_session_id(session_id)
-    if sid is not None and _get_active_write_mode() == 'pending':
+    sid = session_id
+    write_mode = _get_active_write_mode()
+    if sid is None and write_mode == 'pending':
+        raise ValueError(
+            "db_batch_update_last_visited requires a non-None session_id "
+            "under pending write mode: a None session would bypass "
+            "PendingMovieHistoryWrites staging and write an unrollbackable "
+            "live row. Thread the active session id explicitly."
+        )
+    if sid is not None and write_mode == 'pending':
         # Pending route: dedupe + stage one sparse pending movie row
         # per href.  ``_pending_movie_overlay`` will sparse-merge this
         # with any earlier stages from the same session at commit time
@@ -633,15 +643,24 @@ def db_batch_update_last_visited(
 def db_batch_update_movie_actors(
     updates: List[Tuple[str, str, str, str, str]],
     db_path: Optional[str] = None,
-    session_id: Any = None,
+    *,
+    session_id: Any,
 ) -> int:
     """Set actor columns and DateTimeUpdated for each
     ``(href, actor_name, actor_gender, actor_link, supporting_actors)``.
 
     Returns the number of rows matched by UPDATE (may be 0 for unknown hrefs).
 
-    When *session_id* is set (or :func:`get_active_session_id` returns a
-    value), each affected MovieHistory row also gets ``SessionId=?``.
+    When *session_id* is set, each affected MovieHistory row also gets
+    ``SessionId=?``. *session_id* is required — callers must thread the
+    active session id explicitly.
+
+    Under ``WriteMode='pending'`` (the only supported mode) *session_id*
+    must be non-``None``: a ``None`` session would bypass
+    :data:`PendingMovieHistoryWrites` staging and write an unrollbackable,
+    untagged live row, re-introducing exactly the hazard ADR-032 removes.
+    Passing ``None`` in pending mode raises ``ValueError`` (a ``None``
+    session is only meaningful under a non-pending write mode).
 
     Ingestion Perfect Rollback (Phase 2): pending-mode sessions stage a
     sparse "actor fields only" pending movie row per href instead of
@@ -649,13 +668,18 @@ def db_batch_update_movie_actors(
     session.
     """
     _ensure_imports()
-    from javdb.storage.db._db_session import _SESSION_ID_SENTINEL
-    if session_id is None:
-        session_id = _SESSION_ID_SENTINEL
     if not updates:
         return 0
-    sid = _resolve_session_id(session_id)
-    if sid is not None and _get_active_write_mode() == 'pending':
+    sid = session_id
+    write_mode = _get_active_write_mode()
+    if sid is None and write_mode == 'pending':
+        raise ValueError(
+            "db_batch_update_movie_actors requires a non-None session_id "
+            "under pending write mode: a None session would bypass "
+            "PendingMovieHistoryWrites staging and write an unrollbackable "
+            "live row. Thread the active session id explicitly."
+        )
+    if sid is not None and write_mode == 'pending':
         for href, actor_name, actor_gender, actor_link, supporting_actors in (
             updates
         ):

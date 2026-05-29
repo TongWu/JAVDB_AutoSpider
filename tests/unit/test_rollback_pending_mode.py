@@ -762,7 +762,7 @@ class TestBatchUpdatesRouteToPending:
                     "DateTimeVisited": "2026-05-09 12:00:00",
                 },
             )
-            n = db_batch_update_last_visited(["/v/BAT-001"])
+            n = db_batch_update_last_visited(["/v/BAT-001"], session_id=sid)
             assert n == 1
         finally:
             self._teardown()
@@ -817,7 +817,7 @@ class TestBatchUpdatesRouteToPending:
         try:
             n = db_batch_update_movie_actors([
                 ("/v/ACT-001", "Act Actor", "female", "/actors/act", None),
-            ])
+            ], session_id=sid)
             assert n == 1
         finally:
             self._teardown()
