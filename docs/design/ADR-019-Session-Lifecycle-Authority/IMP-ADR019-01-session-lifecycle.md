@@ -92,6 +92,10 @@ def transition(session_id: str, to: str, *, db_path: Optional[str] = None, reaso
     frm = get_state(session_id, db_path=db_path).status
     if not can_transition(frm, to):
         raise IllegalTransition(f"{session_id}: {frm} -> {to} is not allowed")
+    if frm == to:
+        return 0  # idempotent no-op: never re-dispatch (a `failed→failed` would re-write,
+                  # and `→in_progress` would fall through to the final raise). Matches the
+                  # primitives' rowcount-0 behavior. (The shipped lifecycle.py does this.)
     from javdb.storage.db import (
         db_begin_finalize_session, db_finish_commit_session,
         db_mark_session_committed, db_mark_session_failed,

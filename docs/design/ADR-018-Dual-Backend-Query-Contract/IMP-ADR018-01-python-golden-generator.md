@@ -110,7 +110,7 @@ def _build_session_query(*, state: str | None, cursor: str | None, limit: int) -
     if clauses:
         sql += " WHERE " + " AND ".join(clauses)
     sql += " ORDER BY Id DESC LIMIT ?"
-    params.append(limit)
+    params.append(limit + 1)  # over-fetch one row: SessionsRepo.list trims to `limit` and uses len(rows) > limit to set next_cursor — binding plain `limit` would drop pagination
     return sql, params
 ```
 
