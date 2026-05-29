@@ -11,7 +11,6 @@ module is the pure service layer.
 
 import requests
 import logging
-import sys
 import os
 import time
 from pathlib import Path
@@ -19,9 +18,6 @@ from datetime import datetime, timedelta
 from urllib.parse import urlsplit
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
-os.chdir(REPO_ROOT)
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
 
 # Import unified configuration
 from javdb.infra.config import cfg
@@ -903,101 +899,104 @@ def run_file_filter_cli(options: QbFileFilterOptions) -> QbFileFilterResult:
 
     # Create session and login
     session = requests.Session()
-    if not login_to_qbittorrent(session, proxy_override):
-        logger.error("Failed to login to qBittorrent.")
-        return QbFileFilterResult(errors=1)
+    try:
+        if not login_to_qbittorrent(session, proxy_override):
+            logger.error("Failed to login to qBittorrent.")
+            return QbFileFilterResult(errors=1)
 
-    # Compute the set of categories used for the completed-torrent cleanup.
-    # We reuse whatever the user passed for filtering so that the clean-up
-    # scope matches the filter scope.
-    cleanup_categories = categories_list if categories_list else (
-        [options.category] if options.category else []
-    )
-
-    def _run_completed_cleanup():
-        """Run completed-torrent cleanup (remove entry, keep files) on the same
-        categories the filter was asked to process. Delegates to the shared
-        implementation in
-        ``javdb.integrations.qb.client``."""
-        if not cleanup_categories:
-            logger.info(
-                "Skipping completed-torrent cleanup: no categories specified "
-                "(pass --categories or --category to enable)."
-            )
-            return
-        logger.info("-" * 70)
-        logger.info(
-            f"Running completed-torrent cleanup for categories {cleanup_categories} "
-            f"(remove torrent entry, keep files on disk)..."
+        # Compute the set of categories used for the completed-torrent cleanup.
+        # We reuse whatever the user passed for filtering so that the clean-up
+        # scope matches the filter scope.
+        cleanup_categories = categories_list if categories_list else (
+            [options.category] if options.category else []
         )
-        cleanup_completed_torrents(
+
+        def _run_completed_cleanup():
+            """Run completed-torrent cleanup (remove entry, keep files) on the same
+            categories the filter was asked to process. Delegates to the shared
+            implementation in
+            ``javdb.integrations.qb.client``."""
+            if not cleanup_categories:
+                logger.info(
+                    "Skipping completed-torrent cleanup: no categories specified "
+                    "(pass --categories or --category to enable)."
+                )
+                return
+            logger.info("-" * 70)
+            logger.info(
+                f"Running completed-torrent cleanup for categories {cleanup_categories} "
+                f"(remove torrent entry, keep files on disk)..."
+            )
+            cleanup_completed_torrents(
+                session,
+                cleanup_categories,
+                dry_run=options.dry_run,
+                use_proxy=proxy_override,
+            )
+
+        # Get recent torrents
+        torrents = get_recent_torrents(
             session,
-            cleanup_categories,
+            days=options.days,
+            category=options.category,
+            categories=categories_list,
+            use_proxy=proxy_override
+        )
+
+        if not torrents:
+            logger.info("No recent torrents found to process.")
+            print_summary({
+                'torrents_processed': 0,
+                'torrents_with_filtered_files': 0,
+                'files_filtered': 0,
+                'files_kept': 0,
+                'size_saved': 0,
+                'local_files_deleted': 0,
+                'local_size_deleted': 0,
+                'pending_metadata': 0,
+                'errors': 0,
+                'details': []
+            }, options.min_size_mb, options.days, options.dry_run, options.delete_local_files)
+            # Still run the cleanup — completed torrents may not overlap with the
+            # ``recent`` window but we still want to free seeding slots each run.
+            _run_completed_cleanup()
+            return QbFileFilterResult()
+
+        # Filter small files
+        stats = filter_small_files(
+            session,
+            torrents,
+            min_size_mb=options.min_size_mb,
             dry_run=options.dry_run,
             use_proxy=proxy_override,
+            delete_local_files_flag=options.delete_local_files
         )
 
-    # Get recent torrents
-    torrents = get_recent_torrents(
-        session,
-        days=options.days,
-        category=options.category,
-        categories=categories_list,
-        use_proxy=proxy_override
-    )
+        # Print summary
+        print_summary(stats, options.min_size_mb, options.days, options.dry_run, options.delete_local_files)
 
-    if not torrents:
-        logger.info("No recent torrents found to process.")
-        print_summary({
-            'torrents_processed': 0,
-            'torrents_with_filtered_files': 0,
-            'files_filtered': 0,
-            'files_kept': 0,
-            'size_saved': 0,
-            'local_files_deleted': 0,
-            'local_size_deleted': 0,
-            'pending_metadata': 0,
-            'errors': 0,
-            'details': []
-        }, options.min_size_mb, options.days, options.dry_run, options.delete_local_files)
-        # Still run the cleanup — completed torrents may not overlap with the
-        # ``recent`` window but we still want to free seeding slots each run.
         _run_completed_cleanup()
-        return QbFileFilterResult()
 
-    # Filter small files
-    stats = filter_small_files(
-        session,
-        torrents,
-        min_size_mb=options.min_size_mb,
-        dry_run=options.dry_run,
-        use_proxy=proxy_override,
-        delete_local_files_flag=options.delete_local_files
-    )
+        # Log error if there were actual errors (not pending metadata); the exit
+        # code is carried by ``result.exit_code``.
+        if stats['errors'] > 0 and stats['torrents_processed'] == 0:
+            logger.error("All torrent processing failed due to errors!")
 
-    # Print summary
-    print_summary(stats, options.min_size_mb, options.days, options.dry_run, options.delete_local_files)
+        # Log info if all torrents are pending metadata (this is normal, not an error)
+        if stats.get('pending_metadata', 0) > 0 and stats['torrents_processed'] == 0 and stats['errors'] == 0:
+            logger.info("All torrents are waiting for metadata. They will be processed on the next run.")
 
-    _run_completed_cleanup()
-
-    # Log error if there were actual errors (not pending metadata); the exit
-    # code is carried by ``result.exit_code``.
-    if stats['errors'] > 0 and stats['torrents_processed'] == 0:
-        logger.error("All torrent processing failed due to errors!")
-
-    # Log info if all torrents are pending metadata (this is normal, not an error)
-    if stats.get('pending_metadata', 0) > 0 and stats['torrents_processed'] == 0 and stats['errors'] == 0:
-        logger.info("All torrents are waiting for metadata. They will be processed on the next run.")
-
-    return QbFileFilterResult(
-        torrents_processed=stats['torrents_processed'],
-        torrents_with_filtered_files=stats['torrents_with_filtered_files'],
-        files_filtered=stats['files_filtered'],
-        files_kept=stats['files_kept'],
-        size_saved=stats['size_saved'],
-        local_files_deleted=stats['local_files_deleted'],
-        local_size_deleted=stats['local_size_deleted'],
-        pending_metadata=stats['pending_metadata'],
-        errors=stats['errors'],
-        details=list(stats['details']),
-    )
+        return QbFileFilterResult(
+            torrents_processed=stats['torrents_processed'],
+            torrents_with_filtered_files=stats['torrents_with_filtered_files'],
+            files_filtered=stats['files_filtered'],
+            files_kept=stats['files_kept'],
+            size_saved=stats['size_saved'],
+            local_files_deleted=stats['local_files_deleted'],
+            local_size_deleted=stats['local_size_deleted'],
+            pending_metadata=stats['pending_metadata'],
+            errors=stats['errors'],
+            details=list(stats['details']),
+        )
+    finally:
+        session.close()

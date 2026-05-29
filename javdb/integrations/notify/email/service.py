@@ -277,12 +277,11 @@ def run_email_notification(
         if _sid is not None:
             try:
                 from javdb.storage.db import get_db, REPORTS_DB_PATH
+                from javdb.storage.repos.sessions_repo import SessionsRepo
                 with get_db(REPORTS_DB_PATH) as _conn:
-                    _row = _conn.execute(
-                        "SELECT DateTimeCreated FROM ReportSessions WHERE Id = ?", (_sid,)
-                    ).fetchone()
-                    if _row:
-                        session_start_time = _row[0]
+                    _row = SessionsRepo(_conn).get(_sid)
+                    if _row is not None:
+                        session_start_time = _row.created_at
             except Exception as e:
                 logger.debug(f"Could not fetch session start time: {e}")
         dedup_stats = extract_dedup_statistics(dedup_csv_path, session_start_time=session_start_time)

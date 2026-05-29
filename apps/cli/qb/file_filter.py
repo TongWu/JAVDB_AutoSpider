@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 
 from javdb.infra.config import cfg
 from javdb.integrations.qb.file_filter.options import QbFileFilterOptions
 from javdb.integrations.qb.file_filter.service import run_file_filter_cli
 from javdb.proxy.policy import add_proxy_arguments, resolve_proxy_override
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 # Mirror the legacy module-level default sourcing (was file_filter.py:51).
 # QB_FILE_FILTER_MIN_SIZE_MB is NOT exported from javdb.integrations.qb.config;
@@ -54,6 +57,9 @@ def options_from_args(args: argparse.Namespace) -> QbFileFilterOptions:
 
 
 def main(argv: list[str] | None = None) -> int:
+    import os
+
+    os.chdir(REPO_ROOT)
     try:
         options = options_from_args(parse_args(argv))
     except (json.JSONDecodeError, argparse.ArgumentTypeError) as exc:

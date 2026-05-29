@@ -5,19 +5,15 @@ single-file ``email.py`` module. They are gathered here so the responsibility
 submodules (``log_analysis``, ``report_builder``, ``delivery``) and the
 ``service`` orchestration can share a single source without circular imports.
 
-Behaviour is byte-for-byte identical to the pre-split module: same ``cfg()``
-keys, defaults, repo-root chdir, ``sys.path`` insert, and one-time
-``setup_logging`` call.
+Behaviour matches the pre-split module's ``cfg()`` keys, defaults, and
+one-time ``setup_logging`` call. The repo-root ``chdir`` was moved to the
+CLI adapter (``apps.cli.notify.email``) so importing this module no longer
+mutates process-global cwd.
 """
 
-import os
-import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
-os.chdir(REPO_ROOT)
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
 
 # Import unified configuration
 from javdb.infra.config import cfg

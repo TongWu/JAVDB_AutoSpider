@@ -117,6 +117,9 @@ def options_from_args(args: argparse.Namespace) -> RcloneManagerOptions:
 
 
 def main(argv: list[str] | None = None) -> int:
+    import os
+
+    os.chdir(REPO_ROOT)
     return run_manager(options_from_args(parse_args(argv))).exit_code
 
 

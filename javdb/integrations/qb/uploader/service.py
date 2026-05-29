@@ -2,15 +2,10 @@ import requests
 import logging
 from datetime import datetime
 import time
-import os
-import sys
 from pathlib import Path
 from urllib.parse import urlsplit
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
-os.chdir(REPO_ROOT)
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
 
 # Import unified configuration
 from javdb.infra.config import cfg
@@ -616,141 +611,143 @@ def run_uploader(options: QbUploaderOptions) -> QbUploaderResult:
 
     # Create session for qBittorrent
     session = requests.Session()
+    try:
+        # Login to qBittorrent
+        if not login_to_qbittorrent(session, use_proxy):
+            logger.error("Failed to login to qBittorrent. Please check username and password.")
+            return QbUploaderResult(csv_path=csv_filename, error_reason="qb-login-failed")
 
-    # Login to qBittorrent
-    if not login_to_qbittorrent(session, use_proxy):
-        logger.error("Failed to login to qBittorrent. Please check username and password.")
-        return QbUploaderResult(csv_path=csv_filename, error_reason="qb-login-failed")
+        # Get existing torrents to check for duplicates
+        existing_hashes = get_existing_torrents(session, use_proxy)
 
-    # Get existing torrents to check for duplicates
-    existing_hashes = get_existing_torrents(session, use_proxy)
+        # Add torrents to qBittorrent
+        hacked_subtitle_count = 0
+        hacked_no_subtitle_count = 0
+        subtitle_count = 0
+        no_subtitle_count = 0
+        failed_count = 0
+        duplicate_count = 0
+        total_torrents = len(torrents)
 
-    # Add torrents to qBittorrent
-    hacked_subtitle_count = 0
-    hacked_no_subtitle_count = 0
-    subtitle_count = 0
-    no_subtitle_count = 0
-    failed_count = 0
-    duplicate_count = 0
-    total_torrents = len(torrents)
+        logger.info(f"Starting to add {total_torrents} torrents to qBittorrent...")
 
-    logger.info(f"Starting to add {total_torrents} torrents to qBittorrent...")
+        for i, torrent in enumerate(torrents, 1):
+            # Check if torrent already exists in qBittorrent
+            if is_torrent_exists(torrent['magnet'], existing_hashes):
+                logger.info(f"[{i}/{total_torrents}] Skipping (already in qBittorrent): {torrent['title']}")
+                duplicate_count += 1
+                continue
 
-    for i, torrent in enumerate(torrents, 1):
-        # Check if torrent already exists in qBittorrent
-        if is_torrent_exists(torrent['magnet'], existing_hashes):
-            logger.info(f"[{i}/{total_torrents}] Skipping (already in qBittorrent): {torrent['title']}")
-            duplicate_count += 1
-            continue
+            logger.info(f"[{i}/{total_torrents}] Adding: {torrent['title']}")
 
-        logger.info(f"[{i}/{total_torrents}] Adding: {torrent['title']}")
+            success = add_torrent_to_qbittorrent(session, torrent['magnet'], torrent['title'], mode, use_proxy, category_override)
 
-        success = add_torrent_to_qbittorrent(session, torrent['magnet'], torrent['title'], mode, use_proxy, category_override)
+            if success:
+                if torrent['type'] == 'hacked_subtitle':
+                    hacked_subtitle_count += 1
+                elif torrent['type'] == 'hacked_no_subtitle':
+                    hacked_no_subtitle_count += 1
+                elif torrent['type'] == 'subtitle':
+                    subtitle_count += 1
+                elif torrent['type'] == 'no_subtitle':
+                    no_subtitle_count += 1
 
-        if success:
-            if torrent['type'] == 'hacked_subtitle':
-                hacked_subtitle_count += 1
-            elif torrent['type'] == 'hacked_no_subtitle':
-                hacked_no_subtitle_count += 1
-            elif torrent['type'] == 'subtitle':
-                subtitle_count += 1
-            elif torrent['type'] == 'no_subtitle':
-                no_subtitle_count += 1
+                # Add newly added torrent hash to existing set to avoid re-adding in same session
+                new_hash = extract_hash_from_magnet(torrent['magnet'])
+                if new_hash:
+                    existing_hashes.add(new_hash)
+            else:
+                failed_count += 1
 
-            # Add newly added torrent hash to existing set to avoid re-adding in same session
-            new_hash = extract_hash_from_magnet(torrent['magnet'])
-            if new_hash:
-                existing_hashes.add(new_hash)
+            # Small delay between additions
+            time.sleep(DELAY_BETWEEN_ADDITIONS)
+
+        # Generate summary
+        successfully_added = hacked_subtitle_count + hacked_no_subtitle_count + subtitle_count + no_subtitle_count
+        attempted = total_torrents - duplicate_count
+
+        logger.info("=" * 50)
+        logger.info("UPLOAD SUMMARY")
+        logger.info("=" * 50)
+        logger.info(f"CSV file: {csv_filename}")
+        logger.info(f"Total torrents in CSV: {total_torrents}")
+        logger.info(f"Skipped (already in qBittorrent): {duplicate_count}")
+        logger.info(f"Attempted to add: {attempted}")
+        logger.info(f"Successfully added: {successfully_added}")
+        logger.info(f"  - Hacked subtitle torrents: {hacked_subtitle_count}")
+        logger.info(f"  - Hacked no subtitle torrents: {hacked_no_subtitle_count}")
+        logger.info(f"  - Subtitle torrents: {subtitle_count}")
+        logger.info(f"  - No subtitle torrents: {no_subtitle_count}")
+        logger.info(f"Failed to add: {failed_count}")
+        if attempted > 0:
+            logger.info(f"Success rate: {(successfully_added/attempted*100):.1f}%")
         else:
-            failed_count += 1
+            logger.info("Success rate: N/A (all torrents already existed)")
+        logger.info("=" * 50)
 
-        # Small delay between additions
-        time.sleep(DELAY_BETWEEN_ADDITIONS)
+        # Save uploader stats to SQLite if session_id provided
+        _session_id = options.session_id
+        if _session_id:
+            _rate = (successfully_added / attempted * 100) if attempted > 0 else 0.0
+            sink = save_uploader_stats(_session_id, UploaderStats(
+                total_torrents=total_torrents,
+                duplicate_count=duplicate_count,
+                attempted=attempted,
+                successfully_added=successfully_added,
+                failed_count=failed_count,
+                hacked_sub=hacked_subtitle_count,
+                hacked_nosub=hacked_no_subtitle_count,
+                subtitle_count=subtitle_count,
+                no_subtitle_count=no_subtitle_count,
+                success_rate=_rate,
+            ))
+            if sink.saved:
+                logger.info(f"Uploader stats saved to {sink.backend} backend (session_id={_session_id})")
+            elif sink.error:
+                logger.warning(f"Failed to save uploader stats to db backend: {sink.error}")
 
-    # Generate summary
-    successfully_added = hacked_subtitle_count + hacked_no_subtitle_count + subtitle_count + no_subtitle_count
-    attempted = total_torrents - duplicate_count
+        # Git commit uploader results (only if credentials are available).
+        # ``commit_workflow_outputs`` re-checks credentials and flushes log
+        # handlers internally before committing; we mirror the legacy log lines
+        # (the "Committing…" notice is emitted *before* the commit so it lands in
+        # the flushed-and-committed log).
+        from_pipeline = options.from_pipeline
 
-    logger.info("=" * 50)
-    logger.info("UPLOAD SUMMARY")
-    logger.info("=" * 50)
-    logger.info(f"CSV file: {csv_filename}")
-    logger.info(f"Total torrents in CSV: {total_torrents}")
-    logger.info(f"Skipped (already in qBittorrent): {duplicate_count}")
-    logger.info(f"Attempted to add: {attempted}")
-    logger.info(f"Successfully added: {successfully_added}")
-    logger.info(f"  - Hacked subtitle torrents: {hacked_subtitle_count}")
-    logger.info(f"  - Hacked no subtitle torrents: {hacked_no_subtitle_count}")
-    logger.info(f"  - Subtitle torrents: {subtitle_count}")
-    logger.info(f"  - No subtitle torrents: {no_subtitle_count}")
-    logger.info(f"Failed to add: {failed_count}")
-    if attempted > 0:
-        logger.info(f"Success rate: {(successfully_added/attempted*100):.1f}%")
-    else:
-        logger.info("Success rate: N/A (all torrents already existed)")
-    logger.info("=" * 50)
+        if has_git_credentials(GIT_USERNAME, GIT_PASSWORD):
+            logger.info("Committing uploader results...")
+        else:
+            logger.info("Skipping git commit - no credentials provided (commit will be handled by workflow)")
 
-    # Save uploader stats to SQLite if session_id provided
-    _session_id = options.session_id
-    if _session_id:
-        _rate = (successfully_added / attempted * 100) if attempted > 0 else 0.0
-        sink = save_uploader_stats(_session_id, UploaderStats(
+        commit_message = f"Auto-commit: Uploader results {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        commit_workflow_outputs(GitCommitRequest(
+            files_to_add=['logs/'],
+            commit_message=commit_message,
+            from_pipeline=from_pipeline,
+            git_username=GIT_USERNAME,
+            git_password=GIT_PASSWORD,
+            git_repo_url=GIT_REPO_URL,
+            git_branch=GIT_BRANCH,
+        ))
+
+        result = QbUploaderResult(
             total_torrents=total_torrents,
             duplicate_count=duplicate_count,
             attempted=attempted,
             successfully_added=successfully_added,
             failed_count=failed_count,
-            hacked_sub=hacked_subtitle_count,
-            hacked_nosub=hacked_no_subtitle_count,
+            hacked_subtitle_count=hacked_subtitle_count,
+            hacked_no_subtitle_count=hacked_no_subtitle_count,
             subtitle_count=subtitle_count,
             no_subtitle_count=no_subtitle_count,
-            success_rate=_rate,
-        ))
-        if sink.saved:
-            logger.info(f"Uploader stats saved to {sink.backend} backend (session_id={_session_id})")
-        elif sink.error:
-            logger.warning(f"Failed to save uploader stats to db backend: {sink.error}")
+            csv_path=csv_filename,
+            csv_ok=True,
+        )
 
-    # Git commit uploader results (only if credentials are available).
-    # ``commit_workflow_outputs`` re-checks credentials and flushes log
-    # handlers internally before committing; we mirror the legacy log lines
-    # (the "Committing…" notice is emitted *before* the commit so it lands in
-    # the flushed-and-committed log).
-    from_pipeline = options.from_pipeline
+        # Log error if all torrent additions failed (when there were attempts);
+        # the exit code is carried by ``result.exit_code``.
+        if attempted > 0 and successfully_added == 0:
+            logger.error("All torrent additions failed!")
 
-    if has_git_credentials(GIT_USERNAME, GIT_PASSWORD):
-        logger.info("Committing uploader results...")
-    else:
-        logger.info("Skipping git commit - no credentials provided (commit will be handled by workflow)")
-
-    commit_message = f"Auto-commit: Uploader results {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-    commit_workflow_outputs(GitCommitRequest(
-        files_to_add=['logs/'],
-        commit_message=commit_message,
-        from_pipeline=from_pipeline,
-        git_username=GIT_USERNAME,
-        git_password=GIT_PASSWORD,
-        git_repo_url=GIT_REPO_URL,
-        git_branch=GIT_BRANCH,
-    ))
-
-    result = QbUploaderResult(
-        total_torrents=total_torrents,
-        duplicate_count=duplicate_count,
-        attempted=attempted,
-        successfully_added=successfully_added,
-        failed_count=failed_count,
-        hacked_subtitle_count=hacked_subtitle_count,
-        hacked_no_subtitle_count=hacked_no_subtitle_count,
-        subtitle_count=subtitle_count,
-        no_subtitle_count=no_subtitle_count,
-        csv_path=csv_filename,
-        csv_ok=True,
-    )
-
-    # Log error if all torrent additions failed (when there were attempts);
-    # the exit code is carried by ``result.exit_code``.
-    if attempted > 0 and successfully_added == 0:
-        logger.error("All torrent additions failed!")
-
-    return result
+        return result
+    finally:
+        session.close()
