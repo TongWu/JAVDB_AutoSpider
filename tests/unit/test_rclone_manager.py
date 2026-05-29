@@ -9,12 +9,10 @@ from unittest.mock import patch, MagicMock
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from javdb.integrations.rclone.manager._legacy import (
-    parse_arguments,
+from apps.cli.rclone.manager import main, parse_args as parse_arguments
+from javdb.integrations.rclone.manager.service import (
     parse_root_path,
     INVENTORY_FIELDNAMES,
-)
-from javdb.integrations.rclone.manager import (
     resolve_rclone_root,
     load_inventory_as_folder_structure,
     run_report_from_inventory,
@@ -45,7 +43,7 @@ def test_rclone_scan_persistence_does_not_import_raw_db_helpers():
     import ast
     from pathlib import Path
 
-    source = Path("javdb/integrations/rclone/manager/_legacy.py").read_text(
+    source = Path("javdb/integrations/rclone/manager/service.py").read_text(
         encoding="utf-8"
     )
     tree = ast.parse(source)
@@ -83,10 +81,10 @@ from javdb.integrations.rclone.manager.result import RcloneManagerResult
 from javdb.integrations.rclone.manager.service import run_manager
 
 
-def test_run_manager_wraps_legacy_exit_code(monkeypatch):
-    from javdb.integrations.rclone.manager import _legacy
+def test_run_manager_wraps_service_exit_code(monkeypatch):
+    from javdb.integrations.rclone.manager import service
 
-    monkeypatch.setattr(_legacy, "run_manager_from_options", lambda _options: 7)
+    monkeypatch.setattr(service, "run_manager_from_options", lambda _options: 7)
 
     result = run_manager(RcloneManagerOptions(report=True))
 
@@ -185,7 +183,7 @@ class TestParseArguments:
 
 
 def test_scan_inventory_counts_process_year_none_as_error(monkeypatch):
-    import javdb.integrations.rclone.manager._legacy as rm
+    import javdb.integrations.rclone.manager.service as rm
 
     callbacks = []
     monkeypatch.setattr(rm, "get_year_folders", lambda *_args: ["2026"])
@@ -201,7 +199,7 @@ def test_scan_inventory_counts_process_year_none_as_error(monkeypatch):
 
 
 def test_scan_csv_temp_removed_on_scan_failure(monkeypatch, tmp_path):
-    import javdb.integrations.rclone.manager._legacy as rm
+    import javdb.integrations.rclone.manager.service as rm
     import javdb.infra.config as config_helper
 
     output = tmp_path / "inventory.csv"
@@ -236,7 +234,7 @@ def test_scan_csv_temp_removed_on_scan_failure(monkeypatch, tmp_path):
         ],
     )
 
-    assert rm.main() == 1
+    assert main() == 1
     assert not output.exists()
     assert list(tmp_path.glob("inventory.csv.*.tmp")) == []
 
@@ -244,7 +242,7 @@ def test_scan_csv_temp_removed_on_scan_failure(monkeypatch, tmp_path):
 def test_scan_sqlite_uses_staging_when_no_active_session(
     monkeypatch, tmp_path, storage_mode_db
 ):
-    import javdb.integrations.rclone.manager._legacy as rm
+    import javdb.integrations.rclone.manager.service as rm
     from javdb.storage.db import set_active_session_id, db_replace_rclone_inventory, get_db
 
     output = tmp_path / "inventory.csv"
@@ -288,7 +286,7 @@ def test_scan_sqlite_uses_staging_when_no_active_session(
         ],
     )
 
-    assert rm.main() == 1
+    assert main() == 1
     with get_db() as conn:
         rows = conn.execute(
             "SELECT VideoCode FROM RcloneInventory ORDER BY VideoCode"
@@ -372,7 +370,7 @@ def _patch_rclone_repo_mocks(monkeypatch, rm, order, overrides=None):
 def test_scan_marks_local_session_committed_after_inventory_swap(
     monkeypatch, tmp_path, storage_mode_db
 ):
-    import javdb.integrations.rclone.manager._legacy as rm
+    import javdb.integrations.rclone.manager.service as rm
 
 
     output = tmp_path / "inventory.csv"
@@ -409,7 +407,7 @@ def test_scan_marks_local_session_committed_after_inventory_swap(
         ],
     )
 
-    assert rm.main() == 0
+    assert main() == 0
     assert order.index(("swap_inventory", 123)) < order.index(("mark_committed", 123))
     assert not any(item[0] == "merge_inventory" for item in order if isinstance(item, tuple))
 
@@ -417,7 +415,7 @@ def test_scan_marks_local_session_committed_after_inventory_swap(
 def test_scan_year_filter_merges_staging_instead_of_full_swap(
     monkeypatch, tmp_path, storage_mode_db
 ):
-    import javdb.integrations.rclone.manager._legacy as rm
+    import javdb.integrations.rclone.manager.service as rm
 
 
     output = tmp_path / "inventory.csv"
@@ -462,7 +460,7 @@ def test_scan_year_filter_merges_staging_instead_of_full_swap(
         ],
     )
 
-    assert rm.main() == 0
+    assert main() == 0
     assert ("merge_inventory", 123, ["2026"]) in order
     assert ("swap_inventory", 123) not in order
     assert order.index(("merge_inventory", 123, ["2026"])) < order.index(("mark_committed", 123))
@@ -471,7 +469,7 @@ def test_scan_year_filter_merges_staging_instead_of_full_swap(
 def test_scan_does_not_mark_local_session_committed_when_swap_fails(
     monkeypatch, tmp_path, storage_mode_db, caplog
 ):
-    import javdb.integrations.rclone.manager._legacy as rm
+    import javdb.integrations.rclone.manager.service as rm
 
 
     caplog.set_level("ERROR", logger=rm.logger.name)
@@ -520,7 +518,7 @@ def test_scan_does_not_mark_local_session_committed_when_swap_fails(
     )
 
     with pytest.raises(RuntimeError, match="swap failed"):
-        rm.main()
+        main()
     assert ("mark_committed", 123) not in order
     assert ("mark_failed", 123) in order
     assert ("drop_staging", 123) in order
@@ -535,7 +533,7 @@ def test_scan_does_not_mark_local_session_committed_when_swap_fails(
 def test_scan_succeeds_when_post_swap_commit_marking_fails(
     monkeypatch, tmp_path, storage_mode_db
 ):
-    import javdb.integrations.rclone.manager._legacy as rm
+    import javdb.integrations.rclone.manager.service as rm
 
 
     output = tmp_path / "inventory.csv"
@@ -578,7 +576,7 @@ def test_scan_succeeds_when_post_swap_commit_marking_fails(
         ],
     )
 
-    assert rm.main() == 0
+    assert main() == 0
     assert order.count(("mark_committed", 123)) == 3
     assert ("drop_staging", 123) not in order
 
@@ -586,7 +584,7 @@ def test_scan_succeeds_when_post_swap_commit_marking_fails(
 def test_scan_aborts_when_sqlite_staging_init_fails(
     monkeypatch, tmp_path, storage_mode_duo, caplog
 ):
-    import javdb.integrations.rclone.manager._legacy as rm
+    import javdb.integrations.rclone.manager.service as rm
 
 
     caplog.set_level("ERROR", logger=rm.logger.name)
@@ -626,7 +624,7 @@ def test_scan_aborts_when_sqlite_staging_init_fails(
         ],
     )
 
-    assert rm.main() == 1
+    assert main() == 1
     assert "scan" not in order
     assert ("drop_staging", 123) in order
     assert ("mark_failed", 123) in order
@@ -663,19 +661,19 @@ class TestResolveRcloneRoot:
         assert resolve_rclone_root('remote:/a/b') == ('remote', 'a/b')
 
     def test_cli_empty_falls_through_to_config(self):
-        import javdb.integrations.rclone.manager._legacy as rm
+        import javdb.integrations.rclone.manager.service as rm
 
         with patch.object(rm, 'RCLONE_FOLDER_PATH', 'gdrive:/x'):
             assert resolve_rclone_root('  ') == ('gdrive', 'x')
 
     def test_from_rclone_folder_path(self):
-        import javdb.integrations.rclone.manager._legacy as rm
+        import javdb.integrations.rclone.manager.service as rm
 
         with patch.object(rm, 'RCLONE_FOLDER_PATH', 'gdrive:/shows/jav'):
             assert resolve_rclone_root(None) == ('gdrive', 'shows/jav')
 
-    def test_legacy_drive_and_root(self):
-        import javdb.integrations.rclone.manager._legacy as rm
+    def test_drive_name_and_root_folder_fallback(self):
+        import javdb.integrations.rclone.manager.service as rm
 
         with patch.object(rm, 'RCLONE_FOLDER_PATH', None):
 
@@ -695,7 +693,7 @@ class TestResolveRcloneRoot:
 # ============================================================================
 
 class TestLoadInventoryAsFolderStructure:
-    @patch('javdb.integrations.rclone.manager._legacy.get_configured_drive_name', return_value='gdrive')
+    @patch('javdb.integrations.rclone.manager.service.get_configured_drive_name', return_value='gdrive')
     def test_loads_from_csv(self, _mock_dn, tmp_path, storage_mode_csv):
         csv_path = str(tmp_path / 'inventory.csv')
         with open(csv_path, 'w', newline='', encoding='utf-8') as f:
@@ -734,8 +732,8 @@ class TestLoadInventoryAsFolderStructure:
         assert 'DEF-456' in codes
         assert all_folders[0].full_path.startswith('gdrive:')
 
-    @patch('javdb.integrations.rclone.manager._legacy.get_configured_drive_name', return_value='gdrive')
-    @patch('javdb.integrations.rclone.manager._legacy.get_configured_root_folder', return_value='root')
+    @patch('javdb.integrations.rclone.manager.service.get_configured_drive_name', return_value='gdrive')
+    @patch('javdb.integrations.rclone.manager.service.get_configured_root_folder', return_value='root')
     def test_loads_from_db(self, _mock_root, _mock_dn, storage_mode_db):
         from javdb.storage.db import db_replace_rclone_inventory
         db_replace_rclone_inventory([
@@ -759,7 +757,7 @@ class TestLoadInventoryAsFolderStructure:
         assert all_folders[0].movie_code == 'DB-001'
         assert all_folders[0].full_path == 'gdrive:root/2025/Actor/DB-001 [有码-中字]'
 
-    @patch('javdb.integrations.rclone.manager._legacy.get_configured_drive_name', return_value='gdrive')
+    @patch('javdb.integrations.rclone.manager.service.get_configured_drive_name', return_value='gdrive')
     def test_db_priority_over_csv(self, _mock_dn, tmp_path, storage_mode_db):
         """When DB has data, CSV should not be loaded even if it exists."""
         from javdb.storage.db import db_replace_rclone_inventory
@@ -803,8 +801,8 @@ class TestLoadInventoryAsFolderStructure:
         structure = load_inventory_as_folder_structure(csv_path)
         assert structure == {}
 
-    @patch('javdb.integrations.rclone.manager._legacy.get_configured_drive_name', return_value='gdrive')
-    @patch('javdb.integrations.rclone.manager._legacy.get_configured_root_folder', return_value='root')
+    @patch('javdb.integrations.rclone.manager.service.get_configured_drive_name', return_value='gdrive')
+    @patch('javdb.integrations.rclone.manager.service.get_configured_root_folder', return_value='root')
     def test_loads_new_layout_with_code_dir(self, _mock_root, _mock_dn, tmp_path, storage_mode_csv):
         """New layout: <root>/<year>/<actor>/<movie_code>/<sensor-subtitle>."""
         csv_path = str(tmp_path / 'inventory.csv')
@@ -844,8 +842,8 @@ class TestLoadInventoryAsFolderStructure:
         assert by_code['DEF-456'].actor == 'ActorB'
         assert by_code['DEF-456'].folder_name == '无码流出-无字'
 
-    @patch('javdb.integrations.rclone.manager._legacy.get_configured_drive_name', return_value='gdrive')
-    @patch('javdb.integrations.rclone.manager._legacy.get_configured_root_folder', return_value='root')
+    @patch('javdb.integrations.rclone.manager.service.get_configured_drive_name', return_value='gdrive')
+    @patch('javdb.integrations.rclone.manager.service.get_configured_root_folder', return_value='root')
     def test_folder_info_fields(self, _mock_root, _mock_dn, tmp_path, storage_mode_csv):
         csv_path = str(tmp_path / 'inventory.csv')
         with open(csv_path, 'w', newline='', encoding='utf-8') as f:
@@ -875,8 +873,8 @@ class TestLoadInventoryAsFolderStructure:
         assert fi.file_count == 10
         assert fi.full_path == 'gdrive:root/2024/SomeActor/XYZ-789 [无码流出-无字]'
 
-    @patch('javdb.integrations.rclone.manager._legacy.get_configured_drive_name', return_value='gdrive')
-    @patch('javdb.integrations.rclone.manager._legacy.get_configured_root_folder', return_value='root')
+    @patch('javdb.integrations.rclone.manager.service.get_configured_drive_name', return_value='gdrive')
+    @patch('javdb.integrations.rclone.manager.service.get_configured_root_folder', return_value='root')
     def test_skips_paths_without_4digit_year_segment(
         self, _mock_root, _mock_dn, tmp_path, storage_mode_csv, caplog,
     ):
@@ -975,7 +973,7 @@ class TestIsDeletedUpdate:
 # ============================================================================
 
 class TestExecuteMode:
-    @patch('javdb.integrations.rclone.manager._legacy.get_configured_drive_name', return_value='gdrive')
+    @patch('javdb.integrations.rclone.manager.service.get_configured_drive_name', return_value='gdrive')
     @patch('javdb.integrations.rclone.helper.subprocess.run')
     def test_dry_run_does_not_update_csv(self, mock_run, _mock_dn, tmp_path):
         mock_run.return_value = MagicMock(returncode=0)
@@ -994,8 +992,8 @@ class TestExecuteMode:
         result = run_execute_from_csv(path)
         assert result == 0
 
-    @patch('javdb.integrations.rclone.manager._legacy.get_configured_drive_name', return_value='gdrive')
-    @patch('javdb.integrations.rclone.manager._legacy.export_dedup_history')
+    @patch('javdb.integrations.rclone.manager.service.get_configured_drive_name', return_value='gdrive')
+    @patch('javdb.integrations.rclone.manager.service.export_dedup_history')
     @patch('javdb.integrations.rclone.helper.subprocess.run')
     def test_run_execute_live(self, mock_run, mock_export, _mock_dn, tmp_path):
         mock_run.return_value = MagicMock(returncode=0)
@@ -1018,7 +1016,7 @@ class TestExecuteMode:
         result = run_execute_from_csv(path)
         assert result == 0
 
-    @patch('javdb.integrations.rclone.manager._legacy.get_configured_drive_name', return_value='')
+    @patch('javdb.integrations.rclone.manager.service.get_configured_drive_name', return_value='')
     @patch('javdb.integrations.rclone.helper.subprocess.run')
     def test_run_execute_refuses_when_no_drive_name(self, mock_run, _mock_dn, tmp_path):
         """Without a remote prefix and without a configured drive name, the
@@ -1040,8 +1038,8 @@ class TestExecuteMode:
         reloaded = load_dedup_csv(path)
         assert reloaded[0]['is_deleted'] == 'False'
 
-    @patch('javdb.integrations.rclone.manager._legacy.get_configured_drive_name', return_value='')
-    @patch('javdb.integrations.rclone.manager._legacy.export_dedup_history')
+    @patch('javdb.integrations.rclone.manager.service.get_configured_drive_name', return_value='')
+    @patch('javdb.integrations.rclone.manager.service.export_dedup_history')
     @patch('javdb.integrations.rclone.helper.subprocess.run')
     def test_run_execute_allows_explicit_remote_prefix_without_drive_name(
         self, mock_run, _mock_export, _mock_dn, tmp_path,
@@ -1205,11 +1203,11 @@ class TestMigrateStripDriveNames:
 # Path validation & self-healing
 # ============================================================================
 
-from javdb.integrations.rclone.manager import (
+from javdb.integrations.rclone.manager.service import (
     validate_dedup_records_against_inventory,
     run_validate_inventory,
+    ORPHAN_REASON_SUFFIX,
 )
-from javdb.integrations.rclone.manager._legacy import ORPHAN_REASON_SUFFIX
 
 
 def _add_inventory(rows):
@@ -1238,7 +1236,7 @@ def _add_dedup_pending(code, path, reason='Subtitle upgrade'):
 
 class TestValidateDedupRecords:
     def test_marks_only_orphan_pendings(self, storage_mode_db, tmp_path, monkeypatch):
-        import javdb.integrations.rclone.manager._legacy as rm
+        import javdb.integrations.rclone.manager.service as rm
         monkeypatch.setattr(rm, 'REPORTS_DIR', str(tmp_path))
         monkeypatch.setattr(rm, 'DEDUP_DIR', str(tmp_path / 'Dedup'))
 
@@ -1266,7 +1264,7 @@ class TestValidateDedupRecords:
         assert c_row['DateTimeDeleted']
 
     def test_no_orphans_returns_zero(self, storage_mode_db, tmp_path, monkeypatch):
-        import javdb.integrations.rclone.manager._legacy as rm
+        import javdb.integrations.rclone.manager.service as rm
         monkeypatch.setattr(rm, 'REPORTS_DIR', str(tmp_path))
         monkeypatch.setattr(rm, 'DEDUP_DIR', str(tmp_path / 'Dedup'))
         _add_inventory([('A', '2025/Actor/A/有码-中字')])
@@ -1275,7 +1273,7 @@ class TestValidateDedupRecords:
         assert count == 0 and orphans == []
 
     def test_empty_inventory_skips(self, storage_mode_db, tmp_path, monkeypatch):
-        import javdb.integrations.rclone.manager._legacy as rm
+        import javdb.integrations.rclone.manager.service as rm
         monkeypatch.setattr(rm, 'REPORTS_DIR', str(tmp_path))
         monkeypatch.setattr(rm, 'DEDUP_DIR', str(tmp_path / 'Dedup'))
         _add_dedup_pending('X', '2025/Actor/X/有码-中字')
@@ -1286,7 +1284,7 @@ class TestValidateDedupRecords:
         assert int(rows[0].get('IsDeleted') or 0) == 0
 
     def test_writes_orphan_csv(self, storage_mode_db, tmp_path, monkeypatch):
-        import javdb.integrations.rclone.manager._legacy as rm
+        import javdb.integrations.rclone.manager.service as rm
         monkeypatch.setattr(rm, 'REPORTS_DIR', str(tmp_path))
         monkeypatch.setattr(rm, 'DEDUP_DIR', str(tmp_path / 'Dedup'))
         _add_inventory([('A', 'p/A')])
@@ -1305,7 +1303,7 @@ class TestRunValidateInventory:
     def test_prunes_inventory_and_chains_dedup_self_heal(
         self, storage_mode_db, tmp_path, monkeypatch,
     ):
-        import javdb.integrations.rclone.manager._legacy as rm
+        import javdb.integrations.rclone.manager.service as rm
         monkeypatch.setattr(rm, 'REPORTS_DIR', str(tmp_path))
         monkeypatch.setattr(rm, 'DEDUP_DIR', str(tmp_path / 'Dedup'))
         monkeypatch.setattr(
@@ -1354,7 +1352,7 @@ class TestRunValidateInventory:
         assert '2025/Actor/X/有码-中字' in orphans_csv.read_text(encoding='utf-8')
 
     def test_no_prune_keeps_inventory(self, storage_mode_db, tmp_path, monkeypatch):
-        import javdb.integrations.rclone.manager._legacy as rm
+        import javdb.integrations.rclone.manager.service as rm
         monkeypatch.setattr(rm, 'REPORTS_DIR', str(tmp_path))
         monkeypatch.setattr(rm, 'DEDUP_DIR', str(tmp_path / 'Dedup'))
 
@@ -1378,7 +1376,7 @@ class TestRunValidateInventory:
         assert 'A' in inv and 'X' in inv  # not pruned
 
     def test_aborts_when_remote_returns_zero(self, storage_mode_db, tmp_path, monkeypatch):
-        import javdb.integrations.rclone.manager._legacy as rm
+        import javdb.integrations.rclone.manager.service as rm
         monkeypatch.setattr(rm, 'REPORTS_DIR', str(tmp_path))
         monkeypatch.setattr(rm, 'DEDUP_DIR', str(tmp_path / 'Dedup'))
 

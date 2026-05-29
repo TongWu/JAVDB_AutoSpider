@@ -1,8 +1,7 @@
 """Canonical rclone manager CLI entrypoint.
 
 Owns argparse parsing and exit-code mapping for the rclone manager. The
-orchestration lives in :mod:`javdb.integrations.rclone.manager` (service +
-bake legacy implementation).
+orchestration lives in :mod:`javdb.integrations.rclone.manager.service`.
 """
 
 from __future__ import annotations
@@ -119,21 +118,6 @@ def options_from_args(args: argparse.Namespace) -> RcloneManagerOptions:
 
 def main(argv: list[str] | None = None) -> int:
     return run_manager(options_from_args(parse_args(argv))).exit_code
-
-
-# Temporary bake convenience: re-export selected package helpers so legacy
-# `from apps.cli.rclone.manager import <helper>` imports keep working during
-# the Phase 4 bake window. Removed by IMP-ADR015-05. This is a plain import
-# (not a sys.modules alias), so the architecture guard does not flag it.
-from javdb.integrations.rclone.manager import (  # noqa: E402
-    load_inventory_as_folder_structure,
-    migrate_strip_drive_names,
-    resolve_rclone_root,
-    run_execute_from_csv,
-    run_report_from_inventory,
-    run_validate_inventory,
-    validate_dedup_records_against_inventory,
-)
 
 
 if __name__ == "__main__":
