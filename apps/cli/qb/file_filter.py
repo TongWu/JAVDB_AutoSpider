@@ -5,7 +5,7 @@ import json
 
 from javdb.infra.config import cfg
 from javdb.integrations.qb.file_filter.options import QbFileFilterOptions
-from javdb.integrations.qb.file_filter.service import run_file_filter
+from javdb.integrations.qb.file_filter.service import run_file_filter_cli
 from javdb.proxy.policy import add_proxy_arguments, resolve_proxy_override
 
 # Mirror the legacy module-level default sourcing (was file_filter.py:51).
@@ -58,7 +58,7 @@ def main(argv: list[str] | None = None) -> int:
         options = options_from_args(parse_args(argv))
     except (json.JSONDecodeError, argparse.ArgumentTypeError) as exc:
         raise SystemExit(str(exc)) from exc
-    return run_file_filter(options).exit_code
+    return run_file_filter_cli(options).exit_code
 
 
 if __name__ == "__main__":
