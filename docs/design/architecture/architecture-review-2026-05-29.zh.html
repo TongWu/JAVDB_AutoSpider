@@ -49,7 +49,6 @@
               <tr><td class="py-2 pr-4 font-mono text-xs">ADR-005</td><td class="py-2 pr-4">db.py 退役 / Repo 模式</td><td class="py-2 pr-4"><span class="text-slate-500">已归档 — 门面只退役一半</span></td><td class="py-2 font-medium">C</td></tr>
               <tr><td class="py-2 pr-4 font-mono text-xs">ADR-011</td><td class="py-2 pr-4">Parsing 模块</td><td class="py-2 pr-4"><span class="text-slate-500">已归档 — shim 仍在生产使用</span></td><td class="py-2 font-medium">D</td></tr>
               <tr><td class="py-2 pr-4 font-mono text-xs">ADR-010</td><td class="py-2 pr-4">统一 D1 访问端口</td><td class="py-2 pr-4"><span class="text-amber-700">已接受 · 等待默认提升</span></td><td class="py-2 font-medium">F（相关）</td></tr>
-              <tr><td class="py-2 pr-4 font-mono text-xs">ADR-028</td><td class="py-2 pr-4">Web 平台路线图</td><td class="py-2 pr-4"><span class="text-rose-700">空文件夹 — 无文档</span></td><td class="py-2 text-slate-400">清理项</td></tr>
             </tbody>
           </table>
         </div>
@@ -456,7 +455,6 @@ flowchart TB
         <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500">清理项（不是深化 —— 只是清理）</h2>
         <ul class="text-sm text-slate-600 list-disc list-inside space-y-1">
           <li>仓库根目录的 <code>utils/</code> 已死 —— 只有过期的 <code>__pycache__</code>，无源码，零 import（ADR-007 Phase 3 已退役它）。可安全删除。</li>
-          <li><code>docs/design/ADR-028-Web-Platform-Completeness-Roadmap/</code> 是个空文件夹，里面没有 ADR 文档。要么写它，要么删它。</li>
           <li><code>CONTEXT.md</code> 仍把 Repo 写在 <code>db_layer/</code> 下；它们实际位于 <code>javdb/storage/repos/</code>。轻微文档漂移。</li>
         </ul>
       </section>
