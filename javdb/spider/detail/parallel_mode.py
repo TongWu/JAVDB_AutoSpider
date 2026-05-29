@@ -5,6 +5,7 @@ from typing import List
 
 from javdb.infra.logging import get_logger
 from javdb.parsing import parse_detail_page
+from javdb.parsing.magnet_categorize import categorize
 
 from javdb.spider.detail.runner import (
     process_detail_entries,
@@ -48,7 +49,7 @@ def _spider_parse_fn(html: str, task: EngineTask):
     if not detail.parse_success:
         return None
     return {
-        'magnets': detail.get_magnets_as_legacy(),
+        'magnet_links': categorize(detail.get_magnets_as_legacy(), task.entry_index),
         'actor_info': detail.get_first_actor_name(),
         'actor_gender': detail.get_first_actor_gender() or '',
         'actor_link': detail.get_first_actor_href() or '',
