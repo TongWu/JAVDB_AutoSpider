@@ -89,6 +89,7 @@ from javdb.integrations.rclone.manager._legacy import (
     run_execute_from_csv,
     run_execute_inventory_purge_from_csv,
     run_execute_soft_delete_from_csv,
+    run_rclone_manager,
     run_report_from_inventory,
     run_validate_inventory,
     scan_inventory,
@@ -109,12 +110,28 @@ __all__ = [
     "run_execute_from_csv",
     "run_execute_inventory_purge_from_csv",
     "run_execute_soft_delete_from_csv",
+    "run_rclone_manager",
     "run_report_from_inventory",
     "run_validate_inventory",
     "scan_inventory",
     "validate_dedup_records_against_inventory",
 ]
 ```
+
+> **Implementation note (bake-export completeness):** `run_rclone_manager` MUST
+> be in the bake-export list. It is a live programmatic API imported at call
+> time by `apps/api/routers/operations.py`
+> (`from javdb.integrations.rclone.manager import run_rclone_manager`) and
+> patched by `tests/unit/test_operations_rclone_cleanup.py`
+> (`javdb.integrations.rclone.manager.run_rclone_manager`). Omitting it breaks
+> the operations router import and those tests. IMP-ADR015-05 either keeps this
+> export or migrates the router/tests to the service entry point.
+
+> **Implementation note (`os.chdir` depth):** `_legacy.py` now lives one
+> directory deeper than the old `manager.py`. Its module-level
+> `REPO_ROOT = Path(__file__).resolve().parents[3]` + `os.chdir(REPO_ROOT)` must
+> become `parents[4]`; otherwise the chdir lands in `javdb/` and every relative
+> reports/CSV path resolves under the wrong root at runtime.
 
 ---
 
@@ -716,9 +733,38 @@ Expected: PASS.
 ## Task 7: Update Tests And Docs
 
 **Files:**
+- Modify: `tests/architecture/test_integrations_interface_boundary.py`
 - Modify: `tests/unit/test_rclone_manager.py`
 - Modify: `apps/cli/rclone/README.md`
 - Modify: `javdb/integrations/rclone/README.md`
+
+- [ ] **Step 0: Move the rclone guard allowlist key to the bake path.**
+
+The architecture guard (`tests/architecture/test_integrations_interface_boundary.py`)
+scans every file under `javdb/integrations/`. Because Phase 4 keeps the legacy
+CLI surface (`argparse`, `parse_arguments`, `main`, `__main__`, `sys.exit`,
+`argparse.Namespace`) inside the **bake** module `manager/_legacy.py`, the
+`INTEGRATION_CLI_SURFACE_ALLOWLIST` key must move from the old flat path to the
+new package path (same token set). IMP-ADR015-05 removes this entry entirely
+when the bake wrapper is deleted.
+
+```python
+# Before
+"javdb/integrations/rclone/manager.py": {
+    "argparse_import", "parse_arguments", "main",
+    "dunder_main", "argparse_namespace_annotation", "sys_exit",
+},
+# After
+"javdb/integrations/rclone/manager/_legacy.py": {
+    "argparse_import", "parse_arguments", "main",
+    "dunder_main", "argparse_namespace_annotation", "sys_exit",
+},
+```
+
+Leave the `APPS_CLI_INTEGRATION_ALIAS_ALLOWLIST` entry
+`"apps/cli/rclone/manager.py"` in place for now: the real adapter is no longer
+an alias so the guard will not flag it, and IMP-ADR015-05 removes the (now
+unused) allowlist entry during cleanup.
 
 - [ ] **Step 1: Add service contract tests.**
 
@@ -740,16 +786,47 @@ def test_run_manager_wraps_legacy_exit_code(monkeypatch):
     assert result == RcloneManagerResult(exit_code=7)
 ```
 
-- [ ] **Step 2: Keep wrapper compatibility tests.**
+- [ ] **Step 2: Keep wrapper compatibility tests (and fix monkeypatch targets).**
 
-Keep existing imports such as:
-
-```python
-from apps.cli.rclone.manager import run_report_from_inventory
-```
-
-working through the Phase 4 bake wrapper. These imports are migrated in
-IMP-ADR015-05.
+> **Implementation note (resolves a thin-adapter vs. bake-import tension):** the
+> current `tests/unit/test_rclone_manager.py` both (a) imports domain helpers
+> `from apps.cli.rclone.manager import (...)` and (b) does
+> `import apps.cli.rclone.manager as rm` then monkeypatches domain functions on
+> `rm`. Today this works only because `apps.cli.rclone.manager` is a
+> `sys.modules` alias of the integration module. After Phase 4 the adapter is a
+> real, thin CLI module, so the two patterns need different handling:
+>
+> 1. **Pure helper imports** (`from apps.cli.rclone.manager import run_report_from_inventory`,
+>    `resolve_rclone_root`, `load_inventory_as_folder_structure`,
+>    `run_execute_from_csv`, `migrate_strip_drive_names`,
+>    `validate_dedup_records_against_inventory`, `run_validate_inventory`, …):
+>    keep these working during the bake by having the thin adapter
+>    **re-export the bake-wrapper helpers** at the bottom of
+>    `apps/cli/rclone/manager.py`, e.g.
+>    `from javdb.integrations.rclone.manager import (run_report_from_inventory, …)`.
+>    This is a TEMPORARY bake convenience removed in IMP-ADR015-05. (It does NOT
+>    use `importlib.import_module(...)` + `sys.modules[__name__] = …`, so it is
+>    not an alias and does not trip the architecture guard.) Names that are NOT
+>    in the package bake-export list (`parse_arguments`, `parse_root_path`,
+>    `INVENTORY_FIELDNAMES`, `ORPHAN_REASON_SUFFIX`) are imported in the test
+>    directly from `javdb.integrations.rclone.manager._legacy`.
+> 2. **Monkeypatch targets** (`monkeypatch.setattr(rm, "scan_inventory", …)`,
+>    `check_rclone_installed`, `check_remote_exists`, `get_year_folders`,
+>    `_process_year`, `export_db_to_csv`, `RCLONE_CONFIG_BASE64`, plus the new
+>    `SessionLifecycleRepo`/`OperationsRepo` via `_patch_rclone_repo_mocks`):
+>    these MUST patch where the scan/report/execute code RESOLVES the name, which
+>    is now `javdb.integrations.rclone.manager._legacy`. Change
+>    `import apps.cli.rclone.manager as rm` →
+>    `import javdb.integrations.rclone.manager._legacy as rm` for every such test,
+>    and call `_patch_rclone_repo_mocks(monkeypatch, rm, order, …)` with that
+>    `rm`. Patching the thin adapter would be a no-op and the test would silently
+>    exercise the real implementation.
+>
+> The legacy `parse_arguments` (bake parser) stays tested via `_legacy`; the new
+> `parse_args` is tested via `apps.cli.rclone.manager` (see
+> `tests/unit/test_rclone_manager_options.py`). IMP-ADR015-05 migrates the helper
+> imports to `javdb.integrations.rclone.manager.service` / `.helper` and removes
+> the adapter re-exports and all `_legacy` references.
 
 - [ ] **Step 3: Update READMEs.**
 
@@ -806,6 +883,7 @@ git add javdb/integrations/rclone/manager \
         javdb/storage/repos/session_lifecycle_repo.py \
         javdb/storage/repos/README.md \
         apps/cli/rclone/manager.py \
+        tests/architecture/test_integrations_interface_boundary.py \
         tests/unit/test_rclone_manager_options.py \
         tests/unit/test_session_lifecycle_repo.py \
         tests/unit/test_rclone_manager.py \

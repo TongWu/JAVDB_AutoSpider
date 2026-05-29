@@ -1,20 +1,24 @@
 # ADR-015：Integrations Interface 边界收束
 
-**状态**：已接受 - 实现待启动
+**状态**：已完成 - 全部 7 个阶段已实现（2026-05-29）
 **日期**：2026-05-20
 **决策者**：Integrations interface boundary brainstorming + grill 会话
 **关联实现计划 (Related Implementation Plans)**：[IMP-ADR015-01](IMP-ADR015-01-integrations-phase1-guard-workflow-adapters.md)（Phase 1 - guard and workflow adapters）、[IMP-ADR015-02](IMP-ADR015-02-integrations-phase2-qb-command-packages.md)（Phase 2 - qB command packages）、[IMP-ADR015-03](IMP-ADR015-03-integrations-phase3-pikpak-bridge.md)（Phase 3 - PikPak bridge package）、[IMP-ADR015-04](IMP-ADR015-04-integrations-phase4-rclone-manager-split.md)（Phase 4 - rclone manager split）、[IMP-ADR015-05](IMP-ADR015-05-integrations-phase5-rclone-cleanup.md)（Phase 5 - rclone cleanup）、[IMP-ADR015-06](IMP-ADR015-06-integrations-phase6-notify-email-split.md)（Phase 6 - notify email split）、[IMP-ADR015-07](IMP-ADR015-07-integrations-phase7-notify-cleanup.md)（Phase 7 - notify cleanup）
 
-## 待办 (Outstanding Work)
+## 已完成工作 (Completed Work)
 
-- Phase 1 - 增加带 allowlist 的 architecture guards，并引入 `javdb.workflow` adapters：artifact inputs、stats sinks、git side effects。
-- Phase 2 - 将 qB uploader 和 file filter 迁成 command packages，使用 typed options/results 和真正的 `apps.cli.qb.*` adapters。
-- Phase 3 - 将 PikPak bridge 迁成 command package，使用 typed options/result 和真正的 `apps.cli.pikpak.bridge` adapter。
-- Phase 4 - 拆分 rclone manager command package，将其 scan persistence/session
-  lifecycle DB 写入收敛到 storage Repos，并保留短期 bake wrapper。
-- Phase 5 - 删除 rclone bake wrapper，并从 allowlists 中移除 rclone。
-- Phase 6 - 将 notify email 拆成 command package，以及 `log_analysis`、`report_builder`、`delivery`，并保留短期 bake wrapper。
-- Phase 7 - 删除 notify bake wrapper，并从 allowlists 中移除 notify。
+全部 7 个阶段已实现并合入开发分支（2026-05-29）。两个 architecture allowlist
+现已全部清空：没有任何 `javdb.integrations.*` 模块携带 CLI surface，也没有任何
+`apps.cli.*` 模块是裸 `sys.modules` 别名。
+
+- [x] Phase 1 - 增加带 allowlist 的 architecture guards，并引入 `javdb.workflow` adapters：artifact inputs、stats sinks、git side effects。
+- [x] Phase 2 - 将 qB uploader 和 file filter 迁成 command packages，使用 typed options/results 和真正的 `apps.cli.qb.*` adapters。
+- [x] Phase 3 - 将 PikPak bridge 迁成 command package，使用 typed options/result 和真正的 `apps.cli.pikpak.bridge` adapter。
+- [x] Phase 4 - 拆分 rclone manager command package，将其 scan persistence/session
+  lifecycle DB 写入收敛到 storage Repos（Issue #79），并保留短期 bake wrapper。
+- [x] Phase 5 - 删除 rclone bake wrapper，并从 allowlists 中移除 rclone。
+- [x] Phase 6 - 将 notify email 拆成 command package，以及 `log_analysis`、`report_builder`、`delivery`，并保留短期 bake wrapper。
+- [x] Phase 7 - 删除 notify bake wrapper，并从 allowlists 中移除 notify。
 
 ---
 

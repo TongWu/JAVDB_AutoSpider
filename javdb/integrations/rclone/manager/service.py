@@ -1,42 +1,24 @@
 #!/usr/bin/env python3
 """
-Unified RClone Manager — scan, report and execute via composable flags.
+Unified RClone Manager service — scan, report and execute orchestration.
 
-Flags
------
-``--scan``
-    Scan the remote folder tree and write results to DB/CSV.
+Owns the non-CLI manager orchestration: inventory scan, dedup report,
+execute / execute-soft-delete, and inventory validation. The command-line
+surface lives in :mod:`apps.cli.rclone.manager`, which maps parsed arguments to
+:class:`RcloneManagerOptions` and calls :func:`run_manager`.
 
-``--report``
-    Load the inventory from DB (fallback CSV), analyse duplicates,
-    generate a CSV report, and persist dedup records.
-
-``--execute``
-    Read a dedup CSV, skip already-deleted entries, execute
-    ``rclone purge`` for each remaining entry, and update the CSV.
-
-Flags can be combined.  Regardless of the order they are passed on the
-command line, execution always follows **scan → report → execute**.
+Phases (regardless of flag order) always run **scan → report → execute**.
 
 Valid combinations
 ~~~~~~~~~~~~~~~~~~
-* ``--scan``
-* ``--report``
-* ``--execute``
-* ``--scan --report``
-* ``--report --execute``
-* ``--scan --report --execute``
+* ``scan``
+* ``report``
+* ``execute``
+* ``scan + report``
+* ``report + execute``
+* ``scan + report + execute``
 
-Invalid: ``--scan --execute`` without ``--report``.
-
-Usage
------
-    python3 -m apps.cli.rclone.manager --scan
-    python3 -m apps.cli.rclone.manager --report
-    python3 -m apps.cli.rclone.manager --scan --report
-    python3 -m apps.cli.rclone.manager --execute
-    python3 -m apps.cli.rclone.manager --report --execute --dry-run
-    python3 -m apps.cli.rclone.manager --scan --report --execute
+Invalid: ``scan + execute`` without ``report``.
 """
 
 import os
@@ -44,7 +26,6 @@ import re
 import sys
 import csv
 import gc
-import argparse
 import tempfile
 from pathlib import Path
 from datetime import datetime
@@ -52,7 +33,7 @@ from typing import Dict, List, Optional, Tuple
 
 _YEAR_RE = re.compile(r"^\d{4}$")
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = Path(__file__).resolve().parents[4]
 os.chdir(REPO_ROOT)
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -90,6 +71,10 @@ from javdb.integrations.rclone.helper import (
     has_remote_prefix,
     INCREMENTAL_DAYS,
 )
+from javdb.storage.repos.operations_repo import OperationsRepo
+from javdb.storage.repos.session_lifecycle_repo import SessionLifecycleRepo
+from javdb.integrations.rclone.manager.options import RcloneManagerOptions
+from javdb.integrations.rclone.manager.result import RcloneManagerResult
 
 # Config defaults
 RCLONE_FOLDER_PATH = cfg('RCLONE_FOLDER_PATH', None)
@@ -109,6 +94,12 @@ INVENTORY_FIELDNAMES = [
     'video_code', 'sensor_category', 'subtitle_category',
     'folder_path', 'folder_size', 'file_count', 'scan_datetime',
 ]
+
+
+def run_manager(options: RcloneManagerOptions) -> RcloneManagerResult:
+    """Public service entry point: run the manager for the given options."""
+    exit_code = run_manager_from_options(options)
+    return RcloneManagerResult(exit_code=exit_code)
 
 
 # ============================================================================
@@ -1101,7 +1092,7 @@ def run_execute_inventory_purge_from_csv(
     """Purge folders listed in an inventory-alignment plan CSV (``rclone purge``).
 
     Expects rows with a ``source_path`` (or ``SourcePath``) column — the same
-    shape produced by ``packages/python/javdb_migrations/tools/align_inventory_with_moviehistory.py``.
+    shape produced by ``javdb/migrations/tools/align_inventory_with_moviehistory.py``.
     """
     if not os.path.exists(purge_plan_csv):
         logger.info(f"Purge-plan CSV not found: {purge_plan_csv}")
@@ -1170,8 +1161,9 @@ def run_rclone_manager(
 ) -> dict:
     """Programmatic entry point for the rclone manager pipeline.
 
-    Mirrors the ``main()`` orchestration without argparse: set up the rclone
-    config, resolve the remote, then run whichever phases are requested.
+    Mirrors the options-driven orchestration without a command-line parser:
+    set up the rclone config, resolve the remote, then run whichever phases
+    are requested.
 
     Only the phases that actually ran appear in ``phase_results``.  Each
     phase's value is a dict with at least ``{"exit_code": int}``.
@@ -1222,55 +1214,53 @@ def run_rclone_manager(
         # uses, so a subsequent report/execute phase reads fresh inventory
         # rather than stale rows. A partial scan drops staging and leaves the
         # live RcloneInventory untouched.
-        from javdb.storage.db import (
-            init_db,
-            db_create_report_session,
-            db_mark_session_committed,
-            db_mark_session_failed,
-            db_open_rclone_staging,
-            db_append_rclone_staging,
-            db_swap_rclone_inventory,
-            db_drop_rclone_staging,
-            get_active_session_id,
-        )
+        session_repo = SessionLifecycleRepo()
+        operations_repo = OperationsRepo()
 
-        init_db()
-        staging_sid = get_active_session_id()
+        session_repo.init_storage()
+        staging_sid = session_repo.get_active_session_id()
         # Only finalize (commit/fail) a session we created ourselves — an
         # inherited active session is owned by the caller.
         created_local_session = staging_sid is None
         if created_local_session:
-            staging_sid = db_create_report_session(
+            staging_sid = session_repo.create_report_session(
                 report_type="rclone_inventory",
                 report_date=datetime.now().strftime("%Y%m%d"),
                 csv_filename=RCLONE_INVENTORY_CSV,
             )
         try:
-            # db_open_rclone_staging is inside the try so a failure here also
+            # open_rclone_staging is inside the try so a failure here also
             # triggers the drop-staging / mark-failed finalization below.
-            db_open_rclone_staging(staging_sid)
+            operations_repo.open_rclone_staging(staging_sid)
             total_rows, error_count = scan_inventory(
                 remote_name,
                 root_folder,
-                row_callback=lambda rows: db_append_rclone_staging(
-                    rows, session_id=staging_sid
+                row_callback=lambda rows: operations_repo.append_rclone_staging(
+                    rows,
+                    session_id=staging_sid,
                 ),
             )
             if error_count == 0:
-                db_swap_rclone_inventory(session_id=staging_sid)
+                operations_repo.swap_rclone_inventory(staging_sid)
                 if created_local_session:
-                    db_mark_session_committed(staging_sid)
+                    session_repo.mark_session_committed(staging_sid)
             else:
                 # Partial scan — drop staging, leave live inventory untouched.
-                db_drop_rclone_staging(staging_sid)
+                operations_repo.drop_rclone_staging(staging_sid)
                 if created_local_session:
-                    db_mark_session_failed(staging_sid)
+                    session_repo.mark_session_failed(
+                        staging_sid,
+                        reason="rclone_scan_partial",
+                    )
         except Exception:
             # scan_inventory / swap raised — never leave the staging table or
             # the report session dangling in an in-progress state.
-            db_drop_rclone_staging(staging_sid)
+            operations_repo.drop_rclone_staging(staging_sid)
             if created_local_session:
-                db_mark_session_failed(staging_sid)
+                session_repo.mark_session_failed(
+                    staging_sid,
+                    reason="rclone_scan_error",
+                )
             raise
         phase_results["scan"] = {
             "exit_code": 0 if error_count == 0 else 1,
@@ -1302,100 +1292,29 @@ def run_rclone_manager(
 
 
 # ============================================================================
-# CLI
+# Manager orchestration (from options)
 # ============================================================================
 
-def _describe_mode(args: argparse.Namespace) -> str:
+def _describe_mode(options: "RcloneManagerOptions") -> str:
     """Return a human-readable label for the active flag combination."""
     parts = []
-    if args.scan:
+    if options.scan:
         parts.append('SCAN')
-    if args.report:
+    if options.report:
         parts.append('REPORT')
-    if args.execute:
+    if options.execute:
         parts.append('EXECUTE')
-    if args.execute_soft_delete:
+    if options.execute_soft_delete:
         parts.append('EXECUTE_SOFT_DELETE')
-    if getattr(args, 'validate', False):
+    if getattr(options, 'validate', False):
         parts.append('VALIDATE')
     return '+'.join(parts) or 'NONE'
 
 
-def parse_arguments(argv=None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description='Unified rclone manager — scan, report & execute via composable flags',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  %(prog)s --scan
-  %(prog)s --scan --root-path "gdrive:/path" --years "2025,2026"
-  %(prog)s --report
-  %(prog)s --scan --report
-  %(prog)s --execute
-  %(prog)s --report --execute --dry-run
-  %(prog)s --scan --report --execute
-        """,
-    )
+def run_manager_from_options(options: "RcloneManagerOptions") -> int:
+    setup_logging(log_level=options.log_level)
 
-    mode_group = parser.add_argument_group('mode flags (at least one required)')
-    mode_group.add_argument('--scan', action='store_true', help='Scan remote folder tree into DB/CSV')
-    mode_group.add_argument('--report', action='store_true', help='Generate dedup report from inventory')
-    mode_group.add_argument('--execute', action='store_true', help='Execute pending deletions from dedup CSV')
-    mode_group.add_argument('--execute-soft-delete', action='store_true', help='Execute soft-delete moves from CSV plan')
-    mode_group.add_argument(
-        '--validate', action='store_true',
-        help='Re-validate inventory against the remote (dirs-only listing); '
-             'prunes orphan inventory rows and self-heals related dedup pendings',
-    )
-
-    parser.add_argument('--root-path', type=str, default=None, help='rclone path (remote:/path)')
-    parser.add_argument('--years', type=str, default=None, help='Comma-separated years')
-    parser.add_argument('--workers', type=int, default=4, help='Parallel workers (default: 4)')
-    parser.add_argument('--log-level', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'], default='INFO')
-    parser.add_argument('--output', type=str, default=None, help='Override output CSV path')
-
-    report_group = parser.add_argument_group('report options')
-    report_group.add_argument('--incremental', action='store_true', help='Only process recent changes')
-
-    execute_group = parser.add_argument_group('execute options')
-    execute_group.add_argument('--dry-run', action='store_true', help='Simulate without deleting')
-    execute_group.add_argument(
-        '--dedup-csv', type=str, default=None,
-        help='Override dedup CSV path (default: REPORTS_DIR/DEDUP_CSV)',
-    )
-    execute_group.add_argument(
-        '--soft-delete-csv', type=str, default=None,
-        help='Soft-delete CSV path (default: REPORTS_DIR/SOFT_DELETE_CSV)',
-    )
-    execute_group.add_argument(
-        '--soft-delete-backup-prefix', type=str, default='',
-        help='Backup destination prefix for rows without destination_path',
-    )
-
-    validate_group = parser.add_argument_group('validate options')
-    validate_group.add_argument(
-        '--no-validate-prune', dest='validate_prune', action='store_false',
-        default=True,
-        help='Validate mode: only report orphans, do not delete from inventory',
-    )
-
-    args = parser.parse_args(argv)
-
-    if not (args.scan or args.report or args.execute or args.execute_soft_delete or args.validate):
-        parser.error('At least one mode flag is required')
-    if args.scan and args.execute and not args.report:
-        parser.error('--scan --execute requires --report (use --scan --report --execute)')
-    if args.validate and (args.scan or args.report or args.execute or args.execute_soft_delete):
-        parser.error('--validate must be used on its own (no other mode flag)')
-
-    return args
-
-
-def main() -> int:
-    args = parse_arguments()
-    setup_logging(log_level=args.log_level)
-
-    mode_label = _describe_mode(args)
+    mode_label = _describe_mode(options)
 
     # Setup rclone config
     if RCLONE_CONFIG_BASE64:
@@ -1405,28 +1324,28 @@ def main() -> int:
         logger.info("No RCLONE_CONFIG_BASE64 in config — assuming rclone is pre-configured")
 
     # ── Execute-only (independent of remote/inventory) ────────────────
-    if args.execute and not args.scan and not args.report and not args.execute_soft_delete:
-        if args.dedup_csv:
-            dedup_csv = args.dedup_csv
+    if options.execute and not options.scan and not options.report and not options.execute_soft_delete:
+        if options.dedup_csv:
+            dedup_csv = options.dedup_csv
             from_file_only = True
         else:
             # Read from DB (authoritative); dedup_csv is only used as
             # a fallback path inside load_dedup_csv when DB is empty.
             dedup_csv = os.path.join(REPORTS_DIR, 'dedup_history.csv')
             from_file_only = False
-        return run_execute_from_csv(dedup_csv, dry_run=args.dry_run, from_file_only=from_file_only)
+        return run_execute_from_csv(dedup_csv, dry_run=options.dry_run, from_file_only=from_file_only)
 
-    if args.execute_soft_delete and not args.scan and not args.report and not args.execute:
-        soft_delete_csv = args.soft_delete_csv or os.path.join(REPORTS_DIR, SOFT_DELETE_CSV)
-        backup_prefix = args.soft_delete_backup_prefix or RCLONE_SOFT_DELETE_BACKUP_PREFIX
+    if options.execute_soft_delete and not options.scan and not options.report and not options.execute:
+        soft_delete_csv = options.soft_delete_csv or os.path.join(REPORTS_DIR, SOFT_DELETE_CSV)
+        backup_prefix = options.soft_delete_backup_prefix or RCLONE_SOFT_DELETE_BACKUP_PREFIX
         return run_execute_soft_delete_from_csv(
             soft_delete_csv,
-            dry_run=args.dry_run,
+            dry_run=options.dry_run,
             backup_prefix=backup_prefix,
         )
 
     # ── Scan / Report (/ Execute) / Validate need a remote ────────────
-    resolved = resolve_rclone_root(args.root_path)
+    resolved = resolve_rclone_root(options.root_path)
     if not resolved:
         logger.error(
             "No --root-path provided and RCLONE_FOLDER_PATH not set in config "
@@ -1435,15 +1354,15 @@ def main() -> int:
         return 1
     remote_name, root_folder = resolved
 
-    if args.output:
-        output_path = args.output
+    if options.output:
+        output_path = options.output
     else:
         os.makedirs(REPORTS_DIR, exist_ok=True)
         output_path = os.path.join(REPORTS_DIR, RCLONE_INVENTORY_CSV)
 
     year_filter = None
-    if args.years:
-        year_filter = [y.strip() for y in args.years.split(',') if y.strip()]
+    if options.years:
+        year_filter = [str(y).strip() for y in options.years if str(y).strip()]
 
     logger.info("=" * 60)
     logger.info("RCLONE MANAGER")
@@ -1451,13 +1370,13 @@ def main() -> int:
     logger.info(f"Remote: {remote_name}:{root_folder}")
     if year_filter:
         logger.info(f"Year filter: {year_filter}")
-    logger.info(f"Workers: {args.workers}")
-    if args.report:
-        logger.info(f"Incremental: {args.incremental}")
-    if args.execute:
-        logger.info(f"Dry run: {args.dry_run}")
-    if args.execute_soft_delete:
-        logger.info(f"Soft delete dry run: {args.dry_run}")
+    logger.info(f"Workers: {options.workers}")
+    if options.report:
+        logger.info(f"Incremental: {options.incremental}")
+    if options.execute:
+        logger.info(f"Dry run: {options.dry_run}")
+    if options.execute_soft_delete:
+        logger.info(f"Soft delete dry run: {options.dry_run}")
     logger.info(f"Output: {output_path}")
     logger.info("=" * 60)
 
@@ -1475,22 +1394,25 @@ def main() -> int:
     logger.info(f"  {msg}")
 
     # ── Validate phase (mutually exclusive with scan/report/execute) ──
-    if args.validate:
+    if options.validate:
         logger.info("")
         logger.info("=" * 60)
         logger.info("VALIDATE PHASE — re-validating inventory against remote")
-        logger.info(f"Prune orphans: {args.validate_prune}")
+        logger.info(f"Prune orphans: {options.validate_prune}")
         logger.info("=" * 60)
         return run_validate_inventory(
             remote_name, root_folder,
             year_filter=year_filter,
-            max_workers=args.workers,
-            prune=args.validate_prune,
+            max_workers=options.workers,
+            prune=options.validate_prune,
         )
 
     # ── Scan phase ───────────────────────────────────────────────────
-    if args.scan:
+    if options.scan:
         from javdb.infra.config import use_sqlite as _use_sqlite, use_csv as _use_csv
+
+        session_repo = SessionLifecycleRepo()
+        operations_repo = OperationsRepo()
 
         total_written = 0
         _sqlite_ok = False
@@ -1498,22 +1420,10 @@ def main() -> int:
         _created_local_staging_session = False
         if _use_sqlite():
             try:
-                from javdb.storage.db import (
-                    init_db,
-                    db_create_report_session,
-                    db_mark_session_committed,
-                    db_mark_session_failed,
-                    db_open_rclone_staging,
-                    db_append_rclone_staging,
-                    db_swap_rclone_inventory,
-                    db_merge_rclone_inventory_from_stage,
-                    db_drop_rclone_staging,
-                    get_active_session_id,
-                )
-                init_db()
-                _staging_session_id = get_active_session_id()
+                session_repo.init_storage()
+                _staging_session_id = session_repo.get_active_session_id()
                 if _staging_session_id is None:
-                    _staging_session_id = db_create_report_session(
+                    _staging_session_id = session_repo.create_report_session(
                         report_type="rclone_inventory",
                         report_date=datetime.now().strftime("%Y%m%d"),
                         csv_filename=os.path.basename(output_path),
@@ -1527,13 +1437,16 @@ def main() -> int:
                 # table; the live RcloneInventory only gets rewritten in a
                 # single atomic swap at the end. A failed scan therefore
                 # can't half-overwrite.
-                db_open_rclone_staging(_staging_session_id)
+                operations_repo.open_rclone_staging(_staging_session_id)
                 _sqlite_ok = True
             except Exception as e:
                 logger.error(f"Failed initializing SQLite for rclone inventory; aborting scan: {e}")
                 if _staging_session_id is not None:
                     try:
-                        db_mark_session_failed(_staging_session_id)
+                        session_repo.mark_session_failed(
+                            _staging_session_id,
+                            reason="rclone_scan_error",
+                        )
                     except Exception as mark_error:
                         logger.warning(
                             "Failed to mark rclone inventory staging session "
@@ -1541,7 +1454,7 @@ def main() -> int:
                             mark_error,
                         )
                     try:
-                        db_drop_rclone_staging(_staging_session_id)
+                        operations_repo.drop_rclone_staging(_staging_session_id)
                     except Exception as drop_error:
                         logger.error(
                             "Failed to drop rclone inventory staging table "
@@ -1581,7 +1494,9 @@ def main() -> int:
                 _csv_file.flush()
             if _sqlite_ok:
                 if _staging_session_id is not None:
-                    db_append_rclone_staging(rows, session_id=_staging_session_id)
+                    operations_repo.append_rclone_staging(
+                        rows, session_id=_staging_session_id
+                    )
             total_written += len(rows)
 
         scan_failed = False
@@ -1589,7 +1504,7 @@ def main() -> int:
         try:
             total_found, scan_error_count = scan_inventory(
                 remote_name, root_folder,
-                max_workers=args.workers,
+                max_workers=options.workers,
                 year_filter=year_filter,
                 row_callback=on_rows,
             )
@@ -1606,7 +1521,10 @@ def main() -> int:
         finally:
             if scan_failed and _sqlite_ok and _staging_session_id is not None:
                 try:
-                    db_mark_session_failed(_staging_session_id)
+                    session_repo.mark_session_failed(
+                        _staging_session_id,
+                        reason="rclone_scan_error",
+                    )
                 except Exception as mark_error:
                     logger.warning(
                         "Failed to mark rclone inventory staging session "
@@ -1614,7 +1532,7 @@ def main() -> int:
                         mark_error,
                     )
                 try:
-                    db_drop_rclone_staging(_staging_session_id)
+                    operations_repo.drop_rclone_staging(_staging_session_id)
                     logger.info(
                         "Dropped RcloneInventoryStaging_%s after scan failure; "
                         "live RcloneInventory left untouched.",
@@ -1642,13 +1560,13 @@ def main() -> int:
             cleanup_failed = False
             try:
                 if year_filter:
-                    committed = db_merge_rclone_inventory_from_stage(
-                        session_id=_staging_session_id,
-                        years=year_filter,
+                    committed = operations_repo.merge_rclone_inventory_from_stage(
+                        _staging_session_id,
+                        year_filter,
                     )
                 else:
-                    committed = db_swap_rclone_inventory(
-                        session_id=_staging_session_id,
+                    committed = operations_repo.swap_rclone_inventory(
+                        _staging_session_id,
                     )
             except Exception as e:
                 action = "merge" if year_filter else "swap"
@@ -1657,7 +1575,10 @@ def main() -> int:
                     f"main table left UNCHANGED: {e}"
                 )
                 try:
-                    db_mark_session_failed(_staging_session_id)
+                    session_repo.mark_session_failed(
+                        _staging_session_id,
+                        reason="rclone_scan_error",
+                    )
                 except Exception as mark_error:
                     logger.warning(
                         "Failed to mark rclone inventory staging session "
@@ -1665,7 +1586,7 @@ def main() -> int:
                         mark_error,
                     )
                 try:
-                    db_drop_rclone_staging(_staging_session_id)
+                    operations_repo.drop_rclone_staging(_staging_session_id)
                 except Exception as drop_error:
                     logger.error(
                         "Failed to drop rclone inventory staging table "
@@ -1684,7 +1605,7 @@ def main() -> int:
                 cleanup_failed = True
                 for attempt in range(1, 4):
                     try:
-                        db_mark_session_committed(_staging_session_id)
+                        session_repo.mark_session_committed(_staging_session_id)
                     except Exception as e:
                         logger.warning(
                             "Failed to mark rclone inventory session committed "
@@ -1721,12 +1642,12 @@ def main() -> int:
         logger.info(f"Output: {output_path}")
         logger.info("=" * 60)
 
-        if total_found == 0 and not args.report:
+        if total_found == 0 and not options.report:
             logger.warning("No movie folders found")
             return 0
 
     # ── Report phase ─────────────────────────────────────────────────
-    if args.report:
+    if options.report:
         logger.info("")
         logger.info("=" * 60)
         logger.info("REPORT PHASE — analysing inventory for duplicates")
@@ -1734,44 +1655,40 @@ def main() -> int:
 
         rc = run_report_from_inventory(
             csv_path=output_path,
-            max_workers=args.workers,
-            incremental=args.incremental,
+            max_workers=options.workers,
+            incremental=options.incremental,
         )
         if rc != 0:
             return rc
 
     # ── Execute phase ────────────────────────────────────────────────
-    if args.execute:
+    if options.execute:
         logger.info("")
         logger.info("=" * 60)
         logger.info("EXECUTE PHASE — purging duplicates")
         logger.info("=" * 60)
 
-        if args.dedup_csv:
-            dedup_csv = args.dedup_csv
+        if options.dedup_csv:
+            dedup_csv = options.dedup_csv
             from_file_only = True
         else:
             # Records were persisted to DB in the report phase above;
             # read from DB (authoritative source).
             dedup_csv = os.path.join(REPORTS_DIR, 'dedup_history.csv')
             from_file_only = False
-        return run_execute_from_csv(dedup_csv, dry_run=args.dry_run, from_file_only=from_file_only)
+        return run_execute_from_csv(dedup_csv, dry_run=options.dry_run, from_file_only=from_file_only)
 
-    if args.execute_soft_delete:
+    if options.execute_soft_delete:
         logger.info("")
         logger.info("=" * 60)
         logger.info("EXECUTE SOFT DELETE PHASE — moving lower versions")
         logger.info("=" * 60)
-        soft_delete_csv = args.soft_delete_csv or os.path.join(REPORTS_DIR, SOFT_DELETE_CSV)
-        backup_prefix = args.soft_delete_backup_prefix or RCLONE_SOFT_DELETE_BACKUP_PREFIX
+        soft_delete_csv = options.soft_delete_csv or os.path.join(REPORTS_DIR, SOFT_DELETE_CSV)
+        backup_prefix = options.soft_delete_backup_prefix or RCLONE_SOFT_DELETE_BACKUP_PREFIX
         return run_execute_soft_delete_from_csv(
             soft_delete_csv,
-            dry_run=args.dry_run,
+            dry_run=options.dry_run,
             backup_prefix=backup_prefix,
         )
 
     return 0
-
-
-if __name__ == '__main__':
-    sys.exit(main())

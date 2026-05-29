@@ -1,21 +1,25 @@
 # ADR-015: Integrations Interface Boundary
 
-**Status**: Accepted - implementation pending
+**Status**: Completed - all 7 phases implemented (2026-05-29)
 **Date**: 2026-05-20
 **Deciders**: Integrations interface boundary brainstorming and grill session
 **Related Implementation Plans**: [IMP-ADR015-01](IMP-ADR015-01-integrations-phase1-guard-workflow-adapters.md) (Phase 1 - guard and workflow adapters), [IMP-ADR015-02](IMP-ADR015-02-integrations-phase2-qb-command-packages.md) (Phase 2 - qB command packages), [IMP-ADR015-03](IMP-ADR015-03-integrations-phase3-pikpak-bridge.md) (Phase 3 - PikPak bridge package), [IMP-ADR015-04](IMP-ADR015-04-integrations-phase4-rclone-manager-split.md) (Phase 4 - rclone manager split), [IMP-ADR015-05](IMP-ADR015-05-integrations-phase5-rclone-cleanup.md) (Phase 5 - rclone cleanup), [IMP-ADR015-06](IMP-ADR015-06-integrations-phase6-notify-email-split.md) (Phase 6 - notify email split), [IMP-ADR015-07](IMP-ADR015-07-integrations-phase7-notify-cleanup.md) (Phase 7 - notify cleanup)
 
-## Outstanding Work
+## Completed Work
 
-- Phase 1 - add architecture guards with allowlists and introduce `javdb.workflow` adapters for artifact inputs, stats sinks, and git side effects.
-- Phase 2 - migrate qB uploader and file filter into command packages with typed options/results and real `apps.cli.qb.*` adapters.
-- Phase 3 - migrate PikPak bridge into a command package with typed options/result and real `apps.cli.pikpak.bridge` adapter.
-- Phase 4 - split rclone manager into a command package, route its scan
-  persistence/session lifecycle DB writes through storage Repos, and keep a
-  short bake wrapper.
-- Phase 5 - delete the rclone bake wrapper and remove rclone from allowlists.
-- Phase 6 - split notify email into command package plus `log_analysis`, `report_builder`, and `delivery`, keeping a short bake wrapper.
-- Phase 7 - delete the notify bake wrapper and remove notify from allowlists.
+All seven phases are implemented and merged into the development branch (2026-05-29).
+Both architecture allowlists are now empty: no `javdb.integrations.*` module
+carries a CLI surface and no `apps.cli.*` module is a bare `sys.modules` alias.
+
+- [x] Phase 1 - add architecture guards with allowlists and introduce `javdb.workflow` adapters for artifact inputs, stats sinks, and git side effects.
+- [x] Phase 2 - migrate qB uploader and file filter into command packages with typed options/results and real `apps.cli.qb.*` adapters.
+- [x] Phase 3 - migrate PikPak bridge into a command package with typed options/result and real `apps.cli.pikpak.bridge` adapter.
+- [x] Phase 4 - split rclone manager into a command package, route its scan
+  persistence/session lifecycle DB writes through storage Repos (Issue #79), and
+  keep a short bake wrapper.
+- [x] Phase 5 - delete the rclone bake wrapper and remove rclone from allowlists.
+- [x] Phase 6 - split notify email into command package plus `log_analysis`, `report_builder`, and `delivery`, keeping a short bake wrapper.
+- [x] Phase 7 - delete the notify bake wrapper and remove notify from allowlists.
 
 ---
 
