@@ -538,7 +538,7 @@ class TestInitDb:
                 'daily', '20240101', 'test.csv', db_path=single_db)
             db_append_dedup_record(
                 {'video_code': 'T1', 'existing_gdrive_path': 'p'},
-                db_path=single_db)
+                db_path=single_db, session_id=None)
             close_db()
 
             # Now init_db() without db_path should detect + split
@@ -580,14 +580,14 @@ class TestRcloneInventory:
 
     def test_replace_and_load(self, _isolate_sqlite):
         entries = [self._entry('A'), self._entry('B')]
-        db_replace_rclone_inventory(entries)
+        db_replace_rclone_inventory(entries, session_id=None)
         inv = db_load_rclone_inventory()
         assert 'A' in inv
         assert 'B' in inv
 
     def test_replace_clears_old(self, _isolate_sqlite):
-        db_replace_rclone_inventory([self._entry('OLD')])
-        db_replace_rclone_inventory([self._entry('NEW')])
+        db_replace_rclone_inventory([self._entry('OLD')], session_id=None)
+        db_replace_rclone_inventory([self._entry('NEW')], session_id=None)
         inv = db_load_rclone_inventory()
         assert 'OLD' not in inv
         assert 'NEW' in inv
@@ -597,7 +597,7 @@ class TestRcloneInventory:
             self._entry('SAME', folder_path='remote:/copy1'),
             self._entry('SAME', folder_path='remote:/copy2'),
         ]
-        db_replace_rclone_inventory(entries)
+        db_replace_rclone_inventory(entries, session_id=None)
         inv = db_load_rclone_inventory()
         assert len(inv['SAME']) == 2
 
@@ -617,14 +617,14 @@ class TestDedupRecords:
         return row
 
     def test_append_and_load(self, _isolate_sqlite):
-        db_append_dedup_record(self._rec())
+        db_append_dedup_record(self._rec(), session_id=None)
         rows = db_load_dedup_records()
         assert len(rows) == 1
         assert rows[0]['VideoCode'] == 'DUP-001'
 
     def test_save_overwrites(self, _isolate_sqlite):
-        db_append_dedup_record(self._rec('A'))
-        db_append_dedup_record(self._rec('B'))
+        db_append_dedup_record(self._rec('A'), session_id=None)
+        db_append_dedup_record(self._rec('B'), session_id=None)
         rows = db_load_dedup_records()
         assert len(rows) == 2
 
@@ -640,24 +640,25 @@ class TestDedupRecords:
     def test_append_skips_duplicate_pending(self, _isolate_sqlite):
         """Same existing_gdrive_path with is_deleted=0 should be rejected."""
         r = self._rec('A', existing_gdrive_path='remote:/dup_path')
-        assert db_append_dedup_record(r) > 0
-        assert db_append_dedup_record(r) == -1
+        assert db_append_dedup_record(r, session_id=None) > 0
+        assert db_append_dedup_record(r, session_id=None) == -1
         assert len(db_load_dedup_records()) == 1
 
     def test_append_allows_after_deleted(self, _isolate_sqlite):
         """A deleted record should not block re-append of the same path."""
         r = self._rec('A', existing_gdrive_path='remote:/path')
-        db_append_dedup_record(r)
-        db_mark_records_deleted([('remote:/path', '2024-06-01 00:00:00')])
-        assert db_append_dedup_record(r) > 0
+        db_append_dedup_record(r, session_id=None)
+        db_mark_records_deleted(
+            [('remote:/path', '2024-06-01 00:00:00')], session_id=None)
+        assert db_append_dedup_record(r, session_id=None) > 0
         assert len(db_load_dedup_records()) == 2
 
     def test_mark_records_deleted(self, _isolate_sqlite):
-        db_append_dedup_record(self._rec('A'))
-        db_append_dedup_record(self._rec('B'))
+        db_append_dedup_record(self._rec('A'), session_id=None)
+        db_append_dedup_record(self._rec('B'), session_id=None)
         updated = db_mark_records_deleted([
             ('remote:/A', '2024-06-01 10:00:00'),
-        ])
+        ], session_id=None)
         assert updated == 1
         rows = db_load_dedup_records()
         a_row = [r for r in rows if r['VideoCode'] == 'A'][0]
@@ -669,27 +670,33 @@ class TestDedupRecords:
     def test_mark_multiple_pending_same_path(self, _isolate_sqlite):
         """Edge 1a: multiple pending records with the same path."""
         r1 = self._rec('A', existing_gdrive_path='remote:/same')
-        db_append_dedup_record(r1)
+        db_append_dedup_record(r1, session_id=None)
         # Force a second record with the same path by marking the first deleted first
-        db_mark_records_deleted([('remote:/same', '2024-01-01 00:00:00')])
-        db_append_dedup_record(r1)
+        db_mark_records_deleted(
+            [('remote:/same', '2024-01-01 00:00:00')], session_id=None)
+        db_append_dedup_record(r1, session_id=None)
         # Now re-mark: only the second (pending) row should update
-        updated = db_mark_records_deleted([('remote:/same', '2024-06-01 00:00:00')])
+        updated = db_mark_records_deleted(
+            [('remote:/same', '2024-06-01 00:00:00')], session_id=None)
         assert updated == 1
 
     def test_mark_idempotent(self, _isolate_sqlite):
         """Marking an already-deleted record should not update again."""
-        db_append_dedup_record(self._rec('A'))
-        db_mark_records_deleted([('remote:/A', '2024-06-01 00:00:00')])
-        updated = db_mark_records_deleted([('remote:/A', '2024-07-01 00:00:00')])
+        db_append_dedup_record(self._rec('A'), session_id=None)
+        db_mark_records_deleted(
+            [('remote:/A', '2024-06-01 00:00:00')], session_id=None)
+        updated = db_mark_records_deleted(
+            [('remote:/A', '2024-07-01 00:00:00')], session_id=None)
         assert updated == 0
 
     def test_cleanup_deleted_records(self, _isolate_sqlite):
-        db_append_dedup_record(self._rec('OLD'))
-        db_mark_records_deleted([('remote:/OLD', '2020-01-01 00:00:00')])
-        db_append_dedup_record(self._rec('FRESH'))
-        db_mark_records_deleted([('remote:/FRESH', '2099-01-01 00:00:00')])
-        db_append_dedup_record(self._rec('PENDING'))
+        db_append_dedup_record(self._rec('OLD'), session_id=None)
+        db_mark_records_deleted(
+            [('remote:/OLD', '2020-01-01 00:00:00')], session_id=None)
+        db_append_dedup_record(self._rec('FRESH'), session_id=None)
+        db_mark_records_deleted(
+            [('remote:/FRESH', '2099-01-01 00:00:00')], session_id=None)
+        db_append_dedup_record(self._rec('PENDING'), session_id=None)
 
         removed = db_cleanup_deleted_records(older_than_days=30)
         assert removed == 1
@@ -702,23 +709,25 @@ class TestDedupRecords:
     def test_cleanup_skips_empty_delete_datetime(self, _isolate_sqlite):
         """Edge 3a: is_deleted=1 but delete_datetime=NULL should be kept."""
         r = self._rec('ANOMALY', is_deleted=1, delete_datetime=None)
-        db_append_dedup_record(r)
+        db_append_dedup_record(r, session_id=None)
         removed = db_cleanup_deleted_records(older_than_days=0)
         assert removed == 0
         assert len(db_load_dedup_records()) == 1
 
     def test_cleanup_zero_retention(self, _isolate_sqlite):
         """Edge 3b: retention_days=0 removes all with valid timestamps."""
-        db_append_dedup_record(self._rec('A'))
-        db_mark_records_deleted([('remote:/A', '2024-06-01 00:00:00')])
+        db_append_dedup_record(self._rec('A'), session_id=None)
+        db_mark_records_deleted(
+            [('remote:/A', '2024-06-01 00:00:00')], session_id=None)
         removed = db_cleanup_deleted_records(older_than_days=0)
         assert removed == 1
         assert len(db_load_dedup_records()) == 0
 
     def test_mark_orphan_records_appends_reason(self, _isolate_sqlite):
-        db_append_dedup_record(self._rec('A'))
+        db_append_dedup_record(self._rec('A'), session_id=None)
         updated = db_mark_orphan_records(
             ['remote:/A'], '[orphan: missing in inventory]', '2024-06-01 12:00:00',
+            session_id=None,
         )
         assert updated == 1
         rows = db_load_dedup_records()
@@ -729,15 +738,18 @@ class TestDedupRecords:
         assert 'Subtitle upgrade' in a_row['DeletionReason']
 
     def test_mark_orphan_records_skips_already_deleted(self, _isolate_sqlite):
-        db_append_dedup_record(self._rec('A'))
-        db_mark_records_deleted([('remote:/A', '2024-06-01 00:00:00')])
+        db_append_dedup_record(self._rec('A'), session_id=None)
+        db_mark_records_deleted(
+            [('remote:/A', '2024-06-01 00:00:00')], session_id=None)
         updated = db_mark_orphan_records(
             ['remote:/A'], '[orphan]', '2024-07-01 00:00:00',
+            session_id=None,
         )
         assert updated == 0
 
     def test_mark_orphan_records_empty_input(self, _isolate_sqlite):
-        assert db_mark_orphan_records([], '[orphan]', '2024-01-01') == 0
+        assert db_mark_orphan_records(
+            [], '[orphan]', '2024-01-01', session_id=None) == 0
 
 
 # ── rclone_inventory orphan deletion ──────────────────────────────────────
@@ -756,7 +768,7 @@ class TestDeleteRcloneInventoryPaths:
             self._entry('A', '2025/Actor/A/有码-中字'),
             self._entry('B', '2025/Actor/B/有码-中字'),
             self._entry('C', '2025/Actor/C/有码-中字'),
-        ])
+        ], session_id=None)
         deleted = db_delete_rclone_inventory_paths([
             '2025/Actor/B/有码-中字',
             '2025/Actor/C/有码-中字',
@@ -767,7 +779,7 @@ class TestDeleteRcloneInventoryPaths:
         assert 'B' not in inv and 'C' not in inv
 
     def test_delete_missing_path_is_noop(self, _isolate_sqlite):
-        db_replace_rclone_inventory([self._entry('A', 'p/a')])
+        db_replace_rclone_inventory([self._entry('A', 'p/a')], session_id=None)
         assert db_delete_rclone_inventory_paths(['p/missing']) == 0
 
     def test_delete_empty_input(self, _isolate_sqlite):
@@ -783,7 +795,7 @@ class TestDeleteRcloneInventoryPaths:
             self._entry(f'C{i:03d}', f'2025/Actor/C{i:03d}/有码-中字')
             for i in range(batch_size + extra_entries)
         ]
-        db_replace_rclone_inventory(entries)
+        db_replace_rclone_inventory(entries, session_id=None)
         targets = [e['folder_path'] for e in entries[:target_count]]
         deleted = db_delete_rclone_inventory_paths(targets)
         assert deleted == target_count
@@ -812,12 +824,12 @@ class TestMarkRecordsDeletedBatching:
     def test_mark_distinct_datetimes_per_pair(self, _isolate_sqlite):
         """Each path gets its own distinct DateTimeDeleted value."""
         for c in ('A', 'B', 'C'):
-            db_append_dedup_record(self._rec(c, f'remote:/{c}'))
+            db_append_dedup_record(self._rec(c, f'remote:/{c}'), session_id=None)
         updated = db_mark_records_deleted([
             ('remote:/A', '2024-06-01 10:00:00'),
             ('remote:/B', '2024-06-02 11:00:00'),
             ('remote:/C', '2024-06-03 12:00:00'),
-        ])
+        ], session_id=None)
         assert updated == 3
         rows = {r['ExistingGdrivePath']: r for r in db_load_dedup_records()}
         assert rows['remote:/A']['DateTimeDeleted'] == '2024-06-01 10:00:00'
@@ -829,10 +841,10 @@ class TestMarkRecordsDeletedBatching:
         must still hit every record regardless of how many >90 are passed."""
         codes = [f'B{i:03d}' for i in range(120)]
         for c in codes:
-            db_append_dedup_record(self._rec(c, f'remote:/{c}'))
+            db_append_dedup_record(self._rec(c, f'remote:/{c}'), session_id=None)
         shared_dt = '2024-09-15 09:00:00'
         pairs = [(f'remote:/{c}', shared_dt) for c in codes]
-        updated = db_mark_records_deleted(pairs)
+        updated = db_mark_records_deleted(pairs, session_id=None)
         assert updated == 120
         rows = db_load_dedup_records()
         assert all(r['DateTimeDeleted'] == shared_dt for r in rows)
@@ -840,11 +852,11 @@ class TestMarkRecordsDeletedBatching:
 
     def test_mark_skips_blank_paths(self, _isolate_sqlite):
         """Empty path strings must not produce a degenerate ``... IN ()`` query."""
-        db_append_dedup_record(self._rec('A', 'remote:/A'))
+        db_append_dedup_record(self._rec('A', 'remote:/A'), session_id=None)
         updated = db_mark_records_deleted([
             ('', '2024-06-01 10:00:00'),
             ('remote:/A', '2024-06-01 10:00:00'),
-        ])
+        ], session_id=None)
         assert updated == 1
 
 
@@ -859,7 +871,7 @@ class TestPikpakHistory:
             'uploaded_to_pikpak_date': '', 'transfer_status': 'success',
             'error_message': '',
         }
-        db_append_pikpak_history(rec)
+        db_append_pikpak_history(rec, session_id=None)
 
         with get_db(_isolate_sqlite) as conn:
             rows = conn.execute("SELECT * FROM PikpakHistory").fetchall()

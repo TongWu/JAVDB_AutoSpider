@@ -361,13 +361,15 @@ def test_db_align_no_exact_match_roundtrip(temp_dir):
 
     assert db_load_align_no_exact_match_codes(db_path=db_path) == set()
 
-    db_upsert_align_no_exact_match('abc-123', db_path=db_path)
-    db_upsert_align_no_exact_match('DEF-456', reason='custom', db_path=db_path)
+    db_upsert_align_no_exact_match('abc-123', db_path=db_path, session_id=None)
+    db_upsert_align_no_exact_match(
+        'DEF-456', reason='custom', db_path=db_path, session_id=None)
 
     codes = db_load_align_no_exact_match_codes(db_path=db_path)
     assert codes == {'ABC-123', 'DEF-456'}
 
-    db_upsert_align_no_exact_match('abc-123', reason='updated', db_path=db_path)
+    db_upsert_align_no_exact_match(
+        'abc-123', reason='updated', db_path=db_path, session_id=None)
     codes = db_load_align_no_exact_match_codes(db_path=db_path)
     assert codes == {'ABC-123', 'DEF-456'}
 

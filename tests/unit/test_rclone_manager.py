@@ -271,7 +271,7 @@ def test_scan_sqlite_uses_staging_when_no_active_session(
     })
 
     set_active_session_id(None)
-    db_replace_rclone_inventory([seed])
+    db_replace_rclone_inventory([seed], session_id=None)
 
     def fake_scan(*_args, row_callback=None, **_kwargs):
         row_callback([incoming])
@@ -853,7 +853,7 @@ class TestLoadInventoryAsFolderStructure:
                 'file_count': 2,
                 'scan_datetime': '2026-01-01 00:00:00',
             },
-        ])
+        ], session_id=None)
 
         structure = load_inventory_as_folder_structure('/nonexistent.csv')
         all_folders = []
@@ -878,7 +878,7 @@ class TestLoadInventoryAsFolderStructure:
                 'file_count': 1,
                 'scan_datetime': '2026-01-01 00:00:00',
             },
-        ])
+        ], session_id=None)
 
         csv_path = str(tmp_path / 'inventory.csv')
         with open(csv_path, 'w', newline='', encoding='utf-8') as f:
@@ -1256,7 +1256,7 @@ class TestMigrateStripDriveNames:
                 'file_count': 2,
                 'scan_datetime': '2026-01-01 00:00:00',
             },
-        ])
+        ], session_id=None)
 
         updated = migrate_strip_drive_names()
         assert updated >= 1
@@ -1289,7 +1289,7 @@ class TestMigrateStripDriveNames:
                 'file_count': 2,
                 'scan_datetime': '2026-01-01 00:00:00',
             },
-        ])
+        ], session_id=None)
 
         first = migrate_strip_drive_names()
         assert first >= 1
@@ -1327,7 +1327,7 @@ def _add_inventory(rows):
             'folder_size': 1, 'file_count': 1,
             'scan_datetime': '2026-01-01 00:00:00',
         })
-    db_replace_rclone_inventory(entries)
+    db_replace_rclone_inventory(entries, session_id=None)
 
 
 def _add_dedup_pending(code, path, reason='Subtitle upgrade'):
@@ -1338,7 +1338,7 @@ def _add_dedup_pending(code, path, reason='Subtitle upgrade'):
         'existing_folder_size': 100, 'new_torrent_category': '有码',
         'deletion_reason': reason, 'detect_datetime': '2026-01-01 00:00:00',
         'is_deleted': 0, 'delete_datetime': None,
-    })
+    }, session_id=None)
 
 
 class TestValidateDedupRecords:
