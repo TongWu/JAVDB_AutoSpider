@@ -1178,3 +1178,45 @@ git commit -m "perf(init): replace per-request ensureTable with cold-start-only 
 **4. Observations:**
 - The `ensureTable()` method on `JobRunsRepo` is NOT deleted from `job-runs.ts` — it's still available for ad-hoc use or tests. Only the per-request calls in route handlers are removed.
 - The `system_state` and `api_config` tables are included in `initializeTables()` because `onboarding.ts` and `config-store.ts` depend on them existing.
+
+---
+
+## Implementation Status (2026-05-29)
+
+Executed via `superpowers:subagent-driven-development` on branch
+`claude/adr-028-web-completeness` (web-repo worktree), after IMP-ADR029-01 and
+IMP-ADR030-01.
+
+**All 7 tasks DONE & verified.** Final gate: `npm run test:server` → **206 passed,
+0 failures** (26 files); `npm run typecheck:server` → clean. A final holistic
+cross-cutting review of the whole branch (`7735b53..69e7dd7`, 26 commits, 38 files,
++1944/-160) passed with no Critical/Important/Minor issues.
+
+Divergences from the written plan (corrected during execution):
+- **Task 3 (workflow registry):** the plan's test asserted `WORKFLOW_REGISTRY.size === 5`
+  but the plan's code listed only 4 workflows. Added a 5th REAL workflow,
+  `StaleSessionCleanup.yml`, with params derived from the actual
+  `.github/workflows/StaleSessionCleanup.yml` (max_age_hours/apply/scope/log_level/
+  runner, no safetyGate). Also added unit tests for the security-critical
+  `validateWorkflowInputs` (safety gate, required, choice) which the plan omitted.
+- **Task 5 (rollback):** the plan's new tests used a non-existent `login()` helper and
+  omitted the `csrf_token` cookie → corrected to the file's `getCsrf()` helper +
+  full CSRF double-submit (`X-CSRF-Token` header + `Cookie`). The plan's "forwards
+  scope and force" test set `force:true` without `confirm_production` yet expected
+  `[200,503]` (would actually be 422) → added `confirm_production:"I-UNDERSTAND"` so it
+  exercises the success path. The old `"dry_run=true returns preview"` test was deleted
+  because the new handler removes the local preview branch (dry_run now dispatches a
+  real GH dry-run).
+- **Task 6 (onboarding):** same CSRF defect as Task 5 in the plan's tests → corrected to
+  `getCsrf()` + full CSRF.
+- **Tasks 1–2, 4, 7:** implemented per plan; Task 4's POST /runs 422 wiring is covered
+  indirectly by Task 5's rollback tests; Task 7 removed 3 (operations.ts) + 6 (tasks.ts)
+  per-request `ensureTable()` calls in favor of a cold-start init middleware (the
+  `ensureTable` METHOD is retained in `job-runs.ts`).
+
+**Internal dependency:** Task 5 (rollback) and Task 6 (onboarding) write to `job_runs`
+via `createJobRunsRepo(...).create()` without calling `ensureTable`; this relies on
+Task 7's init middleware creating the table. All three ship together on this branch,
+so the dependency is satisfied. (In tests, GH Actions is never configured, so the
+dispatch/create path is not reached — the table-existence dependency only matters in
+production, where the init middleware covers it.)
