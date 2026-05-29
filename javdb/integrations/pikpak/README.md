@@ -6,7 +6,7 @@ PikPak cloud-transfer bridge: moves old torrents that qBittorrent could not seed
 
 | Directory | Purpose |
 |---|---|
-| `bridge/` | Bridge service package (`options.py`, `result.py`, `service.py`); reads torrent metadata, transfers magnets, deletes from qB, and updates `PikpakHistory`. No CLI surface — the CLI lives in `apps.cli.pikpak.bridge`. The package-level `pikpak_bridge` is the programmatic API consumed by the REST layer (`apps/api/routers/operations.py`). |
+| `bridge/` | Bridge service package (`options.py`, `result.py`, `service.py`); reads torrent metadata, transfers magnets, deletes from qB, and updates `PikpakHistory`. No CLI surface — the CLI lives in `apps.cli.pikpak.bridge`. The package-level `pikpak_bridge` is the programmatic API consumed by the REST layer (`apps.api.routers.operations`). |
 
 ## Depends on
 
