@@ -557,7 +557,14 @@ def db_batch_update_last_visited(
 
     When *session_id* is set, each affected MovieHistory row also gets
     ``SessionId=?``. *session_id* is required — callers must thread the
-    active session id (or ``None`` when intentionally untagged) explicitly.
+    active session id explicitly.
+
+    Under ``WriteMode='pending'`` (the only supported mode) *session_id*
+    must be non-``None``: a ``None`` session would bypass
+    :data:`PendingMovieHistoryWrites` staging and write an unrollbackable,
+    untagged live row, re-introducing exactly the hazard ADR-032 removes.
+    Passing ``None`` in pending mode raises ``ValueError`` (a ``None``
+    session is only meaningful under a non-pending write mode).
 
     Ingestion Perfect Rollback (Phase 2): when the active session runs
     under ``WriteMode='pending'`` the visit timestamps are staged into
@@ -568,7 +575,15 @@ def db_batch_update_last_visited(
     if not hrefs:
         return 0
     sid = session_id
-    if sid is not None and _get_active_write_mode() == 'pending':
+    write_mode = _get_active_write_mode()
+    if sid is None and write_mode == 'pending':
+        raise ValueError(
+            "db_batch_update_last_visited requires a non-None session_id "
+            "under pending write mode: a None session would bypass "
+            "PendingMovieHistoryWrites staging and write an unrollbackable "
+            "live row. Thread the active session id explicitly."
+        )
+    if sid is not None and write_mode == 'pending':
         # Pending route: dedupe + stage one sparse pending movie row
         # per href.  ``_pending_movie_overlay`` will sparse-merge this
         # with any earlier stages from the same session at commit time
@@ -638,7 +653,14 @@ def db_batch_update_movie_actors(
 
     When *session_id* is set, each affected MovieHistory row also gets
     ``SessionId=?``. *session_id* is required — callers must thread the
-    active session id (or ``None`` when intentionally untagged) explicitly.
+    active session id explicitly.
+
+    Under ``WriteMode='pending'`` (the only supported mode) *session_id*
+    must be non-``None``: a ``None`` session would bypass
+    :data:`PendingMovieHistoryWrites` staging and write an unrollbackable,
+    untagged live row, re-introducing exactly the hazard ADR-032 removes.
+    Passing ``None`` in pending mode raises ``ValueError`` (a ``None``
+    session is only meaningful under a non-pending write mode).
 
     Ingestion Perfect Rollback (Phase 2): pending-mode sessions stage a
     sparse "actor fields only" pending movie row per href instead of
@@ -649,7 +671,15 @@ def db_batch_update_movie_actors(
     if not updates:
         return 0
     sid = session_id
-    if sid is not None and _get_active_write_mode() == 'pending':
+    write_mode = _get_active_write_mode()
+    if sid is None and write_mode == 'pending':
+        raise ValueError(
+            "db_batch_update_movie_actors requires a non-None session_id "
+            "under pending write mode: a None session would bypass "
+            "PendingMovieHistoryWrites staging and write an unrollbackable "
+            "live row. Thread the active session id explicitly."
+        )
+    if sid is not None and write_mode == 'pending':
         for href, actor_name, actor_gender, actor_link, supporting_actors in (
             updates
         ):

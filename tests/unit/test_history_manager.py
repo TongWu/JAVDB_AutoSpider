@@ -748,18 +748,26 @@ class TestBatchUpdateLastVisited:
     """Test cases for batch_update_last_visited function."""
 
     def test_updates_visited_hrefs(self, temp_dir):
-        """Test that last_visited_datetime is updated for visited hrefs."""
+        """Test that last_visited_datetime is updated for visited hrefs.
+
+        ADR-032: in pending mode the visit bump must run inside an active
+        session (it stages into PendingMovieHistoryWrites and lands on commit);
+        a session-less call now raises rather than writing an untagged live row.
+        """
         _seed_history_sqlite([
             {'href': '/v/ABC-123', 'phase': 1, 'video_code': 'ABC-123'},
             {'href': '/v/DEF-456', 'phase': 1, 'video_code': 'DEF-456'},
         ])
         history_file = os.path.join(temp_dir, 'history.csv')
+        before = db_load_history()['/v/ABC-123']['DateTimeVisited']
 
-        batch_update_last_visited(history_file, {'/v/ABC-123'})
+        with _active_session() as sid:
+            batch_update_last_visited(history_file, {'/v/ABC-123'})
+        db_commit_session_history(sid)
 
         history = db_load_history()
-        # ABC-123 should have an updated timestamp (not the seed default)
-        assert history['/v/ABC-123']['DateTimeVisited'] != ''
+        # ABC-123 was visited → its timestamp moved off the seed default.
+        assert history['/v/ABC-123']['DateTimeVisited'] != before
 
     def test_empty_visited_set(self, temp_dir):
         """Test that empty visited set is a no-op."""
@@ -777,24 +785,34 @@ class TestBatchUpdateLastVisited:
         assert records[0]['last_visited_datetime'] == '2024-01-01 10:00:00'
 
     def test_nonexistent_file(self, temp_dir):
-        """Test that nonexistent file is handled gracefully."""
+        """Test that a missing on-disk file is handled gracefully (SQLite path
+        ignores it). Runs inside a session per the ADR-032 pending contract."""
         history_file = os.path.join(temp_dir, 'nonexistent.csv')
-        batch_update_last_visited(history_file, {'/v/ABC-123'})
+        with _active_session() as sid:
+            batch_update_last_visited(history_file, {'/v/ABC-123'})
+        db_commit_session_history(sid)
 
     def test_unknown_hrefs_ignored(self, temp_dir):
-        """Test that hrefs not in history are silently ignored."""
+        """Test that bumping an href not in history leaves known rows untouched.
+
+        Seeds a known row, then (inside a session) bumps only an UNKNOWN href
+        and commits; the known row's visit timestamp must stay at its seed
+        default. ADR-032: the bump must run under an active session.
+        """
+        _seed_history_sqlite([
+            {'href': '/v/ABC-123', 'phase': 1, 'video_code': 'ABC-123'},
+        ])
+
         history_file = os.path.join(temp_dir, 'history.csv')
-        with open(history_file, 'w', encoding='utf-8-sig', newline='') as f:
-            f.write('href,phase,video_code,create_datetime,update_datetime,last_visited_datetime,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle\n')
-            f.write('/v/ABC-123,1,ABC-123,2024-01-01 10:00:00,2024-01-01 10:00:00,2024-01-01 10:00:00,,,,\n')
+        before = db_load_history()['/v/ABC-123']['DateTimeVisited']
 
-        batch_update_last_visited(history_file, {'/v/UNKNOWN'})
+        with _active_session() as sid:
+            batch_update_last_visited(history_file, {'/v/UNKNOWN'})
+        db_commit_session_history(sid)
 
-        with open(history_file, 'r', encoding='utf-8-sig') as f:
-            reader = csv.DictReader(f)
-            records = list(reader)
-
-        assert records[0]['last_visited_datetime'] == '2024-01-01 10:00:00'
+        history = db_load_history()
+        # The known row was never in the visited set → its timestamp is intact.
+        assert history['/v/ABC-123']['DateTimeVisited'] == before
 
 
 # ── STORAGE_MODE tests ──────────────────────────────────────────────────
