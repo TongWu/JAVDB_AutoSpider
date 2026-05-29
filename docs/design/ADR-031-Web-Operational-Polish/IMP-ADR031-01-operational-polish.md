@@ -8,9 +8,9 @@
 
 **Tech Stack:** TypeScript, Hono, Cloudflare Workers, D1, Vitest + `@cloudflare/vitest-pool-workers`
 
-**Related:** [ADR-020](ADR-020-web-operational-polish.md), [IMP-ADR018-01](../ADR-018-Web-Security-Hardening/IMP-ADR018-01-security-hardening.md), [IMP-ADR019-01](../ADR-019-Web-Feature-Parity/IMP-ADR019-01-feature-parity.md)
+**Related:** [ADR-031](ADR-031-web-operational-polish.md), [IMP-ADR029-01](../ADR-029-Web-Security-Hardening/IMP-ADR029-01-security-hardening.md), [IMP-ADR030-01](../ADR-030-Web-Feature-Parity/IMP-ADR030-01-feature-parity.md)
 
-**Dependency:** This plan assumes IMP-ADR018-01 and IMP-ADR019-01 have been implemented first. The `AUTH_KV` binding, async `findUser()`, and config alias map are prerequisites.
+**Dependency:** This plan assumes IMP-ADR029-01 and IMP-ADR030-01 have been implemented first. The `AUTH_KV` binding, async `findUser()`, and config alias map are prerequisites.
 
 ---
 
