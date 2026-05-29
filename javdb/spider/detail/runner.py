@@ -21,8 +21,6 @@ from javdb.proxy.coordinator.movie_claim_client import (
     MovieClaimUnavailable,
     current_shard_date,
 )
-from javdb.spider.magnet_extractor import extract_magnets
-
 import javdb.spider.runtime.state as state
 from javdb.pipeline.models import ParsedMovie
 from javdb.pipeline.planner import build_spider_ingestion_plan
@@ -697,7 +695,7 @@ def process_detail_entries(
             logger.info(f"[{idx_str}] {worker_tag}Parsed {entry.get('video_code', '')}{cf_tag}")
 
             data = result.data or {}
-            magnet_links = extract_magnets(data['magnets'], idx_str)
+            magnet_links = data['magnet_links']
             outcome = persist_parsed_detail_result(
                 entry=entry,
                 phase=phase,
