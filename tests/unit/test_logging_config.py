@@ -316,6 +316,18 @@ class TestLoggerNameMapping:
     def test_shorten_unknown_module_returned_as_is(self):
         assert _shorten_logger_name('some.other.lib') == 'some.other.lib'
 
+    def test_shorten_command_package_service_uses_parent_label(self):
+        # ADR-015 command packages log under ``<module>.service``; the short
+        # label of the mapped parent package must still apply.
+        assert _shorten_logger_name('javdb.integrations.qb.uploader.service') == 'QBUploader'
+        assert _shorten_logger_name('javdb.integrations.qb.file_filter.service') == 'QBFilter'
+        assert _shorten_logger_name('javdb.integrations.pikpak.bridge.service') == 'PikPak'
+
+    def test_shorten_service_suffix_without_mapped_parent_returned_as_is(self):
+        # A ``.service`` module whose parent is not mapped falls through to the
+        # default behavior (returned unchanged).
+        assert _shorten_logger_name('some.unmapped.module.service') == 'some.unmapped.module.service'
+
     def test_get_logger_name_mapping_returns_dict(self):
         mapping = get_logger_name_mapping()
         assert isinstance(mapping, dict)
