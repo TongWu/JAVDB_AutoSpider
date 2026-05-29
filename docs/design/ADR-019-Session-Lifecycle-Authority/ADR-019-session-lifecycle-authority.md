@@ -100,3 +100,4 @@ failed    → committed ── ILLEGAL → raise IllegalTransition
 
 - 2026-05-29: Proposed (from architecture review Candidate E grilling).
 - 2026-05-29: Phase 1 implemented & verified ([IMP-ADR019-01](IMP-ADR019-01-session-lifecycle.md)) — `SessionLifecycle` authority + all status writes rerouted; `committed→failed` / `failed→committed` now raise. Phase 2 (CommitPipeline) deferred pending production verification.
+- 2026-05-29: Reconciled with ADR-015's `SessionLifecycleRepo` (concurrent integrations refactor). That repo's `mark_session_committed` / `mark_session_failed` now delegate to `transition`, so the rclone staging path — and any future `SessionLifecycleRepo` caller — flows through the single legality authority instead of the loose `db_*` primitives. Closes the overlap surfaced when this branch merged with ADR-015.
