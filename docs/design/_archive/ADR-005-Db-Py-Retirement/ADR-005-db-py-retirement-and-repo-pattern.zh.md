@@ -63,6 +63,8 @@ PR-1（Repo 类）✅ 已交付：`HistoryRepo`、`OperationsRepo`、`StatsRepo`
 
 - **2026-05-22 amendment 7**：**PR-4 与 PR-5 已交付。** Audit Mode 已完全退役：audit 表、audit archive/cleanup 工具、audit 写入/rollback 分支均已移除。`javdb/storage/db/db.py` 已删除。原 ADR-001 拆出的模块（`db_history_read.py`、`db_history_write.py`、`db_stats.py` 等）已不再是空壳模块；它们现在承载 low-level implementation，并通过 `javdb/storage/db/__init__.py` 的包级 public API 暴露。
 
+- **2026-05-29 amendment 8**：**amendment-2 的"全局已消除"声明不完整；补完工作记于 [ADR-032](../../ADR-032-Mandatory-Session-Binding/ADR-032-mandatory-session-binding.md)。** amendment-2 断言 D5 目标（消除 `db_session._active` 全局）已由 per-method `session_id` 满足。实际上 `_SESSION_ID_SENTINEL` 全局回退仍存活于 `_db_operations.py`（~10 个函数）与两个 `_db_history_write.py` batch 函数，故部分写入仍无声回退到全局。ADR-032 补完该目标（使 `session_id` 必填）并整合 `db_*` / Repo 双接口。per-method 绑定保留；构造时绑定仍被拒。
+
 ---
 
 ## D10 Gate 核查结果

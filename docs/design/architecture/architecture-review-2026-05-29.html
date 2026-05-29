@@ -49,7 +49,6 @@
               <tr><td class="py-2 pr-4 font-mono text-xs">ADR-005</td><td class="py-2 pr-4">db.py retirement / Repo pattern</td><td class="py-2 pr-4"><span class="text-slate-500">Archived — facade half-retired</span></td><td class="py-2 font-medium">C</td></tr>
               <tr><td class="py-2 pr-4 font-mono text-xs">ADR-011</td><td class="py-2 pr-4">Parsing module</td><td class="py-2 pr-4"><span class="text-slate-500">Archived — shim still live</span></td><td class="py-2 font-medium">D</td></tr>
               <tr><td class="py-2 pr-4 font-mono text-xs">ADR-010</td><td class="py-2 pr-4">Unified D1 access port</td><td class="py-2 pr-4"><span class="text-amber-700">Accepted · pending promotion</span></td><td class="py-2 font-medium">F (related)</td></tr>
-              <tr><td class="py-2 pr-4 font-mono text-xs">ADR-028</td><td class="py-2 pr-4">Web platform roadmap</td><td class="py-2 pr-4"><span class="text-rose-700">Empty folder — no doc</span></td><td class="py-2 text-slate-400">housekeeping</td></tr>
             </tbody>
           </table>
         </div>
@@ -456,7 +455,6 @@ flowchart TB
         <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500">Housekeeping (not deepening — just cleanup)</h2>
         <ul class="text-sm text-slate-600 list-disc list-inside space-y-1">
           <li><code>utils/</code> at repo root is dead — only stale <code>__pycache__</code>, no source, zero importers (ADR-007 Phase 3 retired it). Safe to delete.</li>
-          <li><code>docs/design/ADR-028-Web-Platform-Completeness-Roadmap/</code> is an empty folder with no ADR doc inside. Either write it or remove it.</li>
           <li><code>CONTEXT.md</code> still names the Repos under <code>db_layer/</code>; they actually live at <code>javdb/storage/repos/</code>. Minor doc drift.</li>
         </ul>
       </section>

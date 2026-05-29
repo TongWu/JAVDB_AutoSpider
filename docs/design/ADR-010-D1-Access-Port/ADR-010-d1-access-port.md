@@ -4,7 +4,7 @@
 **Date**: 2026-05-19
 **Deciders**: D1 access-port brainstorming and grill session
 **Prerequisites**: [ADR-006](../_archive/ADR-006-Pending-Mode-Rollout/ADR-006-pending-mode-default-rollout.md) keeps pending mode as the default write path; [ADR-009](../_archive/ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md) documents the recent D1 transient-failure and drift response.
-**Related Implementation Plans**: [IMP-ADR010-01](IMP-ADR010-01-d1-access-port-phase1-core.md) (Phase 1 — port core), [IMP-ADR010-02](IMP-ADR010-02-d1-access-port-phase2-recovery-outbox.md) (Phase 2 — recovery outbox), [IMP-ADR010-03](IMP-ADR010-03-d1-access-port-phase3-safe-batching.md) (Phase 3 — safe batching), [IMP-ADR010-04](IMP-ADR010-04-d1-access-port-phase4-startup-replay.md) (Phase 4 — startup replay)
+**Related Implementation Plans**: [IMP-ADR010-01](IMP-ADR010-01-d1-access-port-phase1-core.md) (Phase 1 — port core), [IMP-ADR010-02](IMP-ADR010-02-d1-access-port-phase2-recovery-outbox.md) (Phase 2 — recovery outbox), [IMP-ADR010-03](IMP-ADR010-03-d1-access-port-phase3-safe-batching.md) (Phase 3 — safe batching), [IMP-ADR010-04](IMP-ADR010-04-d1-access-port-phase4-startup-replay.md) (Phase 4 — startup replay), [IMP-ADR010-05](IMP-ADR010-05-finish-recovery-facade.md) (Phase 5 — finish recovery facade)
 
 ## Implementation Progress
 
@@ -188,6 +188,7 @@ The rollout is staged by code defaults and environment overrides. The ADR requir
 | Phase 2 | [IMP-ADR010-02](IMP-ADR010-02-d1-access-port-phase2-recovery-outbox.md) | Outbox code still gated | `D1_RECOVERY_OUTBOX_ENABLED=1` allows safe operations to queue and replay |
 | Phase 3 | [IMP-ADR010-03](IMP-ADR010-03-d1-access-port-phase3-safe-batching.md) | Ordinary SQL still synchronous | `D1_BATCHING_ENABLED=1` and `D1_FLUSH_INTERVAL_MS=250` allow safe-path micro-batching |
 | Phase 4 | [IMP-ADR010-04](IMP-ADR010-04-d1-access-port-phase4-startup-replay.md) | Startup replay off | `D1_STARTUP_REPLAY_ENABLED=1` drains non-dead-lettered work on process startup |
+| Phase 5 | [IMP-ADR010-05](IMP-ADR010-05-finish-recovery-facade.md) | Recovery helpers duck-type on connection facade methods; `current_backend()` reads removed from the commit path | — (refactor; no rollout gate) |
 
 Promotion gates should use `d1_port_summary.json`, pending verification records, and drift/dead-letter absence. A phase should not become default while it creates new pending residuals, new dead letters, or unexplained drift.
 
