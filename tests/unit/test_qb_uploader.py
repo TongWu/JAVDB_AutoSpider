@@ -42,14 +42,16 @@ mock_config.GIT_REPO_URL = ''
 mock_config.GIT_BRANCH = 'main'
 sys.modules['config'] = mock_config
 
-# Import the functions to test
-from apps.cli.qb.uploader import (
+# Import the functions to test. Domain behaviour now lives in the uploader
+# *service* module (ADR-015 Phase 2); ``apps.cli.qb.uploader`` is a thin CLI
+# adapter only, so all domain-level patch/import targets resolve here.
+from javdb.integrations.qb.uploader.service import (
     extract_hash_from_magnet,
     is_torrent_exists,
     get_existing_torrents,
     test_qbittorrent_connection as uploader_test_qbittorrent_connection,
 )
-import apps.cli.qb.uploader as qb_uploader_module
+import javdb.integrations.qb.uploader.service as qb_uploader_module
 
 
 class TestExtractHashFromMagnet:
@@ -175,7 +177,7 @@ class TestIsTorrentExists:
 class TestGetExistingTorrents:
     """Test cases for get_existing_torrents function."""
     
-    @patch('apps.cli.qb.uploader.get_proxies_dict')
+    @patch('javdb.integrations.qb.uploader.service.get_proxies_dict')
     def test_get_existing_torrents_success(self, mock_proxies):
         """Test successful retrieval of existing torrents."""
         mock_proxies.return_value = None
@@ -198,7 +200,7 @@ class TestGetExistingTorrents:
         assert 'def456abc123def456abc123def456abc123def4' in result
         assert 'ghi789jkl012ghi789jkl012ghi789jkl012ghi7' in result
     
-    @patch('apps.cli.qb.uploader.get_proxies_dict')
+    @patch('javdb.integrations.qb.uploader.service.get_proxies_dict')
     def test_exclude_error_state_torrents(self, mock_proxies):
         """Test that torrents in error state are excluded."""
         mock_proxies.return_value = None
@@ -223,7 +225,7 @@ class TestGetExistingTorrents:
         assert 'error123def456abc123def456abc123def456ab' not in result
         assert 'missing123456abc123def456abc123def456abc' not in result
     
-    @patch('apps.cli.qb.uploader.get_proxies_dict')
+    @patch('javdb.integrations.qb.uploader.service.get_proxies_dict')
     def test_api_failure_returns_empty_set(self, mock_proxies):
         """Test that API failure returns empty set."""
         mock_proxies.return_value = None
@@ -237,7 +239,7 @@ class TestGetExistingTorrents:
         
         assert result == set()
     
-    @patch('apps.cli.qb.uploader.get_proxies_dict')
+    @patch('javdb.integrations.qb.uploader.service.get_proxies_dict')
     def test_network_error_returns_empty_set(self, mock_proxies):
         """Test that network error returns empty set."""
         import requests
@@ -250,7 +252,7 @@ class TestGetExistingTorrents:
         
         assert result == set()
     
-    @patch('apps.cli.qb.uploader.get_proxies_dict')
+    @patch('javdb.integrations.qb.uploader.service.get_proxies_dict')
     def test_hashes_are_lowercase(self, mock_proxies):
         """Test that all returned hashes are lowercase."""
         mock_proxies.return_value = None
@@ -269,7 +271,7 @@ class TestGetExistingTorrents:
         for h in result:
             assert h == h.lower(), f"Hash {h} is not lowercase"
     
-    @patch('apps.cli.qb.uploader.get_proxies_dict')
+    @patch('javdb.integrations.qb.uploader.service.get_proxies_dict')
     def test_include_various_valid_states(self, mock_proxies):
         """Test that various valid torrent states are included."""
         mock_proxies.return_value = None
@@ -299,8 +301,8 @@ class TestGetExistingTorrents:
 class TestQbEndpointFallback:
     """Test connection fallback from HTTPS to HTTP."""
 
-    @patch('apps.cli.qb.uploader.get_proxies_dict')
-    @patch('apps.cli.qb.uploader.requests.get')
+    @patch('javdb.integrations.qb.uploader.service.get_proxies_dict')
+    @patch('javdb.integrations.qb.uploader.service.requests.get')
     def test_test_qbittorrent_connection_retries_http(self, mock_get, mock_proxies):
         import requests
 
@@ -330,7 +332,7 @@ class TestQbEndpointFallback:
 class TestDuplicateDetectionIntegration:
     """Integration tests for duplicate detection workflow."""
     
-    @patch('apps.cli.qb.uploader.get_proxies_dict')
+    @patch('javdb.integrations.qb.uploader.service.get_proxies_dict')
     def test_full_duplicate_detection_workflow(self, mock_proxies):
         """Test complete workflow of detecting duplicates."""
         mock_proxies.return_value = None
@@ -373,109 +375,112 @@ class TestDuplicateDetectionIntegration:
 
 
 class TestErrorHandlingExitCodes:
-    """Test cases for error handling and exit codes in main()."""
+    """Test cases for error handling and exit codes via ``run_uploader``.
 
-    @patch('apps.cli.qb.uploader.test_qbittorrent_connection')
-    @patch('apps.cli.qb.uploader.initialize_proxy_helper')
-    @patch('apps.cli.qb.uploader.parse_arguments')
-    def test_exit_on_connection_failure(self, mock_args, mock_init_proxy, mock_test_conn):
-        """Test that script exits with code 1 when connection test fails."""
-        mock_args.return_value = MagicMock(
-            mode='daily',
-            use_proxy=False,
-            no_proxy=False,
-            input_file=None,
-            from_pipeline=False
-        )
+    ADR-015 Phase 2 replaced the ``main()`` + ``sys.exit`` flow with a service
+    function that returns a ``QbUploaderResult``; the CLI return code is carried
+    by ``result.exit_code``. The former ``sys.exit(1)`` branches now surface as
+    ``error_reason`` / ``csv_ok=False`` outcomes.
+    """
+
+    @patch('javdb.integrations.qb.uploader.service.test_qbittorrent_connection')
+    @patch('javdb.integrations.qb.uploader.service.initialize_proxy_helper')
+    def test_exit_on_connection_failure(self, mock_init_proxy, mock_test_conn):
+        """exit_code is 1 when the qBittorrent connection test fails."""
+        from javdb.integrations.qb.uploader.service import run_uploader
+        from javdb.integrations.qb.uploader.options import QbUploaderOptions
+
         mock_init_proxy.return_value = None
         mock_test_conn.return_value = False  # Connection fails
-        
-        from apps.cli.qb.uploader import main
-        
-        with pytest.raises(SystemExit) as exc_info:
-            main()
-        
-        assert exc_info.value.code == 1
 
-    @patch('apps.cli.qb.uploader.login_to_qbittorrent')
-    @patch('apps.cli.qb.uploader.test_qbittorrent_connection')
-    @patch('apps.cli.qb.uploader.initialize_proxy_helper')
-    @patch('apps.cli.qb.uploader.parse_arguments')
-    def test_exit_on_login_failure(self, mock_args, mock_init_proxy, mock_test_conn, mock_login):
-        """Test that script exits with code 1 when login fails."""
-        mock_args.return_value = MagicMock(
-            mode='daily',
-            use_proxy=False,
-            no_proxy=False,
-            input_file=None,
-            from_pipeline=False
-        )
+        result = run_uploader(QbUploaderOptions(mode='daily'))
+
+        assert result.error_reason == 'qb-unreachable'
+        assert result.exit_code == 1
+
+    @patch('javdb.integrations.qb.uploader.service.get_csv_filename')
+    @patch('javdb.integrations.qb.uploader.service.resolve_qb_uploader_csv_path')
+    @patch('javdb.integrations.qb.uploader.service.login_to_qbittorrent')
+    @patch('javdb.integrations.qb.uploader.service.read_csv_file')
+    @patch('javdb.integrations.qb.uploader.service.test_qbittorrent_connection')
+    @patch('javdb.integrations.qb.uploader.service.initialize_proxy_helper')
+    def test_exit_on_login_failure(
+        self, mock_init_proxy, mock_test_conn, mock_read_csv, mock_login,
+        mock_resolve, mock_get_csv,
+    ):
+        """exit_code is 1 when login to qBittorrent fails."""
+        from javdb.integrations.qb.uploader.service import run_uploader
+        from javdb.integrations.qb.uploader.options import QbUploaderOptions
+
         mock_init_proxy.return_value = None
         mock_test_conn.return_value = True
+        mock_resolve.return_value = MagicMock(source='latest', path=None)
+        mock_get_csv.return_value = 'fake.csv'
+        mock_read_csv.return_value = (
+            [{'magnet': 'magnet:?xt=urn:btih:a' * 1, 'title': 't', 'type': 'subtitle'}],
+            True,
+        )
         mock_login.return_value = False  # Login fails
-        
-        from apps.cli.qb.uploader import main
-        
-        with pytest.raises(SystemExit) as exc_info:
-            main()
-        
-        assert exc_info.value.code == 1
 
-    @patch('apps.cli.qb.uploader.read_csv_file')
-    @patch('apps.cli.qb.uploader.test_qbittorrent_connection')
-    @patch('apps.cli.qb.uploader.initialize_proxy_helper')
-    @patch('apps.cli.qb.uploader.parse_arguments')
-    def test_exit_on_csv_file_not_found(self, mock_args, mock_init_proxy, mock_test_conn, mock_read_csv):
-        """Test that script exits with code 1 when CSV file is not found."""
-        mock_args.return_value = MagicMock(
-            mode='adhoc',
-            use_proxy=False,
-            no_proxy=False,
-            input_file=None,
-            from_pipeline=False
-        )
+        result = run_uploader(QbUploaderOptions(mode='daily'))
+
+        assert result.error_reason == 'qb-login-failed'
+        assert result.exit_code == 1
+
+    @patch('javdb.integrations.qb.uploader.service.get_csv_filename')
+    @patch('javdb.integrations.qb.uploader.service.resolve_qb_uploader_csv_path')
+    @patch('javdb.integrations.qb.uploader.service.read_csv_file')
+    @patch('javdb.integrations.qb.uploader.service.test_qbittorrent_connection')
+    @patch('javdb.integrations.qb.uploader.service.initialize_proxy_helper')
+    def test_exit_on_csv_file_not_found(
+        self, mock_init_proxy, mock_test_conn, mock_read_csv, mock_resolve, mock_get_csv,
+    ):
+        """exit_code is 1 when the CSV file cannot be read end-to-end."""
+        from javdb.integrations.qb.uploader.service import run_uploader
+        from javdb.integrations.qb.uploader.options import QbUploaderOptions
+
         mock_init_proxy.return_value = None
         mock_test_conn.return_value = True
-        mock_read_csv.return_value = ([], False)  # File not found
-        
-        from apps.cli.qb.uploader import main
-        
-        with pytest.raises(SystemExit) as exc_info:
-            main()
-        
-        assert exc_info.value.code == 1
+        mock_resolve.return_value = MagicMock(source='latest', path=None)
+        mock_get_csv.return_value = 'fake.csv'
+        mock_read_csv.return_value = ([], False)  # File not found / unreadable
 
-    @patch('apps.cli.qb.uploader.read_csv_file')
-    @patch('apps.cli.qb.uploader.test_qbittorrent_connection')
-    @patch('apps.cli.qb.uploader.initialize_proxy_helper')
-    @patch('apps.cli.qb.uploader.parse_arguments')
-    def test_no_exit_when_csv_empty_but_exists(self, mock_args, mock_init_proxy, mock_test_conn, mock_read_csv):
-        """Test that script does NOT exit with error when CSV file exists but is empty."""
-        mock_args.return_value = MagicMock(
-            mode='daily',
-            use_proxy=False,
-            no_proxy=False,
-            input_file=None,
-            from_pipeline=False
-        )
+        result = run_uploader(QbUploaderOptions(mode='adhoc'))
+
+        assert result.csv_ok is False
+        assert result.exit_code == 1
+
+    @patch('javdb.integrations.qb.uploader.service.get_csv_filename')
+    @patch('javdb.integrations.qb.uploader.service.resolve_qb_uploader_csv_path')
+    @patch('javdb.integrations.qb.uploader.service.read_csv_file')
+    @patch('javdb.integrations.qb.uploader.service.test_qbittorrent_connection')
+    @patch('javdb.integrations.qb.uploader.service.initialize_proxy_helper')
+    def test_no_exit_when_csv_empty_but_exists(
+        self, mock_init_proxy, mock_test_conn, mock_read_csv, mock_resolve, mock_get_csv,
+    ):
+        """exit_code is 0 when the CSV exists but contains no torrents."""
+        from javdb.integrations.qb.uploader.service import run_uploader
+        from javdb.integrations.qb.uploader.options import QbUploaderOptions
+
         mock_init_proxy.return_value = None
         mock_test_conn.return_value = True
+        mock_resolve.return_value = MagicMock(source='latest', path=None)
+        mock_get_csv.return_value = 'fake.csv'
         mock_read_csv.return_value = ([], True)  # File exists but no torrents
-        
-        from apps.cli.qb.uploader import main
-        
-        # Should NOT raise SystemExit - just returns normally
-        result = main()
-        assert result is None
+
+        result = run_uploader(QbUploaderOptions(mode='daily'))
+
+        assert result.csv_ok is True
+        assert result.exit_code == 0
 
 
 class TestQbUploaderAdvanced:
     """Advanced test cases for qb_uploader functions."""
     
-    @patch('apps.cli.qb.uploader.get_proxies_dict')
+    @patch('javdb.integrations.qb.uploader.service.get_proxies_dict')
     def test_login_to_qbittorrent_success(self, mock_proxies):
         """Test successful login to qBittorrent."""
-        from apps.cli.qb.uploader import login_to_qbittorrent
+        from javdb.integrations.qb.uploader.service import login_to_qbittorrent
         mock_proxies.return_value = None
         
         mock_session = MagicMock()
@@ -488,10 +493,10 @@ class TestQbUploaderAdvanced:
         
         assert result is True
     
-    @patch('apps.cli.qb.uploader.get_proxies_dict')
+    @patch('javdb.integrations.qb.uploader.service.get_proxies_dict')
     def test_login_to_qbittorrent_failure(self, mock_proxies):
         """Test failed login to qBittorrent."""
-        from apps.cli.qb.uploader import login_to_qbittorrent
+        from javdb.integrations.qb.uploader.service import login_to_qbittorrent
         mock_proxies.return_value = None
         
         mock_session = MagicMock()
@@ -605,7 +610,7 @@ class TestReadCsvFile:
     
     def test_read_csv_file_not_found(self, temp_dir):
         """Test that read_csv_file returns ([], False) when file not found."""
-        from apps.cli.qb.uploader import read_csv_file
+        from javdb.integrations.qb.uploader.service import read_csv_file
         
         non_existent_file = os.path.join(temp_dir, 'nonexistent.csv')
         torrents, file_exists = read_csv_file(non_existent_file)
@@ -616,7 +621,7 @@ class TestReadCsvFile:
     def test_read_csv_file_exists_with_data(self, temp_dir):
         """Test that read_csv_file returns (data, True) when file exists with data."""
         import csv
-        from apps.cli.qb.uploader import read_csv_file
+        from javdb.integrations.qb.uploader.service import read_csv_file
         
         csv_file = os.path.join(temp_dir, 'test_torrents.csv')
         
@@ -646,7 +651,7 @@ class TestReadCsvFile:
     def test_read_csv_file_exists_but_empty(self, temp_dir):
         """Test that read_csv_file returns ([], True) when file exists but is empty."""
         import csv
-        from apps.cli.qb.uploader import read_csv_file
+        from javdb.integrations.qb.uploader.service import read_csv_file
 
         csv_file = os.path.join(temp_dir, 'empty_torrents.csv')
 
@@ -673,7 +678,7 @@ class TestReadCsvFile:
         subtitle silently lost the subtitle entry.
         """
         import csv
-        from apps.cli.qb.uploader import read_csv_file
+        from javdb.integrations.qb.uploader.service import read_csv_file
 
         csv_file = os.path.join(temp_dir, 'mixed_torrents.csv')
         with open(csv_file, 'w', newline='', encoding='utf-8-sig') as f:
@@ -712,9 +717,9 @@ class TestFindLatestAdhocCsv:
     def test_find_latest_adhoc_csv_no_files(self, temp_dir):
         """Test that function returns None when no adhoc CSV files exist."""
         from unittest.mock import patch
-        from apps.cli.qb.uploader import find_latest_adhoc_csv
+        from javdb.integrations.qb.uploader.service import find_latest_adhoc_csv
         
-        with patch('apps.cli.qb.uploader.AD_HOC_DIR', temp_dir):
+        with patch('javdb.integrations.qb.uploader.service.AD_HOC_DIR', temp_dir):
             result = find_latest_adhoc_csv()
             assert result is None
     
@@ -722,7 +727,7 @@ class TestFindLatestAdhocCsv:
         """Test that function finds a custom-named adhoc CSV file."""
         from unittest.mock import patch
         from datetime import datetime
-        from apps.cli.qb.uploader import find_latest_adhoc_csv
+        from javdb.integrations.qb.uploader.service import find_latest_adhoc_csv
         
         # Create dated directory structure
         current_date = datetime.now().strftime("%Y%m%d")
@@ -736,7 +741,7 @@ class TestFindLatestAdhocCsv:
         with open(custom_csv, 'w') as f:
             f.write('test')
         
-        with patch('apps.cli.qb.uploader.AD_HOC_DIR', temp_dir):
+        with patch('javdb.integrations.qb.uploader.service.AD_HOC_DIR', temp_dir):
             result = find_latest_adhoc_csv()
             assert result is not None
             assert 'Javdb_AdHoc_actors_ActorName' in result
@@ -746,7 +751,7 @@ class TestFindLatestAdhocCsv:
         import time
         from unittest.mock import patch
         from datetime import datetime
-        from apps.cli.qb.uploader import find_latest_adhoc_csv
+        from javdb.integrations.qb.uploader.service import find_latest_adhoc_csv
         
         # Create dated directory structure
         current_date = datetime.now().strftime("%Y%m%d")
@@ -767,7 +772,7 @@ class TestFindLatestAdhocCsv:
         with open(second_csv, 'w') as f:
             f.write('second')
         
-        with patch('apps.cli.qb.uploader.AD_HOC_DIR', temp_dir):
+        with patch('javdb.integrations.qb.uploader.service.AD_HOC_DIR', temp_dir):
             result = find_latest_adhoc_csv()
             assert result is not None
             assert 'SecondMaker' in result
@@ -777,7 +782,7 @@ class TestFindLatestAdhocCsv:
         import time
         from unittest.mock import patch
         from datetime import datetime, timedelta
-        from apps.cli.qb.uploader import find_latest_adhoc_csv
+        from javdb.integrations.qb.uploader.service import find_latest_adhoc_csv
         
         # Simulate yesterday's file (cross-midnight scenario)
         yesterday = datetime.now() - timedelta(days=1)
@@ -792,7 +797,7 @@ class TestFindLatestAdhocCsv:
         with open(yesterday_csv, 'w') as f:
             f.write('yesterday')
         
-        with patch('apps.cli.qb.uploader.AD_HOC_DIR', temp_dir):
+        with patch('javdb.integrations.qb.uploader.service.AD_HOC_DIR', temp_dir):
             result = find_latest_adhoc_csv()
             # Should find yesterday's file even though "today" is different
             assert result is not None
@@ -806,7 +811,7 @@ class TestGetCsvFilenameAdhocAutoDiscovery:
         """Test that get_csv_filename auto-discovers adhoc CSV in adhoc mode."""
         from unittest.mock import patch
         from datetime import datetime
-        from apps.cli.qb.uploader import get_csv_filename
+        from javdb.integrations.qb.uploader.service import get_csv_filename
         
         # Create dated directory structure
         current_date = datetime.now().strftime("%Y%m%d")
@@ -820,7 +825,7 @@ class TestGetCsvFilenameAdhocAutoDiscovery:
         with open(custom_csv, 'w') as f:
             f.write('test')
         
-        with patch('apps.cli.qb.uploader.AD_HOC_DIR', temp_dir):
+        with patch('javdb.integrations.qb.uploader.service.AD_HOC_DIR', temp_dir):
             result = get_csv_filename(mode='adhoc')
             assert result is not None
             assert 'video_codes_TEST' in result
@@ -829,11 +834,11 @@ class TestGetCsvFilenameAdhocAutoDiscovery:
         """Test that get_csv_filename falls back to default naming when no file found."""
         from unittest.mock import patch
         from datetime import datetime
-        from apps.cli.qb.uploader import get_csv_filename
+        from javdb.integrations.qb.uploader.service import get_csv_filename
         
         current_date = datetime.now().strftime("%Y%m%d")
         
-        with patch('apps.cli.qb.uploader.AD_HOC_DIR', temp_dir):
+        with patch('javdb.integrations.qb.uploader.service.AD_HOC_DIR', temp_dir):
             result = get_csv_filename(mode='adhoc')
             # Should fall back to default naming
             assert 'Javdb_TodayTitle' in result or 'AdHoc' in result
@@ -842,7 +847,7 @@ class TestGetCsvFilenameAdhocAutoDiscovery:
         """Test that daily mode auto-discovers existing CSV files."""
         from unittest.mock import patch
         from datetime import datetime
-        from apps.cli.qb.uploader import get_csv_filename
+        from javdb.integrations.qb.uploader.service import get_csv_filename
         
         # Create dated directory structure
         current_date = datetime.now().strftime("%Y%m%d")
@@ -856,7 +861,7 @@ class TestGetCsvFilenameAdhocAutoDiscovery:
         with open(daily_csv, 'w') as f:
             f.write('test')
         
-        with patch('apps.cli.qb.uploader.DAILY_REPORT_DIR', temp_dir):
+        with patch('javdb.integrations.qb.uploader.service.DAILY_REPORT_DIR', temp_dir):
             result = get_csv_filename(mode='daily')
             assert result is not None
             assert f'Javdb_TodayTitle_{current_date}.csv' in result
@@ -865,11 +870,11 @@ class TestGetCsvFilenameAdhocAutoDiscovery:
         """Test that daily mode falls back to default naming when no file found."""
         from unittest.mock import patch
         from datetime import datetime
-        from apps.cli.qb.uploader import get_csv_filename
+        from javdb.integrations.qb.uploader.service import get_csv_filename
         
         current_date = datetime.now().strftime("%Y%m%d")
         
-        with patch('apps.cli.qb.uploader.DAILY_REPORT_DIR', temp_dir):
+        with patch('javdb.integrations.qb.uploader.service.DAILY_REPORT_DIR', temp_dir):
             result = get_csv_filename(mode='daily')
             # Should fall back to default naming with current date
             assert f'Javdb_TodayTitle_{current_date}.csv' in result
@@ -878,7 +883,7 @@ class TestGetCsvFilenameAdhocAutoDiscovery:
         """Test that daily mode finds yesterday's file after midnight."""
         from unittest.mock import patch
         from datetime import datetime, timedelta
-        from apps.cli.qb.uploader import get_csv_filename
+        from javdb.integrations.qb.uploader.service import get_csv_filename
         
         # Simulate yesterday's file (cross-midnight scenario)
         yesterday = datetime.now() - timedelta(days=1)
@@ -893,7 +898,7 @@ class TestGetCsvFilenameAdhocAutoDiscovery:
         with open(yesterday_csv, 'w') as f:
             f.write('yesterday')
         
-        with patch('apps.cli.qb.uploader.DAILY_REPORT_DIR', temp_dir):
+        with patch('javdb.integrations.qb.uploader.service.DAILY_REPORT_DIR', temp_dir):
             result = get_csv_filename(mode='daily')
             # Should find yesterday's file since it's the most recent
             assert result is not None
@@ -905,7 +910,7 @@ class TestInitializeProxyHelper:
     
     def test_initialize_no_proxy(self):
         """Test initialization without proxy."""
-        from apps.cli.qb.uploader import initialize_proxy_helper
+        from javdb.integrations.qb.uploader.service import initialize_proxy_helper
         
         result = initialize_proxy_helper(False)
         
