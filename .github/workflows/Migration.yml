@@ -145,23 +145,17 @@ on:
         required: false
         type: boolean
         default: false
-      # ---- Runner ----
-      runner:
-        description: 'Runner type'
-        required: false
-        default: 'self-hosted'
-        type: choice
-        options:
-          - 'ubuntu-latest'
-          - 'self-hosted'
+      # Manual dispatch intentionally uses the default self-hosted runner.
+      # GitHub Actions allows at most 25 workflow_dispatch inputs; runner
+      # selection remains available to reusable workflow callers below.
 
   # Allow other workflows (e.g. WeeklyDedup.yml) to invoke this as a reusable workflow.
   # NOTE: The full authoritative input schema (with descriptions and choice
   # definitions) lives under `workflow_dispatch` above. The inputs below mirror
-  # that schema with minimal metadata because workflow_call inputs do not
-  # support `type: choice` and do not render descriptions in the UI. When adding
-  # or changing inputs, update `workflow_dispatch` first and keep this block in
-  # sync.
+  # that schema with minimal metadata, plus reusable-workflow-only controls such
+  # as runner and timeout_minutes. When adding or changing inputs, update
+  # `workflow_dispatch` first and keep this block in sync without exceeding the
+  # workflow_dispatch input cap.
   workflow_call:
     inputs:
       dry_run:
