@@ -16,6 +16,25 @@
 
 ---
 
+> **⚠ Divergence note (recorded during implementation, 2026-05-30).** Two gaps in
+> the steps below were found and fixed:
+> 1. **Local DDL parity (`init_db`) was missing.** Task 3 only re-aligns the
+>    *runtime* SQLite file via `sync_d1_to_sqlite`. But the repo also has a
+>    checked-in production schema initializer — `_HISTORY_DDL` in
+>    `javdb/storage/db/_db_migrations.py` (used by `init_db`) — and a guard test
+>    `tests/unit/test_rollback_full_fidelity.py::TestD1MigrationsAreCoveredByLocalSchema`
+>    that fails if any D1-migration table/column is absent from that local DDL.
+>    The three ADR-022 tables were added to `_HISTORY_DDL` verbatim (mirroring the
+>    D1 migration files) so the D1↔local schema-parity contract holds.
+>    **Rule for future migration phases:** a new D1 table must be added to BOTH
+>    `javdb/migrations/d1/*.sql` AND `_HISTORY_DDL`/`_REPORTS_DDL`/`_OPERATIONS_DDL`.
+> 2. **`CLOUDFLARE_API_TOKEN` unavailable locally.** `sync_d1_to_sqlite --apply
+>    --force-overwrite-all` needs that token (HTTP D1 API) and could not run in
+>    this session. The three tables were instead created in the local runtime
+>    `reports/history.db` by applying the committed migration DDL directly
+>    (same schema, no drift). The full force-overwrite reconciliation still runs
+>    in CI / can be run later when the token is present.
+
 ## Task 1 — MovieMetadata migration
 
 **Files:**
