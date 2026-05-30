@@ -62,3 +62,25 @@ class TestPreferenceGate:
     def test_gate_fails_open_on_exception(self, _cfg, _blocked):
         from javdb.integrations.qb.uploader import _preference_gate_blocks
         assert _preference_gate_blocks({'actor_link': '/actors/ANY'}) is False
+
+    @patch('javdb.integrations.qb.uploader.service._resolve_actor_link',
+           return_value='/actors/BLOCKED')
+    @patch('javdb.storage.repos.preference_repo.PreferenceRepo.is_actor_blocked',
+           return_value=True)
+    @patch('javdb.infra.config.cfg', side_effect=_cfg_side_effect_enabled)
+    def test_gate_resolves_actor_from_href_when_actor_link_absent(
+        self, _cfg, _blocked, _resolve
+    ):
+        from javdb.integrations.qb.uploader import _preference_gate_blocks
+        # No actor_link in the CSV row, but href is present -> resolve from history.
+        assert _preference_gate_blocks({'href': '/video/ABC-001'}) is True
+        _resolve.assert_called_once_with('/video/ABC-001')
+
+    @patch('javdb.integrations.qb.uploader.service._resolve_actor_link',
+           return_value='')
+    @patch('javdb.infra.config.cfg', side_effect=_cfg_side_effect_enabled)
+    def test_gate_allows_when_actor_link_unresolvable_from_href(
+        self, _cfg, _resolve
+    ):
+        from javdb.integrations.qb.uploader import _preference_gate_blocks
+        assert _preference_gate_blocks({'href': '/video/UNKNOWN'}) is False
