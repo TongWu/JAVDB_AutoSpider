@@ -168,3 +168,44 @@ def test_main_align_limit_per_worker_passed_through(monkeypatch):
 
     assert migrate_to_current.main() == 0
     assert calls['align_args'].limit_per_worker == 12
+
+
+def _install_metadata_stub(monkeypatch, calls):
+    """Stub ``backfill_movie_metadata`` and record its invocation."""
+    meta_mod = types.ModuleType('javdb.migrations.tools.backfill_movie_metadata')
+
+    def _run_backfill_metadata(args):
+        calls['meta_args'] = args
+        return 0
+
+    meta_mod.run_backfill_metadata = _run_backfill_metadata
+    monkeypatch.setitem(
+        sys.modules, 'javdb.migrations.tools.backfill_movie_metadata', meta_mod,
+    )
+
+
+def test_main_backfill_metadata_d1_auto_skips_schema(monkeypatch):
+    """Under STORAGE_BACKEND=d1 a --backfill-metadata run (no --skip-schema)
+    must auto-skip the local schema migration instead of aborting on a
+    missing reports/history.db, and still reach run_backfill_metadata.
+    """
+    calls = _install_main_stubs(monkeypatch)
+    _install_metadata_stub(monkeypatch, calls)
+
+    import javdb.migrations.tools.migrate_v7_to_v8 as v7_mod
+
+    def _record_schema(**_kwargs):
+        calls['schema_called'] = True
+        return 0
+
+    monkeypatch.setattr(v7_mod, 'run_schema_migration', _record_schema)
+    monkeypatch.setenv('STORAGE_BACKEND', 'd1')
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        ['migrate_to_current.py', '--backfill-metadata'],
+    )
+
+    assert migrate_to_current.main() == 0
+    assert 'schema_called' not in calls
+    assert 'meta_args' in calls
