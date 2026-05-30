@@ -31,11 +31,10 @@ class TestPreferenceGate:
         from javdb.integrations.qb.uploader import _preference_gate_blocks
         assert _preference_gate_blocks({}) is False
 
-    @patch('javdb.integrations.qb.uploader._preference_gate_blocks.__wrapped__', create=True)
     @patch('javdb.storage.repos.preference_repo.PreferenceRepo.is_actor_blocked',
            return_value=True)
     @patch('javdb.infra.config.cfg', side_effect=_cfg_side_effect_enabled)
-    def test_gate_blocks_when_actor_disliked(self, _cfg, _blocked, _wrap):
+    def test_gate_blocks_when_actor_disliked(self, _cfg, _blocked):
         from javdb.integrations.qb.uploader import _preference_gate_blocks
         assert _preference_gate_blocks({'actor_link': '/actors/BLOCKED'}) is True
 
@@ -84,3 +83,39 @@ class TestPreferenceGate:
     ):
         from javdb.integrations.qb.uploader import _preference_gate_blocks
         assert _preference_gate_blocks({'href': '/video/UNKNOWN'}) is False
+
+
+class TestResolveActorLink:
+    """Exercise the REAL _resolve_actor_link DB path (no mock), covering the
+    row['ActorLink'] key access against an actual sqlite connection."""
+
+    def _make_history_db(self, tmp_path):
+        import sqlite3
+        path = str(tmp_path / "history.db")
+        conn = sqlite3.connect(path)
+        conn.execute(
+            "CREATE TABLE MovieHistory (Href TEXT PRIMARY KEY, ActorLink TEXT)"
+        )
+        conn.execute(
+            "INSERT INTO MovieHistory(Href, ActorLink) VALUES (?, ?)",
+            ("/video/ABC-001", "/actors/XYZ"),
+        )
+        conn.commit()
+        conn.close()
+        return path
+
+    def test_resolve_returns_actorlink_by_href(self, tmp_path, monkeypatch):
+        import javdb.storage.db as db
+        from javdb.integrations.qb.uploader.service import _resolve_actor_link
+        monkeypatch.setattr(db, "HISTORY_DB_PATH", self._make_history_db(tmp_path))
+        assert _resolve_actor_link("/video/ABC-001") == "/actors/XYZ"
+
+    def test_resolve_returns_empty_for_missing_href(self, tmp_path, monkeypatch):
+        import javdb.storage.db as db
+        from javdb.integrations.qb.uploader.service import _resolve_actor_link
+        monkeypatch.setattr(db, "HISTORY_DB_PATH", self._make_history_db(tmp_path))
+        assert _resolve_actor_link("/video/MISSING") == ""
+
+    def test_resolve_returns_empty_for_blank_href(self):
+        from javdb.integrations.qb.uploader.service import _resolve_actor_link
+        assert _resolve_actor_link("") == ""
