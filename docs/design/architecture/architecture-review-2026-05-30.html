@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Architecture review — JAVDB AutoSpider (Rust/Go rewrite candidates)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+    </script>
+    <style>
+      .seam { stroke-dasharray: 4 4; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .deep { background: linear-gradient(135deg, #0f172a, #1e293b); }
+      .ghost { background: repeating-linear-gradient(135deg, #f1f5f9, #f1f5f9 8px, #e2e8f0 8px, #e2e8f0 16px); }
+      .strike { position: relative; }
+      .strike::after { content: ""; position: absolute; inset: 0; border-top: 2px solid #dc2626; transform: rotate(-6deg); transform-origin: center; }
+    </style>
+  </head>
+  <body class="bg-stone-50 text-slate-900 font-sans antialiased">
+    <main class="max-w-5xl mx-auto px-6 py-12 space-y-14">
+
+      <!-- HEADER -->
+      <header class="space-y-5">
+        <p class="text-xs uppercase tracking-[0.2em] text-slate-500">Architecture review · deepening through the Rust/Go lens</p>
+        <h1 class="text-4xl font-serif font-semibold leading-tight">JAVDB AutoSpider — what to rewrite in Rust/Go</h1>
+        <p class="text-sm text-slate-500">2026-05-30 · branch <span class="mono">claude/gifted-goldstine-6974af</span></p>
+
+        <div class="rounded-lg border border-slate-200 bg-white p-5 text-sm leading-relaxed">
+          <p class="mb-3"><span class="font-semibold">The finding in one line:</span> the project already made a large Rust bet — but the migration is <span class="font-semibold">half-finished</span>. The highest-value moves are not <em>new</em> rewrites; they are <em>finishing and consolidating</em> the Rust seams that are now shallow, doubled, or phantom.</p>
+          <div class="grid sm:grid-cols-3 gap-3 mt-4">
+            <div class="rounded border border-slate-200 p-3">
+              <div class="text-2xl font-semibold text-rose-600">~2,826</div>
+              <div class="text-xs text-slate-500 mt-1">lines of Python that <span class="font-medium">re-implement</span> Rust behind a parity-tested seam</div>
+            </div>
+            <div class="rounded border border-slate-200 p-3">
+              <div class="text-2xl font-semibold text-amber-600">1</div>
+              <div class="text-xs text-slate-500 mt-1">phantom Rust adapter (the HTTP requester) — exported, never called</div>
+            </div>
+            <div class="rounded border border-slate-200 p-3">
+              <div class="text-2xl font-semibold text-slate-700">0</div>
+              <div class="text-xs text-slate-500 mt-1">parts where the GIL is the bottleneck — the hot loop is I/O-bound</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- legend -->
+        <div class="flex flex-wrap gap-4 text-xs text-slate-500 pt-2">
+          <span class="inline-flex items-center gap-2"><span class="inline-block w-4 h-4 border-2 border-slate-700 bg-white"></span> module</span>
+          <span class="inline-flex items-center gap-2"><svg width="28" height="8"><line x1="0" y1="4" x2="28" y2="4" stroke="#475569" stroke-width="2" class="seam"/></svg> seam</span>
+          <span class="inline-flex items-center gap-2"><svg width="28" height="8"><line x1="0" y1="4" x2="28" y2="4" stroke="#dc2626" stroke-width="2"/></svg> leak / drift risk</span>
+          <span class="inline-flex items-center gap-2"><span class="inline-block w-4 h-4 deep"></span> deep module</span>
+          <span class="inline-flex items-center gap-2"><span class="inline-block w-4 h-4 ghost border border-slate-300"></span> dead / phantom</span>
+        </div>
+      </header>
+
+      <!-- ================= CANDIDATES ================= -->
+      <section id="candidates" class="space-y-12">
+
+        <!-- ===== CARD 1 ===== -->
+        <article id="c1" class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="px-6 pt-6 pb-4 border-b border-slate-100">
+            <div class="flex flex-wrap items-center gap-2 mb-3">
+              <span class="text-xs font-semibold uppercase tracking-wider px-2 py-1 rounded bg-emerald-100 text-emerald-800">Strong</span>
+              <span class="text-xs px-2 py-1 rounded bg-slate-100 text-slate-600 mono">in-process · PyO3</span>
+              <span class="text-xs px-2 py-1 rounded bg-rose-50 text-rose-700">~2,826 LOC to delete</span>
+            </div>
+            <h2 class="text-2xl font-serif font-semibold">1 · Collapse the Rust↔Python parity shadow</h2>
+            <p class="text-sm text-slate-500 mt-1">The seam fronts two full implementations that may not differ. Commit to Rust; delete the Python twin.</p>
+          </div>
+
+          <div class="px-6 py-5">
+            <p class="text-xs uppercase tracking-wider text-slate-400 mb-2">Files</p>
+            <ul class="mono text-sm text-slate-700 space-y-0.5 mb-6">
+              <li>javdb/parsing/fallback/{index,detail,tag}_parser.py <span class="text-slate-400">— 1,070</span></li>
+              <li>javdb/proxy/pool.py + ban_manager.py <span class="text-slate-400">— 942</span></li>
+              <li>javdb/spider/url_helper.py · parsing/magnet_categorize.py · infra/masking.py <span class="text-slate-400">— 814</span></li>
+              <li>guarded by tests/parity/ + tests/unit/test_magnet_parity.py</li>
+            </ul>
+
+            <!-- before/after: mass diagram, interface fronting two implementations -->
+            <div class="grid md:grid-cols-2 gap-4 mb-6">
+              <div class="rounded-lg border border-slate-200 p-4">
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">Before — shallow seam, doubled implementation</p>
+                <div class="space-y-2" style="min-height:300px">
+                  <div class="text-center text-[11px] uppercase tracking-wider text-slate-500">interface</div>
+                  <div class="h-8 rounded border-2 border-slate-700 bg-white flex items-center justify-center mono text-xs">parse_index_page() · ProxyPool · extract_magnets()</div>
+                  <div class="flex items-center justify-center text-slate-400 text-lg leading-none">⇣</div>
+                  <div class="grid grid-cols-2 gap-2">
+                    <div class="deep text-white rounded p-3 text-center">
+                      <div class="text-[10px] uppercase tracking-wider text-slate-300">Rust impl</div>
+                      <div class="text-xs mt-1">scraper / proxy / magnet</div>
+                      <div class="text-[10px] text-slate-400 mt-2">fast path</div>
+                    </div>
+                    <div class="ghost rounded p-3 text-center border border-slate-300">
+                      <div class="text-[10px] uppercase tracking-wider text-slate-500">Python shadow</div>
+                      <div class="text-xs mt-1 text-slate-700">fallback re-impl</div>
+                      <div class="text-[10px] text-slate-500 mt-2">~2,826 LOC</div>
+                    </div>
+                  </div>
+                  <div class="flex items-center justify-center">
+                    <svg width="200" height="26"><line x1="50" y1="13" x2="150" y2="13" stroke="#dc2626" stroke-width="2" class="seam"/><text x="100" y="9" text-anchor="middle" font-size="9" fill="#dc2626">parity tests hold the two in lockstep</text></svg>
+                  </div>
+                </div>
+              </div>
+
+              <div class="rounded-lg border border-emerald-200 bg-emerald-50/30 p-4">
+                <p class="text-xs uppercase tracking-wider text-emerald-600 mb-3">After — one implementation behind the seam</p>
+                <div class="space-y-2" style="min-height:300px">
+                  <div class="text-center text-[11px] uppercase tracking-wider text-slate-500">interface (unchanged)</div>
+                  <div class="h-8 rounded border-2 border-slate-700 bg-white flex items-center justify-center mono text-xs">parse_index_page() · ProxyPool · extract_magnets()</div>
+                  <div class="flex items-center justify-center text-slate-400 text-lg leading-none">⇣</div>
+                  <div class="deep text-white rounded p-6 text-center">
+                    <div class="text-[10px] uppercase tracking-wider text-slate-300">Rust impl — the only adapter</div>
+                    <div class="text-sm mt-2">prebuilt wheel = hard dependency</div>
+                  </div>
+                  <div class="text-center text-xs text-slate-400 mt-2">Python shadow + parity tests retired</div>
+                  <div class="ghost border border-slate-300 rounded p-2 text-center strike">
+                    <span class="text-[11px] text-slate-500 mono">~2,826 LOC deleted</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-x-8 gap-y-3 text-sm">
+              <div>
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-1">Problem</p>
+                <p class="text-slate-700">Two adapters justify a seam only when behaviour varies across it — here both are required to be <em>identical</em>, enforced by parity tests. The seam fronts duplicated locality, not variation.</p>
+              </div>
+              <div>
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-1">Solution</p>
+                <p class="text-slate-700">Ship the Rust wheel as a hard dependency (CI already builds it). Delete the Python re-implementations; reduce the import-fallback to a clear "Rust core required" error.</p>
+              </div>
+              <div class="md:col-span-2">
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-1">Wins</p>
+                <ul class="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-slate-700 list-disc list-inside">
+                  <li>locality: one place per behaviour</li>
+                  <li>delete ~2,826 LOC + parity suite</li>
+                  <li>inverted deletion test: drop Python, complexity does <em>not</em> reappear</li>
+                  <li>drift class disappears (no two-language lockstep)</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="mt-5 rounded-md bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-900">
+              <span class="font-semibold">Tradeoff to weigh:</span> the Python shadow buys pure-Python portability (run with no Rust toolchain). If that fallback is genuinely load-bearing for some deploy target, this becomes "Worth exploring" rather than Strong — the first grilling question.
+            </div>
+          </div>
+        </article>
+
+        <!-- ===== CARD 2 ===== -->
+        <article id="c2" class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="px-6 pt-6 pb-4 border-b border-slate-100">
+            <div class="flex flex-wrap items-center gap-2 mb-3">
+              <span class="text-xs font-semibold uppercase tracking-wider px-2 py-1 rounded bg-amber-100 text-amber-800">Worth exploring</span>
+              <span class="text-xs px-2 py-1 rounded bg-slate-100 text-slate-600 mono">in-process · PyO3</span>
+              <span class="text-xs px-2 py-1 rounded bg-amber-50 text-amber-700">phantom adapter</span>
+            </div>
+            <h2 class="text-2xl font-serif font-semibold">2 · Resolve the phantom HTTP requester</h2>
+            <p class="text-sm text-slate-500 mt-1">A Rust fetch adapter is exported but never called; the real fetch is a 1,655-line Python cascade.</p>
+          </div>
+
+          <div class="px-6 py-5">
+            <p class="text-xs uppercase tracking-wider text-slate-400 mb-2">Files</p>
+            <ul class="mono text-sm text-slate-700 space-y-0.5 mb-6">
+              <li>javdb/infra/request.py <span class="text-slate-400">— 1,655 (live Python cascade)</span></li>
+              <li>javdb/spider/fetch/fetch_engine.py <span class="text-slate-400">— 1,924 (worker threads)</span></li>
+              <li>javdb/rust_core/src/requester/handler.rs <span class="text-slate-400">— 841 (the dead adapter)</span></li>
+            </ul>
+
+            <div class="grid md:grid-cols-2 gap-4 mb-6">
+              <div class="rounded-lg border border-slate-200 p-4">
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-2">Before — one live adapter, one phantom</p>
+                <pre class="mermaid" style="min-height:280px">
+flowchart TB
+  S[Spider fetch_engine] --> P[request.py<br/>Python cascade]
+  P --> R1[requests]
+  P --> R2[curl_cffi<br/>TLS impersonation]
+  P --> R3[CF-bypass service]
+  RC[RequestConfig] -.seam.-> RH[RustRequestHandler<br/>exported · never called]
+  RH -.-> X[reqwest]
+  classDef dead fill:#f1f5f9,stroke:#94a3b8,stroke-dasharray:4 4,color:#64748b;
+  classDef live fill:#0f172a,color:#fff,stroke:#0f172a;
+  class RH,X dead
+  class P live
+                </pre>
+              </div>
+              <div class="rounded-lg border border-emerald-200 bg-emerald-50/30 p-4">
+                <p class="text-xs uppercase tracking-wider text-emerald-600 mb-2">After — pick one honest path</p>
+                <pre class="mermaid" style="min-height:280px">
+flowchart TB
+  subgraph A["Option A — wire Rust, retire Python cascade"]
+    S1[Spider] --> RH1[RustRequestHandler<br/>the only fetch adapter]
+  end
+  subgraph B["Option B — delete the phantom"]
+    S2[Spider] --> P2[request.py<br/>Python = canonical]
+    note[remove dead Rust requester]
+  end
+  classDef live fill:#0f172a,color:#fff,stroke:#0f172a;
+  class RH1,P2 live
+                </pre>
+              </div>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-x-8 gap-y-3 text-sm">
+              <div>
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-1">Problem</p>
+                <p class="text-slate-700">The requester seam has one live adapter (Python) and one dead one (Rust, surfaced only in a status flag). A phantom adapter gives zero leverage and reads as a real option that isn't.</p>
+              </div>
+              <div>
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-1">Solution</p>
+                <p class="text-slate-700">Either wire <span class="mono">RustRequestHandler</span> as the real fetch path and retire the Python cascade, or delete the dead adapter and make Python canonical. Don't keep both.</p>
+              </div>
+              <div class="md:col-span-2">
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-1">Wins</p>
+                <ul class="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-slate-700 list-disc list-inside">
+                  <li>kill a phantom seam</li>
+                  <li>one fetch implementation, one place to test</li>
+                  <li>Option B is cheap and removes dead code today</li>
+                  <li>Option A concentrates TLS/CF-bypass logic in Rust</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="mt-5 rounded-md bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-900">
+              <span class="font-semibold">Why only "Worth exploring":</span> this path is <em>I/O-bound</em> (Card 4) — Rust buys no throughput here. The win is locality, not speed. And <span class="mono">curl_cffi</span>'s JA3/TLS impersonation is the load-bearing trick against Cloudflare; <span class="mono">reqwest</span> does not replicate it trivially. <span class="font-semibold">Option B (delete the phantom) is the safe, immediate move;</span> Option A is a real research project.
+            </div>
+          </div>
+        </article>
+
+        <!-- ===== CARD 3 ===== -->
+        <article id="c3" class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="px-6 pt-6 pb-4 border-b border-slate-100">
+            <div class="flex flex-wrap items-center gap-2 mb-3">
+              <span class="text-xs font-semibold uppercase tracking-wider px-2 py-1 rounded bg-slate-200 text-slate-700">Speculative</span>
+              <span class="text-xs px-2 py-1 rounded bg-slate-100 text-slate-600 mono">long-lived service · Go</span>
+              <span class="text-xs px-2 py-1 rounded bg-amber-100 text-amber-800">⚠ contradicts ADR-017</span>
+            </div>
+            <h2 class="text-2xl font-serif font-semibold">3 · FastAPI backend → Go</h2>
+            <p class="text-sm text-slate-500 mt-1">The only persistent service — but rewriting the language doesn't fix its real depth problem.</p>
+          </div>
+
+          <div class="px-6 py-5">
+            <p class="text-xs uppercase tracking-wider text-slate-400 mb-2">Files</p>
+            <ul class="mono text-sm text-slate-700 space-y-0.5 mb-6">
+              <li>apps/api/ <span class="text-slate-400">— ~6,500 LOC, 15 routers, uvicorn Docker service</span></li>
+              <li>javdb-autospider-web/server/ <span class="text-slate-400">— TS Worker mirror (separate repo)</span></li>
+            </ul>
+
+            <div class="grid md:grid-cols-2 gap-4 mb-6">
+              <div class="rounded-lg border border-slate-200 p-4">
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">Before — two adapters over one overlapping surface</p>
+                <div class="relative" style="min-height:280px">
+                  <div class="absolute left-1/2 -translate-x-1/2 top-0 w-40 text-center rounded border-2 border-slate-700 bg-white p-2 text-xs mono">Vue SPA<br/><span class="text-slate-400">(frontend)</span></div>
+                  <div class="absolute left-2 top-24 w-40 rounded border-2 border-slate-700 bg-white p-2 text-xs mono">Python API<br/><span class="text-slate-400">apps/api · subprocess exec</span></div>
+                  <div class="absolute right-2 top-24 w-40 rounded border-2 border-slate-700 bg-white p-2 text-xs mono">TS Worker<br/><span class="text-slate-400">D1 + GH dispatch</span></div>
+                  <div class="absolute left-1/2 -translate-x-1/2 bottom-2 w-56 text-center rounded border-2 border-rose-400 bg-rose-50 p-2 text-[11px]">overlapping surface<br/><span class="text-slate-500">D1 queries · auth (JWT) · response shapes</span></div>
+                  <svg class="absolute inset-0 w-full h-full" style="z-index:-1">
+                    <line x1="50%" y1="56" x2="22%" y2="96" stroke="#475569" stroke-width="1.5"/>
+                    <line x1="50%" y1="56" x2="78%" y2="96" stroke="#475569" stroke-width="1.5"/>
+                    <line x1="22%" y1="150" x2="50%" y2="220" stroke="#dc2626" stroke-width="1.5" class="seam"/>
+                    <line x1="78%" y1="150" x2="50%" y2="220" stroke="#dc2626" stroke-width="1.5" class="seam"/>
+                  </svg>
+                  <div class="absolute left-1/2 -translate-x-1/2 top-44 text-[10px] text-rose-600">ADR-017: must stay in sync ↕</div>
+                </div>
+              </div>
+              <div class="rounded-lg border border-slate-200 p-4">
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">After (Go) — a third copy of the same surface</p>
+                <div class="relative" style="min-height:280px">
+                  <div class="absolute left-1/2 -translate-x-1/2 top-0 w-40 text-center rounded border-2 border-slate-700 bg-white p-2 text-xs mono">Vue SPA</div>
+                  <div class="absolute left-1 top-24 w-28 rounded border-2 border-slate-400 bg-white p-2 text-[11px] mono">Go API</div>
+                  <div class="absolute left-1/2 -translate-x-1/2 top-24 w-28 rounded border-2 border-slate-400 bg-white p-2 text-[11px] mono">TS Worker</div>
+                  <div class="absolute right-1 top-24 w-28 rounded border-2 border-slate-300 ghost p-2 text-[11px] mono text-slate-500">Python?</div>
+                  <div class="absolute left-1/2 -translate-x-1/2 bottom-2 w-56 text-center rounded border-2 border-rose-500 bg-rose-50 p-2 text-[11px]">overlapping surface<br/><span class="text-rose-600 font-semibold">now drifts 3 ways</span></div>
+                  <div class="absolute left-1/2 -translate-x-1/2 top-44 text-[10px] text-rose-600 text-center w-48">language rewrite ≠ depth gain</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-x-8 gap-y-3 text-sm">
+              <div>
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-1">Problem</p>
+                <p class="text-slate-700">The real friction isn't the language — it's that D1 queries + auth + response shapes are duplicated across Python and TS already (a shallow seam replicated by hand). Go adds a third site of the same logic.</p>
+              </div>
+              <div>
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-1">Solution</p>
+                <p class="text-slate-700">If touched at all: deepen the <span class="mono">overlapping surface</span> into one shared contract (extend ADR-018 Contract Golden) before — or instead of — changing language.</p>
+              </div>
+            </div>
+
+            <div class="mt-5 rounded-md bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-900">
+              <span class="font-semibold">⚠ Contradicts ADR-017 (dual-backend sync) — but worth naming because</span> the duplication ADR-017 manages by discipline is itself the depth problem. A Go rewrite makes the discipline harder, not easier. Reopen ADR-017/ADR-018 only if you want to attack the duplication directly; otherwise leave Python in place.
+            </div>
+          </div>
+        </article>
+
+        <!-- ===== CARD 4 ===== -->
+        <article id="c4" class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="px-6 pt-6 pb-4 border-b border-slate-100">
+            <div class="flex flex-wrap items-center gap-2 mb-3">
+              <span class="text-xs font-semibold uppercase tracking-wider px-2 py-1 rounded bg-slate-800 text-white">Do not rewrite</span>
+              <span class="text-xs px-2 py-1 rounded bg-slate-100 text-slate-600 mono">cross-process concurrency</span>
+            </div>
+            <h2 class="text-2xl font-serif font-semibold">4 · The spider hot loop — the obvious candidate that isn't</h2>
+            <p class="text-sm text-slate-500 mt-1">"Rewrite the scraper in Go for concurrency" is the tempting move. The numbers say no.</p>
+          </div>
+
+          <div class="px-6 py-5">
+            <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">One page-scrape, by time spent</p>
+            <!-- cross-section: a single request's timeline -->
+            <div class="rounded-lg border border-slate-200 p-4 mb-6" style="min-height:150px">
+              <div class="flex w-full h-16 rounded overflow-hidden border border-slate-300 text-[11px] text-white">
+                <div class="bg-slate-600 flex items-center justify-center" style="width:58%">throttle + sleep <span class="hidden sm:inline">&nbsp;(6–20s, GIL released)</span></div>
+                <div class="bg-sky-700 flex items-center justify-center" style="width:36%">network I/O <span class="hidden sm:inline">&nbsp;(GIL released)</span></div>
+                <div class="deep flex items-center justify-center" style="width:6%" title="Rust parse">parse</div>
+              </div>
+              <div class="flex justify-between text-[10px] text-slate-500 mt-2">
+                <span>← almost all wall-clock is sleep + network (I/O-bound)</span>
+                <span>Rust parse ≈ a sliver →</span>
+              </div>
+              <div class="mt-4 text-sm text-slate-700">Parallelism is achieved <span class="font-semibold">across processes</span> — GitHub Actions runner matrix, coordinated by the Cloudflare <span class="mono">RunnerRegistry</span> / <span class="mono">MovieClaim</span> Durable Objects — not within one process. HTML parsing is already offloaded to Rust. The GIL never gates throughput.</div>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-x-8 gap-y-3 text-sm">
+              <div>
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-1">Why not</p>
+                <ul class="text-slate-700 list-disc list-inside space-y-1">
+                  <li>I/O-bound: threads already release the GIL</li>
+                  <li>CPU sliver (parse) is already Rust</li>
+                  <li>scale = more runners, not more threads</li>
+                </ul>
+              </div>
+              <div>
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-1">Instead</p>
+                <ul class="text-slate-700 list-disc list-inside space-y-1">
+                  <li>add runner shards (cross-process)</li>
+                  <li>ensure the Rust wheel is installed (Card 1)</li>
+                  <li>tune coordinator throttle, not the language</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </article>
+
+      </section>
+
+      <!-- ================= TOP RECOMMENDATION ================= -->
+      <section id="top-recommendation">
+        <div class="rounded-xl deep text-white p-7 shadow-md">
+          <p class="text-xs uppercase tracking-[0.2em] text-slate-300 mb-3">Top recommendation</p>
+          <h2 class="text-2xl font-serif font-semibold mb-3">Start with <a href="#c1" class="underline decoration-emerald-400 underline-offset-4">Card 1 — collapse the Rust↔Python parity shadow</a>.</h2>
+          <p class="text-sm text-slate-200 leading-relaxed max-w-3xl">
+            It is the highest leverage, lowest risk move and it directly answers the question: the parts worth having in Rust <em>are already in Rust</em>. The work is to <span class="font-semibold text-white">finish the migration</span> — delete ~2,826 lines of Python shadow and the parity suite that holds them in lockstep — turning a doubled, shallow seam into a single deep one. Card 2 (delete the phantom requester) is the natural follow-on. Card 3 stays parked behind ADR-017, and Card 4 is a deliberate <span class="font-semibold text-white">"don't."</span>
+          </p>
+          <p class="text-xs text-slate-400 mt-4">The one decision that gates everything: is the pure-Python fallback still a real deploy target? That's where the grilling should start.</p>
+        </div>
+      </section>
+
+    </main>
+  </body>
+</html>

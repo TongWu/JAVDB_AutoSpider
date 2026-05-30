@@ -240,7 +240,7 @@ from javdb.spider.filename_helper import (
 )
 
 # Import proxy pool
-from javdb.proxy.pool import ProxyPool, create_proxy_pool_from_config
+from javdb.proxy.pool import create_proxy_pool_from_config
 
 # Import unified request handler
 from javdb.infra.request import RequestHandler, RequestConfig, create_request_handler_from_config
@@ -332,7 +332,7 @@ class MovieSleepManager:
 movie_sleep_mgr = MovieSleepManager(MOVIE_SLEEP_MIN, MOVIE_SLEEP_MAX)
 
 # Global proxy pool instance (will be initialized in main)
-global_proxy_pool: Optional[ProxyPool] = None
+global_proxy_pool: Optional[Any] = None
 
 # Global request handler instance (will be initialized in main)
 global_request_handler: Optional[RequestHandler] = None
