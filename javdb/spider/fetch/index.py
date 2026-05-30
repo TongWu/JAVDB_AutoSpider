@@ -18,6 +18,7 @@ from javdb.pipeline.policies import (
 import javdb.spider.runtime.state as state
 from javdb.spider.fetch.fallback import get_page_url, fetch_index_page_with_fallback
 from javdb.spider.runtime.sleep import ensure_sleep_runtime, movie_sleep_mgr
+from javdb.ops.sentinel import field_health as _sentinel_field_health
 
 logger = get_logger(__name__)
 
@@ -121,6 +122,8 @@ def _fetch_all_index_pages_sequential(
     consecutive_empty_pages = 0
     csv_name_resolved = False
 
+    _sentinel_field_health.start_run()  # ADR-035: begin per-run field-health
+
     while True:
         if cancel_event is not None and cancel_event.is_set():
             logger.info("Index page fetch cancelled")
@@ -174,6 +177,10 @@ def _fetch_all_index_pages_sequential(
 
         page_result = parse_index_page(index_html, page_num)
 
+        _acc = _sentinel_field_health.current()
+        if _acc is not None and page_result is not None:
+            _acc.observe("index", page_result.movies)  # ADR-035 piggyback
+
         if phase_mode in ['1', 'all']:
             page_results = select_index_entries(
                 page_result,
@@ -225,6 +232,8 @@ def _fetch_all_index_pages_sequential(
         _sleep_manager(runtime).sleep()
 
     logger.info(f"Fetched and parsed {last_valid_page - start_page + 1 if last_valid_page >= start_page else 0} pages")
+
+    _sentinel_field_health.persist_run()  # ADR-035: persist run field-health (best-effort)
 
     return _post_process_index_results(
         {
