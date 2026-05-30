@@ -62,6 +62,68 @@ from javdb.infra.logging import setup_logging, get_logger
 setup_logging(UPLOADER_LOG_FILE, LOG_LEVEL)
 logger = get_logger(__name__)
 
+
+def _resolve_actor_link(href: str) -> str:
+    """Return the lead actor's href for a movie *href* from MovieHistory.
+
+    The qB-upload CSV carries no ``actor_link`` column, but ``MovieHistory``
+    already stores ``ActorLink`` per movie. Returns '' on any miss/error.
+    The aliased column + key access keeps this D1/Dual-safe.
+    """
+    if not href:
+        return ''
+    try:
+        from javdb.storage.db import get_db, HISTORY_DB_PATH
+        with get_db(HISTORY_DB_PATH) as conn:
+            row = conn.execute(
+                "SELECT ActorLink AS ActorLink FROM MovieHistory WHERE Href = ?",
+                (href,),
+            ).fetchone()
+        if row is None:
+            return ''
+        return row["ActorLink"] or ''
+    except Exception:
+        logger.debug(
+            "actor_link resolution failed for %s — failing open", href,
+            exc_info=True,
+        )
+        return ''
+
+
+def _preference_gate_blocks(torrent: dict) -> bool:
+    """Return True if the preference gate should block this torrent upload.
+
+    Disabled by default (PREFERENCE_GATE_ENABLED = False in config.py).
+    When enabled, blocks upload if the movie's lead actor has an explicit
+    hearted=0 entry in ContentPreferences.
+
+    The qB-upload CSV has no ``actor_link`` column, so when one isn't supplied
+    directly the lead actor's href is resolved from ``MovieHistory`` via the
+    movie ``href`` (which the CSV does carry).
+
+    Fails open: any exception returns False so a DB error never blocks uploads.
+
+    This is the ADR-022 rule-based placeholder. ADR-025 replaces the body of
+    this function with a model-score-based gate without changing its signature.
+    """
+    from javdb.infra.config import cfg
+    if not cfg('PREFERENCE_GATE_ENABLED', False):
+        return False
+    actor_href = torrent.get('actor_link', '')
+    if not actor_href:
+        actor_href = _resolve_actor_link(torrent.get('href', ''))
+    if not actor_href:
+        return False
+    try:
+        from javdb.storage.repos.preference_repo import PreferenceRepo
+        return PreferenceRepo().is_actor_blocked(actor_href)
+    except Exception:
+        logger.debug(
+            "Preference gate check failed — failing open", exc_info=True
+        )
+        return False
+
+
 # Workflow adapters (IMP-ADR015-01)
 from javdb.workflow.artifact_inputs import (
     resolve_qb_uploader_csv_path,
@@ -424,6 +486,14 @@ def read_csv_file(filename):
         href = row.get('href', '')
         video_code = row.get('video_code', '')
 
+        # Evaluate the preference gate once per row (the decision is the same
+        # for all four torrent columns) to avoid a redundant actor lookup +
+        # ContentPreferences query per column.
+        row_blocked = _preference_gate_blocks({
+            'actor_link': row.get('actor_link', ''),
+            'href': href,
+        })
+
         for col, label, ttype in torrent_columns:
             raw = row.get(col)
             if not raw:
@@ -434,6 +504,12 @@ def read_csv_file(filename):
             if is_downloaded_torrent(magnet):
                 logger.debug(
                     f"Skipping downloaded torrent: {video_code} [{label}]"
+                )
+                skipped_count += 1
+                continue
+            if row_blocked:
+                logger.debug(
+                    "Preference gate blocked: %s [%s]", video_code, label
                 )
                 skipped_count += 1
                 continue
