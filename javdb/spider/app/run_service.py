@@ -590,6 +590,14 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
                     db_get_session_status as _db_get_session_status,
                 )
                 _set_active_session_id(_session_id)
+                # ADR-035: the index fetch above filled the field-health
+                # accumulator BEFORE this session existed (the CSV name, and
+                # thus the session, can only be resolved from the fetch
+                # result). Persist it now that the active session id is set so
+                # the commit gate can read this run's fills. Best-effort:
+                # field_health.persist_run swallows its own errors.
+                from javdb.ops.sentinel import field_health as _sentinel_fh
+                _sentinel_fh.persist_run()
                 _emit_event("RunStarted", session_id=str(_session_id),
                             entity_type="session", entity_id=str(_session_id),
                             run_id=run_id, run_attempt=run_attempt)  # ADR-036

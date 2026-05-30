@@ -23,6 +23,7 @@ python3 -m apps.cli.<command> [options]
 - [Operations Diagnosis CLI](#operations-diagnosis-cli) (`apps.cli.ops.diagnose_run`)
 - [Content Filter CLI](#content-filter-cli) (`apps.cli.ops.content_filter`)
 - [Event Spine Consumer CLI](#event-spine-consumer-cli) (`apps.cli.ops.events`)
+- [Site-Contract Sentinel CLI](#site-contract-sentinel-cli) (`apps.cli.ops.sentinel`)
 - [Config Generator CLI](#config-generator-cli) (`apps.cli.config_generator`)
 - [Complete Spider Argument Reference](#complete-spider-argument-reference)
 
@@ -700,6 +701,46 @@ python3 -m apps.cli.ops.events
 
 # Rebuild the projection from scratch (idempotent — same result)
 python3 -m apps.cli.ops.events --replay
+```
+
+---
+
+## Site-Contract Sentinel CLI
+
+**Module:** `apps.cli.ops.sentinel`
+
+Evaluates a session's persisted parse field-health for site-contract drift
+(ADR-035). It reads the `ParseRunFieldFill` rows recorded during the run and
+scores each field against the declarative parse contract: `critical` fields are
+checked against an absolute minimum fill-rate, `soft` fields against their
+rolling baseline. The command is read-only and exits with code `4` when critical
+drift is detected, so a workflow can gate on it.
+
+### Arguments
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--session-id` | Pipeline session ID in `YYYYMMDDTHHMMSS.ffffffZ-TTTT-SSSS` format whose field-health to evaluate. Required. | — |
+| `--run-id` | GitHub Actions run ID to associate with the evaluation. | `None` |
+| `--attempt` | GitHub Actions run attempt. Stored as `run_attempt`. | `None` |
+| `--json` | Print the verdict as a JSON payload instead of a log summary. | `False` |
+| `--log-level` | Logging level. Choices: `DEBUG`, `INFO`, `WARNING`, `ERROR`. | `INFO` |
+
+Exit code `4` means critical drift was detected for the session; otherwise the
+exit code is `0`.
+
+### Examples
+
+```bash
+# Evaluate a session's field-health and log the verdict
+python3 -m apps.cli.ops.sentinel --session-id 20260527T120000.000000Z-0001-0001
+
+# Print the verdict as JSON for downstream email/API use
+python3 -m apps.cli.ops.sentinel \
+  --session-id 20260527T120000.000000Z-0001-0001 \
+  --run-id 123456789 \
+  --attempt 1 \
+  --json
 ```
 
 ---

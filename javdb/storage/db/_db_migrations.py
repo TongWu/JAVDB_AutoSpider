@@ -435,6 +435,24 @@ CREATE TABLE IF NOT EXISTS RunEventSummary (
     count       INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (session_id, event_type)
 );
+
+-- Site-Contract Drift Sentinel (ADR-035 Phase 1). Mirrors
+-- javdb/migrations/d1/2026_05_29_add_parse_run_field_fill.sql so a fresh local
+-- init_db() builds it too (not just the remote D1 migration). Enrichment, off
+-- the Pending->Commit path.
+CREATE TABLE IF NOT EXISTS ParseRunFieldFill (
+    session_id    TEXT NOT NULL,
+    page_type     TEXT NOT NULL,
+    field         TEXT NOT NULL,
+    fill_rate     REAL NOT NULL,
+    sample_count  INTEGER NOT NULL,
+    committed     INTEGER NOT NULL DEFAULT 0,
+    observed_at   TEXT,
+    PRIMARY KEY (session_id, page_type, field)
+);
+CREATE INDEX IF NOT EXISTS idx_prff_field_committed
+    ON ParseRunFieldFill(page_type, field, committed, observed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_prff_session ON ParseRunFieldFill(session_id);
 """
 
 _OPERATIONS_DDL = _SCHEMA_VERSION_DDL + """
