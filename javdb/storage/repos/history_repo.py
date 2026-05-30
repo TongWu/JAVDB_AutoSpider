@@ -417,6 +417,11 @@ class HistoryRepo:
         from javdb.storage.db import db_commit_session_history
         return db_commit_session_history(session_id, **kwargs)
 
+    def resume_finalizing_session(self, session_id: str, **kwargs) -> dict:
+        """Idempotently finish a session left in ``Status='finalizing'``."""
+        from javdb.storage.db import db_resume_finalizing_session
+        return db_resume_finalizing_session(session_id, **kwargs)
+
     def batch_update_last_visited(self, hrefs: List[str]) -> int:
         """Bump LastVisited on each href; staging-aware under pending mode."""
         from javdb.storage.db import (
