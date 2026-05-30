@@ -5,7 +5,7 @@
 | **状态**   | Accepted —— Phase 1（Python golden）已于 2026-05-29 实现；Phase 2（TS 消费）待做 |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
-| **关联**   | [ADR-029](../ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md)（auth 加固 — token 撤销归它）、[ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md)（双后端拆分）、[ADR-010](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.md)（D1 访问端口） |
+| **关联**   | [ADR-029](../ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md)（auth 加固 — token 撤销归它）、[ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md)（双后端拆分）、[ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md)（D1 访问端口） |
 
 > 源自 2026-05-29 架构审查（候选 B）：[architecture-review-2026-05-29.zh.html](../architecture/architecture-review-2026-05-29.zh.html)。
 

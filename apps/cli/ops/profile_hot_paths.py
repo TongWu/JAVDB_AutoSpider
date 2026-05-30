@@ -25,9 +25,9 @@ Design notes:
   flagged in the W4 plan (10x speed-up target).
 * DB benchmarks (3) intentionally use an in-memory SQLite so the
   reported time is bound by Python prep cost rather than disk I/O.
-* Proxy pool benchmarks (5) report both the round-robin and
-  health-weighted paths separately so the random.choices overhead is
-  visible.
+* Proxy benchmark (1) covers the pure-Python ``is_proxy_usable`` predicate;
+  the pool selection paths now live in the Rust core (ADR-041 Rust-Required)
+  and are profiled there, not here.
 """
 
 from __future__ import annotations
@@ -331,39 +331,9 @@ def bench_category_to_indicators(iterations: int) -> Dict[str, float]:
 # ---------------------------------------------------------------------------
 
 
-def _build_pool(n_proxies: int = 5):
-    """Build a ProxyPool with ``n_proxies`` fake proxies."""
-    from javdb.proxy.pool import ProxyPool
-    pool = ProxyPool()
-    for i in range(n_proxies):
-        pool.add_proxy(
-            http_url=f"http://10.0.0.{i+1}:8080",
-            https_url=f"http://10.0.0.{i+1}:8080",
-            name=f"P{i+1}",
-        )
-    return pool
-
-
-def bench_get_next_proxy_rr(iterations: int) -> Dict[str, float]:
-    """Round-robin proxy selection (no health provider)."""
-    pool = _build_pool()
-    return _bench(
-        "get_next_proxy_rr", iterations,
-        lambda: pool.get_next_proxy(),
-    )
-
-
-def bench_get_next_proxy_weighted(iterations: int) -> Dict[str, float]:
-    """Health-weighted proxy selection."""
-    pool = _build_pool()
-    # Stable scores so random.choices runs the full weighting math.
-    pool.set_health_provider(lambda name: 0.5 + 0.1 * (hash(name) % 5))
-    return _bench(
-        "get_next_proxy_weighted", iterations,
-        lambda: pool.get_next_proxy(),
-    )
-
-
+# ADR-041: the Python-pool selection benchmarks (get_next_proxy_rr / _weighted)
+# were dropped — the proxy pool is now Rust-Required and has no Python pool to
+# profile. ProxyInfo / is_proxy_usable remain pure-Python and are still profiled.
 def bench_is_proxy_usable(iterations: int) -> Dict[str, float]:
     """is_proxy_usable predicate on a ProxyInfo."""
     from javdb.proxy.pool import ProxyInfo
@@ -400,9 +370,7 @@ BENCHMARKS: List[Tuple[str, Callable[[int], Dict[str, float]], int]] = [
     ("db_load_history",           bench_db_load_history,           20),
     ("compute_indicators",        bench_compute_indicators,        500_000),
     ("category_to_indicators",    bench_category_to_indicators,    500_000),
-    # Proxy pool.
-    ("get_next_proxy_rr",         bench_get_next_proxy_rr,         200_000),
-    ("get_next_proxy_weighted",   bench_get_next_proxy_weighted,   200_000),
+    # Proxy pool (Rust-Required; ADR-041) — only the pure-Python predicate.
     ("is_proxy_usable",           bench_is_proxy_usable,           1_000_000),
 ]
 

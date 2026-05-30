@@ -71,7 +71,7 @@ setup_logging(log_file=PIKPAK_LOG_FILE)
 logger = get_logger(__name__)
 
 # Import proxy pool
-from javdb.proxy.pool import ProxyPool, create_proxy_pool_from_config
+from javdb.proxy.pool import create_proxy_pool_from_config
 
 # Import proxy helper from request handler
 from javdb.infra.request import ProxyHelper, create_proxy_helper_from_config
