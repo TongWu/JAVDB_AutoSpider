@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 import json
+import logging
 
 import pytest
 
@@ -15,17 +17,26 @@ def test_default_stalled_after_days_falls_back_on_non_integer_config(monkeypatch
     assert reconcile_cli._default_stalled_after_days() == 7
 
 
-def test_main_rejects_nonpositive_config_default(monkeypatch, capsys):
+def test_main_falls_back_on_nonpositive_config_default(monkeypatch, capsys, caplog):
     monkeypatch.setattr(reconcile_cli, "cfg", lambda *args, **kwargs: "0")
     monkeypatch.setattr(reconcile_cli, "setup_logging", lambda **kwargs: None)
-    monkeypatch.setattr(reconcile_cli, "run", lambda _options: None)
+    captured = {}
+
+    def _run(options):
+        captured["options"] = options
+        return ReconcileResult()
+
+    monkeypatch.setattr(reconcile_cli, "run", _run)
+    caplog.set_level(logging.WARNING)
 
     rc = reconcile_cli.main(["--json"])
 
-    assert rc == 1
+    assert rc == 0
+    assert captured["options"].stalled_after_days == 7
     captured = capsys.readouterr()
-    assert captured.out == ""
-    assert "stalled_after_days must be >= 1" in captured.err
+    assert captured.out.strip() == json.dumps(asdict(ReconcileResult()), ensure_ascii=False)
+    assert captured.err == ""
+    assert [r.message for r in caplog.records] == ["Invalid RECONCILE_STALLED_DAYS; falling back to 7"]
 
 
 def test_main_json_emits_payload_and_returns_zero(monkeypatch, capsys):
@@ -48,17 +59,50 @@ def test_main_json_emits_payload_and_returns_zero(monkeypatch, capsys):
     captured = capsys.readouterr()
     assert captured.err == ""
     assert captured.out.strip() == json.dumps(
-        {
-            "observed": 3,
-            "outcomes_updated": 2,
-            "marked_downloading": 1,
-            "marked_completed": 1,
-            "marked_stalled": 0,
-            "marked_failed": 0,
-            "errors": [],
-        },
+        asdict(expected),
         ensure_ascii=False,
     )
+
+
+def test_main_text_summary_uses_structured_logging_helpers(monkeypatch):
+    result = ReconcileResult(
+        observed=3,
+        outcomes_updated=2,
+        marked_downloading=1,
+        marked_completed=1,
+        marked_stalled=0,
+        marked_failed=0,
+        errors=["source down"],
+    )
+    sections = []
+    summaries = []
+
+    monkeypatch.setattr(reconcile_cli, "setup_logging", lambda **kwargs: None)
+    monkeypatch.setattr(reconcile_cli, "run", lambda options: result)
+    monkeypatch.setattr(
+        reconcile_cli,
+        "log_section",
+        lambda _logger, title: sections.append(title),
+    )
+    monkeypatch.setattr(
+        reconcile_cli,
+        "log_summary_block",
+        lambda _logger, title, pairs: summaries.append((title, pairs)),
+    )
+
+    rc = reconcile_cli.main([])
+
+    assert rc == 2
+    assert sections == ["Acquisition Outcome Reconcile"]
+    assert summaries == [("Reconcile Summary", {
+        "Observed": 3,
+        "Outcomes updated": 2,
+        "Marked downloading": 1,
+        "Marked completed": 1,
+        "Marked stalled": 0,
+        "Marked failed": 0,
+        "Errors": 1,
+    })]
 
 
 def test_main_returns_nonzero_when_run_raises(monkeypatch, capsys):

@@ -7,7 +7,7 @@ The primary configuration file is **`config.py`**. Copy `config.py.example` to
 never committed.
 
 Environment variables for the Web API and Docker are covered in
-[Section 15](#15-environment-variables).
+[Section 16](#16-environment-variables).
 
 ---
 
@@ -27,7 +27,8 @@ Environment variables for the Web API and Docker are covered in
 12. [PikPak](#12-pikpak)
 13. [Rclone / Dedup](#13-rclone--dedup)
 14. [qBittorrent File Filter](#14-qbittorrent-file-filter)
-15. [Environment Variables](#15-environment-variables)
+15. [Media Closed Loop](#15-media-closed-loop)
+16. [Environment Variables](#16-environment-variables)
 
 ---
 
@@ -286,7 +287,7 @@ persists an `OpsIncidents` record or JSONL fallback.
 | `EMAIL_NOTIFICATION_LOG_FILE` | `str` | `'logs/email_notification.log'` | Log file path for email notifications. |
 
 Additional logging behavior is controlled by environment variables (see
-[Section 15](#15-environment-variables)):
+[Section 16](#16-environment-variables)):
 `LOG_STYLE` (`compact` | `plain` | `verbose`) and
 `LOG_GITHUB_GROUPS` (`on` | `off` | `auto`).
 
@@ -384,11 +385,23 @@ download" priority inside torrents. For newly added torrents, it waits up to
 
 ---
 
-## 15. Environment Variables
+## 15. Media Closed Loop
+
+ADR-033 Phase 1 records acquisition outcomes and reconciles them against live
+qBittorrent state. The CLI flag `--stalled-after-days` overrides the configured
+default for a single reconcile run.
+
+| Variable | Type | Default | Description |
+|---|---|---|---|
+| `RECONCILE_STALLED_DAYS` | `int` | `7` | Positive integer. Active `queued` / `downloading` outcomes that have not been observed in qB for this many days become `stalled`; after 2x this window they become `failed`. Tune it to the slowest expected qB download in your environment. |
+
+---
+
+## 16. Environment Variables
 
 These variables are set in `.env` files rather than `config.py`.
 
-### 15.1 Root `.env` (Docker / cron entrypoint)
+### 16.1 Root `.env` (Docker / cron entrypoint)
 
 Defined in `.env.example` at the repository root. **Bare-metal uvicorn does
 not auto-load this file** — `apps/api/services/context.py` deliberately omits
@@ -452,7 +465,7 @@ All cron expressions use the standard five-field format:
 | `MAX_LOG_SIZE` | `str` | *(none)* | Maximum log file size before rotation, e.g. `100M`. |
 | `MAX_LOG_FILES` | `int` | *(none)* | Maximum number of rotated log files to keep. |
 
-### 15.2 Shell / CI Environment Variables
+### 16.2 Shell / CI Environment Variables
 
 These are set in the shell or in GitHub Actions workflow files and are read at
 runtime by various modules.
@@ -474,7 +487,7 @@ runtime by various modules.
 | `LOG_GITHUB_GROUPS` | `str` | `'auto'` | GitHub Actions log grouping. `'on'` -- always emit `::group::` markers. `'off'` -- never. `'auto'` -- detect CI environment. |
 | `VAR_MOVIE_SLEEP` | `str` | *(none)* | Override adaptive sleep range as `"min,max"` in seconds, e.g. `"0,0"` for CI. |
 
-### 15.3 Docker-Specific `.env` (`docker/.env.example`)
+### 16.3 Docker-Specific `.env` (`docker/.env.example`)
 
 The `docker/.env.example` file provides a simplified cron configuration format
 for the Docker container. It uses the same variables described in

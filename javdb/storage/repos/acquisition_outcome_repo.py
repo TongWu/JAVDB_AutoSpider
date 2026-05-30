@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import sqlite3
 from typing import Any, Optional
 
@@ -12,8 +11,6 @@ from javdb.ops.reconcile.models import (
     AcquisitionOutcomeRecord,
     utc_now_iso,
 )
-
-logger = logging.getLogger(__name__)
 
 _COLUMNS = (
     "qb_hash",
@@ -39,10 +36,7 @@ def _row_to_record(row: Any) -> AcquisitionOutcomeRecord:
 class AcquisitionOutcomeRepo:
     def __init__(self, conn: sqlite3.Connection) -> None:
         self._conn = conn
-        try:
-            self._conn.row_factory = sqlite3.Row
-        except Exception:
-            logger.debug("row_factory set failed", exc_info=True)
+        self._conn.row_factory = sqlite3.Row
 
     def upsert(self, record: AcquisitionOutcomeRecord) -> None:
         values = [getattr(record, column) for column in _COLUMNS]

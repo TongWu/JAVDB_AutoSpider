@@ -120,7 +120,7 @@ def run(options: ReconcileOptions, *, repo=None, qb_client=None) -> ReconcileRes
         observations = {}
         if "qb" in options.sources:
             try:
-                client = qb_client or _build_qb_client(options)
+                client = qb_client or _build_qb_client()
                 torrents = client.get_torrents_multiple_categories(
                     list(options.categories), torrent_filter="all"
                 )
@@ -179,7 +179,7 @@ def run(options: ReconcileOptions, *, repo=None, qb_client=None) -> ReconcileRes
     return result
 
 
-def _build_qb_client(options: ReconcileOptions):
+def _build_qb_client():
     """Build the real read-only qB client lazily for production runs."""
     from javdb.infra.config import cfg
     from javdb.integrations.qb.client import QBittorrentClient
