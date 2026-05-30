@@ -5,7 +5,7 @@
 | **Status**  | Accepted — Phase 1 (Python golden) implemented 2026-05-29; Phase 2 (TS consume) pending |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-029](../ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md) (auth hardening — owns token revocation), [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md) (dual-backend split), [ADR-010](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.md) (D1 access port) |
+| **Related** | [ADR-029](../ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md) (auth hardening — owns token revocation), [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md) (dual-backend split), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md) (D1 access port) |
 
 > Originated from the 2026-05-29 architecture review (Candidate B): [architecture-review-2026-05-29.html](../architecture/architecture-review-2026-05-29.html).
 

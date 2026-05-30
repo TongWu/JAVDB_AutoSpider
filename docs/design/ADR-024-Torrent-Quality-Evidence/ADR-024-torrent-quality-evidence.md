@@ -5,7 +5,7 @@
 | **Status**  | Proposed                                                              |
 | **Date**    | 2026-05-27                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-010](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md) |
+| **Related** | [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md) |
 
 ## Context
 

@@ -1,6 +1,6 @@
 # ADR-010: Unified Python D1 Access Port
 
-**Status**: Accepted — implementation complete behind rollout gates as of 2026-05-26; default promotion pending bake/metrics
+**Status**: Completed — production-gated bake passed on 2026-05-30; code defaults remain opt-in for self-hosters while the Production environment keeps all ADR-010 gates enabled
 **Date**: 2026-05-19
 **Deciders**: D1 access-port brainstorming and grill session
 **Prerequisites**: [ADR-006](../_archive/ADR-006-Pending-Mode-Rollout/ADR-006-pending-mode-default-rollout.md) keeps pending mode as the default write path; [ADR-009](../_archive/ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md) documents the recent D1 transient-failure and drift response.
@@ -15,7 +15,9 @@
 
 2026-05-26 update: Phase 2 replay/outbox restoration and Phase 4 startup replay are implemented and locally verified. All high-risk behavior remains opt-in behind environment gates.
 
-The four phases are independently gated. This ADR remains open until the gated behavior has baked cleanly and default promotion or explicit deferral is decided.
+2026-05-30 closeout: the Production environment enabled `D1_RECOVERY_OUTBOX_ENABLED`, `D1_BATCHING_ENABLED`, and `D1_STARTUP_REPLAY_ENABLED` on 2026-05-26 13:51 UTC. After that gate flip, DailyIngestion succeeded on 2026-05-27, 2026-05-28, and 2026-05-29; QBFileFilter succeeded on 2026-05-26 through 2026-05-29; and StaleSessionCleanup succeeded on 2026-05-27 through 2026-05-30. The latest `reports/D1/d1_port_summary.json` reports `outbox_queued=0`, `outbox_dead_lettered=0`, `permanent_errors=0`, and `transient_errors=0`; no recovery outbox/dead-letter files exist under `reports/D1/`; and the 2026-05-27 through 2026-05-29 pending verification records show `pending_residual_count=0` and `derived_recompute_drift=0`.
+
+Closeout decision: keep the code defaults conservative and opt-in for self-hosters, but treat the Production environment gate promotion as complete. Any future code-default flip should be a new, explicit change because it changes self-hoster behavior rather than finishing this ADR.
 
 ---
 
@@ -190,7 +192,7 @@ The rollout is staged by code defaults and environment overrides. The ADR requir
 | Phase 4 | [IMP-ADR010-04](IMP-ADR010-04-d1-access-port-phase4-startup-replay.md) | Startup replay off | `D1_STARTUP_REPLAY_ENABLED=1` drains non-dead-lettered work on process startup |
 | Phase 5 | [IMP-ADR010-05](IMP-ADR010-05-finish-recovery-facade.md) | Recovery helpers duck-type on connection facade methods; `current_backend()` reads removed from the commit path | — (refactor; no rollout gate) |
 
-Promotion gates should use `d1_port_summary.json`, pending verification records, and drift/dead-letter absence. A phase should not become default while it creates new pending residuals, new dead letters, or unexplained drift.
+Promotion gates used `d1_port_summary.json`, pending verification records, and drift/dead-letter absence. The 2026-05-30 closeout found no new pending residuals, no dead letters, and no unexplained drift after Production enabled all three ADR-010 gates. The code defaults remain opt-in for self-hosters; Production keeps the gates enabled through GitHub Environment variables.
 
 ### D11. Workflow and Private-Payload Handling
 
