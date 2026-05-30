@@ -12,7 +12,7 @@
 
 **Related:** [ADR-020](ADR-020-parser-interface-consolidation.md)
 
-**Status:** Completed (2026-05-29) — all phases implemented across PR #123 (Phases 1-2) and the stacked Phase 3-5 PR. Folder archival deferred until both PRs merge.
+**Status:** Completed (2026-05-30 closeout) — all phases implemented across PR #123 (Phases 1-2) and PR #124 (Phases 3-5). Both PRs are merged, and the ADR folder is archived.
 
 ---
 
@@ -91,7 +91,7 @@
 - [x] `test_magnet_parity.py` green at every phase boundary (D6 Rust guard).
 - [x] `python -c "import javdb.parsing; import javdb.spider; import javdb.legacy._spider_legacy"` — clean.
 - [x] Grep gate passes (no live `parse_legacy_adapters` importers).
-- [x] Update this IMP's `Status` to `Completed`. (Folder archival deferred until PR #123 + the stacked Phase 3-5 PR merge to main.)
+- [x] Update this IMP's `Status` to `Completed`. Folder archived on 2026-05-30 after PR #123 and PR #124 merged.
 
 ## Risks
 
