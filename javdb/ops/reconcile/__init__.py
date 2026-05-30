@@ -10,6 +10,7 @@ from .models import (
     ReconcileResult,
     utc_now_iso,
 )
+from .service import apply_cleanup_completed, record_queued, run
 
 __all__ = [
     "ACQUISITION_STATES",
@@ -19,5 +20,8 @@ __all__ = [
     "Observation",
     "ReconcileOptions",
     "ReconcileResult",
+    "apply_cleanup_completed",
+    "record_queued",
+    "run",
     "utc_now_iso",
 ]
