@@ -50,7 +50,7 @@ def _mock_config(monkeypatch):
     import javdb.infra.config as config_module
 
     monkeypatch.setattr(config_module, "_config_module", mock_config)
-    yield
+    return mock_config
 
 
 @pytest.fixture

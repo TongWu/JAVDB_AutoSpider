@@ -115,12 +115,52 @@ def test_run_marks_downloading_from_observation(repo):
     assert res.marked_downloading == 1
 
 
+def test_run_refreshes_last_seen_when_observed_state_is_unchanged(repo):
+    old_ts = _old_iso(10)
+    repo.upsert(
+        AcquisitionOutcomeRecord(
+            qb_hash="d1",
+            href="/v/1",
+            state="downloading",
+            last_seen_at=old_ts,
+        )
+    )
+    qb = _FakeQb([{"hash": "d1", "progress": 0.5, "state": "downloading"}])
+
+    res = service.run(ReconcileOptions(), repo=repo, qb_client=qb)
+
+    got = repo.get("d1")
+    assert got.state == "downloading"
+    assert got.last_seen_at != old_ts
+    assert res.outcomes_updated == 1
+    assert res.marked_downloading == 0
+
+
 def test_run_marks_stalled_when_absent_and_old(repo):
     repo.upsert(AcquisitionOutcomeRecord(qb_hash="s1", href="/v/1", state="queued",
                                          last_seen_at=_old_iso(10)))
     qb = _FakeQb([])  # no longer in qB, and not completed
     res = service.run(ReconcileOptions(stalled_after_days=7), repo=repo, qb_client=qb)
     assert repo.get("s1").state == "stalled"
+    assert res.marked_stalled == 1
+
+
+def test_run_handles_naive_last_seen_timestamp_when_absent_and_old(repo):
+    old_ts = (datetime.now() - timedelta(days=10)).isoformat()
+    repo.upsert(
+        AcquisitionOutcomeRecord(
+            qb_hash="s1",
+            href="/v/1",
+            state="queued",
+            last_seen_at=old_ts,
+        )
+    )
+    qb = _FakeQb([])
+
+    res = service.run(ReconcileOptions(stalled_after_days=7), repo=repo, qb_client=qb)
+
+    assert repo.get("s1").state == "stalled"
+    assert res.errors == []
     assert res.marked_stalled == 1
 
 

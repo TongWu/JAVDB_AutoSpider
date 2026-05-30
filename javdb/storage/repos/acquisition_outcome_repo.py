@@ -29,6 +29,12 @@ _ACTIVE_STATES = tuple(
 )
 
 
+def _upsert_assignment(column: str) -> str:
+    if column in {"completed_at", "landed_at"}:
+        return f"{column}=COALESCE(excluded.{column}, AcquisitionOutcome.{column})"
+    return f"{column}=excluded.{column}"
+
+
 def _row_to_record(row: Any) -> AcquisitionOutcomeRecord:
     return AcquisitionOutcomeRecord(**{column: row[column] for column in _COLUMNS})
 
@@ -42,7 +48,7 @@ class AcquisitionOutcomeRepo:
         values = [getattr(record, column) for column in _COLUMNS]
         placeholders = ", ".join(["?"] * len(_COLUMNS))
         columns = ", ".join(_COLUMNS)
-        updates = ", ".join(f"{column}=excluded.{column}" for column in _COLUMNS if column != "qb_hash")
+        updates = ", ".join(_upsert_assignment(column) for column in _COLUMNS if column != "qb_hash")
         self._conn.execute(
             f"""
             INSERT INTO AcquisitionOutcome ({columns})

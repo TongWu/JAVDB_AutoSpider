@@ -182,6 +182,7 @@ def storage_mode_duo(monkeypatch):
 def acquisition_outcome_conn():
     """Create an in-memory AcquisitionOutcome schema from the D1 migration."""
     conn = sqlite3.connect(":memory:")
+    conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(_ACQUISITION_OUTCOME_MIGRATION.read_text(encoding="utf-8"))
     try:
         yield conn
