@@ -37,6 +37,7 @@ def test_sequential_backend_success_updates_runtime_state_and_payload(monkeypatc
             'file_count': 1,
         }
     ]
+    movie_detail = object()
 
     monkeypatch.setattr(
         sb,
@@ -48,6 +49,7 @@ def test_sequential_backend_success_updates_runtime_state_and_payload(monkeypatc
             '/actors/a1',
             'Support',
             True,
+            movie_detail,
             True,
             True,
         ),
@@ -73,6 +75,7 @@ def test_sequential_backend_success_updates_runtime_state_and_payload(monkeypatc
         'actor_gender': 'F',
         'actor_link': '/actors/a1',
         'supporting': 'Support',
+        'movie_detail': movie_detail,
     }
     assert backend.runtime_state() == FetchRuntimeState(
         use_proxy=True,
@@ -85,8 +88,8 @@ def test_sequential_backend_failure_triggers_next_movie_sleep(monkeypatch):
 
     responses = iter(
         [
-            ([], '', '', '', '', False, False, False),
-            ([], 'Actor', '', '', '', True, False, False),
+            ([], '', '', '', '', False, None, False, False),
+            ([], 'Actor', '', '', '', True, object(), False, False),
         ]
     )
     sleep_calls: list[str] = []
@@ -129,9 +132,9 @@ def test_sequential_backend_skip_and_cf_fallback_keep_original_pacing(monkeypatc
 
     responses = iter(
         [
-            ([], 'Actor', '', '', '', True, True, True),
-            ([], 'Actor', '', '', '', True, True, True),
-            ([], 'Actor', '', '', '', True, True, True),
+            ([], 'Actor', '', '', '', True, object(), True, True),
+            ([], 'Actor', '', '', '', True, object(), True, True),
+            ([], 'Actor', '', '', '', True, object(), True, True),
         ]
     )
     movie_sleep_calls: list[str] = []
