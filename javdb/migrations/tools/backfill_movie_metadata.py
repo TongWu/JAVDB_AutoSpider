@@ -220,8 +220,11 @@ def run_backfill_metadata(args: SimpleNamespace) -> int:
             )
             failed += 1
         if i < total:
+            # Intentional non-cryptographic jitter for crawl timing (anti-ban).
             time.sleep(
-                random.uniform(movie_sleep_mgr.base_min, movie_sleep_mgr.base_max)
+                random.uniform(  # noqa: S311
+                    movie_sleep_mgr.base_min, movie_sleep_mgr.base_max
+                )
             )
 
     logger.info(
