@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from javdb.ops.reconcile.models import ReconcileResult
 
 from apps.cli.ops import reconcile as reconcile_cli
@@ -61,3 +63,21 @@ def test_main_returns_nonzero_when_run_raises(monkeypatch, capsys):
     assert captured.out == ""
     assert "Error: boom" in captured.err
     assert "Traceback" not in captured.err
+
+
+def test_parser_rejects_unknown_source():
+    parser = reconcile_cli._build_parser()
+
+    with pytest.raises(SystemExit) as exc:
+        parser.parse_args(["--source", "qbb"])
+
+    assert exc.value.code == 2
+
+
+def test_parser_rejects_nonpositive_stalled_after_days():
+    parser = reconcile_cli._build_parser()
+
+    with pytest.raises(SystemExit) as exc:
+        parser.parse_args(["--stalled-after-days", "0"])
+
+    assert exc.value.code == 2

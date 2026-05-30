@@ -18,6 +18,8 @@ from javdb.ops.reconcile.persistence import open_outcome_repo
 
 logger = logging.getLogger(__name__)
 
+_SUPPORTED_SOURCES = frozenset({"qb"})
+
 
 @contextlib.contextmanager
 def _repo_ctx(repo):
@@ -37,6 +39,18 @@ def _age_days(iso_ts: str | None) -> float:
     except ValueError:
         return 0.0
     return (datetime.now(timezone.utc) - parsed).total_seconds() / 86400.0
+
+
+def _validate_options(options: ReconcileOptions) -> list[str]:
+    errors: list[str] = []
+    sources = tuple(options.sources)
+    if not sources:
+        errors.append("at least one source is required")
+    for source in sorted(set(sources) - _SUPPORTED_SOURCES):
+        errors.append(f"unsupported source: {source}")
+    if options.stalled_after_days < 1:
+        errors.append("stalled_after_days must be >= 1")
+    return errors
 
 
 def record_queued(torrent: dict, session_id: str | None, *, repo=None) -> None:
@@ -94,6 +108,11 @@ def apply_cleanup_completed(stats: dict, *, repo=None) -> ReconcileResult:
 def run(options: ReconcileOptions, *, repo=None, qb_client=None) -> ReconcileResult:
     """Reconcile active outcomes against live sources."""
     result = ReconcileResult()
+    validation_errors = _validate_options(options)
+    if validation_errors:
+        result.errors.extend(validation_errors)
+        return result
+
     now = utc_now_iso()
     with _repo_ctx(repo) as r:
         active = {rec.qb_hash: rec for rec in r.list_active()}
@@ -120,14 +139,15 @@ def run(options: ReconcileOptions, *, repo=None, qb_client=None) -> ReconcileRes
             obs = observations.get(qb_hash)
             new_state = None
             extra = {}
+            counter_name = None
 
             if obs is not None:
                 if obs.state == "completed" and rec.state != "completed":
                     new_state, extra = "completed", {"completed_at": now}
-                    result.marked_completed += 1
+                    counter_name = "marked_completed"
                 elif obs.state == "downloading" and rec.state != "downloading":
                     new_state, extra = "downloading", {}
-                    result.marked_downloading += 1
+                    counter_name = "marked_downloading"
                 else:
                     new_state, extra = rec.state, {}
                 rec.last_seen_at = now
@@ -135,10 +155,10 @@ def run(options: ReconcileOptions, *, repo=None, qb_client=None) -> ReconcileRes
                 age = _age_days(rec.last_seen_at or rec.queued_at)
                 if age >= 2 * options.stalled_after_days:
                     new_state, extra = "failed", {}
-                    result.marked_failed += 1
+                    counter_name = "marked_failed"
                 elif age >= options.stalled_after_days:
                     new_state, extra = "stalled", {}
-                    result.marked_stalled += 1
+                    counter_name = "marked_stalled"
                 else:
                     continue
 
@@ -151,6 +171,8 @@ def run(options: ReconcileOptions, *, repo=None, qb_client=None) -> ReconcileRes
             try:
                 r.upsert(rec)
                 result.outcomes_updated += 1
+                if counter_name is not None:
+                    setattr(result, counter_name, getattr(result, counter_name) + 1)
             except Exception as exc:
                 logger.warning("run: upsert failed for %s", qb_hash, exc_info=True)
                 result.errors.append(str(exc))

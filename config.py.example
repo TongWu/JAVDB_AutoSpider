@@ -208,6 +208,7 @@ RUNNER_REGISTRY_ENABLED = 'false'
 # ADR-033 media closed-loop: active acquisition outcomes (queued/downloading)
 # that have not been seen in qB for this many days are marked 'stalled'
 # (and 'failed' after 2x this window). Tune to your slowest expected download.
+# Must be a positive integer.
 RECONCILE_STALLED_DAYS = 7
 
 # Example configurations:
