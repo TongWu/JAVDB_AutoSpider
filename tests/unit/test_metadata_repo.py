@@ -1,6 +1,7 @@
 """Unit tests for MetadataRepo (ADR-022)."""
 
 import json
+import pathlib
 import sqlite3
 
 import pytest
@@ -12,36 +13,21 @@ from javdb.storage.repos.metadata_repo import MetadataRepo
 # Fixture
 # ---------------------------------------------------------------------------
 
+# Reuse the canonical D1 migration DDL so the test schema (columns, NOT NULL
+# defaults, and the idx_movie_metadata_video_code index) can never drift from
+# production.
+_REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+_METADATA_DDL = (
+    _REPO_ROOT
+    / "javdb/migrations/d1/2026_05_27_add_movie_metadata_table.sql"
+).read_text(encoding="utf-8")
+
+
 @pytest.fixture
 def db_path(tmp_path):
     path = str(tmp_path / "test_history.db")
     conn = sqlite3.connect(path)
-    conn.execute("""
-        CREATE TABLE MovieMetadata (
-            href              TEXT PRIMARY KEY,
-            title             TEXT,
-            video_code        TEXT,
-            release_date      TEXT,
-            duration_minutes  INTEGER,
-            rate              REAL,
-            comment_count     INTEGER,
-            review_count      INTEGER,
-            want_count        INTEGER,
-            watched_count     INTEGER,
-            maker             TEXT,
-            publisher         TEXT,
-            series            TEXT,
-            directors         TEXT,
-            categories        TEXT,
-            poster_url        TEXT,
-            fanart_urls       TEXT,
-            trailer_url       TEXT,
-            created_at        TEXT NOT NULL
-                DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-            updated_at        TEXT NOT NULL
-                DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-        )
-    """)
+    conn.executescript(_METADATA_DDL)
     conn.commit()
     conn.close()
     return path

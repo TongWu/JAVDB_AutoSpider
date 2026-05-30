@@ -1,6 +1,7 @@
 """Unit tests for PreferenceRepo (ADR-022)."""
 
 import json
+import pathlib
 import sqlite3
 
 import pytest
@@ -12,35 +13,21 @@ from javdb.storage.repos.preference_repo import PreferenceRepo
 # Fixture
 # ---------------------------------------------------------------------------
 
+# Reuse the canonical D1 migration DDL so the test schema carries the same
+# CHECK constraints (content_type whitelist, hearted IN (0,1), rating range)
+# and defaults as production — preventing fixture/schema drift.
+_REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+_RATINGS_PREFS_DDL = (
+    _REPO_ROOT
+    / "javdb/migrations/d1/2026_05_27_add_ratings_preferences_tables.sql"
+).read_text(encoding="utf-8")
+
+
 @pytest.fixture
 def db_path(tmp_path):
     path = str(tmp_path / "test_pref.db")
     conn = sqlite3.connect(path)
-    conn.execute("""
-        CREATE TABLE MovieRatings (
-            href        TEXT PRIMARY KEY,
-            video_code  TEXT NOT NULL,
-            rating      INTEGER
-                CHECK (rating IS NULL OR (rating >= 1 AND rating <= 5)),
-            tags        TEXT NOT NULL DEFAULT '[]',
-            notes       TEXT,
-            rated_at    TEXT,
-            updated_at  TEXT NOT NULL
-                DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE ContentPreferences (
-            content_type  TEXT NOT NULL,
-            content_id    TEXT NOT NULL,
-            content_name  TEXT NOT NULL,
-            hearted       INTEGER NOT NULL DEFAULT 0,
-            weight        REAL NOT NULL DEFAULT 1.0,
-            updated_at    TEXT NOT NULL
-                DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-            PRIMARY KEY (content_type, content_id)
-        )
-    """)
+    conn.executescript(_RATINGS_PREFS_DDL)
     conn.commit()
     conn.close()
     return path
