@@ -35,7 +35,7 @@
 | `javdb/integrations/pikpak/bridge/service.py`, `javdb/integrations/qb/uploader/service.py` | Modify | Drop the unused `ProxyPool` symbol from `from javdb.proxy.pool import ...` (keep `create_proxy_pool_from_config`) |
 | `javdb/pipeline/service.py` | Verify only | `RUST_PROXY_AVAILABLE` status flag (line 71-72) stays valid (always True in practice) |
 | `CONTEXT.md` | Modify | Add **Best-Effort Fallback** + **Rust-Required Module** terms (ADR-041 Domain Language) |
-| `docs/design/ADR-020-Parser-Interface-Consolidation/ADR-020-parser-interface-consolidation.md` + `.zh.md` | Modify | Status Log back-reference to ADR-041 (both languages, same commit) |
+| `docs/design/_archive/ADR-020-Parser-Interface-Consolidation/ADR-020-parser-interface-consolidation.md` + `.zh.md` | Modify | Status Log back-reference to ADR-041 (both languages, same commit) |
 | `docs/handbook/en/developer/*` + `docs/handbook/zh/*` | Modify (if present) | Note: pure-Python is dev-only best-effort; proxy requires Rust |
 
 ---

@@ -43,7 +43,7 @@ class SessionLifecycleRepo:
         session_id: Optional[str] = None,
         write_mode: Optional[str] = None,
     ) -> str:
-        from javdb.storage.db import db_create_report_session
+        from javdb.storage.db._db_reports import db_create_report_session
 
         return db_create_report_session(
             report_type=report_type,
@@ -111,7 +111,7 @@ class SessionLifecycleRepo:
         Repo's ``db_path`` is threaded as the default ``reports_db_path``;
         explicit per-call overrides take precedence.
         """
-        from javdb.storage.db import db_rollback_session
+        from javdb.storage.db._db_rollback import db_rollback_session
 
         return db_rollback_session(
             session_id,
@@ -144,7 +144,7 @@ class SessionLifecycleRepo:
         require_run_identity: bool = False,
     ) -> List[str]:
         """Return ReportSessions.Id rows still flagged 'in_progress'."""
-        from javdb.storage.db import db_find_in_progress_sessions
+        from javdb.storage.db._db_reports import db_find_in_progress_sessions
 
         return db_find_in_progress_sessions(
             since=since,
@@ -161,7 +161,7 @@ class SessionLifecycleRepo:
         history_db_path: Optional[str] = None,
     ) -> List[str]:
         """Return every session id touched by a (RunId, RunAttempt) run."""
-        from javdb.storage.db import db_find_sessions_by_run
+        from javdb.storage.db._db_reports import db_find_sessions_by_run
 
         return db_find_sessions_by_run(
             run_id,
@@ -174,7 +174,7 @@ class SessionLifecycleRepo:
         self, session_id: str,
     ) -> Optional[Tuple[Optional[str], Optional[int]]]:
         """Return ``(RunId, RunAttempt)`` for *session_id*, or ``None``."""
-        from javdb.storage.db import db_get_session_run_identity
+        from javdb.storage.db._db_reports import db_get_session_run_identity
 
         return db_get_session_run_identity(session_id, db_path=self._db_path)
 
@@ -185,7 +185,7 @@ class SessionLifecycleRepo:
         require_run_identity: bool = True,
     ) -> List[Tuple[str, str, str]]:
         """Return [(Id, Status, WriteMode), ...] for stale Phase 3 sessions."""
-        from javdb.storage.db import db_find_stale_pending_sessions
+        from javdb.storage.db._db_reports import db_find_stale_pending_sessions
 
         return db_find_stale_pending_sessions(
             db_path=self._db_path,
@@ -200,7 +200,7 @@ class SessionLifecycleRepo:
         csv_filename: str,
     ) -> List[str]:
         """Return 'in_progress' SessionIds for the same run + CSV file."""
-        from javdb.storage.db import db_find_in_progress_session_ids_for_run_csv
+        from javdb.storage.db._db_reports import db_find_in_progress_session_ids_for_run_csv
 
         return db_find_in_progress_session_ids_for_run_csv(
             run_id,
@@ -213,12 +213,12 @@ class SessionLifecycleRepo:
         self, report_type: Optional[str] = None,
     ) -> Optional[dict]:
         """SQLite-only latest-session lookup (optionally by report type)."""
-        from javdb.storage.db import db_get_latest_session_local
+        from javdb.storage.db._db_reports import db_get_latest_session_local
 
         return db_get_latest_session_local(report_type, self._db_path)
 
     def insert_report_rows(self, session_id: str, rows: List[dict]) -> int:
         """Insert report rows into ReportMovies + ReportTorrents."""
-        from javdb.storage.db import db_insert_report_rows
+        from javdb.storage.db._db_reports import db_insert_report_rows
 
         return db_insert_report_rows(session_id, rows, self._db_path)
