@@ -532,6 +532,24 @@ CREATE TABLE IF NOT EXISTS EmailNotificationHistory (
 );
 CREATE INDEX IF NOT EXISTS idx_email_history_session ON EmailNotificationHistory(SessionId);
 CREATE INDEX IF NOT EXISTS idx_email_history_status ON EmailNotificationHistory(Status);
+
+CREATE TABLE IF NOT EXISTS AcquisitionOutcome (
+    qb_hash       TEXT PRIMARY KEY NOT NULL,
+    href          TEXT NOT NULL DEFAULT '',
+    video_code    TEXT,
+    category      TEXT,
+    state         TEXT NOT NULL DEFAULT 'queued'
+        CHECK (state IN ('queued','downloading','completed','in_library','stalled','failed')),
+    queued_at     TEXT,
+    completed_at  TEXT,
+    landed_at     TEXT,
+    last_seen_at  TEXT,
+    session_id    TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_acq_outcome_state ON AcquisitionOutcome(state);
+CREATE INDEX IF NOT EXISTS idx_acq_outcome_video_code ON AcquisitionOutcome(video_code);
+CREATE INDEX IF NOT EXISTS idx_acq_outcome_session ON AcquisitionOutcome(session_id);
+CREATE INDEX IF NOT EXISTS idx_acq_outcome_last_seen ON AcquisitionOutcome(last_seen_at);
 """
 
 # Combined DDL for single-DB mode (backward compat, csv_to_sqlite, testing)
@@ -1560,6 +1578,7 @@ def _migrate_single_to_split():
         (OPERATIONS_DB_PATH, _OPERATIONS_DDL, [
             'RcloneInventory', 'DedupRecords', 'PikpakHistory',
             'InventoryAlignNoExactMatch', 'EmailNotificationHistory',
+            'AcquisitionOutcome',
         ]),
     ]
 
