@@ -2,12 +2,12 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Accepted — Phase 1 implemented 2026-05-29; Phase 2 (CommitPipeline) deferred |
+| **Status**  | Completed — Phase 1 (`SessionLifecycle`) implemented & verified 2026-05-29; Phase 2 (CommitPipeline, IMP-ADR019-02) superseded — see that IMP. Archived 2026-05-30. |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md) (Repo pattern, pending-mode commit/rollback), [ADR-012](../_archive/ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md) (run boundary) |
+| **Related** | [ADR-005](../ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md) (Repo pattern, pending-mode commit/rollback), [ADR-012](../ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md) (run boundary) |
 
-> Originated from the 2026-05-29 architecture review (Candidate E): [architecture-review-2026-05-29.html](../architecture/architecture-review-2026-05-29.html).
+> Originated from the 2026-05-29 architecture review (Candidate E): [architecture-review-2026-05-29.html](../../architecture/architecture-review-2026-05-29.html).
 
 ## Context
 
