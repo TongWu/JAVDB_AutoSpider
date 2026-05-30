@@ -153,6 +153,59 @@ CREATE INDEX IF NOT EXISTS idx_pthw_run ON PendingTorrentHistoryWrites(RunId, Ru
 CREATE INDEX IF NOT EXISTS idx_pthw_href ON PendingTorrentHistoryWrites(Href);
 CREATE INDEX IF NOT EXISTS idx_pthw_session_state
     ON PendingTorrentHistoryWrites(SessionId, ApplyState);
+
+-- User-preference data foundation (ADR-022).  These three tables sit
+-- OUTSIDE the Pending→Commit session flow — writes are direct UPSERTs.
+-- They land on D1 first (javdb/migrations/d1/2026_05_27_*.sql); the local
+-- DDL below mirrors those migrations verbatim so the rollback round-trip
+-- (and the D1↔local schema-parity test) stays satisfied.
+CREATE TABLE IF NOT EXISTS MovieMetadata (
+    href              TEXT PRIMARY KEY,
+    title             TEXT,
+    video_code        TEXT,
+    release_date      TEXT,
+    duration_minutes  INTEGER,
+    rate              REAL,
+    comment_count     INTEGER,
+    review_count      INTEGER,
+    want_count        INTEGER,
+    watched_count     INTEGER,
+    maker             TEXT,
+    publisher         TEXT,
+    series            TEXT,
+    directors         TEXT,
+    categories        TEXT,
+    poster_url        TEXT,
+    fanart_urls       TEXT,
+    trailer_url       TEXT,
+    created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_movie_metadata_video_code
+    ON MovieMetadata(video_code);
+
+CREATE TABLE IF NOT EXISTS MovieRatings (
+    href        TEXT PRIMARY KEY,
+    video_code  TEXT NOT NULL,
+    rating      INTEGER CHECK (rating IS NULL OR (rating >= 1 AND rating <= 5)),
+    tags        TEXT NOT NULL DEFAULT '[]',
+    notes       TEXT,
+    rated_at    TEXT,
+    updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE TABLE IF NOT EXISTS ContentPreferences (
+    content_type  TEXT NOT NULL
+        CHECK (content_type IN ('actor','category','maker','director')),
+    content_id    TEXT NOT NULL,
+    content_name  TEXT NOT NULL,
+    hearted       INTEGER NOT NULL DEFAULT 0 CHECK (hearted IN (0, 1)),
+    weight        REAL NOT NULL DEFAULT 1.0,
+    updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (content_type, content_id)
+);
+CREATE INDEX IF NOT EXISTS idx_content_prefs_hearted
+    ON ContentPreferences(content_type, hearted);
 """
 
 _REPORTS_DDL = _SCHEMA_VERSION_DDL + """
