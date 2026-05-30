@@ -10,7 +10,7 @@
 
 **Related:** [ADR-032](ADR-032-mandatory-session-binding.md), [IMP-ADR032-01](IMP-ADR032-01-mandatory-session-id.md) (land first)
 
-**Status:** In progress (2026-05-29) — **Phase 2a done** (thin methods added + all external callers migrated to Repos; `db_*` still exported); **Phase 2b pending** (repoint Repo-internal imports to submodules, migrate `db_*`-targeted tests, trim `__all__`, de-export proof). Split per the scope reality below.
+**Status:** Completed (2026-05-29). **Phase 2a** (PR #127, merged): thin Repo methods added + all external callers migrated to Repos. **Phase 2b** (this PR): implementation layer repointed off the facade to `_db_*` submodules + a boundary test enforcing "the Repo is the single caller-facing interface" — the *enforce, don't hard-remove* variant chosen after measuring the full hard-removal at ~46 files / 33 tests (see scope decision below). `__all__` left intact. Folder archival deferred until this PR merges.
 
 ---
 
