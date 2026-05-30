@@ -166,6 +166,57 @@ def test_spider_main_result_uses_actual_mode_from_url(tmp_path, monkeypatch):
     assert result.url == "https://javdb.com/actors/EvkJ"
 
 
+def test_spider_run_loads_content_filter_rules_once_for_both_phases(tmp_path, monkeypatch):
+    from javdb.spider.app import run_service
+
+    result_path = tmp_path / "spider-result.json"
+    monkeypatch.setattr(
+        run_service,
+        "parse_arguments",
+        lambda: _base_args(result_json=str(result_path), phase="all"),
+    )
+    _patch_lightweight_spider_run(monkeypatch, run_service, tmp_path)
+
+    rules = [object()]
+    load_calls = []
+    process_calls = []
+    monkeypatch.setattr(
+        run_service,
+        "_load_content_filter_rules",
+        lambda: load_calls.append(True) or rules,
+    )
+
+    def fake_process_detail_entries(**kwargs):
+        process_calls.append(kwargs)
+        if not kwargs["entries"]:
+            return {
+                "use_proxy": False,
+                "use_cf_bypass": False,
+                "rows": [],
+                "skipped_history": 0,
+                "failed": 0,
+                "failed_movies": [],
+                "no_new_torrents": 0,
+            }
+        return {
+            "use_proxy": False,
+            "use_cf_bypass": False,
+            "rows": [{"href": "https://example.test/1"}],
+            "skipped_history": 0,
+            "failed": 0,
+            "failed_movies": [],
+            "no_new_torrents": 0,
+        }
+
+    monkeypatch.setattr(run_service, "process_detail_entries", fake_process_detail_entries)
+
+    run_service.main()
+
+    assert load_calls == [True]
+    assert len(process_calls) == 2
+    assert all(call["content_filter_rules"] is rules for call in process_calls)
+
+
 def test_spider_main_writes_partial_result_json_on_failure(tmp_path, monkeypatch):
     import javdb.spider.app.run_service as run_service
 

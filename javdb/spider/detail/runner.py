@@ -439,6 +439,7 @@ def process_detail_entries(
     include_recent_release_filters: bool = False,
     log_duplicate_skips: bool = False,
     cancel_event: Event | None = None,
+    content_filter_rules: Optional[list[Rule]] = None,
 ) -> dict:
     """Run the shared detail pipeline against a concrete fetch backend."""
     runtime = _resolve_runtime(runtime)
@@ -461,14 +462,15 @@ def process_detail_entries(
         include_recent_release_filters=include_recent_release_filters,
         log_duplicate_skips=log_duplicate_skips,
     )
-    try:
-        content_filter_rules = _load_content_filter_rules()
-    except Exception:  # noqa: BLE001 — content filtering is best-effort
-        logger.info(
-            "Content filter rules unavailable; continuing without filtering",
-            exc_info=True,
-        )
-        content_filter_rules = []
+    if content_filter_rules is None:
+        try:
+            content_filter_rules = _load_content_filter_rules()
+        except Exception:  # noqa: BLE001 — content filtering is best-effort
+            logger.info(
+                "Content filter rules unavailable; continuing without filtering",
+                exc_info=True,
+            )
+            content_filter_rules = []
 
     # P1-B: filter through the cross-runner MovieClaim mutex.  Returns the
     # candidates this runner won the lease on; peer-completed and
@@ -733,10 +735,10 @@ def process_detail_entries(
                         held_claims.discard(href)
                     if href in queue_held_hrefs and work_client is not None:
                         try:
-                            work_client.release(holder_id, [href])
+                            work_client.complete(holder_id, [href])
                         except Exception:  # noqa: BLE001 — fail-open
                             logger.debug(
-                                "WorkDistributor release(%s) failed", href,
+                                "WorkDistributor complete(%s) failed", href,
                                 exc_info=True,
                             )
                         queue_held_hrefs.discard(href)

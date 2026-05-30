@@ -734,8 +734,8 @@ def test_process_detail_entries_content_filter_skips_sequential_style_payload(mo
     }]
     assert fake_claim_client.stage_calls == []
     assert fake_claim_client.complete_calls == []
-    assert fake_work_client.release_calls == [('runner-test', ['/v/abc123'])]
-    assert fake_work_client.complete_calls == []
+    assert fake_work_client.release_calls == []
+    assert fake_work_client.complete_calls == [('runner-test', ['/v/abc123'])]
 
 
 # ---------------------------------------------------------------------------
