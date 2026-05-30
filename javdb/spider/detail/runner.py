@@ -461,7 +461,14 @@ def process_detail_entries(
         include_recent_release_filters=include_recent_release_filters,
         log_duplicate_skips=log_duplicate_skips,
     )
-    content_filter_rules = _load_content_filter_rules()
+    try:
+        content_filter_rules = _load_content_filter_rules()
+    except Exception:  # noqa: BLE001 — content filtering is best-effort
+        logger.info(
+            "Content filter rules unavailable; continuing without filtering",
+            exc_info=True,
+        )
+        content_filter_rules = []
 
     # P1-B: filter through the cross-runner MovieClaim mutex.  Returns the
     # candidates this runner won the lease on; peer-completed and

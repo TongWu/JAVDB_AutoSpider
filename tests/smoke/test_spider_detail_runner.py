@@ -519,7 +519,90 @@ def test_process_detail_entries_empty_content_filter_preserves_success_path(monk
     assert backend.ack_calls == [('reported', False), ('reported', False)]
 
 
-def test_process_detail_entries_content_filter_skips_persist(monkeypatch):
+def test_process_detail_entries_content_filter_rule_load_exception_fails_open(monkeypatch):
+    from javdb.spider.fetch.backend import FetchRuntimeState
+    from javdb.spider.fetch.fetch_engine import EngineResult
+
+    class FakeBackend:
+        def __init__(self):
+            self.tasks = []
+            self.ack_calls = []
+
+        @property
+        def worker_count(self):
+            return 1
+
+        def start(self):
+            return None
+
+        def submit_task(self, task):
+            self.tasks.append(task)
+
+        def mark_done(self):
+            return None
+
+        def runtime_state(self):
+            return FetchRuntimeState(use_proxy=False, use_cf_bypass=False)
+
+        def results(self):
+            for task in self.tasks:
+                yield EngineResult(
+                    task=task,
+                    success=True,
+                    data={
+                        'magnet_links': {'subtitle': 'magnet-1'},
+                        'actor_info': 'Actor',
+                        'actor_gender': '',
+                        'actor_link': '',
+                        'supporting': '',
+                    },
+                    _ack_callback=lambda status, changed: self.ack_calls.append((status, changed)),
+                )
+
+        def shutdown(self, *, timeout=10):
+            return []
+
+    import javdb.spider.detail.runner as dc
+
+    persist_calls = []
+    monkeypatch.setattr(
+        dc,
+        '_load_content_filter_rules',
+        lambda: (_ for _ in ()).throw(RuntimeError('rules unavailable')),
+    )
+    monkeypatch.setattr(
+        dc,
+        'persist_parsed_detail_result',
+        lambda **kwargs: persist_calls.append(kwargs) or DetailPersistOutcome(
+            status='reported',
+            row={'href': kwargs['entry']['href']},
+            visited_href=kwargs['entry']['href'],
+        ),
+    )
+
+    backend = FakeBackend()
+    result = process_detail_entries(
+        backend=backend,
+        entries=[
+            make_entry('ABC-123', href='/v/abc123'),
+            make_entry('DEF-456', href='/v/def456'),
+        ],
+        phase=1,
+        history_data={},
+        history_file='history.csv',
+        csv_path='report.csv',
+        fieldnames=['href'],
+        dry_run=True,
+        use_history_for_saving=False,
+        is_adhoc_mode=False,
+    )
+
+    assert [call['entry']['href'] for call in persist_calls] == ['/v/abc123', '/v/def456']
+    assert result['rows'] == [{'href': '/v/abc123'}, {'href': '/v/def456'}]
+    assert backend.ack_calls == [('reported', False), ('reported', False)]
+
+
+def test_process_detail_entries_content_filter_skips_sequential_style_payload(monkeypatch):
     from javdb.spider.fetch.backend import FetchRuntimeState
     from javdb.spider.fetch.fetch_engine import EngineResult
     from javdb.proxy.coordinator.work_distributor_client import (
