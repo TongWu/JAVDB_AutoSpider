@@ -1459,3 +1459,69 @@ flagged as a fast-follow, not built here (the daily pipeline commits via the CLI
 
 **Open verification dependency:** Task 1 Steps 2-3 require live `wrangler` D1 access +
 `apps.cli.db.sync_d1_to_sqlite`; run where other migrations are applied.
+
+---
+
+## As-Built Notes (implemented 2026-05-31)
+
+All 11 tasks were implemented and reviewed. The following diverged from the plan
+text and were corrected during execution (recorded here per the design-feedback
+loop so the plan reflects what actually shipped):
+
+1. **Task 1 — `_REPORTS_DDL` parity is mandatory, not optional.** A new reports-DB
+   migration table MUST also be added to `_REPORTS_DDL` in
+   `javdb/storage/db/_db_migrations.py`, or `tests/unit/test_rollback_full_fidelity.py`
+   (schema-parity contract: every D1-migration column must exist in the local DDL)
+   fails. The remote `wrangler d1 execute --remote` apply was **not** run from the
+   feature worktree (mutates shared production D1); it remains a required deploy
+   step — see fast-follow below. Local materialisation was verified via `init_db`.
+
+2. **Task 7 — `get_db(REPORTS_DB_PATH)`, not `get_db("reports")`.** The plan mirrored
+   ADR-026's `persistence.py`, which calls `get_db("reports")`. That is **broken**:
+   `get_db` takes a filesystem path (keyed in `_DB_PATH_TO_LOGICAL_NAME` by path), so
+   `get_db("reports")` raises `DatabaseError` under sqlite and `ValueError` under D1.
+   ADR-026 only survives it via a broad `try/except` → JSONL fallback; the ADR-035
+   commit gate reads fills with no such net, so it would have crashed the commit.
+   The sentinel uses `get_db(REPORTS_DB_PATH)` (works under sqlite + D1). *(ADR-026's
+   `persist_incident` retains the latent bug — flagged as a separate follow-up.)*
+
+3. **Task 9 — no `SystemExit`; fail-open.** `commit_session.py` is a per-session loop
+   collecting `failed_commits`; critical drift routes through that existing failure
+   path (`failed_commits.append` + `SessionFailed` event + `_emit_pending_verify('finalizing')`
+   + `continue`) so other sessions still commit — `raise SystemExit(4)` (plan text)
+   would abort the whole batch. The gate is **fail-open**: a sentinel evaluation error
+   logs a warning and lets the commit proceed (a sentinel bug must never halt the
+   pipeline); only a successful `verdict.critical is True` blocks.
+
+4. **Task 10 — `setup_logging(log_level=...)`**, not `setup_logging(level=...)` (the
+   real signature is `setup_logging(log_file=None, log_level=None, *, log_style=None)`).
+
+5. **Task 8 — the index loop is `while True:` in `_fetch_all_index_pages_sequential`,
+   not `for page_num`** (the plan's grep would not match). `page_result.movies` is
+   correct (`IndexPageResult.movies: list[MovieIndexEntry]`).
+
+6. **Task 5 — baseline median rounding.** `statistics.median([0.80, 0.90])` returns
+   `0.8500000000000001` (IEEE-754), failing the plan's verbatim `== 0.85` assertion.
+   `baseline()` rounds to 6 dp (`round(median, 6)`); harmless for a [0,1] ratio.
+
+7. **Task 12 (added) — parallel index path wired.** The plan scoped only the
+   sequential path, but the daily production run uses the **parallel** path
+   (`use_parallel = use_proxy AND PROXY_MODE=='pool' AND len(PROXY_POOL)>1`), which
+   bypassed the hook — leaving the sentinel dormant on daily runs. The same
+   `start_run`/`observe`/`persist_run` piggyback was added to
+   `javdb/spider/fetch/index_parallel.py::fetch_all_index_pages_parallel`, placed in
+   the **single-threaded** parse loop that runs *after* `backend.shutdown()` (so the
+   non-thread-safe `FieldHealthAccumulator`/`_CURRENT` global is never touched from
+   worker threads).
+
+**Remaining fast-follows (not built in Phase 1):**
+
+- **Apply the D1 migration to production.** `wrangler d1 execute javdb-reports --remote
+  --file=javdb/migrations/d1/2026_05_29_add_parse_run_field_fill.sql` must run before
+  the gate is deployed. Until then the gate is harmless (fail-open: no table → read
+  error → treated as non-critical), but the sentinel does nothing.
+- **API commit path not gated.** `javdb/storage/sessions/commit.py::commit_session`
+  (via `POST /api/sessions/{id}/commit`) does not call `evaluate_session`. The daily
+  pipeline commits via the CLI, so this is an accepted gap.
+- **Detail-page boundary** (contract-ready, not wired) and a **dedicated EMA baseline
+  table** remain as documented Phase-2 candidates.

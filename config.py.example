@@ -267,6 +267,10 @@ OPS_DIAGNOSIS_API_KEY = ''
 OPS_DIAGNOSIS_MODEL = 'deterministic-fallback-v1'
 OPS_DIAGNOSIS_MAX_LOG_SNIPPETS = 20
 
+# ADR-035 site-contract drift sentinel.
+SENTINEL_MIN_SAMPLE = 30      # skip drift evaluation when a run parsed fewer items
+SENTINEL_BASELINE_WINDOW = 14 # soft-field baseline = median over this many committed runs
+
 # JavDB session cookie (can be auto-updated by scripts/login.py)
 # Manual method: Get from browser → Developer Tools → Application → Cookies → _jdb_session
 # Automatic method: Set credentials above and run: python3 scripts/login.py
