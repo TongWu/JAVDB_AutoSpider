@@ -16,6 +16,24 @@
 
 ---
 
+> **⚠ Divergence note (recorded during implementation, 2026-05-30).** Corrections
+> to the verbatim test code below:
+> 1. **`cfg()` mocking (gate tests).** `@patch('javdb.infra.config.cfg',
+>    return_value=False/True)` patches `cfg` for *every* key (incl. `LOG_LEVEL`
+>    consumed at import time), which breaks the uploader import. Replaced with
+>    `side_effect=` helpers (`_cfg_side_effect_disabled/_enabled`) that return the
+>    gate flag for `PREFERENCE_GATE_ENABLED` and pass through `default` for all
+>    other keys. Assertions are unchanged.
+> 2. **`upsert_preference` keyword args.** `PreferenceRepo.upsert_preference` is
+>    keyword-only (`def upsert_preference(self, *, ...)`). Three test calls that
+>    used positional args were converted to keyword args.
+> 3. **Gate test count is 7, not 6.** `TestPreferenceGate` defines 7 methods; the
+>    DoD's "6 tests" was a miscount. Total new tests: 8 + 14 + 7 = **29**.
+> 4. **Regression fix surfaced by the suite.** The full `pytest tests/unit/` run
+>    exposed a *pre-existing* parity guard failing because Phase 1 had not updated
+>    the local `_HISTORY_DDL` — fixed under IMP-ADR022-01 (see its divergence
+>    note), not here.
+
 ## Task 1 — MetadataRepo unit tests
 
 **Files:**
@@ -516,6 +534,6 @@ Expected: no regressions.
 |---|------|-------|
 | 1 | `test_metadata_repo.py` passes | `pytest tests/unit/test_metadata_repo.py -v` → 8 PASS, 0 FAIL |
 | 2 | `test_preference_repo.py` passes | `pytest tests/unit/test_preference_repo.py -v` → 14 PASS, 0 FAIL |
-| 3 | `test_preference_gate.py` passes | `pytest tests/unit/test_preference_gate.py -v` → 6 PASS, 0 FAIL |
-| 4 | No regressions in existing unit tests | `pytest tests/unit/ -v` → only the 28 new tests added; no pre-existing test changes status |
+| 3 | `test_preference_gate.py` passes | `pytest tests/unit/test_preference_gate.py -v` → 7 PASS, 0 FAIL (7 methods, not 6 — see divergence note) |
+| 4 | No regressions in existing unit tests | `pytest tests/unit/ -v` → 29 new tests added; no pre-existing test left failing (the `_HISTORY_DDL` parity guard was fixed under IMP-ADR022-01) |
 | 5 | Smoke tests pass | `pytest tests/smoke/ -v` → all PASS |
