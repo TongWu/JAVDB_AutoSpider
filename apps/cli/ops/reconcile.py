@@ -27,8 +27,7 @@ def _default_stalled_after_days() -> int:
         logger.warning("Invalid RECONCILE_STALLED_DAYS; falling back to 7")
         return 7
     if value < 1:
-        logger.warning("Invalid RECONCILE_STALLED_DAYS; falling back to 7")
-        return 7
+        raise ValueError("stalled_after_days must be >= 1")
     return value
 
 
