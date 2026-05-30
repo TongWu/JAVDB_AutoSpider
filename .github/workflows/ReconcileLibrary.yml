@@ -1,0 +1,124 @@
+name: Reconcile Library
+
+# ADR-033 Phase 1: reconcile AcquisitionOutcome rows against live qB state.
+# The cron runs hourly because qB download state changes independently of the
+# ingestion workflows. The default runner is self-hosted so the job can reach
+# the operator's qBittorrent Web UI; manual dispatch may override it for tests.
+
+permissions:
+  contents: read
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: 'Runner type. Use self-hosted when qBittorrent is only reachable locally.'
+        required: false
+        default: 'self-hosted'
+        type: choice
+        options:
+          - 'self-hosted'
+          - 'ubuntu-latest'
+      stalled_after_days:
+        description: 'Active outcomes unseen for this many days become stalled.'
+        required: false
+        default: '7'
+        type: string
+      dry_run:
+        description: 'Compute transitions but write nothing.'
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: reconcile-library
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ${{ inputs.runner || 'self-hosted' }}
+    timeout-minutes: 30
+    environment: Production
+    env:
+      TZ: Asia/Singapore
+      STORAGE_BACKEND: d1
+      D1_RECOVERY_OUTBOX_ENABLED: ${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}
+      D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
+      D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
+      INPUT_STALLED_AFTER_DAYS: ${{ inputs.stalled_after_days || '7' }}
+      INPUT_DRY_RUN: ${{ inputs.dry_run || 'false' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+          lfs: true
+
+      - name: Set up Python, venv, dependencies, Rust extension
+        uses: ./.github/actions/setup-python-env
+        with:
+          python-version: '3.11'
+
+      - name: Generate config.py from GitHub Variables and Secrets
+        env:
+          # qBittorrent is the only Phase-1 collector.
+          VAR_QB_URL: ${{ secrets.QB_URL }}
+          VAR_QB_USERNAME: ${{ secrets.QB_USERNAME }}
+          VAR_QB_PASSWORD: ${{ secrets.QB_PASSWORD }}
+          # D1 / Cloudflare - AcquisitionOutcome lives in the operations DB.
+          VAR_STORAGE_BACKEND: d1
+          VAR_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VAR_CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          VAR_D1_HISTORY_DB_ID: ${{ secrets.D1_HISTORY_DB_ID }}
+          VAR_D1_REPORTS_DB_ID: ${{ secrets.D1_REPORTS_DB_ID }}
+          VAR_D1_OPERATIONS_DB_ID: ${{ secrets.D1_OPERATIONS_DB_ID }}
+          VAR_REPORTS_DIR: ${{ vars.REPORTS_DIR || 'reports' }}
+          VAR_LOG_LEVEL: ${{ vars.LOG_LEVEL || 'INFO' }}
+        run: python3 -m apps.cli.ops.config_generator --github-actions
+
+      - name: Run acquisition-outcome reconciliation
+        run: |
+          set -e
+          set -o pipefail
+
+          CMD=(python3 -m apps.cli.ops.reconcile
+               --stalled-after-days "$INPUT_STALLED_AFTER_DAYS"
+               --json)
+
+          if [ "$INPUT_DRY_RUN" = "true" ]; then
+            CMD+=(--dry-run)
+          fi
+
+          mkdir -p logs
+          echo "Executing: STORAGE_BACKEND=d1 ${CMD[*]}"
+          STORAGE_BACKEND=d1 "${CMD[@]}" 2>&1 | tee logs/reconcile_library.jsonl
+
+      - name: Upload reconcile log
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: reconcile-library-log
+          path: logs/reconcile_library.jsonl
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Reconcile Library"
+            echo ""
+            echo "- Storage backend: d1"
+            echo "- Stalled-after days: $INPUT_STALLED_AFTER_DAYS"
+            echo "- Dry run: $INPUT_DRY_RUN"
+            echo ""
+            if [ -f logs/reconcile_library.jsonl ]; then
+              echo "Last output line:"
+              echo '```json'
+              tail -n 1 logs/reconcile_library.jsonl
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

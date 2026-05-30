@@ -205,6 +205,11 @@ MOVIE_CLAIM_ENABLED = 'auto'
 # RUNNER_REGISTRY_ENABLED feeds this via config_generator.
 RUNNER_REGISTRY_ENABLED = 'false'
 
+# ADR-033 media closed-loop: active acquisition outcomes (queued/downloading)
+# that have not been seen in qB for this many days are marked 'stalled'
+# (and 'failed' after 2x this window). Tune to your slowest expected download.
+RECONCILE_STALLED_DAYS = 7
+
 # Example configurations:
 # PROXY_MODULES = ['spider']  # Default: only spider (including login), not qBittorrent/PikPak
 # PROXY_MODULES = ['all']  # Enable proxy for all modules
