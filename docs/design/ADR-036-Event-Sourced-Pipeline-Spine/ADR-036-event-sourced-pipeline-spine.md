@@ -2,7 +2,7 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Proposed — umbrella; execution delegated to per-phase IMPs            |
+| **Status**  | Proposed — umbrella; Phase 1 implemented and verified; execution delegated to per-phase IMPs |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
 | **Related** | [ADR-012](../_archive/ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md), [ADR-019](../ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md), [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md) |
@@ -204,11 +204,12 @@ ADR-033/035 having landed. Phase 3 is an optional, high-care authority migration
 ## Status Log
 
 - 2026-05-29: Proposed (umbrella; three phases scoped, IMPs pending).
-- 2026-05-30: Phase 1 implemented ([IMP-ADR036-01](IMP-ADR036-01-event-spine.md)).
+- 2026-05-30: Phase 1 implemented and verified ([IMP-ADR036-01](IMP-ADR036-01-event-spine.md)).
   `PipelineEvent` / `EventConsumerCursor` / `RunEventSummary` tables applied to
-  remote `javdb-reports` D1; `javdb/pipeline/events/` (`emit`, `read_since`,
-  cursor `Consumer`) + `PipelineEventRepo` / `RunEventSummaryRepo`; session
-  events (`RunStarted` / `SessionCommitted` / `SessionFailed`) wired at the run
-  and commit boundaries; demonstrator `apps.cli.ops.events` consumer/replay CLI.
-  Umbrella stays **Proposed** pending Phase 2 (adopt consumers) and Phase 3
-  (optional strangler).
+  remote `javdb-reports` D1; `PipelineEvent` has live rows from `RunStarted` /
+  `SessionCommitted`; `javdb/pipeline/events/` (`emit`, `read_since`, cursor
+  `Consumer`) + `PipelineEventRepo` / `RunEventSummaryRepo`; session events
+  (`RunStarted` / `SessionCommitted` / `SessionFailed`) wired at the run and
+  commit boundaries; demonstrator `apps.cli.ops.events` consumer/replay CLI;
+  GitHub full unit tests passed with no failures. Umbrella stays **Proposed**
+  pending Phase 2 (adopt consumers) and Phase 3 (optional strangler).
