@@ -1,4 +1,11 @@
 # tests/unit/test_commit_gate_site_drift.py
+"""Unit tests for the sentinel VERDICT the commit gate consumes (ADR-035).
+
+These assert what ``service.evaluate_session`` returns (critical vs clean) — the
+signal the gate reads. The gate's actual commit-blocking control flow (drive
+``commit_session.main`` and assert the drain is skipped / SessionFailed emitted)
+is covered in ``tests/unit/test_commit_session_events.py``.
+"""
 import sqlite3
 
 from javdb.ops.sentinel import service
@@ -26,15 +33,15 @@ def _repo():
     return ParseRunFieldFillRepo(c)
 
 
-def test_gate_blocks_on_critical_drift():
+def test_verdict_is_critical_on_href_collapse():
     repo = _repo()
     repo.upsert_fills("S1", [FieldFill("index", "href", 0.05, 100)])  # critical
     v = service.evaluate_session("S1", fill_repo=repo, incident_repo=_Inc())
-    assert v.critical is True  # caller must NOT commit
+    assert v.critical is True  # gate will refuse to commit on this verdict
 
 
-def test_gate_allows_clean_run():
+def test_verdict_is_clean_when_above_min_fill():
     repo = _repo()
     repo.upsert_fills("S1", [FieldFill("index", "href", 1.0, 100)])
     v = service.evaluate_session("S1", fill_repo=repo, incident_repo=_Inc())
-    assert v.critical is False  # caller commits, then mark_committed
+    assert v.critical is False  # gate commits, then mark_committed

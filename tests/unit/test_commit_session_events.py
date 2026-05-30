@@ -21,6 +21,7 @@ from types import SimpleNamespace
 import pytest
 
 import apps.cli.db.commit_session as cs
+from javdb.ops.sentinel.models import DriftFinding, SentinelVerdict
 
 
 def _emitted_types(recorder):
@@ -88,3 +89,63 @@ def test_drain_failure_emits_session_failed(harness):
     rc = cs.main(["--session-id", "S1", "--no-claim-commit"])
     assert rc == 1
     assert _emitted_types(harness.emit) == ["SessionFailed"]
+
+
+# ── ADR-035 site-contract gate — drives the REAL commit path (cs.main) ───────
+# (Unlike tests/unit/test_commit_gate_site_drift.py, which only asserts the
+# sentinel *verdict*, these exercise commit_session's gating control flow.)
+
+
+def test_site_drift_gate_blocks_commit_on_critical(harness, monkeypatch):
+    """Critical drift routes the session to the failure path and must NEVER
+    reach the pending-rows drain (ADR-035 D3)."""
+    monkeypatch.setattr(
+        cs, "_sentinel_evaluate",
+        lambda sid: SentinelVerdict(
+            critical=True,
+            findings=[DriftFinding("index", "href", "critical", 0.05, 0.99)],
+            evaluated=1,
+        ),
+    )
+
+    drained: list = []
+
+    class _NoDrainRepo:
+        def commit_session(self, sid):
+            drained.append(sid)  # the gate must prevent this from running
+            return {"residual_cleanup": False, "pending_deleted": 0}
+
+    monkeypatch.setattr(cs, "HistoryRepo", lambda *a, **k: _NoDrainRepo())
+
+    rc = cs.main(["--session-id", "S1", "--no-claim-commit"])
+
+    assert rc == 1
+    assert _emitted_types(harness.emit) == ["SessionFailed"]
+    assert drained == []  # critical drift gated the drain out entirely
+
+
+def test_site_drift_gate_allows_clean_run(harness, monkeypatch):
+    """A clean verdict commits normally and marks the run baseline-eligible."""
+    marked: list = []
+    monkeypatch.setattr(cs, "_sentinel_evaluate", lambda sid: SentinelVerdict(critical=False))
+    monkeypatch.setattr(cs, "_sentinel_mark_committed", lambda sid: marked.append(sid))
+
+    rc = cs.main(["--session-id", "S1", "--no-claim-commit"])
+
+    assert rc == 0
+    assert _emitted_types(harness.emit) == ["SessionCommitted"]
+    assert marked == ["S1"]
+
+
+def test_site_drift_gate_fails_open_on_sentinel_error(harness, monkeypatch):
+    """A sentinel evaluation error must NOT block the commit (fail-open)."""
+    def _boom(sid):
+        raise RuntimeError("sentinel boom")
+
+    monkeypatch.setattr(cs, "_sentinel_evaluate", _boom)
+    monkeypatch.setattr(cs, "_sentinel_mark_committed", lambda sid: None)
+
+    rc = cs.main(["--session-id", "S1", "--no-claim-commit"])
+
+    assert rc == 0
+    assert _emitted_types(harness.emit) == ["SessionCommitted"]
