@@ -2,7 +2,7 @@
 
 | 字段       | 值                                                                    |
 | ---------- | --------------------------------------------------------------------- |
-| **状态**   | Proposed — 伞型;执行下放给各期 IMP                                    |
+| **状态**   | Accepted — Phase 1 已实现;后续阶段待完成                               |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
 | **关联**   | [ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md), [ADR-038](../ADR-038-Agentic-Operator-MCP/ADR-038-agentic-operator-mcp-surface.md) |
@@ -106,3 +106,4 @@ Phase 1 附加且向后兼容（无规则 → 无变化）。Phase 2/3 拓宽包
 ## 状态日志 (Status Log)
 
 - 2026-05-29: Proposed（从"流式摄取"纠偏为内容过滤;三期已划定,IMP 待出）。
+- 2026-05-30: Phase 1 已通过 [IMP-ADR040-01](IMP-ADR040-01-content-filter.md) 实现;ADR 继续保持 active,用于 Phase 2/3。

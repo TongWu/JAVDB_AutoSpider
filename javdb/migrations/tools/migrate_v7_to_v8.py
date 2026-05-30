@@ -588,7 +588,17 @@ def run_actor_backfill(
                 use_cf_bypass=use_cf_bypass,
                 entry_index=entry_index, is_adhoc_mode=True,
             )
-            magnets, actor_name, actor_gender, actor_link, supporting_actors, parse_ok, _ep, _ecf = m
+            (
+                magnets,
+                actor_name,
+                actor_gender,
+                actor_link,
+                supporting_actors,
+                parse_ok,
+                _movie_detail,
+                _ep,
+                _ecf,
+            ) = m
 
             an = (actor_name or "").strip()
             ag = (actor_gender or "").strip()

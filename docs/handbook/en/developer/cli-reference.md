@@ -21,6 +21,7 @@ python3 -m apps.cli.<command> [options]
 - [Login CLI](#login-cli) (`apps.cli.login`)
 - [Rollback CLI](#rollback-cli) (`apps.cli.rollback`)
 - [Operations Diagnosis CLI](#operations-diagnosis-cli) (`apps.cli.ops.diagnose_run`)
+- [Content Filter CLI](#content-filter-cli) (`apps.cli.ops.content_filter`)
 - [Event Spine Consumer CLI](#event-spine-consumer-cli) (`apps.cli.ops.events`)
 - [Config Generator CLI](#config-generator-cli) (`apps.cli.config_generator`)
 - [Complete Spider Argument Reference](#complete-spider-argument-reference)
@@ -594,6 +595,79 @@ python3 -m apps.cli.ops.diagnose_run \
 python3 -m apps.cli.ops.diagnose_run \
   --run-id 123456789 \
   --drift-verdict CLEAN
+```
+
+---
+
+## Content Filter CLI
+
+**Module:** `apps.cli.ops.content_filter`
+
+Manages ADR-040 content-filter rules in the `ContentFilterRule` table in the
+reports database. The spider loads enabled rules once per run and evaluates
+them after detail parsing, before CSV/report persistence and qBittorrent upload.
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `add` | Add a rule. |
+| `list` | List all rules, including disabled rules. |
+| `remove` | Delete a rule by id. |
+| `enable` | Enable a rule by id, or disable it with `--off`. |
+
+### Supported Rule Shapes
+
+| Dimension | Mode | Value |
+|-----------|------|-------|
+| `actor` | `exclude` | Required: actor name or actor href. |
+| `tag` | `exclude` | Required: tag name. |
+| `tag` | `include` | Required: tag name. At least one include tag must match when include rules exist. |
+| `gender` | `require_lead` | Required: `female` or `male`. |
+| `gender` | `exclude_all_male` | No value; `--value` is rejected. |
+
+### Arguments
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--dimension` | Rule dimension for `add`. Choices: `actor`, `tag`, `gender`. | Required |
+| `--mode` | Rule mode for `add`. Choices: `exclude`, `include`, `require_lead`, `exclude_all_male`. | Required |
+| `--value` | Rule value for `add`: actor name/href, tag name, or lead gender depending on the rule. Required except for `gender exclude_all_male`. | `""` |
+| `--id` | Rule id for `remove` and `enable`. | Required |
+| `--off` | Disable the rule in `enable` instead of enabling it. | `False` |
+| `--log-level` | Logging level. Choices: `DEBUG`, `INFO`, `WARNING`, `ERROR`. | `INFO` |
+
+### Examples
+
+```bash
+# Drop any movie whose actor name or href matches the value
+python3 -m apps.cli.ops.content_filter add \
+  --dimension actor \
+  --mode exclude \
+  --value "/actors/EvkJ"
+
+# Require at least one included tag to be present
+python3 -m apps.cli.ops.content_filter add \
+  --dimension tag \
+  --mode include \
+  --value subtitle
+
+# Require a female lead actor
+python3 -m apps.cli.ops.content_filter add \
+  --dimension gender \
+  --mode require_lead \
+  --value female
+
+# Drop all-male detail pages
+python3 -m apps.cli.ops.content_filter add \
+  --dimension gender \
+  --mode exclude_all_male
+
+# Inspect and manage rules
+python3 -m apps.cli.ops.content_filter list
+python3 -m apps.cli.ops.content_filter enable --id 3 --off
+python3 -m apps.cli.ops.content_filter enable --id 3
+python3 -m apps.cli.ops.content_filter remove --id 3
 ```
 
 ---
