@@ -4,7 +4,7 @@ JAVDB AutoSpider 所有配置变量的完整参考。
 
 主配置文件为 **`config.py`**。将 `config.py.example` 复制为 `config.py` 并填入你的值。该文件已被 git 忽略，因此凭据不会被提交。
 
-Web API 和 Docker 的环境变量在[第 15 节](#15-环境变量)中介绍。
+Web API 和 Docker 的环境变量在[第 16 节](#16-环境变量)中介绍。
 
 ---
 
@@ -24,7 +24,8 @@ Web API 和 Docker 的环境变量在[第 15 节](#15-环境变量)中介绍。
 12. [PikPak](#12-pikpak)
 13. [Rclone / 去重](#13-rclone--去重)
 14. [qBittorrent 文件过滤器](#14-qbittorrent-文件过滤器)
-15. [环境变量](#15-环境变量)
+15. [媒体闭环](#15-媒体闭环)
+16. [环境变量](#16-环境变量)
 
 ---
 
@@ -275,7 +276,7 @@ ADR-026 新增了一个只读运维诊断助手，用于失败的 ingestion run 
 | `PIPELINE_LOG_FILE` | `str` | `'logs/pipeline.log'` | 流水线编排器的日志文件路径。 |
 | `EMAIL_NOTIFICATION_LOG_FILE` | `str` | `'logs/email_notification.log'` | 邮件通知的日志文件路径。 |
 
-其他日志行为由环境变量控制（见[第 15 节](#15-环境变量)）：
+其他日志行为由环境变量控制（见[第 16 节](#16-环境变量)）：
 `LOG_STYLE`（`compact` | `plain` | `verbose`）和
 `LOG_GITHUB_GROUPS`（`on` | `off` | `auto`）。
 
@@ -370,11 +371,22 @@ Google Drive 库存扫描和重复文件清理的设置。
 
 ---
 
-## 15. 环境变量
+## 15. 媒体闭环
+
+ADR-033 Phase 1 会记录采集结果，并使用实时 qBittorrent 状态做对账。CLI
+标志 `--stalled-after-days` 可覆盖单次对账运行的配置默认值。
+
+| 变量 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `RECONCILE_STALLED_DAYS` | `int` | `7` | 正整数。活跃的 `queued` / `downloading` outcome 如果超过该天数未在 qB 中被观测到，会变为 `stalled`；超过 2 倍窗口后会变为 `failed`。请按环境中最慢的预期 qB 下载耗时调优。 |
+
+---
+
+## 16. 环境变量
 
 这些变量在 `.env` 文件中设置，而非 `config.py`。
 
-### 15.1 根目录 `.env`（Docker / cron 入口脚本）
+### 16.1 根目录 `.env`（Docker / cron 入口脚本）
 
 在仓库根目录的 `.env.example` 中定义。**裸 uvicorn 不会自动加载此文件** ——
 `apps/api/services/context.py` 故意去掉了 `load_dotenv`，以避免陈旧的 `.env`
@@ -436,7 +448,7 @@ uvicorn 之前 `export VAR=...`。
 | `MAX_LOG_SIZE` | `str` | *（无）* | 日志文件轮转前的最大大小，例如 `100M`。 |
 | `MAX_LOG_FILES` | `int` | *（无）* | 保留的轮转日志文件最大数量。 |
 
-### 15.2 Shell / CI 环境变量
+### 16.2 Shell / CI 环境变量
 
 在 Shell 或 GitHub Actions 工作流文件中设置，由各模块在运行时读取。
 
@@ -457,7 +469,7 @@ uvicorn 之前 `export VAR=...`。
 | `LOG_GITHUB_GROUPS` | `str` | `'auto'` | GitHub Actions 日志分组。`'on'` —— 始终输出 `::group::` 标记。`'off'` —— 从不。`'auto'` —— 自动检测 CI 环境。 |
 | `VAR_MOVIE_SLEEP` | `str` | *（无）* | 覆盖自适应休眠范围，格式为 `"min,max"`（秒），例如 CI 中使用 `"0,0"`。 |
 
-### 15.3 Docker 专用 `.env`（`docker/.env.example`）
+### 16.3 Docker 专用 `.env`（`docker/.env.example`）
 
 `docker/.env.example` 文件提供了 Docker 容器的简化 cron 配置格式。使用与[Docker 定时任务调度](#docker-定时任务调度)中相同的变量，但采用替代的内联格式：
 

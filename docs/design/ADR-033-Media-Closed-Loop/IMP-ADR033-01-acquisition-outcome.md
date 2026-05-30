@@ -4,6 +4,8 @@
 
 **Related:** [ADR-033](ADR-033-media-closed-loop.md) (umbrella) — this is **Phase 1** of three.
 
+**Status:** Implemented and locally verified (2026-05-30). All 11 tasks landed: D1 migration file, reconcile models/repo/persistence/collector/service/CLI, qB queued instrumentation, PikPak cleanup completion push, ReconcileLibrary workflow, config knob, and paired docs. Local verification gates passed (`31` targeted ADR-033 tests; `201` touched-area unit tests; collector read-only grep; workflow YAML parse; CLI help; `git diff --check`). Remote D1 apply and local SQLite mirror refresh remain environment-bound deployment verification because this worktree lacks Cloudflare credentials and a real LFS-backed `reports/operations.db`.
+
 **Goal:** Record the real fate of every selected torrent after qBittorrent (`queued → downloading → completed`, plus `stalled`/`failed`) in a new D1-canonical `AcquisitionOutcome` table, written by an async `Options→Result` reconcile service.
 
 **Architecture:** A new `javdb/ops/reconcile/` module mirrors the ADR-026 diagnosis module shape: typed `models.py`, read-only `collectors.py` (`SourceCollector` seam, `QbCollector` only in Phase 1), a `service.py` whose `run(ReconcileOptions) -> ReconcileResult` is the **single writer**, and `persistence.py` wiring `get_db('operations')`. The uploader writes a `state=queued` row at add-time (reusing `extract_hash_from_magnet`); the existing cleanup step pushes `state=completed` for the hashes it removes (ADR-033 D3); a new `ReconcileLibrary.yml` cron drives `downloading`/`stalled`/`failed` derivation.

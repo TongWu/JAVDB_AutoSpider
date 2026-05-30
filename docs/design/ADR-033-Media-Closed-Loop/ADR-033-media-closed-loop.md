@@ -2,7 +2,7 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Proposed — umbrella; execution delegated to per-phase IMPs            |
+| **Status**  | Proposed — umbrella; Phase 1 implemented and locally verified; execution delegated to per-phase IMPs |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
 | **Related** | [ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-024](../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md), [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-028](../ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md) |
@@ -241,11 +241,11 @@ Each phase ships and rolls back independently. Phase 1 is the foundation; Phases
 2 and 3 are "add a collector" and do not alter the service orchestration.
 
 **Planning cadence.** [IMP-ADR033-01](IMP-ADR033-01-acquisition-outcome.md)
-(Phase 1) is written and ready to implement. **IMP-ADR033-02 and IMP-ADR033-03
-are intentionally left as roadmap stubs** — their detailed plans will be produced
-in a dedicated `grill-me` + `brainstorming` round **after Phase 1 lands**, so they
-can incorporate what the Phase 1 reconcile service and the `AcquisitionOutcome`
-shape reveal in practice.
+(Phase 1) is implemented and locally verified. **IMP-ADR033-02 and
+IMP-ADR033-03 are intentionally left as roadmap stubs** — their detailed plans
+will be produced in a dedicated `grill-me` + `brainstorming` round after Phase 1,
+so they can incorporate what the Phase 1 reconcile service and the
+`AcquisitionOutcome` shape reveal in practice.
 
 ### Explicit non-goals (YAGNI)
 
@@ -300,3 +300,5 @@ shape reveal in practice.
 - 2026-05-29: IMP-ADR033-01 (Phase 1) plan written; IMP-02/03 deferred to a
   post-Phase-1 `grill-me` + `brainstorming` round. Web surface split out to
   [ADR-034](../ADR-034-Media-Closed-Loop-Web-Surface/ADR-034-media-closed-loop-web-surface.md).
+- 2026-05-30: IMP-ADR033-01 (Phase 1) implemented and locally verified. Remote
+  D1 apply and local SQLite mirror refresh remain deployment-environment gates.

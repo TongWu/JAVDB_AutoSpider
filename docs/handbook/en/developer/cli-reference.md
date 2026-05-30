@@ -21,6 +21,7 @@ python3 -m apps.cli.<command> [options]
 - [Login CLI](#login-cli) (`apps.cli.login`)
 - [Rollback CLI](#rollback-cli) (`apps.cli.rollback`)
 - [Operations Diagnosis CLI](#operations-diagnosis-cli) (`apps.cli.ops.diagnose_run`)
+- [Acquisition Reconcile CLI](#acquisition-reconcile-cli) (`apps.cli.ops.reconcile`)
 - [Content Filter CLI](#content-filter-cli) (`apps.cli.ops.content_filter`)
 - [Event Spine Consumer CLI](#event-spine-consumer-cli) (`apps.cli.ops.events`)
 - [Site-Contract Sentinel CLI](#site-contract-sentinel-cli) (`apps.cli.ops.sentinel`)
@@ -596,6 +597,54 @@ python3 -m apps.cli.ops.diagnose_run \
 python3 -m apps.cli.ops.diagnose_run \
   --run-id 123456789 \
   --drift-verdict CLEAN
+```
+
+---
+
+## Acquisition Reconcile CLI
+
+**Module:** `apps.cli.ops.reconcile`
+
+Reconciles ADR-033 `AcquisitionOutcome` rows against live source state. Phase 1
+uses qBittorrent as the only collector and updates active outcomes from
+`queued` / `downloading` to `downloading`, `completed`, `stalled`, or `failed`.
+Run it with `STORAGE_BACKEND=d1` in production because `AcquisitionOutcome` is
+D1-canonical in the operations database.
+
+### Arguments
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--source` | Source to reconcile. Repeatable. Phase 1 only accepts `qb`. | `qb` |
+| `--category` | qB category to scan. Repeatable. | `TORRENT_CATEGORY`, `TORRENT_CATEGORY_ADHOC` |
+| `--stalled-after-days` | Positive integer. Active outcomes unseen for this many days become `stalled`; after 2x this window they become `failed`. | `RECONCILE_STALLED_DAYS` or `7` |
+| `--dry-run` | Compute transitions but write nothing. | `False` |
+| `--json` | Print a JSON result payload. | `False` |
+| `--log-level` | Logging level. Choices: `DEBUG`, `INFO`, `WARNING`, `ERROR`. | `INFO` |
+
+Exit code `0` means the reconcile pass completed without source or write errors.
+Exit code `2` means the pass completed with recorded errors, and `1` means an
+unexpected CLI failure occurred.
+
+When `--category` is supplied, the run is treated as a partial scan: observed
+hashes can still advance to `downloading` / `completed`, but outcomes absent
+from that subset are not marked `stalled` or `failed`.
+
+### Examples
+
+```bash
+# Production cron path: reconcile D1 using qB observations and print JSON
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --json
+
+# Preview stalled/failed transitions with a wider threshold
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile \
+  --stalled-after-days 14 \
+  --dry-run \
+  --json
+
+# Reconcile only one qB category; absent-state inference is disabled
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile \
+  --category "Daily Ingestion"
 ```
 
 ---
