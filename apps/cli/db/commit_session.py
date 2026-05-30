@@ -44,11 +44,10 @@ from javdb.storage.sessions.lifecycle_helpers import (
 )
 from javdb.storage.db import (
     close_db,
-    db_commit_session_history,
-    db_find_in_progress_sessions,
-    db_pending_session_stats,
     init_db,
 )
+from javdb.storage.repos.history_repo import HistoryRepo
+from javdb.storage.repos.session_lifecycle_repo import SessionLifecycleRepo
 from javdb.storage.sessions.lifecycle import transition
 from javdb.infra.logging import (
     get_logger,
@@ -258,7 +257,7 @@ def _emit_pending_verify(
     Returns the record (for callers that want to print it / add it to
     their JSON summary).
     """
-    stats = db_pending_session_stats(session_id)
+    stats = HistoryRepo().pending_session_stats(session_id)
     drain = drain or {}
     pending_applied_count = int(
         drain.get("pending_marked_applied", 0) or 0
@@ -330,11 +329,13 @@ def main(argv: Optional[List[str]] = None) -> int:
         # shared session helper: a DB hiccup with no
         # explicit ``--session-id`` is a hard error (exit 1) so an
         # operator notices, but with an explicit id we still try to
-        # commit it. Call db_find_in_progress_sessions directly so the
+        # commit it. Call find_in_progress_sessions directly so the
         # helper's "swallow-and-warn" default doesn't downgrade the
         # no-explicit-id error path.
         try:
-            window_sessions = db_find_in_progress_sessions(since=since)
+            window_sessions = SessionLifecycleRepo().find_in_progress_sessions(
+                since=since,
+            )
         except Exception as e:
             if args.session_id is not None:
                 logger.warning(
@@ -386,7 +387,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         if write_mode == 'pending' and sess_status != 'committed':
             try:
                 commit_started_at = time.monotonic()
-                drain = db_commit_session_history(sid)
+                drain = HistoryRepo().commit_session(sid)
                 drained_pending_session = True
                 commit_duration_ms = int(
                     (time.monotonic() - commit_started_at) * 1000,

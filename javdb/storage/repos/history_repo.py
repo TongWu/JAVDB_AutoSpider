@@ -417,6 +417,23 @@ class HistoryRepo:
         from javdb.storage.db import db_commit_session_history
         return db_commit_session_history(session_id, **kwargs)
 
+    def resume_finalizing_session(self, session_id: str, **kwargs) -> dict:
+        """Idempotently finish a session left in ``Status='finalizing'``."""
+        from javdb.storage.db import db_resume_finalizing_session
+        return db_resume_finalizing_session(session_id, **kwargs)
+
+    def pending_session_stats(self, session_id: str) -> dict[str, int]:
+        """Snapshot pending-table counts for *session_id* (Phase 2 verify).
+
+        Queries the **history** DB (``PendingMovieHistoryWrites`` /
+        ``PendingTorrentHistoryWrites``), so it lives on the history-owned
+        Repo: ``self._db_path`` is the history DB path. (Not on
+        ``SessionLifecycleRepo``, whose ``db_path`` is the reports/session DB
+        — threading that here would mis-route the query.)
+        """
+        from javdb.storage.db import db_pending_session_stats
+        return db_pending_session_stats(session_id, db_path=self._db_path)
+
     def batch_update_last_visited(self, hrefs: List[str]) -> int:
         """Bump LastVisited on each href; staging-aware under pending mode."""
         from javdb.storage.db import (
