@@ -21,6 +21,7 @@ python3 -m apps.cli.<command> [options]
 - [Login CLI](#login-cli)（`apps.cli.login`）
 - [Rollback CLI](#rollback-cli)（`apps.cli.rollback`）
 - [运维诊断 CLI](#运维诊断-cli)（`apps.cli.ops.diagnose_run`）
+- [事件主线消费者 CLI](#事件主线消费者-cli)（`apps.cli.ops.events`）
 - [Config Generator CLI](#config-generator-cli)（`apps.cli.config_generator`）
 - [Spider 完整参数参考](#spider-完整参数参考)
 
@@ -587,6 +588,37 @@ python3 -m apps.cli.ops.diagnose_run \
 python3 -m apps.cli.ops.diagnose_run \
   --run-id 123456789 \
   --drift-verdict CLEAN
+```
+
+---
+
+## 事件主线消费者 CLI
+
+**模块：** `apps.cli.ops.events`
+
+运行 ADR-036 事件主线（event spine）的示范消费者。它按游标读取新的 `PipelineEvent`
+行，并将"每会话、每事件类型"的计数投影到 `RunEventSummary` 表（两者都在
+`javdb-reports` 库中）。这是 Phase 1 对 emit → consume → replay 闭环的验证，
+**不触碰**权威的 `pending→commit` 路径。
+
+### 参数
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--replay` | 重置消费者游标并清空投影，然后从 `seq` 0 重建。 | `False` |
+| `--batch` | 每次 `read_since` 分页读取的事件数。必须 `>= 1`。 | `500` |
+| `--log-level` | 日志级别。可选：`DEBUG`、`INFO`、`WARNING`、`ERROR`。 | `INFO` |
+
+正常运行退出码恒为 `0`；投影的事件数会写入日志。
+
+### 示例
+
+```bash
+# 将新事件投影进 RunEventSummary（推进游标）
+python3 -m apps.cli.ops.events
+
+# 从头重建投影（幂等 —— 结果一致）
+python3 -m apps.cli.ops.events --replay
 ```
 
 ---
