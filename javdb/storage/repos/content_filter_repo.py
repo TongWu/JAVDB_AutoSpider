@@ -21,6 +21,16 @@ def _row_to_rule(row: Mapping[str, object]) -> Rule:
     )
 
 
+def _canonical_lastrowid(cur: object) -> int:
+    # DualConnection reads from D1, so operator-facing IDs must match D1
+    # when the mirror write cursor is available.
+    d1_cur = getattr(cur, "_d1_cur", None)
+    d1_lastrowid = getattr(d1_cur, "lastrowid", None)
+    if d1_lastrowid is not None:
+        return int(d1_lastrowid)
+    return int(getattr(cur, "lastrowid"))
+
+
 class ContentFilterRepo:
     def __init__(self, conn: sqlite3.Connection) -> None:
         self._conn = conn
@@ -42,7 +52,7 @@ class ContentFilterRepo:
             "VALUES (?, ?, ?, 1)",
             [dimension, mode, value],
         )
-        return int(cur.lastrowid)
+        return _canonical_lastrowid(cur)
 
     def list_rules(self) -> list[Rule]:
         rows = self._conn.execute(

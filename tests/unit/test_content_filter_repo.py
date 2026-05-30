@@ -23,6 +23,61 @@ CREATE INDEX idx_content_filter_enabled ON ContentFilterRule(enabled, dimension)
 """
 
 
+class _FakeCursor:
+    def __init__(
+        self,
+        *,
+        lastrowid: int | None = None,
+        rows: list[dict[str, object]] | None = None,
+    ) -> None:
+        self.lastrowid = lastrowid
+        self.rowcount = 1
+        self._rows = list(rows or [])
+
+    def fetchall(self) -> list[dict[str, object]]:
+        return list(self._rows)
+
+
+class _FakeDualCursor:
+    def __init__(self, *, sqlite_lastrowid: int, d1_lastrowid: int) -> None:
+        self.lastrowid = sqlite_lastrowid
+        self.rowcount = 1
+        self._d1_cur = _FakeCursor(lastrowid=d1_lastrowid)
+
+
+class _FakeDualConnection:
+    row_factory = None
+
+    def __init__(self) -> None:
+        self._inserted = False
+
+    def execute(
+        self,
+        sql: str,
+        params: list[str] | tuple[str, ...] = (),
+    ) -> _FakeCursor | _FakeDualCursor:
+        if sql.startswith("INSERT INTO ContentFilterRule"):
+            assert list(params) == ["actor", "exclude", "/actors/abc"]
+            self._inserted = True
+            return _FakeDualCursor(sqlite_lastrowid=11, d1_lastrowid=42)
+        if sql.startswith(
+            "SELECT id, dimension, mode, value, enabled FROM ContentFilterRule"
+        ):
+            assert self._inserted
+            return _FakeCursor(
+                rows=[
+                    {
+                        "id": 42,
+                        "dimension": "actor",
+                        "mode": "exclude",
+                        "value": "/actors/abc",
+                        "enabled": 1,
+                    }
+                ]
+            )
+        raise AssertionError(f"Unexpected SQL: {sql}")
+
+
 @pytest.fixture
 def conn() -> sqlite3.Connection:
     connection = sqlite3.connect(":memory:")
@@ -40,6 +95,24 @@ def test_add_rule_returns_id_and_lists_rule(conn: sqlite3.Connection) -> None:
     assert repo.list_rules() == [
         Rule(
             id=rule_id,
+            dimension="actor",
+            mode="exclude",
+            value="/actors/abc",
+            enabled=True,
+        )
+    ]
+
+
+def test_add_rule_returns_d1_id_for_dual_connection() -> None:
+    fake_conn = _FakeDualConnection()
+    repo = ContentFilterRepo(fake_conn)
+
+    rule_id = repo.add_rule("actor", "exclude", "/actors/abc")
+
+    assert rule_id == 42
+    assert repo.list_rules() == [
+        Rule(
+            id=42,
             dimension="actor",
             mode="exclude",
             value="/actors/abc",
