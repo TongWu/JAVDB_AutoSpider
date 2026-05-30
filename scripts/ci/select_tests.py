@@ -132,7 +132,7 @@ IMPACT_RULES = (
             "tests/unit/test_magnet_extractor.py",
             "tests/unit/test_parser.py",
             "tests/unit/test_video_code_search.py",
-            "tests/parity/test_parser_parity.py",
+            "tests/unit/test_fallback_shape.py",
             "tests/integration/test_spider_gateway.py",
         ),
     ),

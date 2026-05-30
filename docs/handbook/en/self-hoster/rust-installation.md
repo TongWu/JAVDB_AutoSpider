@@ -64,7 +64,7 @@ cd javdb/rust_core
 maturin develop --release
 ```
 
-This compiles the Rust code and installs the `javdb_rust_core` Python extension module. The system falls back to pure Python automatically if the extension is not available.
+This compiles the Rust code and installs the `javdb_rust_core` Python extension module. Without it, the parsers, magnet categorisation, URL helpers, and masking fall back to **best-effort** pure Python (dev-only — behaviour may differ from production, and a `WARNING` is logged); but the **proxy pool and ban manager require the Rust core** — running `--use-proxy` without the wheel raises a clear error (ADR-041). For local runs without Rust, use `--no-proxy` or install the wheel.
 
 ## Troubleshooting
 

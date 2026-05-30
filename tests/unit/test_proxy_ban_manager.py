@@ -1,8 +1,14 @@
 """
-Unit tests for utils/proxy_ban_manager.py
+Unit tests for the proxy ban manager.
 
-Proxy bans are now session-scoped (in-memory only).
-A ban is permanent for the lifetime of the process.
+Proxy bans are session-scoped (in-memory only); a ban is permanent for the
+lifetime of the process.
+
+ADR-041: the proxy ban manager is Rust-Required — the production manager is the
+Rust implementation returned by ``get_ban_manager()``. These tests construct that
+same Rust ``ProxyBanManager`` class directly and assert its behaviour contract
+(add / is-banned / session-permanent / summary / remove). The former
+``TestProxyBanRecord`` cases were dropped with the Python ``ProxyBanRecord``.
 """
 import os
 import sys
@@ -14,173 +20,127 @@ from unittest.mock import patch, MagicMock
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from javdb.proxy.ban_manager import (
-    ProxyBanRecord,
-    ProxyBanManager,
-    get_ban_manager,
-    _global_ban_manager
-)
-
-
-class TestProxyBanRecord:
-    """Test cases for ProxyBanRecord class."""
-    
-    def test_init_basic(self):
-        """Test basic initialization."""
-        ban_time = datetime(2024, 1, 1, 10, 0, 0)
-        record = ProxyBanRecord("test-proxy", ban_time)
-        
-        assert record.proxy_name == "test-proxy"
-        assert record.ban_time == ban_time
-        assert record.proxy_url is None
-    
-    def test_init_with_proxy_url(self):
-        """Test initialization with proxy URL."""
-        ban_time = datetime(2024, 1, 1, 10, 0, 0)
-        record = ProxyBanRecord("test-proxy", ban_time,
-                                proxy_url="http://user:pass@192.168.1.1:8080")
-        
-        assert record.proxy_url == "http://user:pass@192.168.1.1:8080"
-    
-    def test_to_dict(self):
-        """Test to_dict conversion."""
-        ban_time = datetime(2024, 1, 1, 10, 30, 45)
-        record = ProxyBanRecord("test-proxy", ban_time,
-                                proxy_url="http://proxy:8080")
-        
-        result = record.to_dict()
-        
-        assert result['proxy_name'] == "test-proxy"
-        assert result['ban_time'] == "2024-01-01 10:30:45"
-        assert 'proxy_url' not in result
-    
-    def test_to_dict_with_ip(self):
-        """Test to_dict_with_ip conversion."""
-        ban_time = datetime(2024, 1, 1, 10, 30, 45)
-        record = ProxyBanRecord("test-proxy", ban_time,
-                                proxy_url="http://proxy:8080")
-        
-        result = record.to_dict_with_ip()
-        
-        assert result['proxy_name'] == "test-proxy"
-        assert result['proxy_url'] == "http://proxy:8080"
-    
-    def test_to_dict_with_ip_no_url(self):
-        """Test to_dict_with_ip when no URL is set."""
-        ban_time = datetime(2024, 1, 1, 10, 30, 45)
-        record = ProxyBanRecord("test-proxy", ban_time)
-        
-        result = record.to_dict_with_ip()
-        
-        assert result['proxy_url'] == 'N/A'
+# ADR-041: the production ban manager is the Rust implementation returned by
+# get_ban_manager(); these tests construct that same Rust class directly.
+from javdb.rust_core import RustProxyBanManager as ProxyBanManager
+from javdb.proxy.ban_manager import get_ban_manager
 
 
 class TestProxyBanManager:
-    """Test cases for ProxyBanManager class (session-scoped, in-memory)."""
-    
+    """Test cases for the (Rust) ban manager — session-scoped, in-memory."""
+
     def test_init_no_bans(self):
-        """Test initialization starts with no bans."""
+        """A fresh manager starts with no bans."""
         manager = ProxyBanManager()
-        assert len(manager.banned_proxies) == 0
-    
+        assert manager.get_banned_count() == 0
+
     def test_add_ban(self):
-        """Test adding a new ban."""
+        """Adding a ban records it (with the proxy URL for reporting)."""
         manager = ProxyBanManager()
-        
+
         manager.add_ban("new-proxy", proxy_url="http://192.168.1.1:8080")
-        
-        assert "new-proxy" in manager.banned_proxies
-        record = manager.banned_proxies["new-proxy"]
-        assert record.proxy_url == "http://192.168.1.1:8080"
-    
+
+        assert manager.is_proxy_banned("new-proxy")
+        record = next(r for r in manager.get_banned_proxies()
+                      if r["proxy_name"] == "new-proxy")
+        assert record["proxy_url"] == "http://192.168.1.1:8080"
+
     def test_add_ban_already_banned(self):
-        """Test adding a ban for already banned proxy."""
+        """Re-adding an already-banned proxy is idempotent (still one ban)."""
         manager = ProxyBanManager()
-        
+
         manager.add_ban("proxy-1")
-        original_ban_time = manager.banned_proxies["proxy-1"].ban_time
-        
         manager.add_ban("proxy-1")
-        
-        assert manager.banned_proxies["proxy-1"].ban_time == original_ban_time
-    
+
+        assert manager.is_proxy_banned("proxy-1")
+        assert manager.get_banned_count() == 1
+
     def test_is_proxy_banned_true(self):
-        """Test is_proxy_banned returns True for banned proxy."""
+        """is_proxy_banned returns True for a banned proxy."""
         manager = ProxyBanManager()
-        
+
         manager.add_ban("banned-proxy")
-        
+
         assert manager.is_proxy_banned("banned-proxy") is True
-    
+
     def test_is_proxy_banned_false(self):
-        """Test is_proxy_banned returns False for non-banned proxy."""
+        """is_proxy_banned returns False for a non-banned proxy."""
         manager = ProxyBanManager()
-        
+
         assert manager.is_proxy_banned("unknown-proxy") is False
-    
+
     def test_is_proxy_banned_session_permanent(self):
         """Ban is permanent for the session — no expiry."""
         manager = ProxyBanManager()
         manager.add_ban("proxy-1")
 
         assert manager.is_proxy_banned("proxy-1") is True
-    
+
     def test_get_banned_proxies(self):
-        """Test get_banned_proxies returns list of banned proxies."""
+        """get_banned_proxies returns the banned proxies."""
         manager = ProxyBanManager()
-        
+
         manager.add_ban("proxy-1")
         manager.add_ban("proxy-2")
-        
+
         banned = manager.get_banned_proxies()
-        
+
         assert len(banned) == 2
-        names = [r.proxy_name for r in banned]
+        names = [r["proxy_name"] for r in banned]
         assert "proxy-1" in names
         assert "proxy-2" in names
-    
+
     def test_get_ban_summary_no_bans(self):
-        """Test get_ban_summary with no banned proxies."""
+        """get_ban_summary with no banned proxies."""
         manager = ProxyBanManager()
-        
-        summary = manager.get_ban_summary()
-        
+
+        summary = manager.get_ban_summary(False)
+
         assert "No proxies currently banned" in summary
-    
+
     def test_get_ban_summary_with_bans(self):
-        """Test get_ban_summary with banned proxies."""
+        """get_ban_summary with a banned proxy."""
         manager = ProxyBanManager()
-        
+
         manager.add_ban("proxy-1", proxy_url="http://192.168.1.1:8080")
-        
-        summary = manager.get_ban_summary()
-        
+
+        summary = manager.get_ban_summary(False)
+
         assert "Currently banned proxies: 1" in summary
         assert "proxy-1" in summary
         assert "Banned at:" in summary
-    
+
     def test_get_ban_summary_with_ip(self):
-        """Test get_ban_summary with IP included."""
+        """get_ban_summary(include_ip=True) includes the proxy URL."""
         manager = ProxyBanManager()
-        
+
         manager.add_ban("proxy-1", proxy_url="http://192.168.1.1:8080")
-        
-        summary = manager.get_ban_summary(include_ip=True)
-        
+
+        summary = manager.get_ban_summary(True)
+
         assert "http://192.168.1.1:8080" in summary
-    
+
     def test_get_ban_summary_without_ip(self):
-        """Test get_ban_summary without IP (default)."""
+        """get_ban_summary(include_ip=False) omits the proxy URL."""
         manager = ProxyBanManager()
-        
+
         manager.add_ban("proxy-1", proxy_url="http://192.168.1.1:8080")
-        
-        summary = manager.get_ban_summary(include_ip=False)
-        
+
+        summary = manager.get_ban_summary(False)
+
         assert "192.168.1.1" not in summary
 
+    def test_remove_ban(self):
+        """remove_ban clears a recorded ban."""
+        manager = ProxyBanManager()
+        manager.add_ban("proxy-1")
+        assert manager.is_proxy_banned("proxy-1") is True
+
+        assert manager.remove_ban("proxy-1") is True
+        assert manager.is_proxy_banned("proxy-1") is False
+
     def test_session_scoped_no_persistence(self):
-        """Test that bans do not persist: a new manager starts clean."""
+        """Bans do not persist: a fresh manager starts clean."""
         manager1 = ProxyBanManager()
         manager1.add_ban("proxy-1")
         assert manager1.is_proxy_banned("proxy-1") is True
@@ -190,34 +150,42 @@ class TestProxyBanManager:
 
 
 class TestGetBanManager:
-    """Test cases for get_ban_manager function."""
-    
+    """Test cases for the get_ban_manager singleton accessor."""
+
     def test_get_ban_manager_creates_singleton(self):
-        """Test that get_ban_manager creates a singleton instance."""
+        """get_ban_manager returns the same instance across calls."""
         import javdb.proxy.ban_manager as pbm
         pbm._global_ban_manager = None
-        
+
         manager1 = get_ban_manager()
         manager2 = get_ban_manager()
-        
+
         assert manager1 is manager2
-        
+
         pbm._global_ban_manager = None
 
+    def test_rust_required_guard_raises_without_rust(self, monkeypatch):
+        """ADR-041 D4: get_ban_manager raises clearly when the Rust core is absent."""
+        import javdb.proxy.ban_manager as pbm
+        monkeypatch.setattr(pbm, "RUST_BAN_MANAGER_AVAILABLE", False)
+        monkeypatch.setattr(pbm, "_global_ban_manager", None)
 
-class TestRemoteBanHook:
-    """P1-A — cross-runner ban dispatcher (``set_remote_ban_hook``).
+        with pytest.raises(RuntimeError, match="requires the Rust core"):
+            get_ban_manager()
 
-    These verify (a) the hook fires once per *newly* recorded ban,
-    (b) repeats are deduped (no over-amplification of report_async),
-    (c) hook exceptions are swallowed, and (d) ``set_remote_ban_hook(None)``
-    cleanly disables the integration so the local manager keeps the
-    pre-coordinator behaviour.
+
+class TestRemoteBanDispatcher:
+    """The cross-runner ban dispatcher function ``_dispatch_remote_ban``.
+
+    ADR-041 made the proxy ban manager Rust-Required; the Rust ``add_ban`` cannot
+    reach the Python ``_dispatch_remote_ban`` hook from inside the extension, so
+    the former ``ProxyBanManager().add_ban`` → hook wiring tests (which exercised
+    the now-removed *Python* ban manager) were dropped. That cross-runner
+    dispatch gap on the Rust path is tracked in BFR-009. What remains valid is
+    the dispatcher function's own input guarding.
     """
 
     def setup_method(self):
-        # Defensive: every test starts with the hook cleared so cross-test
-        # leaks (a previous test forgetting to unregister) can't mask bugs.
         from javdb.proxy.ban_manager import (
             set_remote_ban_hook,
             set_remote_unban_hook,
@@ -233,60 +201,8 @@ class TestRemoteBanHook:
         set_remote_ban_hook(None)
         set_remote_unban_hook(None)
 
-    def test_add_ban_fires_remote_hook_exactly_once(self):
-        from javdb.proxy.ban_manager import (
-            set_remote_ban_hook,
-        )
-        captured: list = []
-        set_remote_ban_hook(lambda name: captured.append(name))
-
-        manager = ProxyBanManager()
-        manager.add_ban("proxy-A")
-        assert captured == ["proxy-A"]
-
-    def test_add_ban_does_not_fire_for_already_banned_proxy(self):
-        from javdb.proxy.ban_manager import (
-            set_remote_ban_hook,
-        )
-        captured: list = []
-        set_remote_ban_hook(lambda name: captured.append(name))
-
-        manager = ProxyBanManager()
-        manager.add_ban("proxy-A")
-        manager.add_ban("proxy-A")
-        manager.add_ban("proxy-A")
-        # Only the first add fires the hook; subsequent calls are dedup'd.
-        assert captured == ["proxy-A"]
-
-    def test_add_ban_swallows_hook_exceptions(self):
-        from javdb.proxy.ban_manager import (
-            set_remote_ban_hook,
-        )
-
-        def boom(name):
-            raise RuntimeError("simulated coordinator outage")
-
-        set_remote_ban_hook(boom)
-        manager = ProxyBanManager()
-        # Must NOT raise — the local ban must commit even when the hook fails.
-        manager.add_ban("proxy-A")
-        assert manager.is_proxy_banned("proxy-A") is True
-
-    def test_clearing_remote_hook_restores_local_only_behaviour(self):
-        from javdb.proxy.ban_manager import (
-            set_remote_ban_hook,
-        )
-        captured: list = []
-        set_remote_ban_hook(lambda name: captured.append(name))
-        set_remote_ban_hook(None)  # explicit clear
-
-        manager = ProxyBanManager()
-        manager.add_ban("proxy-A")
-        assert captured == []
-        assert manager.is_proxy_banned("proxy-A") is True
-
     def test_remote_hook_skips_empty_proxy_name(self):
-        """Defensive: a falsy name must not reach the hook (which would 4xx)."""
+        """A falsy name must not reach the hook (which would 4xx)."""
         from javdb.proxy.ban_manager import (
             _dispatch_remote_ban,
             set_remote_ban_hook,
