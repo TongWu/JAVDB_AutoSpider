@@ -52,7 +52,7 @@ from javdb.spider.app.options import SpiderRunOptions, spider_options_from_args
 from javdb.spider.runtime.sleep import ensure_sleep_runtime, movie_sleep_mgr
 from javdb.spider.fetch.index import fetch_all_index_pages
 from javdb.spider.detail.parallel_mode import build_parallel_detail_backend
-from javdb.spider.detail.runner import _load_content_filter_rules, process_detail_entries
+from javdb.spider.detail.runner import load_content_filter_rules, process_detail_entries
 from javdb.spider.detail.sequential_mode import build_sequential_detail_backend
 from javdb.spider.runtime.report import generate_summary_report
 from javdb.spider.fetch.fallback import AdhocLoginFailedError
@@ -64,6 +64,7 @@ from javdb.spider.app.result import (
 )
 
 logger = get_logger(__name__)
+_load_content_filter_rules = load_content_filter_rules
 
 
 @dataclass

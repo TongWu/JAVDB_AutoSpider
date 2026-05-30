@@ -68,9 +68,14 @@ def _dedup_log_variant_label(record: DedupRecord | object) -> str:
 
 
 def _load_content_filter_rules() -> list[Rule]:
+    with get_db(REPORTS_DB_PATH) as conn:
+        return ContentFilterRepo(conn).load_rules()
+
+
+def load_content_filter_rules() -> list[Rule]:
+    """Load content filter rules for public callers."""
     try:
-        with get_db(REPORTS_DB_PATH) as conn:
-            return ContentFilterRepo(conn).load_rules()
+        return _load_content_filter_rules()
     except Exception:
         logger.info(
             "Content filter rules unavailable; continuing without filtering",
@@ -463,14 +468,7 @@ def process_detail_entries(
         log_duplicate_skips=log_duplicate_skips,
     )
     if content_filter_rules is None:
-        try:
-            content_filter_rules = _load_content_filter_rules()
-        except Exception:  # noqa: BLE001 — content filtering is best-effort
-            logger.info(
-                "Content filter rules unavailable; continuing without filtering",
-                exc_info=True,
-            )
-            content_filter_rules = []
+        content_filter_rules = load_content_filter_rules()
 
     # P1-B: filter through the cross-runner MovieClaim mutex.  Returns the
     # candidates this runner won the lease on; peer-completed and
