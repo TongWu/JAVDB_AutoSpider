@@ -14,6 +14,7 @@ from javdb.ops.reconcile.models import Observation, utc_now_iso
 _QB_COMPLETED_STATES = frozenset(
     {
         "uploading",
+        "seeding",
         "stalledUP",
         "pausedUP",
         "queuedUP",
@@ -41,7 +42,7 @@ class QbCollector:
                 continue
             progress = t.get("progress") or 0.0
             qb_state = t.get("state") or ""
-            completed = progress >= 1.0 or qb_state in _QB_COMPLETED_STATES
+            completed = progress == 1.0 or qb_state in _QB_COMPLETED_STATES
             out.append(
                 Observation(
                     source=self.source,
