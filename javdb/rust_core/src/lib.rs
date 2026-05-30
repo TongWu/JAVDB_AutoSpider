@@ -7,7 +7,6 @@ pub mod magnet_extractor;
 pub mod models;
 pub mod proxy;
 pub mod rclone_ops;
-pub mod requester;
 pub mod scraper;
 pub mod url_helper;
 
@@ -21,9 +20,6 @@ use proxy::masking::{
     mask_username,
 };
 use proxy::pool::{create_proxy_pool_from_config, ProxyInfo, ProxyPool};
-use requester::config::RequestConfig;
-use requester::handler::{create_request_handler_from_config, RequestHandler};
-use requester::helper::{create_proxy_helper_from_config, ProxyHelper};
 use history::manager::{
     load_parsed_movies_history, cleanup_history_file, maintain_history_limit,
     save_parsed_movie_to_history, validate_history_file, determine_torrent_types,
@@ -113,13 +109,6 @@ fn rust_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(mask_username, m)?)?;
     m.add_function(wrap_pyfunction!(mask_server, m)?)?;
     m.add_function(wrap_pyfunction!(mask_error, m)?)?;
-
-    // --- Request Handler ---
-    m.add_class::<RequestConfig>()?;
-    m.add_class::<RequestHandler>()?;
-    m.add_class::<ProxyHelper>()?;
-    m.add_function(wrap_pyfunction!(create_request_handler_from_config, m)?)?;
-    m.add_function(wrap_pyfunction!(create_proxy_helper_from_config, m)?)?;
 
     // --- Parsers ---
     m.add_function(wrap_pyfunction!(parse_index_page, m)?)?;
