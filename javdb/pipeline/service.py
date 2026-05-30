@@ -73,13 +73,9 @@ def check_rust_core_status():
     except Exception:
         status['proxy_pool'] = False
     
-    # Check request handler
-    try:
-        from javdb.infra.request import RUST_REQUEST_HANDLER_AVAILABLE
-        status['request_handler'] = RUST_REQUEST_HANDLER_AVAILABLE
-    except Exception:
-        status['request_handler'] = False
-    
+    # (No Rust request handler: the phantom `requester/` module was removed —
+    # all HTTP fetching is pure-Python. See javdb/infra/request.py.)
+
     # Check history manager
     try:
         from javdb.storage.history_manager import RUST_HISTORY_AVAILABLE

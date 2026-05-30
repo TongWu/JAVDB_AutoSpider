@@ -44,21 +44,11 @@ from javdb.spider.html_validators import (
     is_maintenance_page as _is_maintenance_page,
 )
 
-# Try Rust implementations
-try:
-    from javdb.rust_core import (
-        RustRequestHandler,
-        RustRequestConfig,
-        RustProxyHelper,
-        create_request_handler_from_config as _rust_create_handler,
-        create_proxy_helper_from_config as _rust_create_helper,
-    )
-    RUST_REQUEST_HANDLER_AVAILABLE = True
-except ImportError as e:
-    RUST_REQUEST_HANDLER_AVAILABLE = False
-    logger.warning(f"⚠️  Rust request handler not available (ImportError: {e}) - falling back to pure-Python implementation")
-else:
-    logger.debug("✅ Rust request handler available - using high-performance Rust implementation")
+# NOTE: there is no Rust request handler. The Rust `requester/` module was a
+# phantom adapter — exported from the crate but never driving a fetch — and was
+# deleted. All HTTP fetching here is pure-Python (requests + curl_cffi + the
+# CF-bypass cascade), which is the load-bearing anti-bot path (curl_cffi's TLS
+# fingerprint impersonation is not something reqwest replicates out of the box).
 
 # Try to import curl_cffi for better TLS fingerprint
 # curl_cffi mimics real browser TLS fingerprints, bypassing Cloudflare detection
