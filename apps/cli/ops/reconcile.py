@@ -31,6 +31,18 @@ def _default_stalled_after_days() -> int:
     return value
 
 
+def _default_categories() -> tuple[str, ...]:
+    categories = []
+    for value in (
+        cfg("TORRENT_CATEGORY", "JavDB"),
+        cfg("TORRENT_CATEGORY_ADHOC", "Ad Hoc"),
+    ):
+        category = str(value or "").strip()
+        if category and category not in categories:
+            categories.append(category)
+    return tuple(categories or ("JavDB", "Ad Hoc"))
+
+
 def _positive_int(value: str) -> int:
     try:
         parsed = int(value)
@@ -59,7 +71,10 @@ def _build_parser() -> argparse.ArgumentParser:
         action="append",
         dest="categories",
         default=None,
-        help="qB category to scan (repeatable). Default: JavDB, Ad Hoc",
+        help=(
+            "qB category to scan (repeatable). Default: TORRENT_CATEGORY and "
+            "TORRENT_CATEGORY_ADHOC from config.py"
+        ),
     )
     parser.add_argument(
         "--stalled-after-days",
@@ -90,12 +105,18 @@ def main(argv: list[str] | None = None) -> int:
             if args.stalled_after_days is not None
             else _default_stalled_after_days()
         )
+        categories = (
+            tuple(args.categories)
+            if args.categories is not None
+            else _default_categories()
+        )
 
         options = ReconcileOptions(
             sources=tuple(args.sources or ("qb",)),
-            categories=tuple(args.categories or ("JavDB", "Ad Hoc")),
+            categories=categories,
             stalled_after_days=stalled_after_days,
             dry_run=args.dry_run,
+            infer_absent=args.categories is None,
         )
         result = run(options)
 

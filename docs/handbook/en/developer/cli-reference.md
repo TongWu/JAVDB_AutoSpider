@@ -614,7 +614,7 @@ D1-canonical in the operations database.
 | Argument | Description | Default |
 |----------|-------------|---------|
 | `--source` | Source to reconcile. Repeatable. Phase 1 only accepts `qb`. | `qb` |
-| `--category` | qB category to scan. Repeatable. | `JavDB`, `Ad Hoc` |
+| `--category` | qB category to scan. Repeatable. | `TORRENT_CATEGORY`, `TORRENT_CATEGORY_ADHOC` |
 | `--stalled-after-days` | Positive integer. Active outcomes unseen for this many days become `stalled`; after 2x this window they become `failed`. | `RECONCILE_STALLED_DAYS` or `7` |
 | `--dry-run` | Compute transitions but write nothing. | `False` |
 | `--json` | Print a JSON result payload. | `False` |
@@ -623,6 +623,10 @@ D1-canonical in the operations database.
 Exit code `0` means the reconcile pass completed without source or write errors.
 Exit code `2` means the pass completed with recorded errors, and `1` means an
 unexpected CLI failure occurred.
+
+When `--category` is supplied, the run is treated as a partial scan: observed
+hashes can still advance to `downloading` / `completed`, but outcomes absent
+from that subset are not marked `stalled` or `failed`.
 
 ### Examples
 
@@ -636,7 +640,7 @@ STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile \
   --dry-run \
   --json
 
-# Reconcile only one qB category
+# Reconcile only one qB category; absent-state inference is disabled
 STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile \
   --category "Daily Ingestion"
 ```

@@ -69,6 +69,8 @@ jobs:
           VAR_QB_URL: ${{ secrets.QB_URL }}
           VAR_QB_USERNAME: ${{ secrets.QB_USERNAME }}
           VAR_QB_PASSWORD: ${{ secrets.QB_PASSWORD }}
+          VAR_TORRENT_CATEGORY: ${{ vars.TORRENT_CATEGORY }}
+          VAR_TORRENT_CATEGORY_ADHOC: ${{ vars.TORRENT_CATEGORY_ADHOC }}
           # D1 / Cloudflare - AcquisitionOutcome lives in the operations DB.
           VAR_STORAGE_BACKEND: d1
           VAR_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

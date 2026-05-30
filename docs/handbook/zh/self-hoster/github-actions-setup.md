@@ -296,6 +296,8 @@ STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --json
 ```
 
 该工作流默认使用 `self-hosted` runner，因为 qBittorrent 通常只在操作者内网可达。如果 qB 可从公网访问或已被测试替身替代，也可以通过手动触发的 `runner` 输入改用 `ubuntu-latest`。
+生成的 `config.py` 会从仓库 Variables 读取 `TORRENT_CATEGORY` 和
+`TORRENT_CATEGORY_ADHOC`，因此默认扫描会跟随上传器使用的同一组 qB 分类。
 
 手动触发输入：
 
