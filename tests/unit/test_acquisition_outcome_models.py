@@ -39,3 +39,4 @@ def test_reconcile_options_defaults():
     assert opts.sources == ("qb",)
     assert opts.stalled_after_days == 7
     assert opts.dry_run is False
+    assert opts.infer_absent is True
