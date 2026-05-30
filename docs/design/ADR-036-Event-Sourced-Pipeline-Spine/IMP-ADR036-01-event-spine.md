@@ -4,6 +4,8 @@
 
 **Related:** [ADR-036](ADR-036-event-sourced-pipeline-spine.md) (umbrella) — this is **Phase 1** of three.
 
+**Status:** Implemented (2026-05-30). All 9 tasks landed; the `2026_05_29_add_pipeline_event.sql` migration is applied to remote `javdb-reports` D1 and mirrored locally. Two plan-vs-code corrections were made during implementation and documented inline (Task 4: `get_db(REPORTS_DB_PATH)` not the literal `"reports"`; Task 7: emit `SessionCommitted` after the status transition succeeds, `SessionFailed` in both failure paths).
+
 **Goal:** Stand up an additive, append-only `PipelineEvent` log in D1 with a cursor-based consumer framework and a demonstrator projection, proving emit → consume → replay end to end — without touching the authoritative `pending→commit` path.
 
 **Architecture:** `javdb/pipeline/events/` provides `emit()` (append a `PipelineEvent`), `read_since(cursor)`, and a base `Consumer` that reads `seq > last_seq`, projects idempotently, and advances its cursor. Phase 1 wires only the three cheap, non-colliding **session-lifecycle** events (`RunStarted`, `SessionCommitted`, `SessionFailed`); per-entity events are a Phase-2 concern (wired alongside re-pointing ADR-033/035, with batching). The demonstrator `RunEventSummaryConsumer` projects per-session event-type counts; resetting its cursor replays the log.
@@ -43,6 +45,19 @@
 
 **Files:**
 - Create: `javdb/migrations/d1/2026_05_29_add_pipeline_event.sql`
+- Modify: `javdb/storage/db/_db_migrations.py` (add the same tables to `_REPORTS_DDL`)
+
+> **Amended 2026-05-30 (review feedback).** The D1 migration file alone is NOT
+> enough. `init_db()` builds local `reports.db` from `_REPORTS_DDL` (used by
+> fresh installs AND the test suite's autouse `_isolate_sqlite` fixture); it does
+> not run the `d1/*.sql` files. The same three tables must be added to
+> `_REPORTS_DDL` (next to `OpsIncidents`), or a fresh local install hits
+> `no such table` and the best-effort emits silently drop every event. A repo
+> test (`test_rollback_full_fidelity.py::...test_every_d1_migration_column_exists_in_local_ddl`)
+> enforces this — so keep `--` comments OUT of the migration's `CREATE TABLE`
+> bodies (its column parser splits on commas and would read a comment as a
+> column). No `SCHEMA_VERSION` bump is needed (additive tables after the v14
+> bump, same as `OpsIncidents`).
 
 - [ ] **Step 1: Write the migration SQL**
 
@@ -451,6 +466,7 @@ import contextlib
 import logging
 
 from javdb.pipeline.events.models import PipelineEventRecord, utc_now_iso
+from javdb.storage import db as _db
 from javdb.storage.db import get_db
 from javdb.storage.repos.pipeline_event_repo import PipelineEventRepo
 
@@ -462,7 +478,16 @@ def _repo_ctx(repo):
     if repo is not None:
         yield repo
     else:
-        with get_db("reports") as conn:
+        # NOTE (amended 2026-05-30): two corrections vs the original plan.
+        # (1) get_db takes a db *path*, not the logical name "reports" (which
+        #     raises under every backend), so resolve REPORTS_DB_PATH.
+        # (2) Reference it via the module attribute (_db.REPORTS_DB_PATH) at
+        #     CALL TIME, not a top-level `from ... import REPORTS_DB_PATH`. A
+        #     top-level import binds the value at import and bypasses the test
+        #     suite's path monkeypatch, so emits would write to the real
+        #     reports.db during tests. Mirrors javdb/storage/rollback/core.py.
+        #     Both bugs were silent because emit() is best-effort.
+        with get_db(_db.REPORTS_DB_PATH) as conn:
             yield PipelineEventRepo(conn)
 
 
@@ -679,8 +704,21 @@ git commit -m "feat(spider): emit RunStarted on session activation (ADR-036)"
 ## Task 7: Emit `SessionCommitted` / `SessionFailed` at commit
 
 **Files:**
-- Modify: `apps/cli/db/commit_session.py` (the drain success path + the `except` block, ~lines 389-415)
-- Test: covered by the store/consumer tests; import-smoke below.
+- Modify: `apps/cli/db/commit_session.py` (the true-commit success branch + BOTH `except` blocks, ~lines 408-455)
+- Test: `tests/unit/test_commit_session_events.py` (pins the corrected placement) + import-smoke below.
+
+> **Amended 2026-05-30 (design feedback loop).** The original plan emitted
+> `SessionCommitted` right after the drain-success `logger.info`. Reading the
+> code showed that log sits **before** `transition(sid, "committed")` — the
+> drain materialises pending→history rows, but the session is only truly
+> committed once the subsequent `transition` succeeds. Emitting at the drain log
+> would announce `SessionCommitted` for a session whose transition then fails
+> (it lands in `failed_commits`), violating ADR-036 **D4** ("the log never
+> disagrees with reality about what committed"). Corrected: emit
+> `SessionCommitted` inside the post-transition success branch
+> (`if n > 0 or drained_pending_session: committed.append(sid)`), and emit
+> `SessionFailed` in **both** failure `except` blocks (drain failure and
+> transition failure), not just one.
 
 - [ ] **Step 1: Add the import** near the top of `apps/cli/db/commit_session.py`
 
@@ -688,48 +726,62 @@ git commit -m "feat(spider): emit RunStarted on session activation (ADR-036)"
 from javdb.pipeline.events import emit as _emit_event
 ```
 
-- [ ] **Step 2: Emit `SessionCommitted` after a successful drain** — find the success log:
+- [ ] **Step 2: Emit `SessionCommitted` after the transition succeeds** — find the
+true-commit success branch (after `n = transition(sid, "committed")`):
 
 ```python
-                else:
-                    logger.info(
-                        "Pending session committed: id=%s mode=%s drain=%s",
-                        sid, write_mode, drain,
-                    )
+        if n > 0 or drained_pending_session:
+            committed.append(sid)
+        else:
+            # Already committed — that's fine, idempotent.
+            skipped.append(sid)
 ```
 
-Insert immediately after that `logger.info(...)` block:
+Insert immediately after `committed.append(sid)` (inside the `if` branch only —
+the `else` is the idempotent already-committed case and must NOT re-emit):
 
 ```python
-                _emit_event("SessionCommitted", session_id=str(sid),
-                            entity_type="session", entity_id=str(sid))  # ADR-036
+            committed.append(sid)
+            _emit_event("SessionCommitted", session_id=str(sid),
+                        entity_type="session", entity_id=str(sid))  # ADR-036
 ```
 
-- [ ] **Step 3: Emit `SessionFailed` in the except block** — find:
+- [ ] **Step 3: Emit `SessionFailed` in BOTH `except` blocks** — there are two
+failure paths, each appending to `failed_commits`. Insert after each.
+
+Drain failure (`except Exception as e:` around the `HistoryRepo().commit_session`):
 
 ```python
                 failed_commits.append(sid)
-```
-
-Insert immediately after it (inside the same `except Exception as e:` block):
-
-```python
                 _emit_event("SessionFailed", session_id=str(sid),
                             entity_type="session", entity_id=str(sid))  # ADR-036
 ```
 
-> Both rides the commit outcome in the same process; emit is best-effort and cannot
+Transition failure (`except Exception as e:` around `transition(sid, "committed")`):
+
+```python
+            failed_commits.append(sid)
+            _emit_event("SessionFailed", session_id=str(sid),
+                        entity_type="session", entity_id=str(sid))  # ADR-036
+```
+
+> Both ride the commit outcome in the same process; emit is best-effort and cannot
 > change commit behaviour. A true in-transaction outbox is an ADR-036 hardening item.
 
-- [ ] **Step 4: Import-smoke**
+- [ ] **Step 4: Import-smoke + placement regression test**
 
-Run: `python3 -c "import apps.cli.db.commit_session; print('import ok')"`
-Expected: `import ok`
+Run:
+```bash
+python3 -c "import apps.cli.db.commit_session; print('import ok')"
+pytest tests/unit/test_commit_session_events.py -q
+```
+Expected: `import ok` + 3 passed (SessionCommitted only on true commit;
+SessionFailed on transition failure and on drain failure).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/cli/db/commit_session.py
+git add apps/cli/db/commit_session.py tests/unit/test_commit_session_events.py
 git commit -m "feat(db): emit SessionCommitted/SessionFailed on commit outcome (ADR-036)"
 ```
 

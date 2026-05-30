@@ -133,3 +133,10 @@ Phase 1 独立成立、不碰任何权威物。Phase 2 依赖 ADR-033/035 已落
 ## 状态日志 (Status Log)
 
 - 2026-05-29: Proposed(伞型;三期已划定,IMP 待出)。
+- 2026-05-30: Phase 1 已实现（[IMP-ADR036-01](IMP-ADR036-01-event-spine.md)）。
+  `PipelineEvent` / `EventConsumerCursor` / `RunEventSummary` 表已应用到远程
+  `javdb-reports` D1;新增 `javdb/pipeline/events/`（`emit`、`read_since`、游标
+  `Consumer`）与 `PipelineEventRepo` / `RunEventSummaryRepo`;会话事件
+  （`RunStarted` / `SessionCommitted` / `SessionFailed`）已在运行与提交边界接线;
+  示范 `apps.cli.ops.events` 消费/回放 CLI。伞型 ADR 仍为 **Proposed**，等待
+  Phase 2（收编消费者）与 Phase 3（可选绞杀迁移）。
