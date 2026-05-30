@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Reduce the dual public interface to one. The Repo classes become the single public storage surface; the module-level `db_*` write/operations functions stop being re-exported and are migrated off at every caller. After this phase there is one obvious way to write storage.
+**Goal:** Reduce the dual public interface to one. The Repo classes become the single public storage surface; the module-level `db_*` write/operations functions are migrated off at every caller and barred from non-storage production code by a boundary test (Phase 2b — they stay exported for storage-internal/test use). After this phase there is one obvious way to write storage.
 
-**Architecture:** Migrate the remaining direct `db_*` call sites (~67 expressions across ~28 non-test files) to Repo methods, add the few missing thin Repo methods, then trim the migrated names from `javdb/storage/db/__init__.py` `__all__`. Stateless primitives stay exported. Migration tools and single-use `align_*` functions are excluded.
+**Architecture:** Migrate the remaining direct `db_*` call sites (~67 expressions across ~28 non-test files) to Repo methods, add the few missing thin Repo methods, then enforce the Repo as the single caller-facing interface via a boundary test (*not* by trimming `javdb/storage/db/__init__.py` `__all__` — superseded; see the Phase 2b scope decision below). Stateless primitives stay exported. Migration tools and single-use `align_*` functions are excluded.
 
 **Tech Stack:** Python 3.11+, pytest. Single repo.
 
@@ -41,9 +41,11 @@ This achieves ADR-032's goal (one obvious caller-facing way to write storage, en
 
 ---
 
+> **⚠️ Sections below = original plan (hard-removal steps superseded).** The Scope, File Map, Task 4, and Task 6 items below were written for the *original* hard-removal approach (trim `__all__`, prove `from javdb.storage.db import db_*` fails). Phase 2b **superseded** that with the *enforce, don't hard-remove* decision documented above (§ "Scope reality & phasing", PR #128): the boundary is enforced by `tests/unit/test_adr032_db_facade_boundary.py` and `__init__.__all__` / the `from ._db_* import (...)` blocks are **left intact**. Where a step below says "trim `__all__`" / "de-export" / "import now fails", read it as "enforce via the boundary test; exports kept". Preserved for historical context.
+
 ## Scope
 
-- **In:** migrate production `db_*` callers to Repos; add missing thin Repo methods; trim `__init__.__all__` + the `from ._db_* import (...)` blocks; boundary tests.
+- **In:** migrate production `db_*` callers to Repos; add missing thin Repo methods; enforce the caller-facing boundary via `tests/unit/test_adr032_db_facade_boundary.py` (the `__init__.__all__` / `from ._db_* import (...)` blocks are **kept intact** — superseded the original trim plan, see banner above).
 - **Out (D6):** `migrations/tools/*` (one-shot scripts) and `align_*` functions — left on module functions. Stateless primitives (`get_db`, `*_DB_PATH`, `init_db`, `generate_session_id`, `generate_integer_id`, `verify_d1_schema_versions`) stay exported.
 - **Behavior:** strictly preserving — each migration is a 1:1 swap `db_foo(x, session_id=s)` → `Repo(...).foo(x, session_id=s)`.
 
@@ -58,7 +60,7 @@ This achieves ADR-032's goal (one obvious caller-facing way to write storage, en
 | Modify | `javdb/integrations/rclone/manager.py` | ~18 `db_*` calls (`:1226-1271`, `:1506-1668`) → `OperationsRepo` / `HistoryRepo` |
 | Modify | `javdb/storage/sessions/commit.py`, `apps/cli/db/commit_session.py`, `apps/cli/db/cleanup_stale_in_progress.py` | `db_commit_session_history` / `db_resume_finalizing_session` → Repo methods |
 | Modify | (~24 more files with direct `db_*` calls — enumerate in Task 1) | 1:1 swap to Repo methods |
-| Modify | `javdb/storage/db/__init__.py` | Trim migrated `db_*` from `__all__` (`:147-223`) + the `from ._db_* import` blocks (`:62-144`); keep stateless primitives |
+| ~~Modify~~ Unchanged | `javdb/storage/db/__init__.py` | **Superseded (Phase 2b):** the original plan trimmed `db_*` from `__all__` (`:147-223`) + the `from ._db_* import` blocks (`:62-144`); the *enforce, don't hard-remove* decision keeps these intact — the boundary is enforced by `tests/unit/test_adr032_db_facade_boundary.py` instead |
 | Modify | (boundary tests) | Extend the `_raw_db_forbidden` pattern to each newly-migrated module |
 
 ---
@@ -80,11 +82,13 @@ This achieves ADR-032's goal (one obvious caller-facing way to write storage, en
 - [ ] Migrate module-by-module, starting with the biggest concentration (`rclone/manager.py`, ~18 calls). Each swap: `db_foo(x, session_id=s, db_path=p)` → `OperationsRepo(db_path=p).foo(x, session_id=s)` (match the Repo's actual signature).
 - [ ] After each module, add/extend its boundary test (Task 5) so the migration can't silently regress.
 
-## Task 4: Trim the `db_*` exports
+## Task 4: Trim the `db_*` exports — ❌ superseded (not executed)
 
-- [ ] Once a `db_*` name has no remaining production caller, remove it from `javdb/storage/db/__init__.py` `__all__` (`:147-223`) and from the `from ._db_* import (...)` blocks (`:62-144`).
+> **Superseded by the Phase 2b scope decision (PR #128).** The hard-removal was measured at ~46 files / 33 tests and judged low-value vs. SQLite retirement, so the exports are **kept intact** and the boundary is enforced by `tests/unit/test_adr032_db_facade_boundary.py` instead. The steps below are preserved for historical context only — do **not** execute them.
+
+- [ ] ~~Once a `db_*` name has no remaining production caller, remove it from `javdb/storage/db/__init__.py` `__all__` (`:147-223`) and from the `from ._db_* import (...)` blocks (`:62-144`).~~
 - [ ] Keep exporting: `get_db`, `*_DB_PATH`, `init_db`, `generate_session_id`, `generate_integer_id`, `verify_d1_schema_versions`.
-- [ ] Verify the repo↔db import shim still resolves: `_db_history_write.py` imports `history_repo` directly from the submodule (not via `__init__`), so trimming `__all__` is safe — confirm with an import smoke test.
+- [ ] ~~Verify the repo↔db import shim still resolves: `_db_history_write.py` imports `history_repo` directly from the submodule (not via `__init__`), so trimming `__all__` is safe — confirm with an import smoke test.~~
 
 ## Task 5: Tests
 
@@ -95,14 +99,14 @@ This achieves ADR-032's goal (one obvious caller-facing way to write storage, en
 ## Task 6: Verification gates
 
 - [ ] Full unit suite green.
-- [ ] **Import-boundary proof:** `python -c "from javdb.storage.db import db_stage_history_write"` now fails (the name is de-exported), while `from javdb.storage.repos.history_repo import HistoryRepo` works.
+- [ ] **Import-boundary proof:** `tests/unit/test_adr032_db_facade_boundary.py` fails CI when non-storage/non-migration production code imports a `db_*` write/ops function from the `javdb.storage.db` facade, while `from javdb.storage.repos.history_repo import HistoryRepo` works. *(Superseded: the original proof was `python -c "from javdb.storage.db import db_stage_history_write"` failing; Phase 2b keeps the name exported and enforces the boundary by test instead.)*
 - [ ] **Grep proof:** no production (non-test, non-migration-tool) file imports a migrated `db_*` name.
 - [ ] Update this IMP's `Status` to `Completed`; check off `IMP-ADR032-02`. If both ADR-032 IMPs are done, mark the ADR Completed and archive the folder per the docs convention.
 
 ## Risks
 
 - **Large diff (~28 files)** — migrate per-module with its boundary test to keep each step verifiable.
-- **De-exporting too eagerly** — only remove a `db_*` from `__all__` after its last production caller is migrated; the `_db_*` submodules keep the implementation.
+- **De-exporting too eagerly** — *(moot under Phase 2b: nothing is de-exported; `__all__` is kept intact and the boundary is enforced by test.)* The `_db_*` submodules keep the implementation regardless.
 - **Test coverage moves, not vanishes** — the `db_*`-targeted tests must be rewritten onto Repos before the names are removed, or coverage drops.
 
 ## Out of scope

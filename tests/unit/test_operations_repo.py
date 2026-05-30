@@ -2,6 +2,8 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from javdb.storage.repos.operations_repo import OperationsRepo
 
 
@@ -66,6 +68,15 @@ class TestOperationsRepoRcloneInventory:
         # No session_id: RcloneInventory append has no SessionId column, and
         # db_append_rclone_inventory's signature is (entries, db_path).
         mock_fn.assert_called_once_with(entries=entries, db_path="/tmp/o.db")
+
+    def test_append_rclone_inventory_rejects_session_id_kwarg(self):
+        # Contract guard: append has no SessionId column, so the removed
+        # session_id kwarg must stay rejected (TypeError) to prevent a
+        # caller from silently reintroducing a session-tagged append.
+        repo = OperationsRepo()
+        entries = [{"VideoCode": "Y"}]
+        with pytest.raises(TypeError):
+            repo.append_rclone_inventory(entries, session_id="s1")
 
 
 class TestOperationsRepoDedup:
