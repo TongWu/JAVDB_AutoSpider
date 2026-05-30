@@ -36,10 +36,10 @@ import javdb.storage.db as _db
 from javdb.storage.db import (
     close_db,
     get_db,
-    db_resume_finalizing_session,
-    db_rollback_session,
 )
 import javdb.storage.db._db_migrations as _db_mig
+from javdb.storage.repos.history_repo import HistoryRepo
+from javdb.storage.repos.session_lifecycle_repo import SessionLifecycleRepo
 from javdb.storage.repos.sessions_repo import SessionsRepo
 from javdb.infra.logging import (
     get_logger,
@@ -153,10 +153,7 @@ def run_stale_cleanup(
         raise RuntimeError(f"Failed to init DB: {e}") from e
 
     try:
-        from javdb.storage.db import (
-            db_find_stale_pending_sessions,
-        )
-        rows = db_find_stale_pending_sessions(
+        rows = SessionLifecycleRepo().find_stale_pending_sessions(
             max_age_hours=max_age_hours,
             require_run_identity=not include_legacy,
         )
@@ -217,7 +214,7 @@ def run_stale_cleanup(
 
         if status == 'finalizing' and write_mode == 'pending':
             try:
-                counts = db_resume_finalizing_session(sid)
+                counts = HistoryRepo().resume_finalizing_session(sid)
                 summaries.append({
                     "session_id": sid,
                     "status": status,
@@ -251,7 +248,7 @@ def run_stale_cleanup(
             continue
 
         try:
-            counts = db_rollback_session(
+            counts = SessionLifecycleRepo().rollback_session(
                 sid,
                 dry_run=False,
                 scope=scope,

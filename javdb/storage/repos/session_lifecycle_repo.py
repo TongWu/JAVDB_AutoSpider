@@ -32,6 +32,16 @@ class SessionLifecycleRepo:
         report_type: str,
         report_date: str,
         csv_filename: str,
+        url_type: Optional[str] = None,
+        display_name: Optional[str] = None,
+        url: Optional[str] = None,
+        start_page: Optional[int] = None,
+        end_page: Optional[int] = None,
+        created_at: Optional[str] = None,
+        run_id: Optional[str] = None,
+        run_attempt: Optional[int] = None,
+        session_id: Optional[str] = None,
+        write_mode: Optional[str] = None,
     ) -> str:
         from javdb.storage.db import db_create_report_session
 
@@ -39,6 +49,16 @@ class SessionLifecycleRepo:
             report_type=report_type,
             report_date=report_date,
             csv_filename=csv_filename,
+            url_type=url_type,
+            display_name=display_name,
+            url=url,
+            start_page=start_page,
+            end_page=end_page,
+            created_at=created_at,
+            run_id=run_id,
+            run_attempt=run_attempt,
+            session_id=session_id,
+            write_mode=write_mode,
             db_path=self._db_path,
         )
 
