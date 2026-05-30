@@ -10,7 +10,7 @@
 
 **Related:** [ADR-019](ADR-019-session-lifecycle-authority.md), [IMP-ADR019-01](IMP-ADR019-01-session-lifecycle.md) (**must land + be production-verified first** — provides `SessionLifecycle.transition`)
 
-**Status:** Proposed (deferred until Phase 1 is verified in production)
+**Status:** Superseded / won't-do (2026-05-30). Phase 1 (IMP-ADR019-01) is complete and production-verified, so the *only* status-flip work this IMP scoped (Task 3's `:1636` / `:1535` flips → `SessionLifecycle.transition`) was **already delivered by Phase 1** — see `_db_history_write.py` (`transition(session_id, "finalizing", ...)` and `transition(session_id, "committed", ...)` now in place). The sole remaining deliverable was the `_commit_session_bulk` four-substep extraction whose own *Honest framing* section below judged it not worth touching the hottest write path purely for an isolation-test surface (no LOC reduction; essential, irreducible complexity). Decision (Ted, 2026-05-30): accept that framing and **do not pursue the extraction**. The high-value, low-risk win (Phase 1 lifecycle authority) is already banked. The substep-extraction steps (Tasks 1–5 below) are preserved as historical context only — do **not** execute them.
 
 ---
 
