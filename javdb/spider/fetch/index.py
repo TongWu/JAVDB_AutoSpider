@@ -233,8 +233,11 @@ def _fetch_all_index_pages_sequential(
 
     logger.info(f"Fetched and parsed {last_valid_page - start_page + 1 if last_valid_page >= start_page else 0} pages")
 
-    _sentinel_field_health.persist_run()  # ADR-035: persist run field-health (best-effort)
-
+    # ADR-035: do NOT persist field-health here — the report session does not
+    # exist yet at index-fetch time (run_service creates it afterwards, since
+    # the CSV name can only be resolved from this result). The accumulator stays
+    # in the process-global _CURRENT; run_service persists it once the active
+    # session id is set. (Persisting here would no-op: no active session.)
     return _post_process_index_results(
         {
             'all_index_results_phase1': all_index_results_phase1,
