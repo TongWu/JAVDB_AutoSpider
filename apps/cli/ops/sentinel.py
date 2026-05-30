@@ -9,6 +9,7 @@ import argparse
 import json
 import logging
 import sys
+from dataclasses import asdict
 
 from javdb.infra.logging import setup_logging
 from javdb.ops.sentinel.service import evaluate_session
@@ -32,12 +33,19 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     setup_logging(log_level=args.log_level)
-    verdict = evaluate_session(args.session_id, run_id=args.run_id, run_attempt=args.run_attempt)
+    try:
+        verdict = evaluate_session(
+            args.session_id, run_id=args.run_id, run_attempt=args.run_attempt)
+    except Exception:
+        # Internal error (e.g. DB unreachable) — exit 1 so callers can tell it
+        # apart from a clean run (0) or a confirmed critical drift (4).
+        logger.exception("Sentinel evaluation failed for session %s", args.session_id)
+        return 1
     if args.json_output:
         print(json.dumps({
             "critical": verdict.critical,
             "evaluated": verdict.evaluated,
-            "findings": [f.__dict__ for f in verdict.findings],
+            "findings": [asdict(f) for f in verdict.findings],
         }, ensure_ascii=False))
     else:
         logger.info("Sentinel: critical=%s evaluated=%d findings=%d",

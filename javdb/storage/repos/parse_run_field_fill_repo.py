@@ -18,7 +18,7 @@ class ParseRunFieldFillRepo:
         self._conn = conn
         try:
             self._conn.row_factory = sqlite3.Row
-        except Exception:
+        except (AttributeError, TypeError):
             logger.debug("row_factory set failed", exc_info=True)
 
     def upsert_fills(self, session_id: str, fills: list[FieldFill]) -> None:
