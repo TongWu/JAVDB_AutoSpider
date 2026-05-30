@@ -63,12 +63,43 @@ setup_logging(UPLOADER_LOG_FILE, LOG_LEVEL)
 logger = get_logger(__name__)
 
 
+def _resolve_actor_link(href: str) -> str:
+    """Return the lead actor's href for a movie *href* from MovieHistory.
+
+    The qB-upload CSV carries no ``actor_link`` column, but ``MovieHistory``
+    already stores ``ActorLink`` per movie. Returns '' on any miss/error.
+    The aliased column + key access keeps this D1/Dual-safe.
+    """
+    if not href:
+        return ''
+    try:
+        from javdb.storage.db import get_db, HISTORY_DB_PATH
+        with get_db(HISTORY_DB_PATH) as conn:
+            row = conn.execute(
+                "SELECT ActorLink AS ActorLink FROM MovieHistory WHERE Href = ?",
+                (href,),
+            ).fetchone()
+        if row is None:
+            return ''
+        return row["ActorLink"] or ''
+    except Exception:
+        logger.debug(
+            "actor_link resolution failed for %s — failing open", href,
+            exc_info=True,
+        )
+        return ''
+
+
 def _preference_gate_blocks(torrent: dict) -> bool:
     """Return True if the preference gate should block this torrent upload.
 
     Disabled by default (PREFERENCE_GATE_ENABLED = False in config.py).
     When enabled, blocks upload if the movie's lead actor has an explicit
     hearted=0 entry in ContentPreferences.
+
+    The qB-upload CSV has no ``actor_link`` column, so when one isn't supplied
+    directly the lead actor's href is resolved from ``MovieHistory`` via the
+    movie ``href`` (which the CSV does carry).
 
     Fails open: any exception returns False so a DB error never blocks uploads.
 
@@ -79,6 +110,8 @@ def _preference_gate_blocks(torrent: dict) -> bool:
     if not cfg('PREFERENCE_GATE_ENABLED', False):
         return False
     actor_href = torrent.get('actor_link', '')
+    if not actor_href:
+        actor_href = _resolve_actor_link(torrent.get('href', ''))
     if not actor_href:
         return False
     try:
@@ -468,6 +501,7 @@ def read_csv_file(filename):
                 continue
             if _preference_gate_blocks({
                 'actor_link': row.get('actor_link', ''),
+                'href': href,
             }):
                 logger.debug(
                     "Preference gate blocked: %s [%s]", video_code, label
