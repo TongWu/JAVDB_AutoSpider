@@ -91,6 +91,16 @@ def test_infra_change_selecting_proxy_tests_builds_rust_wheel():
         assert result.build_rust_wheel is True
 
 
+def test_spider_runtime_change_selecting_sleep_coordinator_builds_rust_wheel():
+    # test_sleep_with_coordinator imports RustProxyBanManager directly, so the
+    # selective push workflow must install the cached Rust wheel whenever a
+    # spider-runtime change selects that test file.
+    result = select("javdb/spider/services/content_filter.py")
+
+    assert "tests/unit/test_sleep_with_coordinator.py" in result.pytest_targets
+    assert result.build_rust_wheel is True
+
+
 def test_index_selection_change_selects_parser_domain_tests():
     result = select("javdb/pipeline/index_selection.py")
 
