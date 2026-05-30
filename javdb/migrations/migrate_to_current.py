@@ -375,22 +375,25 @@ def main() -> int:
     h, r, o = HISTORY_DB_PATH, REPORTS_DB_PATH, OPERATIONS_DB_PATH
     history_db = args.history_db or h
 
-    # ── Bootstrap storage backend for --align-inventory-history ───────
-    # The alignment flow needs to update both local SQLite and D1 with
-    # D1 as the source of truth. When the local mirror is gone (LFS not
-    # pulled), we try `git lfs pull` and fall back to d1-only writes
-    # rather than failing — the SQLite use_sqlite() gate below would
-    # otherwise reject every dual/d1 runtime regardless of why SQLite is
-    # unavailable. Schema migration and v8 verify only make sense
-    # against a real local SQLite file, so we skip them in d1-only mode.
-    align_backend: str | None = None
-    if args.align_inventory_history:
+    # ── Bootstrap storage backend for D1-capable operations ───────────
+    # Both --align-inventory-history and --backfill-metadata write through
+    # get_db()/repos that honour STORAGE_BACKEND, so they can run directly
+    # against D1 with no local SQLite mirror. The flow needs D1 as the
+    # source of truth; when the local mirror is gone (LFS not pulled), we
+    # try `git lfs pull` and fall back to d1-only writes rather than
+    # failing — the SQLite use_sqlite() gate below would otherwise reject
+    # every dual/d1 runtime regardless of why SQLite is unavailable.
+    # Schema migration and v8 verify only make sense against a real local
+    # SQLite file, so we skip them in d1-only mode (otherwise a missing
+    # reports/history.db on a fresh d1-only runner aborts the whole run).
+    effective_backend: str | None = None
+    if args.align_inventory_history or args.backfill_metadata:
         try:
-            align_backend = _bootstrap_storage_backend_for_align([h, r, o])
+            effective_backend = _bootstrap_storage_backend_for_align([h, r, o])
         except RuntimeError as exc:
-            logger.error("Cannot start alignment: %s", exc)
+            logger.error("Cannot start migration: %s", exc)
             return 1
-        if align_backend == "d1":
+        if effective_backend == "d1":
             if not args.skip_schema:
                 logger.info(
                     "Auto-enabling --skip-schema: local SQLite unavailable, "
@@ -409,7 +412,7 @@ def main() -> int:
             # so subsequent get_db() calls now return D1Connection
             # facades — no module reload needed.
 
-    if not use_sqlite() and align_backend != "d1":
+    if not use_sqlite() and effective_backend != "d1":
         logger.error("SQLite storage mode required (config STORAGE_MODE / use_sqlite).")
         return 1
 

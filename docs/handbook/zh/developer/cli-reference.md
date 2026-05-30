@@ -22,6 +22,7 @@ python3 -m apps.cli.<command> [options]
 - [Rollback CLI](#rollback-cli)（`apps.cli.rollback`）
 - [运维诊断 CLI](#运维诊断-cli)（`apps.cli.ops.diagnose_run`）
 - [采集结果对账 CLI](#采集结果对账-cli)（`apps.cli.ops.reconcile`）
+- [内容过滤 CLI](#内容过滤-cli)（`apps.cli.ops.content_filter`）
 - [事件主线消费者 CLI](#事件主线消费者-cli)（`apps.cli.ops.events`）
 - [Config Generator CLI](#config-generator-cli)（`apps.cli.config_generator`）
 - [Spider 完整参数参考](#spider-完整参数参考)
@@ -635,6 +636,79 @@ STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile \
 # 只对一个 qB 分类做对账；此时禁用缺失状态推断
 STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile \
   --category "Daily Ingestion"
+```
+
+---
+
+## 内容过滤 CLI
+
+**模块：** `apps.cli.ops.content_filter`
+
+管理 reports 数据库 `ContentFilterRule` 表中的 ADR-040 内容过滤规则。Spider
+会在每次运行开始时加载一次启用规则，并在详情页解析后、写入 CSV/report 和上传
+qBittorrent 前进行判定。
+
+### 命令
+
+| 命令 | 说明 |
+|------|------|
+| `add` | 新增规则。 |
+| `list` | 列出所有规则，包括已禁用规则。 |
+| `remove` | 按 id 删除规则。 |
+| `enable` | 按 id 启用规则；带 `--off` 时禁用规则。 |
+
+### 支持的规则形状
+
+| 维度 | 模式 | 值 |
+|------|------|----|
+| `actor` | `exclude` | 必填：演员名或演员 href。 |
+| `tag` | `exclude` | 必填：tag 名。 |
+| `tag` | `include` | 必填：tag 名；存在 include 规则时，至少要命中一个 include tag。 |
+| `gender` | `require_lead` | 必填：`female` 或 `male`。 |
+| `gender` | `exclude_all_male` | 不需要值；传入 `--value` 会被拒绝。 |
+
+### 参数
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--dimension` | `add` 使用的规则维度。可选：`actor`、`tag`、`gender`。 | 必填 |
+| `--mode` | `add` 使用的规则模式。可选：`exclude`、`include`、`require_lead`、`exclude_all_male`。 | 必填 |
+| `--value` | `add` 使用的规则值：根据规则可为演员名/href、tag 名或 lead gender。除 `gender exclude_all_male` 外均必填。 | `""` |
+| `--id` | `remove` 和 `enable` 使用的规则 id。 | 必填 |
+| `--off` | 在 `enable` 命令中禁用规则，而不是启用规则。 | `False` |
+| `--log-level` | 日志级别。可选：`DEBUG`、`INFO`、`WARNING`、`ERROR`。 | `INFO` |
+
+### 示例
+
+```bash
+# 丢弃演员名或 href 命中该值的影片
+python3 -m apps.cli.ops.content_filter add \
+  --dimension actor \
+  --mode exclude \
+  --value "/actors/EvkJ"
+
+# 要求至少命中一个 include tag
+python3 -m apps.cli.ops.content_filter add \
+  --dimension tag \
+  --mode include \
+  --value subtitle
+
+# 要求 lead actor 为 female
+python3 -m apps.cli.ops.content_filter add \
+  --dimension gender \
+  --mode require_lead \
+  --value female
+
+# 丢弃全男演员详情页
+python3 -m apps.cli.ops.content_filter add \
+  --dimension gender \
+  --mode exclude_all_male
+
+# 查看和管理规则
+python3 -m apps.cli.ops.content_filter list
+python3 -m apps.cli.ops.content_filter enable --id 3 --off
+python3 -m apps.cli.ops.content_filter enable --id 3
+python3 -m apps.cli.ops.content_filter remove --id 3
 ```
 
 ---
