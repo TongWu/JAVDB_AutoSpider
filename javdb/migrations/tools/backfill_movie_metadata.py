@@ -59,8 +59,12 @@ def _load_hrefs_without_metadata(
     applied yet.  Backfill normally runs *after* schema migration, so a missing
     table means "nothing to backfill here", not a fatal error.
     """
+    # Alias every selected column and read rows by key: under
+    # STORAGE_BACKEND=d1/dual (the canonical backend the backfill runs on in
+    # CI) ``get_db`` returns dict-shaped rows, so positional ``r[0]`` access
+    # would raise KeyError. Key access works for both sqlite3.Row and D1 dicts.
     sql = """
-        SELECT mh.Href
+        SELECT mh.Href AS Href
         FROM   MovieHistory mh
         LEFT JOIN MovieMetadata mm ON mm.href = mh.Href
         WHERE  mm.href IS NULL
@@ -68,8 +72,8 @@ def _load_hrefs_without_metadata(
     """
     with get_db(HISTORY_DB_PATH) as conn:
         present = {
-            r[0] for r in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' "
+            r["name"] for r in conn.execute(
+                "SELECT name AS name FROM sqlite_master WHERE type='table' "
                 "AND name IN ('MovieHistory', 'MovieMetadata')"
             ).fetchall()
         }
@@ -82,7 +86,7 @@ def _load_hrefs_without_metadata(
             )
             return []
         rows = conn.execute(sql).fetchall()
-    all_missing = [r[0] for r in rows]
+    all_missing = [r["Href"] for r in rows]
 
     if only_hrefs:
         only_set = set(only_hrefs)

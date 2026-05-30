@@ -64,9 +64,11 @@ class PreferenceRepo:
     ) -> Tuple[List[dict], int]:
         """Return (items, total_count) for paginated listing."""
         with get_db(self._db_path) as conn:
+            # Alias + key access: D1/Dual cursors return dict-shaped rows, so
+            # positional ``fetchone()[0]`` would KeyError on the canonical backend.
             total = conn.execute(
-                "SELECT COUNT(*) FROM MovieRatings"
-            ).fetchone()[0]
+                "SELECT COUNT(*) AS cnt FROM MovieRatings"
+            ).fetchone()["cnt"]
             rows = conn.execute(
                 "SELECT * FROM MovieRatings ORDER BY updated_at DESC LIMIT ? OFFSET ?",
                 (limit, offset),
