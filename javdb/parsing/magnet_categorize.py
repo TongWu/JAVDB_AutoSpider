@@ -26,7 +26,10 @@ try:
     logger.debug("✅ Rust magnet extractor available")
 except ImportError:
     RUST_MAGNET_AVAILABLE = False
-    logger.debug("⚠️  Rust magnet extractor not available, using Python fallback")
+    logger.warning(
+        "Rust core unavailable — pure-Python magnet fallback is best-effort "
+        "and may diverge from production"
+    )
 
 
 def categorize(magnets, index=None):

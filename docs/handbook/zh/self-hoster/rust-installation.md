@@ -86,6 +86,12 @@ maturin develop --release
 
 这会编译 Rust 代码并安装为 Python 扩展模块 `javdb_rust_core`。
 
+未安装 wheel 时（ADR-041）：
+
+- **解析器、magnet 归类、URL 工具、脱敏** 回退到 *best-effort* 纯 Python —— 仅本地开发；行为可能与生产不同，并记 `WARNING`。
+- **代理池与封禁管理器需要 Rust core** —— 不带 wheel 使用 `--use-proxy` 会抛出清晰错误。
+- 无 Rust 的本地运行请用 `--no-proxy`，或安装 wheel。
+
 ## 常见问题
 
 ### Q: 安装 rustup 后找不到 cargo 命令？

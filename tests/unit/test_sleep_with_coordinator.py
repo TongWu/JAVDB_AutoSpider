@@ -354,14 +354,12 @@ class TestSleepMirrorsRemoteBan:
 
     def test_lease_with_banned_true_falls_back_to_ban_manager_when_pool_is_none(self):
         from javdb.spider.runtime import state as _state
-        from javdb.proxy.ban_manager import (
-            ProxyBanManager,
-            set_remote_ban_hook,
-        )
-        # Use a real Python ban manager (not the global singleton) so we can
-        # observe the side-effect deterministically without leaking into
-        # other tests.
-        manager = ProxyBanManager()
+        from javdb.proxy.ban_manager import set_remote_ban_hook
+        # ADR-041: the ban manager is Rust-Required. Use a fresh Rust ban-manager
+        # instance (independent of the global singleton) so we can observe the
+        # side-effect deterministically without leaking into other tests.
+        from javdb.rust_core import RustProxyBanManager
+        manager = RustProxyBanManager()
         original_pool = _state.global_proxy_pool
         _state.global_proxy_pool = None
         # Pin the global ban manager to our local instance for the duration
