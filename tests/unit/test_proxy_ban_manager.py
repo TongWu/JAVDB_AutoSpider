@@ -26,6 +26,21 @@ from javdb.rust_core import RustProxyBanManager as ProxyBanManager
 from javdb.proxy.ban_manager import get_ban_manager
 
 
+@pytest.fixture(autouse=True)
+def _clear_rust_ban_manager():
+    """ADR-041: clear the process-global Rust ban manager around each test so
+    session bans recorded via the singleton don't leak across cases (the Rust
+    GLOBAL_BAN_MANAGER OnceCell persists even when the Python wrapper is reset)."""
+    def _clear():
+        mgr = get_ban_manager()
+        for name in list(mgr.get_banned_proxy_names()):
+            mgr.remove_ban(name)
+
+    _clear()
+    yield
+    _clear()
+
+
 class TestProxyBanManager:
     """Test cases for the (Rust) ban manager — session-scoped, in-memory."""
 

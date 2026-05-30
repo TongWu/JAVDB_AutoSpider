@@ -25,6 +25,23 @@ from javdb.proxy.pool import (
 from javdb.rust_core import RustProxyPool as ProxyPool
 
 
+@pytest.fixture(autouse=True)
+def _clear_rust_ban_manager():
+    """ADR-041: the Rust ban manager is a process-global singleton shared by every
+    pool; clear it around each test so session-scoped bans don't leak across cases
+    (and so ban assertions don't rely on unique proxy names)."""
+    from javdb.proxy.ban_manager import get_ban_manager
+
+    def _clear():
+        mgr = get_ban_manager()
+        for name in list(mgr.get_banned_proxy_names()):
+            mgr.remove_ban(name)
+
+    _clear()
+    yield
+    _clear()
+
+
 class TestMaskProxyUrl:
     """Test cases for mask_proxy_url function."""
     

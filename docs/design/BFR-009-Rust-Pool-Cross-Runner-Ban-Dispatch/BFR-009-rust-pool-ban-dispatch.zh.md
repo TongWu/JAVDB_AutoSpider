@@ -28,12 +28,6 @@
 
 `ban_manager.py` 中 `remove_ban` 的 docstring 其实已半承认这种不对称:它指出 Rust manager "从扩展内无法触达 Python 的 `_dispatch_remote_unban` hook",并把 unban 分发交给 `ProxyPool.unban_proxy` —— 但 Rust 池的 `ban_proxy` 有同样的限制,且没有等价的分发。
 
-## 影响
-
-- **多 runner 运行失去跨 runner 封禁协调。** 一个 runner 判定为坏(CF 挑战、被封)的代理不会被广播;其它 runner 会在它上面浪费请求,直到各自独立封禁。这是效率/协调退化,不是数据损坏。
-- **单 runner 运行不受影响** —— 本地封禁经 Rust 封禁管理器正常工作。
-- 协调器的 `mark_proxy_banned` 端点与 `ban_proxy` Signal(CONTEXT.md)在 Python 侧实际处于"供给不足"。
-
 ## 修复
 
 尚未实现 —— 在此跟踪,从 ADR-041 中延后(ADR-041 是 fallback 策略变更,不是协调变更)。候选方案(在 follow-up 中决定):
@@ -43,6 +37,12 @@
 3. **观察者/增量轮询。** 让协调器集成层把 Rust 封禁管理器的封禁集合与上次已分发集合做 diff 并推送增量。
 
 方案 2 改动最小,且让 `_dispatch_remote_ban` / `set_remote_ban_hook` 仍有意义;方案 1 长期最干净但要动 Rust crate。
+
+## 副作用
+
+- **多 runner 运行失去跨 runner 封禁协调。** 一个 runner 判定为坏(CF 挑战、被封)的代理不会被广播;其它 runner 会在它上面浪费请求,直到各自独立封禁。这是效率/协调退化,不是数据损坏。
+- **单 runner 运行不受影响** —— 本地封禁经 Rust 封禁管理器正常工作。
+- 协调器的 `mark_proxy_banned` 端点与 `ban_proxy` Signal(CONTEXT.md)在 Python 侧实际处于"供给不足"。
 
 ## Follow-Up
 
