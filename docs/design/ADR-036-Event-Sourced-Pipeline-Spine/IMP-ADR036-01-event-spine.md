@@ -4,7 +4,7 @@
 
 **Related:** [ADR-036](ADR-036-event-sourced-pipeline-spine.md) (umbrella) — this is **Phase 1** of three.
 
-**Status:** Implemented (2026-05-30). All 9 tasks landed; the `2026_05_29_add_pipeline_event.sql` migration is applied to remote `javdb-reports` D1 and mirrored locally. Two plan-vs-code corrections were made during implementation and documented inline (Task 4: `get_db(REPORTS_DB_PATH)` not the literal `"reports"`; Task 7: emit `SessionCommitted` after the status transition succeeds, `SessionFailed` in both failure paths).
+**Status:** Implemented and verified (2026-05-30). All 9 tasks landed; the `2026_05_29_add_pipeline_event.sql` migration is applied to remote `javdb-reports` D1 and mirrored locally; GitHub full unit tests passed with no failures. Two plan-vs-code corrections were made during implementation and documented inline (Task 4: `get_db(REPORTS_DB_PATH)` not the literal `"reports"`; Task 7: emit `SessionCommitted` after the status transition succeeds, `SessionFailed` in both failure paths).
 
 **Goal:** Stand up an additive, append-only `PipelineEvent` log in D1 with a cursor-based consumer framework and a demonstrator projection, proving emit → consume → replay end to end — without touching the authoritative `pending→commit` path.
 
