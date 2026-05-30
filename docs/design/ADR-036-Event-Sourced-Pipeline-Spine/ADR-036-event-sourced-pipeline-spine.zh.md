@@ -5,7 +5,7 @@
 | **状态**   | Proposed — 伞型;执行下放给各期 IMP                                    |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
-| **关联**   | [ADR-012](../_archive/ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md), [ADR-019](../ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md), [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md), [ADR-010](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md) |
+| **关联**   | [ADR-012](../_archive/ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md), [ADR-019](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md), [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md), [ADR-010](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md) |
 
 > 源自 2026-05-29 一次关于全新方向(方向三——可重放的管道内核)的头脑风暴。
 
@@ -20,7 +20,7 @@
 
 两个事实决定了正确的野心:
 
-1. **系统其实已经半事件溯源。** `PendingMovieHistoryWrites` / `PendingTorrentHistoryWrites` 是一个 **append-then-project** 日志（行以 `ApplyState='pending'` 累积,在 commit 时 materialize 到 `MovieHistory` / `TorrentHistory`）;`ReportSessions` 生命周期是一个受治理的状态机（[ADR-019](../ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md)）。
+1. **系统其实已经半事件溯源。** `PendingMovieHistoryWrites` / `PendingTorrentHistoryWrites` 是一个 **append-then-project** 日志（行以 `ApplyState='pending'` 累积,在 commit 时 materialize 到 `MovieHistory` / `TorrentHistory`）;`ReportSessions` 生命周期是一个受治理的状态机（[ADR-019](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md)）。
 2. **对重日志的胃口低——有证据。** 逐行变更日志（`MovieHistoryAudit` / `TorrentHistoryAudit`）已于 2026-05-22 被**删除**（[ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md) PR-4）。一个完整事件溯源重写会**重新引进他们刚删掉的那种啰嗦日志**。
 
 因此本 ADR 走**附加式**路线:一条管道发往的 append-only 事件脊柱,新功能**消费**它而非 hook——且**不碰**权威的 `pending→commit` 路径。
@@ -124,7 +124,7 @@ Phase 1 独立成立、不碰任何权威物。Phase 2 依赖 ADR-033/035 已落
 ## 参考 (References)
 
 - [ADR-012 — Pipeline Run Structured Boundary](../_archive/ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md)
-- [ADR-019 — Session Lifecycle Authority](../ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md)
+- [ADR-019 — Session Lifecycle Authority](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md)
 - [ADR-005 — db.py Retirement & Repo Pattern](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md)
 - [ADR-010 — D1 Access Port](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.md)
 - [ADR-033 — Media Closed-Loop](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)

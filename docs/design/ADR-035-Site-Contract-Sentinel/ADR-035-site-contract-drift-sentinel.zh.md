@@ -5,7 +5,7 @@
 | **状态**   | Proposed — 伞型;执行下放给各期 IMP                                    |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
-| **关联**   | [ADR-026](../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md), [ADR-020](../ADR-020-Parser-Interface-Consolidation/ADR-020-parser-interface-consolidation.md), [ADR-019](../ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md), [ADR-011](../_archive/ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) |
+| **关联**   | [ADR-026](../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md), [ADR-020](../ADR-020-Parser-Interface-Consolidation/ADR-020-parser-interface-consolidation.md), [ADR-019](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md), [ADR-011](../_archive/ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) |
 
 > 源自 2026-05-29 一次关于全新方向(方向二——主动可靠性)的头脑风暴。
 
@@ -119,7 +119,7 @@ Phase 1 以**零新增抓取**交付头号价值（抓住漂移 + 保护 DB）�
 
 - [ADR-026 — AI Operations Diagnosis](../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md)
 - [ADR-020 — Parser Interface Consolidation](../ADR-020-Parser-Interface-Consolidation/ADR-020-parser-interface-consolidation.md)
-- [ADR-019 — Session Lifecycle Authority](../ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md)
+- [ADR-019 — Session Lifecycle Authority](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md)
 - [ADR-011 — Parsing Module](../_archive/ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md)
 
 ## 状态日志 (Status Log)

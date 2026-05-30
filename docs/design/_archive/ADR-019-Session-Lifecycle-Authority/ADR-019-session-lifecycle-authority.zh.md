@@ -2,12 +2,12 @@
 
 | 字段       | 值                                                                    |
 | ---------- | --------------------------------------------------------------------- |
-| **状态**   | Accepted — Phase 1 已实现 2026-05-29；Phase 2（CommitPipeline）延后 |
+| **状态**   | Completed — Phase 1（`SessionLifecycle`）已实现并验证 2026-05-29；Phase 2（CommitPipeline，IMP-ADR019-02）已被取代（superseded）——详见该 IMP。已于 2026-05-30 归档。 |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
-| **关联**   | [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md)（Repo 模式、pending 模式 commit/rollback）、[ADR-012](../_archive/ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md)（run 边界） |
+| **关联**   | [ADR-005](../ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md)（Repo 模式、pending 模式 commit/rollback）、[ADR-012](../ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md)（run 边界） |
 
-> 源自 2026-05-29 架构审查（候选 E）：[architecture-review-2026-05-29.zh.html](../architecture/architecture-review-2026-05-29.zh.html)。
+> 源自 2026-05-29 架构审查（候选 E）：[architecture-review-2026-05-29.zh.html](../../architecture/architecture-review-2026-05-29.zh.html)。
 
 ## 背景（Context）
 
