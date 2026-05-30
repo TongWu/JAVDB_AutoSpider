@@ -2,7 +2,7 @@
 
 | 字段       | 值                                                                    |
 | ---------- | --------------------------------------------------------------------- |
-| **状态**   | Proposed — 伞型;执行下放给各期 IMP                                    |
+| **状态**   | Proposed — 伞型;Phase 1 已实现并完成本地验证;执行下放给各期 IMP       |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
 | **关联**   | [ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-024](../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md), [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-028](../ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md) |
@@ -136,7 +136,7 @@ queued ──→ downloading ──→ completed ──→ in_library
 
 每期独立可上线、可回滚。Phase 1 是地基;Phase 2/3 是"加一个收集器",不改动 service 编排。
 
-**规划节奏。** [IMP-ADR033-01](IMP-ADR033-01-acquisition-outcome.md)（Phase 1）已成文、可动工。**IMP-ADR033-02 与 IMP-ADR033-03 刻意先作为路线图占位**——它们的详细计划将在 **Phase 1 落地之后**,用一轮专门的 `grill-me` + `brainstorming` 产出,以纳入 Phase 1 reconcile service 与 `AcquisitionOutcome` 形态在实践中暴露的东西。
+**规划节奏。** [IMP-ADR033-01](IMP-ADR033-01-acquisition-outcome.md)（Phase 1）已实现并完成本地验证。**IMP-ADR033-02 与 IMP-ADR033-03 刻意先作为路线图占位**——它们的详细计划将在 Phase 1 之后,用一轮专门的 `grill-me` + `brainstorming` 产出,以纳入 Phase 1 reconcile service 与 `AcquisitionOutcome` 形态在实践中暴露的东西。
 
 ### 明确的非目标 (YAGNI)
 
@@ -177,3 +177,5 @@ queued ──→ downloading ──→ completed ──→ in_library
 - 2026-05-29: IMP-ADR033-01（Phase 1）计划已成文;IMP-02/03 推迟到 Phase 1 落地后的
   一轮 `grill-me` + `brainstorming`。web 面拆分到
   [ADR-034](../ADR-034-Media-Closed-Loop-Web-Surface/ADR-034-media-closed-loop-web-surface.md)。
+- 2026-05-30: IMP-ADR033-01（Phase 1）已实现并完成本地验证。远端 D1 apply 与本地
+  SQLite mirror refresh 仍属于部署环境验证门。
