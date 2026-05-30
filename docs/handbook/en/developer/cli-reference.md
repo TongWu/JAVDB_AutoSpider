@@ -21,6 +21,7 @@ python3 -m apps.cli.<command> [options]
 - [Login CLI](#login-cli) (`apps.cli.login`)
 - [Rollback CLI](#rollback-cli) (`apps.cli.rollback`)
 - [Operations Diagnosis CLI](#operations-diagnosis-cli) (`apps.cli.ops.diagnose_run`)
+- [Event Spine Consumer CLI](#event-spine-consumer-cli) (`apps.cli.ops.events`)
 - [Config Generator CLI](#config-generator-cli) (`apps.cli.config_generator`)
 - [Complete Spider Argument Reference](#complete-spider-argument-reference)
 
@@ -593,6 +594,38 @@ python3 -m apps.cli.ops.diagnose_run \
 python3 -m apps.cli.ops.diagnose_run \
   --run-id 123456789 \
   --drift-verdict CLEAN
+```
+
+---
+
+## Event Spine Consumer CLI
+
+**Module:** `apps.cli.ops.events`
+
+Runs the ADR-036 event-spine demonstrator consumer. It reads new `PipelineEvent`
+rows by cursor and projects per-session, per-event-type counts into the
+`RunEventSummary` table (both in the `javdb-reports` DB). This is the Phase 1
+proof of the emit → consume → replay loop; it does not touch the authoritative
+`pending→commit` path.
+
+### Arguments
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--replay` | Reset the consumer cursor and clear the projection, then rebuild it from `seq` 0. | `False` |
+| `--batch` | Number of events to read per `read_since` page. | `500` |
+| `--log-level` | Logging level. Choices: `DEBUG`, `INFO`, `WARNING`, `ERROR`. | `INFO` |
+
+Exit code is always `0` on a clean run; the number of projected events is logged.
+
+### Examples
+
+```bash
+# Project any new events into RunEventSummary (advances the cursor)
+python3 -m apps.cli.ops.events
+
+# Rebuild the projection from scratch (idempotent — same result)
+python3 -m apps.cli.ops.events --replay
 ```
 
 ---
