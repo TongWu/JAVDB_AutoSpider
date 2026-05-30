@@ -737,5 +737,17 @@ jobs:
               echo "  - QB Category: (default)" >> $GITHUB_STEP_SUMMARY
             fi
           fi
+          printf -- '- **Backfill Metadata**: %s\n' "$(summary_bool "$INPUT_BACKFILL_METADATA")" >> $GITHUB_STEP_SUMMARY
+          if [ "$INPUT_BACKFILL_METADATA" = "true" ]; then
+            printf '  - Limit: %s\n' "${INPUT_BACKFILL_METADATA_LIMIT:-0 (all)}" >> $GITHUB_STEP_SUMMARY
+            printf '  - Limit per worker: %s\n' "${INPUT_BACKFILL_METADATA_LIMIT_PER_WORKER:-0 (all)}" >> $GITHUB_STEP_SUMMARY
+            if [ -n "$INPUT_BACKFILL_METADATA_HREFS" ]; then
+              printf '  - Hrefs: %s\n' "$INPUT_BACKFILL_METADATA_HREFS" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "  - Hrefs: (all missing)" >> $GITHUB_STEP_SUMMARY
+            fi
+            printf '  - No Proxy: %s\n' "$(summary_bool "$INPUT_BACKFILL_METADATA_NO_PROXY")" >> $GITHUB_STEP_SUMMARY
+            printf '  - Shuffle: %s\n' "$(summary_bool "$INPUT_BACKFILL_METADATA_SHUFFLE")" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "" >> $GITHUB_STEP_SUMMARY
           printf -- '- **Runner**: %s\n' "$INPUT_RUNNER" >> $GITHUB_STEP_SUMMARY
