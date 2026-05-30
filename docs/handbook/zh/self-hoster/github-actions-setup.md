@@ -302,7 +302,7 @@ STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --json
 | 输入 | 默认值 | 用途 |
 |---|---|---|
 | `runner` | `self-hosted` | 任务使用的 runner 标签。访问本地 qB 时使用 `self-hosted`。 |
-| `stalled_after_days` | `7` | 活跃 outcome 超过该天数未被观测到会变为 `stalled`；超过 2 倍窗口会变为 `failed`。 |
+| `stalled_after_days` | `7` | 正整数。活跃 outcome 超过该天数未被观测到会变为 `stalled`；超过 2 倍窗口会变为 `failed`。 |
 | `dry_run` | `false` | 只计算状态迁移并输出 JSON，不写入数据行。 |
 
 ## 故障排查

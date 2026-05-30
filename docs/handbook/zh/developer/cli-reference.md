@@ -607,9 +607,9 @@ D1 canonical 表。
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `--source` | 要对账的来源，可重复传入。Phase 1 支持 `qb`。 | `qb` |
+| `--source` | 要对账的来源，可重复传入。Phase 1 只接受 `qb`。 | `qb` |
 | `--category` | 要扫描的 qB 分类，可重复传入。 | `JavDB`、`Ad Hoc` |
-| `--stalled-after-days` | 活跃 outcome 超过该天数未被观测到会变为 `stalled`；超过 2 倍窗口会变为 `failed`。 | `RECONCILE_STALLED_DAYS` 或 `7` |
+| `--stalled-after-days` | 正整数。活跃 outcome 超过该天数未被观测到会变为 `stalled`；超过 2 倍窗口会变为 `failed`。 | `RECONCILE_STALLED_DAYS` 或 `7` |
 | `--dry-run` | 只计算状态迁移，不写入数据库。 | `False` |
 | `--json` | 输出 JSON result payload。 | `False` |
 | `--log-level` | 日志级别。可选：`DEBUG`、`INFO`、`WARNING`、`ERROR`。 | `INFO` |

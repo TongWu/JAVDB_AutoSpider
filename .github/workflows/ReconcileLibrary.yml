@@ -22,7 +22,7 @@ on:
           - 'self-hosted'
           - 'ubuntu-latest'
       stalled_after_days:
-        description: 'Active outcomes unseen for this many days become stalled.'
+        description: 'Positive integer: active outcomes unseen this many days become stalled.'
         required: false
         default: '7'
         type: string

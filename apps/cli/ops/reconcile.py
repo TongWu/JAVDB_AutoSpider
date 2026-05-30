@@ -22,10 +22,24 @@ logger = logging.getLogger(__name__)
 
 def _default_stalled_after_days() -> int:
     try:
-        return int(cfg("RECONCILE_STALLED_DAYS", 7))
+        value = int(cfg("RECONCILE_STALLED_DAYS", 7))
     except (TypeError, ValueError):
         logger.warning("Invalid RECONCILE_STALLED_DAYS; falling back to 7")
         return 7
+    if value < 1:
+        logger.warning("Invalid RECONCILE_STALLED_DAYS; falling back to 7")
+        return 7
+    return value
+
+
+def _positive_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise argparse.ArgumentTypeError("must be an integer >= 1") from exc
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be an integer >= 1")
+    return parsed
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -37,8 +51,9 @@ def _build_parser() -> argparse.ArgumentParser:
         "--source",
         action="append",
         dest="sources",
+        choices=("qb",),
         default=None,
-        help="Source to reconcile (repeatable). Default: qb",
+        help="Source to reconcile (repeatable). Phase 1 supports qb. Default: qb",
     )
     parser.add_argument(
         "--category",
@@ -49,9 +64,9 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--stalled-after-days",
-        type=int,
+        type=_positive_int,
         default=_default_stalled_after_days(),
-        help="Active outcomes unseen for this many days become stalled.",
+        help="Active outcomes unseen for this many days become stalled; must be >= 1.",
     )
     parser.add_argument(
         "--dry-run",

@@ -305,7 +305,7 @@ Manual dispatch inputs:
 | Input | Default | Purpose |
 |---|---|---|
 | `runner` | `self-hosted` | Runner label for the job. Use `self-hosted` for local qB access. |
-| `stalled_after_days` | `7` | Active outcomes unseen for this many days become `stalled`; after 2x this window they become `failed`. |
+| `stalled_after_days` | `7` | Positive integer. Active outcomes unseen for this many days become `stalled`; after 2x this window they become `failed`. |
 | `dry_run` | `false` | Compute transitions and print JSON without writing rows. |
 
 ## Troubleshooting
