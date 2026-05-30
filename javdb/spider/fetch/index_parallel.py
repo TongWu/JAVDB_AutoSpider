@@ -36,6 +36,7 @@ from javdb.spider.fetch.fetch_engine import (
     ParallelFetchBackend,
 )
 from javdb.spider.runtime.config import PROXY_POOL
+from javdb.ops.sentinel import field_health as _sentinel_field_health
 
 logger = get_logger(__name__)
 
@@ -238,6 +239,8 @@ def fetch_all_index_pages_parallel(
     sorted_pages = sorted(results_by_page.keys())
     consecutive_empty = 0
 
+    _sentinel_field_health.start_run()  # ADR-035: begin per-run field-health (parallel path)
+
     for page_num in sorted_pages:
         result = results_by_page[page_num]
 
@@ -270,6 +273,9 @@ def fetch_all_index_pages_parallel(
         p1_count = 0
         p2_count = 0
         page_result = parse_index_page(html, page_num)
+        _acc = _sentinel_field_health.current()
+        if _acc is not None and page_result is not None:
+            _acc.observe("index", page_result.movies)  # ADR-035 piggyback
 
         if phase_mode in ['1', 'all']:
             page_results = select_index_entries(
@@ -306,6 +312,8 @@ def fetch_all_index_pages_parallel(
         "Fetched and parsed %d pages (parallel)",
         last_valid_page - start_page + 1 if last_valid_page >= start_page else 0,
     )
+
+    _sentinel_field_health.persist_run()  # ADR-035: persist run field-health (best-effort)
 
     return {
         'all_index_results_phase1': all_index_results_phase1,
