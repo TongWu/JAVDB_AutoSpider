@@ -182,3 +182,4 @@ Phase 1 stands alone and adds only test-support code. Phases 2/3 grow coverage.
 ## Status Log
 
 - 2026-05-29: Proposed (umbrella; three phases scoped, IMPs pending).
+- 2026-05-30: Phase 1 implemented ([IMP-ADR037-01](IMP-ADR037-01-harness-core.md)) — `tests/harness/` ships FixtureHTTP + FakeQB + the `pipeline_harness` fixture and one golden daily scenario (index → 2 details → queued → commit) asserting history (2 rows) + qB queue (2 hashes); 11 tests green in <0.4s. See the IMP's "Implementation Reconciliation" for where the shipped composition diverged from the plan (3-step `run_spider`→`run_uploader`→`commit_session`, session from `SpiderRunResult`, `STORAGE_MODE=duo` for the CSV handoff). Phases 2/3 remain stubs.

@@ -114,3 +114,4 @@ Phase 1 独立成立、只加测试支撑代码。Phase 2/3 扩展覆盖。
 ## 状态日志 (Status Log)
 
 - 2026-05-29: Proposed(伞型;三期已划定,IMP 待出)。
+- 2026-05-30: Phase 1 已实现（[IMP-ADR037-01](IMP-ADR037-01-harness-core.md)）—— `tests/harness/` 交付 FixtureHTTP + FakeQB + `pipeline_harness` fixture 与一个黄金每日场景（index → 2 个 detail → queued → commit），断言历史落地 2 行 + qB 入队 2 个 hash；11 个测试 <0.4s 全绿。实现与计划的偏差见 IMP 的 "Implementation Reconciliation"（三步 `run_spider`→`run_uploader`→`commit_session`、session 取自 `SpiderRunResult`、`STORAGE_MODE=duo` 以打通 CSV 交接）。Phase 2/3 仍为 stub。
