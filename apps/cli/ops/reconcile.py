@@ -13,7 +13,7 @@ import logging
 import sys
 
 from javdb.infra.config import cfg
-from javdb.infra.logging import setup_logging
+from javdb.infra.logging import log_section, log_summary_block, setup_logging
 from javdb.ops.reconcile.models import ReconcileOptions
 from javdb.ops.reconcile.service import run
 
@@ -23,11 +23,11 @@ logger = logging.getLogger(__name__)
 def _default_stalled_after_days() -> int:
     try:
         value = int(cfg("RECONCILE_STALLED_DAYS", 7))
+        if value < 1:
+            raise ValueError
     except (TypeError, ValueError):
         logger.warning("Invalid RECONCILE_STALLED_DAYS; falling back to 7")
         return 7
-    if value < 1:
-        raise ValueError("stalled_after_days must be >= 1")
     return value
 
 
@@ -64,7 +64,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--stalled-after-days",
         type=_positive_int,
-        default=_default_stalled_after_days(),
+        default=None,
         help="Active outcomes unseen for this many days become stalled; must be >= 1.",
     )
     parser.add_argument(
@@ -85,11 +85,16 @@ def main(argv: list[str] | None = None) -> int:
     try:
         args = _build_parser().parse_args(argv)
         setup_logging(log_level=args.log_level)
+        stalled_after_days = (
+            args.stalled_after_days
+            if args.stalled_after_days is not None
+            else _default_stalled_after_days()
+        )
 
         options = ReconcileOptions(
             sources=tuple(args.sources or ("qb",)),
             categories=tuple(args.categories or ("JavDB", "Ad Hoc")),
-            stalled_after_days=args.stalled_after_days,
+            stalled_after_days=stalled_after_days,
             dry_run=args.dry_run,
         )
         result = run(options)
@@ -97,17 +102,16 @@ def main(argv: list[str] | None = None) -> int:
         if args.json_output:
             print(json.dumps(asdict(result), ensure_ascii=False))
         else:
-            logger.info(
-                "Reconcile done: observed=%d updated=%d downloading=%d completed=%d "
-                "stalled=%d failed=%d errors=%d",
-                result.observed,
-                result.outcomes_updated,
-                result.marked_downloading,
-                result.marked_completed,
-                result.marked_stalled,
-                result.marked_failed,
-                len(result.errors),
-            )
+            log_section(logger, "Acquisition Outcome Reconcile")
+            log_summary_block(logger, "Reconcile Summary", {
+                "Observed": result.observed,
+                "Outcomes updated": result.outcomes_updated,
+                "Marked downloading": result.marked_downloading,
+                "Marked completed": result.marked_completed,
+                "Marked stalled": result.marked_stalled,
+                "Marked failed": result.marked_failed,
+                "Errors": len(result.errors),
+            })
 
         return 2 if result.errors else 0
     except Exception as exc:

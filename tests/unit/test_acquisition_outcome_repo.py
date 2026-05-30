@@ -1,24 +1,12 @@
-import sqlite3
-
 import pytest
 
 from javdb.ops.reconcile.models import AcquisitionOutcomeRecord
 from javdb.storage.repos.acquisition_outcome_repo import AcquisitionOutcomeRepo
 
-_DDL = """
-CREATE TABLE AcquisitionOutcome (
-  qb_hash TEXT PRIMARY KEY, href TEXT NOT NULL DEFAULT '', video_code TEXT,
-  category TEXT, state TEXT NOT NULL DEFAULT 'queued', queued_at TEXT,
-  completed_at TEXT, landed_at TEXT, last_seen_at TEXT, session_id TEXT
-);
-"""
-
 
 @pytest.fixture
-def conn():
-    c = sqlite3.connect(":memory:")
-    c.executescript(_DDL)
-    return c
+def conn(acquisition_outcome_conn):
+    return acquisition_outcome_conn
 
 
 def test_upsert_then_get(conn):

@@ -1,19 +1,9 @@
-import sqlite3
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
 from javdb.ops.reconcile.models import AcquisitionOutcomeRecord, ReconcileOptions
 from javdb.ops.reconcile import service
-from javdb.storage.repos.acquisition_outcome_repo import AcquisitionOutcomeRepo
-
-_DDL = """
-CREATE TABLE AcquisitionOutcome (
-  qb_hash TEXT PRIMARY KEY, href TEXT NOT NULL DEFAULT '', video_code TEXT,
-  category TEXT, state TEXT NOT NULL DEFAULT 'queued', queued_at TEXT,
-  completed_at TEXT, landed_at TEXT, last_seen_at TEXT, session_id TEXT
-);
-"""
 
 
 def _old_iso(days: int) -> str:
@@ -21,10 +11,8 @@ def _old_iso(days: int) -> str:
 
 
 @pytest.fixture
-def repo():
-    c = sqlite3.connect(":memory:")
-    c.executescript(_DDL)
-    return AcquisitionOutcomeRepo(c)
+def repo(acquisition_outcome_repo):
+    return acquisition_outcome_repo
 
 
 class _FakeQb:

@@ -1,61 +1,71 @@
 import os
-import sqlite3
 import sys
-from unittest.mock import MagicMock
 from types import ModuleType
+from unittest.mock import MagicMock
+
+import pytest
 
 # Add project root to path
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-# Create a proper mock config module with actual values
-mock_config = ModuleType('config')
-mock_config.QB_URL = 'https://localhost:8080'
-mock_config.QB_HOST = 'localhost'
-mock_config.QB_PORT = '8080'
-mock_config.QB_USERNAME = 'admin'
-mock_config.QB_PASSWORD = 'adminadmin'
-mock_config.TORRENT_CATEGORY = 'JavDB'
-mock_config.TORRENT_CATEGORY_ADHOC = 'Ad Hoc'
-mock_config.TORRENT_SAVE_PATH = ''
-mock_config.AUTO_START = True
-mock_config.SKIP_CHECKING = False
-mock_config.REQUEST_TIMEOUT = 30
-mock_config.DELAY_BETWEEN_ADDITIONS = 1
-mock_config.UPLOADER_LOG_FILE = 'logs/qb_uploader.log'
-mock_config.REPORTS_DIR = 'reports'
-mock_config.DAILY_REPORT_DIR = 'reports/DailyReport'
-mock_config.AD_HOC_DIR = 'reports/AdHoc'
-mock_config.LOG_LEVEL = 'INFO'
-mock_config.PROXY_HTTP = None
-mock_config.PROXY_HTTPS = None
-mock_config.PROXY_MODULES = ['all']
-mock_config.PROXY_MODE = 'single'
-mock_config.PROXY_POOL = []
-mock_config.PROXY_POOL_MAX_FAILURES = 3
-mock_config.GIT_USERNAME = 'test'
-mock_config.GIT_PASSWORD = ''
-mock_config.GIT_REPO_URL = ''
-mock_config.GIT_BRANCH = 'main'
-sys.modules['config'] = mock_config
 
-from javdb.integrations.qb.uploader import service as uploader_service
-from javdb.ops.reconcile import service as reconcile_service
-from javdb.storage.repos.acquisition_outcome_repo import AcquisitionOutcomeRepo
-
-_DDL = """
-CREATE TABLE AcquisitionOutcome (
-  qb_hash TEXT PRIMARY KEY, href TEXT NOT NULL DEFAULT '', video_code TEXT,
-  category TEXT, state TEXT NOT NULL DEFAULT 'queued', queued_at TEXT,
-  completed_at TEXT, landed_at TEXT, last_seen_at TEXT, session_id TEXT
-);
-"""
+def _build_mock_config():
+    mock_config = ModuleType("config")
+    mock_config.QB_URL = "https://localhost:8080"
+    mock_config.QB_HOST = "localhost"
+    mock_config.QB_PORT = "8080"
+    mock_config.QB_USERNAME = "admin"
+    mock_config.QB_PASSWORD = "adminadmin"
+    mock_config.TORRENT_CATEGORY = "JavDB"
+    mock_config.TORRENT_CATEGORY_ADHOC = "Ad Hoc"
+    mock_config.TORRENT_SAVE_PATH = ""
+    mock_config.AUTO_START = True
+    mock_config.SKIP_CHECKING = False
+    mock_config.REQUEST_TIMEOUT = 30
+    mock_config.DELAY_BETWEEN_ADDITIONS = 1
+    mock_config.UPLOADER_LOG_FILE = "logs/qb_uploader.log"
+    mock_config.REPORTS_DIR = "reports"
+    mock_config.DAILY_REPORT_DIR = "reports/DailyReport"
+    mock_config.AD_HOC_DIR = "reports/AdHoc"
+    mock_config.LOG_LEVEL = "INFO"
+    mock_config.PROXY_HTTP = None
+    mock_config.PROXY_HTTPS = None
+    mock_config.PROXY_MODULES = ["all"]
+    mock_config.PROXY_MODE = "single"
+    mock_config.PROXY_POOL = []
+    mock_config.PROXY_POOL_MAX_FAILURES = 3
+    mock_config.GIT_USERNAME = "test"
+    mock_config.GIT_PASSWORD = ""
+    mock_config.GIT_REPO_URL = ""
+    mock_config.GIT_BRANCH = "main"
+    return mock_config
 
 
-def test_uploader_helper_writes_queued_row():
+@pytest.fixture(autouse=True)
+def _mock_config(monkeypatch):
+    mock_config = _build_mock_config()
+    monkeypatch.setitem(sys.modules, "config", mock_config)
+
+    import javdb.infra.config as config_module
+
+    monkeypatch.setattr(config_module, "_config_module", mock_config)
+    yield
+
+
+@pytest.fixture
+def qb_modules():
+    from javdb.integrations.qb.uploader import service as uploader_service
+    from javdb.ops.reconcile import service as reconcile_service
+    from javdb.storage.repos.acquisition_outcome_repo import AcquisitionOutcomeRepo
+
+    return uploader_service, reconcile_service, AcquisitionOutcomeRepo
+
+
+def test_uploader_helper_writes_queued_row(acquisition_outcome_conn, qb_modules):
     """Pin the contract the uploader relies on: a successful add -> one queued row."""
-    c = sqlite3.connect(':memory:')
-    c.executescript(_DDL)
+    _uploader_service, reconcile_service, AcquisitionOutcomeRepo = qb_modules
+    c = acquisition_outcome_conn
     repo = AcquisitionOutcomeRepo(c)
     torrent = {
         'magnet': 'magnet:?xt=urn:btih:' + 'b' * 40,
@@ -74,7 +84,8 @@ def test_uploader_helper_writes_queued_row():
     assert got.session_id == 'S9'
 
 
-def test_uploader_success_helper_delegates_queued_write(monkeypatch):
+def test_uploader_success_helper_delegates_queued_write(monkeypatch, qb_modules):
+    uploader_service, _reconcile_service, _repo_cls = qb_modules
     calls = []
     monkeypatch.setattr(
         uploader_service,
@@ -95,7 +106,8 @@ def test_uploader_success_helper_delegates_queued_write(monkeypatch):
     assert calls == [(torrent, 'S9')]
 
 
-def test_run_uploader_success_path_records_queued(monkeypatch):
+def test_run_uploader_success_path_records_queued(monkeypatch, qb_modules):
+    uploader_service, _reconcile_service, _repo_cls = qb_modules
     from javdb.integrations.qb.uploader.options import QbUploaderOptions
 
     queued_calls = []

@@ -1,27 +1,13 @@
-import sqlite3
-
 import pytest
 
 from javdb.integrations.pikpak.bridge import service as pikpak_service
 from javdb.ops.reconcile import service as reconcile_service
 from javdb.ops.reconcile.models import AcquisitionOutcomeRecord
-from javdb.storage.repos.acquisition_outcome_repo import AcquisitionOutcomeRepo
-
-
-_DDL = """
-CREATE TABLE AcquisitionOutcome (
-  qb_hash TEXT PRIMARY KEY, href TEXT NOT NULL DEFAULT '', video_code TEXT,
-  category TEXT, state TEXT NOT NULL DEFAULT 'queued', queued_at TEXT,
-  completed_at TEXT, landed_at TEXT, last_seen_at TEXT, session_id TEXT
-);
-"""
 
 
 @pytest.fixture
-def repo():
-    conn = sqlite3.connect(":memory:")
-    conn.executescript(_DDL)
-    return AcquisitionOutcomeRepo(conn)
+def repo(acquisition_outcome_repo):
+    return acquisition_outcome_repo
 
 
 def test_apply_cleanup_completed_promotes_hashes_and_orphan_minimal_insert(repo):
