@@ -6,7 +6,12 @@ import logging
 import sqlite3
 from typing import Any, Optional
 
-from javdb.ops.reconcile.models import AcquisitionOutcomeRecord, utc_now_iso
+from javdb.ops.reconcile.models import (
+    ACQUISITION_STATES,
+    TERMINAL_STATES,
+    AcquisitionOutcomeRecord,
+    utc_now_iso,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +27,9 @@ _COLUMNS = (
     "last_seen_at",
     "session_id",
 )
-_ACTIVE_STATES = ("queued", "downloading")
+_ACTIVE_STATES = tuple(
+    state for state in ACQUISITION_STATES if state not in TERMINAL_STATES
+)
 
 
 def _row_to_record(row: Any) -> AcquisitionOutcomeRecord:
