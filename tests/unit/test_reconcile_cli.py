@@ -9,10 +9,23 @@ from javdb.ops.reconcile.models import ReconcileResult
 from apps.cli.ops import reconcile as reconcile_cli
 
 
-def test_default_stalled_after_days_falls_back_on_bad_config(monkeypatch):
+def test_default_stalled_after_days_falls_back_on_non_integer_config(monkeypatch):
     monkeypatch.setattr(reconcile_cli, "cfg", lambda *args, **kwargs: "not-an-int")
 
     assert reconcile_cli._default_stalled_after_days() == 7
+
+
+def test_main_rejects_nonpositive_config_default(monkeypatch, capsys):
+    monkeypatch.setattr(reconcile_cli, "cfg", lambda *args, **kwargs: "0")
+    monkeypatch.setattr(reconcile_cli, "setup_logging", lambda **kwargs: None)
+    monkeypatch.setattr(reconcile_cli, "run", lambda _options: None)
+
+    rc = reconcile_cli.main(["--json"])
+
+    assert rc == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "stalled_after_days must be >= 1" in captured.err
 
 
 def test_main_json_emits_payload_and_returns_zero(monkeypatch, capsys):
