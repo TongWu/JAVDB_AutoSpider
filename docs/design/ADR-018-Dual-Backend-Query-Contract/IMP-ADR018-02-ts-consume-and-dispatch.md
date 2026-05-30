@@ -14,7 +14,7 @@
 
 **Related:** [ADR-018](ADR-018-dual-backend-query-contract.md), [IMP-ADR018-01](IMP-ADR018-01-python-golden-generator.md) (must land first)
 
-**Status:** Proposed
+**Status:** Implemented (2026-05-30) — Tasks 1–7 done and locally verified across both repos. TS builders extracted (`buildMovieWhere`/`buildTorrentWhere`/`buildSessionQuery`); golden vendored; vitest conformance green (25 golden cases); `ci.yml` gains the freshness gen-diff + a `test:server` step (CI did not previously run `test:server`); Python `publish-query-contract.yml` + TS `revendor-query-golden.yml` dispatch pair created. **Pre-existing drift reconciled:** the TS `/sessions` handler now over-fetches `limit + 1` to match the Python golden (fixes a phantom `next_cursor` at exact-multiple boundaries); pinned by two new route tests. Both drift simulations confirmed the guard fails as intended. **Task 8 (stats) remains deferred** (blocked on the Python router→builder extraction). **Pending ops (cannot be done from code):** create `WEB_REPO_DISPATCH_TOKEN` (PAT, `contents:write` on the web repo) in this repo's `Production` environment; post-merge CI dry-run + `workflow_dispatch` dispatch dry-run.
 
 ---
 
