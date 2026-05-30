@@ -78,7 +78,7 @@ from javdb.infra.git_helper import has_git_credentials
 from javdb.infra.masking import mask_error, mask_username
 
 # Import proxy pool
-from javdb.proxy.pool import ProxyPool, create_proxy_pool_from_config
+from javdb.proxy.pool import create_proxy_pool_from_config
 
 # Import proxy helper from request handler
 from javdb.infra.request import ProxyHelper, create_proxy_helper_from_config

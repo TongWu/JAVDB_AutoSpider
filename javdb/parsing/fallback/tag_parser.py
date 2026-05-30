@@ -24,7 +24,8 @@ lets callers build a complete mapping.
 
 FROZEN: Python fallback for ``javdb.rust_core.parse_tag_page``. DO NOT EXTEND.
 New parsing logic goes into ``javdb/rust_core/src/scraper/``.
-See ``tests/parity/test_parser_parity.py`` for drift detection.
+Best-effort fallback (ADR-041): see ``tests/unit/test_fallback_shape.py`` for the
+shape/smoke check; value parity with Rust is no longer guaranteed.
 """
 
 from __future__ import annotations

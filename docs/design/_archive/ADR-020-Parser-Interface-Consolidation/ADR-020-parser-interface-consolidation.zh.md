@@ -2,18 +2,18 @@
 
 | 字段       | 值                                                                    |
 | ---------- | --------------------------------------------------------------------- |
-| **状态**   | Implemented                                                          |
+| **状态**   | Completed                                                            |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
-| **关联**   | [ADR-011](../_archive/ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md)（parsing 模块；本就计划删除此 shim）；[IMP-ADR020-01](IMP-ADR020-01-consolidate-parser.md)（Phase 1 — 执行） |
+| **关联**   | [ADR-011](../ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md)（parsing 模块；本就计划删除此 shim）；[IMP-ADR020-01](IMP-ADR020-01-consolidate-parser.md)（Phase 1 — 执行） |
 
-> 源自 2026-05-29 架构审查（候选 D）：[architecture-review-2026-05-29.zh.html](../architecture/architecture-review-2026-05-29.zh.html)。
+> 源自 2026-05-29 架构审查（候选 D）：[architecture-review-2026-05-29.zh.html](../../architecture/architecture-review-2026-05-29.zh.html)。
 
 ## 背景（Context）
 
 如今"解析一个 JavDB 页面"需要知道**两个解析器入口**和一段**两步 magnet 舞**：
 
-1. **shim。** `javdb/spider/parse_legacy_adapters.py`（118 行）在 [ADR-011](../_archive/ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) Phase 3 中幸存——那一阶段删了原 `parser.py`，却把其包装**搬来这里**而非删掉。它重新暴露 `extract_video_code`（对 `javdb.parsing.common` 的纯透传）、`parse_index`（包 `parse_index_page` + 应用 `pipeline.index_selection.select_index_entries` + 返回 legacy dict）、`parse_detail`（包 `parse_detail_page` + 把 `MovieDetail` 重塑成 legacy 6-tuple）。它有 **6+ 个生产 importer**（`spider/fetch/fallback.py`、`spider/detail/parallel_mode.py`、`legacy/_spider_legacy.py`、两个 `migrations/tools/*`、`apps/cli/ops/profile_hot_paths.py`）加测试。
+1. **shim。** `javdb/spider/parse_legacy_adapters.py`（118 行）在 [ADR-011](../ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) Phase 3 中幸存——那一阶段删了原 `parser.py`，却把其包装**搬来这里**而非删掉。它重新暴露 `extract_video_code`（对 `javdb.parsing.common` 的纯透传）、`parse_index`（包 `parse_index_page` + 应用 `pipeline.index_selection.select_index_entries` + 返回 legacy dict）、`parse_detail`（包 `parse_detail_page` + 把 `MovieDetail` 重塑成 legacy 6-tuple）。它有 **6+ 个生产 importer**（`spider/fetch/fallback.py`、`spider/detail/parallel_mode.py`、`legacy/_spider_legacy.py`、两个 `migrations/tools/*`、`apps/cli/ops/profile_hot_paths.py`）加测试。
 2. **两步。** 解析返回*原始* magnet（`MovieDetail.magnets`）；一个*独立、靠后*的 `javdb/spider/magnet_extractor.py:extract_magnets(...)` 调用才把它们归类为 `subtitle / hacked_subtitle / hacked_no_subtitle / no_subtitle`。热路径在 `javdb/spider/detail/runner.py:700`（`extract_magnets(data['magnets'], idx_str)`）做这步，离解析处很远。每个详情调用方都得记住两步。
 
 所以调用方必须 (a) 选择 import 哪个解析器，且 (b) 记得事后归类。这是浅的：shim 只做形状翻译没有行为，归类步把"详情页抽取什么"这一内部细节泄漏给每个调用方。
@@ -75,3 +75,5 @@
 - 2026-05-29：Proposed（源自架构审查候选 D 的 grilling）。
 - 2026-05-29：设计纠正（实现 Phase 2 期间）。`MovieDetail.categorize_magnets()`（原 D2 的"成品对象方法"）在**生产路径上死掉**——`parse_detail_page()` 返回 Rust 的 `RustMovieDetail`，没有该方法。已修订 D2/D3：正式接口为 parsing 层自由函数 `magnet_categorize.categorize(detail.get_magnets_as_legacy())`（对 Rust/Python 两种 detail 对象统一，与 `runner.py:700` 一致）。死方法及其测试已删除。
 - 2026-05-29：已实现（全部阶段）。Phase 1-2（归类下沉到 `javdb/parsing/magnet_categorize.py`；非 spider 调用方迁移）随 PR #123 交付。Phase 3-5（spider 详情流迁移 + 折叠热路径两步，backends 直接产出预归类的 `data['magnet_links']`；legacy spider import 替换；`test_parser.py` repoint；**删除 `parse_legacy_adapters.py`** + 移除日志别名）随 stacked 的 Phase 3-5 PR 交付。`grep -rn parse_legacy_adapters javdb apps tests` 为空；`test_magnet_parity.py` 全程绿（D6 Rust dispatch 保留）。状态 → Implemented；两个 PR 合并后归档整个文件夹。
+- 2026-05-30：fallback 策略维度被 [ADR-041](../../ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.zh.md) 修订。D6 的 value parity 是**迁移期**守卫；稳态回退现改为**形状契约**（Best-Effort 层——`test_magnet_parity.py` / `tests/parity/` 退役，代之以 `tests/unit/test_fallback_shape.py`）。代理池 / 封禁管理器改为 **Rust-Required**（无 Python 镜像）。ADR-020 的接口合并不变。
+- 2026-05-30：已完成并归档。PR #123 与 PR #124 均已合并；最终 closeout 已将本文件夹移至 `docs/design/_archive/ADR-020-Parser-Interface-Consolidation/`。

@@ -2,18 +2,18 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Implemented                                                          |
+| **Status**  | Completed                                                            |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-011](../_archive/ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) (the parsing module; intended this shim's deletion); [IMP-ADR020-01](IMP-ADR020-01-consolidate-parser.md) (Phase 1 — execution) |
+| **Related** | [ADR-011](../ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) (the parsing module; intended this shim's deletion); [IMP-ADR020-01](IMP-ADR020-01-consolidate-parser.md) (Phase 1 — execution) |
 
-> Originated from the 2026-05-29 architecture review (Candidate D): [architecture-review-2026-05-29.html](../architecture/architecture-review-2026-05-29.html).
+> Originated from the 2026-05-29 architecture review (Candidate D): [architecture-review-2026-05-29.html](../../architecture/architecture-review-2026-05-29.html).
 
 ## Context
 
 Understanding "parse a JavDB page" today requires knowing **two parser entrypoints** and a **two-step magnet dance**:
 
-1. **The shim.** `javdb/spider/parse_legacy_adapters.py` (118 lines) survived [ADR-011](../_archive/ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) Phase 3 — that phase deleted the original `parser.py` but *relocated* its wrappers here instead of deleting them. It re-exposes `extract_video_code` (a pure pass-through to `javdb.parsing.common`), `parse_index` (wraps `parse_index_page` + applies `pipeline.index_selection.select_index_entries` + returns legacy dicts), and `parse_detail` (wraps `parse_detail_page` + reshapes `MovieDetail` into a legacy 6-tuple). It has **6+ live importers** (`spider/fetch/fallback.py`, `spider/detail/parallel_mode.py`, `legacy/_spider_legacy.py`, two `migrations/tools/*`, `apps/cli/ops/profile_hot_paths.py`) plus tests.
+1. **The shim.** `javdb/spider/parse_legacy_adapters.py` (118 lines) survived [ADR-011](../ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) Phase 3 — that phase deleted the original `parser.py` but *relocated* its wrappers here instead of deleting them. It re-exposes `extract_video_code` (a pure pass-through to `javdb.parsing.common`), `parse_index` (wraps `parse_index_page` + applies `pipeline.index_selection.select_index_entries` + returns legacy dicts), and `parse_detail` (wraps `parse_detail_page` + reshapes `MovieDetail` into a legacy 6-tuple). It has **6+ live importers** (`spider/fetch/fallback.py`, `spider/detail/parallel_mode.py`, `legacy/_spider_legacy.py`, two `migrations/tools/*`, `apps/cli/ops/profile_hot_paths.py`) plus tests.
 2. **The two-step.** Parsing returns *raw* magnets (`MovieDetail.magnets`); a *separate, later* `javdb/spider/magnet_extractor.py:extract_magnets(...)` call categorizes them into `subtitle / hacked_subtitle / hacked_no_subtitle / no_subtitle`. The hot path does this at `javdb/spider/detail/runner.py:700` (`extract_magnets(data['magnets'], idx_str)`), far from where parsing happened. Every detail caller must remember both steps.
 
 So a caller must (a) pick which parser to import and (b) remember to categorize afterward. This is shallow: the shim adds shape-translation without behavior, and the categorization step leaks an internal detail of "what we extract from a detail page" into every caller.
@@ -75,3 +75,5 @@ Consolidate to **one parser interface** — `javdb.parsing` returns *finished do
 - 2026-05-29: Proposed (from architecture review Candidate D grilling).
 - 2026-05-29: Design correction (during implementation, Phase 2). `MovieDetail.categorize_magnets()` (the original D2 "finished-object method") is **dead on the production path** — `parse_detail_page()` returns a Rust `RustMovieDetail` that lacks the method. D2/D3 amended: the canonical interface is the parsing-layer free function `magnet_categorize.categorize(detail.get_magnets_as_legacy())` (uniform across Rust/Python detail objects, matches `runner.py:700`). The dead method + its test were removed.
 - 2026-05-29: Implemented (all phases). Phases 1-2 (categorization relocated to `javdb/parsing/magnet_categorize.py`; non-spider callers migrated) shipped in PR #123. Phases 3-5 (spider detail flow migrated + hot-path two-step collapsed so backends emit pre-categorized `data['magnet_links']`; legacy spider import-swapped; `test_parser.py` repointed; **`parse_legacy_adapters.py` deleted** + logging alias removed) shipped in the stacked Phase 3-5 PR. `grep -rn parse_legacy_adapters javdb apps tests` is empty; `test_magnet_parity.py` green throughout (D6 Rust dispatch preserved). Status → Implemented; folder archives once both PRs merge.
+- 2026-05-30: Fallback-policy dimension amended by [ADR-041](../../ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md). D6's value parity was a **migration-time** guard; the steady-state fallback is now **shape-contracted** (Best-Effort tier — `test_magnet_parity.py` / `tests/parity/` retired in favour of `tests/unit/test_fallback_shape.py`). The proxy pool / ban manager became **Rust-Required** (no Python mirror). ADR-020's interface consolidation is unchanged.
+- 2026-05-30: Completed and archived. PR #123 and PR #124 are merged; the final closeout moved this folder to `docs/design/_archive/ADR-020-Parser-Interface-Consolidation/`.

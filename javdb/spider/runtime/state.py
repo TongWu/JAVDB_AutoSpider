@@ -14,7 +14,7 @@ import sys
 import threading
 import time
 import uuid
-from typing import Optional, Dict
+from typing import Any, Dict, Optional
 from datetime import datetime
 
 from javdb.infra.logging import get_logger
@@ -47,7 +47,7 @@ from javdb.proxy.coordinator.runner_registry_client import (
     proxy_pool_hash,
     proxy_pool_summary_for_registry,
 )
-from javdb.proxy.pool import ProxyPool, create_proxy_pool_from_config
+from javdb.proxy.pool import create_proxy_pool_from_config
 from javdb.proxy.policy import should_proxy_module
 from javdb.infra.request import RequestHandler, RequestConfig
 from javdb.infra.paths import ensure_dated_dir
@@ -121,7 +121,7 @@ LEGACY_DATA_FIELDS = (
 # Mutable globals
 # ---------------------------------------------------------------------------
 
-global_proxy_pool: Optional[ProxyPool] = None
+global_proxy_pool: Optional[Any] = None
 global_request_handler: Optional[RequestHandler] = None
 # Cross-instance proxy coordinator (Cloudflare DO).  Lazily initialised by
 # :func:`setup_proxy_coordinator`; ``None`` means "use local throttling
