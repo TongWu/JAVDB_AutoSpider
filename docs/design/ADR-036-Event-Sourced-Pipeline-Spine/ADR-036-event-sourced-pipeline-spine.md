@@ -5,7 +5,7 @@
 | **Status**  | Proposed — umbrella; execution delegated to per-phase IMPs            |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-012](../_archive/ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md), [ADR-019](../ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md), [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md), [ADR-010](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md) |
+| **Related** | [ADR-012](../_archive/ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md), [ADR-019](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md), [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md), [ADR-010](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md) |
 
 > Originated from a 2026-05-29 brainstorming session on net-new directions
 > (Direction 3 — a replayable pipeline core).
@@ -34,7 +34,7 @@ Two facts shape the right ambition:
    `PendingTorrentHistoryWrites` are an **append-then-project** log (rows accrue
    with `ApplyState='pending'`, materialize to `MovieHistory` / `TorrentHistory`
    at commit); the `ReportSessions` lifecycle is a governed state machine
-   ([ADR-019](../ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md)).
+   ([ADR-019](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md)).
 2. **Appetite for a heavy log is low — by evidence.** The per-row change log
    (`MovieHistoryAudit` / `TorrentHistoryAudit`) was **deleted** on 2026-05-22
    ([ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md)
@@ -195,7 +195,7 @@ ADR-033/035 having landed. Phase 3 is an optional, high-care authority migration
 ## References
 
 - [ADR-012 — Pipeline Run Structured Boundary](../_archive/ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md)
-- [ADR-019 — Session Lifecycle Authority](../ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md)
+- [ADR-019 — Session Lifecycle Authority](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md)
 - [ADR-005 — db.py Retirement & Repo Pattern](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md)
 - [ADR-010 — D1 Access Port](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.md)
 - [ADR-033 — Media Closed-Loop](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
