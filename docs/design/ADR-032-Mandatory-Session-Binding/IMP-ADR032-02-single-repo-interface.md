@@ -10,7 +10,7 @@
 
 **Related:** [ADR-032](ADR-032-mandatory-session-binding.md), [IMP-ADR032-01](IMP-ADR032-01-mandatory-session-id.md) (land first)
 
-**Status:** In progress (2026-05-29) — split into 2a (migrate callers + add thin methods) and 2b (de-export) per the scope reality below.
+**Status:** In progress (2026-05-29) — **Phase 2a done** (thin methods added + all external callers migrated to Repos; `db_*` still exported); **Phase 2b pending** (repoint Repo-internal imports to submodules, migrate `db_*`-targeted tests, trim `__all__`, de-export proof). Split per the scope reality below.
 
 ---
 
