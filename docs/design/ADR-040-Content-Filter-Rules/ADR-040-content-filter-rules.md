@@ -2,7 +2,7 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Proposed — umbrella; execution delegated to per-phase IMPs            |
+| **Status**  | Accepted — Phase 1 implemented; later phases pending                  |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
 | **Related** | [ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md), [ADR-038](../ADR-038-Agentic-Operator-MCP/ADR-038-agentic-operator-mcp-surface.md) |
@@ -164,3 +164,5 @@ widen the include side and attribute coverage.
 
 - 2026-05-29: Proposed (pivoted from "streaming ingestion" to content filtering;
   three phases scoped, IMPs pending).
+- 2026-05-30: Phase 1 implemented via [IMP-ADR040-01](IMP-ADR040-01-content-filter.md);
+  ADR remains active for Phase 2/3.
