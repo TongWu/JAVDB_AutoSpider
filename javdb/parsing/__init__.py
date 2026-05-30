@@ -36,7 +36,8 @@ except ImportError as e:
     from javdb.parsing.fallback.tag_parser import parse_tag_page
     RUST_PARSERS_AVAILABLE = False
     logger.warning(
-        "Rust parsers not available (ImportError: %s) - falling back to pure-Python implementation",
+        "Rust core unavailable — pure-Python parsers fallback is best-effort "
+        "and may diverge from production (ImportError: %s)",
         e,
     )
 
