@@ -315,14 +315,15 @@ class OperationsRepo:
         from javdb.storage.db._db_operations import db_clear_rclone_inventory
         db_clear_rclone_inventory(db_path=self._db_path)
 
-    def append_rclone_inventory(
-        self, entries: List[dict], *, session_id: str,
-    ) -> int:
-        """Append rows directly to RcloneInventory (rare; prefer swap)."""
+    def append_rclone_inventory(self, entries: List[dict]) -> int:
+        """Append rows directly to RcloneInventory (rare; prefer swap).
+
+        RcloneInventory has no SessionId column, so the append path is not
+        session-tagged (unlike ``swap_rclone_inventory``); no ``session_id``
+        is accepted or forwarded.
+        """
         from javdb.storage.db._db_operations import db_append_rclone_inventory
-        return db_append_rclone_inventory(
-            entries=entries, session_id=session_id, db_path=self._db_path,
-        )
+        return db_append_rclone_inventory(entries=entries, db_path=self._db_path)
 
     # ── Dedup records ─────────────────────────────────────────────
 

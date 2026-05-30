@@ -61,11 +61,11 @@ class TestOperationsRepoRcloneInventory:
     def test_append_rclone_inventory_delegates(self, mock_fn):
         repo = OperationsRepo(db_path="/tmp/o.db")
         entries = [{"VideoCode": "Y"}]
-        result = repo.append_rclone_inventory(entries, session_id="s1")
+        result = repo.append_rclone_inventory(entries)
         assert result == 3
-        mock_fn.assert_called_once_with(
-            entries=entries, session_id="s1", db_path="/tmp/o.db",
-        )
+        # No session_id: RcloneInventory append has no SessionId column, and
+        # db_append_rclone_inventory's signature is (entries, db_path).
+        mock_fn.assert_called_once_with(entries=entries, db_path="/tmp/o.db")
 
 
 class TestOperationsRepoDedup:

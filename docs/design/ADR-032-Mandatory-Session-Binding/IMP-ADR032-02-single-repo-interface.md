@@ -10,7 +10,7 @@
 
 **Related:** [ADR-032](ADR-032-mandatory-session-binding.md), [IMP-ADR032-01](IMP-ADR032-01-mandatory-session-id.md) (land first)
 
-**Status:** Completed (2026-05-29). **Phase 2a** (PR #127, merged): thin Repo methods added + all external callers migrated to Repos. **Phase 2b** (this PR): implementation layer repointed off the facade to `_db_*` submodules + a boundary test enforcing "the Repo is the single caller-facing interface" — the *enforce, don't hard-remove* variant chosen after measuring the full hard-removal at ~46 files / 33 tests (see scope decision below). `__all__` left intact. Folder archival deferred until this PR merges.
+**Status:** Completed (2026-05-29). **Phase 2a** (PR #127, merged): thin Repo methods added + all external callers migrated to Repos. **Phase 2b** (PR #128): implementation layer repointed off the facade to `_db_*` submodules + a boundary test enforcing "the Repo is the single caller-facing interface" — the *enforce, don't hard-remove* variant chosen after measuring the full hard-removal at ~46 files / 33 tests (see scope decision below). `__all__` left intact. Folder archival deferred until PR #128 merges.
 
 ---
 
@@ -23,16 +23,16 @@ Task-1 enumeration on current `main` surfaced two things the original plan under
 
 **Edge dispositions (decided):** `db_writes_forbidden` (`infra/config.py`) stays exported — it's an infra predicate/kill-switch, not a domain write op. `apps/cli/ops/profile_hot_paths.py` (`db_load_history`) is **excluded** (a one-shot benchmark, D6 spirit). `db_insert_report_rows` gets a thin Repo method (no new `ReportsRepo`).
 
-### Phase 2a (this PR) — migrate callers + add thin methods
+### Phase 2a (PR #127) — migrate callers + add thin methods
 
 Migrate every external `db_*` caller (~14 files, ~37 sites) to existing/new Repo methods; add the ~10 missing thin wrappers. **Behavior-preserving; `db_*` stay exported** (no `__init__` change yet), so nothing can break from de-export. Per-module boundary tests.
 
-### Phase 2b (follow-up PR) — enforce, don't hard-remove
+### Phase 2b (PR #128) — enforce, don't hard-remove
 
 **Scope decision (2026-05-29, after measuring):** the literal hard-removal (Task 6's "`from javdb.storage.db import db_X` fails") was measured at **~46 files** — 13 production + **33 test files** importing the ~45 de-export-candidate `db_*` names. Since Phase 2a already routes every *caller* through a Repo, the marginal value of forcing the implementation layer + 33 test files off the facade (when these `db_*`/SQLite functions are themselves slated for retirement under the D1-canonical direction) does not justify that churn/risk. So Phase 2b **enforces the boundary instead of hard-removing the exports**:
 
 1. **Repoint the implementation layer (8 files).** The Repos (`history_repo`/`operations_repo`/`stats_repo`/`session_lifecycle_repo`) + storage internals (`sessions/lifecycle.py`, `sessions/lifecycle_helpers.py`, `sessions/commit.py`, `rollback/core.py`) import the `db_*` they wrap **from the `_db_*` submodules directly**, not the `javdb.storage.db` facade. The implementation layer stops eating its own dog-food facade.
-2. **Boundary test.** A new test forbids *non-storage, non-migration* production code (`javdb/`, `apps/`, excluding `javdb/storage/db/` and `javdb/migrations/`) from `from javdb.storage.db import <a write/ops `db_*`>`. This mechanizes "the Repo is the single caller-facing front door" and fails CI on regression — the enforcement Task 6 wanted, achieved by test rather than by removal.
+2. **Boundary test.** A new test forbids *non-storage, non-migration* production code (`javdb/`, `apps/`, excluding `javdb/storage/db/` and `javdb/migrations/`) from importing any `db_*` write/ops function from the `javdb.storage.db` facade. This mechanizes "the Repo is the single caller-facing front door" and fails CI on regression — the enforcement Task 6 wanted, achieved by test rather than by removal.
 3. **Keep the `__init__` exports.** Migration tools (D6-excluded), tests, and the impl-internal fall-backs keep working; the stateless primitives stay exported regardless. The `__all__` / import blocks are left intact.
 
 This achieves ADR-032's goal (one obvious caller-facing way to write storage, enforced) at ~9 files instead of ~46. The full hard-removal is recorded as available but deliberately not pursued (low marginal value vs. SQLite-retirement churn).
