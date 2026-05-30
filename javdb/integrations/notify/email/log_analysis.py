@@ -809,9 +809,10 @@ def extract_dedup_statistics(dedup_csv_path, session_start_time=None):
     try:
         from javdb.infra.config import use_sqlite
         if use_sqlite():
-            from javdb.storage.db import init_db, db_load_dedup_records
+            from javdb.storage.db import init_db
+            from javdb.storage.repos.operations_repo import OperationsRepo
             init_db()
-            db_rows = db_load_dedup_records()
+            db_rows = OperationsRepo().load_dedup_records()
             if db_rows:
                 rows = []
                 for r in db_rows:

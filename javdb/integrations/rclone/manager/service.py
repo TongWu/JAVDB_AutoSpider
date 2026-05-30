@@ -304,8 +304,8 @@ def load_inventory_as_folder_structure(
 
     if use_sqlite():
         try:
-            from javdb.storage.db import db_load_rclone_inventory, current_backend
-            raw = db_load_rclone_inventory()
+            from javdb.storage.db import current_backend
+            raw = OperationsRepo().load_rclone_inventory()
             for entries in raw.values():
                 rows.extend(entries)
             if rows:
@@ -545,17 +545,7 @@ def validate_dedup_records_against_inventory() -> Tuple[int, List[dict]]:
     Returns ``(orphan_count, orphan_rows)``. Zero remote calls are made.
     """
     try:
-        from javdb.storage.db import (
-            db_load_rclone_inventory,
-            db_load_dedup_records,
-            db_mark_orphan_records,
-        )
-    except Exception as e:
-        logger.warning(f"Skipping dedup self-heal — DB helpers unavailable: {e}")
-        return 0, []
-
-    try:
-        inventory = db_load_rclone_inventory()
+        inventory = OperationsRepo().load_rclone_inventory()
     except Exception as e:
         logger.warning(f"Skipping dedup self-heal — could not load inventory: {e}")
         return 0, []
@@ -581,7 +571,7 @@ def validate_dedup_records_against_inventory() -> Tuple[int, List[dict]]:
         return 0, []
 
     try:
-        all_records = db_load_dedup_records()
+        all_records = OperationsRepo().load_dedup_records()
     except Exception as e:
         logger.warning(f"Skipping dedup self-heal — could not load dedup records: {e}")
         return 0, []
@@ -603,7 +593,7 @@ def validate_dedup_records_against_inventory() -> Tuple[int, List[dict]]:
         return 0, []
 
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    updated = db_mark_orphan_records(
+    updated = OperationsRepo().mark_orphan_records(
         orphan_paths, ORPHAN_REASON_SUFFIX, now_str,
         session_id=SessionLifecycleRepo().get_active_session_id(),
     )
@@ -731,11 +721,6 @@ def run_validate_inventory(
 
     Returns 0 on success, 1 on failure.
     """
-    from javdb.storage.db import (
-        db_load_rclone_inventory,
-        db_delete_rclone_inventory_paths,
-    )
-
     logger.info("Building remote truth-set (dirs-only listing)...")
     truth = list_remote_truth_paths(
         remote_name, root_folder,
@@ -751,7 +736,7 @@ def run_validate_inventory(
         return 1
 
     try:
-        inventory = db_load_rclone_inventory()
+        inventory = OperationsRepo().load_rclone_inventory()
     except Exception as e:
         logger.error(f"Validate: could not load inventory: {e}")
         return 1
@@ -791,7 +776,7 @@ def run_validate_inventory(
         logger.info(f"Inventory orphans report written: {csv_path}")
 
     if orphan_rows and prune:
-        deleted = db_delete_rclone_inventory_paths(
+        deleted = OperationsRepo().delete_rclone_inventory_paths(
             r['folder_path'] for r in orphan_rows
         )
         logger.warning(f"Validate: pruned {deleted} orphan inventory row(s)")
