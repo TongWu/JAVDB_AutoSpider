@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from apps.api.infra.auth import _require_auth
 from apps.api.schemas.preferences import (
@@ -71,7 +71,6 @@ def _row_to_metadata(row: dict) -> MovieMetadataResponse:
 
 
 def _row_to_rating(row: dict) -> MovieRatingResponse:
-    import json as _json
     return MovieRatingResponse(
         href=row["href"],
         video_code=row["video_code"],
@@ -127,8 +126,8 @@ def get_movie_rating(href: str, _user=Depends(_require_auth)):
 
 @router.get("/movies/ratings", response_model=MovieRatingListResponse)
 def list_movie_ratings(
-    limit: int = 50,
-    offset: int = 0,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
     _user=Depends(_require_auth),
 ):
     items, total = PreferenceRepo().list_ratings(limit=limit, offset=offset)
