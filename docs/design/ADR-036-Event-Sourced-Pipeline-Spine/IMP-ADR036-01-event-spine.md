@@ -45,6 +45,19 @@
 
 **Files:**
 - Create: `javdb/migrations/d1/2026_05_29_add_pipeline_event.sql`
+- Modify: `javdb/storage/db/_db_migrations.py` (add the same tables to `_REPORTS_DDL`)
+
+> **Amended 2026-05-30 (review feedback).** The D1 migration file alone is NOT
+> enough. `init_db()` builds local `reports.db` from `_REPORTS_DDL` (used by
+> fresh installs AND the test suite's autouse `_isolate_sqlite` fixture); it does
+> not run the `d1/*.sql` files. The same three tables must be added to
+> `_REPORTS_DDL` (next to `OpsIncidents`), or a fresh local install hits
+> `no such table` and the best-effort emits silently drop every event. A repo
+> test (`test_rollback_full_fidelity.py::...test_every_d1_migration_column_exists_in_local_ddl`)
+> enforces this — so keep `--` comments OUT of the migration's `CREATE TABLE`
+> bodies (its column parser splits on commas and would read a comment as a
+> column). No `SCHEMA_VERSION` bump is needed (additive tables after the v14
+> bump, same as `OpsIncidents`).
 
 - [ ] **Step 1: Write the migration SQL**
 
@@ -453,7 +466,8 @@ import contextlib
 import logging
 
 from javdb.pipeline.events.models import PipelineEventRecord, utc_now_iso
-from javdb.storage.db import REPORTS_DB_PATH, get_db
+from javdb.storage import db as _db
+from javdb.storage.db import get_db
 from javdb.storage.repos.pipeline_event_repo import PipelineEventRepo
 
 logger = logging.getLogger(__name__)
@@ -464,13 +478,16 @@ def _repo_ctx(repo):
     if repo is not None:
         yield repo
     else:
-        # NOTE (amended 2026-05-30): get_db takes a db *path*, not the logical
-        # name "reports". Passing "reports" raises under every backend (sqlite:
-        # opens the reports/ directory as a DB file; d1/dual: no logical-name
-        # mapping). Resolve via the REPORTS_DB_PATH constant instead. Because
-        # emit() is best-effort, the original "reports" bug would have silently
-        # dropped every event rather than failing loudly.
-        with get_db(REPORTS_DB_PATH) as conn:
+        # NOTE (amended 2026-05-30): two corrections vs the original plan.
+        # (1) get_db takes a db *path*, not the logical name "reports" (which
+        #     raises under every backend), so resolve REPORTS_DB_PATH.
+        # (2) Reference it via the module attribute (_db.REPORTS_DB_PATH) at
+        #     CALL TIME, not a top-level `from ... import REPORTS_DB_PATH`. A
+        #     top-level import binds the value at import and bypasses the test
+        #     suite's path monkeypatch, so emits would write to the real
+        #     reports.db during tests. Mirrors javdb/storage/rollback/core.py.
+        #     Both bugs were silent because emit() is best-effort.
+        with get_db(_db.REPORTS_DB_PATH) as conn:
             yield PipelineEventRepo(conn)
 
 

@@ -6,15 +6,19 @@
 --
 -- Additive, append-only. Does NOT change the authoritative pending->commit path.
 
+-- PipelineEvent columns: seq = global monotonic order; entity_type is one of
+-- session | movie | torrent; payload is JSON. (Inline comments are kept OUT of
+-- the CREATE TABLE body so the migration-coverage test's column parser, which
+-- splits on commas, does not read a comment as a column name.)
 CREATE TABLE IF NOT EXISTS PipelineEvent (
-  seq          INTEGER PRIMARY KEY AUTOINCREMENT,  -- global monotonic order
+  seq          INTEGER PRIMARY KEY AUTOINCREMENT,
   session_id   TEXT NOT NULL,
   run_id       TEXT,
   run_attempt  INTEGER,
   event_type   TEXT NOT NULL,
-  entity_type  TEXT NOT NULL,   -- session | movie | torrent
+  entity_type  TEXT NOT NULL,
   entity_id    TEXT,
-  payload      TEXT,            -- JSON
+  payload      TEXT,
   created_at   TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_pipeline_event_session ON PipelineEvent(session_id, seq);

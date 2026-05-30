@@ -8,7 +8,8 @@ import contextlib
 import logging
 
 from javdb.pipeline.events.models import PipelineEventRecord, utc_now_iso
-from javdb.storage.db import REPORTS_DB_PATH, get_db
+from javdb.storage import db as _db
+from javdb.storage.db import get_db
 from javdb.storage.repos.pipeline_event_repo import PipelineEventRepo
 
 logger = logging.getLogger(__name__)
@@ -19,7 +20,11 @@ def _repo_ctx(repo):
     if repo is not None:
         yield repo
     else:
-        with get_db(REPORTS_DB_PATH) as conn:
+        # Resolve REPORTS_DB_PATH via the module attribute at call time (not a
+        # top-level `from ... import REPORTS_DB_PATH`, which captures the value
+        # at import and bypasses the test suite's path monkeypatch — that would
+        # make emits write to the real reports.db during tests).
+        with get_db(_db.REPORTS_DB_PATH) as conn:
             yield PipelineEventRepo(conn)
 
 
