@@ -53,6 +53,11 @@ def _load_hrefs_without_metadata(
     """Return MovieHistory.Href values that have no MovieMetadata row.
 
     If *only_hrefs* is given, restrict to that set.
+
+    Returns an empty list (with a warning) when the required tables are not
+    present — e.g. a database that has not had the ADR-022 schema migration
+    applied yet.  Backfill normally runs *after* schema migration, so a missing
+    table means "nothing to backfill here", not a fatal error.
     """
     sql = """
         SELECT mh.Href
@@ -62,6 +67,20 @@ def _load_hrefs_without_metadata(
         ORDER  BY mh.DateTimeCreated DESC
     """
     with get_db(HISTORY_DB_PATH) as conn:
+        present = {
+            r[0] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' "
+                "AND name IN ('MovieHistory', 'MovieMetadata')"
+            ).fetchall()
+        }
+        missing = {'MovieHistory', 'MovieMetadata'} - present
+        if missing:
+            logger.warning(
+                "Backfill skipped: required table(s) %s not found in the "
+                "history database — run the schema migration first.",
+                ", ".join(sorted(missing)),
+            )
+            return []
         rows = conn.execute(sql).fetchall()
     all_missing = [r[0] for r in rows]
 
