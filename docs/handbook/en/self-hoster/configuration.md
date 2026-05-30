@@ -273,6 +273,17 @@ persists an `OpsIncidents` record or JSONL fallback.
 | `OPS_DIAGNOSIS_MODEL` | `str` | `'deterministic-fallback-v1'` | Model identifier recorded in diagnosis output. The default documents that no remote model is used. |
 | `OPS_DIAGNOSIS_MAX_LOG_SNIPPETS` | `int` | `20` | Maximum matching log lines collected into the compact evidence bundle. Invalid values fall back to `20`. |
 
+### Site-Contract Drift Sentinel (ADR-035)
+
+The drift sentinel records per-field parse fill-rates during the daily index
+parse and gates the session commit when a critical field collapses (it reuses
+the `OpsIncidents` surface above). Two `config.py` knobs tune it:
+
+| Variable | Type | Default | Description |
+|---|---|---|---|
+| `SENTINEL_MIN_SAMPLE` | `int` | `30` | Skip drift evaluation when a run parsed fewer than this many items (avoids flapping on tiny runs). |
+| `SENTINEL_BASELINE_WINDOW` | `int` | `14` | Soft-field baseline = median fill-rate over this many most-recent committed runs (self-calibrating; learns only from clean runs). |
+
 ---
 
 ## 9. Logging
