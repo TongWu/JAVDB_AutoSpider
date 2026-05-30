@@ -2,7 +2,7 @@
 
 | 字段       | 值                                                                    |
 | ---------- | --------------------------------------------------------------------- |
-| **状态**   | Proposed — 伞型;执行下放给各期 IMP                                    |
+| **状态**   | Proposed — 伞型;Phase 1 已实现并验证;执行下放给各期 IMP               |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
 | **关联**   | [ADR-012](../_archive/ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md), [ADR-019](../ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md), [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md) |
@@ -133,10 +133,11 @@ Phase 1 独立成立、不碰任何权威物。Phase 2 依赖 ADR-033/035 已落
 ## 状态日志 (Status Log)
 
 - 2026-05-29: Proposed(伞型;三期已划定,IMP 待出)。
-- 2026-05-30: Phase 1 已实现（[IMP-ADR036-01](IMP-ADR036-01-event-spine.md)）。
+- 2026-05-30: Phase 1 已实现并验证（[IMP-ADR036-01](IMP-ADR036-01-event-spine.md)）。
   `PipelineEvent` / `EventConsumerCursor` / `RunEventSummary` 表已应用到远程
-  `javdb-reports` D1;新增 `javdb/pipeline/events/`（`emit`、`read_since`、游标
+  `javdb-reports` D1;`PipelineEvent` 已有 `RunStarted` / `SessionCommitted`
+  的实时行;新增 `javdb/pipeline/events/`（`emit`、`read_since`、游标
   `Consumer`）与 `PipelineEventRepo` / `RunEventSummaryRepo`;会话事件
   （`RunStarted` / `SessionCommitted` / `SessionFailed`）已在运行与提交边界接线;
-  示范 `apps.cli.ops.events` 消费/回放 CLI。伞型 ADR 仍为 **Proposed**，等待
-  Phase 2（收编消费者）与 Phase 3（可选绞杀迁移）。
+  示范 `apps.cli.ops.events` 消费/回放 CLI;GitHub 全量单元测试无失败。伞型 ADR
+  仍为 **Proposed**，等待 Phase 2（收编消费者）与 Phase 3（可选绞杀迁移）。
