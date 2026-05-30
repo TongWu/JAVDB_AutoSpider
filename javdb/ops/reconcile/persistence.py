@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import contextlib
 
-from javdb.storage.db import get_db
+from javdb.storage.db import OPERATIONS_DB_PATH, get_db
 from javdb.storage.repos.acquisition_outcome_repo import AcquisitionOutcomeRepo
 
 
@@ -14,5 +14,5 @@ def open_outcome_repo():
 
     Routing honours STORAGE_BACKEND via get_db (D1 / sqlite / dual).
     """
-    with get_db("operations") as conn:
+    with get_db(OPERATIONS_DB_PATH) as conn:
         yield AcquisitionOutcomeRepo(conn)
