@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 import contextlib
-import logging
 
 from javdb.storage.db import get_db
 from javdb.storage.repos.acquisition_outcome_repo import AcquisitionOutcomeRepo
-
-logger = logging.getLogger(__name__)
 
 
 @contextlib.contextmanager
