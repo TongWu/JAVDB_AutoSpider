@@ -199,3 +199,11 @@ fetch**. Phase 2 adds between-run lead time. Phase 3 is optional polish.
 ## Status Log
 
 - 2026-05-29: Proposed (umbrella; three phases scoped, IMPs pending).
+- 2026-05-31: Phase 1 ([IMP-ADR035-01](IMP-ADR035-01-piggyback-and-gate.md))
+  implemented — `parse_contract`, `field_health` piggyback (both the sequential
+  AND parallel index paths), `ParseRunFieldFill` + repo, pure `detectors`,
+  `service` (sole writer + `site_drift` incident), commit gate (critical →
+  fail; fail-open on sentinel error), and `apps.cli.ops.sentinel`. See the
+  IMP's "As-Built Notes" for deviations. Fast-follows: apply the D1 migration
+  to production; gate the API commit path. Phases 2–3 remain pending, so the
+  umbrella stays Proposed.
