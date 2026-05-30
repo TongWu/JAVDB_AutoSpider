@@ -21,6 +21,7 @@ python3 -m apps.cli.<command> [options]
 - [Login CLI](#login-cli)（`apps.cli.login`）
 - [Rollback CLI](#rollback-cli)（`apps.cli.rollback`）
 - [运维诊断 CLI](#运维诊断-cli)（`apps.cli.ops.diagnose_run`）
+- [采集结果对账 CLI](#采集结果对账-cli)（`apps.cli.ops.reconcile`）
 - [事件主线消费者 CLI](#事件主线消费者-cli)（`apps.cli.ops.events`）
 - [Config Generator CLI](#config-generator-cli)（`apps.cli.config_generator`）
 - [Spider 完整参数参考](#spider-完整参数参考)
@@ -588,6 +589,48 @@ python3 -m apps.cli.ops.diagnose_run \
 python3 -m apps.cli.ops.diagnose_run \
   --run-id 123456789 \
   --drift-verdict CLEAN
+```
+
+---
+
+## 采集结果对账 CLI
+
+**模块：** `apps.cli.ops.reconcile`
+
+将 ADR-033 的 `AcquisitionOutcome` 行与实时来源状态对账。Phase 1 只使用
+qBittorrent collector，并把活跃 outcome 从 `queued` / `downloading` 推进到
+`downloading`、`completed`、`stalled` 或 `failed`。生产环境应使用
+`STORAGE_BACKEND=d1`，因为 `AcquisitionOutcome` 是 operations 数据库中的
+D1 canonical 表。
+
+### 参数
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--source` | 要对账的来源，可重复传入。Phase 1 支持 `qb`。 | `qb` |
+| `--category` | 要扫描的 qB 分类，可重复传入。 | `JavDB`、`Ad Hoc` |
+| `--stalled-after-days` | 活跃 outcome 超过该天数未被观测到会变为 `stalled`；超过 2 倍窗口会变为 `failed`。 | `RECONCILE_STALLED_DAYS` 或 `7` |
+| `--dry-run` | 只计算状态迁移，不写入数据库。 | `False` |
+| `--json` | 输出 JSON result payload。 | `False` |
+| `--log-level` | 日志级别。可选：`DEBUG`、`INFO`、`WARNING`、`ERROR`。 | `INFO` |
+
+退出码 `0` 表示对账完成且没有来源或写入错误。退出码 `2` 表示对账完成但记录了错误，`1` 表示 CLI 发生意外失败。
+
+### 示例
+
+```bash
+# 生产 cron 路径：使用 qB 观测结果对 D1 做对账，并输出 JSON
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --json
+
+# 使用更宽的阈值预览 stalled/failed 状态迁移
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile \
+  --stalled-after-days 14 \
+  --dry-run \
+  --json
+
+# 只对一个 qB 分类做对账
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile \
+  --category "Daily Ingestion"
 ```
 
 ---
