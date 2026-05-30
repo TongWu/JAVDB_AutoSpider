@@ -42,7 +42,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence
 
-from javdb.storage.db import (
+from javdb.storage.db._db_reports import (
     db_find_in_progress_sessions,
     db_find_sessions_by_run,
     db_get_session_run_identity,

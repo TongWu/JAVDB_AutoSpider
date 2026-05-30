@@ -20,7 +20,13 @@ from __future__ import annotations
 
 import pytest
 
-import javdb.storage.db as db_mod
+# Repo methods import their backing db_* functions from the owning
+# javdb.storage.db._db_* submodule (ADR-032 de-export). Monkeypatch at that
+# import site — the function object the Repo actually looks up — not the
+# javdb.storage.db facade, which the Repo no longer reads.
+import javdb.storage.db._db_history_write as db_history_write
+import javdb.storage.db._db_reports as db_reports
+import javdb.storage.db._db_rollback as db_rollback
 from javdb.storage.repos.history_repo import HistoryRepo
 from javdb.storage.repos.session_lifecycle_repo import SessionLifecycleRepo
 
@@ -57,7 +63,7 @@ def lifecycle_repo():
 
 def test_find_in_progress_sessions(monkeypatch, lifecycle_repo):
     rec = _Recorder(["s1", "s2"])
-    monkeypatch.setattr(db_mod, "db_find_in_progress_sessions", rec)
+    monkeypatch.setattr(db_reports, "db_find_in_progress_sessions", rec)
 
     result = lifecycle_repo.find_in_progress_sessions(
         since="2026-01-01", max_age_hours=None, require_run_identity=True
@@ -74,7 +80,7 @@ def test_find_in_progress_sessions(monkeypatch, lifecycle_repo):
 
 def test_find_sessions_by_run(monkeypatch, lifecycle_repo):
     rec = _Recorder(["sid-a"])
-    monkeypatch.setattr(db_mod, "db_find_sessions_by_run", rec)
+    monkeypatch.setattr(db_reports, "db_find_sessions_by_run", rec)
 
     result = lifecycle_repo.find_sessions_by_run("run-1", 2)
 
@@ -86,7 +92,7 @@ def test_find_sessions_by_run(monkeypatch, lifecycle_repo):
 
 def test_get_session_run_identity(monkeypatch, lifecycle_repo):
     rec = _Recorder(("run-9", 3))
-    monkeypatch.setattr(db_mod, "db_get_session_run_identity", rec)
+    monkeypatch.setattr(db_reports, "db_get_session_run_identity", rec)
 
     result = lifecycle_repo.get_session_run_identity("sess-x")
 
@@ -99,7 +105,7 @@ def test_pending_session_stats(monkeypatch):
     # pending_session_stats queries the history DB (Pending*HistoryWrites), so
     # it lives on the history-owned HistoryRepo, not SessionLifecycleRepo.
     rec = _Recorder({"pending_total_count": 7})
-    monkeypatch.setattr(db_mod, "db_pending_session_stats", rec)
+    monkeypatch.setattr(db_reports, "db_pending_session_stats", rec)
 
     result = HistoryRepo(db_path=DB_PATH).pending_session_stats("sess-y")
 
@@ -110,7 +116,7 @@ def test_pending_session_stats(monkeypatch):
 
 def test_find_stale_pending_sessions(monkeypatch, lifecycle_repo):
     rec = _Recorder([("sid", "in_progress", "pending")])
-    monkeypatch.setattr(db_mod, "db_find_stale_pending_sessions", rec)
+    monkeypatch.setattr(db_reports, "db_find_stale_pending_sessions", rec)
 
     result = lifecycle_repo.find_stale_pending_sessions(
         max_age_hours=12.0, require_run_identity=False
@@ -127,7 +133,7 @@ def test_find_stale_pending_sessions(monkeypatch, lifecycle_repo):
 def test_find_in_progress_session_ids_for_run_csv(monkeypatch, lifecycle_repo):
     rec = _Recorder(["sid-1"])
     monkeypatch.setattr(
-        db_mod, "db_find_in_progress_session_ids_for_run_csv", rec
+        db_reports, "db_find_in_progress_session_ids_for_run_csv", rec
     )
 
     result = lifecycle_repo.find_in_progress_session_ids_for_run_csv(
@@ -141,7 +147,7 @@ def test_find_in_progress_session_ids_for_run_csv(monkeypatch, lifecycle_repo):
 
 def test_get_latest_session_local(monkeypatch, lifecycle_repo):
     rec = _Recorder({"Id": "sess-latest"})
-    monkeypatch.setattr(db_mod, "db_get_latest_session_local", rec)
+    monkeypatch.setattr(db_reports, "db_get_latest_session_local", rec)
 
     result = lifecycle_repo.get_latest_session_local("daily")
 
@@ -153,7 +159,7 @@ def test_get_latest_session_local(monkeypatch, lifecycle_repo):
 
 def test_insert_report_rows(monkeypatch, lifecycle_repo):
     rec = _Recorder(5)
-    monkeypatch.setattr(db_mod, "db_insert_report_rows", rec)
+    monkeypatch.setattr(db_reports, "db_insert_report_rows", rec)
 
     rows = [{"href": "/v/abc"}]
     result = lifecycle_repo.insert_report_rows("sess-z", rows)
@@ -169,7 +175,7 @@ def test_insert_report_rows(monkeypatch, lifecycle_repo):
 
 def test_resume_finalizing_session(monkeypatch):
     rec = _Recorder({"movies_upserted": 2})
-    monkeypatch.setattr(db_mod, "db_resume_finalizing_session", rec)
+    monkeypatch.setattr(db_history_write, "db_resume_finalizing_session", rec)
 
     repo = HistoryRepo(db_path=DB_PATH)
     result = repo.resume_finalizing_session(
@@ -187,7 +193,7 @@ def test_resume_finalizing_session(monkeypatch):
 
 def test_rollback_session(monkeypatch):
     rec = _Recorder({"history": {"MovieHistory": 1}})
-    monkeypatch.setattr(db_mod, "db_rollback_session", rec)
+    monkeypatch.setattr(db_rollback, "db_rollback_session", rec)
 
     repo = SessionLifecycleRepo(db_path=DB_PATH)
     result = repo.rollback_session("sess-r", dry_run=True, scope="history")
@@ -211,7 +217,7 @@ def test_rollback_session(monkeypatch):
 def test_rollback_session_explicit_reports_db_path_overrides(monkeypatch):
     """An explicit reports_db_path wins over the Repo's db_path default."""
     rec = _Recorder({})
-    monkeypatch.setattr(db_mod, "db_rollback_session", rec)
+    monkeypatch.setattr(db_rollback, "db_rollback_session", rec)
 
     repo = SessionLifecycleRepo(db_path=DB_PATH)
     repo.rollback_session("sess-r", reports_db_path="/tmp/other.db")
