@@ -4,6 +4,8 @@
 
 **Related:** [ADR-036](ADR-036-event-sourced-pipeline-spine.md) (umbrella) — this is **Phase 1** of three.
 
+**Status:** Implemented (2026-05-30). All 9 tasks landed; the `2026_05_29_add_pipeline_event.sql` migration is applied to remote `javdb-reports` D1 and mirrored locally. Two plan-vs-code corrections were made during implementation and documented inline (Task 4: `get_db(REPORTS_DB_PATH)` not the literal `"reports"`; Task 7: emit `SessionCommitted` after the status transition succeeds, `SessionFailed` in both failure paths).
+
 **Goal:** Stand up an additive, append-only `PipelineEvent` log in D1 with a cursor-based consumer framework and a demonstrator projection, proving emit → consume → replay end to end — without touching the authoritative `pending→commit` path.
 
 **Architecture:** `javdb/pipeline/events/` provides `emit()` (append a `PipelineEvent`), `read_since(cursor)`, and a base `Consumer` that reads `seq > last_seq`, projects idempotently, and advances its cursor. Phase 1 wires only the three cheap, non-colliding **session-lifecycle** events (`RunStarted`, `SessionCommitted`, `SessionFailed`); per-entity events are a Phase-2 concern (wired alongside re-pointing ADR-033/035, with batching). The demonstrator `RunEventSummaryConsumer` projects per-session event-type counts; resetting its cursor replays the log.
