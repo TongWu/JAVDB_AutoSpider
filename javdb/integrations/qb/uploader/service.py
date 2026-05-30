@@ -365,6 +365,7 @@ from javdb.integrations.qb.client import (
     extract_hash_from_magnet,
     is_torrent_exists,
 )
+from javdb.ops.reconcile.service import record_queued as _record_acquisition_queued
 
 
 def _wrap_session_as_client(session, use_proxy=False):
@@ -378,6 +379,11 @@ def _wrap_session_as_client(session, use_proxy=False):
         proxies=get_proxies_dict('qbittorrent', use_proxy),
         request_timeout=REQUEST_TIMEOUT,
     )
+
+
+def _record_queued_acquisition(torrent: dict, session_id: str | None) -> None:
+    """Best-effort queued instrumentation after a successful qB add."""
+    _record_acquisition_queued(torrent, session_id)
 
 
 def get_existing_torrents(session, use_proxy=False):
@@ -732,6 +738,7 @@ def run_uploader(options: QbUploaderOptions) -> QbUploaderResult:
                 new_hash = extract_hash_from_magnet(torrent['magnet'])
                 if new_hash:
                     existing_hashes.add(new_hash)
+                _record_queued_acquisition(torrent, options.session_id)
             else:
                 failed_count += 1
 
