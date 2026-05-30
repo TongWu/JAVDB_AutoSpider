@@ -38,6 +38,7 @@ def evaluate(detail, rules: Iterable[Rule]) -> FilterDecision:
         rule
         for rule in enabled_rules
         if rule.dimension == 'tag' and rule.mode == 'include'
+        and _normalized_match_value(rule.value)
     ]
     if include_tag_rules and not any(
         _matches_link(rule.value, tag)
@@ -86,12 +87,18 @@ def _gender_drop_reason(detail, rule: Rule) -> str:
 
 
 def _matches_link(value: str, item) -> bool:
-    expected = _clean_value(value)
+    expected = _normalized_match_value(value)
+    if not expected:
+        return False
     return expected in {
-        _clean_value(getattr(item, 'name', '')),
-        _clean_value(getattr(item, 'href', '')),
+        _normalized_match_value(getattr(item, 'name', '')),
+        _normalized_match_value(getattr(item, 'href', '')),
     }
 
 
 def _clean_value(value: str | None) -> str:
     return str(value or '').strip()
+
+
+def _normalized_match_value(value: str | None) -> str:
+    return _clean_value(value).casefold()
