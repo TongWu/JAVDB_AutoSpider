@@ -58,15 +58,15 @@ def _current_backend() -> str:
 
 
 def _db_save_uploader_stats(session_id: str, payload: dict[str, Any]) -> None:
-    from javdb.storage.db import db_save_uploader_stats
+    from javdb.storage.repos.stats_repo import StatsRepo
 
-    db_save_uploader_stats(session_id, payload)
+    StatsRepo().save_uploader_stats(session_id, payload)
 
 
 def _db_save_pikpak_stats(session_id: str, payload: dict[str, Any]) -> None:
-    from javdb.storage.db import db_save_pikpak_stats
+    from javdb.storage.repos.stats_repo import StatsRepo
 
-    db_save_pikpak_stats(session_id, payload)
+    StatsRepo().save_pikpak_stats(session_id, payload)
 
 
 def save_uploader_stats(session_id: str | None, stats: UploaderStats) -> StatsSinkResult:

@@ -18,7 +18,55 @@ def test_create_report_session_delegates_with_db_path():
         report_type="rclone_inventory",
         report_date="20260523",
         csv_filename="rclone_inventory.csv",
+        url_type=None,
+        display_name=None,
+        url=None,
+        start_page=None,
+        end_page=None,
+        created_at=None,
+        run_id=None,
+        run_attempt=None,
+        session_id=None,
+        write_mode=None,
         db_path="/tmp/reports.db",
+    )
+
+
+def test_create_report_session_forwards_full_param_set():
+    """run_service.py passes url_type/run_id/write_mode/... — verify the Repo
+    threads the full db_create_report_session kwarg set, not just the trio."""
+    repo = SessionLifecycleRepo()
+
+    with patch("javdb.storage.db.db_create_report_session", return_value="sess-2") as mock_fn:
+        result = repo.create_report_session(
+            report_type="daily",
+            report_date="20260530",
+            csv_filename="daily.csv",
+            url_type="actor",
+            display_name="EvkJ",
+            url="https://javdb.com/actors/EvkJ",
+            start_page=1,
+            run_id="999",
+            run_attempt=1,
+            write_mode="pending",
+        )
+
+    assert result == "sess-2"
+    mock_fn.assert_called_once_with(
+        report_type="daily",
+        report_date="20260530",
+        csv_filename="daily.csv",
+        url_type="actor",
+        display_name="EvkJ",
+        url="https://javdb.com/actors/EvkJ",
+        start_page=1,
+        end_page=None,
+        created_at=None,
+        run_id="999",
+        run_attempt=1,
+        session_id=None,
+        write_mode="pending",
+        db_path=None,
     )
 
 
