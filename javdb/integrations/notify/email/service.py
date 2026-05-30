@@ -181,24 +181,24 @@ def run_email_notification(
         if _use_sqlite():
             from javdb.storage.db import (
                 init_db,
-                db_get_latest_session_local,
-                db_get_spider_stats_local,
-                db_get_uploader_stats_local,
-                db_get_pikpak_stats_local,
                 current_backend as _cur_be,
+            )
+            from javdb.storage.repos.stats_repo import StatsRepo
+            from javdb.storage.repos.session_lifecycle_repo import (
+                SessionLifecycleRepo,
             )
             init_db()
             _stats_backend_label = f"{_cur_be()} (stats forced sqlite-local)"
             _sid = options.session_id
             if _sid is None:
-                latest = db_get_latest_session_local()
+                latest = SessionLifecycleRepo().get_latest_session_local()
                 if latest:
                     _sid = latest.get('Id', latest.get('id'))
                     logger.debug(f"No --session-id provided, falling back to latest session: {_sid}")
             if _sid is not None:
-                _db_spider_stats = db_get_spider_stats_local(_sid)
-                _db_uploader_stats = db_get_uploader_stats_local(_sid)
-                _db_pikpak_stats = db_get_pikpak_stats_local(_sid)
+                _db_spider_stats = StatsRepo().get_spider_stats_local(_sid)
+                _db_uploader_stats = StatsRepo().get_uploader_stats_local(_sid)
+                _db_pikpak_stats = StatsRepo().get_pikpak_stats_local(_sid)
     except Exception as e:
         logger.debug(f"SQLite stats not available: {e}")
 

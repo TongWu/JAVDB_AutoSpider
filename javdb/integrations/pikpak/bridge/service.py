@@ -427,11 +427,11 @@ def save_to_pikpak_history(torrent_info, transfer_status, error_msg=None):
         try:
             from javdb.storage.db import (
                 init_db,
-                db_append_pikpak_history,
                 get_active_session_id,
             )
+            from javdb.storage.repos.operations_repo import OperationsRepo
             init_db()
-            db_append_pikpak_history(
+            OperationsRepo().append_pikpak_history(
                 record, session_id=get_active_session_id(),
             )
         except Exception as e:

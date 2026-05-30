@@ -80,6 +80,97 @@ def test_rclone_scan_persistence_does_not_import_raw_db_helpers():
     assert forbidden.isdisjoint(used_names)
 
 
+def _raw_db_forbidden(name):
+    def _raise(*args, **kwargs):
+        raise AssertionError(f"raw db function called: {name}")
+
+    return _raise
+
+
+def test_validate_dedup_self_heal_routes_through_operations_repo(monkeypatch):
+    """ADR-032 2a.2: the dedup self-heal must read/write via OperationsRepo,
+    never the raw ``db_*`` helpers."""
+    import javdb.integrations.rclone.manager.service as rm
+    import javdb.storage.db._db_operations as ops_db
+
+    repo = MagicMock()
+    repo.load_rclone_inventory.return_value = {
+        'A': [{'FolderPath': '2025/Actor/A/有码-中字'}],
+    }
+    repo.load_dedup_records.return_value = [{
+        'IsDeleted': 0,
+        'ExistingGdrivePath': '2025/Actor/ORPHAN/有码-中字',
+        'DeletionReason': 'Subtitle upgrade',
+    }]
+    repo.mark_orphan_records.return_value = 1
+    repo_cls = MagicMock(return_value=repo)
+
+    monkeypatch.setattr(rm, 'OperationsRepo', repo_cls)
+    session_repo = MagicMock()
+    session_repo.get_active_session_id.return_value = None
+    monkeypatch.setattr(rm, 'SessionLifecycleRepo', MagicMock(return_value=session_repo))
+    monkeypatch.setattr(rm, '_write_dedup_orphan_csv', lambda *_, **__: None)
+
+    # Any raw db_* call would be a regression — fail loudly.
+    for name in (
+        'db_load_rclone_inventory',
+        'db_load_dedup_records',
+        'db_mark_orphan_records',
+    ):
+        monkeypatch.setattr(ops_db, name, _raw_db_forbidden(name))
+
+    count, orphans = rm.validate_dedup_records_against_inventory()
+
+    assert count == 1
+    assert len(orphans) == 1
+    repo.load_rclone_inventory.assert_called_once_with()
+    repo.load_dedup_records.assert_called_once_with()
+    repo.mark_orphan_records.assert_called_once()
+    assert repo.mark_orphan_records.call_args.kwargs['session_id'] is None
+
+
+def test_run_validate_inventory_prunes_through_operations_repo(monkeypatch):
+    """ADR-032 2a.2: inventory pruning must delete via OperationsRepo."""
+    import javdb.integrations.rclone.manager.service as rm
+    import javdb.storage.db._db_operations as ops_db
+
+    repo = MagicMock()
+    repo.load_rclone_inventory.return_value = {
+        'A': [{
+            'VideoCode': 'A',
+            'FolderPath': '2025/Actor/ORPHAN/有码-中字',
+            'SensorCategory': '有码',
+            'SubtitleCategory': '中字',
+            'FolderSize': 1,
+            'FileCount': 1,
+            'DateTimeScanned': '2026-01-01 00:00:00',
+        }],
+    }
+    repo.delete_rclone_inventory_paths.return_value = 1
+    repo_cls = MagicMock(return_value=repo)
+
+    monkeypatch.setattr(rm, 'OperationsRepo', repo_cls)
+    monkeypatch.setattr(
+        rm, 'list_remote_truth_paths', lambda *a, **k: {'2025/Actor/KEEP/有码-中字'}
+    )
+    monkeypatch.setattr(rm, '_write_inventory_orphan_csv', lambda *_, **__: None)
+    monkeypatch.setattr(rm, 'export_db_to_csv', lambda *_, **__: 0)
+    # The chained dedup self-heal is covered by its own test; stub it out.
+    monkeypatch.setattr(
+        rm, 'validate_dedup_records_against_inventory', lambda: (0, [])
+    )
+    monkeypatch.setattr(ops_db, 'db_delete_rclone_inventory_paths',
+                        _raw_db_forbidden('db_delete_rclone_inventory_paths'))
+    monkeypatch.setattr(ops_db, 'db_load_rclone_inventory',
+                        _raw_db_forbidden('db_load_rclone_inventory'))
+
+    rc = rm.run_validate_inventory('remote', 'root', prune=True)
+
+    assert rc == 0
+    repo.load_rclone_inventory.assert_called_once_with()
+    repo.delete_rclone_inventory_paths.assert_called_once()
+
+
 # ============================================================================
 # Service contract
 # ============================================================================
