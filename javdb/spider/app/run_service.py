@@ -52,7 +52,7 @@ from javdb.spider.app.options import SpiderRunOptions, spider_options_from_args
 from javdb.spider.runtime.sleep import ensure_sleep_runtime, movie_sleep_mgr
 from javdb.spider.fetch.index import fetch_all_index_pages
 from javdb.spider.detail.parallel_mode import build_parallel_detail_backend
-from javdb.spider.detail.runner import process_detail_entries
+from javdb.spider.detail.runner import _load_content_filter_rules, process_detail_entries
 from javdb.spider.detail.sequential_mode import build_sequential_detail_backend
 from javdb.spider.runtime.report import generate_summary_report
 from javdb.spider.fetch.fallback import AdhocLoginFailedError
@@ -639,6 +639,8 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
     # ======================================================================
     # Process Phase 1 entries
     # ======================================================================
+    content_filter_rules = _load_content_filter_rules()
+
     if phase_mode in ['1', 'all']:
         original_count_phase1 = len(all_index_results_phase1)
         if max_movies_phase1 is not None and max_movies_phase1 > 0 and original_count_phase1 > max_movies_phase1:
@@ -685,6 +687,7 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
             include_recent_release_filters=use_parallel,
             log_duplicate_skips=not use_parallel,
             cancel_event=options.cancel_event,
+            content_filter_rules=content_filter_rules,
         )
         use_proxy = p1_result['use_proxy']
         use_cf_bypass = p1_result['use_cf_bypass']
@@ -757,6 +760,7 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
             include_recent_release_filters=use_parallel,
             log_duplicate_skips=not use_parallel,
             cancel_event=options.cancel_event,
+            content_filter_rules=content_filter_rules,
         )
         use_proxy = p2_result['use_proxy']
         use_cf_bypass = p2_result['use_cf_bypass']
