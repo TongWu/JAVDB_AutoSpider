@@ -2,7 +2,7 @@
 
 | 字段       | 值                                                                    |
 | ---------- | --------------------------------------------------------------------- |
-| **状态**   | Accepted —— Phase 1（Python golden）已于 2026-05-29 实现；Phase 2（TS 消费 + dispatch）已于 2026-05-30 实现（待合并 + 运维：`WEB_REPO_DISPATCH_TOKEN`） |
+| **状态**   | Implemented —— Phase 1 与 Phase 2 已于 2026-05-30 实现；本地验证已完成；可选 Phase 3（"消除"，D7）延后到出现反复漂移后再启动 |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
 | **关联**   | [ADR-029](../ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md)（auth 加固 — token 撤销归它）、[ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md)（双后端拆分）、[ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md)（D1 访问端口） |
@@ -88,7 +88,7 @@
 | 阶段 | IMP（计划） | 交付 | 延后 |
 | --- | --- | --- | --- |
 | Phase 1 | [IMP-ADR018-01](IMP-ADR018-01-python-golden-generator.md) | `apps/cli/ops/` 里的 golden 生成器、golden 提交到 `docs/api/contract/`、pytest 钉 history 的 movie+torrent filter（`_build_movie_filters`/`_build_torrent_filters`）+ sessions 查询（抽出的 `_build_session_query`） | `stats`（需 router→builder 抽取） |
-| Phase 2 | [IMP-ADR018-02](IMP-ADR018-02-ts-consume-and-dispatch.md) | TS 仓 vendored golden、CI 对 Python `main` 新鲜度 diff + vitest 一致性钉 `buildMovieQuery` 等、**`stats` 聚合 builder**（抽取后）、`repository_dispatch` re-vendor 自动化（D6） | — |
+| Phase 2 | [IMP-ADR018-02](IMP-ADR018-02-ts-consume-and-dispatch.md) | TS 仓 vendored golden、CI 对 Python `main` 新鲜度 diff + vitest 一致性钉 `buildMovieQuery` 等、**SQL-backed 重合 `stats` trend builder**（`success_rate`、`movies`、`torrents`、`history_growth`、`pikpak`、`dedup`）、`repository_dispatch` re-vendor 自动化（D6） | `duration`（Python 返回 501）、`proxy_bans`（依赖日志）、以及 TS-only ADR-027 stats metrics 仍不纳入 ADR-018 |
 | Phase 3 | IMP-ADR018-03（消除，可选） | 共享 filter spec；两端 builder 由它派生（D7） | 直到守卫显示重复持续漂移 |
 
 ## 不在范围（Out of Scope）
@@ -104,3 +104,4 @@
 - 2026-05-29：D6 经 grilling 修订——镜像 `openapi.json` / `api.gen.ts` 模式（vendored golden + CI 新鲜度 diff，接受 main 分支竞态）；re-vendor 由 `repository_dispatch` 自动化；golden `version` = 内容哈希。早期"pin 到版本/SHA"思路因与 house pattern 不一致被否决。
 - 2026-05-29：Phase 1 已实现（[IMP-ADR018-01](IMP-ADR018-01-python-golden-generator.md)）。从 `SessionsRepo.list` 抽出 `_build_session_query`（行为保持）；golden 生成器（`apps/cli/ops/dump_query_contract.py`）、共享 cases + `normalize_sql`（`query_contract_cases.py`）、已提交的 golden（`docs/api/contract/query-builders.golden.json`，内容哈希 `version`）、以及 pytest pin（`tests/unit/test_query_contract_golden.py`）全部落地。覆盖 history movie+torrent 过滤器 + sessions 查询；每个 builder 分支都被 pin。**`stats` 确认延后到 Phase 2**（其聚合内联在 `apps/api/routers/stats.py`，需先做 router→builder 抽取）。Phase 1 路线图行 = history + sessions，符合计划。
 - 2026-05-30：Phase 2 已实现（[IMP-ADR018-02](IMP-ADR018-02-ts-consume-and-dispatch.md)），Task 1–7。TS 纯 builder 抽取完成（`server/routes/history.ts` 的 `buildMovieWhere`/`buildTorrentWhere`、`server/routes/sessions.ts` 的 `buildSessionQuery`）；golden 经 `scripts/fetch-query-golden.mjs`（`gen:query-golden`）vendored 到 `server/__tests__/fixtures/`；vitest 一致性测试（`server/__tests__/query-contract.test.ts`）钉住全部 25 个 golden case。`ci.yml` 新增 golden 新鲜度 gen-diff **以及一个 `test:server` 步骤**——此前 CI 并未运行 `test:server`,否则一致性守卫无法 gate CI。跨仓自动化：Python `publish-query-contract.yml`（regenerate→commit→`repository_dispatch`）+ TS `revendor-query-golden.yml`（监听→re-vendor→PR）。**movie/torrent builder 天然对齐（无漂移）;唯一的预存漂移——TS `/sessions` handler 绑定 `limit` 而非 Python 的 `limit + 1`——已向 Python 对齐（over-fetch 前瞻;修复了幽灵 `next_cursor`),并由两个新路由测试钉住。** 两个漂移模拟(TS 侧改子句→一致性红;Python 侧改 golden→新鲜度红)均确认守卫有效。**`stats`(Task 8)继续延后。** 待运维:在 `Production` environment 创建 `WEB_REPO_DISPATCH_TOKEN` + 合并后 CI/dispatch 演练。
+- 2026-05-30：Phase 2 Task 8 已完成。Python 将 SQL-backed `/api/stats/trend` builder 从 `apps/api/routers/stats.py` 抽到可导入的 `apps/api/routers/stats_query_builders.py`；golden 现在共有 31 个 case，其中 6 个 `stats_trend_query` case，内容哈希为 `85fef51b76f3decc`。TS 新增匹配的 `buildStatsTrendQuery`、一致性测试映射，并重新 vendor golden。范围刻意只覆盖重合的 SQL-backed metrics（`success_rate`、`movies`、`torrents`、`history_growth`、`pikpak`、`dedup`）；`duration`、`proxy_bans`、以及 TS-only ADR-027 metrics 仍不纳入契约。本地 Task-9 验证已完成（`test:server`、`test:unit`、`typecheck`、`build`，以及两侧漂移演练）。剩余远端 freshness/dispatch gate 属于合并后验证，因为 TS CI 与 re-vendor workflow 都从 Python `main` 拉取 golden。
