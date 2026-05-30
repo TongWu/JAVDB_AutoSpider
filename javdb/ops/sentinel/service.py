@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+from typing import Any, Iterator
 
 from javdb.infra.config import cfg
 from javdb.ops.sentinel.detectors import evaluate
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 @contextlib.contextmanager
-def _fill_ctx(repo):
+def _fill_ctx(repo: Any) -> Iterator[Any]:
     if repo is not None:
         yield repo
     else:
@@ -26,7 +27,7 @@ def _fill_ctx(repo):
 
 
 @contextlib.contextmanager
-def _incident_ctx(repo):
+def _incident_ctx(repo: Any) -> Iterator[Any]:
     if repo is not None:
         yield repo
     else:
@@ -38,7 +39,11 @@ def _active_session_id() -> str | None:
     try:
         from javdb.storage.db import get_active_session_id
         return get_active_session_id()
-    except Exception:
+    except Exception:  # noqa: BLE001 - best-effort; absence of a session is non-fatal
+        logger.debug(
+            "get_active_session_id failed; treating as no active session",
+            exc_info=True,
+        )
         return None
 
 
@@ -70,7 +75,7 @@ def evaluate_session(
             verdict, session_id=session_id, run_id=run_id, run_attempt=run_attempt)
         try:
             with _incident_ctx(incident_repo) as ir:
-                ir.upsert(record)
+                ir.upsert(record.with_persistence_status("d1_written"))
         except Exception:
             logger.warning("evaluate_session: incident persist failed", exc_info=True)
     return verdict

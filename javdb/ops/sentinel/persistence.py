@@ -49,7 +49,9 @@ def build_drift_incident(
         session_id=session_id,
         incident_type="site_drift",
         status="open",
-        persistence_status="d1_written",
+        # Built pre-persist; the service flips this to "d1_written" only after a
+        # successful upsert (mirrors OpsIncidentRecord.from_bundle_and_result).
+        persistence_status="not_written",
         model_version="n/a",
         detector_version="sentinel-v1",
         bundle_schema_version="n/a",

@@ -7,6 +7,7 @@ contract field. Never writes the DB; persistence is the service's job."""
 from __future__ import annotations
 
 import logging
+from typing import Any, Optional
 
 from javdb.ops.sentinel.models import FieldFill
 from javdb.spider.parse_contract import fields_for
@@ -14,7 +15,7 @@ from javdb.spider.parse_contract import fields_for
 logger = logging.getLogger(__name__)
 
 
-def _value(record, name):
+def _value(record: Any, name: str) -> Optional[Any]:
     if hasattr(record, name):
         return getattr(record, name)
     if isinstance(record, dict):
@@ -40,6 +41,8 @@ class FieldHealthAccumulator:
     def observe(self, page_type: str, records) -> None:
         spec = fields_for(page_type)
         if not spec:
+            return
+        if not records:  # None / empty / non-truthy — telemetry must never raise
             return
         for record in records:
             for name in spec:

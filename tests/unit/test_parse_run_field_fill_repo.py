@@ -37,8 +37,10 @@ def test_upsert_idempotent(repo):
 
 
 def test_baseline_uses_committed_only_median(repo):
-    repo.upsert_fills("S1", [FieldFill("index", "rate", 0.90, 100)]); repo.mark_committed("S1")
-    repo.upsert_fills("S2", [FieldFill("index", "rate", 0.80, 100)]); repo.mark_committed("S2")
+    repo.upsert_fills("S1", [FieldFill("index", "rate", 0.90, 100)])
+    repo.mark_committed("S1")
+    repo.upsert_fills("S2", [FieldFill("index", "rate", 0.80, 100)])
+    repo.mark_committed("S2")
     repo.upsert_fills("S3", [FieldFill("index", "rate", 0.10, 100)])  # NOT committed
     assert repo.baseline("index", "rate", window=14) == 0.85  # median(0.90, 0.80)
 
