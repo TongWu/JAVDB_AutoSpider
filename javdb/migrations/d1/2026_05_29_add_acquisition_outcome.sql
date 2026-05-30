@@ -9,7 +9,7 @@
 -- by qb_hash. session_id is provenance only (the run that queued the torrent).
 
 CREATE TABLE IF NOT EXISTS AcquisitionOutcome (
-  qb_hash       TEXT PRIMARY KEY,
+  qb_hash       TEXT PRIMARY KEY NOT NULL,
   href          TEXT NOT NULL DEFAULT '',
   video_code    TEXT,
   category      TEXT,
