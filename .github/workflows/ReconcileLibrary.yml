@@ -55,6 +55,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
+          persist-credentials: false
           lfs: true
 
       - name: Set up Python, venv, dependencies, Rust extension
@@ -94,7 +95,7 @@ jobs:
 
           mkdir -p logs
           echo "Executing: STORAGE_BACKEND=d1 ${CMD[*]}"
-          STORAGE_BACKEND=d1 "${CMD[@]}" 2>&1 | tee logs/reconcile_library.jsonl
+          STORAGE_BACKEND=d1 "${CMD[@]}" > logs/reconcile_library.jsonl
 
       - name: Upload reconcile log
         if: always()

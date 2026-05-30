@@ -2,11 +2,17 @@
 Pytest configuration and fixtures for JAVDB AutoSpider tests.
 """
 import os
+from pathlib import Path
+import sqlite3
 import sys
 
 # Add project root to path for imports
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
+_PROJECT_ROOT = Path(project_root)
+_ACQUISITION_OUTCOME_MIGRATION = (
+    _PROJECT_ROOT / "javdb" / "migrations" / "d1" / "2026_05_29_add_acquisition_outcome.sql"
+)
 
 # Mock pikpakapi before any other imports to avoid Python 3.9 compatibility issues
 # The pikpakapi library uses `from types import NoneType` which is only available in Python 3.10+
@@ -170,6 +176,25 @@ def storage_mode_duo(monkeypatch):
     monkeypatch.setattr(_cfg_mod, 'storage_mode', lambda: 'duo')
     monkeypatch.setattr(_cfg_mod, 'use_sqlite', lambda: True)
     monkeypatch.setattr(_cfg_mod, 'use_csv', lambda: True)
+
+
+@pytest.fixture
+def acquisition_outcome_conn():
+    """Create an in-memory AcquisitionOutcome schema from the D1 migration."""
+    conn = sqlite3.connect(":memory:")
+    conn.executescript(_ACQUISITION_OUTCOME_MIGRATION.read_text(encoding="utf-8"))
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+@pytest.fixture
+def acquisition_outcome_repo(acquisition_outcome_conn):
+    """Return an AcquisitionOutcomeRepo backed by the canonical test schema."""
+    from javdb.storage.repos.acquisition_outcome_repo import AcquisitionOutcomeRepo
+
+    return AcquisitionOutcomeRepo(acquisition_outcome_conn)
 
 
 @pytest.fixture
