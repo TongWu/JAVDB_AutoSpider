@@ -39,11 +39,9 @@ from javdb.storage.sessions.lifecycle_helpers import (
     write_github_output,
 )
 import javdb.storage.db as _db_pkg
-from javdb.storage.db import (
-    get_db,
-    db_pending_session_stats,
-    db_rollback_session,
-)
+from javdb.storage.db import get_db
+from javdb.storage.db._db_reports import db_pending_session_stats
+from javdb.storage.db._db_rollback import db_rollback_session
 from javdb.infra.logging import get_logger
 
 
