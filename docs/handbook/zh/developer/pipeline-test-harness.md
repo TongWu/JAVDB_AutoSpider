@@ -62,9 +62,14 @@ def test_golden_daily_run_writes_two_movies(pipeline_harness):
 `run_daily` 驱动真实的三步流程：`run_spider(options)` →
 `run_uploader(QbUploaderOptions(...))` → `commit_session(CommitRequest(...))`。
 session id 与 CSV 路径取自 spider 返回的 `SpiderRunResult`（因为 `run_spider`
-在其 `finally` 块中、返回前已清空 active-session 上下文）。实时节流（spider 的
-逐影片 / phase 切换冷却，以及 uploader 的逐个添加延迟）被中和，因此整次运行远
-小于 1 秒即可完成。
+在其 `finally` 块中、返回前已清空 active-session 上下文）。commit **门控在 spider
+与 uploader 均成功**——镜像 `DailyIngestion.yml` 的 "Mark sessions as committed"
+步骤（`if: ${{ success() }}`）。当 uploader 失败时（例如
+`FakeQBConfig(fail_adds=True)` 让每次 add 返回 `False`，产生非零的
+`QbUploaderResult.exit_code`），`run_daily` 不 commit 该 session——生产会把它交给
+cleanup-on-failure 回滚——因此 `result.commit_result is None`，pending 行不会进入
+`MovieHistory`。实时节流（spider 的逐影片 / phase 切换冷却，以及 uploader 的逐个
+添加延迟）被中和，因此整次运行远小于 1 秒即可完成。
 
 ### 断言面
 
