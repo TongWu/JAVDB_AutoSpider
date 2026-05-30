@@ -114,6 +114,37 @@ on:
         required: false
         default: ''
         type: string
+      # ---- Metadata Backfill Options ----
+      backfill_metadata:
+        description: 'Backfill MovieMetadata for MovieHistory rows that lack metadata'
+        required: false
+        type: boolean
+        default: false
+      backfill_metadata_limit:
+        description: 'Metadata backfill: absolute max hrefs (0=all; ignored when limit_per_worker > 0)'
+        required: false
+        type: string
+        default: '0'
+      backfill_metadata_limit_per_worker:
+        description: 'Metadata backfill: max completed tasks per proxy worker (0=use limit or all)'
+        required: false
+        type: string
+        default: '0'
+      backfill_metadata_hrefs:
+        description: 'Metadata backfill: comma-separated movie hrefs to process (blank=all missing)'
+        required: false
+        type: string
+        default: ''
+      backfill_metadata_no_proxy:
+        description: 'Metadata backfill: direct HTTP without proxy (debug)'
+        required: false
+        type: boolean
+        default: false
+      backfill_metadata_shuffle:
+        description: 'Metadata backfill: randomise processing order (random pick behaviour)'
+        required: false
+        type: boolean
+        default: false
       # ---- Runner ----
       runner:
         description: 'Runner type'
@@ -212,6 +243,30 @@ on:
         required: false
         default: ''
         type: string
+      backfill_metadata:
+        required: false
+        default: false
+        type: boolean
+      backfill_metadata_limit:
+        required: false
+        default: '0'
+        type: string
+      backfill_metadata_limit_per_worker:
+        required: false
+        default: '0'
+        type: string
+      backfill_metadata_hrefs:
+        required: false
+        default: ''
+        type: string
+      backfill_metadata_no_proxy:
+        required: false
+        default: false
+        type: boolean
+      backfill_metadata_shuffle:
+        required: false
+        default: false
+        type: boolean
       # Intentionally typed as string for workflow_call (workflow_call does not
       # support `type: choice`). Callers must pass a valid runner label
       # (e.g. 'self-hosted' or 'ubuntu-latest').
@@ -256,6 +311,12 @@ jobs:
       INPUT_ALIGN_ENQUEUE_QB: ${{ inputs.align_enqueue_qb }}
       INPUT_ALIGN_EXECUTE_DELETE: ${{ inputs.align_execute_delete }}
       INPUT_ALIGN_QB_CATEGORY: ${{ inputs.align_qb_category }}
+      INPUT_BACKFILL_METADATA: ${{ inputs.backfill_metadata }}
+      INPUT_BACKFILL_METADATA_LIMIT: ${{ inputs.backfill_metadata_limit }}
+      INPUT_BACKFILL_METADATA_LIMIT_PER_WORKER: ${{ inputs.backfill_metadata_limit_per_worker }}
+      INPUT_BACKFILL_METADATA_HREFS: ${{ inputs.backfill_metadata_hrefs }}
+      INPUT_BACKFILL_METADATA_NO_PROXY: ${{ inputs.backfill_metadata_no_proxy }}
+      INPUT_BACKFILL_METADATA_SHUFFLE: ${{ inputs.backfill_metadata_shuffle }}
       INPUT_RUNNER: ${{ inputs.runner || 'self-hosted' }}
       INPUT_CONFIRM_PRODUCTION: ${{ inputs.confirm_production }}
 
@@ -432,6 +493,16 @@ jobs:
           else
             echo "  QB Category:          (default)"
           fi
+          printf 'Backfill Metadata:      %s\n' "$INPUT_BACKFILL_METADATA"
+          printf '  Limit:                %s\n' "${INPUT_BACKFILL_METADATA_LIMIT:-0 (all)}"
+          printf '  Limit per worker:     %s\n' "${INPUT_BACKFILL_METADATA_LIMIT_PER_WORKER:-0 (all)}"
+          if [ -n "$INPUT_BACKFILL_METADATA_HREFS" ]; then
+            printf '  Hrefs:                %s\n' "$INPUT_BACKFILL_METADATA_HREFS"
+          else
+            echo "  Hrefs:                (all missing)"
+          fi
+          printf '  No Proxy:             %s\n' "$INPUT_BACKFILL_METADATA_NO_PROXY"
+          printf '  Shuffle:              %s\n' "$INPUT_BACKFILL_METADATA_SHUFFLE"
           printf 'Runner:                 %s\n' "$INPUT_RUNNER"
           echo "============================================"
 
@@ -515,6 +586,33 @@ jobs:
             QB_CATEGORY="$INPUT_ALIGN_QB_CATEGORY"
             if [ -n "$QB_CATEGORY" ]; then
               CMD+=(--align-qb-category "$QB_CATEGORY")
+            fi
+          fi
+
+          if [ "$INPUT_BACKFILL_METADATA" = "true" ]; then
+            CMD+=(--backfill-metadata)
+
+            META_LIMIT_PW="$INPUT_BACKFILL_METADATA_LIMIT_PER_WORKER"
+            if [ -n "$META_LIMIT_PW" ] && [ "$META_LIMIT_PW" != "0" ]; then
+              CMD+=(--backfill-metadata-limit-per-worker "$META_LIMIT_PW")
+            fi
+
+            META_LIMIT="$INPUT_BACKFILL_METADATA_LIMIT"
+            if [ -n "$META_LIMIT" ] && [ "$META_LIMIT" != "0" ]; then
+              CMD+=(--backfill-metadata-limit "$META_LIMIT")
+            fi
+
+            META_HREFS="$INPUT_BACKFILL_METADATA_HREFS"
+            if [ -n "$META_HREFS" ]; then
+              CMD+=(--backfill-metadata-hrefs "$META_HREFS")
+            fi
+
+            if [ "$INPUT_BACKFILL_METADATA_NO_PROXY" = "true" ]; then
+              CMD+=(--backfill-metadata-no-proxy)
+            fi
+
+            if [ "$INPUT_BACKFILL_METADATA_SHUFFLE" = "true" ]; then
+              CMD+=(--backfill-metadata-shuffle)
             fi
           fi
 
