@@ -1,3 +1,7 @@
+from dataclasses import FrozenInstanceError
+
+import pytest
+
 from javdb.ops.reconcile.models import (
     AcquisitionOutcomeRecord,
     Observation,
@@ -20,6 +24,8 @@ def test_record_defaults_to_queued():
 def test_observation_is_frozen():
     obs = Observation(source="qb", qb_hash="abc", state="downloading", observed_at="t")
     assert obs.source == "qb"
+    with pytest.raises(FrozenInstanceError):
+        obs.source = "local"  # type: ignore[misc]
 
 
 def test_reconcile_result_starts_empty():
