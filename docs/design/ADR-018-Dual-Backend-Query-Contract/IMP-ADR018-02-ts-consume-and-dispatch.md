@@ -14,16 +14,16 @@
 
 **Related:** [ADR-018](ADR-018-dual-backend-query-contract.md), [IMP-ADR018-01](IMP-ADR018-01-python-golden-generator.md) (must land first)
 
-**Status:** Implemented (2026-05-30) — Tasks 1–7 done and locally verified across both repos. TS builders extracted (`buildMovieWhere`/`buildTorrentWhere`/`buildSessionQuery`); golden vendored; vitest conformance green (25 golden cases); `ci.yml` gains the freshness gen-diff + a `test:server` step (CI did not previously run `test:server`); Python `publish-query-contract.yml` + TS `revendor-query-golden.yml` dispatch pair created. **Pre-existing drift reconciled:** the TS `/sessions` handler now over-fetches `limit + 1` to match the Python golden (fixes a phantom `next_cursor` at exact-multiple boundaries); pinned by two new route tests. Both drift simulations confirmed the guard fails as intended. **Task 8 (stats) remains deferred** (blocked on the Python router→builder extraction). **Pending ops (cannot be done from code):** create `WEB_REPO_DISPATCH_TOKEN` (PAT, `contents:write` on the web repo) in the Python repo's `Production` environment **and** `REVENDOR_PR_TOKEN` (PAT, `contents:write` + `pull-requests:write` on the web repo) in the TS repo's secrets — may be the same PAT (so the re-vendor PR triggers CI); post-merge CI dry-run + `workflow_dispatch` dispatch dry-run.
+**Status:** Implemented (2026-05-30) — Tasks 1–8 are implemented across both repos, and the local Task-9 gates are verified. The golden now has 31 cases, including 6 `stats_trend_query` cases for the SQL-backed overlapping stats trend metrics (`success_rate`, `movies`, `torrents`, `history_growth`, `pikpak`, `dedup`). TS conformance is green against the vendored golden; Python pytest pins the same cases. The remaining Task-9 gates are explicitly post-merge: TS CI freshness and dispatch PR-opening can only be truthfully run after the Python golden lands on `main`, because the TS CI and re-vendor workflow both fetch Python `main`. `duration`, `proxy_bans`, and TS-only ADR-027 stats metrics remain intentionally outside ADR-018.
 
 ---
 
 ## Prerequisites
 
-- [ ] **IMP-ADR018-01 is merged on Python `main`** — `docs/api/contract/query-builders.golden.json` exists with `movie_filters`, `torrent_filters`, and `session_query` cases, and the content-hash `version` field (D6).
-- [ ] A PAT secret with **read** access to the private Python repo is available to TS CI as `CICD_REPO_TOKEN` (already used by the `api.gen.ts` step in `ci.yml`).
-- [ ] A PAT secret with **write** access to the TS repo is available to the Python repo as `WEB_REPO_DISPATCH_TOKEN` (new — Task 6).
-- [ ] A PAT secret with **write** access to the TS repo (`contents:write` + `pull-requests:write`) is available to TS CI as `REVENDOR_PR_TOKEN` (new — Task 7; needed so the re-vendor PR triggers CI). May be the same PAT as `WEB_REPO_DISPATCH_TOKEN`.
+- [x] **IMP-ADR018-01 is merged on Python `main`** — `docs/api/contract/query-builders.golden.json` exists with `movie_filters`, `torrent_filters`, and `session_query` cases, and the content-hash `version` field (D6).
+- [x] A PAT secret with **read** access to the private Python repo is available to TS CI as `CICD_REPO_TOKEN` (already used by the `api.gen.ts` step in `ci.yml`).
+- [x] A PAT secret with **write** access to the TS repo is available to the Python repo as `WEB_REPO_DISPATCH_TOKEN` (new — Task 6).
+- [x] A PAT secret with **write** access to the TS repo (`contents:write` + `pull-requests:write`) is available to TS CI as `REVENDOR_PR_TOKEN` (new — Task 7; needed so the re-vendor PR triggers CI). May be the same PAT as `WEB_REPO_DISPATCH_TOKEN`.
 
 ---
 
@@ -31,7 +31,7 @@
 
 - **Comparable unit = the builder's own output.** For `movie_filters`/`torrent_filters` the golden pins the **WHERE clause + bindings** (what Python `_build_movie_filters` returns and what the TS builder assembles into its local `where`). For `session_query` it pins the **full SQL + bindings**. The SELECT skeleton of the movie query (column list, `LEFT JOIN`, `GROUP BY`, `ORDER BY m.Id`) is **not** pinned by this golden — it is near-static; revisit only if it drifts.
 - **Builder-input level.** The golden's `params` are the **decoded builder inputs** (Python kwarg names: `q`, `perfect_match`, `cursor_id`, …), not raw wire query params. The TS conformance test maps golden params → the TS builder input and compares output. The wire-decode layer (cursor base64 scheme, `"true"`→bool) is each repo's own concern; pin it separately later via cursor vectors if it drifts (out of scope here).
-- **`stats` is gated.** TS `stats.ts` aggregations can only be pinned once the golden carries `stats` cases, which needs the Python router→builder extraction first (deferred from IMP-01). Task 8 is **blocked** on that prerequisite and may ship in a follow-up.
+- **`stats` is covered for the overlapping SQL-backed subset.** Task 8 extracted Python stats trend SQL builders first, then pinned the matching TS builders. The covered set is intentionally limited to `success_rate`, `movies`, `torrents`, `history_growth`, `pikpak`, and `dedup`; `duration` (Python returns 501), `proxy_bans` (log-derived), and TS-only ADR-027 metrics are outside this contract.
 
 ---
 
@@ -43,9 +43,11 @@
 | ------ | ---- | -------------- |
 | Modify | `server/routes/history.ts` | Extract `buildMovieWhere(input)` / `buildTorrentWhere(input)` returning `{ where, bindings }`; `buildMovieQuery`/`buildTorrentQuery` delegate |
 | Modify | `server/routes/sessions.ts` | Extract `buildSessionQuery(input)` returning `{ sql, bindings }`; the `/sessions` handler delegates |
+| Modify | `server/routes/stats.ts` | Extract `buildStatsTrendQuery(input)` for the six SQL-backed overlapping trend metrics; `/stats/trend` delegates those metrics |
 | Create | `scripts/fetch-query-golden.mjs` | Mirror of `fetch-openapi.mjs`: resolve golden (local path / raw URL+token), write vendored copy |
 | Create | `server/__tests__/fixtures/query-builders.golden.json` | **Vendored** golden (generated output, committed) |
-| Create | `server/__tests__/query-contract.test.ts` | Conformance: map golden cases → TS builders, assert normalized SQL + bindings |
+| Create/Modify | `server/__tests__/query-contract.test.ts` | Conformance: map golden cases → TS builders, assert normalized SQL + bindings |
+| Modify | `server/__tests__/stats-routes.test.ts` | Route regression coverage for contract-backed stats trend row mapping |
 | Modify | `package.json` | Add `"gen:query-golden": "node scripts/fetch-query-golden.mjs"` |
 | Modify | `.github/workflows/ci.yml` | Add golden freshness gen-diff step (mirror the `api.gen.ts` step) |
 | Create | `.github/workflows/revendor-query-golden.yml` | `on: repository_dispatch`; run `gen:query-golden`, open re-vendor PR |
@@ -55,6 +57,10 @@
 | Action | Path | Responsibility |
 | ------ | ---- | -------------- |
 | Create | `.github/workflows/publish-query-contract.yml` | Mirror `publish-openapi.yml`: regenerate golden on `main`, commit, **dispatch to TS repo on change** |
+| Create | `apps/api/routers/stats_query_builders.py` | Importable SQL-backed stats trend builders for Python route + golden generator |
+| Modify | `apps/api/routers/stats.py` | Delegate covered SQL-backed `/api/stats/trend` metrics to the pure builders |
+| Modify | `apps/cli/ops/query_contract_cases.py` | Add six `stats_trend_query` cases |
+| Modify | `apps/cli/ops/dump_query_contract.py` | Register `stats_trend_query` in the golden generator |
 
 ---
 
@@ -62,7 +68,7 @@
 
 The golden's comparable unit is the WHERE/query assembly. Extract it so it can be exercised directly, mirroring the Python `_build_*` functions.
 
-- [ ] In `server/routes/history.ts`, extract from `buildMovieQuery` (L59):
+- [x] In `server/routes/history.ts`, extract from `buildMovieQuery` (L59):
 
 ```ts
 // Input keys mirror the Python _build_movie_filters kwargs (decoded).
@@ -85,10 +91,10 @@ export function buildMovieWhere(input: MovieFilterInput): { where: string; bindi
 }
 ```
 
-- [ ] `buildMovieQuery` now decodes wire params → `MovieFilterInput`, calls `buildMovieWhere`, and assembles `selectSql`/`countSql` around the returned `where` — **no behavior change** (same SQL, same bindings, same ordering).
-- [ ] Repeat for `buildTorrentWhere` (from `buildTorrentQuery`, L197).
-- [ ] In `server/routes/sessions.ts`, extract `buildSessionQuery(input: { state?: string; cursor_sid?: string; limit: number }) -> { sql: string; bindings: (string|number)[] }` matching the Python `_build_session_query` full SQL (`... ORDER BY Id DESC LIMIT ?`). The `/sessions` handler decodes the cursor then delegates.
-- [ ] **Verify (regression):** `npm run test:server` and `npm run test:unit` — existing history/sessions route tests pass unchanged.
+- [x] `buildMovieQuery` now decodes wire params → `MovieFilterInput`, calls `buildMovieWhere`, and assembles `selectSql`/`countSql` around the returned `where` — **no behavior change** (same SQL, same bindings, same ordering).
+- [x] Repeat for `buildTorrentWhere` (from `buildTorrentQuery`, L197).
+- [x] In `server/routes/sessions.ts`, extract `buildSessionQuery(input: { state?: string; cursor_sid?: string; limit: number }) -> { sql: string; bindings: (string|number)[] }` matching the Python `_build_session_query` full SQL (`... ORDER BY Id DESC LIMIT ?`). The `/sessions` handler decodes the cursor then delegates.
+- [x] **Verify (regression):** `npm run test:server` and `npm run test:unit` — existing history/sessions route tests pass unchanged.
 
 > The branch **order** must match Python (cursor → q → actor → …) so the joined WHERE string is byte-identical after normalization. Order mismatch is exactly what the golden will catch.
 
@@ -96,7 +102,7 @@ export function buildMovieWhere(input: MovieFilterInput): { where: string; bindi
 
 ## Task 2: Vendor script + vendored golden
 
-- [ ] Create `scripts/fetch-query-golden.mjs`, mirroring `fetch-openapi.mjs`:
+- [x] Create `scripts/fetch-query-golden.mjs`, mirroring `fetch-openapi.mjs`:
 
 ```js
 #!/usr/bin/env node
@@ -127,14 +133,14 @@ await writeFile(OUT, json, 'utf-8')
 console.log(`[fetch-query-golden] wrote ${OUT}`)
 ```
 
-- [ ] Add to `package.json` scripts: `"gen:query-golden": "node scripts/fetch-query-golden.mjs"`.
-- [ ] Vendor the current golden: `QUERY_GOLDEN_PATH=../docs/api/contract/query-builders.golden.json npm run gen:query-golden`, then **commit** `server/__tests__/fixtures/query-builders.golden.json`.
+- [x] Add to `package.json` scripts: `"gen:query-golden": "node scripts/fetch-query-golden.mjs"`.
+- [x] Vendor the current golden: `QUERY_GOLDEN_PATH=../docs/api/contract/query-builders.golden.json npm run gen:query-golden`, then **commit** `server/__tests__/fixtures/query-builders.golden.json`.
 
 ---
 
 ## Task 3: Vitest conformance test (pins TS builders to vendored golden)
 
-- [ ] Create `server/__tests__/query-contract.test.ts`:
+- [x] Create `server/__tests__/query-contract.test.ts`:
 
 ```ts
 import { describe, it, expect } from "vitest";
@@ -162,9 +168,9 @@ describe("ADR-018 query Contract Golden conformance", () => {
 });
 ```
 
-- [ ] Implement `mapSessionParams` to translate the golden's session params (incl. the pre-encoded `cursor`) into `buildSessionQuery`'s input (decode the cursor with the TS `cursorDecode`), so the same decoded `sid` flows in.
-- [ ] Ensure `query-contract.test.ts` runs under `test:server` (its include glob is `server/__tests__/**/*.test.ts`).
-- [ ] **Run:** `npm run test:server`.
+- [x] Implement `mapSessionParams` to translate the golden's session params (incl. the pre-encoded `cursor`) into `buildSessionQuery`'s input (decode the cursor with the TS `cursorDecode`), so the same decoded `sid` flows in.
+- [x] Ensure `query-contract.test.ts` runs under `test:server` (its include glob is `server/__tests__/**/*.test.ts`).
+- [x] **Run:** `npm run test:server`.
 
 ---
 
@@ -172,14 +178,14 @@ describe("ADR-018 query Contract Golden conformance", () => {
 
 The first conformance run may go **red** because the two builders already diverge (e.g., a cursor operator, a branch order, a `LIKE` shape). That is the guard doing its job on day one.
 
-- [ ] For each failure: decide the single correct form, fix the TS builder (and, if Python is wrong, fix Python + `python -m apps.cli.ops.dump_query_contract` + re-vendor via Task 2).
-- [ ] Re-run until `npm run test:server` is green with the committed vendored golden.
+- [x] For each failure: decide the single correct form, fix the TS builder (and, if Python is wrong, fix Python + `python -m apps.cli.ops.dump_query_contract` + re-vendor via Task 2).
+- [x] Re-run until `npm run test:server` is green with the committed vendored golden.
 
 ---
 
 ## Task 5: CI freshness gen-diff (mirror the `api.gen.ts` step)
 
-- [ ] In `.github/workflows/ci.yml`, add a step modeled on the existing "Regenerate API types" step:
+- [x] In `.github/workflows/ci.yml`, add a step modeled on the existing "Regenerate API types" step:
 
 ```yaml
       - name: Refresh query Contract Golden from main repo
@@ -197,13 +203,13 @@ The first conformance run may go **red** because the two builders already diverg
           fi
 ```
 
-- [ ] Confirm the existing "Contract tests" / `test:server` step runs the new conformance test in the same job.
+- [x] Confirm the existing "Contract tests" / `test:server` step runs the new conformance test in the same job.
 
 ---
 
 ## Task 6: Python-repo dispatch source (`publish-query-contract.yml`)
 
-- [ ] In the **Python repo**, create `.github/workflows/publish-query-contract.yml`, mirroring `publish-openapi.yml`:
+- [x] In the **Python repo**, create `.github/workflows/publish-query-contract.yml`, mirroring `publish-openapi.yml`:
 
 ```yaml
 name: Publish query Contract Golden
@@ -278,13 +284,13 @@ jobs:
 > diff (`github.event.before..github.sha`, needs `fetch-depth: 0`) touched the
 > golden file. Manual `workflow_dispatch` always notifies.
 
-- [ ] Create the `WEB_REPO_DISPATCH_TOKEN` secret (PAT with `contents:write` on the TS repo) in the Python repo's `Production` environment.
+- [x] Create the `WEB_REPO_DISPATCH_TOKEN` secret (PAT with `contents:write` on the TS repo) in the Python repo's `Production` environment.
 
 ---
 
 ## Task 7: TS-repo dispatch listener (auto-open re-vendor PR)
 
-- [ ] In the **TS repo**, create `.github/workflows/revendor-query-golden.yml`:
+- [x] In the **TS repo**, create `.github/workflows/revendor-query-golden.yml`:
 
 ```yaml
 name: Re-vendor query Contract Golden
@@ -322,29 +328,29 @@ jobs:
           commit-message: "chore: re-vendor query Contract Golden"
 ```
 
-- [ ] The opened PR's CI runs Task-5 freshness (now green, vendored == main) **and** Task-3 conformance (red until a human reconciles the TS builders) — exactly the intended hand-off.
-- [ ] **Token (corrected per PR review):** `create-pull-request` MUST be given a `token:` that is a PAT/App token with write access — without it the action falls back to `GITHUB_TOKEN`, and GitHub suppresses CI on the resulting PR, so the re-vendor PR would open with **no checks** and the conformance-red hand-off would never appear. Add a `REVENDOR_PR_TOKEN` secret to the TS repo (may be the same PAT as `WEB_REPO_DISPATCH_TOKEN`).
+- [x] The opened PR's CI runs Task-5 freshness (now green, vendored == main) **and** Task-3 conformance (red until a human reconciles the TS builders) — exactly the intended hand-off.
+- [x] **Token (corrected per PR review):** `create-pull-request` MUST be given a `token:` that is a PAT/App token with write access — without it the action falls back to `GITHUB_TOKEN`, and GitHub suppresses CI on the resulting PR, so the re-vendor PR would open with **no checks** and the conformance-red hand-off would never appear. Add a `REVENDOR_PR_TOKEN` secret to the TS repo (may be the same PAT as `WEB_REPO_DISPATCH_TOKEN`).
 
 ---
 
-## Task 8: stats coverage (BLOCKED — prerequisite first)
+## Task 8: stats coverage
 
-> Gated on a Python-side router→builder extraction that does not exist yet.
+> Completed for the SQL-backed overlapping trend metrics: `success_rate`, `movies`, `torrents`, `history_growth`, `pikpak`, and `dedup`.
 
-- [ ] **Python repo prerequisite:** extract the `stats.ts`-equivalent aggregations from `apps/api/routers/stats.py` into importable builders, add `stats` cases to `query_contract_cases.py`, regenerate the golden (extends IMP-ADR018-01).
-- [ ] **TS repo:** extract the matching builders from `server/routes/stats.ts`, add them to the conformance test's `RUN` map, re-vendor, reconcile.
-- [ ] If the prerequisite is not ready, ship Tasks 1–7 and track stats as a follow-up.
+- [x] **Python repo prerequisite:** extract the `stats.ts`-equivalent aggregations from `apps/api/routers/stats.py` into importable builders, add `stats` cases to `query_contract_cases.py`, regenerate the golden (extends IMP-ADR018-01).
+- [x] **TS repo:** extract the matching builders from `server/routes/stats.ts`, add them to the conformance test's `RUN` map, re-vendor, reconcile.
+- [x] Keep non-overlapping metrics out of the ADR-018 golden (`duration`, `proxy_bans`, and TS-only ADR-027 stats metrics).
 
 ---
 
 ## Task 9: Verification gates
 
-- [ ] **TS repo:** `npm run test:server` (conformance green), `npm run test:unit`, `npm run typecheck`, `npm run build` all pass.
-- [ ] **TS CI dry run:** push a branch; confirm the Task-5 freshness step passes when vendored == main.
-- [ ] **Drift simulation (TS side):** change a clause in `buildMovieWhere` without re-vendoring → confirm `test:server` fails with the case id. Revert.
-- [ ] **Drift simulation (Python side):** on a Python branch, change `_build_movie_filters` + regenerate golden; point TS `gen:query-golden` at that local golden → confirm the Task-5 freshness diff fails. Revert.
-- [ ] **Dispatch dry run:** manually `workflow_dispatch` `publish-query-contract.yml` (Python) → confirm a re-vendor PR opens in the TS repo.
-- [ ] Update this IMP's `Status` to `Completed` and check off `IMP-ADR018-02` in the ADR roadmap.
+- [x] **TS repo:** `npm run test:server` (conformance green), `npm run test:unit`, `npm run typecheck`, `npm run build` all pass.
+- [ ] **TS CI dry run:** push a branch; confirm the Task-5 freshness step passes when vendored == main. **Post-merge gate:** the Web branch currently carries the new 31-case golden, while Python `main` still carries the pre-Task-8 golden, so opening a Web PR before the Python PR merges would correctly fail freshness rather than prove the green path.
+- [x] **Drift simulation (TS side):** change a clause in `buildMovieWhere` without re-vendoring → confirm `test:server` fails with the case id. Revert. Verified on 2026-05-30 by changing `m.ActorName` to `m.Actor`; `npm run test:server` failed `server/__tests__/query-contract.test.ts` for `movie_filters:q_only` and `movie_filters:q_and_perfect_match`, then the change was reverted.
+- [x] **Drift simulation (Python side):** on a Python branch, change `_build_movie_filters` + regenerate golden; point TS `gen:query-golden` at that local golden → confirm the Task-5 freshness diff fails. Revert. Verified on 2026-05-30 by changing the Python movie search clause, regenerating `docs/api/contract/query-builders.golden.json`, re-vendoring from that local path, and confirming `git diff --quiet server/__tests__/fixtures/query-builders.golden.json` reported a diff; then both goldens were regenerated back to the committed state.
+- [ ] **Dispatch dry run:** manually `workflow_dispatch` `publish-query-contract.yml` (Python) → confirm a re-vendor PR opens in the TS repo. **Post-merge gate:** running this from a feature branch cannot open the intended re-vendor PR because the TS workflow fetches `TongWu/JAVDB_AutoSpider_CICD/main/docs/api/contract/query-builders.golden.json`; it must be run after the Python PR lands on `main`, or the workflow must first gain a branch/ref override input.
+- [ ] Update this IMP's `Status` to `Completed` and check off `IMP-ADR018-02` in the ADR roadmap once the two post-merge gates above have run.
 
 ---
 
