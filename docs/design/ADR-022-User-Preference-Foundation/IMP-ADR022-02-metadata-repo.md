@@ -170,7 +170,35 @@ git commit -m "feat(storage): add MetadataRepo for MovieMetadata (ADR-022)"
 
 ---
 
-## Task 2 — Extend parse_detail() to return MovieDetail
+## Task 2 — Surface the MovieDetail object for metadata upsert
+
+> **⚠ Divergence note (recorded during implementation, 2026-05-30).**
+> This task's original plan assumed a `parse_detail()` function returning a
+> 6-tuple in `javdb/spider/parse_legacy_adapters.py`. **That file and function
+> do not exist in the current codebase.** The real detail parser is
+> `parse_detail_page(html) -> MovieDetail` (`javdb.parsing`). Two paths consume
+> it:
+> - **Parallel mode** (production default, proxy pool): `_spider_parse_fn()` in
+>   `javdb/spider/detail/parallel_mode.py` builds the per-entry `data` dict.
+> - **Sequential mode** (`--no-proxy` fallback): `SequentialFetchBackend` →
+>   `fetch_detail_page_with_fallback()` → `_parse_detail_to_tuple()` in
+>   `javdb/spider/fetch/fallback.py` (the real "legacy 6-tuple" the plan meant).
+>
+> **What was implemented:** `_spider_parse_fn()` now adds `'movie_detail': detail`
+> to its returned dict; `process_detail_entries()` forwards
+> `data.get('movie_detail')` to `persist_parsed_detail_result()` (Task 3). This
+> captures metadata for the **parallel path** (the production default).
+>
+> **Descoped:** Threading `MovieDetail` through `fetch_detail_page_with_fallback()`
+> (15+ return sites across nested helpers, plus `javdb/legacy/` and
+> `javdb/migrations/` callers) was judged a disproportionate blast radius on a
+> critical fetch path. The **sequential/fallback path does not capture metadata
+> live**; this gap is covered by the [IMP-ADR022-08](IMP-ADR022-08-metadata-backfill.md)
+> backfill tool, which fills `MovieMetadata` for any `MovieHistory` row lacking
+> it. Follow-up: revisit live sequential capture if backfill proves insufficient.
+
+The steps below are retained for historical reference; they describe the
+non-existent `parse_detail()` shape and were superseded by the divergence note.
 
 **Files:**
 - Modify: `javdb/spider/parse_legacy_adapters.py`
@@ -489,7 +517,7 @@ git commit -m "feat(api): add MovieMetadata GET endpoint (ADR-022)"
 | # | Gate | Check |
 |---|------|-------|
 | 1 | `MetadataRepo` imports cleanly | `python3 -c "from javdb.storage.repos.metadata_repo import MetadataRepo; print('OK')"` → `OK` |
-| 2 | `parse_detail` returns 7-tuple | `python3 -c "from javdb.spider.parse_legacy_adapters import parse_detail; assert len(parse_detail('<html></html>')) == 7"` → no error |
+| 2 | Parallel path surfaces `movie_detail` | `_spider_parse_fn()` returns a dict containing `movie_detail`; `process_detail_entries()` forwards it to `persist_parsed_detail_result()` (see Task 2 divergence note). Sequential path descoped → covered by IMP-ADR022-08. |
 | 3 | Spider dry-run produces no metadata errors | `python3 -m apps.cli.spider --dry-run --start-page 1 --end-page 1 --no-proxy` → no `MovieMetadata upsert failed` |
 | 4 | Metadata endpoint in OpenAPI spec | `/api/preferences/metadata/{href}` present in `/openapi.json` |
 | 5 | MetadataRepo unit tests pass | `pytest tests/unit/test_metadata_repo.py -v` → all PASS (tests written in IMP-ADR022-07) |
