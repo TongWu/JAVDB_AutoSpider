@@ -106,7 +106,7 @@ def test_content_filter_cli_allows_all_male_rule_without_value(cli_conn, capsys)
 
 
 @pytest.mark.parametrize(
-    "argv, message",
+    ("argv", "message"),
     [
         (
             ["add", "--dimension", "actor", "--mode", "include", "--value", "A"],

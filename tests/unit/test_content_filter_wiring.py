@@ -101,3 +101,29 @@ def test_runner_skips_persist_when_content_filter_drops(monkeypatch) -> None:
     assert evaluate_calls == [(movie_detail, rules)]
     assert result["rows"] == []
     assert backend.ack_calls == [("content_filtered", False)]
+
+
+def test_load_content_filter_rules_delegates_private_loader(monkeypatch) -> None:
+    sentinel_rules = [
+        Rule(id=7, dimension="actor", mode="exclude", value="Bad", enabled=True),
+    ]
+    calls = []
+
+    monkeypatch.setattr(
+        runner,
+        "_load_content_filter_rules",
+        lambda: calls.append(True) or sentinel_rules,
+    )
+
+    assert runner.load_content_filter_rules() == sentinel_rules
+    assert calls == [True]
+
+
+def test_load_content_filter_rules_fails_open_when_private_loader_errors(monkeypatch) -> None:
+    monkeypatch.setattr(
+        runner,
+        "_load_content_filter_rules",
+        lambda: (_ for _ in ()).throw(RuntimeError("rules unavailable")),
+    )
+
+    assert runner.load_content_filter_rules() == []
