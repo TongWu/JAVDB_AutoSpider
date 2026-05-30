@@ -86,8 +86,8 @@ daily 写入链路先经 `db_stage_history_write()` 把解析结果写入
 
 - [x] 归一化 D1 现存 `MovieHistory.ActorLink` + `SupportingActors`
   (849 行,2026-05-31 执行)。
-- [ ] 方便时从 D1 重对齐本地 SQLite 镜像
-  (`python3 -m apps.cli.db.sync_d1_to_sqlite --apply --force-overwrite-all`)
-  ——本地镜像正在退役,非阻塞。
-- [ ] 考虑加一个契约测试:若任何新写入方把站内相对 JavDB href 写入
-  `MovieHistory` / `MovieMetadata` 则失败。
+- [x] 从 D1 重对齐本地 SQLite 镜像(force-overwrite 全量重建),并提交 LFS 跟踪的
+  `reports/{history,reports,operations}.db`,使提交的镜像也带绝对 href。
+- [x] 已加契约测试——`tests/unit/test_href_absolute_contract.py` 用站内相对输入
+  驱动两个公开写入路径(MovieHistory stage→commit、`MetadataRepo.upsert`),若
+  `MovieHistory` / `MovieMetadata` 中残留任何站内相对 JavDB href 则失败。
