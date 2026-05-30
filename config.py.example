@@ -343,6 +343,12 @@ ENABLE_REDOWNLOAD = False
 # 0.30 means a new torrent must be at least 30% larger to trigger re-download.
 REDOWNLOAD_SIZE_THRESHOLD = 0.30
 
+# ADR-022: Skip qBittorrent upload for movies whose lead actor is explicitly
+# disliked in ContentPreferences (hearted=False). Disabled by default until
+# enough preference data has been collected. ADR-025 replaces the rule with a
+# model-score-based gate.
+PREFERENCE_GATE_ENABLED = False
+
 # =============================================================================
 # FILE PATHS
 # =============================================================================
