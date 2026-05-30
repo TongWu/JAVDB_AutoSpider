@@ -30,4 +30,41 @@ class MovieMetadataResponse(BaseModel):
     updated_at: Optional[str] = None
 
 
-# Rating and preference schemas are added in IMP-ADR022-03.
+class MovieRatingUpsert(BaseModel):
+    rating: Optional[int] = Field(default=None, ge=1, le=5)
+    tags: List[str] = Field(default_factory=list)
+    notes: Optional[str] = None
+
+
+class MovieRatingResponse(BaseModel):
+    href: str
+    video_code: str
+    rating: Optional[int] = None
+    tags: List[str] = Field(default_factory=list)
+    notes: Optional[str] = None
+    rated_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class MovieRatingListResponse(BaseModel):
+    items: List[MovieRatingResponse]
+    total: int
+
+
+class ContentPreferenceUpsert(BaseModel):
+    content_name: str
+    hearted: bool = False
+    weight: float = Field(default=1.0, ge=0.0, le=10.0)
+
+
+class ContentPreferenceResponse(BaseModel):
+    content_type: str
+    content_id: str
+    content_name: str
+    hearted: bool
+    weight: float
+    updated_at: Optional[str] = None
+
+
+class ContentPreferenceListResponse(BaseModel):
+    items: List[ContentPreferenceResponse]
