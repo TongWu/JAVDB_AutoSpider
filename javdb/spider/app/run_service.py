@@ -17,6 +17,7 @@ from javdb.infra.logging import (
 )
 from javdb.storage.history_manager import load_parsed_movies_history, validate_history_file
 from javdb.storage.repos.stats_repo import StatsRepo
+from javdb.pipeline.events import emit as _emit_event  # ADR-036 event spine
 from javdb.infra.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
 from javdb.spider.filename_helper import generate_output_csv_name
 from javdb.infra.paths import ensure_dated_dir
@@ -588,6 +589,9 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
                     db_get_session_status as _db_get_session_status,
                 )
                 _set_active_session_id(_session_id)
+                _emit_event("RunStarted", session_id=str(_session_id),
+                            entity_type="session", entity_id=str(_session_id),
+                            run_id=run_id, run_attempt=run_attempt)  # ADR-036
                 _set_active_run_identity(run_id, run_attempt)
                 # Read back the row so the in-process WriteMode mirrors
                 # whatever actually landed (defends against a downgrade
