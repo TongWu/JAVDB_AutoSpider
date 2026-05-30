@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 
 from javdb.integrations.pikpak.bridge import service as pikpak_service
@@ -89,3 +91,56 @@ def test_pikpak_bridge_only_pushes_cleanup_outcomes_when_not_dry_run(
 
     assert result["total_torrents"] == 0
     assert apply_calls == expected_calls
+
+
+def test_pikpak_bridge_still_scans_adhoc_when_cleanup_outcome_apply_fails(
+    monkeypatch,
+    caplog,
+):
+    scan_requests = []
+
+    class RecordingQBClient:
+        def __init__(self, base_urls, username, password, use_proxy):
+            self.base_urls = list(base_urls)
+            self.username = username
+            self.password = password
+            self.use_proxy = use_proxy
+
+        def get_torrents_multiple_categories(self, categories, torrent_filter="downloading"):
+            scan_requests.append((tuple(categories), torrent_filter))
+            return []
+
+    def fake_cleanup(_qb, _categories, dry_run=False, qb_label=""):
+        return {
+            "scanned": 0,
+            "deleted": 0,
+            "hashes": [],
+            "kind": "adhoc" if qb_label == "Adhoc QB" else "primary",
+        }
+
+    def fake_apply(stats, repo=None):
+        if stats.get("kind") == "adhoc":
+            raise RuntimeError("reconcile apply unavailable")
+
+    monkeypatch.setattr(pikpak_service, "QBittorrentClient", RecordingQBClient)
+    monkeypatch.setattr(pikpak_service, "initialize_proxy_helper", lambda *args, **kwargs: None)
+    monkeypatch.setattr(pikpak_service, "should_proxy_module", lambda *args, **kwargs: False)
+    monkeypatch.setattr(pikpak_service, "qb_base_url_candidates", lambda *args, **kwargs: ["http://qb.local"])
+    monkeypatch.setattr(pikpak_service, "QB_URL_ADHOC", "http://adhoc.local")
+    monkeypatch.setattr(pikpak_service, "QB_USERNAME_ADHOC", "adhoc-user")
+    monkeypatch.setattr(pikpak_service, "QB_PASSWORD_ADHOC", "adhoc-pass")
+    monkeypatch.setattr(pikpak_service, "remove_completed_torrents_keep_files", fake_cleanup)
+    monkeypatch.setattr(pikpak_service, "_apply_cleanup_completed", fake_apply)
+
+    with caplog.at_level(logging.WARNING):
+        result = pikpak_service._pikpak_bridge_impl(
+            days=7,
+            dry_run=False,
+            batch_mode=True,
+            use_proxy=None,
+            from_pipeline=False,
+        )
+
+    assert result["total_torrents"] == 0
+    assert ((pikpak_service.TORRENT_CATEGORY_ADHOC,), "downloading") in scan_requests
+    assert "Failed to apply adhoc cleanup outcomes" in caplog.text

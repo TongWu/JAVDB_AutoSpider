@@ -38,6 +38,7 @@ concurrency:
 
 jobs:
   reconcile:
+    name: Reconcile
     runs-on: ${{ inputs.runner || 'self-hosted' }}
     timeout-minutes: 30
     environment: Production
