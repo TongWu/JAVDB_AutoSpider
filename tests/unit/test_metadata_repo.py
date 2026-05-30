@@ -97,7 +97,8 @@ class TestMetadataRepoUpsert:
 
         maker = json.loads(row['maker'])
         assert maker['name'] == 'TestMaker'
-        assert maker['href'] == '/makers/001'
+        # BFR-010: embedded links are absolutized on write.
+        assert maker['href'] == 'https://javdb.com/makers/001'
 
     def test_upsert_serialises_directors_as_json_array(self, db_path):
         repo = MetadataRepo(db_path=db_path)
@@ -106,7 +107,8 @@ class TestMetadataRepoUpsert:
 
         directors = json.loads(row['directors'])
         assert len(directors) == 1
-        assert directors[0]['href'] == '/directors/abc'
+        # BFR-010: embedded links are absolutized on write.
+        assert directors[0]['href'] == 'https://javdb.com/directors/abc'
 
     def test_upsert_serialises_categories_from_tags_field(self, db_path):
         repo = MetadataRepo(db_path=db_path)
@@ -128,6 +130,18 @@ class TestMetadataRepoUpsert:
 
         assert row['title'] == 'New Title'
         assert row['rate'] == pytest.approx(4.5)
+
+    def test_upsert_absolutizes_href_key(self, db_path):
+        # BFR-010: the href key is absolutized so it matches MovieHistory.Href
+        # (the backfill join key) and get() resolves either form.
+        repo = MetadataRepo(db_path=db_path)
+        repo.upsert('/v/abc', _minimal_detail(video_code='ABS-1'))
+        conn = sqlite3.connect(db_path)
+        stored = conn.execute("SELECT href FROM MovieMetadata").fetchone()[0]
+        conn.close()
+        assert stored == 'https://javdb.com/v/abc'
+        assert repo.get('/v/abc') is not None
+        assert repo.get('https://javdb.com/v/abc') is not None
 
     def test_upsert_null_optional_fields(self, db_path):
         repo = MetadataRepo(db_path=db_path)

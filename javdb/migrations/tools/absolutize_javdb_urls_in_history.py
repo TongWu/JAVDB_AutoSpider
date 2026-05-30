@@ -1,31 +1,42 @@
 #!/usr/bin/env python3
-"""One-time script: normalize DB URL columns to absolute BASE_URL values.
+"""One-time migration: normalize JavDB URL columns to absolute BASE_URL form.
+
+Backend-aware: routes through :func:`get_db`, so it targets whatever
+``STORAGE_BACKEND`` is active. D1 is the canonical source of truth, so run it
+with ``STORAGE_BACKEND=d1`` to correct production data.
 
 Targets:
-  - history.db / MovieHistory: Href, ActorLink, SupportingActors(JSON link/href)
-  - optional reports.db / ReportMovies: Href
+  - history ``MovieHistory``: ``Href``, ``ActorLink``, ``SupportingActors``
+    (JSON ``link`` / ``href`` payloads)
+  - optional reports ``ReportMovies``: ``Href`` (``--also-reports-db``)
+
+Only rows that still carry a *site-relative* value are fetched and rewritten;
+already-absolute rows are skipped, so a second run is a cheap no-op. See
+``docs/design/BFR-010-Relative-Href-Inconsistency/``.
+
+Usage::
+
+    STORAGE_BACKEND=d1 python3 -m javdb.migrations.tools.absolutize_javdb_urls_in_history --dry-run
+    STORAGE_BACKEND=d1 python3 -m javdb.migrations.tools.absolutize_javdb_urls_in_history --apply
+    STORAGE_BACKEND=d1 python3 -m javdb.migrations.tools.absolutize_javdb_urls_in_history --apply --also-reports-db
 """
 
 from __future__ import annotations
 
 import argparse
-import os
-import sqlite3
-import sys
 from dataclasses import dataclass
-from pathlib import Path
+from typing import List, Tuple
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
-os.chdir(REPO_ROOT)
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-from javdb.parsing.common import (  # noqa: E402
+from javdb.parsing.common import (
     javdb_absolute_url,
     absolutize_supporting_actors_json,
 )
-from javdb.infra.config import cfg  # noqa: E402
-from javdb.storage.db import HISTORY_DB_PATH, REPORTS_DB_PATH  # noqa: E402
+from javdb.infra.config import cfg
+from javdb.infra.logging import get_logger, setup_logging
+from javdb.storage.db import get_db, HISTORY_DB_PATH, REPORTS_DB_PATH
+
+setup_logging()
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -33,129 +44,136 @@ class RunStats:
     scanned: int = 0
     updated: int = 0
     unchanged: int = 0
-    conflicts: int = 0
 
 
-def _process_history_db(conn: sqlite3.Connection, base_url: str, dry_run: bool) -> RunStats:
+def _chunked(seq: List, n: int):
+    for i in range(0, len(seq), n):
+        yield seq[i:i + n]
+
+
+# A row needs work only if some URL column still holds a site-relative value.
+# Absolute values begin with ``https://`` so they never contain a quote
+# immediately followed by a slash (``"/``); a relative ActorLink/Href begins
+# with ``/`` and a relative SupportingActors inner link reads ``"link": "/..``.
+_HISTORY_CANDIDATE_SQL = """
+    SELECT Id AS Id,
+           Href AS Href,
+           ActorLink AS ActorLink,
+           SupportingActors AS SupportingActors
+    FROM   MovieHistory
+    WHERE  Href LIKE '/%'
+       OR  ActorLink LIKE '/%'
+       OR  SupportingActors LIKE '%"/%'
+"""
+
+
+def _process_history(base_url: str, dry_run: bool) -> RunStats:
     stats = RunStats()
-    cur = conn.execute(
-        "SELECT Id, Href, ActorLink, SupportingActors FROM MovieHistory ORDER BY Id"
-    )
-    rows = cur.fetchall()
+    with get_db(HISTORY_DB_PATH) as conn:
+        rows = conn.execute(_HISTORY_CANDIDATE_SQL).fetchall()
     stats.scanned = len(rows)
-    for row_id, href, actor_link, supporting in rows:
-        old_href = href or ''
-        old_actor = actor_link or ''
-        old_supporting = supporting or ''
 
+    changes: List[Tuple] = []
+    for r in rows:
+        old_href = r["Href"] or ''
+        old_actor = r["ActorLink"] or ''
+        old_sup = r["SupportingActors"] or ''
         new_href = javdb_absolute_url(old_href, base_url) if old_href else old_href
         new_actor = javdb_absolute_url(old_actor, base_url) if old_actor else old_actor
-        new_supporting = (
-            absolutize_supporting_actors_json(old_supporting, base_url)
-            if old_supporting
-            else old_supporting
+        new_sup = (
+            absolutize_supporting_actors_json(old_sup, base_url)
+            if old_sup else old_sup
         )
-
-        if (
-            new_href == old_href
-            and new_actor == old_actor
-            and new_supporting == old_supporting
-        ):
+        if new_href == old_href and new_actor == old_actor and new_sup == old_sup:
             stats.unchanged += 1
             continue
+        changes.append((new_href, new_actor, new_sup, r["Id"]))
 
-        if dry_run:
-            stats.updated += 1
-            continue
+    if dry_run:
+        stats.updated = len(changes)
+        return stats
 
-        try:
-            conn.execute(
-                """
-                UPDATE MovieHistory
-                SET Href = ?, ActorLink = ?, SupportingActors = ?
-                WHERE Id = ?
-                """,
-                (new_href, new_actor, new_supporting, row_id),
-            )
-            stats.updated += 1
-        except sqlite3.IntegrityError:
-            # Skip rows that would violate unique Href after normalization.
-            stats.conflicts += 1
+    # Apply in small chunks; each get_db context commits (flushes D1) on exit.
+    for chunk in _chunked(changes, 50):
+        with get_db(HISTORY_DB_PATH) as conn:
+            for new_href, new_actor, new_sup, row_id in chunk:
+                conn.execute(
+                    "UPDATE MovieHistory SET Href=?, ActorLink=?, "
+                    "SupportingActors=? WHERE Id=?",
+                    (new_href, new_actor, new_sup, row_id),
+                )
+        stats.updated += len(chunk)
     return stats
 
 
-def _process_reports_db(conn: sqlite3.Connection, base_url: str, dry_run: bool) -> RunStats:
+def _process_reports(base_url: str, dry_run: bool) -> RunStats:
     stats = RunStats()
-    cur = conn.execute("SELECT Id, Href FROM ReportMovies ORDER BY Id")
-    rows = cur.fetchall()
+    with get_db(REPORTS_DB_PATH) as conn:
+        rows = conn.execute(
+            "SELECT Id AS Id, Href AS Href FROM ReportMovies WHERE Href LIKE '/%'"
+        ).fetchall()
     stats.scanned = len(rows)
-    for row_id, href in rows:
-        old_href = href or ''
+
+    changes: List[Tuple] = []
+    for r in rows:
+        old_href = r["Href"] or ''
         new_href = javdb_absolute_url(old_href, base_url) if old_href else old_href
         if new_href == old_href:
             stats.unchanged += 1
             continue
-        if dry_run:
-            stats.updated += 1
-            continue
-        conn.execute("UPDATE ReportMovies SET Href = ? WHERE Id = ?", (new_href, row_id))
-        stats.updated += 1
+        changes.append((new_href, r["Id"]))
+
+    if dry_run:
+        stats.updated = len(changes)
+        return stats
+
+    for chunk in _chunked(changes, 50):
+        with get_db(REPORTS_DB_PATH) as conn:
+            for new_href, row_id in chunk:
+                conn.execute(
+                    "UPDATE ReportMovies SET Href=? WHERE Id=?",
+                    (new_href, row_id),
+                )
+        stats.updated += len(chunk)
     return stats
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    p.add_argument("--history-db", default=HISTORY_DB_PATH, help=f"Path to history.db (default: {HISTORY_DB_PATH})")
-    p.add_argument("--base-url", default=cfg('BASE_URL', 'https://javdb.com'), help="Base site URL used for absolute links")
-    p.add_argument("--also-reports-db", action="store_true", help="Also normalize ReportMovies.Href in reports.db")
-    p.add_argument("--reports-db", default=REPORTS_DB_PATH, help=f"Path to reports.db (default: {REPORTS_DB_PATH})")
+    p = argparse.ArgumentParser(
+        description="Absolutize JavDB URL columns (backend-aware; D1 canonical)."
+    )
+    p.add_argument(
+        "--base-url",
+        default=cfg('BASE_URL', 'https://javdb.com'),
+        help="Base site URL used for absolute links",
+    )
+    p.add_argument(
+        "--also-reports-db",
+        action="store_true",
+        help="Also normalize ReportMovies.Href",
+    )
     mode = p.add_mutually_exclusive_group(required=False)
-    mode.add_argument("--apply", action="store_true", help="Apply updates and commit")
-    mode.add_argument("--dry-run", action="store_true", help="Show counts only, no writes (default)")
+    mode.add_argument("--apply", action="store_true", help="Apply updates")
+    mode.add_argument(
+        "--dry-run", action="store_true", help="Preview counts only (default)",
+    )
     args = p.parse_args()
 
-    history_db = os.path.abspath(args.history_db)
-    reports_db = os.path.abspath(args.reports_db)
-    base_url = args.base_url.strip() or cfg('BASE_URL', 'https://javdb.com')
+    base_url = (args.base_url or '').strip() or cfg('BASE_URL', 'https://javdb.com')
     dry_run = not args.apply
+    mode_text = "dry-run" if dry_run else "applied"
 
-    if not os.path.isfile(history_db):
-        print(f"error: history db not found: {history_db}", file=sys.stderr)
-        return 1
-
-    h_conn = sqlite3.connect(history_db)
-    try:
-        h_stats = _process_history_db(h_conn, base_url, dry_run)
-        if dry_run:
-            h_conn.rollback()
-            mode_text = "dry-run"
-        else:
-            h_conn.commit()
-            mode_text = "applied"
-    finally:
-        h_conn.close()
-
-    print(
-        f"[{mode_text}] history MovieHistory: scanned={h_stats.scanned} "
-        f"updated={h_stats.updated} unchanged={h_stats.unchanged} conflicts={h_stats.conflicts}"
+    h = _process_history(base_url, dry_run)
+    logger.info(
+        "[%s] MovieHistory: scanned=%d updated=%d unchanged=%d",
+        mode_text, h.scanned, h.updated, h.unchanged,
     )
 
     if args.also_reports_db:
-        if not os.path.isfile(reports_db):
-            print(f"error: reports db not found: {reports_db}", file=sys.stderr)
-            return 1
-        r_conn = sqlite3.connect(reports_db)
-        try:
-            r_stats = _process_reports_db(r_conn, base_url, dry_run)
-            if dry_run:
-                r_conn.rollback()
-            else:
-                r_conn.commit()
-        finally:
-            r_conn.close()
-        print(
-            f"[{mode_text}] reports ReportMovies: scanned={r_stats.scanned} "
-            f"updated={r_stats.updated} unchanged={r_stats.unchanged}"
+        r = _process_reports(base_url, dry_run)
+        logger.info(
+            "[%s] ReportMovies: scanned=%d updated=%d unchanged=%d",
+            mode_text, r.scanned, r.updated, r.unchanged,
         )
 
     return 0
