@@ -25,16 +25,17 @@
 >    re-exported from `javdb/integrations/qb/uploader/__init__.py` so
 >    `from javdb.integrations.qb.uploader import _preference_gate_blocks` works
 >    (the Phase 7 tests + DoD #2 depend on this package-level import).
-> 2. **No `actor_link` in the qB-upload CSV (known limitation / follow-up):** the
->    CSV written by the spider has fields
+> 2. **No `actor_link` in the qB-upload CSV → resolved from history (code-review fix).**
+>    The CSV written by the spider has fields
 >    `href, video_code, page, actor, rate, comment_number, hacked_subtitle,
 >    hacked_no_subtitle, subtitle, no_subtitle` — there is **no `actor_link`
->    column** (only the actor *name*). So even when `PREFERENCE_GATE_ENABLED=True`,
->    the gate reads an empty `actor_link` and no-ops (returns False). This is
->    acceptable for ADR-022: B2 is an explicit rule-based **hook** that ADR-025
->    replaces. **Follow-up before the gate can actually block:** add `actor_link`
->    to the qB CSV fieldnames (`javdb/spider/app/run_service.py`), or resolve the
->    actor href another way inside the gate.
+>    column** (only the actor *name*). The gate originally read
+>    `row.get('actor_link', '')` and therefore no-opped on every normally-generated
+>    CSV. Per code review, the gate now falls back to `_resolve_actor_link(href)`,
+>    which looks up `MovieHistory.ActorLink` by the movie `href` (the CSV *does*
+>    carry `href`) using an aliased, D1/Dual-safe query. So when
+>    `PREFERENCE_GATE_ENABLED=True` the gate actually evaluates `ContentPreferences`.
+>    It still fails open on any miss/error.
 > 3. **No `--dry-run` flag:** `apps.cli.qb.uploader` does not accept `--dry-run`
 >    (its args are `--mode/--input-file/--use-proxy/--no-proxy/--from-pipeline/
 >    --category/--session-id`). DoD #3's dry-run command is unverifiable as
