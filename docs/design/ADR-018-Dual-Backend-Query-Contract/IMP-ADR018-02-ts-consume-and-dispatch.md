@@ -14,7 +14,7 @@
 
 **Related:** [ADR-018](ADR-018-dual-backend-query-contract.md), [IMP-ADR018-01](IMP-ADR018-01-python-golden-generator.md) (must land first)
 
-**Status:** Proposed
+**Status:** Implemented (2026-05-30) — Tasks 1–7 done and locally verified across both repos. TS builders extracted (`buildMovieWhere`/`buildTorrentWhere`/`buildSessionQuery`); golden vendored; vitest conformance green (25 golden cases); `ci.yml` gains the freshness gen-diff + a `test:server` step (CI did not previously run `test:server`); Python `publish-query-contract.yml` + TS `revendor-query-golden.yml` dispatch pair created. **Pre-existing drift reconciled:** the TS `/sessions` handler now over-fetches `limit + 1` to match the Python golden (fixes a phantom `next_cursor` at exact-multiple boundaries); pinned by two new route tests. Both drift simulations confirmed the guard fails as intended. **Task 8 (stats) remains deferred** (blocked on the Python router→builder extraction). **Pending ops (cannot be done from code):** create `WEB_REPO_DISPATCH_TOKEN` (PAT, `contents:write` on the web repo) in the Python repo's `Production` environment **and** `REVENDOR_PR_TOKEN` (PAT, `contents:write` + `pull-requests:write` on the web repo) in the TS repo's secrets — may be the same PAT (so the re-vendor PR triggers CI); post-merge CI dry-run + `workflow_dispatch` dispatch dry-run.
 
 ---
 
@@ -23,6 +23,7 @@
 - [ ] **IMP-ADR018-01 is merged on Python `main`** — `docs/api/contract/query-builders.golden.json` exists with `movie_filters`, `torrent_filters`, and `session_query` cases, and the content-hash `version` field (D6).
 - [ ] A PAT secret with **read** access to the private Python repo is available to TS CI as `CICD_REPO_TOKEN` (already used by the `api.gen.ts` step in `ci.yml`).
 - [ ] A PAT secret with **write** access to the TS repo is available to the Python repo as `WEB_REPO_DISPATCH_TOKEN` (new — Task 6).
+- [ ] A PAT secret with **write** access to the TS repo (`contents:write` + `pull-requests:write`) is available to TS CI as `REVENDOR_PR_TOKEN` (new — Task 7; needed so the re-vendor PR triggers CI). May be the same PAT as `WEB_REPO_DISPATCH_TOKEN`.
 
 ---
 
@@ -228,21 +229,38 @@ jobs:
       - run: pip install -r requirements.txt
       - name: Regenerate golden
         run: python -m apps.cli.ops.dump_query_contract
-      - name: Commit if changed
+      - name: Self-commit golden if a builder PR forgot to regenerate it
         id: commit
         run: |
           set -e
           if git diff --quiet docs/api/contract/query-builders.golden.json; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"; exit 0
+            echo "self_committed=false" >> "$GITHUB_OUTPUT"; exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add docs/api/contract/query-builders.golden.json
           git commit -m "docs(api): regenerate query Contract Golden [skip ci]"
           git push
-          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "self_committed=true" >> "$GITHUB_OUTPUT"
+      - name: Did this push change the golden?
+        id: pushdiff
+        run: |
+          set -e
+          if [ "${{ github.event_name }}" != "push" ]; then
+            echo "golden_changed=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          before="${{ github.event.before }}"
+          if [ -z "$before" ] || [ "$before" = "0000000000000000000000000000000000000000" ]; then
+            echo "golden_changed=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if git diff --name-only "$before" "${{ github.sha }}" \
+               | grep -qx 'docs/api/contract/query-builders.golden.json'; then
+            echo "golden_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "golden_changed=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Dispatch re-vendor to web repo
-        if: steps.commit.outputs.changed == 'true'
+        if: steps.commit.outputs.self_committed == 'true' || steps.pushdiff.outputs.golden_changed == 'true'
         run: |
           curl -fsS -X POST \
             -H "Authorization: Bearer ${{ secrets.WEB_REPO_DISPATCH_TOKEN }}" \
@@ -250,6 +268,15 @@ jobs:
             https://api.github.com/repos/TongWu/JAVDB_AutoSpider_Web/dispatches \
             -d '{"event_type":"query-golden-updated"}'
 ```
+
+> **Dispatch trigger (corrected per PR review):** the dispatch must fire whenever
+> the golden changes on `main` — most often the golden diff arrives *already
+> committed* inside the builder PR (the ADR-018 D5 flow), so the regenerate step
+> is a no-op and `self_committed=false`. Gating dispatch only on a self-commit
+> would miss that (by far the common) case and leave the TS vendor permanently
+> stale. So dispatch fires on `self_committed == 'true'` **or** when this push's
+> diff (`github.event.before..github.sha`, needs `fetch-depth: 0`) touched the
+> golden file. Manual `workflow_dispatch` always notifies.
 
 - [ ] Create the `WEB_REPO_DISPATCH_TOKEN` secret (PAT with `contents:write` on the TS repo) in the Python repo's `Production` environment.
 
@@ -283,6 +310,10 @@ jobs:
       - name: Open PR
         uses: peter-evans/create-pull-request@v6
         with:
+          # PAT with contents:write + pull-requests:write on THIS repo — required
+          # so the PR triggers ci.yml. The default GITHUB_TOKEN is suppressed by
+          # GitHub for workflow-created PRs (no CI → no conformance-red signal).
+          token: ${{ secrets.REVENDOR_PR_TOKEN }}
           branch: chore/revendor-query-golden
           title: "chore: re-vendor query Contract Golden"
           body: |
@@ -292,6 +323,7 @@ jobs:
 ```
 
 - [ ] The opened PR's CI runs Task-5 freshness (now green, vendored == main) **and** Task-3 conformance (red until a human reconciles the TS builders) — exactly the intended hand-off.
+- [ ] **Token (corrected per PR review):** `create-pull-request` MUST be given a `token:` that is a PAT/App token with write access — without it the action falls back to `GITHUB_TOKEN`, and GitHub suppresses CI on the resulting PR, so the re-vendor PR would open with **no checks** and the conformance-red hand-off would never appear. Add a `REVENDOR_PR_TOKEN` secret to the TS repo (may be the same PAT as `WEB_REPO_DISPATCH_TOKEN`).
 
 ---
 
