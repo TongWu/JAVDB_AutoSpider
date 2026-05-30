@@ -28,12 +28,6 @@ This is a latent **pre-existing** gap — it predates [ADR-041](../ADR-041-Rust-
 
 The `remove_ban` docstring in `ban_manager.py` already half-acknowledges the asymmetry: it notes the Rust manager "can't reach the Python `_dispatch_remote_unban` hook from inside the extension" and defers unban dispatch to `ProxyPool.unban_proxy` — but the Rust pool's `ban_proxy` has the same limitation and no equivalent dispatch.
 
-## Impact
-
-- **Multi-runner runs lose cross-runner ban coordination.** A proxy that one runner has determined is bad (CF-challenged, blocked) is not broadcast; peers waste requests on it until each independently bans it. This is an efficiency/coordination degradation, not data corruption.
-- **Single-runner runs are unaffected** — local bans work correctly via the Rust ban manager.
-- The coordinator's `mark_proxy_banned` endpoint and the `ban_proxy` Signal (CONTEXT.md) are effectively under-fed from the Python side.
-
 ## Fix
 
 Not yet implemented — tracked here, deferred out of ADR-041 (which is a fallback-policy change, not a coordination change). Candidate approaches (decide in the follow-up):
@@ -43,6 +37,12 @@ Not yet implemented — tracked here, deferred out of ADR-041 (which is a fallba
 3. **Observer/delta poll.** Have the coordinator-integration layer diff the Rust ban manager's banned set against the last-dispatched set and push deltas.
 
 Approach 2 is the smallest change and keeps `_dispatch_remote_ban` / `set_remote_ban_hook` meaningful; approach 1 is the cleanest long-term but touches the Rust crate.
+
+## Side Effects
+
+- **Multi-runner runs lose cross-runner ban coordination.** A proxy that one runner has determined is bad (CF-challenged, blocked) is not broadcast; peers waste requests on it until each independently bans it. This is an efficiency/coordination degradation, not data corruption.
+- **Single-runner runs are unaffected** — local bans work correctly via the Rust ban manager.
+- The coordinator's `mark_proxy_banned` endpoint and the `ban_proxy` Signal (CONTEXT.md) are effectively under-fed from the Python side.
 
 ## Follow-Up
 
