@@ -20,10 +20,10 @@ logger = get_logger(__name__)
 
 
 def _parse_detail_to_tuple(html):
-    """Parse detail HTML into the spider's legacy 6-tuple.
+    """Parse detail HTML into the spider's legacy fields plus rich detail.
 
     Returns ``(magnets, actor_info, actor_gender, actor_link, supporting,
-    parse_success)`` sourced directly from ``parse_detail_page``.
+    parse_success, movie_detail)`` sourced directly from ``parse_detail_page``.
     """
     detail = parse_detail_page(html)
     return (
@@ -33,6 +33,7 @@ def _parse_detail_to_tuple(html):
         detail.get_first_actor_href() or '',
         detail.get_supporting_actors_json() or '',
         detail.parse_success,
+        detail,
     )
 
 
@@ -487,12 +488,12 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
 
     Returns:
         tuple: (magnets, actor_info, actor_gender, actor_link, supporting_actors, parse_success,
-                effective_use_proxy, effective_use_cf_bypass)
+                movie_detail, effective_use_proxy, effective_use_cf_bypass)
     """
     use_cf_bypass = _effective_cf_bypass(use_cf_bypass)
     runtime = _resolve_runtime(runtime)
     proxy_pool = _resolve_proxy_pool(runtime)
-    last_result = ([], '', '', '', '', False)
+    last_result = ([], '', '', '', '', False, None)
 
     def try_fetch_and_parse(u_proxy, u_cf, context_msg, skip_sleep=False, *, send_cookie=None):
         """send_cookie: when True/False, overrides outer use_cookie (e.g. after login refresh)."""
@@ -521,23 +522,42 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
                                              runtime=runtime)
                             if html and not is_login_page(html):
                                 m = _parse_detail_to_tuple(html)
-                                magnets, actor_info, actor_gender, actor_link, supporting, parse_success = m
+                                (
+                                    magnets, actor_info, actor_gender,
+                                    actor_link, supporting, parse_success,
+                                    movie_detail,
+                                ) = m
                                 if parse_success:
                                     logger.info(f"[{entry_index}] Login refresh succeeded: {context_msg}")
-                                    return magnets, actor_info, actor_gender, actor_link, supporting, True
+                                    return (
+                                        magnets, actor_info, actor_gender,
+                                        actor_link, supporting, True,
+                                        movie_detail,
+                                    )
                                 last_result = (
-                                    magnets, actor_info, actor_gender, actor_link, supporting, False,
+                                    magnets, actor_info, actor_gender,
+                                    actor_link, supporting, False,
+                                    movie_detail,
                                 )
                             else:
                                 logger.warning(f"[{entry_index}] Still login page after refresh")
-                    return [], '', '', '', '', False
+                    return [], '', '', '', '', False, None
 
                 m = _parse_detail_to_tuple(html)
-                magnets, actor_info, actor_gender, actor_link, supporting, parse_success = m
+                (
+                    magnets, actor_info, actor_gender, actor_link,
+                    supporting, parse_success, movie_detail,
+                ) = m
                 if parse_success:
                     logger.debug(f"[{entry_index}] Success: {context_msg}")
-                    return magnets, actor_info, actor_gender, actor_link, supporting, True
-                last_result = (magnets, actor_info, actor_gender, actor_link, supporting, False)
+                    return (
+                        magnets, actor_info, actor_gender, actor_link,
+                        supporting, True, movie_detail,
+                    )
+                last_result = (
+                    magnets, actor_info, actor_gender, actor_link,
+                    supporting, False, movie_detail,
+                )
                 logger.debug(f"[{entry_index}] Parse validation failed (missing magnets): {context_msg}")
             else:
                 logger.debug(f"[{entry_index}] Failed to fetch HTML: {context_msg}")
@@ -545,38 +565,38 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
             raise
         except Exception as e:
             logger.debug(f"[{entry_index}] Failed {context_msg}: {e}")
-        return [], '', '', '', '', False
+        return [], '', '', '', '', False, None
 
     def try_proxy_direct_then_cf(proxy_name, skip_sleep=True):
-        """Returns (magnets, actor_info, ag, al, sup, success, used_cf, proxy_banned)."""
+        """Returns (magnets, actor_info, ag, al, sup, success, detail, used_cf, proxy_banned)."""
         try:
             needs_cf = _proxy_needs_cf_bypass(proxy_name, runtime=runtime)
             if needs_cf:
-                magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
+                magnets, actor_info, ag, al, sup, success, movie_detail = try_fetch_and_parse(
                     True, True,
                     f"Detail: Proxy={proxy_name} + CF Bypass (marked)",
                     skip_sleep=skip_sleep)
                 if success:
-                    return magnets, actor_info, ag, al, sup, True, True, False
-                return [], '', '', '', '', False, True, False
-            magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
+                    return magnets, actor_info, ag, al, sup, True, movie_detail, True, False
+                return [], '', '', '', '', False, None, True, False
+            magnets, actor_info, ag, al, sup, success, movie_detail = try_fetch_and_parse(
                 True, False,
                 f"Detail: Proxy={proxy_name} Direct",
                 skip_sleep=skip_sleep)
             if success:
-                return magnets, actor_info, ag, al, sup, True, False, False
+                return magnets, actor_info, ag, al, sup, True, movie_detail, False, False
             _sleep_between_fetches(runtime=runtime)
-            magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
+            magnets, actor_info, ag, al, sup, success, movie_detail = try_fetch_and_parse(
                 True, True,
                 f"Detail: Proxy={proxy_name} + CF Bypass",
                 skip_sleep=skip_sleep)
             if success:
                 _mark_proxy_cf_bypass(proxy_name, runtime=runtime)
-                return magnets, actor_info, ag, al, sup, True, True, False
-            return [], '', '', '', '', False, False, False
+                return magnets, actor_info, ag, al, sup, True, movie_detail, True, False
+            return [], '', '', '', '', False, None, False, False
         except ProxyBannedError as e:
             logger.warning(f"[{entry_index}] Proxy '{proxy_name}' banned during detail fetch: {e.reason}")
-            return [], '', '', '', '', False, False, True
+            return [], '', '', '', '', False, None, False, True
 
     # --- Phase 0: Initial Attempt ---
     detail_proxy_was_banned = False
@@ -584,22 +604,22 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
         current_proxy_name = proxy_pool.get_current_proxy_name()
         initial_cf = use_cf_bypass or _proxy_needs_cf_bypass(current_proxy_name, runtime=runtime)
         try:
-            magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
+            magnets, actor_info, ag, al, sup, success, movie_detail = try_fetch_and_parse(
                 True, initial_cf,
                 f"Detail Initial (Proxy={current_proxy_name}, CF={initial_cf})",
                 skip_sleep=False)
             if success:
-                return magnets, actor_info, ag, al, sup, True, True, initial_cf
+                return magnets, actor_info, ag, al, sup, True, movie_detail, True, initial_cf
             if not initial_cf:
                 _sleep_between_fetches(runtime=runtime)
-                magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
+                magnets, actor_info, ag, al, sup, success, movie_detail = try_fetch_and_parse(
                     True, True,
                     f"Detail: Proxy={current_proxy_name} + CF Bypass",
                     skip_sleep=True)
                 if success:
                     _mark_proxy_cf_bypass(current_proxy_name, runtime=runtime)
                     logger.info(f"[{entry_index}] Detail CF Bypass succeeded with initial proxy={current_proxy_name}")
-                    return magnets, actor_info, ag, al, sup, True, True, True
+                    return magnets, actor_info, ag, al, sup, True, movie_detail, True, True
         except ProxyBannedError as e:
             logger.warning(
                 f"[{entry_index}] Proxy '{e.proxy_name}' banned during detail initial attempt: {e.reason}"
@@ -607,12 +627,12 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
             detail_proxy_was_banned = True
         logger.warning(f"[{entry_index}] Detail page initial attempt failed. Starting fallback...")
     elif not use_proxy:
-        magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
+        magnets, actor_info, ag, al, sup, success, movie_detail = try_fetch_and_parse(
             False, use_cf_bypass,
             f"Detail Initial (No Proxy, CF={use_cf_bypass})",
             skip_sleep=False)
         if success:
-            return magnets, actor_info, ag, al, sup, True, False, use_cf_bypass
+            return magnets, actor_info, ag, al, sup, True, movie_detail, False, use_cf_bypass
         logger.warning(f"[{entry_index}] Detail page initial attempt failed (no proxy). Starting fallback...")
     else:
         logger.warning(f"[{entry_index}] No proxy pool configured for initial attempt.")
@@ -626,22 +646,22 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
         if login_success and use_proxy and proxy_pool:
             current_proxy_name = proxy_pool.get_current_proxy_name()
             _sleep_between_fetches(runtime=runtime)
-            magnets, actor_info, ag, al, sup, success, used_cf, _banned = try_proxy_direct_then_cf(
+            magnets, actor_info, ag, al, sup, success, movie_detail, used_cf, _banned = try_proxy_direct_then_cf(
                 current_proxy_name, skip_sleep=True)
             if success:
                 logger.info(f"[{entry_index}] Login refresh + retry succeeded (Proxy={current_proxy_name}, CF={used_cf})")
-                return magnets, actor_info, ag, al, sup, True, True, used_cf
+                return magnets, actor_info, ag, al, sup, True, movie_detail, True, used_cf
             logger.warning(f"[{entry_index}] Login refresh completed but detail page still failed")
         elif login_success and not use_proxy:
             _sleep_between_fetches(runtime=runtime)
-            magnets, actor_info, ag, al, sup, success = try_fetch_and_parse(
+            magnets, actor_info, ag, al, sup, success, movie_detail = try_fetch_and_parse(
                 False, use_cf_bypass,
                 "Detail: Retry with refreshed cookie (No Proxy)",
                 skip_sleep=True,
                 send_cookie=True,
             )
             if success:
-                return magnets, actor_info, ag, al, sup, True, False, use_cf_bypass
+                return magnets, actor_info, ag, al, sup, True, movie_detail, False, use_cf_bypass
         elif not login_success:
             logger.warning(f"[{entry_index}] Login refresh failed, continuing with proxy pool fallback...")
 
@@ -650,7 +670,7 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
         logger.warning(f"[{entry_index}] No-proxy mode: fallback exhausted (login-only recovery)")
         return (
             last_result[0], last_result[1], last_result[2], last_result[3], last_result[4],
-            last_result[5], use_proxy, use_cf_bypass,
+            last_result[5], last_result[6], use_proxy, use_cf_bypass,
         )
 
     # --- Phase 2: Iterate through remaining proxies ---
@@ -658,7 +678,7 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
         logger.error(f"[{entry_index}] Fallback failed: No proxy pool configured")
         return (
             last_result[0], last_result[1], last_result[2], last_result[3], last_result[4],
-            last_result[5], use_proxy, use_cf_bypass,
+            last_result[5], last_result[6], use_proxy, use_cf_bypass,
         )
 
     max_switches = proxy_pool.get_proxy_count() if PROXY_MODE == 'pool' else 1
@@ -675,11 +695,11 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
                 break
         current_proxy_name = proxy_pool.get_current_proxy_name()
         _sleep_between_fetches(runtime=runtime)
-        magnets, actor_info, ag, al, sup, success, used_cf, banned = try_proxy_direct_then_cf(
+        magnets, actor_info, ag, al, sup, success, movie_detail, used_cf, banned = try_proxy_direct_then_cf(
             current_proxy_name, skip_sleep=True)
         if success:
             logger.info(f"[{entry_index}] Detail Proxy fallback succeeded (Proxy={current_proxy_name}, CF={used_cf})")
-            return magnets, actor_info, ag, al, sup, True, True, used_cf
+            return magnets, actor_info, ag, al, sup, True, movie_detail, True, used_cf
         if banned:
             skip_switch = True
             continue
@@ -687,5 +707,5 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
     logger.warning(f"[{entry_index}] Detail page fallback exhausted. Returning best available result.")
     return (
         last_result[0], last_result[1], last_result[2], last_result[3], last_result[4],
-        last_result[5], use_proxy, use_cf_bypass,
+        last_result[5], last_result[6], use_proxy, use_cf_bypass,
     )

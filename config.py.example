@@ -349,6 +349,10 @@ REDOWNLOAD_SIZE_THRESHOLD = 0.30
 # model-score-based gate.
 PREFERENCE_GATE_ENABLED = False
 
+# ADR-040 content-filter rules are managed dynamically in the reports DB
+# (ContentFilterRule) via `python3 -m apps.cli.ops.content_filter`.
+# No config.py key is required for actor/tag/gender rules.
+
 # =============================================================================
 # FILE PATHS
 # =============================================================================
