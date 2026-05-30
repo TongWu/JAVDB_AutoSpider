@@ -72,6 +72,25 @@ def test_canonical_parser_change_selects_parser_domain_and_rust_wheel():
     assert any("parser-domain impact rule" in reason for reason in result.reason)
 
 
+def test_proxy_change_builds_rust_wheel_for_rust_required_tests():
+    # ADR-041: the proxy pool is Rust-Required; its tests import javdb.rust_core
+    # unconditionally, so selecting them must trigger the wheel build (else CI
+    # collection fails with ImportError in a no-wheel environment).
+    result = select("javdb/proxy/pool.py")
+
+    assert "tests/unit/test_proxy_pool.py" in result.pytest_targets
+    assert result.build_rust_wheel is True
+
+
+def test_infra_change_selecting_proxy_tests_builds_rust_wheel():
+    # The proxy tests are also selected by infra changes (platform-config rule);
+    # the wheel must still be built whenever those Rust-Required tests run.
+    result = select("javdb/infra/request.py")
+
+    if "tests/unit/test_proxy_pool.py" in result.pytest_targets:
+        assert result.build_rust_wheel is True
+
+
 def test_index_selection_change_selects_parser_domain_tests():
     result = select("javdb/pipeline/index_selection.py")
 
