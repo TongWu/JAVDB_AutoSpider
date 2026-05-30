@@ -25,6 +25,26 @@ def test_upsert_is_idempotent_on_hash(conn):
     assert conn.execute("SELECT COUNT(*) FROM AcquisitionOutcome").fetchone()[0] == 1
 
 
+def test_upsert_preserves_existing_terminal_timestamps_when_partial_record_has_none(conn):
+    repo = AcquisitionOutcomeRepo(conn)
+    repo.upsert(
+        AcquisitionOutcomeRecord(
+            qb_hash="h1",
+            href="/v/1",
+            state="completed",
+            completed_at="2026-05-30T01:00:00Z",
+            landed_at="2026-05-30T02:00:00Z",
+        )
+    )
+
+    repo.upsert(AcquisitionOutcomeRecord(qb_hash="h1", href="/v/1", state="queued"))
+
+    got = repo.get("h1")
+    assert got.state == "queued"
+    assert got.completed_at == "2026-05-30T01:00:00Z"
+    assert got.landed_at == "2026-05-30T02:00:00Z"
+
+
 def test_mark_state_updates_existing(conn):
     repo = AcquisitionOutcomeRepo(conn)
     repo.upsert(AcquisitionOutcomeRecord(qb_hash="h1", href="/v/1", state="queued"))

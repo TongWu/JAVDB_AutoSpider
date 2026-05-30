@@ -549,14 +549,32 @@ def _pikpak_bridge_impl(days, dry_run, batch_mode=True, use_proxy=None, from_pip
                 QB_PASSWORD_ADHOC,
                 use_proxy,
             )
+        except Exception as e:
+            logger.warning(f"Failed to connect to adhoc qBittorrent: {e}")
+            logger.warning("Continuing with primary QB only")
+        else:
             adhoc_categories = [TORRENT_CATEGORY_ADHOC]
-            adhoc_cleanup_stats = remove_completed_torrents_keep_files(
-                qb_adhoc, adhoc_categories, dry_run=dry_run, qb_label="Adhoc QB"
-            )
+            try:
+                adhoc_cleanup_stats = remove_completed_torrents_keep_files(
+                    qb_adhoc, adhoc_categories, dry_run=dry_run, qb_label="Adhoc QB"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to cleanup completed adhoc qBittorrent torrents: {e}")
+                adhoc_cleanup_stats = {}
             if not dry_run:
-                _apply_cleanup_completed(adhoc_cleanup_stats)
-            adhoc_torrents = qb_adhoc.get_torrents_multiple_categories(adhoc_categories)
-            logger.info(f"Found {len(adhoc_torrents)} torrents in category {adhoc_categories} (adhoc QB)")
+                try:
+                    _apply_cleanup_completed(adhoc_cleanup_stats)
+                except Exception as e:
+                    logger.warning(f"Failed to apply adhoc cleanup outcomes: {e}", exc_info=True)
+
+            try:
+                adhoc_torrents = qb_adhoc.get_torrents_multiple_categories(adhoc_categories)
+            except Exception as e:
+                logger.warning(f"Failed to scan adhoc qBittorrent: {e}")
+                logger.warning("Continuing with primary QB only")
+                adhoc_torrents = []
+            else:
+                logger.info(f"Found {len(adhoc_torrents)} torrents in category {adhoc_categories} (adhoc QB)")
 
             # Deduplicate by hash — adhoc torrents that already exist in
             # primary are *not* re-added to ``torrents`` (to avoid double
@@ -574,9 +592,6 @@ def _pikpak_bridge_impl(days, dry_run, batch_mode=True, use_proxy=None, from_pip
                     existing_hashes.add(t['hash'])
                 else:
                     logger.debug(f"Skipping duplicate torrent from adhoc QB: {t['name']}")
-        except Exception as e:
-            logger.warning(f"Failed to connect to adhoc qBittorrent: {e}")
-            logger.warning("Continuing with primary QB only")
 
     old_torrents = [t for t in torrents if datetime.fromtimestamp(t['added_on']).date() <= cutoff_date]
     logger.info(f"Filtered {len(old_torrents)} torrents older than {days} days")

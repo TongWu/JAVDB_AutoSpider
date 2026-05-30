@@ -36,9 +36,13 @@ def _age_days(iso_ts: str | None) -> float:
         return 0.0
     try:
         parsed = datetime.fromisoformat(iso_ts.replace("Z", "+00:00"))
-    except ValueError:
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        else:
+            parsed = parsed.astimezone(timezone.utc)
+        return (datetime.now(timezone.utc) - parsed).total_seconds() / 86400.0
+    except (TypeError, ValueError):
         return 0.0
-    return (datetime.now(timezone.utc) - parsed).total_seconds() / 86400.0
 
 
 def _validate_options(options: ReconcileOptions) -> list[str]:
