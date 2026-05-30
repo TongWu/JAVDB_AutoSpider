@@ -5,7 +5,7 @@
 | **Status**  | Proposed — umbrella; execution delegated to per-phase IMPs            |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-026](../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md), [ADR-020](../ADR-020-Parser-Interface-Consolidation/ADR-020-parser-interface-consolidation.md), [ADR-019](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md), [ADR-011](../_archive/ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) |
+| **Related** | [ADR-026](../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md), [ADR-020](../_archive/ADR-020-Parser-Interface-Consolidation/ADR-020-parser-interface-consolidation.md), [ADR-019](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md), [ADR-011](../_archive/ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) |
 
 > Originated from a 2026-05-29 brainstorming session on net-new directions
 > (Direction 2 — proactive reliability).
@@ -192,7 +192,7 @@ fetch**. Phase 2 adds between-run lead time. Phase 3 is optional polish.
 ## References
 
 - [ADR-026 — AI Operations Diagnosis](../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md)
-- [ADR-020 — Parser Interface Consolidation](../ADR-020-Parser-Interface-Consolidation/ADR-020-parser-interface-consolidation.md)
+- [ADR-020 — Parser Interface Consolidation](../_archive/ADR-020-Parser-Interface-Consolidation/ADR-020-parser-interface-consolidation.md)
 - [ADR-019 — Session Lifecycle Authority](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md)
 - [ADR-011 — Parsing Module](../_archive/ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md)
 
