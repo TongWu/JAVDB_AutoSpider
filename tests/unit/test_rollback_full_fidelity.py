@@ -430,3 +430,20 @@ class TestD1MigrationsAreCoveredByLocalSchema:
             "missing — rollback can't round-trip them:\n"
             + "\n".join(f"  - {m}" for m in missing)
         )
+
+    def test_content_filter_enabled_index_exists_with_expected_columns(
+        self,
+    ):
+        with get_db() as conn:
+            indexes = conn.execute(
+                "PRAGMA index_list(ContentFilterRule)"
+            ).fetchall()
+            assert "idx_content_filter_enabled" in {
+                row[1] for row in indexes
+            }
+            index_columns = [
+                row[2] for row in conn.execute(
+                    "PRAGMA index_info(idx_content_filter_enabled)"
+                ).fetchall()
+            ]
+        assert index_columns == ["enabled", "dimension"]

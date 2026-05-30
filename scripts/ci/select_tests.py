@@ -91,6 +91,7 @@ PARSER_PARITY_RUST_WHEEL_GLOBS = (
 RUST_REQUIRED_TEST_FILES = frozenset({
     "tests/unit/test_proxy_pool.py",
     "tests/unit/test_proxy_ban_manager.py",
+    "tests/unit/test_sleep_with_coordinator.py",
 })
 FALLBACK_TESTS = (
     "tests/unit/test_rust_adapters_fallback.py",

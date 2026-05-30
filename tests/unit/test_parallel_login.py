@@ -287,8 +287,8 @@ class TestDetailLoginRetrySendsCookie:
 
         parse_seq = iter(
             [
-                ([], '', '', '', '', False),
-                (['mag'], 'a', '', '', '', True),
+                ([], '', '', '', '', False, None),
+                (['mag'], 'a', '', '', '', True, object()),
             ]
         )
 
