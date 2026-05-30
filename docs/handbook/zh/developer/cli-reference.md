@@ -22,6 +22,7 @@ python3 -m apps.cli.<command> [options]
 - [Rollback CLI](#rollback-cli)（`apps.cli.rollback`）
 - [运维诊断 CLI](#运维诊断-cli)（`apps.cli.ops.diagnose_run`）
 - [事件主线消费者 CLI](#事件主线消费者-cli)（`apps.cli.ops.events`）
+- [站点契约哨兵 CLI](#站点契约哨兵-cli)（`apps.cli.ops.sentinel`）
 - [Config Generator CLI](#config-generator-cli)（`apps.cli.config_generator`）
 - [Spider 完整参数参考](#spider-完整参数参考)
 
@@ -619,6 +620,40 @@ python3 -m apps.cli.ops.events
 
 # 从头重建投影（幂等 —— 结果一致）
 python3 -m apps.cli.ops.events --replay
+```
+
+---
+
+## 站点契约哨兵 CLI
+
+**模块：** `apps.cli.ops.sentinel`
+
+评估某个 session 已持久化的解析 field-health，检测站点契约漂移（ADR-035）。它读取该 run 记录的 `ParseRunFieldFill` 行，并将每个字段对照声明式解析契约打分：`critical` 字段对照绝对最低填充率，`soft` 字段对照其滚动基线。该命令为只读，检测到关键漂移时退出码为 `4`，便于 workflow 据此门控。
+
+### 参数
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--session-id` | 待评估 field-health 的 pipeline session ID，格式为 `YYYYMMDDTHHMMSS.ffffffZ-TTTT-SSSS`。必填。 | — |
+| `--run-id` | 关联到本次评估的 GitHub Actions run ID。 | `None` |
+| `--attempt` | GitHub Actions run attempt，存为 `run_attempt`。 | `None` |
+| `--json` | 输出 JSON payload，而非日志摘要。 | `False` |
+| `--log-level` | 日志级别。可选：`DEBUG`、`INFO`、`WARNING`、`ERROR`。 | `INFO` |
+
+退出码 `4` 表示该 session 检测到关键漂移；否则退出码为 `0`。
+
+### 示例
+
+```bash
+# 评估某个 session 的 field-health 并将 verdict 写入日志
+python3 -m apps.cli.ops.sentinel --session-id 20260527T120000.000000Z-0001-0001
+
+# 输出 JSON verdict 供后续邮件/API 使用
+python3 -m apps.cli.ops.sentinel \
+  --session-id 20260527T120000.000000Z-0001-0001 \
+  --run-id 123456789 \
+  --attempt 1 \
+  --json
 ```
 
 ---
