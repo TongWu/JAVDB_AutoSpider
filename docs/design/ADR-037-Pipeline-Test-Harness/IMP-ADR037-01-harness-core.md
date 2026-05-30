@@ -28,7 +28,12 @@
    session-lifecycle-correct entry is `commit_session(CommitRequest(...))`
    (`javdb/storage/sessions/commit.py`). The pipeline runs the uploader as a
    **subprocess**, so the harness must call `run_uploader` in-process itself
-   (monkeypatch can't cross a subprocess).
+   (monkeypatch can't cross a subprocess). The commit is **gated on spider AND
+   uploader success** (`exit_code == 0`), mirroring `DailyIngestion.yml`'s "Mark
+   sessions as committed" step (`if: ${{ success() }}`): a failed uploader
+   leaves the session uncommitted for the cleanup-on-failure rollback, so the
+   harness must not drain pending rows either. `FakeQBConfig(fail_adds=True)`
+   exercises this (see `test_uploader_failure_blocks_commit`).
 2. **Session id + CSV path come from the returned `SpiderRunResult`, not
    `get_active_session_id()`.** `run_spider`'s `finally` block clears the active
    session context before returning (`run_service.py:959-961`), so the plan's

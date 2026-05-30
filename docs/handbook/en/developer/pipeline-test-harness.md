@@ -65,9 +65,16 @@ def test_golden_daily_run_writes_two_movies(pipeline_harness):
 `run_uploader(QbUploaderOptions(...))` → `commit_session(CommitRequest(...))`.
 The session id and CSV path are taken from the spider's returned
 `SpiderRunResult` (because `run_spider` clears the active-session context in its
-`finally` block before returning). Real-time throttles (the spider's per-movie /
-phase-transition cooldowns and the uploader's inter-add delay) are neutered, so
-the whole run finishes in well under a second.
+`finally` block before returning). The commit is **gated on spider AND uploader
+success** — mirroring `DailyIngestion.yml`'s "Mark sessions as committed" step
+(`if: ${{ success() }}`). When the uploader fails (e.g.
+`FakeQBConfig(fail_adds=True)` makes every add return `False`, yielding a nonzero
+`QbUploaderResult.exit_code`), `run_daily` leaves the session uncommitted —
+production would hand it to the cleanup-on-failure rollback — so
+`result.commit_result is None` and the pending rows never reach `MovieHistory`.
+Real-time throttles (the spider's per-movie / phase-transition cooldowns and the
+uploader's inter-add delay) are neutered, so the whole run finishes in well under
+a second.
 
 ### Assertion surface
 
