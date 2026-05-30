@@ -299,6 +299,9 @@ STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --json
 The workflow defaults to the `self-hosted` runner because qBittorrent is often
 reachable only from the operator's network. It still exposes a manual `runner`
 input for test runs on `ubuntu-latest` when qB is publicly reachable or mocked.
+The generated `config.py` reads `TORRENT_CATEGORY` and `TORRENT_CATEGORY_ADHOC`
+from repository variables, so the default scan follows the same qB categories
+used by the uploader.
 
 Manual dispatch inputs:
 

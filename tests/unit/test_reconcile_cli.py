@@ -39,6 +39,50 @@ def test_main_falls_back_on_nonpositive_config_default(monkeypatch, capsys, capl
     assert [r.message for r in caplog.records] == ["Invalid RECONCILE_STALLED_DAYS; falling back to 7"]
 
 
+def test_main_uses_configured_categories_by_default(monkeypatch, capsys):
+    captured = {}
+
+    def _cfg(name, default):
+        values = {
+            "TORRENT_CATEGORY": "Movies",
+            "TORRENT_CATEGORY_ADHOC": "One Off",
+        }
+        return values.get(name, default)
+
+    def _run(options):
+        captured["options"] = options
+        return ReconcileResult()
+
+    monkeypatch.setattr(reconcile_cli, "cfg", _cfg)
+    monkeypatch.setattr(reconcile_cli, "setup_logging", lambda **kwargs: None)
+    monkeypatch.setattr(reconcile_cli, "run", _run)
+
+    rc = reconcile_cli.main(["--json"])
+
+    assert rc == 0
+    assert captured["options"].categories == ("Movies", "One Off")
+    assert captured["options"].infer_absent is True
+    capsys.readouterr()
+
+
+def test_main_category_override_disables_absent_inference(monkeypatch, capsys):
+    captured = {}
+
+    def _run(options):
+        captured["options"] = options
+        return ReconcileResult()
+
+    monkeypatch.setattr(reconcile_cli, "setup_logging", lambda **kwargs: None)
+    monkeypatch.setattr(reconcile_cli, "run", _run)
+
+    rc = reconcile_cli.main(["--category", "Movies", "--json"])
+
+    assert rc == 0
+    assert captured["options"].categories == ("Movies",)
+    assert captured["options"].infer_absent is False
+    capsys.readouterr()
+
+
 def test_main_json_emits_payload_and_returns_zero(monkeypatch, capsys):
     expected = ReconcileResult(
         observed=3,

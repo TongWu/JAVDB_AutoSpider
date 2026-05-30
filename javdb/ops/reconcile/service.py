@@ -105,6 +105,17 @@ def apply_cleanup_completed(stats: dict, *, repo=None) -> ReconcileResult:
     return result
 
 
+def _fetch_qb_torrents(client, categories) -> list:
+    """Fetch qB categories strictly so partial reads cannot drive transitions."""
+    get_torrents = getattr(client, "get_torrents", None)
+    if callable(get_torrents):
+        torrents = []
+        for category in categories:
+            torrents.extend(get_torrents(category, torrent_filter="all"))
+        return torrents
+    return client.get_torrents_multiple_categories(list(categories), torrent_filter="all")
+
+
 def run(options: ReconcileOptions, *, repo=None, qb_client=None) -> ReconcileResult:
     """Reconcile active outcomes against live sources."""
     result = ReconcileResult()
@@ -121,9 +132,7 @@ def run(options: ReconcileOptions, *, repo=None, qb_client=None) -> ReconcileRes
         if "qb" in options.sources:
             try:
                 client = qb_client or _build_qb_client()
-                torrents = client.get_torrents_multiple_categories(
-                    list(options.categories), torrent_filter="all"
-                )
+                torrents = _fetch_qb_torrents(client, options.categories)
                 for obs in QbCollector().collect(torrents):
                     observations[obs.qb_hash] = obs
             except Exception as exc:
@@ -152,6 +161,8 @@ def run(options: ReconcileOptions, *, repo=None, qb_client=None) -> ReconcileRes
                     new_state, extra = rec.state, {}
                 rec.last_seen_at = now
             else:
+                if not options.infer_absent:
+                    continue
                 age = _age_days(rec.last_seen_at or rec.queued_at)
                 if age >= 2 * options.stalled_after_days:
                     new_state, extra = "failed", {}

@@ -63,6 +63,7 @@ class ReconcileOptions:
     categories: Sequence[str] = ("JavDB", "Ad Hoc")
     stalled_after_days: int = 7
     dry_run: bool = False
+    infer_absent: bool = True
 
 
 @dataclass

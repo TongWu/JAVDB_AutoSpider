@@ -23,6 +23,19 @@ class _FakeQb:
         return self._t
 
 
+class _CategoryQb:
+    def __init__(self, by_category, fail_categories=()):
+        self._by_category = by_category
+        self._fail_categories = set(fail_categories)
+        self.requests = []
+
+    def get_torrents(self, category, torrent_filter="downloading"):
+        self.requests.append((category, torrent_filter))
+        if category in self._fail_categories:
+            raise RuntimeError(f"{category} down")
+        return self._by_category.get(category, [])
+
+
 class _FailingQb:
     def get_torrents_multiple_categories(self, categories, torrent_filter="downloading"):
         raise RuntimeError("qb down")
@@ -109,6 +122,46 @@ def test_run_marks_stalled_when_absent_and_old(repo):
     res = service.run(ReconcileOptions(stalled_after_days=7), repo=repo, qb_client=qb)
     assert repo.get("s1").state == "stalled"
     assert res.marked_stalled == 1
+
+
+def test_run_skips_absent_transitions_when_category_scan_is_partial(repo):
+    repo.upsert(AcquisitionOutcomeRecord(qb_hash="s1", href="/v/1", state="queued",
+                                         last_seen_at=_old_iso(10)))
+    qb = _CategoryQb({"Movies": []})
+
+    res = service.run(
+        ReconcileOptions(
+            categories=("Movies",),
+            stalled_after_days=7,
+            infer_absent=False,
+        ),
+        repo=repo,
+        qb_client=qb,
+    )
+
+    assert repo.get("s1").state == "queued"
+    assert res.marked_stalled == 0
+    assert res.errors == []
+
+
+def test_run_skips_transitions_when_one_qb_category_fails(repo):
+    repo.upsert(AcquisitionOutcomeRecord(qb_hash="s1", href="/v/1", state="queued",
+                                         last_seen_at=_old_iso(10)))
+    qb = _CategoryQb({"Movies": []}, fail_categories={"One Off"})
+
+    res = service.run(
+        ReconcileOptions(
+            categories=("Movies", "One Off"),
+            stalled_after_days=7,
+        ),
+        repo=repo,
+        qb_client=qb,
+    )
+
+    assert repo.get("s1").state == "queued"
+    assert res.observed == 0
+    assert res.marked_stalled == 0
+    assert res.errors == ["One Off down"]
 
 
 def test_run_marks_failed_when_long_overdue(repo):
