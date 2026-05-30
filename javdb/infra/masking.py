@@ -10,8 +10,11 @@ Prefers the Rust implementation (``javdb_rust_core``) when available,
 falling back to the pure-Python implementation otherwise.
 """
 
+import logging
 import re
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 try:
     from javdb.rust_core import (
@@ -25,6 +28,10 @@ try:
     RUST_MASKING_AVAILABLE = True
 except ImportError:
     RUST_MASKING_AVAILABLE = False
+    logger.warning(
+        "Rust core unavailable — pure-Python masking fallback is best-effort "
+        "and may diverge from production"
+    )
 
 
 def mask_full(value: Optional[str]) -> str:

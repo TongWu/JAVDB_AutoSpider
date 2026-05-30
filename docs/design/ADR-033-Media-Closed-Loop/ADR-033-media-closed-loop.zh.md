@@ -5,7 +5,7 @@
 | **状态**   | Proposed — 伞型;执行下放给各期 IMP                                    |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
-| **关联**   | [ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-024](../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md), [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-010](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-028](../ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md) |
+| **关联**   | [ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-024](../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md), [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-028](../ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md) |
 
 > 源自 2026-05-29 一次关于"现有 ADR 尚未收编的全新方向"的头脑风暴。
 
@@ -168,7 +168,7 @@ queued ──→ downloading ──→ completed ──→ in_library
 - [ADR-024 — Torrent Quality Evidence Foundation](../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md)
 - [ADR-025 — User Preference Model](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md)
 - [ADR-015 — Integrations Interface Boundary](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md)
-- [ADR-010 — D1 Access Port](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.md)
+- [ADR-010 — D1 Access Port](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md)
 - [ADR-028 — Web Platform & Capability Completeness Roadmap](../ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md)
 
 ## 状态日志 (Status Log)
