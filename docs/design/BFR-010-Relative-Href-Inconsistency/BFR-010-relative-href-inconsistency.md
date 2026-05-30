@@ -101,8 +101,10 @@ every row look un-backfilled.
 
 - [x] Normalize existing D1 `MovieHistory.ActorLink` + `SupportingActors`
   (849 rows, run 2026-05-31).
-- [ ] Re-align the local SQLite mirror from D1
-  (`python3 -m apps.cli.db.sync_d1_to_sqlite --apply --force-overwrite-all`)
-  when convenient — the local mirror is being retired, so this is not blocking.
-- [ ] Consider a contract test that fails if any new writer persists a
-  site-relative JavDB href into `MovieHistory` / `MovieMetadata`.
+- [x] Re-align the local SQLite mirror from D1 (force-overwrite rebuild) and
+  commit the LFS-tracked `reports/{history,reports,operations}.db` so the
+  committed mirror carries the absolute hrefs.
+- [x] Contract test added — `tests/unit/test_href_absolute_contract.py` drives
+  both public writers (MovieHistory stage→commit, `MetadataRepo.upsert`) with
+  site-relative input and fails if any site-relative JavDB href survives in
+  `MovieHistory` / `MovieMetadata`.
