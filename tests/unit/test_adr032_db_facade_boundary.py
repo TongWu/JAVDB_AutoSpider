@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
-from typing import List, Tuple
 
 # Repo root = three levels up from this file (tests/unit/<file>).
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -52,8 +51,8 @@ def _is_exempt(path: Path) -> bool:
     return False
 
 
-def _iter_python_files() -> List[Path]:
-    files: List[Path] = []
+def _iter_python_files() -> list[Path]:
+    files: list[Path] = []
     for root in _SCAN_ROOTS:
         if not root.exists():
             continue
@@ -64,7 +63,7 @@ def _iter_python_files() -> List[Path]:
     return files
 
 
-def _facade_db_imports(path: Path) -> List[str]:
+def _facade_db_imports(path: Path) -> list[str]:
     """Return ``db_*`` names imported from the ``javdb.storage.db`` facade.
 
     Uses ``ast`` (not regex) so multi-line ``from ... import (a, b, c)`` blocks
@@ -74,7 +73,7 @@ def _facade_db_imports(path: Path) -> List[str]:
     """
     source = path.read_text(encoding="utf-8")
     tree = ast.parse(source, filename=str(path))
-    offending: List[str] = []
+    offending: list[str] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.ImportFrom):
             continue
@@ -88,7 +87,7 @@ def _facade_db_imports(path: Path) -> List[str]:
 
 
 def test_no_production_code_imports_db_star_from_facade():
-    violations: List[Tuple[str, str]] = []
+    violations: list[tuple[str, str]] = []
     for path in _iter_python_files():
         rel = path.relative_to(_REPO_ROOT).as_posix()
         for name in _facade_db_imports(path):
