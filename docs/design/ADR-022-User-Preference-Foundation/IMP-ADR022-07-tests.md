@@ -497,7 +497,7 @@ class TestPreferenceGate:
 pytest tests/unit/test_preference_gate.py -v
 ```
 
-Expected: 6 tests, all PASS.
+Expected: 7 tests, all PASS. (The code block above defines 7 methods — see the divergence note at the top. Code review later added more gate tests for the actor-link resolution path, so the live file has additional cases.)
 
 - [ ] **Step 3: Commit**
 
