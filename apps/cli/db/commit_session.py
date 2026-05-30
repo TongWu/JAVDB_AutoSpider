@@ -50,6 +50,10 @@ from javdb.storage.repos.history_repo import HistoryRepo
 from javdb.storage.repos.session_lifecycle_repo import SessionLifecycleRepo
 from javdb.storage.sessions.lifecycle import transition
 from javdb.pipeline.events import emit as _emit_event  # ADR-036 event spine
+from javdb.ops.sentinel.service import (  # ADR-035 site-contract gate
+    evaluate_session as _sentinel_evaluate,
+    mark_committed as _sentinel_mark_committed,
+)
 from javdb.infra.logging import (
     get_logger,
     setup_logging,
@@ -381,6 +385,32 @@ def main(argv: Optional[List[str]] = None) -> int:
         pre = read_session_pre_state(sid)
         write_mode = pre.write_mode
         sess_status = pre.status
+        # ADR-035 site-contract gate: refuse to commit on critical parser drift.
+        # Fail-open: a sentinel error must never block the commit pipeline.
+        try:
+            _verdict = _sentinel_evaluate(str(sid))
+        except Exception:
+            logger.warning(
+                "Site-contract sentinel evaluation failed for session %s; "
+                "treating as non-critical (fail-open).", sid, exc_info=True,
+            )
+            _verdict = None
+        if _verdict is not None and _verdict.critical:
+            logger.error(
+                "Site-contract drift gate: critical drift for session %s "
+                "(%d finding(s)); refusing commit (FailureReason=site_drift).",
+                sid, len(_verdict.findings),
+            )
+            failed_commits.append(sid)
+            _emit_event("SessionFailed", session_id=str(sid),
+                        entity_type="session", entity_id=str(sid))  # ADR-036
+            if write_mode == 'pending':
+                _emit_pending_verify(
+                    sid, drain=None, final_status='finalizing', write_mode=write_mode,
+                    commit_attempts=1, commit_duration_ms=None,
+                    shadow_audit=_shadow_audit_enabled(args),
+                )
+            continue
         drain: Optional[Dict[str, Any]] = None
         commit_started_at: Optional[float] = None
         commit_duration_ms: Optional[int] = None
@@ -455,6 +485,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         else:
             # Already committed — that's fine, idempotent.
             skipped.append(sid)
+        # ADR-035: commit went through — this run's fills are now
+        # baseline-eligible.  Best-effort; never fail the commit on this.
+        try:
+            _sentinel_mark_committed(str(sid))
+        except Exception:
+            logger.warning(
+                "Site-contract sentinel mark_committed failed for %s",
+                sid, exc_info=True,
+            )
         if write_mode == 'pending':
             # Phase 2 verify: emit one line per pending session whose
             # commit actually went through (committed or no-op idempotent).
