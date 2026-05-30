@@ -5,7 +5,9 @@ fetch the JavDB detail page and upsert via :class:`MetadataRepo`.
 
 Execution model: **single-threaded / sequential**.  Each page is fetched via
 ``spider_state.get_page`` which honours the proxy pool when ``use_proxy`` is set
-(``--no-proxy`` forces a direct request).  A one-time catch-up job does not need
+(``--no-proxy`` forces a direct request).  Detail pages sit behind Cloudflare,
+so the proxy path enables ``use_cf_bypass`` (bypass→direct fallback) — a plain
+direct fetch returns an empty body.  A one-time catch-up job does not need
 the spider's parallel-per-proxy machinery, and ``FetchEngine`` exposes no
 public result-draining API to reuse here, so a simple sequential loop is both
 correct and sufficient.  Writes are OUTSIDE the Pending→Commit session flow --
@@ -106,6 +108,24 @@ class BackfillResult:
 
 
 # ---------------------------------------------------------------------------
+# URL helper
+# ---------------------------------------------------------------------------
+
+def _detail_url(href: str, base_url: str) -> str:
+    """Resolve a ``MovieHistory.Href`` to an absolute detail URL.
+
+    ``Href`` is stored as an absolute URL (``https://javdb.com/v/..``), so it
+    is returned verbatim.  Only the legacy/relative ``/v/..`` form has
+    *base_url* prepended — prepending it to an already-absolute href yields a
+    doubled ``https://..https://..`` URL that never resolves (every fetch then
+    fails with an empty response).
+    """
+    if href.startswith(("http://", "https://")):
+        return href
+    return base_url + "/" + href.lstrip("/")
+
+
+# ---------------------------------------------------------------------------
 # Per-href processing
 # ---------------------------------------------------------------------------
 
@@ -118,10 +138,17 @@ def _process_href(
     dry_run: bool,
 ) -> BackfillResult:
     """Fetch + parse one detail page and (unless dry-run) upsert metadata."""
+    # JavDB detail pages sit behind Cloudflare: a plain direct fetch returns
+    # an empty/challenge body, so a no-bypass request fails on every proxy.
+    # Route through the proxy's CF-bypass service (use_cf_bypass), which runs
+    # the full bypass→direct fallback sequence internally — the same path the
+    # spider relies on for detail pages. CF bypass is only meaningful when a
+    # proxy is in play; the --no-proxy debug path has no local bypass service,
+    # so it stays a direct request.
     try:
         html = spider_state.get_page(
             detail_url, session=session, use_proxy=use_proxy,
-            module_name='spider',
+            module_name='spider', use_cf_bypass=use_proxy,
         )
     except Exception as exc:  # noqa: BLE001 — fetch errors are recoverable
         return BackfillResult(href, 'fetch_failed', str(exc))
@@ -132,8 +159,14 @@ def _process_href(
         detail = parse_detail_page(html)
     except Exception as exc:  # noqa: BLE001
         return BackfillResult(href, 'parse_failed', str(exc))
-    if not detail.parse_success:
-        return BackfillResult(href, 'parse_failed', 'parse_success=False')
+    # detail.parse_success reflects ONLY whether a #magnets-content section was
+    # found — magnets are frequently login-gated and irrelevant to a metadata
+    # backfill. Metadata fields (title / video_code / release_date / rate /
+    # maker / …) are parsed independently, so accept the page whenever core
+    # metadata was extracted and reject only genuinely empty pages (Cloudflare
+    # challenge, deleted movie, or a body with no detail panel).
+    if not (getattr(detail, 'video_code', '') or getattr(detail, 'title', '')):
+        return BackfillResult(href, 'parse_failed', 'no metadata fields parsed')
 
     if dry_run:
         return BackfillResult(href, 'dry_run')
@@ -208,7 +241,7 @@ def run_backfill_metadata(args: SimpleNamespace) -> int:
     for i, href in enumerate(hrefs, 1):
         idx = f"meta-{i}/{total}"
         result = _process_href(
-            href, base_url + href, session,
+            href, _detail_url(href, base_url), session,
             use_proxy=use_proxy, dry_run=args.dry_run,
         )
         if result.status in ('ok', 'dry_run'):
