@@ -204,3 +204,11 @@ ADR-033/035 having landed. Phase 3 is an optional, high-care authority migration
 ## Status Log
 
 - 2026-05-29: Proposed (umbrella; three phases scoped, IMPs pending).
+- 2026-05-30: Phase 1 implemented ([IMP-ADR036-01](IMP-ADR036-01-event-spine.md)).
+  `PipelineEvent` / `EventConsumerCursor` / `RunEventSummary` tables applied to
+  remote `javdb-reports` D1; `javdb/pipeline/events/` (`emit`, `read_since`,
+  cursor `Consumer`) + `PipelineEventRepo` / `RunEventSummaryRepo`; session
+  events (`RunStarted` / `SessionCommitted` / `SessionFailed`) wired at the run
+  and commit boundaries; demonstrator `apps.cli.ops.events` consumer/replay CLI.
+  Umbrella stays **Proposed** pending Phase 2 (adopt consumers) and Phase 3
+  (optional strangler).
