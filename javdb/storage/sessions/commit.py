@@ -80,7 +80,7 @@ def _emit_commit_metrics(
         append_jsonl_record,
         attach_run_identity,
     )
-    from javdb.storage.db import db_pending_session_stats
+    from javdb.storage.db._db_reports import db_pending_session_stats
 
     try:
         stats = db_pending_session_stats(session_id)
@@ -134,8 +134,8 @@ def commit_session(req: CommitRequest) -> CommitResult:
     from javdb.storage.db import (
         get_db,
         REPORTS_DB_PATH,
-        db_commit_session_history,
     )
+    from javdb.storage.db._db_history_write import db_commit_session_history
     # Lazy import: lifecycle imports the _db_reports primitives at module top,
     # so importing it here (rather than at module top) avoids a circular import
     # while javdb.storage.db is still initializing.

@@ -580,10 +580,12 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
             effective_write_mode = requested_write_mode
             try:
                 from javdb.storage.db import (
-                    db_get_session_status as _db_get_session_status,
                     set_active_run_identity as _set_active_run_identity,
                     set_active_session_id as _set_active_session_id,
                     set_active_write_mode as _set_active_write_mode,
+                )
+                from javdb.storage.db._db_reports import (
+                    db_get_session_status as _db_get_session_status,
                 )
                 _set_active_session_id(_session_id)
                 _set_active_run_identity(run_id, run_attempt)

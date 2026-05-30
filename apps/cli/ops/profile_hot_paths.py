@@ -286,7 +286,7 @@ def _seed_history(db_path: str, n_movies: int) -> None:
 
 def bench_db_load_history(iterations: int) -> Dict[str, float]:
     """db_load_history with 1000 seeded rows in an in-memory DB."""
-    from javdb.storage.db import db_load_history
+    from javdb.storage.db._db_history_read import db_load_history
     db_path = _setup_in_memory_db()
     try:
         _seed_history(db_path, n_movies=1000)
