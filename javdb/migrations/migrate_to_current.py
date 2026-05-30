@@ -311,6 +311,45 @@ def main() -> int:
         default='',
         help="Alignment: qBittorrent category override for upgrade enqueue",
     )
+    parser.add_argument(
+        "--backfill-metadata",
+        action="store_true",
+        help="Backfill MovieMetadata for MovieHistory rows that lack metadata.",
+    )
+    parser.add_argument(
+        "--backfill-metadata-limit",
+        type=int,
+        default=0,
+        dest="backfill_metadata_limit",
+        help="Metadata backfill: absolute max hrefs (0=all). "
+             "Ignored when --backfill-metadata-limit-per-worker > 0.",
+    )
+    parser.add_argument(
+        "--backfill-metadata-limit-per-worker",
+        type=int,
+        default=0,
+        dest="backfill_metadata_limit_per_worker",
+        help="Metadata backfill: max completed tasks per proxy worker (0=use --backfill-metadata-limit or all).",
+    )
+    parser.add_argument(
+        "--backfill-metadata-hrefs",
+        type=str,
+        default='',
+        dest="backfill_metadata_hrefs",
+        help="Metadata backfill: comma-separated movie hrefs to process (default: all missing).",
+    )
+    parser.add_argument(
+        "--backfill-metadata-no-proxy",
+        action="store_true",
+        dest="backfill_metadata_no_proxy",
+        help="Metadata backfill: direct HTTP without proxy (debug).",
+    )
+    parser.add_argument(
+        "--backfill-metadata-shuffle",
+        action="store_true",
+        dest="backfill_metadata_shuffle",
+        help="Metadata backfill: randomise processing order.",
+    )
     args = parser.parse_args()
     if args.align_no_proxy and args.align_use_proxy:
         parser.error("--align-no-proxy and deprecated --align-use-proxy cannot be used together")
@@ -325,6 +364,7 @@ def main() -> int:
 
     from javdb.migrations.tools.migrate_v6_to_v7_split import _normalize_three_dbs
     from javdb.migrations.tools.align_inventory_with_moviehistory import run_alignment
+    from javdb.migrations.tools.backfill_movie_metadata import run_backfill_metadata
     from javdb.migrations.tools.migrate_v7_to_v8 import (
         backup_db_file,
         run_actor_backfill,
@@ -435,9 +475,23 @@ def main() -> int:
         if arc != 0:
             return arc
 
+    if args.backfill_metadata:
+        meta_ns = SimpleNamespace(
+            dry_run=args.dry_run,
+            limit=args.backfill_metadata_limit,
+            limit_per_worker=args.backfill_metadata_limit_per_worker,
+            hrefs=args.backfill_metadata_hrefs,
+            use_proxy=not args.backfill_metadata_no_proxy,
+            shuffle=args.backfill_metadata_shuffle,
+        )
+        mrc = run_backfill_metadata(meta_ns)
+        if mrc != 0:
+            return mrc
+
     if (
         not args.backfill_actors
         and not args.align_inventory_history
+        and not args.backfill_metadata
         and not args.skip_schema
         and not args.dry_run
     ):
