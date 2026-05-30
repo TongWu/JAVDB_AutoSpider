@@ -49,6 +49,7 @@ from javdb.storage.db import (
 from javdb.storage.repos.history_repo import HistoryRepo
 from javdb.storage.repos.session_lifecycle_repo import SessionLifecycleRepo
 from javdb.storage.sessions.lifecycle import transition
+from javdb.pipeline.events import emit as _emit_event  # ADR-036 event spine
 from javdb.infra.logging import (
     get_logger,
     setup_logging,
@@ -411,6 +412,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                     "%s: %s", sid, e,
                 )
                 failed_commits.append(sid)
+                _emit_event("SessionFailed", session_id=str(sid),
+                            entity_type="session", entity_id=str(sid))  # ADR-036
                 # Phase 2 verify: emit a verify line on failure too so the
                 # email pipeline knows commit attempted but did not finish.
                 if write_mode == 'pending':
@@ -432,6 +435,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         except Exception as e:
             logger.error("Failed to commit session %s: %s", sid, e)
             failed_commits.append(sid)
+            _emit_event("SessionFailed", session_id=str(sid),
+                        entity_type="session", entity_id=str(sid))  # ADR-036
             if write_mode == 'pending':
                 _emit_pending_verify(
                     sid,
@@ -445,6 +450,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             continue
         if n > 0 or drained_pending_session:
             committed.append(sid)
+            _emit_event("SessionCommitted", session_id=str(sid),
+                        entity_type="session", entity_id=str(sid))  # ADR-036
         else:
             # Already committed — that's fine, idempotent.
             skipped.append(sid)
