@@ -59,7 +59,8 @@ def test_list_active_excludes_terminal(conn):
     repo.upsert(AcquisitionOutcomeRecord(qb_hash="a", state="queued"))
     repo.upsert(AcquisitionOutcomeRecord(qb_hash="b", state="downloading"))
     repo.upsert(AcquisitionOutcomeRecord(qb_hash="c", state="stalled"))
-    repo.upsert(AcquisitionOutcomeRecord(qb_hash="d", state="completed"))
-    repo.upsert(AcquisitionOutcomeRecord(qb_hash="e", state="failed"))
+    repo.upsert(AcquisitionOutcomeRecord(qb_hash="d", state="in_library"))
+    repo.upsert(AcquisitionOutcomeRecord(qb_hash="e", state="completed"))
+    repo.upsert(AcquisitionOutcomeRecord(qb_hash="f", state="failed"))
     active = {r.qb_hash for r in repo.list_active()}
     assert active == {"a", "b", "c"}
