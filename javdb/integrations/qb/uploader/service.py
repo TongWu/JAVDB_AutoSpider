@@ -486,6 +486,14 @@ def read_csv_file(filename):
         href = row.get('href', '')
         video_code = row.get('video_code', '')
 
+        # Evaluate the preference gate once per row (the decision is the same
+        # for all four torrent columns) to avoid a redundant actor lookup +
+        # ContentPreferences query per column.
+        row_blocked = _preference_gate_blocks({
+            'actor_link': row.get('actor_link', ''),
+            'href': href,
+        })
+
         for col, label, ttype in torrent_columns:
             raw = row.get(col)
             if not raw:
@@ -499,10 +507,7 @@ def read_csv_file(filename):
                 )
                 skipped_count += 1
                 continue
-            if _preference_gate_blocks({
-                'actor_link': row.get('actor_link', ''),
-                'href': href,
-            }):
+            if row_blocked:
                 logger.debug(
                     "Preference gate blocked: %s [%s]", video_code, label
                 )
