@@ -481,8 +481,9 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
             from javdb.storage.db import (
                 init_db,
                 verify_d1_schema_versions,
-                db_create_report_session,
-                db_find_in_progress_session_ids_for_run_csv,
+            )
+            from javdb.storage.repos.session_lifecycle_repo import (
+                SessionLifecycleRepo,
             )
             from javdb.spider.url_helper import detect_url_type, extract_url_identifier
             init_db(force=True)
@@ -530,7 +531,7 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
             #     index intentionally excludes.
             csv_basename = os.path.basename(csv_path) if csv_path else ''
             if run_id and csv_basename:
-                dup_ids = db_find_in_progress_session_ids_for_run_csv(
+                dup_ids = SessionLifecycleRepo().find_in_progress_session_ids_for_run_csv(
                     run_id, run_attempt, csv_basename,
                 )
                 if dup_ids:
@@ -559,7 +560,7 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
                 requested_write_mode,
                 os.environ.get('JAVDB_HISTORY_WRITE_MODE', ''),
             )
-            _session_id = db_create_report_session(
+            _session_id = SessionLifecycleRepo().create_report_session(
                 report_type=report_type,
                 report_date=report_date,
                 csv_filename=os.path.basename(csv_path),
