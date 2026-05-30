@@ -25,6 +25,7 @@ from tests.harness.fixture_http import FixtureHTTP
 @dataclass
 class FakeQBConfig:
     initial: tuple = ()
+    fail_adds: bool = False
 
 
 @dataclass
@@ -64,7 +65,7 @@ class PipelineHarness:
 
     def _install(self, scenario: PipelineScenario) -> None:
         self.http = FixtureHTTP(scenario.pages)
-        self.qb = FakeQB()
+        self.qb = FakeQB(fail_adds=scenario.qb.fail_adds)
         for magnet in scenario.qb.initial:
             self.qb.add_torrent(magnet)
         # HTTP seam — the spider fetch routes through RequestHandler.get_page.
@@ -131,8 +132,14 @@ class PipelineHarness:
         ))
 
         # 3) Commit — drains pending writes into MovieHistory / TorrentHistory.
+        #    Gate on spider AND uploader success, mirroring DailyIngestion.yml's
+        #    "Mark sessions as committed" step (if: ${{ success() }} after the
+        #    spider/uploader). On failure production leaves the session for the
+        #    cleanup-on-failure rollback, so the harness must NOT commit either.
         commit_result = None
-        if session_id:
+        spider_ok = spider_result.exit_code == 0
+        uploader_ok = uploader_result.exit_code == 0
+        if session_id and spider_ok and uploader_ok:
             commit_result = commit_session(CommitRequest(session_id=session_id))
 
         return HarnessResult(self.qb, self.http, spider_result, uploader_result,

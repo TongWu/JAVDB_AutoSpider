@@ -13,12 +13,18 @@ from javdb.integrations.qb.client import extract_hash_from_magnet
 
 
 class FakeQB:
-    def __init__(self) -> None:
+    def __init__(self, *, fail_adds: bool = False) -> None:
         # hash -> {hash, name, category, state, progress}
         self._torrents: dict[str, dict] = {}
+        # When True, every add_torrent is rejected — lets a scenario simulate a
+        # qB that accepts the connection/login but refuses every magnet, so
+        # run_uploader reports a nonzero exit_code (all adds failed).
+        self._fail_adds = fail_adds
 
     # --- QBittorrentClient surface used by the pipeline -------------------
     def add_torrent(self, magnet_link, name=None, category=None, **_kw) -> bool:
+        if self._fail_adds:
+            return False
         h = extract_hash_from_magnet(magnet_link)
         if not h:
             return False
