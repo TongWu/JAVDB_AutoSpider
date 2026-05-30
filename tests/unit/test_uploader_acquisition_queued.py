@@ -1,6 +1,7 @@
 import os
 import sqlite3
 import sys
+from unittest.mock import MagicMock
 from types import ModuleType
 
 # Add project root to path
@@ -92,3 +93,55 @@ def test_uploader_success_helper_delegates_queued_write(monkeypatch):
     uploader_service._record_queued_acquisition(torrent, 'S9')
 
     assert calls == [(torrent, 'S9')]
+
+
+def test_run_uploader_success_path_records_queued(monkeypatch):
+    from javdb.integrations.qb.uploader.options import QbUploaderOptions
+
+    queued_calls = []
+    sink = MagicMock()
+    sink.saved = False
+    sink.error = None
+    sink.backend = 'mock'
+
+    monkeypatch.setattr(uploader_service, 'global_proxy_helper', None)
+    monkeypatch.setattr(uploader_service, 'initialize_proxy_helper', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(uploader_service, 'test_qbittorrent_connection', lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        uploader_service,
+        'resolve_qb_uploader_csv_path',
+        lambda **_kwargs: MagicMock(source='manual', path='fake.csv'),
+    )
+    monkeypatch.setattr(uploader_service, 'read_csv_file', lambda _path: ([{
+        'magnet': 'magnet:?xt=urn:btih:' + 'd' * 40,
+        'title': 'ABC-3 [sub]',
+        'type': 'subtitle',
+        'href': '/v/ABC-3',
+        'video_code': 'ABC-3',
+    }], True))
+    monkeypatch.setattr(uploader_service, 'login_to_qbittorrent', lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(uploader_service, 'get_existing_torrents', lambda *_args, **_kwargs: set())
+    monkeypatch.setattr(uploader_service, 'add_torrent_to_qbittorrent', lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(uploader_service, 'time', MagicMock(sleep=lambda *_args, **_kwargs: None))
+    monkeypatch.setattr(
+        uploader_service,
+        'save_uploader_stats',
+        lambda *_args, **_kwargs: sink,
+    )
+    monkeypatch.setattr(uploader_service, 'commit_workflow_outputs', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        uploader_service,
+        '_record_acquisition_queued',
+        lambda torrent, session_id: queued_calls.append((torrent, session_id)),
+    )
+
+    result = uploader_service.run_uploader(QbUploaderOptions(mode='daily', session_id='S9'))
+
+    assert result.exit_code == 0
+    assert queued_calls == [({
+        'magnet': 'magnet:?xt=urn:btih:' + 'd' * 40,
+        'title': 'ABC-3 [sub]',
+        'type': 'subtitle',
+        'href': '/v/ABC-3',
+        'video_code': 'ABC-3',
+    }, 'S9')]
