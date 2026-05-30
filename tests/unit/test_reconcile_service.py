@@ -58,6 +58,17 @@ class _FlakyCleanupRepo:
         return self._repo.get(qb_hash)
 
 
+class _FailingUpsertRepo:
+    def __init__(self, repo):
+        self._repo = repo
+
+    def list_active(self):
+        return self._repo.list_active()
+
+    def upsert(self, record):
+        raise RuntimeError("upsert failed")
+
+
 def test_record_queued_writes_queued_row(repo):
     torrent = {"magnet": "magnet:?xt=urn:btih:" + "a" * 40, "href": "/v/1",
                "video_code": "ABC-123", "type": "subtitle"}
@@ -125,8 +136,10 @@ def test_run_dry_run_writes_nothing(repo):
     repo.upsert(AcquisitionOutcomeRecord(qb_hash="d1", href="/v/1", state="queued",
                                          last_seen_at=_old_iso(0)))
     qb = _FakeQb([{"hash": "d1", "progress": 0.5, "state": "downloading"}])
-    service.run(ReconcileOptions(dry_run=True), repo=repo, qb_client=qb)
+    res = service.run(ReconcileOptions(dry_run=True), repo=repo, qb_client=qb)
     assert repo.get("d1").state == "queued"  # unchanged
+    assert res.outcomes_updated == 0
+    assert res.marked_downloading == 0
 
 
 def test_run_returns_error_and_leaves_rows_unchanged_when_qb_fails(repo):
@@ -146,3 +159,69 @@ def test_run_returns_error_and_leaves_rows_unchanged_when_qb_fails(repo):
     assert got.state == "queued"
     assert got.last_seen_at == old_ts
     assert res.errors
+
+
+def test_run_rejects_unknown_sources_without_absent_state_transitions(repo):
+    old_ts = _old_iso(10)
+    repo.upsert(
+        AcquisitionOutcomeRecord(
+            qb_hash="s1",
+            href="/v/1",
+            state="queued",
+            last_seen_at=old_ts,
+        )
+    )
+
+    res = service.run(
+        ReconcileOptions(sources=("qbb",), stalled_after_days=7),
+        repo=repo,
+        qb_client=_FakeQb([]),
+    )
+
+    got = repo.get("s1")
+    assert got.state == "queued"
+    assert got.last_seen_at == old_ts
+    assert res.errors == ["unsupported source: qbb"]
+
+
+def test_run_rejects_nonpositive_stalled_threshold_without_transitions(repo):
+    old_ts = _old_iso(10)
+    repo.upsert(
+        AcquisitionOutcomeRecord(
+            qb_hash="s1",
+            href="/v/1",
+            state="queued",
+            last_seen_at=old_ts,
+        )
+    )
+
+    res = service.run(
+        ReconcileOptions(stalled_after_days=0),
+        repo=repo,
+        qb_client=_FakeQb([]),
+    )
+
+    got = repo.get("s1")
+    assert got.state == "queued"
+    assert got.last_seen_at == old_ts
+    assert res.errors == ["stalled_after_days must be >= 1"]
+
+
+def test_run_counts_marked_only_after_successful_upsert(repo):
+    repo.upsert(
+        AcquisitionOutcomeRecord(
+            qb_hash="d1",
+            href="/v/1",
+            state="queued",
+            last_seen_at=_old_iso(0),
+        )
+    )
+    wrapped = _FailingUpsertRepo(repo)
+    qb = _FakeQb([{"hash": "d1", "progress": 0.5, "state": "downloading"}])
+
+    res = service.run(ReconcileOptions(), repo=wrapped, qb_client=qb)
+
+    assert repo.get("d1").state == "queued"
+    assert res.outcomes_updated == 0
+    assert res.marked_downloading == 0
+    assert res.errors == ["upsert failed"]

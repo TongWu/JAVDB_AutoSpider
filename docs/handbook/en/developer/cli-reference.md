@@ -613,9 +613,9 @@ D1-canonical in the operations database.
 
 | Argument | Description | Default |
 |----------|-------------|---------|
-| `--source` | Source to reconcile. Repeatable. Phase 1 supports `qb`. | `qb` |
+| `--source` | Source to reconcile. Repeatable. Phase 1 only accepts `qb`. | `qb` |
 | `--category` | qB category to scan. Repeatable. | `JavDB`, `Ad Hoc` |
-| `--stalled-after-days` | Active outcomes unseen for this many days become `stalled`; after 2x this window they become `failed`. | `RECONCILE_STALLED_DAYS` or `7` |
+| `--stalled-after-days` | Positive integer. Active outcomes unseen for this many days become `stalled`; after 2x this window they become `failed`. | `RECONCILE_STALLED_DAYS` or `7` |
 | `--dry-run` | Compute transitions but write nothing. | `False` |
 | `--json` | Print a JSON result payload. | `False` |
 | `--log-level` | Logging level. Choices: `DEBUG`, `INFO`, `WARNING`, `ERROR`. | `INFO` |
