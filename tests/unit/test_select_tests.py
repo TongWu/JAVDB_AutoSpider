@@ -68,7 +68,7 @@ def test_canonical_parser_change_selects_parser_domain_and_rust_wheel():
     assert "tests/unit/test_api_parsers.py" in result.pytest_targets
     assert "tests/unit/test_parser.py" in result.pytest_targets
     assert "tests/unit/test_video_code_search.py" in result.pytest_targets
-    assert "tests/parity/test_parser_parity.py" in result.pytest_targets
+    assert "tests/unit/test_fallback_shape.py" in result.pytest_targets
     assert any("parser-domain impact rule" in reason for reason in result.reason)
 
 
@@ -78,7 +78,7 @@ def test_index_selection_change_selects_parser_domain_tests():
     assert result.run_full_python is False
     assert result.run_selected_python is True
     assert "tests/unit/test_parser.py" in result.pytest_targets
-    assert "tests/parity/test_parser_parity.py" in result.pytest_targets
+    assert "tests/unit/test_fallback_shape.py" in result.pytest_targets
     assert any("parser-domain impact rule" in reason for reason in result.reason)
 
 
