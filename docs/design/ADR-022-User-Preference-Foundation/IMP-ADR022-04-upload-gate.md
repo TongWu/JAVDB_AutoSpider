@@ -16,6 +16,31 @@
 
 ---
 
+> **⚠ Divergence note (recorded during implementation, 2026-05-30).**
+> Three corrections vs. the steps below:
+> 1. **File path:** the IMP says `javdb/integrations/qb/uploader.py`, but the real
+>    module is the package file **`javdb/integrations/qb/uploader/service.py`**
+>    (where `logger`, `read_csv_file`, and `is_downloaded_torrent` live). The gate
+>    function and call site were added there, and `_preference_gate_blocks` is
+>    re-exported from `javdb/integrations/qb/uploader/__init__.py` so
+>    `from javdb.integrations.qb.uploader import _preference_gate_blocks` works
+>    (the Phase 7 tests + DoD #2 depend on this package-level import).
+> 2. **No `actor_link` in the qB-upload CSV → resolved from history (code-review fix).**
+>    The CSV written by the spider has fields
+>    `href, video_code, page, actor, rate, comment_number, hacked_subtitle,
+>    hacked_no_subtitle, subtitle, no_subtitle` — there is **no `actor_link`
+>    column** (only the actor *name*). The gate originally read
+>    `row.get('actor_link', '')` and therefore no-opped on every normally-generated
+>    CSV. Per code review, the gate now falls back to `_resolve_actor_link(href)`,
+>    which looks up `MovieHistory.ActorLink` by the movie `href` (the CSV *does*
+>    carry `href`) using an aliased, D1/Dual-safe query. So when
+>    `PREFERENCE_GATE_ENABLED=True` the gate actually evaluates `ContentPreferences`.
+>    It still fails open on any miss/error.
+> 3. **No `--dry-run` flag:** `apps.cli.qb.uploader` does not accept `--dry-run`
+>    (its args are `--mode/--input-file/--use-proxy/--no-proxy/--from-pipeline/
+>    --category/--session-id`). DoD #3's dry-run command is unverifiable as
+>    written; gate correctness is covered by import checks + Phase 7 unit tests.
+
 ## Task 1 — Add PREFERENCE_GATE_ENABLED config flag
 
 **Files:**
@@ -138,5 +163,5 @@ git commit -m "feat(qb): add B2 preference gate hook to upload path (ADR-022)"
 |---|------|-------|
 | 1 | `PREFERENCE_GATE_ENABLED` in `config.py.example` | `grep PREFERENCE_GATE_ENABLED config.py.example` → one match |
 | 2 | Gate returns False when disabled | `python3 -c "from javdb.integrations.qb.uploader import _preference_gate_blocks; assert _preference_gate_blocks({'actor_link':'/x'}) is False"` → no error |
-| 3 | Uploader dry-run unchanged | `python3 -m apps.cli.qb.uploader --mode adhoc --dry-run` → no errors |
+| 3 | Uploader module imports cleanly | `python3 -c "import javdb.integrations.qb.uploader.service; print('OK')"` → `OK` (the CLI has no `--dry-run` flag — see divergence note) |
 | 4 | Gate unit tests pass | `pytest tests/unit/test_preference_gate.py -v` → all PASS (written in IMP-ADR022-07) |

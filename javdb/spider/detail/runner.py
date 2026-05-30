@@ -15,6 +15,7 @@ from javdb.storage.history_manager import (
     batch_update_last_visited,
 )
 from javdb.storage.repos.history_repo import HistoryRepo
+from javdb.storage.repos.metadata_repo import MetadataRepo
 from javdb.infra.csv_writer import write_csv
 from javdb.proxy.coordinator.movie_claim_client import (
     DEFAULT_CLAIM_TTL_MS,
@@ -718,6 +719,7 @@ def process_detail_entries(
                 actor_link=data['actor_link'],
                 supporting_actors=data['supporting'],
                 magnet_links=magnet_links,
+                movie_detail=data.get('movie_detail'),
             )
             skipped_history += outcome.skipped_history
             no_new_torrents += outcome.no_new_torrents
@@ -976,6 +978,7 @@ def persist_parsed_detail_result(
     actor_link: str = '',
     supporting_actors: str = '',
     magnet_links: Optional[dict] = None,
+    movie_detail: Optional[object] = None,
 ) -> DetailPersistOutcome:
     """Build ingestion plan, write outputs, and return outcome metadata."""
 
@@ -1076,6 +1079,16 @@ def persist_parsed_detail_result(
                 actor_link=actor_link,
                 supporting_actors=supporting_actors,
             )
+        # ADR-022: persist rich metadata outside the session flow
+        if movie_detail is not None and not dry_run:
+            try:
+                MetadataRepo().upsert(href, movie_detail.__dict__)
+            except Exception:
+                logger.debug(
+                    "MovieMetadata upsert failed for %s — will retry on next scrape",
+                    href,
+                    exc_info=True,
+                )
         return outcome
 
     outcome.status = 'not_included'
