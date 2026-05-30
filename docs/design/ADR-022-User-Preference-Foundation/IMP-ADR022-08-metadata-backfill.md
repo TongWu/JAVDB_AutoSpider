@@ -16,6 +16,37 @@
 
 ---
 
+> **⚠ Divergence note (recorded during implementation, 2026-05-30).** The Task 1
+> tool below was rewritten; Tasks 2-3 (CLI + workflow wiring) match reality.
+> Corrections:
+> 1. **Sequential, not parallel.** The plan's parallel branch drove a `FetchEngine`
+>    via `engine.iter_results()` / `engine.stop()` — **those methods do not exist**
+>    on the real `FetchEngine` (it exposes `start`/`submit`/`mark_done` only; the
+>    spider consumes it through `ParallelFetchBackend`, not directly). The tool was
+>    rewritten as a single-threaded loop using
+>    `spider_state.get_page(url, session, use_proxy=...)`, which honours the proxy
+>    pool when `use_proxy` is set. A one-time catch-up does not need parallelism;
+>    `--limit-per-worker` is kept for workflow-input compatibility and interpreted
+>    against the proxy-pool size. Follow-up: wire to `ParallelFetchBackend` if
+>    backfill volume ever makes sequential too slow.
+> 2. **`get_page_url` is a URL builder, not a fetcher.** The plan's sequential
+>    branch imported `from javdb.infra.request import get_page_url` and called it
+>    to fetch HTML — wrong symbol (it builds paginated URLs). Replaced with
+>    `spider_state.get_page`.
+> 3. **`REPO_ROOT = parents[4]` was wrong** (it points *above* the repo root —
+>    `parents[3]` is the root). The whole `os.chdir(REPO_ROOT)` + `sys.path`
+>    preamble was dropped: it is unnecessary (the module runs via `python3 -m`)
+>    and sibling tools in `javdb/migrations/tools/` don't use it.
+> 4. **Missing-table guard.** `_load_hrefs_without_metadata` now returns `[]` with
+>    a warning when `MovieHistory`/`MovieMetadata` are absent, instead of raising a
+>    raw `OperationalError`. Backfill runs *after* schema migration in production,
+>    so a missing table means "nothing to backfill", not a crash.
+> 5. **DoD verification is network-aware.** DoD #2/#4's `--...-limit 5` would fetch
+>    5 real pages from javdb.com. For a network-free local check use a bogus
+>    `--backfill-metadata-hrefs "/video/__PROBE__"` → "0 hrefs … exit 0". (The
+>    canonical migration CLI process opens a fresh DB, so under `--skip-schema`
+>    the guard cleanly reports "table not found" and exits 0.)
+
 ## File Map
 
 **New files:**
@@ -626,9 +657,9 @@ git commit -m "ci(migrations): add backfill-metadata inputs and CMD block to Mig
 | # | Gate | Check |
 |---|------|-------|
 | 1 | Tool imports cleanly | `python3 -c "from javdb.migrations.tools.backfill_movie_metadata import run_backfill_metadata; print('OK')"` → `OK` |
-| 2 | Dry-run via tool directly | `python3 -m javdb.migrations.tools.backfill_movie_metadata --dry-run --limit 5 --no-proxy` → exits 0 |
+| 2 | Dry-run via tool directly (network-free) | `python3 -m javdb.migrations.tools.backfill_movie_metadata --dry-run --no-proxy --hrefs "/video/__PROBE__"` → "0 hrefs … (dry-run)", exits 0. (`--limit 5` instead would fetch 5 real pages from javdb.com.) |
 | 3 | Flag registered in canonical CLI | `python3 -m apps.cli.db.migration --help \| grep backfill-metadata` → matches |
-| 4 | Dry-run via canonical CLI | `python3 -m apps.cli.db.migration --skip-schema --backfill-metadata --backfill-metadata-limit 3 --backfill-metadata-no-proxy --dry-run` → exits 0 |
+| 4 | Dry-run via canonical CLI (network-free) | `python3 -m apps.cli.db.migration --skip-schema --backfill-metadata --backfill-metadata-hrefs "/video/__PROBE__" --backfill-metadata-no-proxy --dry-run` → exits 0 |
 | 5 | Migration.yml YAML valid | `python3 -c "import yaml; yaml.safe_load(open('.github/workflows/Migration.yml'))"` → no error |
 | 6 | Workflow dispatch shows new inputs | GitHub → Actions → Migration workflow → "Run workflow" dropdown shows `backfill_metadata` inputs |
 | 7 | Real run writes metadata rows | Run without `--dry-run` on 5 hrefs → `SELECT COUNT(*) FROM MovieMetadata` on D1 increases by up to 5 |

@@ -54,6 +54,7 @@ def _spider_parse_fn(html: str, task: EngineTask):
         'actor_gender': detail.get_first_actor_gender() or '',
         'actor_link': detail.get_first_actor_href() or '',
         'supporting': detail.get_supporting_actors_json() or '',
+        'movie_detail': detail,
     }
 
 
