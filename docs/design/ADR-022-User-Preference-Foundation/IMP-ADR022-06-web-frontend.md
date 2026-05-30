@@ -22,6 +22,42 @@
 
 ---
 
+## Status — ✅ Implemented (with deviations noted below)
+
+All four features are implemented and merged/PR-open in `javdb-autospider-web`. The
+final wiring landed across these commits (most recent first): the C1 tag-chips +
+notes gap-fill and review fixes (`f34ebae`, `813c674`), the B3 `/browse` score +
+C4 `/browse` hearts (`b9828e6`, `b6bf218`, `4ead773`), on top of the original
+C1 inline-rating + B3 column (`a74e720`), C3 batch mode (`3529db9`),
+`HeartButton` (`d8337c9`), and the API client (`27356ac`). Tracking PR:
+[`TongWu/JAVDB_AutoSpider_Web#14`](https://github.com/TongWu/JAVDB_AutoSpider_Web/pull/14).
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| C1 — inline star rating | ✅ Done | `/data/movies` (`NRate` column) |
+| C1 — tag chips + notes | ✅ Done | Added in expandable row; **was missing from the original Task 3 steps** (see Task 3 addendum) |
+| C3 — batch annotation | ✅ Done | `j/k/1–5/Enter/Space` keyboard mode |
+| C4 — heart on actor | ✅ Done | `/data/movies` actor column + `/browse` actor chips |
+| C4 — heart on category | ✅ Done | `/browse` tag/category chips (`content_type: category`) |
+| C4 — heart on maker/director | ⛔ Deferred | **No maker/director chips are rendered anywhere in the frontend** — they live only in `MovieMetadataResponse`, not the rendered `ExploreResolveResponse`. Closing this needs a chip-rendering change first (tracked as a separate follow-up), not a `HeartButton` change. |
+| B3 — score on `/data` | ✅ Done | Score column via `computePreferenceScore` |
+| B3 — score on `/browse` | ✅ Done | Score chip on the Resolve detail card via shared `computePreferenceScore` |
+
+**File-path note:** the plan below references `src/pages/DataPage.vue`. The actual
+implementation lives in `src/pages/data/MoviesPage.vue` (the movies sub-page), with
+`/browse` work in `src/components/browse/ResolveCard.vue`. Helpers landed as
+`src/pages/data/rating-merge.ts`, `src/pages/data/preference-score.ts`, and
+`src/components/browse/resolve-preferences.ts`.
+
+**Key deviation — merge-preserving saves (correctness).** The backend rating upsert
+(`PUT /api/preferences/movies/:href/rating`) is **full-replace**: a request omitting
+`rating`/`tags`/`notes` clears the omitted fields. The plan's per-field saves (e.g.
+`upsertMovieRating(href, { rating })`) would therefore wipe siblings once tags/notes
+exist. All save paths now route through a single `saveRating()` that merges the patch
+over the current row (`rating-merge.ts`) before the PUT. See the Task 3 addendum.
+
+---
+
 ## Task 1 — Typed API client
 
 **Files:**
@@ -305,6 +341,56 @@ git add src/pages/DataPage.vue
 git commit -m "feat(frontend): add C1 inline rating and B3 score column (ADR-022)"
 ```
 
+### Task 3 addendum — tag chips + notes (C1 completion) + merge-preserving saves
+
+> The Goal lists C1 as "star rating **+ tag chips + notes**", but Steps 1–6 above
+> only covered the star column. The following was added to close that gap (commits
+> `f34ebae`, `813c674`). Implemented in `src/pages/data/MoviesPage.vue`.
+
+- [x] **Step 7: Tag chips + notes in an expandable row**
+
+  Add a `{ type: 'expand', renderExpand }` column to the movie table. The expanded
+  panel holds:
+  - **Tags** — `NSelect` (`multiple`) over the 12 `VALID_TAGS` slugs (mirrors the
+    backend `VALID_TAGS`; labelled via i18n `movies.tags.<slug>`), saving on change.
+  - **Notes** — a *controlled* `NInput` textarea backed by a per-row draft map,
+    persisting **on blur only** (not per keystroke). (An earlier uncontrolled
+    `defaultValue` version was replaced after review — it could drop in-progress
+    text when a sibling control re-rendered the panel.)
+
+- [x] **Step 8: Merge-preserving `saveRating()` (correctness)**
+
+  Because the backend rating upsert is full-replace, introduce a pure helper
+  `rating-merge.ts` → `mergeRating(current, patch)` that fills `rating`/`tags`/`notes`
+  from the patch when the key is present (so an explicit `null` clears) else from the
+  current row. Route **all four** save paths — star `NRate`, tags select, notes blur,
+  and the C3 batch-annotation save — through a single `saveRating(href, patch)` that
+  merges then PUTs, so editing one field never wipes the others. Unit-tested in
+  `tests/unit/rating-merge.spec.ts`.
+
+- [x] **Step 9: Reactive heart map**
+
+  The `/data` actor `HeartButton` `onChange` reassigns a **new** `Map`
+  (not in-place `.set`) so the B3 Score column recomputes when an actor heart toggles.
+
+### Task 3b — B3 score + C4 hearts on `/browse` (ResolveCard)
+
+> ADR-022 §B3 requires the score on **both** `/data` and `/browse`, and §C4 requires
+> hearts "on all pages that display these dimensions". Implemented in
+> `src/components/browse/ResolveCard.vue` (commits `b9828e6`, `b6bf218`).
+
+- [x] **Step 1: Pure helper** — `resolve-preferences.ts` exposes
+  `resolvePreferenceScore(rating, actors, actorHearted)` delegating to the shared
+  `computePreferenceScore` (formula unchanged). Unit-tested in
+  `tests/unit/resolve-preferences.spec.ts`.
+- [x] **Step 2: Score chip** in the detail header (gated to the `detail` branch).
+- [x] **Step 3: Hearts** on actor chips (`content_type: actor`) and tag/category
+  chips (`content_type: category`), using the name-as-id convention so rows are
+  shared with `/data`; initial state loaded via `listContentPreferences`.
+- [x] **Step 4: Robustness** — `getMovieRating(href, { skipErrorToast: true })` so the
+  "unrated ⇒ 404" common case does not pop an error toast; a latest-wins `reqUrl`
+  guard prevents a stale resolve from overwriting a newer one.
+
 ---
 
 ## Task 4 — Batch annotation mode (C3)
@@ -399,11 +485,16 @@ git commit -m "feat(frontend): add C3 batch annotation mode (ADR-022)"
 
 ## Definition of Done
 
-| # | Gate | Check |
-|---|------|-------|
-| 1 | Preferences API client compiles | `npx tsc --noEmit` → no errors in `src/api/preferences.ts` |
-| 2 | HeartButton renders | `/data` page shows heart icon next to actor name |
-| 3 | C1 rating saves to DB | Click star on a row → Network tab shows PUT `/api/preferences/movies/.../rating` → 200 |
-| 4 | B3 score column visible | `/data` page shows "Score" column with values 0.00–1.00 |
-| 5 | C3 batch mode activates | Click "Annotate" → keyboard `j`/`k`/`1–5`/`Enter`/`Space` all work |
-| 6 | C4 heart persists | Click heart on actor → PUT `/api/preferences/actor/...` → 200; refresh page → heart state preserved |
+| # | Gate | Check | Status |
+|---|------|-------|--------|
+| 1 | Preferences API client compiles | `npm run typecheck` → no errors | ✅ |
+| 2 | HeartButton renders | `/data/movies` shows heart icon next to actor name | ✅ |
+| 3 | C1 rating saves to DB | Click star on a row → PUT `/api/preferences/movies/.../rating` → 200 | ✅ |
+| 4 | C1 tags + notes save | Expand a row → select tags / type notes (blur) → PUT persists; sibling fields preserved (merge) | ✅ |
+| 5 | B3 score column visible (`/data`) | `/data/movies` shows "Score" column with values 0.00–1.00 | ✅ |
+| 6 | B3 score visible (`/browse`) | Resolve a URL → detail card shows a "Score" chip | ✅ |
+| 7 | C3 batch mode activates | Click "Annotate" → keyboard `j`/`k`/`1–5`/`Enter`/`Space` all work | ✅ |
+| 8 | C4 heart persists (actor) | Click heart on actor (`/data` or `/browse`) → PUT `/api/preferences/actor/...` → 200; persists on refresh | ✅ |
+| 9 | C4 heart persists (category) | Click heart on a `/browse` tag/category chip → PUT `/api/preferences/category/...` → 200 | ✅ |
+| 10 | Unit suite green | `npm run typecheck && npm run lint && npm run test:unit` all pass | ✅ |
+| 11 | C4 maker/director hearts | Heart on maker/director chips | ⛔ Deferred — no maker/director chips rendered yet (separate follow-up) |
