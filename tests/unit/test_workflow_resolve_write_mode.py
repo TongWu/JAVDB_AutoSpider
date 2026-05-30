@@ -51,6 +51,10 @@ ADR010_D1_GATE_ENV = {
     "D1_BATCHING_ENABLED": "${{ vars.D1_BATCHING_ENABLED || 'false' }}",
     "D1_STARTUP_REPLAY_ENABLED": "${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}",
 }
+WORKFLOW_DISPATCH_INPUT_LIMIT = 25
+ALL_WORKFLOW_FILES = tuple(
+    sorted((REPO_ROOT / ".github" / "workflows").glob("*.yml"))
+)
 
 
 def _extract_run(workflow_path: Path, step_id: str) -> str:
@@ -86,6 +90,11 @@ def _workflow_text(workflow_path: Path) -> str:
 def _load_workflow(workflow_path: Path) -> dict:
     with workflow_path.open() as f:
         return yaml.safe_load(f)
+
+
+def _workflow_on(data: dict) -> dict:
+    # PyYAML follows YAML 1.1 and parses the GitHub Actions key `on` as True.
+    return data.get("on") or data.get(True) or {}
 
 
 def _inject_override(run_script: str, value: str) -> str:
@@ -506,6 +515,20 @@ def _past_iso(hours: int = 1) -> str:
     return (
         dt.datetime.now(tz=dt.timezone.utc) - dt.timedelta(hours=hours)
     ).isoformat()
+
+
+@pytest.mark.parametrize("workflow", ALL_WORKFLOW_FILES, ids=lambda p: p.name)
+def test_workflow_dispatch_inputs_stay_under_github_limit(workflow):
+    data = _load_workflow(workflow)
+    workflow_dispatch = _workflow_on(data).get("workflow_dispatch")
+    if not isinstance(workflow_dispatch, dict):
+        return
+
+    inputs = workflow_dispatch.get("inputs") or {}
+    assert len(inputs) <= WORKFLOW_DISPATCH_INPUT_LIMIT, (
+        f"{workflow.name} defines {len(inputs)} workflow_dispatch inputs; "
+        f"GitHub Actions allows at most {WORKFLOW_DISPATCH_INPUT_LIMIT}"
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────
