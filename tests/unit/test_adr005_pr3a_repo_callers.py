@@ -423,10 +423,10 @@ def test_run_service_main_saves_spider_stats_through_stats_repo(monkeypatch, tmp
     monkeypatch.setattr(db_reports, "db_create_report_session", lambda **_: "sess-1")
     monkeypatch.setattr(db_pkg, "db_create_report_session", lambda **_: "sess-1")
     monkeypatch.setattr(
-        db_reports, "db_find_in_progress_session_ids_for_run_csv", lambda *a, **k: []
+        db_reports, "db_find_in_progress_session_ids_for_run_csv", lambda *_args, **_kwargs: []
     )
     monkeypatch.setattr(
-        db_pkg, "db_find_in_progress_session_ids_for_run_csv", lambda *a, **k: []
+        db_pkg, "db_find_in_progress_session_ids_for_run_csv", lambda *_args, **_kwargs: []
     )
     monkeypatch.setattr(db_reports, "db_get_session_status", lambda *_: ("audit",))
     monkeypatch.setattr(db_pkg, "db_get_session_status", lambda *_: ("audit",))
