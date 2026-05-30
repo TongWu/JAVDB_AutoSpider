@@ -228,21 +228,38 @@ jobs:
       - run: pip install -r requirements.txt
       - name: Regenerate golden
         run: python -m apps.cli.ops.dump_query_contract
-      - name: Commit if changed
+      - name: Self-commit golden if a builder PR forgot to regenerate it
         id: commit
         run: |
           set -e
           if git diff --quiet docs/api/contract/query-builders.golden.json; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"; exit 0
+            echo "self_committed=false" >> "$GITHUB_OUTPUT"; exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add docs/api/contract/query-builders.golden.json
           git commit -m "docs(api): regenerate query Contract Golden [skip ci]"
           git push
-          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "self_committed=true" >> "$GITHUB_OUTPUT"
+      - name: Did this push change the golden?
+        id: pushdiff
+        run: |
+          set -e
+          if [ "${{ github.event_name }}" != "push" ]; then
+            echo "golden_changed=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          before="${{ github.event.before }}"
+          if [ -z "$before" ] || [ "$before" = "0000000000000000000000000000000000000000" ]; then
+            echo "golden_changed=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if git diff --name-only "$before" "${{ github.sha }}" \
+               | grep -qx 'docs/api/contract/query-builders.golden.json'; then
+            echo "golden_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "golden_changed=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Dispatch re-vendor to web repo
-        if: steps.commit.outputs.changed == 'true'
+        if: steps.commit.outputs.self_committed == 'true' || steps.pushdiff.outputs.golden_changed == 'true'
         run: |
           curl -fsS -X POST \
             -H "Authorization: Bearer ${{ secrets.WEB_REPO_DISPATCH_TOKEN }}" \
@@ -250,6 +267,15 @@ jobs:
             https://api.github.com/repos/TongWu/JAVDB_AutoSpider_Web/dispatches \
             -d '{"event_type":"query-golden-updated"}'
 ```
+
+> **Dispatch trigger (corrected per PR review):** the dispatch must fire whenever
+> the golden changes on `main` — most often the golden diff arrives *already
+> committed* inside the builder PR (the ADR-018 D5 flow), so the regenerate step
+> is a no-op and `self_committed=false`. Gating dispatch only on a self-commit
+> would miss that (by far the common) case and leave the TS vendor permanently
+> stale. So dispatch fires on `self_committed == 'true'` **or** when this push's
+> diff (`github.event.before..github.sha`, needs `fetch-depth: 0`) touched the
+> golden file. Manual `workflow_dispatch` always notifies.
 
 - [ ] Create the `WEB_REPO_DISPATCH_TOKEN` secret (PAT with `contents:write` on the TS repo) in the Python repo's `Production` environment.
 
