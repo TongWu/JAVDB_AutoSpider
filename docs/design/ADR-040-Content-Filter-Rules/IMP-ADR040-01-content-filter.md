@@ -1,8 +1,10 @@
 # IMP-ADR040-01: Content Filter Engine + Rules (Phase 1) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Related:** [ADR-040](ADR-040-content-filter-rules.md) (umbrella) — this is **Phase 1** of three.
+
+**Status:** Completed — implemented and verified on 2026-05-30.
 
 **Goal:** A deterministic content-filter stage that drops parsed movies by identity/attribute rules (actor blacklist, tag include/exclude, gender) — read from a dynamic `ContentFilterRule` D1 table — applied after detail parse and AND-ed with the existing rating/rater filter.
 
@@ -45,7 +47,7 @@
 **Files:**
 - Create: `javdb/migrations/d1/2026_05_29_add_content_filter_rule.sql`
 
-- [ ] **Step 1: Write the migration SQL**
+- [x] **Step 1: Write the migration SQL**
 
 ```sql
 -- 2026-05-29: Add ContentFilterRule table (ADR-040 Phase 1).
@@ -68,7 +70,7 @@ CREATE TABLE IF NOT EXISTS ContentFilterRule (
 CREATE INDEX IF NOT EXISTS idx_content_filter_enabled ON ContentFilterRule(enabled, dimension);
 ```
 
-- [ ] **Step 2: Apply to D1, re-align SQLite**
+- [x] **Step 2: Apply to D1, re-align SQLite**
 
 Run:
 ```bash
@@ -78,7 +80,7 @@ python3 -m apps.cli.db.sync_d1_to_sqlite --apply --force-overwrite-all
 ```
 Expected: statements execute; table rebuilt locally; exit 0.
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run:
 ```bash
@@ -86,7 +88,7 @@ python3 -c "import sqlite3,glob; p=glob.glob('reports/reports.db')[0]; print(sql
 ```
 Expected: `('ContentFilterRule',)`
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add javdb/migrations/d1/2026_05_29_add_content_filter_rule.sql
@@ -105,7 +107,7 @@ Semantics: **blacklist wins** (any matching `exclude` → drop), then `include`/
 rules AND together. Tag-include is "≥1 match required if any include rule exists".
 Lead actor = `actors[0]`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/test_content_filter_engine.py
@@ -186,12 +188,12 @@ def test_disabled_rule_ignored():
     assert evaluate(_Detail(actors=[_Actor(name="X")]), [r]).keep is True
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/unit/test_content_filter_engine.py -v`
 Expected: FAIL — `ModuleNotFoundError`
 
-- [ ] **Step 3: Write the engine**
+- [x] **Step 3: Write the engine**
 
 ```python
 # javdb/spider/services/content_filter.py
@@ -273,12 +275,12 @@ def evaluate(detail, rules) -> FilterDecision:
     return FilterDecision(True, reasons)
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pytest tests/unit/test_content_filter_engine.py -v`
 Expected: PASS (8 passed)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add javdb/spider/services/content_filter.py tests/unit/test_content_filter_engine.py
@@ -293,7 +295,7 @@ git commit -m "feat(spider): add deterministic content-filter engine (ADR-040)"
 - Create: `javdb/storage/repos/content_filter_repo.py`
 - Test: `tests/unit/test_content_filter_repo.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/test_content_filter_repo.py
@@ -338,12 +340,12 @@ def test_remove(repo):
     assert repo.list_rules() == []
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/unit/test_content_filter_repo.py -v`
 Expected: FAIL — `ModuleNotFoundError`
 
-- [ ] **Step 3: Write the repo**
+- [x] **Step 3: Write the repo**
 
 ```python
 # javdb/storage/repos/content_filter_repo.py
@@ -396,12 +398,12 @@ class ContentFilterRepo:
                            [1 if enabled else 0, rule_id])
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pytest tests/unit/test_content_filter_repo.py -v`
 Expected: PASS (3 passed)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add javdb/storage/repos/content_filter_repo.py tests/unit/test_content_filter_repo.py
@@ -420,7 +422,7 @@ After a detail page parses successfully, evaluate the rules and **drop** the mov
 (skip persist/CSV) when the engine rejects it, logging the reason. Rules are loaded
 **once per run** and threaded into the detail-success handler.
 
-- [ ] **Step 1: Write the failing test** (pins the helper the wiring uses)
+- [x] **Step 1: Write the failing test** (pins the helper the wiring uses)
 
 ```python
 # tests/unit/test_content_filter_wiring.py
@@ -450,19 +452,19 @@ def test_runner_drops_blacklisted_actor():
     assert decision.keep is False  # the runner must skip persist when keep is False
 ```
 
-- [ ] **Step 2: Run to verify PASS** (pins `evaluate` from Task 2)
+- [x] **Step 2: Run to verify PASS** (pins `evaluate` from Task 2)
 
 Run: `pytest tests/unit/test_content_filter_wiring.py -v`
 Expected: PASS
 
-- [ ] **Step 3: Locate the detail-success seam**
+- [x] **Step 3: Locate the detail-success seam**
 
 Run: `grep -nE "def .*detail.*success|successful detail|persist|write_csv|def _persist|MovieDetail" javdb/spider/detail/runner.py | head`
 Identify the function that handles a successfully-parsed detail (it has the parsed
 `MovieDetail` and writes/persists it; the docstring at ~line 239 is "Best-effort
 Phase-1 stage of a successful detail fetch").
 
-- [ ] **Step 4: Load rules once per run** — at the start of the detail-run entry
+- [x] **Step 4: Load rules once per run** — at the start of the detail-run entry
   (the function near line 430, "Run the shared detail pipeline against a concrete
   fetch backend"), load and pass rules down:
 
@@ -479,7 +481,7 @@ Phase-1 stage of a successful detail fetch").
 > Thread `_content_rules` into the detail-success handler (function signature or a
 > run-scoped attribute, matching how the runner already passes per-run state).
 
-- [ ] **Step 5: Apply the filter in the detail-success handler** — where the parsed
+- [x] **Step 5: Apply the filter in the detail-success handler** — where the parsed
   `MovieDetail` (call it `detail`) is available and about to be persisted/written:
 
 ```python
@@ -495,12 +497,12 @@ Phase-1 stage of a successful detail fetch").
 > uploader. Match the handler's actual early-return / skip convention (it already has
 > skip paths for history/contention). The reasons-logging line is the audit trail.
 
-- [ ] **Step 6: Import-smoke + tests**
+- [x] **Step 6: Import-smoke + tests**
 
 Run: `python3 -c "import javdb.spider.detail.runner; print('import ok')" && pytest tests/unit/test_content_filter_wiring.py -v`
 Expected: `import ok` + PASS
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add javdb/spider/detail/runner.py tests/unit/test_content_filter_wiring.py
@@ -515,7 +517,7 @@ git commit -m "feat(spider): apply content filter after detail parse (ADR-040 D3
 - Create: `apps/cli/ops/content_filter.py`
 - Test: `tests/smoke/test_content_filter_cli.py`
 
-- [ ] **Step 1: Write the failing smoke test**
+- [x] **Step 1: Write the failing smoke test**
 
 ```python
 # tests/smoke/test_content_filter_cli.py
@@ -530,12 +532,12 @@ def test_content_filter_cli_help():
     assert "rule" in r.stdout.lower()
 ```
 
-- [ ] **Step 2: Run to verify FAIL**
+- [x] **Step 2: Run to verify FAIL**
 
 Run: `pytest tests/smoke/test_content_filter_cli.py -v`
 Expected: FAIL — no module
 
-- [ ] **Step 3: Write the CLI**
+- [x] **Step 3: Write the CLI**
 
 ```python
 # apps/cli/ops/content_filter.py
@@ -594,12 +596,12 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-- [ ] **Step 4: Run to verify PASS**
+- [x] **Step 4: Run to verify PASS**
 
 Run: `pytest tests/smoke/test_content_filter_cli.py -v`
 Expected: PASS (1)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/cli/ops/content_filter.py tests/smoke/test_content_filter_cli.py
@@ -613,14 +615,14 @@ git commit -m "feat(cli): add content-filter rule management CLI (ADR-040)"
 **Files:**
 - Modify: `CONTEXT.md`, `docs/handbook/en/developer/cli-reference.md` (+ zh)
 
-- [ ] **Step 1: Update CONTEXT.md** — add ADR-040 terms verbatim: *Content filter rule*,
+- [x] **Step 1: Update CONTEXT.md** — add ADR-040 terms verbatim: *Content filter rule*,
   *Blacklist*, *Attribute filter*, *Filter decision*, *Subscription* (mark Subscription Phase-2).
 
-- [ ] **Step 2: Update CLI reference** — document `python -m apps.cli.ops.content_filter`
+- [x] **Step 2: Update CLI reference** — document `python -m apps.cli.ops.content_filter`
   (`add`/`list`/`remove`/`enable` + the `--dimension`/`--mode`/`--value` options) in the
   en cli-reference; mirror to zh.
 
-- [ ] **Step 3: Full gate**
+- [x] **Step 3: Full gate**
 
 Run:
 ```bash
@@ -629,12 +631,12 @@ pytest tests/unit/test_content_filter_engine.py tests/unit/test_content_filter_r
 ```
 Expected: all PASS.
 
-- [ ] **Step 4: Additive-invariant check** — with no rules, ingestion is unchanged:
+- [x] **Step 4: Additive-invariant check** — with no rules, ingestion is unchanged:
 
 Run: `python3 -c "from javdb.spider.services.content_filter import evaluate; print(evaluate(object(), []).keep)"`
 Expected: `True` (empty rules → keep everything).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add CONTEXT.md docs/handbook
@@ -668,3 +670,11 @@ before persist). The engine + repo are independently green; the wiring is the in
 **Additive guarantee:** no rules → `evaluate` keeps everything (Task 6 Step 4); rule-load
 failure falls back to `[]` (Task 4 Step 4), so a content-filter problem never blocks
 ingestion. The existing rating/rater filter is untouched (a parallel gate).
+
+## Closeout
+
+- 2026-05-30: Completed. Verification:
+  - `pytest tests/unit/test_content_filter_engine.py tests/unit/test_content_filter_repo.py tests/unit/test_content_filter_wiring.py tests/smoke/test_content_filter_cli.py -v`
+  - `python3 -c "from javdb.spider.services.content_filter import evaluate; assert evaluate(object(), []).keep is True"`
+  - `pytest -q tests/unit/test_detail_runner_work_distributor.py tests/smoke/test_spider_detail_runner.py tests/smoke/test_spider_backends.py tests/unit/test_parallel_login.py tests/smoke/test_spider_app_main.py tests/unit/test_migrate_v7_to_v8_security.py`
+  - `git diff --check`
