@@ -80,9 +80,12 @@ def _gender_drop_reason(detail, rule: Rule) -> str:
         expected = _clean_value(rule.value).lower()
         if lead_gender.lower() != expected:
             return f'lead actor gender mismatch: expected {expected}, got {lead_gender}'
-    if rule.mode == 'exclude_all_male' and detail.actors:
-        if all(actor.gender.lower() == 'male' for actor in detail.actors):
-            return 'all actors are male'
+    if (
+        rule.mode == 'exclude_all_male'
+        and detail.actors
+        and all(actor.gender.lower() == 'male' for actor in detail.actors)
+    ):
+        return 'all actors are male'
     return ''
 
 
