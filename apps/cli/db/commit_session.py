@@ -257,7 +257,7 @@ def _emit_pending_verify(
     Returns the record (for callers that want to print it / add it to
     their JSON summary).
     """
-    stats = SessionLifecycleRepo().pending_session_stats(session_id)
+    stats = HistoryRepo().pending_session_stats(session_id)
     drain = drain or {}
     pending_applied_count = int(
         drain.get("pending_marked_applied", 0) or 0

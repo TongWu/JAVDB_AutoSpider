@@ -95,11 +95,13 @@ def test_get_session_run_identity(monkeypatch, lifecycle_repo):
     assert rec.kwargs == {"db_path": DB_PATH}
 
 
-def test_pending_session_stats(monkeypatch, lifecycle_repo):
+def test_pending_session_stats(monkeypatch):
+    # pending_session_stats queries the history DB (Pending*HistoryWrites), so
+    # it lives on the history-owned HistoryRepo, not SessionLifecycleRepo.
     rec = _Recorder({"pending_total_count": 7})
     monkeypatch.setattr(db_mod, "db_pending_session_stats", rec)
 
-    result = lifecycle_repo.pending_session_stats("sess-y")
+    result = HistoryRepo(db_path=DB_PATH).pending_session_stats("sess-y")
 
     assert result == {"pending_total_count": 7}
     assert rec.args == ("sess-y",)
