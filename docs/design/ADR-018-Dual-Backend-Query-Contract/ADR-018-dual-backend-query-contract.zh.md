@@ -2,7 +2,7 @@
 
 | 字段       | 值                                                                    |
 | ---------- | --------------------------------------------------------------------- |
-| **状态**   | Proposed                                                              |
+| **状态**   | Accepted —— Phase 1（Python golden）已于 2026-05-29 实现；Phase 2（TS 消费）待做 |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
 | **关联**   | [ADR-029](../ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md)（auth 加固 — token 撤销归它）、[ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md)（双后端拆分）、[ADR-010](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.md)（D1 访问端口） |
@@ -102,3 +102,4 @@
 
 - 2026-05-29：Proposed（源自架构审查候选 B 的 grilling）。
 - 2026-05-29：D6 经 grilling 修订——镜像 `openapi.json` / `api.gen.ts` 模式（vendored golden + CI 新鲜度 diff，接受 main 分支竞态）；re-vendor 由 `repository_dispatch` 自动化；golden `version` = 内容哈希。早期"pin 到版本/SHA"思路因与 house pattern 不一致被否决。
+- 2026-05-29：Phase 1 已实现（[IMP-ADR018-01](IMP-ADR018-01-python-golden-generator.md)）。从 `SessionsRepo.list` 抽出 `_build_session_query`（行为保持）；golden 生成器（`apps/cli/ops/dump_query_contract.py`）、共享 cases + `normalize_sql`（`query_contract_cases.py`）、已提交的 golden（`docs/api/contract/query-builders.golden.json`，内容哈希 `version`）、以及 pytest pin（`tests/unit/test_query_contract_golden.py`）全部落地。覆盖 history movie+torrent 过滤器 + sessions 查询；每个 builder 分支都被 pin。**`stats` 确认延后到 Phase 2**（其聚合内联在 `apps/api/routers/stats.py`，需先做 router→builder 抽取）。Phase 1 路线图行 = history + sessions，符合计划。

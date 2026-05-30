@@ -110,7 +110,30 @@ def test_changed_test_file_selects_only_that_file():
     result = select("tests/unit/test_parser.py")
 
     assert result.run_full_python is False
-    assert result.pytest_targets == ["tests/unit/test_parser.py"]
+    # The changed test file plus the always-run contract guard (ADR-018), which
+    # is force-selected on every selective build.
+    assert result.pytest_targets == [
+        "tests/unit/test_parser.py",
+        "tests/unit/test_query_contract_golden.py",
+    ]
+
+
+def test_query_contract_golden_always_runs_on_selective_builds():
+    """ADR-018: the query-builder Contract Golden is force-selected on every
+    selective build, even for an unrelated change — because a SQL-only edit to
+    a covered builder is pruned from impact analysis (string-literal-only), so
+    the guard cannot rely on impact selection to run."""
+    # An unrelated source change that selects something specific (not full).
+    result = select("javdb/pipeline/engine.py")
+    assert result.run_full_python is False
+    assert "tests/unit/test_query_contract_golden.py" in result.pytest_targets
+
+    # And when the only change is a covered builder file, the guard is selected.
+    builder = select("javdb/storage/repos/sessions_repo.py")
+    assert (
+        builder.run_full_python is True
+        or "tests/unit/test_query_contract_golden.py" in builder.pytest_targets
+    )
 
 
 def test_large_source_diff_forces_full_python():
