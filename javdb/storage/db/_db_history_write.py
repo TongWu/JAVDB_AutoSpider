@@ -230,6 +230,25 @@ def db_stage_history_write(
     with _get_db(db_path or _HISTORY_DB_PATH) as conn:
         policy = _pending_stage_policy(session_id, seq, kind)
         if kind == _KIND_MOVIE:
+            # Actor links arrive as site-relative paths (e.g. ``/actors/x``)
+            # from the parser. Normalize to absolute BASE_URL form at stage
+            # time so MovieHistory.ActorLink / SupportingActors stay consistent
+            # with the absolute Href the commit path produces — the commit
+            # branches copy these pending values verbatim. (BFR-010)
+            base_url = cfg('BASE_URL', 'https://javdb.com')
+            raw_actor_link = payload.get("ActorLink") or payload.get("actor_link")
+            raw_supporting = (
+                payload.get("SupportingActors")
+                or payload.get("supporting_actors")
+            )
+            actor_link_abs = (
+                _javdb_absolute_url(raw_actor_link, base_url)
+                if raw_actor_link else raw_actor_link
+            )
+            supporting_abs = (
+                _absolutize_supporting_actors_json(raw_supporting, base_url)
+                if raw_supporting else raw_supporting
+            )
             _execute_pending_stage(
                 conn,
                 """INSERT INTO PendingMovieHistoryWrites
@@ -246,11 +265,8 @@ def db_stage_history_write(
                     video_code,
                     payload.get("ActorName") or payload.get("actor_name"),
                     payload.get("ActorGender") or payload.get("actor_gender"),
-                    payload.get("ActorLink") or payload.get("actor_link"),
-                    (
-                        payload.get("SupportingActors")
-                        or payload.get("supporting_actors")
-                    ),
+                    actor_link_abs,
+                    supporting_abs,
                     visited,
                     now,
                 ),

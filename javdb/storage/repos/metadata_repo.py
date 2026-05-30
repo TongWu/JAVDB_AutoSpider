@@ -6,6 +6,8 @@ import json
 import re
 from typing import Optional
 
+from javdb.infra.config import cfg
+from javdb.parsing.common import javdb_absolute_url
 from javdb.storage.db import get_db, HISTORY_DB_PATH
 
 
@@ -21,17 +23,28 @@ class MetadataRepo:
         ``detail`` is MovieDetail.__dict__ or an equivalent mapping.
         Keys match MovieDetail field names (snake_case).
         """
+        # Parser emits site-relative hrefs (``/makers/x``, ``/actors/y``).
+        # Normalize the movie href key and every embedded link to absolute
+        # BASE_URL form so MovieMetadata.href matches MovieHistory.Href (the
+        # backfill join key) and link payloads are stored consistently. (BFR-010)
+        base_url = cfg('BASE_URL', 'https://javdb.com')
+        href = javdb_absolute_url(href, base_url) or href
+
         def _link(obj) -> Optional[str]:
             if obj is None:
                 return None
             if hasattr(obj, 'name') and hasattr(obj, 'href'):
-                return json.dumps({'name': obj.name, 'href': obj.href})
+                return json.dumps(
+                    {'name': obj.name, 'href': javdb_absolute_url(obj.href, base_url)}
+                )
             return json.dumps(obj)
 
         def _links(lst) -> Optional[str]:
             if not lst:
                 return None
-            return json.dumps([{'name': x.name, 'href': x.href} for x in lst])
+            return json.dumps(
+                [{'name': x.name, 'href': javdb_absolute_url(x.href, base_url)} for x in lst]
+            )
 
         def _urls(lst) -> Optional[str]:
             if not lst:
@@ -119,7 +132,14 @@ class MetadataRepo:
             conn.execute(sql, params)
 
     def get(self, href: str) -> Optional[dict]:
-        """Return the MovieMetadata row for *href*, or None."""
+        """Return the MovieMetadata row for *href*, or None.
+
+        The lookup key is absolutized to match how :meth:`upsert` stores it,
+        so callers may pass either a relative ``/v/..`` path or an absolute
+        ``https://javdb.com/v/..`` URL. (BFR-010)
+        """
+        base_url = cfg('BASE_URL', 'https://javdb.com')
+        href = javdb_absolute_url(href, base_url) or href
         with get_db(self._db_path) as conn:
             row = conn.execute(
                 "SELECT * FROM MovieMetadata WHERE href = ?", (href,)
