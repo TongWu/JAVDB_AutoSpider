@@ -104,6 +104,7 @@ class SequentialFetchBackend(FetchBackend):
             actor_link,
             supporting_actors,
             parse_success,
+            movie_detail,
             effective_use_proxy,
             effective_use_cf_bypass,
         ) = fetch_detail_page_with_fallback(
@@ -131,6 +132,7 @@ class SequentialFetchBackend(FetchBackend):
                     "actor_gender": actor_gender or "",
                     "actor_link": actor_link or "",
                     "supporting": supporting_actors or "",
+                    "movie_detail": movie_detail,
                 },
                 used_cf=effective_use_cf_bypass,
                 worker_name="sequential",
