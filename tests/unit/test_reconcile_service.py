@@ -35,6 +35,29 @@ class _FakeQb:
         return self._t
 
 
+class _FailingQb:
+    def get_torrents_multiple_categories(self, categories, torrent_filter="downloading"):
+        raise RuntimeError("qb down")
+
+
+class _FlakyCleanupRepo:
+    def __init__(self, repo):
+        self._repo = repo
+
+    def mark_state(self, qb_hash, state, *, completed_at=None, last_seen_at=None):
+        if qb_hash == "h1":
+            raise RuntimeError("bad hash")
+        return self._repo.mark_state(
+            qb_hash,
+            state,
+            completed_at=completed_at,
+            last_seen_at=last_seen_at,
+        )
+
+    def get(self, qb_hash):
+        return self._repo.get(qb_hash)
+
+
 def test_record_queued_writes_queued_row(repo):
     torrent = {"magnet": "magnet:?xt=urn:btih:" + "a" * 40, "href": "/v/1",
                "video_code": "ABC-123", "type": "subtitle"}
@@ -57,6 +80,18 @@ def test_apply_cleanup_completed_marks_hashes(repo):
     assert repo.get("h1").state == "completed"
     assert repo.get("h2").state == "completed"   # minimal-insert for orphan
     assert res.marked_completed == 2
+
+
+def test_apply_cleanup_completed_keeps_processing_after_one_failure(repo):
+    repo.upsert(AcquisitionOutcomeRecord(qb_hash="h1", href="/v/1", state="queued"))
+    wrapped = _FlakyCleanupRepo(repo)
+
+    res = service.apply_cleanup_completed({"hashes": ["h1", "h2"]}, repo=wrapped)
+
+    assert repo.get("h1").state == "queued"
+    assert repo.get("h2").state == "completed"
+    assert res.errors
+    assert res.marked_completed == 1
 
 
 def test_run_marks_downloading_from_observation(repo):
@@ -92,3 +127,22 @@ def test_run_dry_run_writes_nothing(repo):
     qb = _FakeQb([{"hash": "d1", "progress": 0.5, "state": "downloading"}])
     service.run(ReconcileOptions(dry_run=True), repo=repo, qb_client=qb)
     assert repo.get("d1").state == "queued"  # unchanged
+
+
+def test_run_returns_error_and_leaves_rows_unchanged_when_qb_fails(repo):
+    old_ts = _old_iso(10)
+    repo.upsert(
+        AcquisitionOutcomeRecord(
+            qb_hash="d1",
+            href="/v/1",
+            state="queued",
+            last_seen_at=old_ts,
+        )
+    )
+
+    res = service.run(ReconcileOptions(stalled_after_days=7), repo=repo, qb_client=_FailingQb())
+
+    got = repo.get("d1")
+    assert got.state == "queued"
+    assert got.last_seen_at == old_ts
+    assert res.errors

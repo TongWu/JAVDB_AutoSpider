@@ -76,14 +76,18 @@ def apply_cleanup_completed(stats: dict, *, repo=None) -> ReconcileResult:
         return result
 
     now = utc_now_iso()
-    try:
-        with _repo_ctx(repo) as r:
-            for qb_hash in hashes:
+    with _repo_ctx(repo) as r:
+        for qb_hash in hashes:
+            try:
                 r.mark_state(qb_hash, "completed", completed_at=now, last_seen_at=now)
                 result.marked_completed += 1
-    except Exception as exc:
-        logger.warning("apply_cleanup_completed: persist failed", exc_info=True)
-        result.errors.append(str(exc))
+            except Exception as exc:
+                logger.warning(
+                    "apply_cleanup_completed: persist failed for %s",
+                    qb_hash,
+                    exc_info=True,
+                )
+                result.errors.append(str(exc))
     return result
 
 
@@ -96,12 +100,20 @@ def run(options: ReconcileOptions, *, repo=None, qb_client=None) -> ReconcileRes
 
         observations = {}
         if "qb" in options.sources:
-            client = qb_client or _build_qb_client(options)
-            torrents = client.get_torrents_multiple_categories(
-                list(options.categories), torrent_filter="all"
-            )
-            for obs in QbCollector().collect(torrents):
-                observations[obs.qb_hash] = obs
+            try:
+                client = qb_client or _build_qb_client(options)
+                torrents = client.get_torrents_multiple_categories(
+                    list(options.categories), torrent_filter="all"
+                )
+                for obs in QbCollector().collect(torrents):
+                    observations[obs.qb_hash] = obs
+            except Exception as exc:
+                logger.warning("run: qB read/collect failed, skipping transitions", exc_info=True)
+                result.errors.append(str(exc))
+                result.observed = 0
+                # qB observations are unreliable here, so do not infer absent-state
+                # transitions from this pass.
+                return result
         result.observed = len(observations)
 
         for qb_hash, rec in active.items():
