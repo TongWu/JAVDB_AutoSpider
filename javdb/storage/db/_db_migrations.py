@@ -209,6 +209,22 @@ CREATE INDEX IF NOT EXISTS idx_content_prefs_hearted
 """
 
 _REPORTS_DDL = _SCHEMA_VERSION_DDL + """
+-- Dynamic content-filter rules (ADR-040 Phase 1).  Rules live in the
+-- reports DB and are applied after detail parse; no rows means no
+-- behavior change.
+-- dimension: actor | tag | gender
+-- mode: exclude | include | require_lead | exclude_all_male
+-- value: actor name/href | tag | gender value
+CREATE TABLE IF NOT EXISTS ContentFilterRule (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    dimension  TEXT NOT NULL,
+    mode       TEXT NOT NULL,
+    value      TEXT,
+    enabled    INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_content_filter_enabled ON ContentFilterRule(enabled, dimension);
+
 -- ReportSessions.Id is a TEXT PRIMARY KEY supplied explicitly by the
 -- application via :func:`_generate_session_id`.  TEXT (rather than INTEGER)
 -- so the id round-trips losslessly through Cloudflare D1's JSON layer,

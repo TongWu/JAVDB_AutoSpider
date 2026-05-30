@@ -9,11 +9,12 @@ from urllib.parse import urljoin
 
 from javdb.infra.logging import get_logger
 from javdb.infra.config import use_sqlite
-from javdb.storage.db import get_active_session_id
+from javdb.storage.db import get_active_session_id, get_db, REPORTS_DB_PATH
 from javdb.storage.history_manager import (
     save_parsed_movie_to_history,
     batch_update_last_visited,
 )
+from javdb.storage.repos.content_filter_repo import ContentFilterRepo
 from javdb.storage.repos.history_repo import HistoryRepo
 from javdb.storage.repos.metadata_repo import MetadataRepo
 from javdb.infra.csv_writer import write_csv
@@ -30,6 +31,7 @@ from javdb.pipeline.policies import (
     should_skip_recent_today_release,
     should_skip_recent_yesterday_release,
 )
+from javdb.spider.services.content_filter import Rule, evaluate
 from javdb.spider.services.dedup import (
     DedupRecord,
     should_skip_from_rclone,
@@ -63,6 +65,23 @@ def _dedup_log_variant_label(record: DedupRecord | object) -> str:
     if sensor and subtitle:
         return f"{sensor}-{subtitle}"
     return sensor or subtitle or "unknown"
+
+
+def _load_content_filter_rules() -> list[Rule]:
+    with get_db(REPORTS_DB_PATH) as conn:
+        return ContentFilterRepo(conn).load_rules()
+
+
+def load_content_filter_rules() -> list[Rule]:
+    """Load content filter rules for public callers."""
+    try:
+        return _load_content_filter_rules()
+    except Exception:
+        logger.info(
+            "Content filter rules unavailable; continuing without filtering",
+            exc_info=True,
+        )
+        return []
 
 
 def _resolve_runtime(runtime=None):
@@ -425,6 +444,7 @@ def process_detail_entries(
     include_recent_release_filters: bool = False,
     log_duplicate_skips: bool = False,
     cancel_event: Event | None = None,
+    content_filter_rules: Optional[list[Rule]] = None,
 ) -> dict:
     """Run the shared detail pipeline against a concrete fetch backend."""
     runtime = _resolve_runtime(runtime)
@@ -447,6 +467,8 @@ def process_detail_entries(
         include_recent_release_filters=include_recent_release_filters,
         log_duplicate_skips=log_duplicate_skips,
     )
+    if content_filter_rules is None:
+        content_filter_rules = load_content_filter_rules()
 
     # P1-B: filter through the cross-runner MovieClaim mutex.  Returns the
     # candidates this runner won the lease on; peer-completed and
@@ -696,6 +718,38 @@ def process_detail_entries(
             logger.info(f"[{idx_str}] {worker_tag}Parsed {entry.get('video_code', '')}{cf_tag}")
 
             data = result.data or {}
+            movie_detail = data.get('movie_detail')
+            if content_filter_rules and movie_detail is not None:
+                decision = evaluate(movie_detail, content_filter_rules)
+                if not decision.keep:
+                    logger.info(
+                        "[%s] %s filtered by content rules: %s",
+                        idx_str,
+                        entry.get('video_code', '?'),
+                        '; '.join(decision.reasons) or 'no reasons',
+                    )
+                    if href in held_claims:
+                        _release_movie_claim(href, shard_date, runtime=runtime)
+                        held_claims.discard(href)
+                    if href in queue_held_hrefs and work_client is not None:
+                        try:
+                            work_client.complete(holder_id, [href])
+                        except Exception:  # noqa: BLE001 — fail-open
+                            logger.debug(
+                                "WorkDistributor complete(%s) failed", href,
+                                exc_info=True,
+                            )
+                        queue_held_hrefs.discard(href)
+                    current_runtime_state = backend.runtime_state()
+                    result.acknowledge(
+                        'content_filtered',
+                        runtime_state_changed=(
+                            current_runtime_state != previous_runtime_state
+                        ),
+                    )
+                    previous_runtime_state = current_runtime_state
+                    continue
+
             magnet_links = data['magnet_links']
             outcome = persist_parsed_detail_result(
                 entry=entry,
@@ -719,7 +773,7 @@ def process_detail_entries(
                 actor_link=data['actor_link'],
                 supporting_actors=data['supporting'],
                 magnet_links=magnet_links,
-                movie_detail=data.get('movie_detail'),
+                movie_detail=movie_detail,
             )
             skipped_history += outcome.skipped_history
             no_new_torrents += outcome.no_new_torrents
