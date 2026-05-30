@@ -253,6 +253,16 @@ ADR-026 新增了一个只读运维诊断助手，用于失败的 ingestion run 
 | `OPS_DIAGNOSIS_MODEL` | `str` | `'deterministic-fallback-v1'` | 写入诊断输出的模型标识。默认值说明未使用远程模型。 |
 | `OPS_DIAGNOSIS_MAX_LOG_SNIPPETS` | `int` | `20` | 收集到紧凑 evidence bundle 中的最大匹配日志行数。无效值会回退到 `20`。 |
 
+### 站点契约漂移哨兵 (Site-Contract Drift Sentinel — ADR-035)
+
+漂移哨兵在每日索引解析期间记录每个字段的解析填充率，当某个 critical 字段塌陷时
+拦截 session 提交（复用上文的 `OpsIncidents` 通道）。两个 `config.py` 开关用于调节：
+
+| 变量 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `SENTINEL_MIN_SAMPLE` | `int` | `30` | 当某次运行解析的条目少于该值时跳过漂移评估（避免小样本运行抖动）。 |
+| `SENTINEL_BASELINE_WINDOW` | `int` | `14` | 软字段基线 = 最近这么多次已提交运行的填充率中位数（自校准；仅从干净运行学习）。 |
+
 ---
 
 ## 9. 日志
