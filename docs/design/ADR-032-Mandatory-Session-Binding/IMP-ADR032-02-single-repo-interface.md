@@ -10,7 +10,28 @@
 
 **Related:** [ADR-032](ADR-032-mandatory-session-binding.md), [IMP-ADR032-01](IMP-ADR032-01-mandatory-session-id.md) (land first)
 
-**Status:** Proposed
+**Status:** In progress (2026-05-29) — split into 2a (migrate callers + add thin methods) and 2b (de-export) per the scope reality below.
+
+---
+
+## Scope reality & phasing (amended during implementation, 2026-05-29)
+
+Task-1 enumeration on current `main` surfaced two things the original plan under-scoped, so Phase 2 is split into two independently-shippable PRs:
+
+- **The Repos import `db_*` via `__init__`**, not the submodules: `history_repo.py` / `operations_repo.py` / `stats_repo.py` do `from javdb.storage.db import db_*` at ~38 sites. The Task-6 de-export proof (`from javdb.storage.db import db_stage_history_write` must FAIL) therefore requires **repointing those ~38 Repo-internal imports to `_db_*` submodules** before trimming `__init__`. The original plan only flagged the `_db_history_write → history_repo` shim, not this.
+- **More than "a few" missing thin methods (~10):** the external callers need new Repo wrappers for `db_find_in_progress_sessions`, `db_find_sessions_by_run`, `db_get_session_run_identity`, `db_pending_session_stats`, `db_find_stale_pending_sessions`, `db_resume_finalizing_session`, `db_rollback_session`, `db_find_in_progress_session_ids_for_run_csv`, `db_get_latest_session_local`, and `db_insert_report_rows`. (Most session-query reads → `SessionsRepo`; `resume_finalizing_session`/`commit` → `HistoryRepo`; `rollback_session` → a rollback method; `insert_report_rows` → a thin reports wrapper, **not** a new `ReportsRepo` — single function.)
+
+**Edge dispositions (decided):** `db_writes_forbidden` (`infra/config.py`) stays exported — it's an infra predicate/kill-switch, not a domain write op. `apps/cli/ops/profile_hot_paths.py` (`db_load_history`) is **excluded** (a one-shot benchmark, D6 spirit). `db_insert_report_rows` gets a thin Repo method (no new `ReportsRepo`).
+
+### Phase 2a (this PR) — migrate callers + add thin methods
+
+Migrate every external `db_*` caller (~14 files, ~37 sites) to existing/new Repo methods; add the ~10 missing thin wrappers. **Behavior-preserving; `db_*` stay exported** (no `__init__` change yet), so nothing can break from de-export. Per-module boundary tests.
+
+### Phase 2b (follow-up PR) — de-export
+
+Repoint the ~38 Repo-internal `db_*` imports to `_db_*` submodules; migrate the `db_*`-targeted tests onto Repo methods; trim the migrated names from `__init__.__all__` + the `from ._db_* import (...)` blocks; land the de-export proof (Task 6). This is the delicate surgery, isolated from the caller migration.
+
+---
 
 ---
 
