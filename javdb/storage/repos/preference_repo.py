@@ -133,8 +133,11 @@ class PreferenceRepo:
             params.append(content_type)
         if hearted_only:
             conditions.append("hearted = 1")
+        # Safe: ``where`` only ever interpolates hard-coded fragments with ``?``
+        # placeholders; every user value is passed via ``params``. (S608 below
+        # is a false positive for this parameterized construction.)
         where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
-        sql = (
+        sql = (  # noqa: S608
             f"SELECT * FROM ContentPreferences {where} "
             "ORDER BY content_type, content_name"
         )
