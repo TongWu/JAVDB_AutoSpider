@@ -58,3 +58,11 @@ SESSION_QUERY_CASES = [
     ("session_query", "state_only", {"state": "committed", "cursor": None, "limit": 50}),
     ("session_query", "state_and_cursor", {"state": "failed", "cursor": "<ENCODED>", "limit": 20}),
 ]
+STATS_TREND_QUERY_CASES = [
+    ("stats_trend_query", "success_rate", {"metric": "success_rate", "cutoff": "2026-01-01"}),
+    ("stats_trend_query", "movies", {"metric": "movies", "cutoff": "2026-01-01"}),
+    ("stats_trend_query", "torrents", {"metric": "torrents", "cutoff": "2026-01-01"}),
+    ("stats_trend_query", "history_growth", {"metric": "history_growth", "cutoff": "2026-01-01"}),
+    ("stats_trend_query", "pikpak", {"metric": "pikpak", "cutoff": "2026-01-01"}),
+    ("stats_trend_query", "dedup", {"metric": "dedup", "cutoff": "2026-01-01"}),
+]

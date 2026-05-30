@@ -292,8 +292,86 @@
         "state": "failed"
       },
       "sql": "SELECT Id, Status, WriteMode, RunId, RunAttempt, DateTimeCreated, ReportType, ReportDate, FailureReason FROM ReportSessions WHERE Status = ? AND Id < ? ORDER BY Id DESC LIMIT ?"
+    },
+    {
+      "bindings": [
+        "reports",
+        "2026-01-01"
+      ],
+      "builder": "stats_trend_query",
+      "name": "success_rate",
+      "params": {
+        "cutoff": "2026-01-01",
+        "metric": "success_rate"
+      },
+      "sql": "SELECT DATE(DateTimeCreated), CAST(SUM(CASE WHEN Status='committed' THEN 1 ELSE 0 END) AS REAL) / COUNT(*) FROM ReportSessions WHERE DateTimeCreated >= ? GROUP BY DATE(DateTimeCreated) ORDER BY DATE(DateTimeCreated)"
+    },
+    {
+      "bindings": [
+        "reports",
+        "2026-01-01"
+      ],
+      "builder": "stats_trend_query",
+      "name": "movies",
+      "params": {
+        "cutoff": "2026-01-01",
+        "metric": "movies"
+      },
+      "sql": "SELECT DATE(rs.DateTimeCreated) AS d, COUNT(rm.Id) FROM ReportSessions rs LEFT JOIN ReportMovies rm ON rm.SessionId = rs.Id WHERE rs.DateTimeCreated >= ? GROUP BY d ORDER BY d"
+    },
+    {
+      "bindings": [
+        "reports",
+        "2026-01-01"
+      ],
+      "builder": "stats_trend_query",
+      "name": "torrents",
+      "params": {
+        "cutoff": "2026-01-01",
+        "metric": "torrents"
+      },
+      "sql": "SELECT DATE(rs.DateTimeCreated) AS d, COUNT(rt.Id) FROM ReportSessions rs LEFT JOIN ReportMovies rm ON rm.SessionId = rs.Id LEFT JOIN ReportTorrents rt ON rt.ReportMovieId = rm.Id WHERE rs.DateTimeCreated >= ? GROUP BY d ORDER BY d"
+    },
+    {
+      "bindings": [
+        "history",
+        "2026-01-01"
+      ],
+      "builder": "stats_trend_query",
+      "name": "history_growth",
+      "params": {
+        "cutoff": "2026-01-01",
+        "metric": "history_growth"
+      },
+      "sql": "SELECT DATE(DateTimeCreated), COUNT(*) FROM MovieHistory WHERE DateTimeCreated >= ? GROUP BY DATE(DateTimeCreated) ORDER BY DATE(DateTimeCreated)"
+    },
+    {
+      "bindings": [
+        "operations",
+        "2026-01-01"
+      ],
+      "builder": "stats_trend_query",
+      "name": "pikpak",
+      "params": {
+        "cutoff": "2026-01-01",
+        "metric": "pikpak"
+      },
+      "sql": "SELECT DATE(DateTimeUploadedToPikpak), COUNT(*) FROM PikpakHistory WHERE DateTimeUploadedToPikpak >= ? GROUP BY DATE(DateTimeUploadedToPikpak) ORDER BY DATE(DateTimeUploadedToPikpak)"
+    },
+    {
+      "bindings": [
+        "operations",
+        "2026-01-01"
+      ],
+      "builder": "stats_trend_query",
+      "name": "dedup",
+      "params": {
+        "cutoff": "2026-01-01",
+        "metric": "dedup"
+      },
+      "sql": "SELECT DATE(DateTimeDetected), COALESCE(SUM(ExistingFolderSize), 0) FROM DedupRecords WHERE IsDeleted=1 AND DateTimeDetected >= ? GROUP BY DATE(DateTimeDetected) ORDER BY DATE(DateTimeDetected)"
     }
   ],
   "normalization": "collapse-whitespace-runs-to-single-space-and-trim",
-  "version": "779346e19835b1e7"
+  "version": "85fef51b76f3decc"
 }
