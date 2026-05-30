@@ -10,6 +10,8 @@
 
 **Source spec:** [ADR-010](ADR-010-d1-access-port.md), D1-D4, D8-D10 Phase 1.
 
+**Status:** Completed — implemented, locally verified, and production-baked as part of ADR-010 closeout on 2026-05-30.
+
 ---
 
 ## Files

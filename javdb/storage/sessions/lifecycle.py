@@ -32,7 +32,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from javdb.storage.db import (
+from javdb.storage.db._db_reports import (
     db_begin_finalize_session as _db_begin_finalize_session,
     db_finish_commit_session as _db_finish_commit_session,
     db_get_session_status as _db_get_session_status,

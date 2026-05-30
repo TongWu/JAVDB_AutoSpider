@@ -6,7 +6,7 @@ from javdb.storage.repos.session_lifecycle_repo import SessionLifecycleRepo
 def test_create_report_session_delegates_with_db_path():
     repo = SessionLifecycleRepo(db_path="/tmp/reports.db")
 
-    with patch("javdb.storage.db.db_create_report_session", return_value="sess-1") as mock_fn:
+    with patch("javdb.storage.db._db_reports.db_create_report_session", return_value="sess-1") as mock_fn:
         result = repo.create_report_session(
             report_type="rclone_inventory",
             report_date="20260523",
@@ -37,7 +37,7 @@ def test_create_report_session_forwards_full_param_set():
     threads the full db_create_report_session kwarg set, not just the trio."""
     repo = SessionLifecycleRepo()
 
-    with patch("javdb.storage.db.db_create_report_session", return_value="sess-2") as mock_fn:
+    with patch("javdb.storage.db._db_reports.db_create_report_session", return_value="sess-2") as mock_fn:
         result = repo.create_report_session(
             report_type="daily",
             report_date="20260530",

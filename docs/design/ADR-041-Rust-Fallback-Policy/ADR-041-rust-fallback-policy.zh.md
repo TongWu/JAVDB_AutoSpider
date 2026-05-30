@@ -5,18 +5,18 @@
 | **状态**   | Proposed —— 执行见 [IMP-ADR041-01](IMP-ADR041-01-demote-and-split.md)  |
 | **日期**   | 2026-05-30                                                            |
 | **作者**   | Ted                                                                   |
-| **关联**   | [ADR-020](../ADR-020-Parser-Interface-Consolidation/ADR-020-parser-interface-consolidation.zh.md)(解析器接口;依赖本 ADR 修订的"冻结镜像 + parity 守卫"), [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.zh.md)(Rust scraper 是规范解析路径), [ADR-023](../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.zh.md)(Selection Signal 插在 `ProxyPool.set_health_provider` 上), [ADR-011](../_archive/ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.zh.md)(确立了 parsing 模块 + 冻结 Python 镜像) |
+| **关联**   | [ADR-020](../_archive/ADR-020-Parser-Interface-Consolidation/ADR-020-parser-interface-consolidation.zh.md)(解析器接口;依赖本 ADR 修订的"冻结镜像 + parity 守卫"), [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.zh.md)(Rust scraper 是规范解析路径), [ADR-023](../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.zh.md)(Selection Signal 插在 `ProxyPool.set_health_provider` 上), [ADR-011](../_archive/ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.zh.md)(确立了 parsing 模块 + 冻结 Python 镜像) |
 
 > 源自 2026-05-30 架构评审(候选 1 ——"哪些部分该用 Rust/Go 重构"):[architecture-review-2026-05-30.zh.html](../architecture/architecture-review-2026-05-30.zh.html)。评审发现 Rust 迁移只做了一半:若干 Rust 模块的接缝后面顶着一份**保持 value-parity 锁步的完整 Python 重实现**,外加一个**幽灵** Rust 适配器(HTTP requester)。本 ADR 确定这一回退层的稳态策略;幽灵 requester 单独跟踪(评审卡片 2)。
 
 ## 背景
 
-Rust core(`javdb/rust_core/`,经 PyO3/maturin 安装为 `javdb.rust_core`)是 HTML 解析、magnet 归类、代理池/封禁管理、URL 工具与脱敏的高性能实现。它们每一个前面都有一个 Python 模块,遵循 **"优先 `javdb.rust_core`,`ImportError` 时回退到纯 Python 镜像"** 的模式 —— [ADR-020](../ADR-020-Parser-Interface-Consolidation/ADR-020-parser-interface-consolidation.zh.md)(D2)称之为"layer-legal 且惯用"。
+Rust core(`javdb/rust_core/`,经 PyO3/maturin 安装为 `javdb.rust_core`)是 HTML 解析、magnet 归类、代理池/封禁管理、URL 工具与脱敏的高性能实现。它们每一个前面都有一个 Python 模块,遵循 **"优先 `javdb.rust_core`,`ImportError` 时回退到纯 Python 镜像"** 的模式 —— [ADR-020](../_archive/ADR-020-Parser-Interface-Consolidation/ADR-020-parser-interface-consolidation.zh.md)(D2)称之为"layer-legal 且惯用"。
 
 2026-05-30 评审量化了这套惯用法当前形态的代价:
 
 - **约 2,826 行 Python 在这些接缝后重实现了 Rust**:解析器 `javdb/parsing/fallback/`(1,070)、代理 `javdb/proxy/pool.py` + `ban_manager.py`(942)、以及 `javdb/spider/url_helper.py` + `javdb/parsing/magnet_categorize.py` + `javdb/infra/masking.py`(814)。
-- **两份实现被要求完全一致**,由 **value-parity 测试**强制 —— `tests/parity/test_parser_parity.py`(368)与 `tests/unit/test_magnet_parity.py`(105)。[ADR-020](../ADR-020-Parser-Interface-Consolidation/ADR-020-parser-interface-consolidation.zh.md)(D6)把 `test_magnet_parity.py` 定为迁移"全程保持绿色"的守卫。
+- **两份实现被要求完全一致**,由 **value-parity 测试**强制 —— `tests/parity/test_parser_parity.py`(368)与 `tests/unit/test_magnet_parity.py`(105)。[ADR-020](../_archive/ADR-020-Parser-Interface-Consolidation/ADR-020-parser-interface-consolidation.zh.md)(D6)把 `test_magnet_parity.py` 定为迁移"全程保持绿色"的守卫。
 - **两个适配器只有在行为跨接缝有差异时才构成真正的接缝**。这里行为*不允许*有差异 —— parity 即契约 —— 所以接缝顶着的是重复的局部性(locality),不是变化;代价是一份永久的双语言锁步。
 - **生产从不跑这份回退**。`docker/Dockerfile` 与 `docker/Dockerfile.api` 都用 `maturin build --release` 构建 wheel;CI 经 `setup-python-env` → `install-rust-wheel` 安装。Python 镜像只在 wheel 缺失时运行 —— 即没有 Rust 工具链的本地开发。[ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.zh.md) 已把 **Rust scraper 视为规范解析路径**(其 parse contract 与 fill-rate 遥测观测的是 Rust 输出)。
 - **部分模块的回退是静默的**。解析器和代理池在回退时记 `WARNING`;`javdb/parsing/magnet_categorize.py` 只记 `logger.debug` —— 所以 magnet 归类的降级是看不见的。
@@ -35,9 +35,9 @@ Rust core(`javdb/rust_core/`,经 PyO3/maturin 安装为 `javdb.rust_core`)是 HT
 - **Best-Effort Fallback** —— `javdb.parsing`(index/detail/tag 解析器)、`javdb/parsing/magnet_categorize.py`、`javdb/spider/url_helper.py`、`javdb/infra/masking.py`(以及 `javdb/proxy/pool.py` 中并置的 `mask_proxy_url` 辅助函数)。纯 Python 镜像**保留**,作为免工具链的本地开发便利。其输出可检查,偏差自证。它是 **shape-contracted(形状契约),而非 value-parity-guaranteed(逐值保证)**。
 - **Rust-Required Module** —— `ProxyPool` 与 `ProxyBanManager`。它们有状态且不可检查。Python 重实现**移除**;无 `javdb.rust_core` 时构造它们会抛出清晰错误。
 
-**D2. Best-Effort 层:用形状契约取代 value parity。** 删除 value-parity 套件 `tests/parity/test_parser_parity.py` 与 `tests/unit/test_magnet_parity.py`。代之以一个薄 **shape/smoke** 测试,断言 Python 回退(a)能 import、(b)对小夹具返回正确的*形状* —— 与 Rust 对象暴露相同的访问器/键(如 `MovieDetail.get_magnets_as_legacy()`、`subtitle/hacked_subtitle/hacked_no_subtitle/no_subtitle` 字典键),**而非**与 Rust 逐字节相等。这保住了调用方真正依赖的唯一契约(形状,见 [ADR-020](../ADR-020-Parser-Interface-Consolidation/ADR-020-parser-interface-consolidation.zh.md) D2 的 `get_magnets_as_legacy()` 一致性),同时丢掉双语言逐值锁步。
+**D2. Best-Effort 层:用形状契约取代 value parity。** 删除 value-parity 套件 `tests/parity/test_parser_parity.py` 与 `tests/unit/test_magnet_parity.py`。代之以一个薄 **shape/smoke** 测试,断言 Python 回退(a)能 import、(b)对小夹具返回正确的*形状* —— 与 Rust 对象暴露相同的访问器/键(如 `MovieDetail.get_magnets_as_legacy()`、`subtitle/hacked_subtitle/hacked_no_subtitle/no_subtitle` 字典键),**而非**与 Rust 逐字节相等。这保住了调用方真正依赖的唯一契约(形状,见 [ADR-020](../_archive/ADR-020-Parser-Interface-Consolidation/ADR-020-parser-interface-consolidation.zh.md) D2 的 `get_magnets_as_legacy()` 一致性),同时丢掉双语言逐值锁步。
 
-**D3. 回退要响、要一致。** 每次 Best-Effort 回退恰好记一条 `WARNING`:*"Rust core unavailable — pure-Python `<area>` fallback is best-effort and may diverge from production."* 把 `javdb/parsing/magnet_categorize.py` 的 `logger.debug` 提升为 `logger.warning`,使没有任何回退是静默的。这直接化解了 [ADR-020](../ADR-020-Parser-Interface-Consolidation/ADR-020-parser-interface-consolidation.zh.md) D6 的顾虑(静默掉到慢 Python 路径):parity 去掉后,是*响度* —— 而非逐值相等测试 —— 来阻止 Rust 静默旁路被忽视。
+**D3. 回退要响、要一致。** 每次 Best-Effort 回退恰好记一条 `WARNING`:*"Rust core unavailable — pure-Python `<area>` fallback is best-effort and may diverge from production."* 把 `javdb/parsing/magnet_categorize.py` 的 `logger.debug` 提升为 `logger.warning`,使没有任何回退是静默的。这直接化解了 [ADR-020](../_archive/ADR-020-Parser-Interface-Consolidation/ADR-020-parser-interface-consolidation.zh.md) D6 的顾虑(静默掉到慢 Python 路径):parity 去掉后,是*响度* —— 而非逐值相等测试 —— 来阻止 Rust 静默旁路被忽视。
 
 **D4. Rust-Required 守卫放在构造 chokepoint,而非 import。** 守卫位于每个调用方都会经过的两个工厂 —— `create_proxy_pool_from_config(...)` 与 `get_ban_manager()` —— Rust 不可用时抛出清晰错误(`RuntimeError`,信息:"proxy pool requires the Rust core (`javdb.rust_core`); install the wheel")。它**不是** import 时失败:`import javdb.proxy.pool` 对无害共享符号(`ProxyInfo`、`is_proxy_usable`、`mask_proxy_url`)仍安全,而从不构造池的 `--no-proxy` 运行无需 Rust 仍可工作。移除有状态的 Python `ProxyPool` 选择/封禁主体与 `ProxyBanManager` Python 类;折叠 `RUST_PROXY_AVAILABLE` 分支。
 
@@ -45,7 +45,7 @@ Rust core(`javdb/rust_core/`,经 PyO3/maturin 安装为 `javdb.rust_core`)是 HT
 
 **D5a. 代理行为测试面迁移到 Rust 池 —— 不是删除(实现期修订)。** 代理池/封禁管理器**没有任何 Rust 端测试**(`pool.rs` / `ban_manager.rs` 的 `#[test]` 为零),因此 `tests/unit/test_proxy_pool.py` + `tests/unit/test_proxy_ban_manager.py`(~1,000 行)是选择/冷却/health 加权/ban-skip/session 级封禁的**唯一**行为规格。这些测试大多直接构造 *Python* `ProxyPool()` / `ProxyBanManager()`,所以删 Python 类会把代理行为覆盖降到接近零。因此把行为测试**改指向**经工厂 `create_proxy_pool_from_config(...)` / `get_ban_manager()` 构造(本环境下返回 Rust 池),并针对 Rust 实现断言同一行为契约 —— **保留并升级**测试面(它现在通过真正的接口测试生产实现;接口即测试面)。依赖 Python-only 形状的直接 API 测试(`add_proxy()` 单数、直接 `ProxyBanManager()` singleton 语义)适配到 Rust API(`add_proxies_from_list` / 工厂),或在 Rust 面确有差异处舍弃。`apps/cli/ops/profile_hot_paths.py` 的两个 Python 池微基准(`bench_get_next_proxy_rr`、`bench_get_next_proxy_weighted`)失去对象,删除;`ProxyInfo` / `is_proxy_usable` 基准保留。
 
-**D6. 生产不受影响;本变更只改无 Rust 路径。** Docker 与 CI 总是携带 wheel,所以生产从未跑过回退、也永不触发 D4 错误。本变更删除了一个维护锚点(双语言逐值 parity),并在本地开发中拒绝了一条不可检测的偏差路径(代理池)。这与 [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.zh.md)(Rust 是规范解析路径)和 [ADR-020](../ADR-020-Parser-Interface-Consolidation/ADR-020-parser-interface-consolidation.zh.md)(Rust-first 分派)一致。
+**D6. 生产不受影响;本变更只改无 Rust 路径。** Docker 与 CI 总是携带 wheel,所以生产从未跑过回退、也永不触发 D4 错误。本变更删除了一个维护锚点(双语言逐值 parity),并在本地开发中拒绝了一条不可检测的偏差路径(代理池)。这与 [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.zh.md)(Rust 是规范解析路径)和 [ADR-020](../_archive/ADR-020-Parser-Interface-Consolidation/ADR-020-parser-interface-consolidation.zh.md)(Rust-first 分派)一致。
 
 **D7. 与 ADR-020 / ADR-011 的关系 —— 修订,不是 supersede。** ADR-020 的解析器接口合并与 ADR-011 的 parsing 模块原样保留。本 ADR 只修订它们依赖的*回退策略*维度:ADR-020 D6 把 value parity 当作**迁移守卫**(现已 Implemented);ADR-041 把 Best-Effort 层的**稳态**守卫设为*形状而非逐值*,并对 Rust-Required 层整体移除镜像。会在 ADR-020 的 Status Log 加一条回指。
 
@@ -97,7 +97,7 @@ Rust core(`javdb/rust_core/`,经 PyO3/maturin 安装为 `javdb.rust_core`)是 HT
 
 ## 参考
 
-- [ADR-020 — Parser Interface Consolidation](../ADR-020-Parser-Interface-Consolidation/ADR-020-parser-interface-consolidation.zh.md)
+- [ADR-020 — Parser Interface Consolidation](../_archive/ADR-020-Parser-Interface-Consolidation/ADR-020-parser-interface-consolidation.zh.md)
 - [ADR-035 — Site-Contract Drift Sentinel](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.zh.md)
 - [ADR-023 — Proxy Recommendation Policy](../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.zh.md)
 - [ADR-011 — JavDB Parsing Module](../_archive/ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.zh.md)
