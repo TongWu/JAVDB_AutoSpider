@@ -178,12 +178,6 @@ class SessionLifecycleRepo:
 
         return db_get_session_run_identity(session_id, db_path=self._db_path)
 
-    def pending_session_stats(self, session_id: str) -> dict[str, int]:
-        """Snapshot pending-table counts for *session_id* (Phase 2 verify)."""
-        from javdb.storage.db import db_pending_session_stats
-
-        return db_pending_session_stats(session_id, db_path=self._db_path)
-
     def find_stale_pending_sessions(
         self,
         *,
