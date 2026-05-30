@@ -333,6 +333,39 @@ CREATE INDEX IF NOT EXISTS idx_ops_incidents_session
     ON OpsIncidents(session_id);
 CREATE INDEX IF NOT EXISTS idx_ops_incidents_status_type
     ON OpsIncidents(status, incident_type);
+
+-- Event-spine tables (ADR-036 Phase 1). Mirrors
+-- javdb/migrations/d1/2026_05_29_add_pipeline_event.sql so a fresh local
+-- init_db() builds them too (not just the remote D1 migration). Additive,
+-- append-only; does NOT touch the authoritative pending->commit path.
+CREATE TABLE IF NOT EXISTS PipelineEvent (
+    seq          INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id   TEXT NOT NULL,
+    run_id       TEXT,
+    run_attempt  INTEGER,
+    event_type   TEXT NOT NULL,
+    entity_type  TEXT NOT NULL,
+    entity_id    TEXT,
+    payload      TEXT,
+    created_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_pipeline_event_session
+    ON PipelineEvent(session_id, seq);
+CREATE INDEX IF NOT EXISTS idx_pipeline_event_type
+    ON PipelineEvent(event_type, seq);
+
+CREATE TABLE IF NOT EXISTS EventConsumerCursor (
+    consumer   TEXT PRIMARY KEY,
+    last_seq   INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS RunEventSummary (
+    session_id  TEXT NOT NULL,
+    event_type  TEXT NOT NULL,
+    count       INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (session_id, event_type)
+);
 """
 
 _OPERATIONS_DDL = _SCHEMA_VERSION_DDL + """

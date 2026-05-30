@@ -33,3 +33,19 @@ def test_emit_is_best_effort_on_unknown_type():
     # unknown type is still appended (validation is advisory, not a hard gate) but
     # a None/blank session must NOT raise — emit returns None on bad input.
     assert store.emit("RunStarted", session_id="", entity_type="session", repo=repo) is None
+
+
+def test_emit_without_repo_writes_to_isolated_db(_isolate_sqlite):
+    """emit() with no explicit repo must (1) find PipelineEvent in a fresh
+    init_db (it is in _REPORTS_DDL), and (2) write to the *monkeypatched* test
+    DB — not the real reports.db. Guards both the local-DDL coverage and the
+    call-time REPORTS_DB_PATH resolution that keeps emits out of the dev DB."""
+    import sqlite3
+
+    seq = store.emit("RunStarted", session_id="iso-test", entity_type="session")
+    assert seq is not None  # table exists in init_db; write succeeded
+
+    rows = sqlite3.connect(_isolate_sqlite).execute(
+        "SELECT session_id, event_type FROM PipelineEvent"
+    ).fetchall()
+    assert ("iso-test", "RunStarted") in rows

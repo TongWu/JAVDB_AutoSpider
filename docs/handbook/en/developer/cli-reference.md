@@ -613,7 +613,7 @@ proof of the emit → consume → replay loop; it does not touch the authoritati
 | Argument | Description | Default |
 |----------|-------------|---------|
 | `--replay` | Reset the consumer cursor and clear the projection, then rebuild it from `seq` 0. | `False` |
-| `--batch` | Number of events to read per `read_since` page. | `500` |
+| `--batch` | Number of events to read per `read_since` page. Must be `>= 1`. | `500` |
 | `--log-level` | Logging level. Choices: `DEBUG`, `INFO`, `WARNING`, `ERROR`. | `INFO` |
 
 Exit code is always `0` on a clean run; the number of projected events is logged.

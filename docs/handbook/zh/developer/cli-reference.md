@@ -606,7 +606,7 @@ python3 -m apps.cli.ops.diagnose_run \
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
 | `--replay` | 重置消费者游标并清空投影，然后从 `seq` 0 重建。 | `False` |
-| `--batch` | 每次 `read_since` 分页读取的事件数。 | `500` |
+| `--batch` | 每次 `read_since` 分页读取的事件数。必须 `>= 1`。 | `500` |
 | `--log-level` | 日志级别。可选：`DEBUG`、`INFO`、`WARNING`、`ERROR`。 | `INFO` |
 
 正常运行退出码恒为 `0`；投影的事件数会写入日志。
