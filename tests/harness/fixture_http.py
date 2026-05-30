@@ -14,6 +14,13 @@ def _norm(url: str) -> str:
 
 class FixtureHTTP:
     def __init__(self, pages: dict, *, record_miss: bool = False) -> None:
+        """Replay ``pages`` (URL -> HTML) at the get_page seam.
+
+        ``record_miss`` is a **Phase-2 reserved stub** and currently has no
+        effect: on a cassette miss the URL is only tracked in ``misses`` and
+        ``None`` is returned. Phase 2 will wire it to perform a real request and
+        save the response to refresh the cassette (ADR-037 D3).
+        """
         self._pages = {_norm(k): v for k, v in pages.items()}
         self.record_miss = record_miss
         self.misses: list[str] = []
