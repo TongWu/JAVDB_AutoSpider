@@ -67,6 +67,11 @@
       "category": "Developer Guides"
     },
     {
+      "source": "docs/handbook/en/developer/pipeline-test-harness.md",
+      "wiki_page": "Pipeline-Test-Harness",
+      "category": "Developer Guides"
+    },
+    {
       "source": "docs/handbook/en/developer/publish-to-public.md",
       "wiki_page": "Publish-to-Public",
       "category": "Developer Guides"

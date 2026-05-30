@@ -14,6 +14,59 @@
 
 ---
 
+## Implementation Reconciliation (Phase 1 shipped — 2026-05-30)
+
+> **Status: Implemented.** The shipped harness is the source of truth
+> (`tests/harness/`, 11 tests green in <0.4s). The Task code blocks below were
+> the *plan*; reality diverged on the integration seams flagged in Task 6. The
+> divergences and why the original assumptions were wrong:
+
+1. **Three real steps, not `run_spider` + a bare commit.** The daily flow is
+   `run_spider(options)` → `run_uploader(QbUploaderOptions(...))` →
+   `commit_session(CommitRequest(session_id))`. The plan's
+   `db_commit_session_history(session_id)` is the low-level drain; the
+   session-lifecycle-correct entry is `commit_session(CommitRequest(...))`
+   (`javdb/storage/sessions/commit.py`). The pipeline runs the uploader as a
+   **subprocess**, so the harness must call `run_uploader` in-process itself
+   (monkeypatch can't cross a subprocess).
+2. **Session id + CSV path come from the returned `SpiderRunResult`, not
+   `get_active_session_id()`.** `run_spider`'s `finally` block clears the active
+   session context before returning (`run_service.py:959-961`), so the plan's
+   post-hoc `get_active_session_id()` returns `None`. Use
+   `spider_result.session_id` / `spider_result.csv_path`.
+3. **`SpiderRunOptions` is a 17-field frozen dataclass** — all fields required.
+   The plan's 3-arg constructor `SpiderRunOptions(use_proxy=..., ...)` raises
+   `TypeError`. The harness builds the full object (see
+   `PipelineHarness._daily_options`; reference `tests/unit/test_spider_run_options.py`).
+4. **The uploader's qB probes run before `_wrap_session_as_client`.**
+   `run_uploader` calls `test_qbittorrent_connection` then `login_to_qbittorrent`
+   first; if not neutered it returns `error_reason="qb-unreachable"` before any
+   add. The harness patches **all three** seams (both probes → `True`, plus
+   `_wrap_session_as_client` → `FakeQB`).
+5. **`STORAGE_MODE` must be `duo`, not `db`.** The autouse `_isolate_sqlite`
+   forces `db` (no CSV), but the uploader consumes the spider's dated output CSV
+   — `use_csv()` must be `True`. The harness overrides
+   `_cfg_mod._storage_mode_override = "duo"` (mirrors production) so the spider
+   writes both pending DB rows AND the CSV handoff.
+6. **`get_db()` takes a *path*, not a logical name.** The plan's
+   `get_db("history")` opens a DB literally named `history` (empty → "no such
+   table"). Call `get_db()` with no arg — it defaults to `HISTORY_DB_PATH`,
+   which `_isolate_sqlite` points at the one seeded temp DB.
+7. **Determinism extras the plan omitted:** `monkeypatch.chdir(tmp_path)` keeps
+   the spider's `reports/` artifacts out of the repo; patching
+   `MovieSleepManager.sleep` (class-level, covers the runtime-bound instance)
+   and `up_service.DELAY_BETWEEN_ADDITIONS = 0` removes the ~10s of real-time
+   throttle (22s → 0.08s).
+8. **Fixture registration:** the `pipeline_harness` fixture is registered via
+   `tests/harness/conftest.py` (a module-level fixture isn't auto-discovered by
+   pytest); `__init__.py` only re-exports the names.
+
+The shipped `PipelineHarness.run_daily` / `_install` / `HistoryView` reflect all
+of the above; treat `tests/harness/pipeline_harness.py` as canonical over the
+Task 4 listing below.
+
+---
+
 ## File Structure
 
 | Path | Create/Modify | Responsibility |
