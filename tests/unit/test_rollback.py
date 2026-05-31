@@ -808,3 +808,118 @@ class TestRollbackScopeFiltering:
         # for traceability — that's expected.
         assert row is not None
         assert row["Status"] == "failed"
+
+
+# ── Newer session-tagged tables: provenance is PRESERVED ─────────────────
+
+
+class TestRollbackPreservesProvenanceTables:
+    """Regression: a rolled-back session must PRESERVE the newer session-tagged
+    enrichment / audit / projection tables. Their session_id is provenance, not
+    an ownership FK, and the ADRs decouple them from session/rollback:
+
+      * PipelineEvent / RunEventSummary — ADR-036 append-only event spine (it
+        records the SessionFailed event) and its projection.
+      * ParseRunFieldFill — ADR-035 enrichment, off the Pending->Commit path.
+      * OpsIncidents — ADR-035/026 diagnosis of the very run being rolled back.
+      * AcquisitionOutcome — ADR-033 D10 (bypasses session/rollback); keyed by
+        qb_hash, so the torrent really sits in qB and the reconcile loop must
+        keep tracking it.
+      * EmailNotificationHistory — records emails actually sent.
+
+    Cascading a rollback into any of these would drop the failed run's own
+    record or orphan a live external resource from its tracker.
+    """
+
+    @staticmethod
+    def _seed_reports(conn, sid):
+        conn.execute(
+            "INSERT INTO RunEventSummary (session_id, event_type, count) "
+            "VALUES (?, ?, ?)",
+            (sid, "RunStarted", 1),
+        )
+        conn.execute(
+            "INSERT INTO ParseRunFieldFill "
+            "(session_id, page_type, field, fill_rate, sample_count) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (sid, "index", "href", 1.0, 100),
+        )
+        conn.execute(
+            "INSERT INTO OpsIncidents (incident_id, trigger_source, "
+            "incident_type, model_version, detector_version, "
+            "bundle_schema_version, session_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (f"inc-{sid}", "sentinel", "parse_drift", "m", "d", "b", sid),
+        )
+        conn.execute(
+            "INSERT INTO PipelineEvent (session_id, event_type, entity_type, "
+            "created_at) VALUES (?, ?, ?, ?)",
+            (sid, "SessionFailed", "session", "2026-05-31T00:00:00Z"),
+        )
+
+    def test_reports_scope_preserves_enrichment_tables(self):
+        sid = _create_session()
+        with get_db() as conn:
+            self._seed_reports(conn, sid)
+            # A genuinely session-owned FK child that SHOULD be cleared, to
+            # prove the rollback still ran against this session.
+            conn.execute(
+                "INSERT INTO ReportMovies (SessionId, Href, VideoCode) "
+                "VALUES (?, ?, ?)",
+                (sid, "/v/x", "X-1"),
+            )
+
+        db_rollback_session(sid, scope="reports")
+
+        with get_db() as conn:
+            # FK child cleared (sanity: the rollback acted on this session).
+            assert conn.execute(
+                "SELECT COUNT(*) AS n FROM ReportMovies WHERE SessionId=?",
+                (sid,),
+            ).fetchone()["n"] == 0
+            # Provenance/enrichment tables PRESERVED.
+            for table in (
+                "RunEventSummary", "ParseRunFieldFill", "OpsIncidents",
+                "PipelineEvent",
+            ):
+                kept = conn.execute(
+                    f"SELECT COUNT(*) AS n FROM {table} WHERE session_id=?",
+                    (sid,),
+                ).fetchone()["n"]
+                assert kept == 1, f"{table} must survive rollback"
+
+    def test_operations_scope_preserves_acquisition_and_email(self):
+        sid = _create_session()
+        with get_db() as conn:
+            conn.execute(
+                "INSERT INTO AcquisitionOutcome (qb_hash, session_id, state) "
+                "VALUES (?, ?, ?)",
+                (f"hash-{sid}", sid, "queued"),
+            )
+            conn.execute(
+                "INSERT INTO EmailNotificationHistory "
+                "(SessionId, Recipient, Subject, SentAt) VALUES (?, ?, ?, ?)",
+                (sid, "a@b.c", "subj", "2026-05-31T00:00:00Z"),
+            )
+            # A genuinely session-owned ops row that SHOULD be cleared.
+            db_append_pikpak_history(
+                {"torrent_hash": "h1", "torrent_name": "n1"}, session_id=sid,
+            )
+
+        result = db_rollback_session(sid, scope="operations")
+        # AcquisitionOutcome is preserved → not reported among the deletes.
+        assert "AcquisitionOutcome" not in result["operations"]
+        assert result["operations"]["PikpakHistory"] == 1
+
+        with get_db() as conn:
+            assert conn.execute(
+                "SELECT COUNT(*) AS n FROM PikpakHistory WHERE SessionId=?",
+                (sid,),
+            ).fetchone()["n"] == 0
+            assert conn.execute(
+                "SELECT COUNT(*) AS n FROM AcquisitionOutcome WHERE session_id=?",
+                (sid,),
+            ).fetchone()["n"] == 1
+            assert conn.execute(
+                "SELECT COUNT(*) AS n FROM EmailNotificationHistory WHERE SessionId=?",
+                (sid,),
+            ).fetchone()["n"] == 1
