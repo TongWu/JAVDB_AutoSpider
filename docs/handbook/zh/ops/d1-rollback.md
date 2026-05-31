@@ -122,11 +122,12 @@ Startup replay 是显式开启且受 outbox 状态约束的。如果 replay 将�
 
 | 表族 | 回滚技术 | Schema 新增 |
 |---|---|---|
-| `ReportMovies`, `ReportTorrents`, `ReportSessions`, `SpiderStats`, `UploaderStats`, `PikpakStats` | 按 `SessionId` 级联删除；拒绝删除 `Status='committed'` 的 `ReportSessions` 行 | `ReportSessions.Status TEXT DEFAULT 'in_progress'`；Phase 3 新增 `WriteMode` 和 `Status` 的 `finalizing` 值 |
+| `ReportMovies`, `ReportTorrents`, `ReportSessions`, `SpiderStats`, `UploaderStats`, `PikpakStats`, `RunEventSummary`, `ParseRunFieldFill`, `OpsIncidents` | 按 session id 级联删除（FK 子表用 `SessionId`，较新的按 run 事件/指标表用 `session_id`）；拒绝删除 `Status='committed'` 的 `ReportSessions` 行 | `ReportSessions.Status TEXT DEFAULT 'in_progress'`；Phase 3 新增 `WriteMode` 和 `Status` 的 `finalizing` 值 |
 | `MovieHistory`, `TorrentHistory`（Pending 模式 — Phase 3 默认） | 所有写入先暂存到 `PendingMovie/TorrentHistoryWrites`；提交时一次性重算派生字段并 UPSERT 到正式表；回滚时对 `Status='in_progress'` 的行执行 `DELETE`，对 `Status='finalizing'` 的行执行 `db_resume_finalizing_session`。无需 audit 重放。 | `PendingMovieHistoryWrites` 和 `PendingTorrentHistoryWrites` 表（各含显式应用生成的雪花 `Seq`、`ApplyState`、`SessionId` / `RunId` / `RunAttempt`） |
 | `MovieHistory`, `TorrentHistory`（已退役 audit 回退） | 已由 ADR-005 退役。`JAVDB_HISTORY_WRITE_MODE=audit` 不再启用 audit replay；会降级为 pending。 | Audit 表和 archive/cleanup 工具已删除。 |
-| `PikpakHistory`, `DedupRecords`, `InventoryAlignNoExactMatch` | 删除按 session 范围划定的行。`DedupRecords` 的软删除/孤立更新会先将其前像快照到 `DedupRecordsRollback_<session_id>`，因此回滚可恢复已有行并删除失败 session 创建的行 | 每个表上的 `SessionId INTEGER`；按 session 的 `DedupRecordsRollback_<session_id>` 备份表 |
+| `PikpakHistory`, `DedupRecords`, `InventoryAlignNoExactMatch`, `AcquisitionOutcome` | 删除按 session 范围划定的行。`DedupRecords` 的软删除/孤立更新会先将其前像快照到 `DedupRecordsRollback_<session_id>`，因此回滚可恢复已有行并删除失败 session 创建的行。`AcquisitionOutcome`（ADR-033）按 `session_id` 清除——已回滚 session 的 queued 结果已被撤销 | 每个表上的 `SessionId`（`AcquisitionOutcome` 用 `session_id`）；按 session 的 `DedupRecordsRollback_<session_id>` 备份表 |
 | `RcloneInventory` | 按 session 暂存表 → 原子 D1 批量交换。失败的扫描丢弃暂存表；正式表永远不会看到半写入的扫描 | `RcloneInventoryStaging_<session_id>`（每次运行创建/丢弃） |
+| `PipelineEvent`, `EmailNotificationHistory` | **不回滚**——刻意 append-only。其 session id 是溯源信息，而非归属指针：`PipelineEvent`（ADR-036 事件主线）记录的正是 `SessionFailed` 事件本身，而 `EmailNotificationHistory` 记录的是真实发出的邮件（回滚无法撤销的外部动作）。它们理应在已回滚 session 之后继续存在，且对 `ReportSessions` 没有 FK，因此永远不会触发 `foreign_key_check` 违规。覆盖守卫 `tests/unit/test_rollback_table_coverage.py` 会强制每个新增的 session 标记表归入本行或某一级联行 | `PipelineEvent.session_id`、`EmailNotificationHistory.SessionId`（仅作溯源） |
 
 ### 为什么 history 需要 audit 表？*（仅历史背景）*
 

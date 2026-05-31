@@ -808,3 +808,131 @@ class TestRollbackScopeFiltering:
         # for traceability — that's expected.
         assert row is not None
         assert row["Status"] == "failed"
+
+
+# ── Newer session-tagged tables: cascade vs append-only ──────────────────
+
+
+class TestRollbackCleansNewerSessionTables:
+    """Regression: a rolled-back session must not orphan rows in the newer
+    session-tagged tables. The session-COUPLED ones (RunEventSummary,
+    ParseRunFieldFill, OpsIncidents, AcquisitionOutcome) are cleared; the
+    append-only audit logs (PipelineEvent — the ADR-036 event spine that holds
+    the SessionFailed event — and EmailNotificationHistory — real emails sent)
+    SURVIVE, because their session_id is provenance, not an ownership FK.
+
+    Without the cascade these rows orphaned silently: their session_id had no
+    ReportSessions parent after the rollback deleted it.
+    """
+
+    @staticmethod
+    def _seed_reports(conn, sid):
+        conn.execute(
+            "INSERT INTO RunEventSummary (session_id, event_type, count) "
+            "VALUES (?, ?, ?)",
+            (sid, "RunStarted", 1),
+        )
+        conn.execute(
+            "INSERT INTO ParseRunFieldFill "
+            "(session_id, page_type, field, fill_rate, sample_count) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (sid, "index", "href", 1.0, 100),
+        )
+        conn.execute(
+            "INSERT INTO OpsIncidents (incident_id, trigger_source, "
+            "incident_type, model_version, detector_version, "
+            "bundle_schema_version, session_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (f"inc-{sid}", "sentinel", "parse_drift", "m", "d", "b", sid),
+        )
+        # Append-only event spine — must survive (records the failure itself).
+        conn.execute(
+            "INSERT INTO PipelineEvent (session_id, event_type, entity_type, "
+            "created_at) VALUES (?, ?, ?, ?)",
+            (sid, "SessionFailed", "session", "2026-05-31T00:00:00Z"),
+        )
+
+    def test_reports_scope_clears_coupled_keeps_pipeline_event(self):
+        sid = _create_session()
+        sid_good = _create_session()
+        db_mark_session_committed(sid_good)
+        with get_db() as conn:
+            self._seed_reports(conn, sid)
+            self._seed_reports(conn, sid_good)
+
+        result = db_rollback_session(sid, scope="reports")
+        assert result["reports"]["RunEventSummary"] == 1
+        assert result["reports"]["ParseRunFieldFill"] == 1
+        assert result["reports"]["OpsIncidents"] == 1
+
+        with get_db() as conn:
+            for table in ("RunEventSummary", "ParseRunFieldFill", "OpsIncidents"):
+                gone = conn.execute(
+                    f"SELECT COUNT(*) AS n FROM {table} WHERE session_id=?",
+                    (sid,),
+                ).fetchone()["n"]
+                survives = conn.execute(
+                    f"SELECT COUNT(*) AS n FROM {table} WHERE session_id=?",
+                    (sid_good,),
+                ).fetchone()["n"]
+                assert gone == 0, table
+                assert survives == 1, table
+            # PipelineEvent is append-only: the SessionFailed event SURVIVES.
+            kept = conn.execute(
+                "SELECT COUNT(*) AS n FROM PipelineEvent WHERE session_id=?",
+                (sid,),
+            ).fetchone()["n"]
+        assert kept == 1
+
+    def test_operations_scope_clears_acquisition_keeps_email(self):
+        sid = _create_session()
+        sid_b = _create_session()
+        with get_db() as conn:
+            for s in (sid, sid_b):
+                conn.execute(
+                    "INSERT INTO AcquisitionOutcome (qb_hash, session_id, state) "
+                    "VALUES (?, ?, ?)",
+                    (f"hash-{s}", s, "queued"),
+                )
+            # Append-only send log — must survive (the email was really sent).
+            conn.execute(
+                "INSERT INTO EmailNotificationHistory "
+                "(SessionId, Recipient, Subject, SentAt) VALUES (?, ?, ?, ?)",
+                (sid, "a@b.c", "subj", "2026-05-31T00:00:00Z"),
+            )
+
+        result = db_rollback_session(sid, scope="operations")
+        assert result["operations"]["AcquisitionOutcome"] == 1
+
+        with get_db() as conn:
+            gone = conn.execute(
+                "SELECT COUNT(*) AS n FROM AcquisitionOutcome WHERE session_id=?",
+                (sid,),
+            ).fetchone()["n"]
+            survives = conn.execute(
+                "SELECT COUNT(*) AS n FROM AcquisitionOutcome WHERE session_id=?",
+                (sid_b,),
+            ).fetchone()["n"]
+            kept_email = conn.execute(
+                "SELECT COUNT(*) AS n FROM EmailNotificationHistory WHERE SessionId=?",
+                (sid,),
+            ).fetchone()["n"]
+        assert gone == 0
+        assert survives == 1
+        assert kept_email == 1
+
+    def test_dry_run_counts_new_tables_without_mutation(self):
+        sid = _create_session()
+        with get_db() as conn:
+            self._seed_reports(conn, sid)
+
+        result = db_rollback_session(sid, scope="reports", dry_run=True)
+        assert result["reports"]["RunEventSummary"] == 1
+        assert result["reports"]["ParseRunFieldFill"] == 1
+        assert result["reports"]["OpsIncidents"] == 1
+
+        with get_db() as conn:
+            still_there = conn.execute(
+                "SELECT COUNT(*) AS n FROM ParseRunFieldFill WHERE session_id=?",
+                (sid,),
+            ).fetchone()["n"]
+        assert still_there == 1

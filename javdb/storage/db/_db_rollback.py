@@ -40,6 +40,58 @@ def _ensure_imports():
         _OPERATIONS_DB_PATH = OPERATIONS_DB_PATH
 
 
+# ── Session-owned table coverage (single source of truth) ────────────────
+#
+# Every table tagged with a session id falls into exactly one bucket below.
+# Keeping the buckets module-level lets a regression test assert the schema has
+# no session-tagged table that escaped a deliberate decision — so adding a new
+# such table without wiring it into rollback fails CI rather than silently
+# orphaning rows on the next failed run (see
+# ``tests/unit/test_rollback_table_coverage.py``).
+
+# reports DB — CLEARED on rollback ({table: session-id column}). The four FK
+# children plus the newer per-run event/metric tables. ReportSessions (the PK)
+# and ReportTorrents (cascaded via ReportMovies; no session column) are handled
+# by bespoke statements in ``_rollback_reports``.
+ROLLBACK_REPORTS_TABLES = {
+    'ReportMovies': 'SessionId',
+    'SpiderStats': 'SessionId',
+    'UploaderStats': 'SessionId',
+    'PikpakStats': 'SessionId',
+    'RunEventSummary': 'session_id',
+    'ParseRunFieldFill': 'session_id',
+    'OpsIncidents': 'session_id',
+}
+
+# operations DB — CLEARED on rollback ({table: session-id column}).
+ROLLBACK_OPERATIONS_TABLES = {
+    'PikpakHistory': 'SessionId',
+    'DedupRecords': 'SessionId',
+    'InventoryAlignNoExactMatch': 'SessionId',
+    'AcquisitionOutcome': 'session_id',
+}
+
+# history DB — CLEARED on rollback ({table: session-id column}). Only the
+# pending-write staging tables are session-scoped-deleted; committed
+# MovieHistory / TorrentHistory are durable dedup memory rollback preserves
+# (see ROLLBACK_PRESERVED_TABLES).
+ROLLBACK_HISTORY_PENDING_TABLES = {
+    'PendingMovieHistoryWrites': 'SessionId',
+    'PendingTorrentHistoryWrites': 'SessionId',
+}
+
+# Session-tagged tables DELIBERATELY NOT session-scoped-deleted by rollback —
+# their session id is provenance, not an ownership pointer, so they outlive a
+# rolled-back session. Adding a table here is a conscious decision the coverage
+# test forces.
+ROLLBACK_PRESERVED_TABLES = frozenset({
+    'PipelineEvent',             # ADR-036 append-only event spine (SessionFailed)
+    'EmailNotificationHistory',  # records emails really sent (external action)
+    'MovieHistory',              # durable dedup memory; only Pending* is undone
+    'TorrentHistory',            # durable dedup memory (FK child of MovieHistory)
+})
+
+
 # ── Dedup rollback helpers ──────────────────────────────────────────────
 
 _DEDUP_RECORD_COLUMNS = (
@@ -217,6 +269,12 @@ def _rollback_reports(
     """
     _ensure_imports()
     counts: Dict[str, int] = {}
+    # Session-owned reports tables (FK children + newer per-run event/metric
+    # tables) are cleared so a rolled-back session leaves no dangling rows —
+    # else they orphan once the ReportSessions row below is deleted. The
+    # column name differs (SessionId vs session_id), carried per-table in
+    # ROLLBACK_REPORTS_TABLES. PipelineEvent is intentionally absent (see
+    # ROLLBACK_PRESERVED_TABLES — append-only event spine).
     with _get_db(db_path or _REPORTS_DB_PATH) as conn:
         if dry_run:
             counts['ReportTorrents'] = (conn.execute(
@@ -224,12 +282,9 @@ def _rollback_reports(
                 "WHERE ReportMovieId IN (SELECT Id FROM ReportMovies WHERE SessionId=?)",
                 (session_id,),
             ).fetchone() or {'n': 0})['n']
-            for table in (
-                'ReportMovies', 'SpiderStats', 'UploaderStats',
-                'PikpakStats',
-            ):
+            for table, col in ROLLBACK_REPORTS_TABLES.items():
                 counts[table] = (conn.execute(
-                    f"SELECT COUNT(*) AS n FROM {table} WHERE SessionId=?",
+                    f"SELECT COUNT(*) AS n FROM {table} WHERE {col}=?",
                     (session_id,),
                 ).fetchone() or {'n': 0})['n']
             counts['ReportSessions'] = (conn.execute(
@@ -244,12 +299,9 @@ def _rollback_reports(
             "WHERE ReportMovieId IN (SELECT Id FROM ReportMovies WHERE SessionId=?)",
             (session_id,),
         ).rowcount or 0)
-        for table in (
-            'ReportMovies', 'SpiderStats', 'UploaderStats',
-            'PikpakStats',
-        ):
+        for table, col in ROLLBACK_REPORTS_TABLES.items():
             counts[table] = (conn.execute(
-                f"DELETE FROM {table} WHERE SessionId=?", (session_id,),
+                f"DELETE FROM {table} WHERE {col}=?", (session_id,),
             ).rowcount or 0)
         # Only delete the ReportSessions row if it isn't committed (so a
         # late-arriving rollback can never wipe a successful run).
@@ -273,18 +325,16 @@ def _rollback_operations(
     staging_table = f"RcloneInventoryStaging_{_session_id_to_identifier_suffix(session_id)}"
     dedup_backup_table = _dedup_rollback_table(session_id)
     with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
-        op_specs = [
-            ('PikpakHistory', "DELETE FROM PikpakHistory WHERE SessionId=?"),
-            ('DedupRecords',
-             "DELETE FROM DedupRecords WHERE SessionId=?"),
-            ('InventoryAlignNoExactMatch',
-             "DELETE FROM InventoryAlignNoExactMatch WHERE SessionId=?"),
-        ]
+        # (table, session-id column). AcquisitionOutcome (ADR-033 closed-loop)
+        # is session-owned: a queued outcome for a rolled-back session was
+        # undone, so it is cleared too. EmailNotificationHistory is deliberately
+        # absent (see ROLLBACK_PRESERVED_TABLES — it logs emails really sent, an
+        # external action a rollback cannot undo).
+        op_specs = list(ROLLBACK_OPERATIONS_TABLES.items())
         if dry_run:
-            for table, _ in op_specs:
-                where = "WHERE SessionId=?"
+            for table, col in op_specs:
                 counts[table] = (conn.execute(
-                    f"SELECT COUNT(*) AS n FROM {table} {where}",
+                    f"SELECT COUNT(*) AS n FROM {table} WHERE {col}=?",
                     (session_id,),
                 ).fetchone() or {'n': 0})['n']
             if _dedup_rollback_table_exists(conn, session_id):
@@ -313,8 +363,10 @@ def _rollback_operations(
         )
         counts['DedupRecords.restored'] = restored
         counts['DedupRecords.restore_skipped'] = restore_skipped
-        for table, sql in op_specs:
-            counts[table] = (conn.execute(sql, (session_id,)).rowcount or 0)
+        for table, col in op_specs:
+            counts[table] = (conn.execute(
+                f"DELETE FROM {table} WHERE {col}=?", (session_id,),
+            ).rowcount or 0)
         if restore_skipped == 0:
             try:
                 conn.execute(f"DROP TABLE IF EXISTS {dedup_backup_table}")
