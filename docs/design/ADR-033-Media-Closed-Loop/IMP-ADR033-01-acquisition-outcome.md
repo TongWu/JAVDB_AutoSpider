@@ -6,7 +6,7 @@
 
 **Goal:** Record the real fate of every selected torrent after qBittorrent (`queued → downloading → completed`, plus `stalled`/`failed`) in a new D1-canonical `AcquisitionOutcome` table, written by an async `Options→Result` reconcile service.
 
-**Architecture:** A new `javdb/ops/reconcile/` module mirrors the ADR-026 diagnosis module shape: typed `models.py`, read-only `collectors.py` (`SourceCollector` seam, `QbCollector` only in Phase 1), a `service.py` whose `run(ReconcileOptions) -> ReconcileResult` is the **single writer**, and `persistence.py` wiring `get_db('operations')`. The uploader writes a `state=queued` row at add-time (reusing `extract_hash_from_magnet`); the existing cleanup step pushes `state=completed` for the hashes it removes (ADR-033 D3); a new `ReconcileLibrary.yml` cron drives `downloading`/`stalled`/`failed` derivation.
+**Architecture:** A new `javdb/ops/reconcile/` module mirrors the ADR-026 diagnosis module shape: typed `models.py`, read-only `collectors.py` (`SourceCollector` seam, `QbCollector` only in Phase 1), a `service.py` whose `run(ReconcileOptions) -> ReconcileResult` is the **single writer**, and `persistence.py` wiring `get_db(OPERATIONS_DB_PATH)`. The uploader writes a `state=queued` row at add-time (reusing `extract_hash_from_magnet`); the existing cleanup step pushes `state=completed` for the hashes it removes (ADR-033 D3); a new `ReconcileLibrary.yml` cron drives `downloading`/`stalled`/`failed` derivation.
 
 **Tech Stack:** Python 3, `sqlite3`/D1 via `javdb.storage.db.get_db`, `dataclasses`, `pytest`, Cloudflare D1 + `wrangler`, GitHub Actions.
 
@@ -22,7 +22,7 @@
 | `javdb/ops/reconcile/__init__.py` | Create | Package marker + public re-exports |
 | `javdb/ops/reconcile/models.py` | Create | `AcquisitionState`, `AcquisitionOutcomeRecord`, `Observation`, `ReconcileOptions`, `ReconcileResult`, `utc_now_iso` |
 | `javdb/storage/repos/acquisition_outcome_repo.py` | Create | `AcquisitionOutcomeRepo` (upsert / mark_state / get / list_active) |
-| `javdb/ops/reconcile/persistence.py` | Create | `get_db('operations')` wiring → repo context |
+| `javdb/ops/reconcile/persistence.py` | Create | `get_db(OPERATIONS_DB_PATH)` wiring → repo context |
 | `javdb/ops/reconcile/collectors.py` | Create | `SourceCollector` Protocol + read-only `QbCollector` |
 | `javdb/ops/reconcile/service.py` | Create | `run()` (sole writer) + `record_queued()` + `apply_cleanup_completed()` |
 | `apps/cli/ops/reconcile.py` | Create | CLI adapter: argparse + exit codes + `--json` |
@@ -442,7 +442,7 @@ git commit -m "feat(db): add AcquisitionOutcomeRepo with idempotent upsert/mark_
 
 ---
 
-## Task 4: Persistence wiring (`get_db('operations')`)
+## Task 4: Persistence wiring (`get_db(OPERATIONS_DB_PATH)`)
 
 **Files:**
 - Create: `javdb/ops/reconcile/persistence.py`
@@ -460,7 +460,7 @@ from __future__ import annotations
 import contextlib
 import logging
 
-from javdb.storage.db import get_db
+from javdb.storage.db import OPERATIONS_DB_PATH, get_db
 from javdb.storage.repos.acquisition_outcome_repo import AcquisitionOutcomeRepo
 
 logger = logging.getLogger(__name__)
@@ -471,7 +471,7 @@ def open_outcome_repo():
     """Yield an AcquisitionOutcomeRepo over the operations DB connection.
 
     Routing honours STORAGE_BACKEND via get_db (D1 / sqlite / dual)."""
-    with get_db("operations") as conn:
+    with get_db(OPERATIONS_DB_PATH) as conn:
         yield AcquisitionOutcomeRepo(conn)
 ```
 

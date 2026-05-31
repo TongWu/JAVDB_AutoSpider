@@ -1199,3 +1199,36 @@ class TestSnowflakeProcessTag:
         assert set(ids_a).isdisjoint(set(ids_b)), (
             "different process tags must yield disjoint Id sets"
         )
+
+
+class TestGetDbLogicalNameGuard:
+    """BFR-011: get_db() takes a filesystem PATH, not a logical name.
+
+    Passing a bare logical name ("history"/"reports"/"operations") used to
+    surface as a confusing sqlite3.DatabaseError (sqlite tries to open the
+    directory) or an opaque D1-router ValueError — and was routinely swallowed
+    by broad excepts, silently degrading to a fallback. The guard now fails
+    fast with an actionable message pointing at the *_DB_PATH constants.
+    """
+
+    @pytest.mark.parametrize("name", ["history", "reports", "operations"])
+    def test_get_db_rejects_logical_name(self, name):
+        with pytest.raises(ValueError, match="expects a filesystem path"):
+            with get_db(name):
+                pass
+
+    def test_get_db_error_points_at_path_constants(self):
+        with pytest.raises(ValueError, match="REPORTS_DB_PATH"):
+            with get_db("reports"):
+                pass
+
+    @pytest.mark.parametrize("name", ["history", "reports", "operations"])
+    def test_get_local_sqlite_db_rejects_logical_name(self, name):
+        with pytest.raises(ValueError, match="expects a filesystem path"):
+            with _db_conn.get_local_sqlite_db(name):
+                pass
+
+    def test_get_db_accepts_real_path(self, _isolate_sqlite):
+        # A real filesystem path must NOT trip the guard.
+        with get_db(_isolate_sqlite) as conn:
+            assert conn is not None
