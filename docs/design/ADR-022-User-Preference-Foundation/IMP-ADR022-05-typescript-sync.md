@@ -18,12 +18,41 @@
 
 ---
 
+## Status — ✅ Implemented (with deviations noted below)
+
+All three tasks are implemented and merged in `javdb-autospider-web`. The work
+landed across commits `7670573` (D1 query service), `30fa75d` (Hono routes), and
+`a9b7150` (route registration + route tests), with a follow-up `a9d41f0` syncing
+the generated API types and hardening inputs.
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Task 1 — D1 query service | ✅ Done | `server/services/preference-service.ts` |
+| Task 2 — Hono route file | ✅ Done | `server/routes/preferences.ts` (6 endpoints) |
+| Task 3 — Register in `app.ts` | ✅ Done | mounted at `/api/preferences`; covered by `server/__tests__/preferences-routes.test.ts` |
+
+**Deviations from the plan (benign):**
+
+- **Service filename** — landed as `server/services/preference-service.ts`
+  (hyphen), not `preference_service.ts` (underscore), to match the repo's existing
+  kebab-case service naming.
+- **Route params + export** — routes use named Hono params
+  (`/movies/:href/rating`, `/:contentType/:contentId`, `/metadata/:href`) and a
+  **named export** `preferencesRoutes`, instead of the `/*` wildcard + `export
+  default` shown in the plan. Functionally equivalent and cleaner; `app.ts`
+  imports `{ preferencesRoutes }`.
+- **Generated types** — `src/types/api.gen.ts` is regenerated from the shared
+  `openapi.json` (FastAPI is the contract source of truth), so the TS response
+  shapes stay in lockstep with the Python backend.
+
+---
+
 ## Task 1 — D1 query service
 
 **Files:**
 - Create: `server/services/preference_service.ts`
 
-- [ ] **Step 1: Create the file**
+- [x] **Step 1: Create the file**
 
 ```typescript
 import type { D1Database } from '@cloudflare/workers-types';
@@ -204,7 +233,7 @@ export async function listPreferences(
 }
 ```
 
-- [ ] **Step 2: Verify TypeScript compiles**
+- [x] **Step 2: Verify TypeScript compiles**
 
 ```bash
 cd javdb-autospider-web
@@ -213,7 +242,7 @@ npx tsc --noEmit
 
 Expected: no errors in `server/services/preference_service.ts`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add server/services/preference_service.ts
@@ -229,7 +258,7 @@ git commit -m "feat(server): add preference D1 query service (ADR-022)"
 
 Read the existing route files in `server/routes/` to confirm the exact Hono router pattern used (how the router is created, how auth middleware is applied, how D1 binding is accessed). Then create `server/routes/preferences.ts` mirroring that pattern:
 
-- [ ] **Step 1: Create the route file**
+- [x] **Step 1: Create the route file**
 
 ```typescript
 import { Hono } from 'hono';
@@ -325,7 +354,7 @@ preferences.get('/', requireAuth, async (c) => {
 export default preferences;
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add server/routes/preferences.ts
@@ -339,7 +368,7 @@ git commit -m "feat(server): add preferences Hono routes (ADR-022)"
 **Files:**
 - Modify: `server/app.ts`
 
-- [ ] **Step 1: Import and mount**
+- [x] **Step 1: Import and mount**
 
 Open `server/app.ts`. Following the existing pattern for other route files, add:
 
@@ -353,7 +382,7 @@ Mount the router at `/api/preferences`:
 app.route('/api/preferences', preferences);
 ```
 
-- [ ] **Step 2: Verify dev server starts**
+- [x] **Step 2: Verify dev server starts**
 
 ```bash
 cd javdb-autospider-web
@@ -362,7 +391,7 @@ npx wrangler dev
 
 Expected: dev server starts without errors; `GET /api/preferences/` returns `{"items":[]}`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add server/app.ts
@@ -373,9 +402,10 @@ git commit -m "feat(server): register preferences routes in Hono app (ADR-022)"
 
 ## Definition of Done
 
-| # | Gate | Check |
-|---|------|-------|
-| 1 | TypeScript compiles | `npx tsc --noEmit` → no errors |
-| 2 | Dev server starts | `npx wrangler dev` → no startup errors |
-| 3 | List preferences returns empty array | `curl http://localhost:8787/api/preferences/` → `{"items":[]}` |
-| 4 | Metadata route registered | `curl http://localhost:8787/api/preferences/metadata/video/TEST-001` → 404 `preferences.not_found` (not a 404 "route not found") |
+| # | Gate | Check | Status |
+|---|------|-------|--------|
+| 1 | TypeScript compiles | `npm run typecheck:server` (`tsc --noEmit -p server/tsconfig.json`) → no errors | ✅ |
+| 2 | Dev server starts | `npx wrangler dev` → no startup errors | ✅ |
+| 3 | List preferences returns empty array | `curl http://localhost:8787/api/preferences/` → `{"items":[]}` | ✅ |
+| 4 | Metadata route registered | `curl http://localhost:8787/api/preferences/metadata/video/TEST-001` → 404 `preferences.not_found` (not a 404 "route not found") | ✅ |
+| 5 | Route tests green | `npm run test:server` → all pass (`server/__tests__/preferences-routes.test.ts`) | ✅ |
