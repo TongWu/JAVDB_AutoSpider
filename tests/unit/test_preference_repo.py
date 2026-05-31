@@ -62,6 +62,23 @@ class TestMovieRatings:
         row = repo.upsert_rating(href='/video/ABC-003', rating=None, tags=[], notes=None)
         assert row['rating'] is None
 
+    @pytest.mark.parametrize(
+        ("href", "expected_video_code"),
+        [
+            ("/v/ABC-004", "ABC-004"),
+            ("https://javdb.com/v/ABC-005", "ABC-005"),
+            ("/video/ABC-006", "ABC-006"),
+        ],
+    )
+    def test_upsert_derives_video_code_from_javdb_href_shapes(
+        self, db_path, href, expected_video_code
+    ):
+        repo = PreferenceRepo(db_path=db_path)
+
+        row = repo.upsert_rating(href=href, rating=4, tags=[], notes=None)
+
+        assert row['video_code'] == expected_video_code
+
     def test_get_rating_returns_none_for_missing(self, db_path):
         repo = PreferenceRepo(db_path=db_path)
         assert repo.get_rating('/video/MISSING') is None
