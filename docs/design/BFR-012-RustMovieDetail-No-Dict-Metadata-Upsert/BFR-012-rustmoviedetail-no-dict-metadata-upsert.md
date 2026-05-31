@@ -38,15 +38,18 @@ attribute '__dict__'`. The pure-Python `MovieDetail` dataclass *does* have
 `__dict__`, so the bug is invisible on the Python fallback path and only fires
 when the Rust extension is active.
 
-**Non-obvious side effect — a second, silent failure in the hot path.** The
+**Non-obvious side effect — a second, latent failure in the hot path.** The
 same `.__dict__` form lived in `runner.py`'s detail-phase persist, the path the
-**normal daily spider** takes for every scraped movie. There it was wrapped in
-`try/except Exception: logger.debug(...)`, so it never surfaced: under the Rust
-parser (i.e. production), every per-movie `MovieMetadata` upsert has been
-failing silently at DEBUG level since ADR-022 shipped. The loud backfill error
-is what exposed a defect that the spider had been swallowing all along —
-`MovieMetadata` (an ADR-022 table destined for canonical D1) was simply not
-being populated by the live pipeline.
+**normal daily spider** takes for every scraped movie, wrapped in
+`try/except Exception: logger.debug(...)` — so under the Rust parser it would
+fail *silently* at DEBUG level rather than surface. Crucially, this path had
+**not yet run in production** when the bug was found (see Side Effects for the
+full timeline): the spider wiring (`e055804e`) merged to `main` at
+2026-05-30 20:07 (+0800), ~7 minutes *after* that evening's daily ingestion had
+already checked out the prior HEAD, and the fix landed before the next cron. So
+the defect was **latent** — had it gone unnoticed, the 2026-05-31 20:00 cron
+would have begun silently dropping every per-movie `MovieMetadata` write. The
+loud backfill error exposed it first.
 
 **Why the design was wrong, not just what broke.** `.__dict__` is a fragile way
 to turn a domain object into a field map: it assumes a pure-Python object and
@@ -89,16 +92,35 @@ Tests (`tests/unit/test_metadata_repo.py`):
 
 ## Side Effects
 
-None functional. Existing mapping callers (tests passing `_minimal_detail()`
+**No data loss.** Existing mapping callers (tests passing `_minimal_detail()`
 dicts) are unaffected — `isinstance(detail, Mapping)` short-circuits the
-coercion. The live spider now persists `MovieMetadata` for every scraped movie
-again, which it had been silently failing to do under the Rust parser.
+coercion.
+
+Timeline confirming zero production impact on the spider path:
+
+- `e055804e` (spider metadata wiring) merged to `main` at 2026-05-30 20:07 (+0800).
+- The daily ingestion cron fires at 12:00 UTC (20:00 +0800). That evening's run
+  had already checked out the prior `main` HEAD — which did *not* contain
+  `e055804e` — ~7 min before the merge, so it executed the pre-wiring code. Its
+  result auto-commit (`94c30ab1`, 20:31) lists the later merges as git ancestors
+  only because the push step rebased onto the updated `main`; the spider itself
+  ran the 20:00 checkout. (`merge-base --is-ancestor` reflects graph topology,
+  not the code a CI run actually executed.)
+- The next cron (2026-05-31 20:00) never ran under the bug — the fix landed
+  2026-05-31 10:21 (+0800).
+- No ad-hoc ingestion ran in the window (operator-confirmed).
+
+So `runner.py`'s upsert **never executed against a `RustMovieDetail` in
+production** — no `MovieMetadata` rows were lost. The only path that actually
+hit the bug was the Migration `--backfill-metadata` run, which fails *loudly*
+(no silent loss); re-running it after the fix populates the table.
 
 ## Follow-Up
 
-- [ ] Backfill (optional): the `MovieMetadata` rows the daily spider failed to
-      write during the silent-failure window (ADR-022 ship → this fix) can be
-      repopulated by re-running `--backfill-metadata`, which now succeeds.
+- [ ] Re-run the Migration `--backfill-metadata` job — it was fully blocked by
+      this bug (1000/1000 hrefs `write_failed`) and now succeeds; this is the
+      action that actually populates `MovieMetadata`. **No spider-side backfill
+      is needed** — that path never ran under the bug (see Side Effects).
 - [ ] Audit for other `.__dict__` / `vars()` reflection over parser results that
       could hit the same Rust-vs-Python divergence. `result_to_dict`
       (`javdb/spider/html_validators.py`) already does this correctly via
