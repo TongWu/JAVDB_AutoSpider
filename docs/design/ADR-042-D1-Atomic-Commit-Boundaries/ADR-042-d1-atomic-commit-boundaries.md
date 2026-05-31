@@ -1,4 +1,4 @@
-# ADR-042: D1 Logical ACID Boundaries for Authoritative Writes
+# ADR-042: D1 Atomic-Commit Boundaries for Authoritative Writes
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
@@ -6,7 +6,7 @@
 | **Date**    | 2026-05-31                                                            |
 | **Authors** | Ted                                                                   |
 | **Related** | [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md), [ADR-009](../_archive/ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-019](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md), [ADR-032](../ADR-032-Mandatory-Session-Binding/ADR-032-mandatory-session-binding.md), [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md) |
-| **Related Implementation Plans** | [IMP-ADR042-01](IMP-ADR042-01-d1-logical-acid-boundaries.md) - Phase 1 docs follow-through |
+| **Related Implementation Plans** | [IMP-ADR042-01](IMP-ADR042-01-d1-atomic-commit-boundaries.md) - Phase 1 docs follow-through |
 
 > This ADR was written after a grilling session that separated "D1 itself" from "the authoritative write boundary". That distinction matters: the system does not need a distributed transaction manager, but it does need a session-level boundary that behaves like one for the authoritative history path.
 
@@ -31,7 +31,7 @@ The practical problem is that these layers are easy to blur together. If "ACID" 
 
 ## Decision
 
-Use **session-level logical ACID** for authoritative writes, while keeping D1 transport, enrichment, and diagnostics outside that boundary.
+Use **session-level atomic commit** for authoritative writes, while keeping D1 transport, enrichment, and diagnostics outside that boundary.
 
 ### Design Decisions
 
@@ -48,7 +48,9 @@ The writes that decide whether a pipeline session succeeded or failed must behav
 - draining pending rows into `MovieHistory` / `TorrentHistory`;
 - rollback / resume behavior for failed or interrupted sessions.
 
-This is the boundary that needs ACID-like semantics.
+This is the boundary that needs atomic-commit semantics.
+
+**Scope of the guarantee.** "Atomic commit" here means *all-or-nothing at session scope* — atomicity plus consistency: the authoritative history either commits as one unit or stays recoverable to a clean state. It deliberately does **not** claim database-level isolation or durability across SQLite and D1. Concurrent sessions are kept apart by `SessionId` partitioning and the cross-process `MovieClaim` lease (not by a DB transaction); durability rests on D1's per-request / per-batch atomicity plus the recovery flow. This is why the ADR says "atomic commit" and not "ACID": only the A and C are promised at this boundary.
 
 **D3. Additive enrichment is outside the authoritative boundary.**
 
@@ -57,6 +59,8 @@ Tables and flows that are append-only, idempotent, or replayable may be D1-canon
 **D4. Diagnostics and recovery records are operational, not user truth.**
 
 Drift logs, port summaries, and recovery outbox entries are necessary for observability and recovery, but they do not upgrade a failed authoritative write into a success. They describe what happened; they do not redefine correctness.
+
+Note that recovery state can still *gate* an authoritative commit — an undrained `history:SESSION_ID` recovery ordering key, or a dead-lettered entry, will block the session from reaching `committed`. That is the point: a recovery record may **block** a failure from being declared a success, but it can never **upgrade** a failure into one. Gating is part of fail-closed behavior, not an exception to D4.
 
 **D5. Dual mode is a verifier, not a transaction manager.**
 
@@ -68,7 +72,7 @@ New D1-backed write paths must be classified during design review as one of:
 
 | Class | Meaning | Rule |
 | --- | --- | --- |
-| authoritative | Must participate in session-level logical ACID | Fail closed on error; session correctness depends on it |
+| authoritative | Must participate in session-level atomic commit | Fail closed on error; session correctness depends on it |
 | additive | Safe to replay or rebuild | Prefer idempotent UPSERT / append-only behavior |
 | diagnostic | Observes or explains state | Never determines user-facing correctness |
 
@@ -79,7 +83,7 @@ If a write cannot be classified, it is too ambiguous to land.
 - **Authoritative write** — a write that decides whether a session committed correctly.
 - **Additive write** — a write that records extra state without changing the meaning of the authoritative session.
 - **Diagnostic write** — a write that records evidence, drift, or recovery state.
-- **Session-level logical ACID** — the guarantee that the authoritative session behaves like one atomic unit even though the system uses multiple layers and recovery mechanisms underneath.
+- **Session-level atomic commit** — the guarantee that the authoritative session behaves like one all-or-nothing unit at session scope (atomicity + consistency), even though the system is built from multiple layers and recovery mechanisms underneath. It does not promise database-level isolation or durability across SQLite and D1.
 
 ## Consequences
 
@@ -115,7 +119,7 @@ Rejected. The repository already has additive enrichment and diagnostic surfaces
 
 | Phase | IMP | Ships | Deferred |
 | --- | --- | --- | --- |
-| Phase 1 | [IMP-ADR042-01](IMP-ADR042-01-d1-logical-acid-boundaries.md) | Propagate the boundary into CONTEXT.md and the storage / handbook docs | Any distributed-transaction fantasy across SQLite and D1 |
+| Phase 1 | [IMP-ADR042-01](IMP-ADR042-01-d1-atomic-commit-boundaries.md) | Propagate the boundary into CONTEXT.md and the storage / handbook docs | Any distributed-transaction fantasy across SQLite and D1 |
 
 ## References
 
@@ -133,4 +137,5 @@ Rejected. The repository already has additive enrichment and diagnostic surfaces
 
 ## Status Log
 
-- 2026-05-31: Accepted — codified the session-level logical ACID boundary for authoritative D1 writes.
+- 2026-05-31: Accepted — codified the session-level atomic-commit boundary for authoritative D1 writes.
+- 2026-05-31: Renamed from "logical ACID" to "atomic commit" and scoped the guarantee to atomicity + consistency (isolation via `SessionId`/`MovieClaim`, durability via recovery) after a design review flagged the ACID framing as overclaiming I/D.
