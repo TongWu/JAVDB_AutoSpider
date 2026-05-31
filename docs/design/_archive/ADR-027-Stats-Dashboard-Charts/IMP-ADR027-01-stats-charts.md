@@ -150,7 +150,7 @@
 - [x] Run from the web repo root:
 
 ```bash
-cd /Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web
+cd /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web
 npm run test:server -- --reporter=verbose 2>&1 | tail -30
 ```
 
@@ -2694,7 +2694,7 @@ Note: The Growth tab uses the `Line` component from `vue-chartjs` directly with 
 - [x] Run:
 
 ```bash
-cd /Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web
+cd /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web
 npx vue-tsc --noEmit 2>&1 | tail -20
 ```
 
@@ -2718,7 +2718,7 @@ git commit -m "feat(stats): rewrite StatsPage with 5 main tabs and sub-tab layou
 - [x] Run:
 
 ```bash
-cd /Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web
+cd /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web
 npm run test:server -- --reporter=verbose 2>&1 | tail -40
 ```
 

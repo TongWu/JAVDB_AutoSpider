@@ -14,7 +14,7 @@
 
 **Tech Stack:** Hono 4, TypeScript 5, Cloudflare Pages Functions, D1 native bindings, Web Crypto API (JWT HS256), Vitest + `@cloudflare/vitest-pool-workers`
 
-**Working Directory:** All paths are relative to the `javdb-autospider-web` repo root (`/Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web/`).
+**Working Directory:** All paths are relative to the `javdb-autospider-web` repo root (`/Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web/`).
 
 ---
 
@@ -68,7 +68,7 @@
 - [ ] **Step 1: Install dependencies**
 
 ```bash
-cd /Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web
+cd /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web
 npm install hono
 npm install -D @cloudflare/workers-types wrangler @cloudflare/vitest-pool-workers
 ```

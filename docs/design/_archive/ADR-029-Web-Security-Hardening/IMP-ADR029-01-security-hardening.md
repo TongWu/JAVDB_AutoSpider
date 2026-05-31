@@ -79,7 +79,7 @@ kvNamespaces: {
 
 - [ ] **Step 4: Verify typecheck passes**
 
-Run: `cd /Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx tsc --noEmit -p server/tsconfig.json`
+Run: `cd /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx tsc --noEmit -p server/tsconfig.json`
 Expected: No errors (or only pre-existing errors unrelated to our changes).
 
 - [ ] **Step 5: Commit**
@@ -137,7 +137,7 @@ describe("checkRateLimit", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts server/__tests__/rate-limit.test.ts`
+Run: `cd /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts server/__tests__/rate-limit.test.ts`
 Expected: FAIL — `checkRateLimit` not found.
 
 - [ ] **Step 3: Implement rate limiter**
@@ -177,7 +177,7 @@ export async function checkRateLimit(
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts server/__tests__/rate-limit.test.ts`
+Run: `cd /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts server/__tests__/rate-limit.test.ts`
 Expected: 3 tests PASS.
 
 - [ ] **Step 5: Commit**
@@ -247,7 +247,7 @@ describe("trackSession / getSessionCount", () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts server/__tests__/token-revocation.test.ts`
+Run: `cd /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts server/__tests__/token-revocation.test.ts`
 Expected: FAIL — imports not found.
 
 - [ ] **Step 3: Implement token revocation and session tracking**
@@ -323,7 +323,7 @@ export async function removeSession(kv: KVNamespace, username: string, jti: stri
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts server/__tests__/token-revocation.test.ts`
+Run: `cd /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts server/__tests__/token-revocation.test.ts`
 Expected: 5 tests PASS.
 
 - [ ] **Step 5: Commit**
@@ -377,7 +377,7 @@ Note: The rate limit test depends on the KV binding being available in miniflare
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts server/__tests__/auth-routes.test.ts`
+Run: `cd /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts server/__tests__/auth-routes.test.ts`
 Expected: FAIL on the rate-limiting test (no 429 returned yet).
 
 - [ ] **Step 3: Integrate rate limiting and session tracking into auth.ts**
@@ -593,7 +593,7 @@ import { revokeToken, isTokenRevoked, trackSession, getSessionCount, cleanExpire
 
 - [ ] **Step 5: Run auth route tests**
 
-Run: `cd /Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts server/__tests__/auth-routes.test.ts`
+Run: `cd /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts server/__tests__/auth-routes.test.ts`
 Expected: All tests PASS (existing + new rate-limit test).
 
 - [ ] **Step 6: Commit**
@@ -671,7 +671,7 @@ describe("Token revocation", () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts server/__tests__/auth-routes.test.ts`
+Run: `cd /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts server/__tests__/auth-routes.test.ts`
 Expected: FAIL — revoked token still accepted on POST.
 
 - [ ] **Step 3: Add revocation check to requireAuth middleware**
@@ -782,7 +782,7 @@ export function requireRole(role: string): MiddlewareHandler<HonoEnv> {
 
 - [ ] **Step 4: Run all auth tests**
 
-Run: `cd /Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts server/__tests__/auth-routes.test.ts`
+Run: `cd /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts server/__tests__/auth-routes.test.ts`
 Expected: All PASS.
 
 - [ ] **Step 5: Commit**
@@ -882,7 +882,7 @@ CORS_ORIGINS?: string;
 
 - [ ] **Step 4: Run tests**
 
-Run: `cd /Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts server/__tests__/auth-routes.test.ts`
+Run: `cd /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts server/__tests__/auth-routes.test.ts`
 Expected: CORS test PASS. All existing tests PASS.
 
 - [ ] **Step 5: Commit**
@@ -1032,7 +1032,7 @@ sessionsRoutes.post("/:session_id/commit", requireRole("admin"), async (c) => {
 
 - [ ] **Step 3: Run session tests**
 
-Run: `cd /Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts server/__tests__/sessions-routes.test.ts`
+Run: `cd /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts server/__tests__/sessions-routes.test.ts`
 Expected: All PASS including new test.
 
 - [ ] **Step 4: Commit**
@@ -1080,7 +1080,7 @@ it("GET /api/history/torrents/export includes BOM", async () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts server/__tests__/history-routes.test.ts`
+Run: `cd /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts server/__tests__/history-routes.test.ts`
 Expected: FAIL — no BOM in current output.
 
 - [ ] **Step 3: Add LIMIT, BOM, and truncation headers to movie export**
@@ -1171,7 +1171,7 @@ historyRoutes.get("/torrents/export", async (c) => {
 
 - [ ] **Step 5: Run history tests**
 
-Run: `cd /Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts server/__tests__/history-routes.test.ts`
+Run: `cd /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts server/__tests__/history-routes.test.ts`
 Expected: All PASS including new BOM tests.
 
 - [ ] **Step 6: Commit**
@@ -1192,7 +1192,7 @@ git commit -m "fix(history): add export hard limit (100k rows), BOM, and truncat
 Run:
 
 ```bash
-cd /Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web
+cd /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web
 npx wrangler d1 execute javdb-history --command "CREATE INDEX IF NOT EXISTS idx_th_movie_id ON TorrentHistory(MovieHistoryId);"
 npx wrangler d1 execute javdb-history --command "CREATE INDEX IF NOT EXISTS idx_mh_session ON MovieHistory(SessionId);"
 npx wrangler d1 execute javdb-history --command "CREATE INDEX IF NOT EXISTS idx_th_session ON TorrentHistory(SessionId);"
@@ -1227,12 +1227,12 @@ Expected: Shows `idx_th_movie_id`, `idx_mh_session`, `idx_th_session`, `idx_rs_s
 
 - [ ] **Step 1: Run entire server test suite**
 
-Run: `cd /Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts`
+Run: `cd /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts`
 Expected: All tests PASS.
 
 - [ ] **Step 2: Run typecheck**
 
-Run: `cd /Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vue-tsc --noEmit && npx tsc --noEmit -p server/tsconfig.json`
+Run: `cd /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vue-tsc --noEmit && npx tsc --noEmit -p server/tsconfig.json`
 Expected: No type errors.
 
 - [ ] **Step 3: Create KV namespace (before first deploy)**
