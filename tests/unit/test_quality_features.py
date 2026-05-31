@@ -34,12 +34,36 @@ def test_video_with_subtitle_and_junk():
     f = extract_file_features(files)
     assert f["video_file_count"] == 1
     assert f["subtitle_file_count"] == 1
-    assert f["non_video_file_count"] == 3  # srt + txt + jpg are non-video
+    assert f["non_video_file_count"] == 1  # only srt is counted outside junk
     assert f["junk_size_bytes"] == 201_000  # txt + jpg
     assert f["main_video_size_bytes"] == 5_000_000_000
     assert f["main_video_name"] == "ABC-123.mkv"
     assert 0.0 < f["junk_size_ratio"] < 0.001
     assert f["suspicious_file_count"] == 2
+
+
+def test_junk_video_file_is_excluded_from_video_count():
+    files = [
+        {"name": "movie.mkv", "size": 5_000_000_000, "priority": 1},
+        {"name": "sample.mp4", "size": 100_000_000, "priority": 1},
+        {"name": "readme.txt", "size": 1_000, "priority": 1},
+    ]
+    f = extract_file_features(files)
+    assert f["video_file_count"] == 1
+    assert f["main_video_name"] == "movie.mkv"
+    assert f["non_video_file_count"] == 0
+    assert f["junk_size_bytes"] == 100_001_000
+    assert f["suspicious_file_count"] == 2
+
+
+def test_negative_size_file_is_clamped_to_zero():
+    files = [{"name": "bad-size.mp4", "size": -100, "priority": 1}]
+    f = extract_file_features(files)
+    assert f["total_size_bytes"] == 0
+    assert f["main_video_size_bytes"] == 0
+    assert f["main_video_name"] == "bad-size.mp4"
+    assert f["main_video_ratio"] == 0.0
+    assert f["video_file_count"] == 1
 
 
 def test_inflated_torrent_with_ad_archive():

@@ -6,7 +6,7 @@
 
 **Goal:** Add typed dataclasses for the two ADR-024 records and a `TorrentQualityRepo` that UPSERTs/reads them on the canonical D1 `reports` database, following the established **conn-injected** repo pattern (constructor takes a live `get_db()` connection; a single `_*_COLUMNS` tuple drives INSERT/extract/row→dict).
 
-**Architecture:** A new domain package `javdb/quality/` holds the dataclasses (`models.py`) as **pure domain objects** (no `to_row()`). A new repo `javdb/storage/repos/torrent_quality_repo.py` mirrors `AcquisitionOutcomeRepo` (ADR-033): `__init__(self, conn)`, direct UPSERT keyed by the table primary keys, no session/pending flow. The repo owns all storage concerns (`json.dumps`, bool→int, the promoted-column/`features` split). Reads are backend-agnostic (rows accessed by column **name**, with `row_factory = sqlite3.Row` set defensively).
+**Architecture:** A new domain package `javdb/quality/` holds the dataclasses (`models.py`) as **pure domain objects** (no `to_row()`). A new repo `javdb/storage/repos/torrent_quality_repo.py` mirrors `AcquisitionOutcomeRepo` (ADR-033): `__init__(self, conn)`, direct UPSERT keyed by the table primary keys, no session/pending flow. The repo owns all storage concerns (`json.dumps`, bool→int, the promoted-column/`features` split). Reads are backend-agnostic (rows accessed by column **name**, with `row_factory = sqlite3.Row` set deterministically).
 
 **Tech Stack:** Python 3.11, `dataclasses`, Cloudflare D1 via a `get_db()`-supplied connection, pytest.
 
@@ -193,8 +193,9 @@ import pytest
 from javdb.quality.models import EvaluationRecord, EvidenceRecord
 from javdb.storage.repos.torrent_quality_repo import TorrentQualityRepo
 
-_MIGRATION = Path(
-    "javdb/migrations/d1/2026_05_31_add_torrent_quality_tables.sql"
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_MIGRATION = (
+    _REPO_ROOT / "javdb/migrations/d1/2026_05_31_add_torrent_quality_tables.sql"
 )
 
 
@@ -226,8 +227,8 @@ def test_upsert_and_get_evidence(conn):
     assert row is not None
     assert row["total_size_bytes"] == 1000
     assert row["main_video_ratio"] == 0.9
-    assert "main_video_detected" in row["reasons_json"]
-    assert "mkv" in row["features_json"]
+    assert row["reasons"] == ["main_video_detected"]
+    assert row["features"] == {"container": "mkv"}
 
 
 def test_upsert_evidence_is_idempotent(conn):
@@ -287,7 +288,8 @@ def test_upsert_and_list_evaluation(conn):
     assert rows[0]["score"] == 0.82
     assert rows[0]["policy_mode"] == "shadow"
     assert rows[0]["would_replace_current_choice"] == 0
-    assert "1080p" in rows[0]["javdb_tags_json"]
+    assert rows[0]["javdb_tags"] == ["1080p", "subtitle"]
+    assert rows[0]["reasons"] == ["subtitle_file_missing"]
 
 
 def test_list_recent_evaluations_orders_by_created_at(conn):
@@ -332,6 +334,45 @@ def test_list_recent_evaluations_orders_by_created_at(conn):
     rows = repo.list_recent_evaluations(limit=1)
     assert len(rows) == 1
     assert rows[0]["info_hash"] == "DEF456"
+
+
+def test_list_recent_evaluations_uses_pk_tiebreaker(conn):
+    repo = TorrentQualityRepo(conn)
+    repo.upsert_evaluation(
+        EvaluationRecord(
+            info_hash="ABC123",
+            movie_href="/v/abc",
+            scoring_version="v1",
+            video_code="ABC-123",
+            shadow_rank=2,
+        )
+    )
+    repo.upsert_evaluation(
+        EvaluationRecord(
+            info_hash="DEF456",
+            movie_href="/v/def",
+            scoring_version="v1",
+            video_code="DEF-456",
+            shadow_rank=1,
+        )
+    )
+    conn.execute(
+        """
+        UPDATE TorrentQualityEvaluation
+        SET created_at = ?
+        """,
+        ("2026-05-31T00:00:00.000Z",),
+    )
+
+    rows = repo.list_recent_evaluations(limit=2)
+    assert [row["info_hash"] for row in rows] == ["DEF456", "ABC123"]
+
+
+@pytest.mark.parametrize("limit", [0, -1])
+def test_list_recent_evaluations_rejects_non_positive_limit(conn, limit):
+    repo = TorrentQualityRepo(conn)
+    with pytest.raises(ValueError, match="limit must be positive"):
+        repo.list_recent_evaluations(limit=limit)
 ```
 
 - [x] **Step 2: Run the test to verify it fails**
@@ -435,6 +476,7 @@ _EVALUATION_COLUMNS = (
     "reasons_json",
 )
 _EVALUATION_PK = ("info_hash", "movie_href", "scoring_version")
+_JSON_COLUMNS = frozenset({"features_json", "javdb_tags_json", "reasons_json"})
 
 
 def _bool_to_int(value: Optional[bool]) -> Optional[int]:
@@ -511,10 +553,7 @@ class TorrentQualityRepo:
 
     def __init__(self, conn: sqlite3.Connection) -> None:
         self._conn = conn
-        try:
-            self._conn.row_factory = sqlite3.Row
-        except Exception:  # D1 connections may not expose row_factory
-            logger.debug("row_factory set failed", exc_info=True)
+        self._conn.row_factory = sqlite3.Row
 
     # -- evidence -----------------------------------------------------------
     def upsert_evidence(self, record: EvidenceRecord) -> None:
@@ -553,9 +592,13 @@ class TorrentQualityRepo:
         return [self._to_dict(r, _EVALUATION_COLUMNS) for r in rows]
 
     def list_recent_evaluations(self, *, limit: int = 50) -> list[dict[str, Any]]:
+        limit = int(limit)
+        if limit <= 0:
+            raise ValueError("limit must be positive")
         sql = (
             f"SELECT {', '.join(_EVALUATION_COLUMNS)} FROM TorrentQualityEvaluation "
-            "ORDER BY created_at DESC LIMIT ?"
+            "ORDER BY created_at DESC, info_hash DESC, movie_href DESC, "
+            "scoring_version DESC LIMIT ?"
         )
         rows = self._conn.execute(sql, (limit,)).fetchall()
         return [self._to_dict(r, _EVALUATION_COLUMNS) for r in rows]
@@ -563,7 +606,24 @@ class TorrentQualityRepo:
     @staticmethod
     def _to_dict(row: Mapping[str, Any], columns: tuple[str, ...]) -> dict[str, Any]:
         # Access by NAME (works for sqlite3.Row and D1 dict rows alike).
-        return {col: row[col] for col in columns}
+        data: dict[str, Any] = {}
+        for col in columns:
+            value = TorrentQualityRepo._decode_json_value(col, row[col])
+            key = col[:-5] if col.endswith("_json") else col
+            data[key] = value
+        return data
+
+    @staticmethod
+    def _decode_json_value(column: str, value: Any) -> Any:
+        if column not in _JSON_COLUMNS or value is None or value == "":
+            return value
+        if isinstance(value, (dict, list)):
+            return value
+        try:
+            return json.loads(value)
+        except (TypeError, ValueError):
+            logger.debug("failed to decode JSON column %s", column, exc_info=True)
+            return value
 ```
 
 - [x] **Step 4: Run the test to verify it passes**
@@ -572,7 +632,7 @@ class TorrentQualityRepo:
 pytest tests/unit/test_torrent_quality_repo.py -v
 ```
 
-Expected: PASS (5 tests).
+Expected: PASS (8 tests).
 
 - [x] **Step 5: Commit**
 
@@ -588,7 +648,7 @@ git commit -m "feat(quality): add conn-injected TorrentQualityRepo with UPSERT/r
 | # | Gate | Check |
 |---|------|-------|
 | 1 | Pure domain models | `EvidenceRecord` / `EvaluationRecord` carry no `to_row()` / serialization |
-| 2 | Repo round-trips | `pytest tests/unit/test_torrent_quality_repo.py -v` → PASS (4 tests) |
+| 2 | Repo round-trips | `pytest tests/unit/test_torrent_quality_repo.py -v` → PASS (8 tests) |
 | 3 | No session coupling | Repo never imports `db_session` / pending-write helpers |
 | 4 | Conn-injected | Repo is `__init__(self, conn)` (matches ADR-033/040); caller owns `get_db()` |
 | 5 | Backend-agnostic reads | Rows accessed by column **name**, never positional index |

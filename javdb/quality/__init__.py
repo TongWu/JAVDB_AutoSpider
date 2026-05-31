@@ -5,10 +5,10 @@ from javdb.quality.models import EvaluationRecord, EvidenceRecord
 from javdb.quality.scoring import SCORING_VERSION, score_torrent
 
 __all__ = [
-    "EvidenceRecord",
-    "EvaluationRecord",
     "PROBE_SCHEMA_VERSION",
     "SCORING_VERSION",
+    "EvaluationRecord",
+    "EvidenceRecord",
     "extract_file_features",
     "score_torrent",
 ]

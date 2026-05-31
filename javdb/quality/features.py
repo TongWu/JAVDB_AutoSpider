@@ -115,22 +115,25 @@ def extract_file_features(files: Iterable[dict[str, Any]]) -> dict[str, Any]:
             size = int(f.get("size", 0) or 0)
         except (TypeError, ValueError):
             size = 0
+        size = max(0, size)
         total += size
         ext = _ext(name)
+        is_junk = _is_junk(name, ext)
+
+        if is_junk:
+            junk_bytes += size
+            suspicious += 1
+            continue
 
         if ext in VIDEO_EXTENSIONS:
             video_count += 1
-            if size > main_video_size:
+            if size > main_video_size or not main_video_name:
                 main_video_size = size
                 main_video_name = _basename(name)
         else:
             non_video_count += 1
             if ext in SUBTITLE_EXTENSIONS:
                 subtitle_count += 1
-
-        if _is_junk(name, ext):
-            junk_bytes += size
-            suspicious += 1
 
     main_video_ratio = (main_video_size / total) if total > 0 else 0.0
     junk_size_ratio = (junk_bytes / total) if total > 0 else 0.0
