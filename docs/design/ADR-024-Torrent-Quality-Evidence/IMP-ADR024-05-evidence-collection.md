@@ -1,6 +1,6 @@
 # IMP-ADR024-05: ADR-024 Phase 1 — Evidence Collection (CLI + Workflow + Config)
 
-**Status:** Proposed
+**Status:** Proposed — design-reviewed & hardened 2026-05-31 (see Design Review note).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -17,6 +17,32 @@
 **Depends on:** IMP-01, IMP-02, IMP-03, IMP-04.
 
 **Blocks:** IMP-06 (API reads the rows this writes).
+
+---
+
+## Design Review note (2026-05-31)
+
+A `brainstorming` review against the hardened IMP-02 contract and the codebase
+fixed two real defects in the first draft of this plan:
+
+1. **Repo construction matched the hardened IMP-02.** The draft called
+   `TorrentQualityRepo()` (no args), which no longer exists — IMP-02 is now
+   conn-injected. `run_collection` opens `with get_db(REPORTS_DB_PATH) as conn`
+   and constructs `TorrentQualityRepo(conn)`, running the whole collection inside
+   that `with` (one connection holds all UPSERTs for the run).
+2. **Real movie context now joins from `AcquisitionOutcome` (ADR-033).** The draft
+   fed the qB category (`torrent.get("category")`, e.g. "Daily Ingestion") as
+   `javdb_category`, which is never a JavDB type key — that silently pinned
+   `category_consistent=True` (disabling an ADR headline signal) and polluted the
+   column. `AcquisitionOutcome` (written by the uploader, keyed by `qb_hash`)
+   already carries `href` / `video_code` / type-`category`, so `_build_context`
+   joins it by `qb_hash`. Torrents with no outcome row get `javdb_category=None`,
+   never the qB category. A `_build_context` unit test pins this.
+
+The features→`EvidenceRecord` seam was already correct in the draft
+(`features={k: feats[k] for k in ("main_video_name",)}` — promoted keys go to
+named fields, only the non-promoted hint goes to `.features`, respecting the
+IMP-02 non-overlap invariant).
 
 ---
 
@@ -151,6 +177,30 @@ def test_skips_torrents_without_hash():
     )
     assert summary["evidence_written"] == 0
     assert summary["skipped"] == 1
+
+
+def test_build_context_uses_acquisition_outcome_join():
+    from javdb.quality.collector import _build_context
+
+    class _Outcome:
+        href = "/v/abc"
+        video_code = "ABC-123"
+        category = "subtitle"  # JavDB type key, not the qB category
+
+    ctx = _build_context(
+        {"hash": "H", "name": "ABC-123-C", "category": "Daily Ingestion"}, _Outcome()
+    )
+    assert ctx["movie_href"] == "/v/abc"
+    assert ctx["video_code"] == "ABC-123"
+    assert ctx["javdb_category"] == "subtitle"  # the type key, not "Daily Ingestion"
+
+
+def test_build_context_without_outcome_does_not_use_qb_category():
+    from javdb.quality.collector import _build_context
+
+    ctx = _build_context({"hash": "H", "name": "x", "category": "Daily Ingestion"}, None)
+    assert ctx["javdb_category"] is None  # never the qB category
+    assert ctx["movie_href"] == ""
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -294,6 +344,38 @@ def collect_production_evidence(
     return summary
 
 
+def _build_context(torrent: dict, outcome: Any) -> dict:
+    """Movie context for scoring, joined from the ADR-033 AcquisitionOutcome row.
+
+    The production qB torrent does not itself carry the JavDB
+    ``href``/``video_code``/type-category, but ``AcquisitionOutcome`` (written by
+    the uploader, keyed by ``qb_hash``) does. When a row exists we use its real
+    ``href`` / ``video_code`` / ``category`` (the JavDB *type* key:
+    subtitle/no_subtitle/hacked_*), which activates the category-consistency
+    signal. When no row exists we leave ``javdb_category=None`` and
+    ``movie_href=""`` — we must NOT fall back to the qB category (e.g.
+    "Daily Ingestion"), which is not a type key and would both pollute the column
+    and silently disable the consistency check.
+    """
+    if outcome is not None:
+        return {
+            "movie_href": getattr(outcome, "href", "") or "",
+            "video_code": getattr(outcome, "video_code", None),
+            "javdb_category": getattr(outcome, "category", None),
+            "magnet_name": torrent.get("name"),
+            "javdb_tags": [],
+            "javdb_size_text": None,
+        }
+    return {
+        "movie_href": "",
+        "video_code": None,
+        "javdb_category": None,
+        "magnet_name": torrent.get("name"),
+        "javdb_tags": [],
+        "javdb_size_text": None,
+    }
+
+
 def run_collection(
     *,
     days: int = 2,
@@ -302,14 +384,17 @@ def run_collection(
 ) -> dict[str, int]:
     """Production wiring: connect to qB, gather torrents, collect evidence.
 
-    Reuses the file-filter connection/login path and the shared readonly helpers
-    so evidence collection runs against the same production endpoint the filter
-    uses. Returns the collector summary dict.
+    Reuses the file-filter connection/login path and the shared readonly helpers,
+    joins real movie context from ``AcquisitionOutcome`` (ADR-033) by ``qb_hash``,
+    and writes through a conn-injected ``TorrentQualityRepo`` (one ``reports``
+    connection holds every UPSERT for the run). Returns the collector summary dict.
     """
     import requests
 
     from javdb.integrations.qb import readonly
     from javdb.integrations.qb.file_filter import service as ff
+    from javdb.storage.db import OPERATIONS_DB_PATH, REPORTS_DB_PATH, get_db
+    from javdb.storage.repos.acquisition_outcome_repo import AcquisitionOutcomeRepo
     from javdb.storage.repos.torrent_quality_repo import TorrentQualityRepo
 
     ff.initialize_proxy_helper(use_proxy)
@@ -336,37 +421,39 @@ def run_collection(
             fetch_files=lambda h: ff.get_torrent_files(session, h, use_proxy),
         )
 
-        repo = TorrentQualityRepo()
+        # Join real movie context (href / video_code / type-category) by qb_hash.
+        outcomes: dict[str, Any] = {}
+        with get_db(OPERATIONS_DB_PATH) as ops_conn:
+            acq_repo = AcquisitionOutcomeRepo(ops_conn)
+            for torrent in torrents:
+                h = (torrent.get("hash") or "").strip()
+                if not h:
+                    continue
+                rec = acq_repo.get(h)
+                if rec is not None:
+                    outcomes[h] = rec
 
-        def _context_for(torrent: dict) -> dict:
-            # Phase 1 derives context from the qB torrent only (category + name).
-            # Richer movie context (href/video_code/tags) joins in a later phase
-            # once CSV/movie linkage is plumbed; default to the torrent name.
-            return {
-                "movie_href": "",
-                "video_code": None,
-                "javdb_category": torrent.get("category"),
-                "magnet_name": torrent.get("name"),
-                "javdb_tags": [],
-                "javdb_size_text": None,
-            }
-
-        return collect_production_evidence(
-            torrents=torrents,
-            fetch_files=lambda h: ff.get_torrent_files(session, h, use_proxy),
-            repo=repo,
-            context_for=_context_for,
-        )
+        with get_db(REPORTS_DB_PATH) as conn:
+            repo = TorrentQualityRepo(conn)
+            return collect_production_evidence(
+                torrents=torrents,
+                fetch_files=lambda h: ff.get_torrent_files(session, h, use_proxy),
+                repo=repo,
+                context_for=lambda t: _build_context(
+                    t, outcomes.get((t.get("hash") or "").strip())
+                ),
+            )
     finally:
         session.close()
 ```
 
-> **Note for the implementer (movie context):** Phase 1 keys evaluations by
-> `info_hash` and uses the qB torrent's category/name as context, because the
-> production qB torrent does not carry the JavDB `movie_href`/`video_code`. Joining
-> richer movie context (and Top-K runner-ups) is explicitly deferred — see the
-> ADR-024 roadmap. The `movie_href` column therefore may be empty (`""`) in
-> Phase 1; that is acceptable and the PK `(info_hash, movie_href, scoring_version)`
+> **Note for the implementer (movie context):** Phase 1 joins real movie context
+> from `AcquisitionOutcome` (ADR-033) by `qb_hash` — `href`, `video_code`, and the
+> JavDB type-`category` — so the category-consistency signal is live. Torrents
+> with no `AcquisitionOutcome` row (e.g. manually added) get `javdb_category=None`
+> and `movie_href=""`, never the qB category. Top-K runner-up collection and the
+> remote `quality_probe` role remain deferred (ADR-024 roadmap). An empty
+> `movie_href` is acceptable; the PK `(info_hash, movie_href, scoring_version)`
 > still holds.
 
 - [ ] **Step 4: Run the test to verify it passes**
@@ -377,7 +464,7 @@ Run:
 pytest tests/unit/test_quality_collector.py -v
 ```
 
-Expected: PASS (3 tests).
+Expected: PASS (5 tests).
 
 - [ ] **Step 5: Commit**
 
@@ -580,7 +667,7 @@ Run:
 pytest tests/unit/test_quality_evidence_cli.py -v
 ```
 
-Expected: PASS (3 tests).
+Expected: PASS (5 tests).
 
 - [ ] **Step 5: Commit**
 

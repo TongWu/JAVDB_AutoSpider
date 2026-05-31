@@ -1,6 +1,6 @@
 # IMP-ADR024-04: ADR-024 Phase 1 — Modularize qB Read Helpers
 
-**Status:** Proposed
+**Status:** Proposed — design-reviewed 2026-05-31 (see Design Review note).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -17,6 +17,25 @@
 **Depends on:** Nothing.
 
 **Blocks:** IMP-ADR024-05.
+
+---
+
+## Design Review note (2026-05-31)
+
+A `brainstorming` review compared the extracted helpers against the live
+`file_filter/service.py` (`get_recent_torrents` filter loop,
+`_recent_metadata_candidates`, `wait_for_metadata_readiness`): the logic is
+**faithful** to the originals. One real breakage was found and fixed in this plan:
+
+- **The metadata-wait `time.sleep` moves into `readonly.py`.** The test
+  `tests/unit/test_qb_file_filter.py::...test_waits_until_majority_of_recent_torrents_are_ready`
+  exercises the real wait loop, patches `service.time.sleep`, and asserts
+  `mock_sleep.assert_called_once_with(10)`. If the sleep simply moved to
+  `readonly`, that patch would no longer fire (and the test would sleep for real).
+  Fix: `readonly.wait_for_metadata_readiness` takes an injectable
+  `sleep` callable (default `time.sleep`); `service` passes its own module-level
+  `time.sleep`, so the existing patch still catches it and the test stays green
+  **unchanged** — mirroring the `fetch_files` injection already in this plan.
 
 ---
 
@@ -295,12 +314,15 @@ def wait_for_metadata_readiness(
     poll_interval_seconds: int = DEFAULT_METADATA_POLL_INTERVAL_SECONDS,
     recent_window_seconds: int = DEFAULT_RECENT_METADATA_WINDOW_SECONDS,
     now: Optional[float] = None,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> dict:
     """Poll ``fetch_files(hash)`` until most recent torrents expose metadata.
 
     ``fetch_files`` is injected so callers control HTTP/proxy concerns and tests
-    can stub it. Returns the same summary dict shape as the original file-filter
-    implementation.
+    can stub it. ``sleep`` is injected so the file-filter delegate can pass its
+    own module-level ``time.sleep`` (keeping the existing ``service.time.sleep``
+    patch effective). Returns the same summary dict shape as the original
+    file-filter implementation.
     """
     candidates = recent_metadata_candidates(
         torrents, now=now, window_seconds=recent_window_seconds
@@ -355,7 +377,7 @@ def wait_for_metadata_readiness(
             }
 
         sleep_for = min(max(1, poll_interval_seconds), remaining)
-        time.sleep(sleep_for)
+        sleep(sleep_for)
         waited_seconds += sleep_for
 ```
 
@@ -465,6 +487,7 @@ def wait_for_metadata_readiness(
         max_wait_seconds=max_wait_seconds,
         poll_interval_seconds=poll_interval_seconds,
         recent_window_seconds=recent_window_seconds,
+        sleep=time.sleep,
     )
 ```
 
