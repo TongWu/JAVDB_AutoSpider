@@ -172,7 +172,7 @@ def _process_href(
         return BackfillResult(href, 'dry_run')
 
     try:
-        MetadataRepo().upsert(href, detail.__dict__)
+        MetadataRepo().upsert(href, detail)
     except Exception as exc:  # noqa: BLE001 — write failures are retriable
         return BackfillResult(href, 'write_failed', str(exc))
     return BackfillResult(href, 'ok')
