@@ -49,7 +49,7 @@
 
 Create `docs/handbook/en/ops/torrent-quality-evidence.md`:
 
-```markdown
+````markdown
 # Torrent Quality Evidence (ADR-024 Phase 1)
 
 Phase 1 is a **shadow-only, read-only** layer. It inspects the file lists of
@@ -118,14 +118,14 @@ Scores are never opaque. Common reason codes:
 - File-list metadata only — no frame/OCR/watermark inspection (deferred, ADR-024 D10).
 - Production-selected torrents only — no Top-K runner-up probing yet.
 - No remote `quality_probe` endpoint yet — only the `production_download` role.
-```
+````
 
 - [ ] **Step 2: Write the Chinese mirror**
 
 Create `docs/handbook/zh/ops/torrent-quality-evidence.md` with the same structure
 and identical code blocks / key names / SQL (translate prose only):
 
-```markdown
+````markdown
 # 种子质量证据 (ADR-024 Phase 1)
 
 Phase 1 是一个**仅影子、只读**的层。它检查流水线已经下载的种子的文件列表，
@@ -192,7 +192,7 @@ python3 -m apps.cli.qb.quality_evidence --force
 - 仅文件列表元数据 —— 无帧/OCR/水印检测（推迟，ADR-024 D10）。
 - 仅生产选中的种子 —— 暂无 Top-K 候补探测。
 - 暂无远端 `quality_probe` 端点 —— 仅 `production_download` 角色。
-```
+````
 
 - [ ] **Step 3: Verify the pair exists and matches structure**
 
@@ -255,7 +255,7 @@ translated (keys/defaults verbatim) and the link pointing to
 
 In `docs/handbook/en/developer/cli-reference.md`, add:
 
-```markdown
+````markdown
 ### `apps.cli.qb.quality_evidence`
 
 Collect shadow torrent-quality evidence (ADR-024 Phase 1, read-only). Disabled
@@ -270,8 +270,7 @@ python3 -m apps.cli.qb.quality_evidence [--days N] [--categories '["Daily Ingest
 | `--days` | `2` | Look-back window for production torrents. |
 | `--categories` | (none) | JSON array of qB categories to scan. |
 | `--force` | off | Run even when the feature is disabled in config. |
-```
-```
+````
 
 - [ ] **Step 4: Mirror into the ZH CLI reference**
 

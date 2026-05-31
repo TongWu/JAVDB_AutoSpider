@@ -551,5 +551,5 @@ git commit -m "feat(quality): export feature/scoring symbols (ADR-024)"
 |---|------|-------|
 | 1 | Features pure & versioned | `pytest tests/unit/test_quality_features.py -v` → PASS; `PROBE_SCHEMA_VERSION` present |
 | 2 | Scoring explainable | `pytest tests/unit/test_quality_scoring.py -v` → PASS; every score change emits a reason code |
-| 3 | No I/O | `rg -n "import requests|get_db|http" javdb/quality/features.py javdb/quality/scoring.py` → no output |
+| 3 | No I/O | `rg -n "import requests\|get_db\|http" javdb/quality/features.py javdb/quality/scoring.py` → no output |
 | 4 | Exports resolve | Task 3 Step 2 prints both version strings |
