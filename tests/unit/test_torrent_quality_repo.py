@@ -103,3 +103,29 @@ def test_upsert_and_list_evaluation(conn):
     assert rows[0]["policy_mode"] == "shadow"
     assert rows[0]["would_replace_current_choice"] == 0
     assert "1080p" in rows[0]["javdb_tags_json"]
+
+
+def test_list_recent_evaluations_orders_by_created_at(conn):
+    repo = TorrentQualityRepo(conn)
+    repo.upsert_evaluation(
+        EvaluationRecord(
+            info_hash="ABC123",
+            movie_href="/v/abc",
+            scoring_version="v1",
+            video_code="ABC-123",
+            shadow_rank=2,
+        )
+    )
+    repo.upsert_evaluation(
+        EvaluationRecord(
+            info_hash="DEF456",
+            movie_href="/v/def",
+            scoring_version="v1",
+            video_code="DEF-456",
+            shadow_rank=1,
+        )
+    )
+
+    rows = repo.list_recent_evaluations(limit=1)
+    assert len(rows) == 1
+    assert rows[0]["info_hash"] == "DEF456"
