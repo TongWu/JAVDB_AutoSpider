@@ -61,13 +61,13 @@ def post_commit(
     payload: SessionCommitPayload,
     _user=Depends(require_role("admin")),
 ) -> SessionCommitResponse:
-    from javdb.storage.sessions import CommitRequest, commit_session
+    import javdb.storage.sessions as sessions
     reports_path = _db.REPORTS_DB_PATH
     with _db.get_db(reports_path) as conn:
         if not SessionsRepo(conn).get(session_id):
             raise HTTPException(status_code=404, detail={"error": {"code": "session.not_found"}})
     try:
-        result = commit_session(CommitRequest(
+        result = sessions.commit_session(sessions.CommitRequest(
             session_id=session_id,
             force=payload.force,
             drop_pending=payload.drop_pending,
@@ -83,6 +83,11 @@ def post_commit(
         raise HTTPException(
             status_code=404,
             detail={"error": {"code": "session.not_found", "message": str(exc)}},
+        )
+    except sessions.SiteContractDriftError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"error": {"code": "site_drift", "message": str(exc)}},
         )
     except RuntimeError as exc:
         raise HTTPException(
