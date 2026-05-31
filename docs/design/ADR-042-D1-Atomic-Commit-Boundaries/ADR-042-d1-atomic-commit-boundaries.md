@@ -119,7 +119,7 @@ Rejected. The repository already has additive enrichment and diagnostic surfaces
 
 | Phase | IMP | Ships | Deferred |
 | --- | --- | --- | --- |
-| Phase 1 | [IMP-ADR042-01](IMP-ADR042-01-d1-atomic-commit-boundaries.md) | Propagate the boundary into CONTEXT.md and the storage / handbook docs | Any distributed-transaction fantasy across SQLite and D1 |
+| Phase 1 ✅ | [IMP-ADR042-01](IMP-ADR042-01-d1-atomic-commit-boundaries.md) | Propagate the boundary into CONTEXT.md and the storage / handbook docs — **done 2026-06-01** | Any distributed-transaction fantasy across SQLite and D1 |
 
 ## References
 
@@ -139,3 +139,4 @@ Rejected. The repository already has additive enrichment and diagnostic surfaces
 
 - 2026-05-31: Accepted — codified the session-level atomic-commit boundary for authoritative D1 writes.
 - 2026-05-31: Renamed from "logical ACID" to "atomic commit" and scoped the guarantee to atomicity + consistency (isolation via `SessionId`/`MovieClaim`, durability via recovery) after a design review flagged the ACID framing as overclaiming I/D.
+- 2026-06-01: IMP-ADR042-01 completed — write-boundary vocabulary propagated into `CONTEXT.md` (the `写入边界分类` section + glossary), the storage READMEs, and the developer / ops handbooks.

@@ -2,6 +2,16 @@
 
 Persistence layer: SQLite + Cloudflare D1 backends, dual-write coordination, session-aware history management, and migration-aware schema bootstrapping.
 
+## Write-Class Boundary
+
+New D1-backed writes are not one undifferentiated category. Any new write path must declare its class before it lands:
+
+- **authoritative** — session-scoped, fail closed; decides whether the session commits.
+- **additive** — replayable / rebuildable; never decides session success.
+- **diagnostic** — explains drift / recovery; never decides session truth.
+
+See [ADR-042](../../docs/design/ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md) and the `写入边界分类` section of `CONTEXT.md` for the canonical definitions.
+
 ## Files
 
 | File | Purpose |

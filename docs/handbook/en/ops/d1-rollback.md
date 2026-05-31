@@ -77,6 +77,8 @@ The assistant is read-only and does not replace the rollback safety matrix.
 
 ADR-010 adds `reports/D1/d1_recovery_outbox.jsonl` for safe, recoverable D1 write failures. In `STORAGE_BACKEND=d1`, queued outbox work is diagnostic only: the write still fails. In `STORAGE_BACKEND=dual`, safe operations may queue for recovery, but the related session cannot be committed until its `history:SESSION_ID` ordering key drains. If the outbox entry itself cannot be written durably, the write or commit still fails. Dead-lettered work also blocks its ordering key.
 
+This diagnostic-only-but-commit-gating behavior is the operator-facing form of ADR-042's write-class boundary: a recovery record can **block** an authoritative commit, but it never **upgrades** a failed write into a success. See [ADR-042](../../../design/ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md).
+
 Inspect pending work:
 
 ```bash

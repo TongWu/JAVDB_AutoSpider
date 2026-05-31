@@ -17,6 +17,8 @@ Low-level SQLite/D1 database modules: connection routing, per-table CRUD, migrat
 | `db_session.py` | Active-session state singleton (Session ID, Run ID, Write Mode) shared across subprocesses. |
 | `db_stats.py` | `SpiderStats` / `UploaderStats` / `PikpakStats` reads and writes (idempotent on SessionId). |
 
+> **Write-class boundary:** `MovieHistory` / `TorrentHistory` writes staged by `db_history_write.py` are **authoritative** (session-level atomic commit); `db_reports.py` session-state and `db_rollback.py` recovery are part of that boundary, while drift / recovery records are **diagnostic** only. See [ADR-042](../../../docs/design/ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md) for the additive / diagnostic classes that stay outside the session commit boundary.
+
 ## Subdirectories
 
 (none)

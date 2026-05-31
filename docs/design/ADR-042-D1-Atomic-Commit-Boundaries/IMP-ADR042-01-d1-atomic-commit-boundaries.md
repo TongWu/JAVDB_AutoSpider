@@ -4,6 +4,8 @@
 
 **Related:** [ADR-042](ADR-042-d1-atomic-commit-boundaries.md) - this is **Phase 1**.
 
+**Status:** Completed — 2026-06-01 (all tasks executed and verified; boundary vocabulary landed in `CONTEXT.md`, the storage READMEs, and the developer / ops handbooks).
+
 **Goal:** Propagate the ADR-042 D1 write boundary into the canonical vocabulary and the docs that explain history writes, rollback, and recovery, so future D1 write changes are classified before merge.
 
 **Architecture:** This is a documentation-only follow-through, not a runtime refactor. The source of truth remains ADR-042. `CONTEXT.md` holds the **canonical definitions** of the three write classes and the atomic-commit term; every other doc states the rule in one or two sentences and **links** to ADR-042 / CONTEXT.md rather than re-defining all three classes verbatim (the repo's anti-pattern rules forbid cross-doc copy-paste). The terms are anchored in `CONTEXT.md` first, then referenced from the storage module READMEs and the developer / operator handbook pairs.
@@ -33,7 +35,7 @@
 **Files:**
 - Modify: `CONTEXT.md`
 
-- [ ] **Step 1: Add a bilingual write-boundary subsection under `## 存储层（Storage Layer）`.**
+- [x] **Step 1: Add a bilingual write-boundary subsection under `## 存储层（Storage Layer）`.**
 
 Match CONTEXT.md's house style: bilingual `中文（English）` heading, Chinese prose. Insert after the `### Drift（漂移）` subsection:
 
@@ -48,7 +50,7 @@ Match CONTEXT.md's house style: bilingual `中文（English）` heading, Chinese
 - **会话级原子提交（Session-level atomic commit）** —— 权威写入在 session 范围内表现为一个全有全无整体（原子性 + 一致性）的保证；隔离性靠 `SessionId` / `MovieClaim`、持久性靠 recovery，不在此边界内。
 ```
 
-- [ ] **Step 2: Add four rows to the trilingual glossary table at the bottom of `CONTEXT.md`.**
+- [x] **Step 2: Add four rows to the trilingual glossary table at the bottom of `CONTEXT.md`.**
 
 The bottom glossary uses `| 中文 | English | 中文说明 |`. Append:
 
@@ -59,7 +61,7 @@ The bottom glossary uses `| 中文 | English | 中文说明 |`. Append:
 | 会话级原子提交 | Session-level atomic commit | 权威写入在 session 范围内全有全无（A+C）；I 靠 SessionId/MovieClaim、D 靠 recovery（ADR-042） |
 ```
 
-- [ ] **Step 3: Verify the vocabulary is present in both the subsection and the glossary.**
+- [x] **Step 3: Verify the vocabulary is present in both the subsection and the glossary.**
 
 Run:
 
@@ -76,7 +78,7 @@ Expected: the subsection heading is present; `Session-level atomic commit` / `�
 - Modify: `javdb/storage/README.md`
 - Modify: `javdb/storage/db/README.md`
 
-- [ ] **Step 1: Add a brief guardrail to the storage overview that links rather than copies.**
+- [x] **Step 1: Add a brief guardrail to the storage overview that links rather than copies.**
 
 Use a short paragraph like:
 
@@ -86,11 +88,11 @@ New D1-backed writes are not one undifferentiated category. Any new write path m
 
 (Confirm the relative path to `docs/design/...` resolves from `javdb/storage/README.md`; adjust `../` depth if needed.)
 
-- [ ] **Step 2: Add a one-line pointer next to the low-level db modules.**
+- [x] **Step 2: Add a one-line pointer next to the low-level db modules.**
 
 In `javdb/storage/db/README.md`, near `db_history_write.py`, `db_reports.py`, and `db_rollback.py`, add a single sentence: "`MovieHistory` / `TorrentHistory` writes here are **authoritative** (session-level atomic commit); see ADR-042 for the additive / diagnostic classes." Do not restate all three definitions — link instead.
 
-- [ ] **Step 3: Verify the guardrail and link are present.**
+- [x] **Step 3: Verify the guardrail and link are present.**
 
 Run:
 
@@ -108,7 +110,7 @@ Expected: each README names the classification and links to ADR-042.
 - Modify: `docs/handbook/en/ops/d1-rollback.md`
 - Modify: `docs/handbook/zh/ops/d1-rollback.md`
 
-- [ ] **Step 1: Add a `D1 Write Boundary` subsection to the history-system guide (after `### Storage`).**
+- [x] **Step 1: Add a `D1 Write Boundary` subsection to the history-system guide (after `### Storage`).**
 
 ```md
 ### D1 Write Boundary
@@ -118,7 +120,7 @@ Expected: each README names the classification and links to ADR-042.
 
 Mirror the same structure and meaning in `docs/handbook/zh/developer/history-system.md` (Chinese prose, link to the `.zh.md` ADR). Confirm the relative `../../../design/...` depth resolves from `docs/handbook/{en,zh}/developer/`.
 
-- [ ] **Step 2: In the rollback handbook, cross-reference ADR-042 — do NOT duplicate the diagnostic-only sentence.**
+- [x] **Step 2: In the rollback handbook, cross-reference ADR-042 — do NOT duplicate the diagnostic-only sentence.**
 
 The `D1 Recovery Outbox` section **already** states "queued outbox work is diagnostic only: the write still fails" and that an undrained ordering key / dead-lettered entry blocks the commit. Add only one short sentence that links the existing behavior to the design decision:
 
@@ -128,7 +130,7 @@ This diagnostic-only-but-commit-gating behavior is the operator-facing form of A
 
 Mirror the same sentence (and link to the `.zh.md` ADR) in `docs/handbook/zh/ops/d1-rollback.md`.
 
-- [ ] **Step 3: Verify the boundary text and ADR link are present, with no duplicated definition.**
+- [x] **Step 3: Verify the boundary text and ADR link are present, with no duplicated definition.**
 
 Run:
 
@@ -141,7 +143,7 @@ Expected: the new subsection and the ADR-042 cross-reference appear in each lang
 
 ## Task 4: Final validation
 
-- [ ] **Step 1: Check markdown hygiene.**
+- [x] **Step 1: Check markdown hygiene.**
 
 ```bash
 git diff --check
@@ -149,7 +151,7 @@ git diff --check
 
 Expected: no whitespace or patch-format errors.
 
-- [ ] **Step 2: Confirm the touched docs are the only intended changes.**
+- [x] **Step 2: Confirm the touched docs are the only intended changes.**
 
 ```bash
 git status --short
