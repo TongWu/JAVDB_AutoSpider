@@ -13,6 +13,12 @@ flip the status row).  Optional side-effects — MovieClaim coordinator
 fanout and ``pending_session_verify`` JSONL emission — are gated behind
 ``fanout_claims`` and ``emit_metrics`` flags on :class:`CommitRequest`.
 The CLI sets both to True; the HTTP endpoint leaves them off by default.
+
+Before draining, the commit is gated on the ADR-035 site-contract drift
+sentinel (mirroring ``apps/cli/db/commit_session.py``): a critical-drift
+verdict raises ``RuntimeError`` and refuses the commit, so the
+operator-facing ``POST /api/sessions/{id}/commit`` path cannot bypass the
+CLI gate. The gate is fail-open — a sentinel error never blocks the commit.
 """
 from __future__ import annotations
 
@@ -129,7 +135,8 @@ def commit_session(req: CommitRequest) -> CommitResult:
     LookupError
         If the session does not exist in ReportSessions.
     RuntimeError
-        If the commit DB call fails.
+        If the ADR-035 site-contract gate detects critical parser drift,
+        or if the commit DB call fails.
     """
     from javdb.storage.db import (
         get_db,
@@ -165,6 +172,43 @@ def commit_session(req: CommitRequest) -> CommitResult:
             new_state="committed",
             pending_dropped=0,
         )
+
+    # ADR-035 site-contract gate: refuse to commit on critical parser drift,
+    # mirroring the CLI gate in ``apps/cli/db/commit_session.py``. The
+    # operator-facing ``POST /api/sessions/{id}/commit`` path would otherwise
+    # bypass that CLI-only gate and promote drifted parse data into the live
+    # history tables. Fail-open: a sentinel failure must NEVER block the commit
+    # (a sentinel bug cannot be allowed to wedge the commit path); only a
+    # successful ``verdict.critical`` refuses. ``drop_pending`` is exempt — it
+    # discards the staged rows instead of promoting them, so there is nothing
+    # drifted to protect against, and it must not even import the sentinel.
+    # The import is lazy AND inside the try/except so an import-stage failure is
+    # fail-open too; laziness also preserves this module's circular-import-safe
+    # posture (sentinel persistence pulls in ``javdb.storage.db`` at module top).
+    if not req.drop_pending:
+        try:
+            from javdb.ops.sentinel.service import (
+                evaluate_session as _sentinel_evaluate,
+            )
+            verdict = _sentinel_evaluate(str(req.session_id))
+        except Exception:
+            logger.warning(
+                "Site-contract sentinel evaluation failed for session %s; "
+                "treating as non-critical (fail-open).",
+                req.session_id, exc_info=True,
+            )
+            verdict = None
+        if verdict is not None and verdict.critical:
+            logger.error(
+                "Site-contract drift gate: critical drift for session %s "
+                "(%d finding(s)); refusing commit.",
+                req.session_id, len(verdict.findings),
+            )
+            raise RuntimeError(
+                f"site-contract drift gate: critical parser drift for session "
+                f"{req.session_id!r}; refusing commit "
+                f"({len(verdict.findings)} finding(s))"
+            )
 
     pending_dropped = 0
     drain: Optional[Dict[str, Any]] = None
@@ -232,6 +276,25 @@ def commit_session(req: CommitRequest) -> CommitResult:
         )
     elif n == 0:
         logger.info("Session %s already committed (idempotent)", req.session_id)
+
+    # ADR-035: a successful *promotion* makes this run's fills baseline-
+    # eligible. Skip it on the ``drop_pending`` path — that discards the staged
+    # parse data instead of promoting it, so those fill-rates must NOT enter the
+    # soft-field baseline (an operator dropping a bad/failed parse would
+    # otherwise pollute it). Symmetric with the gate's ``drop_pending`` exemption
+    # above. Best-effort; the import is inside the try so an import-stage failure
+    # is fail-open too — never fail the commit on this (mirrors the CLI).
+    if not req.drop_pending:
+        try:
+            from javdb.ops.sentinel.service import (
+                mark_committed as _sentinel_mark_committed,
+            )
+            _sentinel_mark_committed(str(req.session_id))
+        except Exception:
+            logger.warning(
+                "Site-contract sentinel mark_committed failed for %s",
+                req.session_id, exc_info=True,
+            )
 
     claim_results: List[Dict[str, Any]] = []
     if req.fanout_claims:
