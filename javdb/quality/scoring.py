@@ -140,13 +140,13 @@ def score_torrent(
         "subtitle_evidence": subtitle_evidence,
         "category_consistent": category_consistent,
         "resolution_consistent": resolution_consistent,
-        "inferred_category": _infer_category(features, context, subtitle_evidence),
+        "inferred_category": _infer_category(context, subtitle_evidence),
         "decision": decision,
     }
 
 
 def _infer_category(
-    features: dict[str, Any], context: dict[str, Any], subtitle_evidence: str
+    context: dict[str, Any], subtitle_evidence: str
 ) -> str:
     """Best-effort inferred category from file-list + name hints.
 
