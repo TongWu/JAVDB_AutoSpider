@@ -13,6 +13,13 @@ public result-draining API to reuse here, so a simple sequential loop is both
 correct and sufficient.  Writes are OUTSIDE the Pending→Commit session flow --
 failures are logged and retriable on the next run.
 
+Fetches are authenticated (``use_cookie=True`` attaches ``JAVDB_SESSION_COOKIE``,
+like the ad-hoc spider) so login-gated movies yield metadata rather than a
+login wall.  Because the bare ``get_page`` path has no ``LoginRequired``
+machinery, a login wall (missing/expired cookie) is detected explicitly via
+``is_login_page`` and reported as ``login_required`` — distinct from a genuine
+``parse_failed`` — without failing the job.
+
 Usage (via migrate_to_current.py):
     python3 -m apps.cli.db.migration --backfill-metadata --dry-run
     python3 -m apps.cli.db.migration --backfill-metadata \\
@@ -36,6 +43,7 @@ import requests
 from javdb.infra.config import cfg
 from javdb.infra.logging import get_logger, setup_logging
 from javdb.parsing import parse_detail_page
+from javdb.spider.html_validators import is_login_page
 from javdb.storage.db import get_db, HISTORY_DB_PATH
 from javdb.storage.repos.metadata_repo import MetadataRepo
 import javdb.spider.runtime.state as spider_state
@@ -103,7 +111,8 @@ def _load_hrefs_without_metadata(
 @dataclass
 class BackfillResult:
     href: str
-    status: str           # 'ok' | 'parse_failed' | 'write_failed' | 'dry_run' | 'fetch_failed'
+    # 'ok' | 'dry_run' | 'fetch_failed' | 'login_required' | 'parse_failed' | 'write_failed'
+    status: str
     message: str = ''
 
 
@@ -145,15 +154,31 @@ def _process_href(
     # spider relies on for detail pages. CF bypass is only meaningful when a
     # proxy is in play; the --no-proxy debug path has no local bypass service,
     # so it stays a direct request.
+    #
+    # use_cookie=True attaches the configured JAVDB_SESSION_COOKIE (like the
+    # ad-hoc spider), so login-gated movies render their metadata instead of a
+    # login wall. The cookie only attaches when configured (request handler
+    # guards on it), so an unconfigured/empty cookie degrades to an
+    # unauthenticated fetch — which is_login_page() below then flags as
+    # 'login_required' rather than misreporting 'parse_failed'.
     try:
         html = spider_state.get_page(
             detail_url, session=session, use_proxy=use_proxy,
-            module_name='spider', use_cf_bypass=use_proxy,
+            module_name='spider', use_cf_bypass=use_proxy, use_cookie=True,
         )
     except Exception as exc:  # noqa: BLE001 — fetch errors are recoverable
         return BackfillResult(href, 'fetch_failed', str(exc))
     if not html:
         return BackfillResult(href, 'fetch_failed', 'empty response')
+
+    # Distinguish a login wall (cookie missing/expired, or content login-gated)
+    # from a genuine parse failure: the bare get_page path has no LoginRequired
+    # machinery, so detect it explicitly here.
+    if is_login_page(html):
+        return BackfillResult(
+            href, 'login_required',
+            'session cookie missing or expired — refresh JAVDB_SESSION_COOKIE',
+        )
 
     try:
         detail = parse_detail_page(html)
@@ -237,7 +262,7 @@ def run_backfill_metadata(args: SimpleNamespace) -> int:
     base_url = cfg('BASE_URL', 'https://javdb.com').rstrip('/')
     session = requests.Session()
 
-    ok = failed = 0
+    ok = failed = login_gated = 0
     for i, href in enumerate(hrefs, 1):
         idx = f"meta-{i}/{total}"
         result = _process_href(
@@ -247,6 +272,14 @@ def run_backfill_metadata(args: SimpleNamespace) -> int:
         if result.status in ('ok', 'dry_run'):
             logger.info("[%s] ✓ %s", idx, href)
             ok += 1
+        elif result.status == 'login_required':
+            # Not a hard failure: the page exists but needs a valid session
+            # cookie. Counted separately so it doesn't fail the job, but
+            # surfaced so the operator knows to refresh the cookie.
+            logger.warning(
+                "[%s] %s — login_required: %s", idx, href, result.message
+            )
+            login_gated += 1
         else:
             logger.warning(
                 "[%s] %s — %s: %s", idx, href, result.status, result.message
@@ -261,9 +294,16 @@ def run_backfill_metadata(args: SimpleNamespace) -> int:
             )
 
     logger.info(
-        "MovieMetadata backfill complete: %d ok, %d failed out of %d",
-        ok, failed, total,
+        "MovieMetadata backfill complete: %d ok, %d failed, %d login-gated "
+        "out of %d",
+        ok, failed, login_gated, total,
     )
+    if login_gated:
+        logger.warning(
+            "%d href(s) require login — refresh JAVDB_SESSION_COOKIE "
+            "(run `python3 -m apps.cli.login`) and re-run to backfill them.",
+            login_gated,
+        )
     return 0 if failed == 0 else 1
 
 
