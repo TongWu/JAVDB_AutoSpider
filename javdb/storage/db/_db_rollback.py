@@ -49,26 +49,28 @@ def _ensure_imports():
 # orphaning rows on the next failed run (see
 # ``tests/unit/test_rollback_table_coverage.py``).
 
-# reports DB — CLEARED on rollback ({table: session-id column}). The four FK
-# children plus the newer per-run event/metric tables. ReportSessions (the PK)
-# and ReportTorrents (cascaded via ReportMovies; no session column) are handled
-# by bespoke statements in ``_rollback_reports``.
+# reports DB — CLEARED on rollback ({table: session-id column}). ONLY the four
+# FK children that declare ``REFERENCES ReportSessions(Id)`` — they are the
+# session's own report rows and orphaning them violates the FK. ReportSessions
+# (the PK) and ReportTorrents (cascaded via ReportMovies; no session column) are
+# handled by bespoke statements in ``_rollback_reports``. The newer per-run
+# event/metric tables are enrichment whose session_id is provenance — they are
+# in ROLLBACK_PRESERVED_TABLES, NOT here.
 ROLLBACK_REPORTS_TABLES = {
     'ReportMovies': 'SessionId',
     'SpiderStats': 'SessionId',
     'UploaderStats': 'SessionId',
     'PikpakStats': 'SessionId',
-    'RunEventSummary': 'session_id',
-    'ParseRunFieldFill': 'session_id',
-    'OpsIncidents': 'session_id',
 }
 
-# operations DB — CLEARED on rollback ({table: session-id column}).
+# operations DB — CLEARED on rollback ({table: session-id column}). The
+# pre-existing session-owned operations tables (DedupRecords additionally
+# restores pre-images). AcquisitionOutcome is NOT here — see
+# ROLLBACK_PRESERVED_TABLES.
 ROLLBACK_OPERATIONS_TABLES = {
     'PikpakHistory': 'SessionId',
     'DedupRecords': 'SessionId',
     'InventoryAlignNoExactMatch': 'SessionId',
-    'AcquisitionOutcome': 'session_id',
 }
 
 # history DB — CLEARED on rollback ({table: session-id column}). Only the
@@ -81,11 +83,19 @@ ROLLBACK_HISTORY_PENDING_TABLES = {
 }
 
 # Session-tagged tables DELIBERATELY NOT session-scoped-deleted by rollback —
-# their session id is provenance, not an ownership pointer, so they outlive a
-# rolled-back session. Adding a table here is a conscious decision the coverage
-# test forces.
+# their session id is PROVENANCE, not an ownership pointer, so they outlive a
+# rolled-back session by design. Cascading a rollback into these would be a bug
+# (it would drop the very record of the failed run, or orphan a live external
+# resource from its tracker). Adding a table here is a conscious decision the
+# coverage test forces.
 ROLLBACK_PRESERVED_TABLES = frozenset({
     'PipelineEvent',             # ADR-036 append-only event spine (SessionFailed)
+    'RunEventSummary',           # ADR-036 projection OF that append-only spine
+    'ParseRunFieldFill',         # ADR-035 enrichment, off the Pending->Commit path
+    'OpsIncidents',              # ADR-035/026 the failed run's own diagnosis record
+    'AcquisitionOutcome',        # ADR-033 D10: bypasses session/rollback; keyed by
+                                 # qb_hash — the torrent really sits in qB and the
+                                 # reconcile loop tracks its fate (provenance only)
     'EmailNotificationHistory',  # records emails really sent (external action)
     'MovieHistory',              # durable dedup memory; only Pending* is undone
     'TorrentHistory',            # durable dedup memory (FK child of MovieHistory)
@@ -269,12 +279,12 @@ def _rollback_reports(
     """
     _ensure_imports()
     counts: Dict[str, int] = {}
-    # Session-owned reports tables (FK children + newer per-run event/metric
-    # tables) are cleared so a rolled-back session leaves no dangling rows —
-    # else they orphan once the ReportSessions row below is deleted. The
-    # column name differs (SessionId vs session_id), carried per-table in
-    # ROLLBACK_REPORTS_TABLES. PipelineEvent is intentionally absent (see
-    # ROLLBACK_PRESERVED_TABLES — append-only event spine).
+    # Only the FK children in ROLLBACK_REPORTS_TABLES are cleared — they are the
+    # session's own report rows and would violate the ReportSessions FK if left
+    # behind. The newer per-run event/metric tables (PipelineEvent /
+    # RunEventSummary / ParseRunFieldFill / OpsIncidents) are enrichment whose
+    # session_id is provenance; they are intentionally preserved (see
+    # ROLLBACK_PRESERVED_TABLES).
     with _get_db(db_path or _REPORTS_DB_PATH) as conn:
         if dry_run:
             counts['ReportTorrents'] = (conn.execute(
@@ -325,11 +335,11 @@ def _rollback_operations(
     staging_table = f"RcloneInventoryStaging_{_session_id_to_identifier_suffix(session_id)}"
     dedup_backup_table = _dedup_rollback_table(session_id)
     with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
-        # (table, session-id column). AcquisitionOutcome (ADR-033 closed-loop)
-        # is session-owned: a queued outcome for a rolled-back session was
-        # undone, so it is cleared too. EmailNotificationHistory is deliberately
-        # absent (see ROLLBACK_PRESERVED_TABLES — it logs emails really sent, an
-        # external action a rollback cannot undo).
+        # (table, session-id column) for the pre-existing session-owned ops
+        # tables. AcquisitionOutcome (ADR-033 D10) and EmailNotificationHistory
+        # are deliberately absent — they track external resources/actions that a
+        # rollback cannot undo, so their session_id is provenance only (see
+        # ROLLBACK_PRESERVED_TABLES).
         op_specs = list(ROLLBACK_OPERATIONS_TABLES.items())
         if dry_run:
             for table, col in op_specs:
