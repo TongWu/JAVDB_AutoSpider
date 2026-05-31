@@ -84,7 +84,9 @@ ad-hoc spider's authenticated fetch:
   separately (not a hard failure — the page is fine, the session isn't), logs a
   per-href warning, and emits a structured `log_summary_block` (ok / failed /
   login-gated / total) plus a hint to run `python3 -m apps.cli.login` and re-run.
-  Job exit code still keys off genuine `failed` only.
+  Job exit code is non-zero only when every attempted href hard-fails; partial
+  progress keeps the migration step green while surfacing the failed hrefs in
+  logs.
 
 **Detection is best-effort; `use_cookie=True` is the load-bearing change.** With
 a valid cookie the wall never appears, so the movie is simply scraped. The

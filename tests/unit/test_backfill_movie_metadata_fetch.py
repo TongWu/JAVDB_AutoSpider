@@ -211,6 +211,12 @@ def test_run_backfill_parse_failed_is_fatal(monkeypatch):
     assert _run_backfill_with_statuses(monkeypatch, ['parse_failed']) == 1
 
 
+def test_run_backfill_partial_failure_is_non_fatal(monkeypatch):
+    """A bounded backfill batch may complete with some unparseable pages.
+    Successful rows should be kept and the migration step should continue."""
+    assert _run_backfill_with_statuses(monkeypatch, ['ok', 'parse_failed']) == 0
+
+
 def test_run_backfill_login_required_does_not_mask_real_failure(monkeypatch):
     """A login_required alongside a real failure must not rescue the exit code:
     login_gated is counted apart, but the failed href still returns 1."""

@@ -215,7 +215,7 @@ def run_backfill_metadata(args: SimpleNamespace) -> int:
             shuffle (bool)
 
     Returns:
-        0 on success, 1 on partial failure (some hrefs failed).
+        0 on success or partial progress, 1 when every attempted href hard-fails.
     """
     only_hrefs: Optional[List[str]] = None
     if args.hrefs:
