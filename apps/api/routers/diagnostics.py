@@ -23,7 +23,7 @@ from apps.api.schemas.diagnostics import (
     OpsIncidentSchema,
 )
 from javdb.infra.config import cfg
-from javdb.storage.db import OPERATIONS_DB_PATH, get_db
+from javdb.storage.db import OPERATIONS_DB_PATH, REPORTS_DB_PATH, get_db
 from javdb.storage.repos.ops_incident_repo import OpsIncidentRepo
 from javdb.storage.repos.system_state_repo import SystemStateRepo
 
@@ -75,7 +75,7 @@ def _list_ops_incident_records(
     session_id: str | None = None,
     limit: int = 50,
 ):
-    with get_db("reports") as conn:
+    with get_db(REPORTS_DB_PATH) as conn:
         return OpsIncidentRepo(conn).list(
             status=status,
             run_id=run_id,
@@ -85,7 +85,7 @@ def _list_ops_incident_records(
 
 
 def _get_ops_incident_record(incident_id: str):
-    with get_db("reports") as conn:
+    with get_db(REPORTS_DB_PATH) as conn:
         return OpsIncidentRepo(conn).get(incident_id)
 
 
