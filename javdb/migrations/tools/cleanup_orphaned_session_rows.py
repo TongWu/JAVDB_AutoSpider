@@ -5,18 +5,17 @@ A row is *orphaned* when its ``SessionId`` / ``session_id`` value has no
 matching ``ReportSessions.Id`` parent — the residue left behind when a
 session was rolled back or its ReportSessions row was deleted/cleaned up.
 These surface as ``PRAGMA foreign_key_check`` violations in the reports DB
-(the four FK children) plus dangling rows in the history / operations DBs
-and the newer reports event/metric tables.
+(the four FK children) plus dangling rows in the history / operations DBs.
 
-Scope (session-COUPLED tables — deleted here):
+Scope mirrors ``javdb.storage.db._db_rollback`` exactly: only the
+session-OWNED tables a rollback deletes are cleaned here.
+
     history     MovieHistory (+ its TorrentHistory children),
                 TorrentHistory, PendingMovieHistoryWrites,
                 PendingTorrentHistoryWrites
     reports     ReportMovies (+ ReportTorrents children), SpiderStats,
-                UploaderStats, PikpakStats, RunEventSummary,
-                ParseRunFieldFill, OpsIncidents
-    operations  DedupRecords, PikpakHistory, InventoryAlignNoExactMatch,
-                AcquisitionOutcome
+                UploaderStats, PikpakStats
+    operations  DedupRecords, PikpakHistory, InventoryAlignNoExactMatch
 
 History uses a movie-aggregate cascade: ``TorrentHistory`` has an enforced
 ``REFERENCES MovieHistory(Id)`` (no ON DELETE), so an orphan movie's torrent
@@ -24,17 +23,20 @@ children — INCLUDING any with a NULL ``SessionId`` — are deleted first, then
 the movie. ``TorrentHistory`` rows orphaned by their own ``SessionId`` (whose
 movie may survive) are deleted too.
 
-Deliberately EXCLUDED (append-only audit logs whose ``session_id`` is
-provenance, NOT an ownership FK — they legitimately outlive a rolled-back
-session and carry no FK to ReportSessions, so they never violate
-foreign_key_check):
-    reports     PipelineEvent             (ADR-036 immutable event spine;
-                                           holds the SessionFailed event)
-    operations  EmailNotificationHistory  (records emails really sent)
-
-The forward fix that stops these recurring lives in
-``javdb.storage.db._db_rollback`` (``_rollback_reports`` /
-``_rollback_operations`` now cascade to the coupled tables above).
+Deliberately EXCLUDED — these mirror ``ROLLBACK_PRESERVED_TABLES``. Their
+``session_id`` is PROVENANCE, not an ownership FK; they are enrichment /
+audit / projection records that legitimately outlive a rolled-back session,
+carry no FK to ReportSessions, and so never violate foreign_key_check.
+Deleting them would drop the failed run's own record or orphan a live
+external resource from its tracker:
+    reports     PipelineEvent     (ADR-036 append-only event spine; SessionFailed)
+                RunEventSummary   (ADR-036 projection of that spine)
+                ParseRunFieldFill (ADR-035 enrichment, off the commit path)
+                OpsIncidents      (ADR-035/026 the run's own failure diagnosis)
+    operations  AcquisitionOutcome      (ADR-033 D10 bypasses session/rollback;
+                                         keyed by qb_hash — the reconcile loop
+                                         tracks the real qB torrent's fate)
+                EmailNotificationHistory (records emails really sent)
 
 Usage::
 
@@ -73,15 +75,11 @@ REPORTS_FLAT = [
     ("SpiderStats", "SessionId"),
     ("UploaderStats", "SessionId"),
     ("PikpakStats", "SessionId"),
-    ("RunEventSummary", "session_id"),
-    ("ParseRunFieldFill", "session_id"),
-    ("OpsIncidents", "session_id"),
 ]
 OPERATIONS_FLAT = [
     ("DedupRecords", "SessionId"),
     ("PikpakHistory", "SessionId"),
     ("InventoryAlignNoExactMatch", "SessionId"),
-    ("AcquisitionOutcome", "session_id"),
 ]
 # Pending history tables: no FK, flat delete by SessionId.
 HISTORY_FLAT = [
@@ -89,9 +87,14 @@ HISTORY_FLAT = [
     ("PendingTorrentHistoryWrites", "SessionId"),
 ]
 
-# Append-only logs intentionally left untouched (see module docstring).
+# Provenance/enrichment logs intentionally left untouched (see module docstring;
+# mirrors javdb.storage.db._db_rollback.ROLLBACK_PRESERVED_TABLES).
 EXCLUDED_APPEND_ONLY = [
     (REPORTS, "PipelineEvent", "session_id"),
+    (REPORTS, "RunEventSummary", "session_id"),
+    (REPORTS, "ParseRunFieldFill", "session_id"),
+    (REPORTS, "OpsIncidents", "session_id"),
+    (OPERATIONS, "AcquisitionOutcome", "session_id"),
     (OPERATIONS, "EmailNotificationHistory", "SessionId"),
 ]
 
