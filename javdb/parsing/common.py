@@ -166,8 +166,11 @@ def _is_plausible_video_code(raw: str) -> bool:
     s = (raw or '').strip()
     if len(s) < 2:
         return False
-    # A code is a compact token: alphanumerics with '-'/'_' separators only.
-    if not all(c.isalnum() or c in '-_' for c in s):
+    # A code is a compact token: ASCII alphanumerics with '-'/'_' separators
+    # only. The ASCII guard matches the Rust core's is_ascii_alphanumeric so the
+    # two engines agree (str.isalnum() is True for CJK/full-width, which would
+    # otherwise let "CODE標題" through here but not in Rust).
+    if not all((c.isascii() and c.isalnum()) or c in '-_' for c in s):
         return False
     if not any(c.isdigit() for c in s):
         return False
