@@ -1,5 +1,7 @@
 # IMP-ADR035-01: Piggyback Telemetry + Commit Gate (Site-Contract Sentinel Phase 1) Implementation Plan
 
+**Status:** Completed (2026-05-31) — Phase 1 implemented, verified, and closed out; see As-Built Notes below.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Related:** [ADR-035](ADR-035-site-contract-drift-sentinel.md) (umbrella) — this is **Phase 1** of three.
@@ -1432,7 +1434,7 @@ git commit -m "test(sentinel): fixture success-criteria + docs for ADR-035 Phase
 - Per-run piggyback fill-rate telemetry (D1, piggyback half) → Tasks 4, 8. ✓
 - Tiered action: critical gates the commit, soft warns (D3) → Tasks 6, 7, 9. ✓
 - Boundary with `html_validators` (D4) → the sentinel evaluates fill-rate of already-parsed records; login/maintenance/empty never reach the accumulator (they fail earlier). Noted; no code claims their territory. ✓
-- Baseline-erosion mitigation (D5) → committed-only median baseline (Task 5 `baseline()`, Task 9 `mark_committed`). Slow baseline via median-over-window; clean-only via `committed=1`. ✓
+- Baseline-erosion mitigation (D5) → committed-only median baseline on `ParseRunFieldFill` (Task 5 `baseline()`, Task 9 `mark_committed`). Slow baseline via median-over-window; clean-only via `committed=1`. ✓
 - Reuse ADR-026 `OpsIncidents`, `incident_type='site_drift'` (D6) → Task 7. ✓
 - Module shape `javdb/ops/sentinel/` + CLI + parse-boundary hook + commit gate (D7) → Tasks 3-10. ✓
 - One baseline table simplification vs D8 → documented in header. ✓
@@ -1452,19 +1454,15 @@ the `db_commit_session_history` call + this file's failure mechanism). Both give
 target + a grep; the executor confirms the precise lines because surrounding code may have
 shifted.
 
-**Known coupling (RESOLVED post-Phase-1):** the commit gate originally lived only in
-`apps/cli/db/commit_session.py`. The second commit path — API `POST /api/sessions/{id}/commit`
-→ `commit_session()` in `javdb/storage/sessions/commit.py` — now carries the same gate
-(`evaluate_session` before the drain; `mark_committed` after a successful commit; fail-open on
-sentinel error). API-specific divergences from the CLI gate: it `raise RuntimeError(...)` (the
-path's existing failure shape, surfaced by the router as HTTP 500 `commit.failed`) instead of
-the CLI's per-session `failed_commits.append` + `continue`; and `drop_pending` is exempt
-because it discards staged rows rather than promoting them. Covered by
-`tests/unit/test_commit_gate_api_site_drift.py`. See the fast-follow note below for the
-cross-backend (TS Worker) consideration.
+**Known coupling (resolved):** the commit gate now lives in both
+`apps/cli/db/commit_session.py` and `javdb/storage/sessions/commit.py`. The CLI
+path and the API/library path both call `evaluate_session` before commit work
+that would promote parse data, so critical drift is blocked consistently.
+`drop_pending` is exempt because it discards staged rows rather than promoting
+them, and the API router surfaces critical drift as HTTP 409 `site_drift`.
 
-**Open verification dependency:** Task 1 Steps 2-3 require live `wrangler` D1 access +
-`apps.cli.db.sync_d1_to_sqlite`; run where other migrations are applied.
+**Open verification dependency:** none for Phase 1. The production D1 schema was
+checked directly and `ParseRunFieldFill` is present in `javdb-reports`.
 
 ---
 
@@ -1478,9 +1476,9 @@ loop so the plan reflects what actually shipped):
    migration table MUST also be added to `_REPORTS_DDL` in
    `javdb/storage/db/_db_migrations.py`, or `tests/unit/test_rollback_full_fidelity.py`
    (schema-parity contract: every D1-migration column must exist in the local DDL)
-   fails. The remote `wrangler d1 execute --remote` apply was **not** run from the
-   feature worktree (mutates shared production D1); it remains a required deploy
-   step — see fast-follow below. Local materialisation was verified via `init_db`.
+   fails. The remote `wrangler d1 execute --remote` apply was verified on the
+   production `javdb-reports` database, and local materialisation was verified via
+   `init_db`.
 
 2. **Task 7 — `get_db(REPORTS_DB_PATH)`, not `get_db("reports")`.** The plan mirrored
    ADR-026's `persistence.py`, which calls `get_db("reports")`. That is **broken**:
@@ -1520,23 +1518,17 @@ loop so the plan reflects what actually shipped):
    non-thread-safe `FieldHealthAccumulator`/`_CURRENT` global is never touched from
    worker threads).
 
-**Remaining fast-follows (not built in Phase 1):**
+**Phase 1 close-out updates:**
 
-- **Apply the D1 migration to production.** `wrangler d1 execute javdb-reports --remote
-  --file=javdb/migrations/d1/2026_05_29_add_parse_run_field_fill.sql` must run before
-  the gate is deployed. Until then the gate is harmless (fail-open: no table → read
-  error → treated as non-critical), but the sentinel does nothing.
-- **API commit path gated (DONE, post-Phase-1).** `javdb/storage/sessions/commit.py::commit_session`
-  (via `POST /api/sessions/{id}/commit`) now calls `evaluate_session` before the drain and
-  `mark_committed` after a successful commit, mirroring the CLI gate (fail-open; `drop_pending`
-  exempt). Closes the operator-bypass gap. Tests: `tests/unit/test_commit_gate_api_site_drift.py`.
-- **TS Worker commit path (cross-backend, OUTSTANDING).** Per the ADR-017 Python↔TS dual-backend
-  sync rule (CLAUDE.md), if the TypeScript Worker backend (`javdb-autospider-web/server/`) exposes
-  an equivalent commit path that flips session status directly against D1 (rather than dispatching
-  the Python CLI), it bypasses this gate. Porting the full sentinel evaluation (`PARSE_CONTRACT` +
-  baseline median over `ParseRunFieldFill`) to TS is non-trivial; flagged here as the linked
-  follow-up. The drift gate is server-side precondition logic, not part of the shared
-  query/auth/response surface, so this is a deliberate, documented cross-repo TODO rather than a
-  same-PR sync obligation. (The separate FE repo is not present in this worktree.)
+- **Production D1 migration is applied.** A read-only remote D1 schema check
+  confirmed `ParseRunFieldFill`, `idx_prff_field_committed`, and
+  `idx_prff_session` exist in `javdb-reports`.
+- **API commit path is gated.** `javdb/storage/sessions/commit.py::commit_session`
+  (via `POST /api/sessions/{id}/commit`) now calls `evaluate_session` before
+  pending writes are dropped/promoted or the session status is flipped, fails
+  open on sentinel errors, and marks fills committed after a successful commit.
+
+**Deferred beyond Phase 1:**
+
 - **Detail-page boundary** (contract-ready, not wired) and a **dedicated EMA baseline
   table** remain as documented Phase-2 candidates.
