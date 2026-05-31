@@ -337,6 +337,10 @@ def main(argv=None) -> int:
     g = ap.add_mutually_exclusive_group()
     g.add_argument("--apply", action="store_true", help="Execute the UPDATEs (default: dry-run).")
     g.add_argument("--verify", action="store_true", help="Check no legacy ids remain anywhere.")
+    ap.add_argument("--only", action="append", metavar="OLD_ID",
+                    help="Restrict to specific legacy id(s) — canary runs. Repeatable. "
+                         "Uses the same code path as the full run; new ids keep their "
+                         "full-mapping values, so prefer ids with a UNIQUE timestamp.")
     args = ap.parse_args(argv)
 
     if args.verify:
@@ -348,6 +352,13 @@ def main(argv=None) -> int:
         return verify(saved if saved is not None else build_mapping())
 
     mapping = build_mapping()
+    if args.only:
+        wanted = set(args.only)
+        mapping = [m for m in mapping if m["old_id"] in wanted]
+        missing = wanted - {m["old_id"] for m in mapping}
+        if missing:
+            raise SystemExit(f"--only id(s) not found among legacy rows: {sorted(missing)}")
+        print(f"--only: restricted to {len(mapping)} session(s): {[m['old_id'] for m in mapping]}")
     if not mapping:
         print("No legacy ReportSessions ids found — nothing to migrate.")
         return 0
