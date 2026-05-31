@@ -25,7 +25,7 @@
 
 在 `STORAGE_BACKEND=sqlite` 下实测复现:
 
-```
+```text
 sqlite3.DatabaseError: Database file reports is not a valid SQLite file.
 This usually means Git LFS did not pull the real file.
 ```
