@@ -115,10 +115,10 @@ ADR-026 AI diagnosis can summarize drift incidents like any other.
 hook lives at the parse boundary; the commit gate lives at the session-commit
 path.
 
-**D8. Data model: one baseline table; no new alerting table.**
-`ParseFieldHealth` (per `page_type × field`: rolling baseline fill-rate, last
-fill-rate, last_observed_at, sample_count) is the D1-canonical baseline store.
-Drift events reuse `OpsIncidents` (D6).
+**D8. Data model: one field-health table; no new alerting table.**
+`ParseRunFieldFill` records per-run fill-rates keyed by
+`session_id × page_type × field`; the committed-only median over recent rows is
+the D1-canonical baseline for Phase 1. Drift events reuse `OpsIncidents` (D6).
 
 ## Consequences
 
@@ -148,7 +148,7 @@ Drift events reuse `OpsIncidents` (D6).
 
 | Phase | IMP | Ships | Deferred |
 | --- | --- | --- | --- |
-| Phase 1 — Piggyback + gate | [IMP-ADR035-01](IMP-ADR035-01-piggyback-and-gate.md) | `parse_contract`; `field_health` per-run telemetry; `detectors`; `ParseFieldHealth` baseline; tiered action (critical gate + soft incident) on the daily run; `site_drift` incident type | Independent canary; web/AI surface |
+| Phase 1 — Piggyback + gate | [IMP-ADR035-01](IMP-ADR035-01-piggyback-and-gate.md) | `parse_contract`; `field_health` per-run telemetry; `detectors`; `ParseRunFieldFill` committed-only median baseline; tiered action (critical gate + soft incident) on the daily run; `site_drift` incident type | Independent canary; web/AI surface |
 | Phase 2 — Independent canary | IMP-ADR035-02 (stub) | `probes` + `SiteContractSentinel.yml` cron + pinned pages + golden anchors; between-run detection | — |
 | Phase 3 — Surface (optional) | IMP-ADR035-03 (stub) | Per-field health on web (ADR-034 pattern) / AI drift summary | — |
 
@@ -203,7 +203,7 @@ fetch**. Phase 2 adds between-run lead time. Phase 3 is optional polish.
   implemented — `parse_contract`, `field_health` piggyback (both the sequential
   AND parallel index paths), `ParseRunFieldFill` + repo, pure `detectors`,
   `service` (sole writer + `site_drift` incident), commit gate (critical →
-  fail; fail-open on sentinel error), and `apps.cli.ops.sentinel`. See the
-  IMP's "As-Built Notes" for deviations. Fast-follows: apply the D1 migration
-  to production; gate the API commit path. Phases 2–3 remain pending, so the
-  umbrella stays Proposed.
+  fail; fail-open on sentinel error), `apps.cli.ops.sentinel`, and the API
+  commit path. The production D1 migration has been verified on `javdb-reports`.
+  See the IMP's "As-Built Notes" for deviations. Phases 2–3 remain pending, so
+  the umbrella stays Proposed.
