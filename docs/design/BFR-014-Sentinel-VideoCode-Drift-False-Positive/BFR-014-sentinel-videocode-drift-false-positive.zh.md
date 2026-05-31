@@ -13,7 +13,7 @@
 每日抓取的 `mark-sessions-as-committed` 步骤以退出码 1 失败
 （[run 26712478741](https://github.com/TongWu/JAVDB_AutoSpider_CICD/actions/runs/26712478741)）：
 
-```
+```text
 ✗ __main__  Site-contract drift gate: critical drift for session
             20260531T122613.805503Z-8382-0000 (1 finding(s)); refusing commit
             (FailureReason=site_drift).
@@ -23,7 +23,7 @@ Error: Process completed with exit code 1.
 
 其上方有一条被吞掉的警告：
 
-```
+```text
 ⚠ javdb.ops.se  evaluate_session: incident persist failed
 javdb.storage.d1_client.D1PermanentError: D1 API returned HTTP 400:
   [{'code': 7500, 'message': 'no such table: OpsIncidents: SQLITE_ERROR'}]
