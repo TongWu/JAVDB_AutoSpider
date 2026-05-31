@@ -8,7 +8,7 @@ from pathlib import Path
 from javdb.infra.logging import log_section, log_summary_block
 from javdb.ops.diagnosis.jsonl_store import append_incident_jsonl
 from javdb.ops.diagnosis.models import OpsIncidentRecord
-from javdb.storage.db import get_db
+from javdb.storage.db import REPORTS_DB_PATH, get_db
 from javdb.storage.repos.ops_incident_repo import OpsIncidentRepo
 
 
@@ -26,7 +26,7 @@ def persist_incident(
         if repo is not None:
             repo.upsert(d1_record)
         else:
-            with get_db("reports") as conn:
+            with get_db(REPORTS_DB_PATH) as conn:
                 OpsIncidentRepo(conn).upsert(d1_record)
         return d1_record
     except Exception:
