@@ -306,7 +306,7 @@ Run:
 pytest tests/unit/test_quality_features.py -v
 ```
 
-Expected: PASS (7 tests).
+Expected: PASS (5 tests).
 
 - [x] **Step 5: Commit**
 
@@ -614,7 +614,7 @@ Run:
 pytest tests/unit/test_quality_scoring.py -v
 ```
 
-Expected: PASS (5 tests).
+Expected: PASS (9 tests).
 
 - [x] **Step 5: Commit**
 
