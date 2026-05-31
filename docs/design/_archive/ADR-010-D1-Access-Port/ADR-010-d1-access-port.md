@@ -3,7 +3,7 @@
 **Status**: Completed — production-gated bake passed on 2026-05-30; code defaults remain opt-in for self-hosters while the Production environment keeps all ADR-010 gates enabled
 **Date**: 2026-05-19
 **Deciders**: D1 access-port brainstorming and grill session
-**Prerequisites**: [ADR-006](../_archive/ADR-006-Pending-Mode-Rollout/ADR-006-pending-mode-default-rollout.md) keeps pending mode as the default write path; [ADR-009](../_archive/ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md) documents the recent D1 transient-failure and drift response.
+**Prerequisites**: [ADR-006](../ADR-006-Pending-Mode-Rollout/ADR-006-pending-mode-default-rollout.md) keeps pending mode as the default write path; [ADR-009](../ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md) documents the recent D1 transient-failure and drift response.
 **Related Implementation Plans**: [IMP-ADR010-01](IMP-ADR010-01-d1-access-port-phase1-core.md) (Phase 1 — port core), [IMP-ADR010-02](IMP-ADR010-02-d1-access-port-phase2-recovery-outbox.md) (Phase 2 — recovery outbox), [IMP-ADR010-03](IMP-ADR010-03-d1-access-port-phase3-safe-batching.md) (Phase 3 — safe batching), [IMP-ADR010-04](IMP-ADR010-04-d1-access-port-phase4-startup-replay.md) (Phase 4 — startup replay), [IMP-ADR010-05](IMP-ADR010-05-finish-recovery-facade.md) (Phase 5 — finish recovery facade)
 
 ## Implementation Progress
@@ -310,7 +310,7 @@ No workflow default should enable outbox soft-success until tests, staging rules
 
 ## Related Decisions
 
-- [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md) - Repo migration and eventual `db.py` retirement.
-- [ADR-006](../_archive/ADR-006-Pending-Mode-Rollout/ADR-006-pending-mode-default-rollout.md) - Pending mode default and bake-gate model.
-- [ADR-009](../_archive/ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md) - D1 transient classifier and drift diagnosis.
-- [`docs/handbook/en/ops/d1-rollback.md`](../../handbook/en/ops/d1-rollback.md) - Current pending rollback and drift response runbook.
+- [ADR-005](../ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md) - Repo migration and eventual `db.py` retirement.
+- [ADR-006](../ADR-006-Pending-Mode-Rollout/ADR-006-pending-mode-default-rollout.md) - Pending mode default and bake-gate model.
+- [ADR-009](../ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md) - D1 transient classifier and drift diagnosis.
+- [`docs/handbook/en/ops/d1-rollback.md`](../../../handbook/en/ops/d1-rollback.md) - Current pending rollback and drift response runbook.

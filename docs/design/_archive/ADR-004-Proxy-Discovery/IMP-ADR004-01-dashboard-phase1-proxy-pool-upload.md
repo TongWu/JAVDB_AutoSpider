@@ -15,7 +15,7 @@
 
 **Tech Stack:** Python 3.11+, pytest, existing `packages/python/javdb_platform/runner_registry_client.py` patterns.
 
-**Reference docs:** [CONTEXT.md](../../../CONTEXT.md), [ADR-004](ADR-004-proxy-discovery-via-runner-pool-upload.md)
+**Reference docs:** [CONTEXT.md](../../../../CONTEXT.md), [ADR-004](ADR-004-proxy-discovery-via-runner-pool-upload.md)
 
 ---
 
@@ -536,7 +536,7 @@ If `grep` finds a `docs/handbook/en/developer/*.md` file describing the runner r
 
 - [ ] **Step 3: Verify CONTEXT.md is already accurate**
 
-Read [CONTEXT.md](../../../CONTEXT.md) `RunnerRegistry DO` section. It already describes Phase 1's `proxies_seen` extension. No edit needed unless the description mentions Phase 2 details that haven't shipped.
+Read [CONTEXT.md](../../../../CONTEXT.md) `RunnerRegistry DO` section. It already describes Phase 1's `proxies_seen` extension. No edit needed unless the description mentions Phase 2 details that haven't shipped.
 
 - [ ] **Step 4: Commit any doc changes (skip if none)**
 

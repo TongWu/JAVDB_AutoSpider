@@ -5,7 +5,7 @@
 | **状态**   | Implemented —— Phase 1 与 Phase 2 已于 2026-05-30 实现；本地验证已完成；可选 Phase 3（"消除"，D7）延后到出现反复漂移后再启动 |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
-| **关联**   | [ADR-029](../ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md)（auth 加固 — token 撤销归它）、[ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md)（双后端拆分）、[ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md)（D1 访问端口） |
+| **关联**   | [ADR-029](../_archive/ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md)（auth 加固 — token 撤销归它）、[ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md)（双后端拆分）、[ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md)（D1 访问端口） |
 
 > 源自 2026-05-29 架构审查（候选 B）：[architecture-review-2026-05-29.zh.html](../architecture/architecture-review-2026-05-29.zh.html)。
 
@@ -21,7 +21,7 @@
 ### 已被覆盖（因此不在本 ADR 范围）
 
 - **API 响应格式** — 已有单一真相源：`docs/api/openapi.json` 由 Python 应用生成，TS 仓经 `scripts/fetch-openapi.mjs` → `openapi-typescript` 消费，并有契约测试（`server/__tests__/contract-compliance.test.ts`、`tests/contract/openapi-shapes.spec.ts`）钉住 TS 响应。**本 ADR 不重决。**
-- **Token 撤销 / auth 加固** — 归 [ADR-029](../ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md)（KV 支撑、仅 TS、仅 mutations）。部署拓扑为 **TS Worker 是唯一线上 auth 面**（Cloudflare-first）；某次部署只对一个后端做认证，因此无需跨后端撤销一致性。**本 ADR 不涉及。**
+- **Token 撤销 / auth 加固** — 归 [ADR-029](../_archive/ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md)（KV 支撑、仅 TS、仅 mutations）。部署拓扑为 **TS Worker 是唯一线上 auth 面**（Cloudflare-first）；某次部署只对一个后端做认证，因此无需跨后端撤销一致性。**本 ADR 不涉及。**
 
 ### 仍存在的缺口
 
@@ -93,7 +93,7 @@
 
 ## 不在范围（Out of Scope）
 
-- **Auth / token 撤销** — 归 [ADR-029](../ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md)。
+- **Auth / token 撤销** — 归 [ADR-029](../_archive/ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md)。
 - **API 响应格式** — 已被 `openapi.json` + 契约测试守卫。
 - **跨后端 token 一致性** — 不需要（TS Worker 是唯一线上 auth 面）。
 - **静态单语句查询** — 交给响应格式契约测试。

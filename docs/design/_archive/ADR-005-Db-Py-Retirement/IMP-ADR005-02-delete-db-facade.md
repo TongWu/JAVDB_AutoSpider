@@ -1,7 +1,7 @@
 # IMP-ADR005-02: ADR-005 PR-5 — Delete db.py Facade
 
 **Related:** [ADR-005](ADR-005-db-py-retirement-and-repo-pattern.md)
-**Spec:** [2026-05-22-adr005-pr5-delete-db-py-design](../../superpowers/specs/2026-05-22-adr005-pr5-delete-db-py-design.md)
+**Spec:** [2026-05-22-adr005-pr5-delete-db-py-design](../../../superpowers/specs/2026-05-22-adr005-pr5-delete-db-py-design.md)
 **Branch:** `adr005-pr5-delete-db-py`
 **Status:** Implemented on 2026-05-22. `javdb/storage/db/db.py` is deleted; `javdb/storage/db/__init__.py` is the package public API; ADR-005 English/Chinese and IMP-ADR005-01 were updated to reference PR-5 completion.
 
