@@ -10,8 +10,9 @@ import pytest
 from javdb.quality.models import EvaluationRecord, EvidenceRecord
 from javdb.storage.repos.torrent_quality_repo import TorrentQualityRepo
 
-_MIGRATION = Path(
-    "javdb/migrations/d1/2026_05_31_add_torrent_quality_tables.sql"
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_MIGRATION = (
+    _REPO_ROOT / "javdb/migrations/d1/2026_05_31_add_torrent_quality_tables.sql"
 )
 
 
@@ -43,8 +44,8 @@ def test_upsert_and_get_evidence(conn):
     assert row is not None
     assert row["total_size_bytes"] == 1000
     assert row["main_video_ratio"] == 0.9
-    assert "main_video_detected" in row["reasons_json"]
-    assert "mkv" in row["features_json"]
+    assert row["reasons"] == ["main_video_detected"]
+    assert row["features"] == {"container": "mkv"}
 
 
 def test_upsert_evidence_is_idempotent(conn):
@@ -104,7 +105,8 @@ def test_upsert_and_list_evaluation(conn):
     assert rows[0]["score"] == 0.82
     assert rows[0]["policy_mode"] == "shadow"
     assert rows[0]["would_replace_current_choice"] == 0
-    assert "1080p" in rows[0]["javdb_tags_json"]
+    assert rows[0]["javdb_tags"] == ["1080p", "subtitle"]
+    assert rows[0]["reasons"] == ["subtitle_file_missing"]
 
 
 def test_list_recent_evaluations_orders_by_created_at(conn):
@@ -149,3 +151,42 @@ def test_list_recent_evaluations_orders_by_created_at(conn):
     rows = repo.list_recent_evaluations(limit=1)
     assert len(rows) == 1
     assert rows[0]["info_hash"] == "DEF456"
+
+
+def test_list_recent_evaluations_uses_pk_tiebreaker(conn):
+    repo = TorrentQualityRepo(conn)
+    repo.upsert_evaluation(
+        EvaluationRecord(
+            info_hash="ABC123",
+            movie_href="/v/abc",
+            scoring_version="v1",
+            video_code="ABC-123",
+            shadow_rank=2,
+        )
+    )
+    repo.upsert_evaluation(
+        EvaluationRecord(
+            info_hash="DEF456",
+            movie_href="/v/def",
+            scoring_version="v1",
+            video_code="DEF-456",
+            shadow_rank=1,
+        )
+    )
+    conn.execute(
+        """
+        UPDATE TorrentQualityEvaluation
+        SET created_at = ?
+        """,
+        ("2026-05-31T00:00:00.000Z",),
+    )
+
+    rows = repo.list_recent_evaluations(limit=2)
+    assert [row["info_hash"] for row in rows] == ["DEF456", "ABC123"]
+
+
+@pytest.mark.parametrize("limit", [0, -1])
+def test_list_recent_evaluations_rejects_non_positive_limit(conn, limit):
+    repo = TorrentQualityRepo(conn)
+    with pytest.raises(ValueError, match="limit must be positive"):
+        repo.list_recent_evaluations(limit=limit)

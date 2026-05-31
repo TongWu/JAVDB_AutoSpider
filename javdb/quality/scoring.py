@@ -22,6 +22,7 @@ REJECT_SCORE = 0.4
 
 # javdb_category values that claim embedded/sidecar subtitles.
 _SUBTITLE_CATEGORIES = frozenset({"subtitle", "hacked_subtitle"})
+_NO_SUBTITLE_CATEGORIES = frozenset({"no_subtitle", "hacked_no_subtitle"})
 _CJK_SUBTITLE_NAME_MARKERS = ("字幕", "中文", "中字")
 _ASCII_SUBTITLE_TOKENS = frozenset(
     {"sub", "subs", "subbed", "chinese", "chs", "cht", "zh", "cn"}
@@ -53,6 +54,93 @@ def _extract_resolution_marker(text: str) -> str | None:
     return _normalize_resolution_marker(match.group(1))
 
 
+def _main_video_signal(features: dict[str, Any]) -> tuple[float, list[str]]:
+    score_delta = 0.0
+    reasons: list[str] = []
+    if features.get("video_file_count", 0) > 0:
+        reasons.append("main_video_detected")
+    else:
+        reasons.append("main_video_missing")
+        score_delta -= 0.7
+
+    main_ratio = float(features.get("main_video_ratio", 0.0))
+    if (
+        features.get("video_file_count", 0) == 1
+        and main_ratio < MAIN_VIDEO_RATIO_FLOOR
+    ):
+        reasons.append("main_video_ratio_low")
+        score_delta -= 0.25
+    return score_delta, reasons
+
+
+def _junk_signal(features: dict[str, Any]) -> tuple[float, list[str]]:
+    junk_ratio = float(features.get("junk_size_ratio", 0.0))
+    if junk_ratio >= JUNK_RATIO_HIGH:
+        return -min(0.4, junk_ratio), ["junk_ratio_high"]
+    return 0.0, []
+
+
+def _subtitle_signal(
+    features: dict[str, Any], magnet_name: str
+) -> tuple[str, tuple[float, list[str]]]:
+    if features.get("subtitle_file_count", 0) > 0:
+        return "file_present", (0.0, ["subtitle_file_present"])
+    if _subtitle_name_hint(magnet_name):
+        return "name_hint", (0.0, ["subtitle_name_hint"])
+    return "absent", (0.0, [])
+
+
+def _category_signal(
+    javdb_category: str, subtitle_evidence: str
+) -> tuple[bool, tuple[float, list[str]]]:
+    if javdb_category in _NO_SUBTITLE_CATEGORIES and subtitle_evidence != "absent":
+        return False, (-0.3, ["category_mismatch"])
+    if javdb_category in _SUBTITLE_CATEGORIES and subtitle_evidence == "absent":
+        return False, (-0.3, ["subtitle_file_missing", "category_mismatch"])
+    return True, (0.0, [])
+
+
+def _resolution_signal(
+    features: dict[str, Any], magnet_name: str
+) -> tuple[bool | None, tuple[float, list[str]]]:
+    claimed_resolution = _extract_resolution_marker(magnet_name)
+    main_video_name = str(features.get("main_video_name") or "")
+    if not (claimed_resolution and main_video_name):
+        return None, (0.0, [])
+
+    main_resolution = _extract_resolution_marker(main_video_name)
+    if main_resolution is None:
+        return None, (0.0, [])
+    if main_resolution == claimed_resolution:
+        return True, (0.0, ["resolution_claim_supported"])
+    return False, (-0.1, ["resolution_claim_unsupported"])
+
+
+def _abnormal_file_count_signal(features: dict[str, Any]) -> tuple[float, list[str]]:
+    if features.get("suspicious_file_count", 0) >= 5:
+        return -0.1, ["abnormal_file_count"]
+    return 0.0, []
+
+
+def _decide(score: float, *, category_consistent: bool) -> str:
+    if not category_consistent:
+        return "needs_review"
+    if score >= ACCEPT_SCORE:
+        return "accepted_shadow"
+    if score < REJECT_SCORE:
+        return "rejected_shadow"
+    return "needs_review"
+
+
+def _apply_signal(
+    score: float, reasons: list[str], signal: tuple[float, list[str]]
+) -> float:
+    """Append signal reasons into the caller-local accumulator and return score."""
+    score_delta, signal_reasons = signal
+    reasons.extend(signal_reasons)
+    return score + score_delta
+
+
 def score_torrent(
     features: dict[str, Any], context: dict[str, Any]
 ) -> dict[str, Any]:
@@ -67,72 +155,24 @@ def score_torrent(
     javdb_category = context.get("javdb_category") or ""
     magnet_name = context.get("magnet_name") or ""
 
-    # --- main video presence ---
-    if features.get("video_file_count", 0) > 0:
-        reasons.append("main_video_detected")
-    else:
-        reasons.append("main_video_missing")
-        score -= 0.7
+    score = _apply_signal(score, reasons, _main_video_signal(features))
+    score = _apply_signal(score, reasons, _junk_signal(features))
 
-    # --- effective main-video size, not raw total ---
-    main_ratio = float(features.get("main_video_ratio", 0.0))
-    if features.get("video_file_count", 0) > 0 and main_ratio < MAIN_VIDEO_RATIO_FLOOR:
-        reasons.append("main_video_ratio_low")
-        score -= 0.25
+    subtitle_evidence, subtitle_signal = _subtitle_signal(features, magnet_name)
+    score = _apply_signal(score, reasons, subtitle_signal)
 
-    # --- junk / ad penalty ---
-    junk_ratio = float(features.get("junk_size_ratio", 0.0))
-    if junk_ratio >= JUNK_RATIO_HIGH:
-        reasons.append("junk_ratio_high")
-        score -= min(0.4, junk_ratio)
+    category_consistent, category_signal = _category_signal(
+        javdb_category, subtitle_evidence
+    )
+    score = _apply_signal(score, reasons, category_signal)
 
-    # --- subtitle evidence ---
-    if features.get("subtitle_file_count", 0) > 0:
-        subtitle_evidence = "file_present"
-        reasons.append("subtitle_file_present")
-    elif _subtitle_name_hint(magnet_name):
-        subtitle_evidence = "name_hint"  # weak signal per ADR Scoring Signals
-        reasons.append("subtitle_name_hint")
-    else:
-        subtitle_evidence = "absent"
+    resolution_consistent, resolution_signal = _resolution_signal(
+        features, magnet_name
+    )
+    score = _apply_signal(score, reasons, resolution_signal)
 
-    # --- category consistency ---
-    category_consistent = True
-    if javdb_category in _SUBTITLE_CATEGORIES and subtitle_evidence == "absent":
-        category_consistent = False
-        reasons.append("subtitle_file_missing")
-        reasons.append("category_mismatch")
-        score -= 0.3
-
-    # --- resolution claim check ---
-    resolution_consistent = None
-    claimed_resolution = _extract_resolution_marker(magnet_name)
-    main_video_name = str(features.get("main_video_name") or "")
-    if claimed_resolution and main_video_name:
-        main_resolution = _extract_resolution_marker(main_video_name)
-        if main_resolution == claimed_resolution:
-            resolution_consistent = True
-            reasons.append("resolution_claim_supported")
-        else:
-            resolution_consistent = False
-            reasons.append("resolution_claim_unsupported")
-            score -= 0.1
-
-    # --- abnormal file count ---
-    if features.get("suspicious_file_count", 0) >= 5:
-        reasons.append("abnormal_file_count")
-        score -= 0.1
-
+    score = _apply_signal(score, reasons, _abnormal_file_count_signal(features))
     score = max(0.0, min(1.0, score))
-
-    if not category_consistent:
-        decision = "needs_review"
-    elif score >= ACCEPT_SCORE:
-        decision = "accepted_shadow"
-    elif score < REJECT_SCORE:
-        decision = "rejected_shadow"
-    else:
-        decision = "needs_review"
 
     return {
         "score": score,
@@ -141,7 +181,7 @@ def score_torrent(
         "category_consistent": category_consistent,
         "resolution_consistent": resolution_consistent,
         "inferred_category": _infer_category(context, subtitle_evidence),
-        "decision": decision,
+        "decision": _decide(score, category_consistent=category_consistent),
     }
 
 
@@ -156,7 +196,7 @@ def _infer_category(
     """
     claimed = context.get("javdb_category") or ""
     hacked = claimed.startswith("hacked_")
-    has_subtitle = subtitle_evidence == "file_present"
+    has_subtitle = subtitle_evidence in {"file_present", "name_hint"}
     if hacked:
         return "hacked_subtitle" if has_subtitle else "hacked_no_subtitle"
     return "subtitle" if has_subtitle else "no_subtitle"

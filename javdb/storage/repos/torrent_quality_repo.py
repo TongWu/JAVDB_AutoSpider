@@ -86,6 +86,7 @@ _EVALUATION_COLUMNS = (
     "reasons_json",
 )
 _EVALUATION_PK = ("info_hash", "movie_href", "scoring_version")
+_JSON_COLUMNS = frozenset({"features_json", "javdb_tags_json", "reasons_json"})
 
 
 def _bool_to_int(value: Optional[bool]) -> Optional[int]:
@@ -162,10 +163,7 @@ class TorrentQualityRepo:
 
     def __init__(self, conn: sqlite3.Connection) -> None:
         self._conn = conn
-        try:
-            self._conn.row_factory = sqlite3.Row
-        except Exception:
-            logger.debug("row_factory set failed", exc_info=True)
+        self._conn.row_factory = sqlite3.Row
 
     def upsert_evidence(self, record: EvidenceRecord) -> None:
         self._conn.execute(
@@ -202,13 +200,34 @@ class TorrentQualityRepo:
         return [self._to_dict(r, _EVALUATION_COLUMNS) for r in rows]
 
     def list_recent_evaluations(self, *, limit: int = 50) -> list[dict[str, Any]]:
+        limit = int(limit)
+        if limit <= 0:
+            raise ValueError("limit must be positive")
         sql = (
             f"SELECT {', '.join(_EVALUATION_COLUMNS)} FROM TorrentQualityEvaluation "
-            "ORDER BY created_at DESC LIMIT ?"
+            "ORDER BY created_at DESC, info_hash DESC, movie_href DESC, "
+            "scoring_version DESC LIMIT ?"
         )
         rows = self._conn.execute(sql, (limit,)).fetchall()
         return [self._to_dict(r, _EVALUATION_COLUMNS) for r in rows]
 
     @staticmethod
     def _to_dict(row: Mapping[str, Any], columns: tuple[str, ...]) -> dict[str, Any]:
-        return {col: row[col] for col in columns}
+        data: dict[str, Any] = {}
+        for col in columns:
+            value = TorrentQualityRepo._decode_json_value(col, row[col])
+            key = col[:-5] if col.endswith("_json") else col
+            data[key] = value
+        return data
+
+    @staticmethod
+    def _decode_json_value(column: str, value: Any) -> Any:
+        if column not in _JSON_COLUMNS or value is None or value == "":
+            return value
+        if isinstance(value, (dict, list)):
+            return value
+        try:
+            return json.loads(value)
+        except (TypeError, ValueError):
+            logger.debug("failed to decode JSON column %s", column, exc_info=True)
+            return value
