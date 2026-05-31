@@ -48,7 +48,7 @@ def score_torrent(
         reasons.append("main_video_detected")
     else:
         reasons.append("main_video_missing")
-        score -= 0.6
+        score -= 0.7
 
     # --- effective main-video size, not raw total ---
     main_ratio = float(features.get("main_video_ratio", 0.0))

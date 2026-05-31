@@ -64,7 +64,8 @@ def test_inflated_junk_torrent_scores_low():
 
 
 def test_no_video_file_is_rejected():
-    feats = _features([{"name": "readme.txt", "size": 1_000, "priority": 1}])
+    feats = _features([{"name": "readme.md", "size": 1_000, "priority": 1}])
     result = score_torrent(feats, {"javdb_category": "no_subtitle", "magnet_name": "x", "javdb_tags": []})
     assert "main_video_missing" in result["reasons"]
     assert result["score"] < 0.4
+    assert result["decision"] == "rejected_shadow"
