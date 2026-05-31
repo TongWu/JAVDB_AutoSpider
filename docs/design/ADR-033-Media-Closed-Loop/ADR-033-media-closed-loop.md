@@ -5,7 +5,7 @@
 | **Status**  | Proposed — umbrella; Phase 1 implemented and locally verified; execution delegated to per-phase IMPs |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-024](../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md), [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-028](../ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md) |
+| **Related** | [ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-024](../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md), [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-028](../ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md) |
 
 > Originated from a 2026-05-29 brainstorming session on net-new directions not yet
 > captured by any existing ADR.
@@ -47,7 +47,7 @@ This blindness has three costs:
    it only knows scrape history and a weekly GDrive snapshot.
 2. **Failures and stalls are invisible** — a torrent that never completes leaves
    no trace distinguishable from one that succeeded.
-3. **The deferred preference model ([ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md) /
+3. **The deferred preference model ([ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md) /
    [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md))
    lacks its single strongest implicit signal** — actual watch behavior — because
    nothing reads the media servers the operator already runs (Emby + Plex).
@@ -67,7 +67,7 @@ change as sources are added.
 ### Design Decisions
 
 **D1. Three dedicated enrichment tables, not extensions of the history tables.**
-Following the [ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md)
+Following the [ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md)
 precedent (which created a separate `MovieMetadata` rather than widening
 `MovieHistory`), closed-loop state lives in new tables that are written off the
 Pending→Commit critical path. `MovieHistory` / `TorrentHistory` stay pure
@@ -287,7 +287,7 @@ so they can incorporate what the Phase 1 reconcile service and the
 
 ## References
 
-- [ADR-022 — User Preference Data Foundation](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md)
+- [ADR-022 — User Preference Data Foundation](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md)
 - [ADR-024 — Torrent Quality Evidence Foundation](../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md)
 - [ADR-025 — User Preference Model](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md)
 - [ADR-015 — Integrations Interface Boundary](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md)

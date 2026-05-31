@@ -4,7 +4,7 @@
 **日期**：2026-05-31
 **严重度**：High
 **影响范围**：`javdb/storage/repos/metadata_repo.py`（`MetadataRepo.upsert`）、`javdb/migrations/tools/backfill_movie_metadata.py`（`_process_href`）、`javdb/spider/detail/runner.py`（detail 阶段的 metadata 持久化）
-**关联**：[ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md)（`MovieMetadata` 表与 `MetadataRepo` 的归属）、[IMP-ADR022-08](../ADR-022-User-Preference-Foundation/IMP-ADR022-08-metadata-backfill.md)（暴露该问题的 metadata 回填）、[BFR-010](../BFR-010-Relative-Href-Inconsistency/BFR-010-relative-href-inconsistency.zh.md)（修复必须保留的嵌套 link href 绝对化）
+**关联**：[ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md)（`MovieMetadata` 表与 `MetadataRepo` 的归属）、[IMP-ADR022-08](../_archive/ADR-022-User-Preference-Foundation/IMP-ADR022-08-metadata-backfill.md)（暴露该问题的 metadata 回填）、[BFR-010](../BFR-010-Relative-Href-Inconsistency/BFR-010-relative-href-inconsistency.zh.md)（修复必须保留的嵌套 link href 绝对化）
 
 ---
 

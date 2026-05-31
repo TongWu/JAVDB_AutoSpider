@@ -16,6 +16,18 @@
 
 ---
 
+## Status — ✅ Implemented
+
+`PREFERENCE_GATE_ENABLED` (`config.py.example`), `_preference_gate_blocks`, and the
+`_resolve_actor_link` history fallback live in
+`javdb/integrations/qb/uploader/service.py` and are re-exported from the package
+`__init__`. The gate is wired into `read_csv_file()` and **fails open** on any error.
+See the divergence note below for the three corrections (real package path, actor-link
+resolution from `MovieHistory`, and the absent `--dry-run` flag). Gate behavior is
+covered by `tests/unit/test_preference_gate.py`.
+
+---
+
 > **⚠ Divergence note (recorded during implementation, 2026-05-30).**
 > Three corrections vs. the steps below:
 > 1. **File path:** the IMP says `javdb/integrations/qb/uploader.py`, but the real
@@ -46,7 +58,7 @@
 **Files:**
 - Modify: `config.py.example`
 
-- [ ] **Step 1: Add the flag**
+- [x] **Step 1: Add the flag**
 
 Open `config.py.example`. Find the section that contains other boolean feature flags (e.g. `CF_BYPASS_ENABLED`, `AUTO_START`). Add after those flags:
 
@@ -58,7 +70,7 @@ Open `config.py.example`. Find the section that contains other boolean feature f
 PREFERENCE_GATE_ENABLED = False
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add config.py.example
@@ -72,7 +84,7 @@ git commit -m "chore(config): add PREFERENCE_GATE_ENABLED flag (ADR-022)"
 **Files:**
 - Modify: `javdb/integrations/qb/uploader.py`
 
-- [ ] **Step 1: Add `_preference_gate_blocks` function**
+- [x] **Step 1: Add `_preference_gate_blocks` function**
 
 Open `javdb/integrations/qb/uploader.py`. Locate the import block at the top and the `logger` definition. After the logger definition and before the first public function, add:
 
@@ -105,7 +117,7 @@ def _preference_gate_blocks(torrent: dict) -> bool:
         return False
 ```
 
-- [ ] **Step 2: Call the gate in `read_csv_file()`**
+- [x] **Step 2: Call the gate in `read_csv_file()`**
 
 In `read_csv_file()`, locate the `is_downloaded_torrent(magnet)` check (inside the `for col, label, ttype in torrent_columns:` loop). After that check's `continue` block and before `torrents.append(...)`, add:
 
@@ -127,7 +139,7 @@ The full loop body should now read, in order:
 4. `if _preference_gate_blocks(...): ... continue`
 5. `torrents.append({...})`
 
-- [ ] **Step 3: Verify gate is inactive by default**
+- [x] **Step 3: Verify gate is inactive by default**
 
 ```bash
 python3 -c "
@@ -140,7 +152,7 @@ print('Gate correctly inactive when PREFERENCE_GATE_ENABLED=False')
 
 Expected: `Gate correctly inactive when PREFERENCE_GATE_ENABLED=False`
 
-- [ ] **Step 4: Verify uploader dry-run still works**
+- [x] **Step 4: Verify uploader dry-run still works**
 
 ```bash
 python3 -m apps.cli.qb.uploader --mode adhoc --dry-run 2>&1 | tail -5
@@ -148,7 +160,7 @@ python3 -m apps.cli.qb.uploader --mode adhoc --dry-run 2>&1 | tail -5
 
 Expected: completes without errors; no preference-gate-related output.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add javdb/integrations/qb/uploader.py
