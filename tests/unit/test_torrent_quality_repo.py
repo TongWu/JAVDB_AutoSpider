@@ -75,7 +75,9 @@ def test_features_must_not_duplicate_promoted_columns(conn):
         video_file_count=1,
         features={"video_file_count": 1},  # collides with a promoted column
     )
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        ValueError, match=r"must not duplicate promoted columns.*video_file_count"
+    ):
         repo.upsert_evidence(rec)
 
 
@@ -116,6 +118,7 @@ def test_list_recent_evaluations_orders_by_created_at(conn):
             shadow_rank=2,
         )
     )
+    # Artificial timestamp for deterministic ordering in the repo test.
     conn.execute(
         """
         UPDATE TorrentQualityEvaluation
@@ -133,6 +136,7 @@ def test_list_recent_evaluations_orders_by_created_at(conn):
             shadow_rank=1,
         )
     )
+    # Artificial timestamp for deterministic ordering in the repo test.
     conn.execute(
         """
         UPDATE TorrentQualityEvaluation
