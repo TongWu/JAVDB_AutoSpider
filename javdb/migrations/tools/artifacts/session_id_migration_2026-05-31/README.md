@@ -24,7 +24,8 @@ a real per-session time. 251 of the 362 sessions were a same-second bulk import
 
 - `ReportSessions`: 0 legacy-format ids remaining (394 rows all canonical).
 - `--verify`: 0 legacy refs anywhere, every new id present as PK, per-table
-  reference counts + total row counts conserved, no orphans.
+  reference counts + total row counts conserved, **no new orphans** (within the
+  migration's scope; pre-existing orphans are called out below).
 - `PRAGMA foreign_key_check` (reports D1): no new violations — the 14 that remain
   are pre-existing orphans (sessions `332`, `1820929777505280`) from
   rolled-back sessions, out of this migration's scope.
