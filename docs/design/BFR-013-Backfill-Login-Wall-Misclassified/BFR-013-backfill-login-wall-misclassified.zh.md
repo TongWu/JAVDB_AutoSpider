@@ -65,8 +65,17 @@ Migration `--backfill-metadata` 运行把一部需要登录的影片报成了解
 - **检测**：非空抓取后调 `is_login_page(html)`；命中则返回独立的 `login_required` 结果，附带
   "刷新 `JAVDB_SESSION_COOKIE`" 的提示，而不是 `parse_failed`。
 - **上报而非失败**：`run_backfill_metadata` 单独统计 `login_required`（不算 hard failure——
-  页面没问题、是会话过期），逐条 warning，并在汇总里提示运行 `python3 -m apps.cli.login`
-  后重跑。job 退出码仍只取决于真正的 `failed`。
+  页面没问题、是会话过期），逐条 warning，并用结构化的 `log_summary_block`（ok / failed /
+  login-gated / total）输出汇总，附带运行 `python3 -m apps.cli.login` 后重跑的提示。job 退出
+  码仍只取决于真正的 `failed`。
+
+**检测是 best-effort；`use_cookie=True` 才是承重的改动。** cookie 有效时根本不会出现登录墙，
+影片直接被抓取。`is_login_page` 分类只在登录 HTML 真正回传到 `_process_href` 时才生效——
+`--no-proxy` 直连路径，或大到能越过 CF-bypass 尺寸闸门的登录页。在默认的代理 CF-bypass 路径下，
+request handler 会把小登录页吞成 `None`（`javdb/infra/request.py` 自己的 "Last response
+appears to be a login page" 分支），所以那里过期/缺失 cookie 仍表现为 `fetch_failed` 而非
+`login_required`。把登录信号透传穿过共享的 fetch 层——或让回填走 `FetchEngine`——能让分类穷尽，
+但对一个一次性工具不成比例；认证抓取本身已经修好了报告的症状。
 
 测试（`tests/unit/test_backfill_movie_metadata_fetch.py`）：
 

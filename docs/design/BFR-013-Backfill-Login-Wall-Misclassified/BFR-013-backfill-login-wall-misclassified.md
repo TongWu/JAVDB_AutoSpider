@@ -82,8 +82,21 @@ ad-hoc spider's authenticated fetch:
   `JAVDB_SESSION_COOKIE`" message instead of `parse_failed`.
 - **Report, don't fail**: `run_backfill_metadata` counts `login_required`
   separately (not a hard failure — the page is fine, the session isn't), logs a
-  per-href warning, and emits a summary hint to run `python3 -m apps.cli.login`
-  and re-run. Job exit code still keys off genuine `failed` only.
+  per-href warning, and emits a structured `log_summary_block` (ok / failed /
+  login-gated / total) plus a hint to run `python3 -m apps.cli.login` and re-run.
+  Job exit code still keys off genuine `failed` only.
+
+**Detection is best-effort; `use_cookie=True` is the load-bearing change.** With
+a valid cookie the wall never appears, so the movie is simply scraped. The
+`is_login_page` classification only fires when the login HTML actually reaches
+`_process_href` — the `--no-proxy` direct path, or a login page large enough to
+clear the CF-bypass size gate. In the default proxied CF-bypass path the request
+handler swallows a small login page to `None` (its own "Last response appears to
+be a login page" branch in `javdb/infra/request.py`), so there a missing/expired
+cookie still surfaces as `fetch_failed`, not `login_required`. Propagating the
+login signal through the shared fetch layer — or routing the backfill through
+`FetchEngine` — would make classification exhaustive, but is disproportionate for
+a one-shot tool; the authenticated fetch already fixes the reported symptom.
 
 Tests (`tests/unit/test_backfill_movie_metadata_fetch.py`):
 

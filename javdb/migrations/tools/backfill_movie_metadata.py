@@ -41,7 +41,7 @@ from typing import List, Optional
 import requests
 
 from javdb.infra.config import cfg
-from javdb.infra.logging import get_logger, setup_logging
+from javdb.infra.logging import get_logger, log_summary_block, setup_logging
 from javdb.parsing import parse_detail_page
 from javdb.spider.html_validators import is_login_page
 from javdb.storage.db import get_db, HISTORY_DB_PATH
@@ -173,7 +173,14 @@ def _process_href(
 
     # Distinguish a login wall (cookie missing/expired, or content login-gated)
     # from a genuine parse failure: the bare get_page path has no LoginRequired
-    # machinery, so detect it explicitly here.
+    # machinery, so detect it explicitly here. Best-effort — the proxied
+    # CF-bypass path swallows a small login page to None before returning (the
+    # request handler's "Last response appears to be a login page" branch), so
+    # there it surfaces as 'fetch_failed' above, not here. This fires when the
+    # login HTML actually reaches us (the --no-proxy direct path, or a login
+    # page large enough to clear the CF-bypass size gate). The primary fix is
+    # use_cookie=True above, which avoids the wall entirely when the cookie is
+    # valid.
     if is_login_page(html):
         return BackfillResult(
             href, 'login_required',
@@ -293,11 +300,12 @@ def run_backfill_metadata(args: SimpleNamespace) -> int:
                 )
             )
 
-    logger.info(
-        "MovieMetadata backfill complete: %d ok, %d failed, %d login-gated "
-        "out of %d",
-        ok, failed, login_gated, total,
-    )
+    log_summary_block(logger, "MovieMetadata Backfill", {
+        "OK": ok,
+        "Failed": failed,
+        "Login-gated": login_gated,
+        "Total": total,
+    })
     if login_gated:
         logger.warning(
             "%d href(s) require login — refresh JAVDB_SESSION_COOKIE "
