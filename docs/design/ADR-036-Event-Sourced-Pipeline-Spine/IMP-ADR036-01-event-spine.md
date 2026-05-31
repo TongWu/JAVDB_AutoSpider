@@ -832,6 +832,7 @@ import sys
 
 from javdb.infra.logging import setup_logging
 from javdb.pipeline.events.consumer import RunEventSummaryConsumer
+from javdb.storage import db as _db
 from javdb.storage.db import get_db
 from javdb.storage.repos.pipeline_event_repo import PipelineEventRepo, RunEventSummaryRepo
 
@@ -853,7 +854,7 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     setup_logging(level=args.log_level)
-    with get_db("reports") as conn:
+    with get_db(_db.REPORTS_DB_PATH) as conn:
         event_repo = PipelineEventRepo(conn)
         consumer = RunEventSummaryConsumer(RunEventSummaryRepo(conn))
         if args.replay:

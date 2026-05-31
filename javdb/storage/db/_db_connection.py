@@ -41,6 +41,29 @@ _DB_PATH_TO_LOGICAL_NAME = {
     OPERATIONS_DB_PATH: 'operations',
 }
 
+# The logical names are the *values* above. They are valid arguments to the D1
+# router (make_d1_connection), but NEVER to get_db() / get_local_sqlite_db(),
+# which take filesystem PATHS. Passing a bare logical name — get_db("reports")
+# — is a recurring mistake (see BFR-011): under sqlite it tries to open the
+# "reports/" directory and raises a confusing DatabaseError; under D1 it raises
+# an opaque mapping error deep in the router. Reject it loudly at the door.
+_DB_LOGICAL_NAMES = frozenset(_DB_PATH_TO_LOGICAL_NAME.values())
+
+
+def _reject_logical_name(db_path) -> None:
+    """Fail fast if db_path is a bare logical name instead of a filesystem path.
+
+    A logical name is only rejected when it is NOT also a registered path key,
+    so a pathological config where a configured *_DB_PATH literally equals a
+    logical name still works.
+    """
+    if db_path in _DB_LOGICAL_NAMES and db_path not in _DB_PATH_TO_LOGICAL_NAME:
+        raise ValueError(
+            f"get_db() expects a filesystem path, not the logical name {db_path!r}. "
+            f"Import and pass HISTORY_DB_PATH / REPORTS_DB_PATH / OPERATIONS_DB_PATH "
+            f"from javdb.storage.db (e.g. get_db(REPORTS_DB_PATH))."
+        )
+
 # ── Backend-agnostic error tuples ────────────────────────────────────────
 #
 # Several best-effort code paths catch ``sqlite3.OperationalError`` to mean
@@ -338,7 +361,9 @@ def get_db(db_path: Optional[str] = None):
             conn.execute("INSERT INTO ...")
             # Auto-commits on exit, rolls back on exception
     """
-    conn = _get_connection(db_path or HISTORY_DB_PATH)
+    path = db_path or HISTORY_DB_PATH
+    _reject_logical_name(path)
+    conn = _get_connection(path)
     try:
         yield conn
         conn.commit()
@@ -373,6 +398,7 @@ def get_local_sqlite_db(db_path: Optional[str] = None):
             row = conn.execute("SELECT * FROM SpiderStats WHERE SessionId = ?", (sid,)).fetchone()
     """
     path = db_path or HISTORY_DB_PATH
+    _reject_logical_name(path)
     conn = _open_sqlite_connection(path)
     try:
         yield conn

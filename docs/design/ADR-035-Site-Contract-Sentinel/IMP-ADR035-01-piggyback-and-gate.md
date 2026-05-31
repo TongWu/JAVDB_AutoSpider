@@ -747,7 +747,7 @@ git commit -m "feat(sentinel): add pure drift evaluation"
 - Create: `javdb/ops/sentinel/service.py`
 - Test: `tests/unit/test_sentinel_service.py`
 
-`persistence.py` wires `get_db('reports')` and builds a `site_drift` `OpsIncidentRecord`
+`persistence.py` wires `get_db(REPORTS_DB_PATH)` and builds a `site_drift` `OpsIncidentRecord`
 (reusing the ADR-026 `OpsIncidentRepo`). `service.py` is the only writer.
 
 - [ ] **Step 1: Write the failing test**
@@ -836,20 +836,20 @@ import json
 
 from javdb.ops.diagnosis.models import OpsIncidentRecord, build_incident_id
 from javdb.ops.sentinel.models import SentinelVerdict, utc_now_iso
-from javdb.storage.db import get_db
+from javdb.storage.db import REPORTS_DB_PATH, get_db
 from javdb.storage.repos.ops_incident_repo import OpsIncidentRepo
 from javdb.storage.repos.parse_run_field_fill_repo import ParseRunFieldFillRepo
 
 
 @contextlib.contextmanager
 def open_fill_repo():
-    with get_db("reports") as conn:
+    with get_db(REPORTS_DB_PATH) as conn:
         yield ParseRunFieldFillRepo(conn)
 
 
 @contextlib.contextmanager
 def open_incident_repo():
-    with get_db("reports") as conn:
+    with get_db(REPORTS_DB_PATH) as conn:
         yield OpsIncidentRepo(conn)
 
 
