@@ -24,13 +24,17 @@
 
 ## Status — ✅ Implemented (with deviations noted below)
 
-All four features are implemented and merged/PR-open in `javdb-autospider-web`. The
-final wiring landed across these commits (most recent first): the C1 tag-chips +
-notes gap-fill and review fixes (`f34ebae`, `813c674`), the B3 `/browse` score +
-C4 `/browse` hearts (`b9828e6`, `b6bf218`, `4ead773`), on top of the original
-C1 inline-rating + B3 column (`a74e720`), C3 batch mode (`3529db9`),
-`HeartButton` (`d8337c9`), and the API client (`27356ac`). Tracking PR:
-[`TongWu/JAVDB_AutoSpider_Web#14`](https://github.com/TongWu/JAVDB_AutoSpider_Web/pull/14).
+All four features are implemented and merged in `javdb-autospider-web`, including
+the originally-deferred maker/director hearts. The wiring landed across these
+commits (most recent first): the maker/director dimension hearts (`fd59fff`) plus
+review follow-ups for the heart-toggle/score race (`1415cff`, `509a068`,
+`7545287`, `4ead773`, `b6bf218`); the B3 `/browse` score + C4 `/browse` hearts
+(`b9828e6`); the C1 tag-chips + notes gap-fill and review fixes (`f34ebae`,
+`813c674`); on top of the original C1 inline-rating + B3 column (`a74e720`),
+C3 batch mode (`3529db9`), `HeartButton` (`d8337c9`), and the API client
+(`27356ac`). Tracking PRs:
+[`TongWu/JAVDB_AutoSpider_Web#14`](https://github.com/TongWu/JAVDB_AutoSpider_Web/pull/14)
+and [`#15`](https://github.com/TongWu/JAVDB_AutoSpider_Web/pull/15).
 
 | Feature | Status | Notes |
 |---------|--------|-------|
@@ -39,7 +43,7 @@ C1 inline-rating + B3 column (`a74e720`), C3 batch mode (`3529db9`),
 | C3 — batch annotation | ✅ Done | `j/k/1–5/Enter/Space` keyboard mode |
 | C4 — heart on actor | ✅ Done | `/data/movies` actor column + `/browse` actor chips |
 | C4 — heart on category | ✅ Done | `/browse` tag/category chips (`content_type: category`) |
-| C4 — heart on maker/director | ⛔ Deferred | **No maker/director chips are rendered anywhere in the frontend** — they live only in `MovieMetadataResponse`, not the rendered `ExploreResolveResponse`. Closing this needs a chip-rendering change first (tracked as a separate follow-up), not a `HeartButton` change. |
+| C4 — heart on maker/director | ✅ Done | `/browse` resolve card now renders maker/director chips (sourced from `MovieMetadataResponse` via `resolve-dimensions.ts`), each with a `HeartButton` (`content_type: maker`/`director`). Implemented in commit `fd59fff`; i18n labels added in en/zh-CN/ja. |
 | B3 — score on `/data` | ✅ Done | Score column via `computePreferenceScore` |
 | B3 — score on `/browse` | ✅ Done | Score chip on the Resolve detail card via shared `computePreferenceScore` |
 
@@ -497,4 +501,4 @@ git commit -m "feat(frontend): add C3 batch annotation mode (ADR-022)"
 | 8 | C4 heart persists (actor) | Click heart on actor (`/data` or `/browse`) → PUT `/api/preferences/actor/...` → 200; persists on refresh | ✅ |
 | 9 | C4 heart persists (category) | Click heart on a `/browse` tag/category chip → PUT `/api/preferences/category/...` → 200 | ✅ |
 | 10 | Unit suite green | `npm run typecheck && npm run lint && npm run test:unit` all pass | ✅ |
-| 11 | C4 maker/director hearts | Heart on maker/director chips | ⛔ Deferred — no maker/director chips rendered yet (separate follow-up) |
+| 11 | C4 maker/director hearts | Click heart on a `/browse` maker/director chip → PUT `/api/preferences/maker|director/...` → 200 | ✅ |
