@@ -38,6 +38,7 @@ expanded:
 ## Outline task list (expand with writing-plans before executing)
 
 ### Task A — `policy_mode=assist` activation (no auto-change)
+
 - Make the collector/evaluator honour `TORRENT_QUALITY_POLICY_MODE=assist`,
   computing `would_replace_current_choice` and `shadow_rank` per category once
   Top-K evidence exists. Still writes only — no uploader change.
@@ -45,12 +46,14 @@ expanded:
   `would_replace_current_choice`; production download decision byte-identical.
 
 ### Task B — Per-category recommendation surface (API)
+
 - Extend `/api/quality` with a per-movie-per-category recommendation view:
   "current choice vs. recommended candidate vs. why" (reason codes diff).
 - Add a `decision=needs_review` queue endpoint for operator triage.
 - Verify: API returns recommendations only when assist mode is on; read-only.
 
 ### Task C — Web review actions (standalone repo)
+
 - In `javdb-autospider-web` (separate repo — coordinate per ADR-018), add a
   review UI: list `needs_review` evaluations, show evidence + reason codes, let an
   operator accept/reject a recommendation (writes a review decision, not a
@@ -58,6 +61,7 @@ expanded:
 - Verify: TS + Python query/response shapes stay in sync (ADR-018 rule).
 
 ### Task D — Top-K + remote probe (likely its own IMP)
+
 - If not already delivered as a standalone IMP, plumb runner-up magnets, build the
   remote `quality_probe` collector with capability detection and fail-closed
   behaviour, and feed its evidence (`target_role=quality_probe`) into the same
