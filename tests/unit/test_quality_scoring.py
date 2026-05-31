@@ -46,6 +46,32 @@ def test_subtitle_category_without_subtitle_is_flagged():
     assert result["decision"] == "needs_review"
 
 
+def test_subtitle_category_with_name_hint_only_is_accepted():
+    feats = _features([{"name": "ABC-123.mp4", "size": 4_000_000_000, "priority": 1}])
+    result = score_torrent(
+        feats,
+        {"javdb_category": "subtitle", "magnet_name": "ABC-123-C", "javdb_tags": []},
+    )
+    assert "subtitle_name_hint" in result["reasons"]
+    assert result["subtitle_evidence"] == "name_hint"
+    assert result["category_consistent"] is True
+    assert result["decision"] == "accepted_shadow"
+
+
+def test_ascii_name_hint_does_not_match_subject_substring():
+    feats = _features([{"name": "ABC-123.mp4", "size": 4_000_000_000, "priority": 1}])
+    result = score_torrent(
+        feats,
+        {"javdb_category": "subtitle", "magnet_name": "ABC-123 subject", "javdb_tags": []},
+    )
+    assert "subtitle_name_hint" not in result["reasons"]
+    assert "subtitle_file_missing" in result["reasons"]
+    assert "category_mismatch" in result["reasons"]
+    assert result["subtitle_evidence"] == "absent"
+    assert result["category_consistent"] is False
+    assert result["decision"] == "needs_review"
+
+
 def test_inflated_junk_torrent_scores_low():
     feats = _features(
         [

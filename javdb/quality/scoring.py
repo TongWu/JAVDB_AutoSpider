@@ -9,6 +9,7 @@ is shadow-only - it never changes the production download decision.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 SCORING_VERSION = "adr024-shadow-v1"
@@ -21,12 +22,22 @@ REJECT_SCORE = 0.4
 
 # javdb_category values that claim embedded/sidecar subtitles.
 _SUBTITLE_CATEGORIES = frozenset({"subtitle", "hacked_subtitle"})
-_SUBTITLE_NAME_MARKERS = ("字幕", "中文", "-c", "-uc", "-cu", "chinese", "sub")
+_CJK_SUBTITLE_NAME_MARKERS = ("字幕", "中文", "中字")
+_ASCII_SUBTITLE_TOKENS = frozenset(
+    {"sub", "subs", "subbed", "chinese", "chs", "cht", "zh", "cn"}
+)
+_ASCII_FINAL_SUBTITLE_TOKENS = frozenset({"c", "uc", "cu"})
 
 
 def _subtitle_name_hint(magnet_name: str) -> bool:
     lowered = (magnet_name or "").lower()
-    return any(marker in lowered for marker in _SUBTITLE_NAME_MARKERS)
+    if any(marker in lowered for marker in _CJK_SUBTITLE_NAME_MARKERS):
+        return True
+
+    tokens = [token for token in re.split(r"[^a-z0-9]+", lowered) if token]
+    if any(token in _ASCII_SUBTITLE_TOKENS for token in tokens):
+        return True
+    return bool(tokens and tokens[-1] in _ASCII_FINAL_SUBTITLE_TOKENS)
 
 
 def score_torrent(
@@ -68,6 +79,7 @@ def score_torrent(
         reasons.append("subtitle_file_present")
     elif _subtitle_name_hint(magnet_name):
         subtitle_evidence = "name_hint"  # weak signal per ADR Scoring Signals
+        reasons.append("subtitle_name_hint")
     else:
         subtitle_evidence = "absent"
 
