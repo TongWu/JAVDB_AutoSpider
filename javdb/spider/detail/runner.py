@@ -1136,7 +1136,7 @@ def persist_parsed_detail_result(
         # ADR-022: persist rich metadata outside the session flow
         if movie_detail is not None and not dry_run:
             try:
-                MetadataRepo().upsert(href, movie_detail.__dict__)
+                MetadataRepo().upsert(href, movie_detail)
             except Exception:
                 logger.debug(
                     "MovieMetadata upsert failed for %s — will retry on next scrape",

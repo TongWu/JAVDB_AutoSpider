@@ -4,11 +4,27 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Optional
+from collections.abc import Mapping
+from typing import Any, Optional
 
 from javdb.infra.config import cfg
 from javdb.parsing.common import javdb_absolute_url
 from javdb.storage.db import get_db, HISTORY_DB_PATH
+
+
+# Fields read by ``upsert`` below. Used to coerce a MovieDetail object (Python
+# dataclass OR the Rust ``RustMovieDetail`` PyO3 object, which has no
+# ``__dict__``) into a plain mapping via getattr. Nested link fields
+# (maker/publisher/series/directors/tags) are kept as their original objects so
+# ``_link`` / ``_links`` can absolutize their hrefs — do NOT use MovieDetail's
+# ``to_dict()`` here, which would flatten them into plain dicts and skip
+# absolutization.
+_UPSERT_FIELDS = (
+    'title', 'video_code', 'release_date', 'duration',
+    'rate', 'comment_count', 'review_count', 'want_count', 'watched_count',
+    'maker', 'publisher', 'series', 'directors', 'tags',
+    'poster_url', 'fanart_urls', 'trailer_url',
+)
 
 
 class MetadataRepo:
@@ -17,12 +33,18 @@ class MetadataRepo:
     def __init__(self, *, db_path: Optional[str] = None) -> None:
         self._db_path = db_path or HISTORY_DB_PATH
 
-    def upsert(self, href: str, detail: dict) -> None:
-        """UPSERT a MovieDetail dict into MovieMetadata.
+    def upsert(self, href: str, detail: Any) -> None:
+        """UPSERT a MovieDetail into MovieMetadata.
 
-        ``detail`` is MovieDetail.__dict__ or an equivalent mapping.
-        Keys match MovieDetail field names (snake_case).
+        ``detail`` may be either a mapping (keys = MovieDetail field names,
+        snake_case) or a MovieDetail-like object exposing those fields as
+        attributes — the pure-Python ``MovieDetail`` dataclass or the Rust
+        ``RustMovieDetail`` PyO3 object. The Rust object has no ``__dict__``,
+        so callers must pass the object itself (not ``detail.__dict__``); this
+        method coerces it via getattr.
         """
+        if not isinstance(detail, Mapping):
+            detail = {f: getattr(detail, f, None) for f in _UPSERT_FIELDS}
         # Parser emits site-relative hrefs (``/makers/x``, ``/actors/y``).
         # Normalize the movie href key and every embedded link to absolute
         # BASE_URL form so MovieMetadata.href matches MovieHistory.Href (the
