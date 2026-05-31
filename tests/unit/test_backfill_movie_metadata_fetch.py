@@ -11,6 +11,7 @@ Regression guards for the metadata-backfill fetch/parse fixes:
    (title / video_code) were parsed, regardless of magnets.
 """
 
+import logging
 import types
 
 import javdb.migrations.tools.backfill_movie_metadata as bm
@@ -171,6 +172,49 @@ def test_process_href_login_wall_is_login_required(monkeypatch):
     assert result.status == 'login_required'
     assert called['parsed'] is False
     assert called['upserted'] is False
+
+
+def _run_backfill_with_statuses(monkeypatch, statuses):
+    """Drive run_backfill_metadata over len(statuses) hrefs with _process_href
+    stubbed to return each status in turn, and all I/O (DB, proxy pool, request
+    handler, inter-href sleep) mocked out. Returns the exit code."""
+    hrefs = [f'/v/{i}' for i in range(len(statuses))]
+    monkeypatch.setattr(bm, '_load_hrefs_without_metadata', lambda only=None: list(hrefs))
+    monkeypatch.setattr(bm.spider_state, 'setup_proxy_pool', lambda **_kw: None)
+    monkeypatch.setattr(bm.spider_state, 'initialize_request_handler', lambda *a, **k: None)
+    monkeypatch.setattr(bm.time, 'sleep', lambda *_a, **_k: None)
+    statuses_iter = iter(statuses)
+    monkeypatch.setattr(
+        bm, '_process_href',
+        lambda href, *a, **k: bm.BackfillResult(href, next(statuses_iter), 'stub'),
+    )
+    args = types.SimpleNamespace(
+        hrefs='', shuffle=False, limit=0, limit_per_worker=0,
+        use_proxy=False, dry_run=False,
+    )
+    return bm.run_backfill_metadata(args)
+
+
+def test_run_backfill_login_required_is_non_fatal(monkeypatch, caplog):
+    """login_required is counted as login_gated, not failed: the job still
+    returns 0 and warns the operator to refresh the cookie."""
+    with caplog.at_level(logging.WARNING):
+        rc = _run_backfill_with_statuses(monkeypatch, ['login_required', 'login_required'])
+
+    assert rc == 0                                    # non-fatal ⇒ failed == 0
+    assert '2 href(s) require login' in caplog.text   # login_gated == 2
+
+
+def test_run_backfill_parse_failed_is_fatal(monkeypatch):
+    """A genuine parse_failed still fails the job (return 1), proving
+    login_required is classified distinctly from a hard failure."""
+    assert _run_backfill_with_statuses(monkeypatch, ['parse_failed']) == 1
+
+
+def test_run_backfill_login_required_does_not_mask_real_failure(monkeypatch):
+    """A login_required alongside a real failure must not rescue the exit code:
+    login_gated is counted apart, but the failed href still returns 1."""
+    assert _run_backfill_with_statuses(monkeypatch, ['login_required', 'parse_failed']) == 1
 
 
 def test_detail_url_absolute_href_not_doubled():
