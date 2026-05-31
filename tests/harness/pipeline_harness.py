@@ -154,13 +154,14 @@ class PipelineHarness:
         # below) and would always return []. Resolve REPORTS_DB_PATH via the
         # module attribute at call time so the test suite's path monkeypatch is
         # honoured (mirrors apps/cli/ops/events.py).
+        import sqlite3
         from javdb.storage import db as _db
         from javdb.storage.db import get_db
         try:
             with get_db(_db.REPORTS_DB_PATH) as conn:
                 rows = conn.execute("SELECT event_type FROM PipelineEvent").fetchall()
             return [r[0] for r in rows]
-        except Exception:
+        except sqlite3.OperationalError:
             return []  # PipelineEvent table only exists when ADR-036 is built
 
     def acquisition_outcomes(self) -> list[dict]:
@@ -174,7 +175,7 @@ class PipelineHarness:
                 conn.row_factory = sqlite3.Row
                 rows = conn.execute("SELECT qb_hash, state FROM AcquisitionOutcome").fetchall()
             return [dict(r) for r in rows]
-        except Exception:
+        except sqlite3.OperationalError:
             return []  # AcquisitionOutcome only exists when ADR-033 is built
 
 

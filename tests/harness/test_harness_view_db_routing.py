@@ -19,7 +19,7 @@ from javdb.storage import db as _db
 from javdb.storage.db import get_db
 
 
-def _diverge_history_db(monkeypatch, tmp_path):
+def _diverge_history_db(monkeypatch, tmp_path) -> None:
     """Point HISTORY_DB_PATH at its own empty (table-less) file so a history
     connection can no longer accidentally serve reports/operations tables."""
     monkeypatch.setattr(_db_conn_mod, "HISTORY_DB_PATH", str(tmp_path / "history_only.db"))
