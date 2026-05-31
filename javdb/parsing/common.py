@@ -154,24 +154,26 @@ def extract_all_movie_links(parent_tag: Tag) -> list:
 # Video-code extraction (ported from utils/parser.py)
 # ---------------------------------------------------------------------------
 
-_HYPHENATED_CODE_RE = re.compile(r'^[A-Za-z0-9]+-[A-Za-z0-9]+$')
-
-
 def _is_plausible_video_code(raw: str) -> bool:
-    """Heuristic: accept classic ``ABC-123`` codes and hyphen-less studio codes (e.g. ``n0656``).
+    """Heuristic: accept classic ``ABC-123`` codes, multi-hyphen codes
+    (``FC2-PPV-1234567``), numeric date-style uncensored codes whether hyphen-
+    or underscore-separated (``062216-179`` / ``062216_001``), and hyphen-less
+    studio codes (``n0656``).
 
-    Rejects empty strings, bare letter-only blobs (e.g. a mistaken title fragment),
-    and hyphenated strings that look like natural-language titles (contain spaces or
-    non-alphanumeric characters beyond ``-``).
+    Rejects empty strings, digit-less blobs, and title text (any character
+    outside ``[A-Za-z0-9_-]``, notably whitespace).
     """
     s = (raw or '').strip()
     if len(s) < 2:
         return False
-    has_letter = any(c.isalpha() for c in s)
-    has_digit = any(c.isdigit() for c in s)
-    if '-' in s:
-        return bool(_HYPHENATED_CODE_RE.match(s)) and has_letter and has_digit
-    return has_letter and has_digit
+    # A code is a compact token: alphanumerics with '-'/'_' separators only.
+    if not all(c.isalnum() or c in '-_' for c in s):
+        return False
+    if not any(c.isdigit() for c in s):
+        return False
+    # Accept hyphen-less studio codes (``n0656``) via the letter, and numeric
+    # date-style uncensored codes (``062216-179`` / ``062216_001``) via the separator.
+    return any(c.isalpha() for c in s) or '-' in s or '_' in s
 
 
 def extract_video_code(a_tag: Tag) -> str:
@@ -193,7 +195,10 @@ def extract_video_code(a_tag: Tag) -> str:
         if strong_tag:
             video_code = strong_tag.get_text(strip=True)
         else:
-            video_code = video_title_div.get_text(strip=True)
+            # No <strong>: the div reads "CODE Title…" — the code is the first
+            # whitespace-delimited token; the rest is the title.
+            parts = video_title_div.get_text(strip=True).split()
+            video_code = parts[0] if parts else ''
 
         video_code = unicodedata.normalize('NFKC', video_code)
 

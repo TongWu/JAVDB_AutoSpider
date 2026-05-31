@@ -105,6 +105,19 @@ class TestExtractVideoCode:
         result = extract_video_code(a_tag)
         assert result == ''
 
+    @pytest.mark.parametrize("code", ["n0656", "062216_001", "062216-179", "FC2-PPV-1234567"])
+    def test_extract_uncensored_and_multihyphen_codes(self, code):
+        """Hyphen-less, underscore date-style, and multi-hyphen codes survive."""
+        html = f'<a class="box" href="/v/x"><div class="video-title"><strong>{code}</strong> Title</div></a>'
+        a_tag = BeautifulSoup(html, 'html.parser').find('a')
+        assert extract_video_code(a_tag) == code
+
+    def test_extract_code_without_strong_drops_title(self):
+        """Without <strong>, only the leading code token is kept."""
+        html = '<a class="box" href="/v/x"><div class="video-title">XYZ-99 Some Long Title</div></a>'
+        a_tag = BeautifulSoup(html, 'html.parser').find('a')
+        assert extract_video_code(a_tag) == 'XYZ-99'
+
 
 class TestParseIndex:
     """Test cases for parse_index function."""
