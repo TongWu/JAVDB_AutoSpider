@@ -227,7 +227,8 @@ def run_backfill_metadata(args: SimpleNamespace) -> int:
             shuffle (bool)
 
     Returns:
-        0 on success (or nothing to do), 1 on partial failure.
+        0 when the batch succeeds, has nothing to do, or makes partial
+        progress; 1 when every attempted href hard-fails.
     """
     only_hrefs: Optional[List[str]] = None
     if args.hrefs:
@@ -312,7 +313,17 @@ def run_backfill_metadata(args: SimpleNamespace) -> int:
             "(run `python3 -m apps.cli.login`) and re-run to backfill them.",
             login_gated,
         )
-    return 0 if failed == 0 else 1
+    if failed == 0:
+        return 0
+    if ok > 0:
+        logger.warning(
+            "MovieMetadata backfill completed with %d success(es) and %d "
+            "failure(s); continuing because partial progress was made.",
+            ok,
+            failed,
+        )
+        return 0
+    return 1
 
 
 def parse_args() -> SimpleNamespace:
