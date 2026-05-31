@@ -1,11 +1,14 @@
 """Repository for ADR-024 torrent quality tables (Phase 1).
 
 Conn-injected direct-UPSERT access to `TorrentQualityEvidence` and
-`TorrentQualityEvaluation` on the canonical D1 `reports` database. These tables
-sit outside the Pending->Commit session flow. Follows the `AcquisitionOutcomeRepo`
-(ADR-033) pattern: `__init__(self, conn)` so a caller (e.g. the IMP-05 collector)
-can write one torrent's evidence + N evaluations in a single transaction; a single
-`_*_COLUMNS` tuple drives INSERT columns, value extraction, and row->dict.
+`TorrentQualityEvaluation` on the canonical D1 `reports` database. These
+evidence/enrichment tables are outside the `MovieHistory` / `TorrentHistory`
+Pending->Commit history staging flow; callers write them through a live
+`get_db(REPORTS_DB_PATH)` transaction, not via `db_stage_history_write()`. Follows
+the `AcquisitionOutcomeRepo` (ADR-033) pattern: `__init__(self, conn)` so a caller
+(e.g. the IMP-05 collector) can write one torrent's evidence + N evaluations in a
+single transaction; a single `_*_COLUMNS` tuple drives INSERT columns, value
+extraction, and row->dict.
 """
 
 from __future__ import annotations

@@ -6,7 +6,7 @@
 
 **Goal:** Add typed dataclasses for the two ADR-024 records and a `TorrentQualityRepo` that UPSERTs/reads them on the canonical D1 `reports` database, following the established **conn-injected** repo pattern (constructor takes a live `get_db()` connection; a single `_*_COLUMNS` tuple drives INSERT/extract/row→dict).
 
-**Architecture:** A new domain package `javdb/quality/` holds the dataclasses (`models.py`) as **pure domain objects** (no `to_row()`). A new repo `javdb/storage/repos/torrent_quality_repo.py` mirrors `AcquisitionOutcomeRepo` (ADR-033): `__init__(self, conn)`, direct UPSERT keyed by the table primary keys, no session/pending flow. The repo owns all storage concerns (`json.dumps`, bool→int, the promoted-column/`features` split). Reads are backend-agnostic (rows accessed by column **name**, with `row_factory = sqlite3.Row` set deterministically).
+**Architecture:** A new domain package `javdb/quality/` holds the dataclasses (`models.py`) as **pure domain objects** (no `to_row()`). A new repo `javdb/storage/repos/torrent_quality_repo.py` mirrors `AcquisitionOutcomeRepo` (ADR-033): `__init__(self, conn)`, direct UPSERT keyed by the table primary keys. These are ADR-024 evidence/enrichment rows, not live `MovieHistory` / `TorrentHistory` rows: they sit outside the history Pending→Commit staging flow and are written atomically through the caller's `get_db(REPORTS_DB_PATH)` transaction, not via `db_stage_history_write()`. The repo owns all storage concerns (`json.dumps`, bool→int, the promoted-column/`features` split). Reads are backend-agnostic (rows accessed by column **name**, with `row_factory = sqlite3.Row` set deterministically).
 
 **Tech Stack:** Python 3.11, `dataclasses`, Cloudflare D1 via a `get_db()`-supplied connection, pytest.
 
