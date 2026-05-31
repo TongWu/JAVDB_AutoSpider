@@ -1452,10 +1452,16 @@ the `db_commit_session_history` call + this file's failure mechanism). Both give
 target + a grep; the executor confirms the precise lines because surrounding code may have
 shifted.
 
-**Known coupling (documented):** the commit gate lives in `apps/cli/db/commit_session.py`.
-If a second commit path exists (API `POST /api/sessions/{id}/commit` → `commit_session()` in
-`javdb/storage/sessions/commit.py`), it must call `evaluate_session` too for full coverage —
-flagged as a fast-follow, not built here (the daily pipeline commits via the CLI).
+**Known coupling (RESOLVED post-Phase-1):** the commit gate originally lived only in
+`apps/cli/db/commit_session.py`. The second commit path — API `POST /api/sessions/{id}/commit`
+→ `commit_session()` in `javdb/storage/sessions/commit.py` — now carries the same gate
+(`evaluate_session` before the drain; `mark_committed` after a successful commit; fail-open on
+sentinel error). API-specific divergences from the CLI gate: it `raise RuntimeError(...)` (the
+path's existing failure shape, surfaced by the router as HTTP 500 `commit.failed`) instead of
+the CLI's per-session `failed_commits.append` + `continue`; and `drop_pending` is exempt
+because it discards staged rows rather than promoting them. Covered by
+`tests/unit/test_commit_gate_api_site_drift.py`. See the fast-follow note below for the
+cross-backend (TS Worker) consideration.
 
 **Open verification dependency:** Task 1 Steps 2-3 require live `wrangler` D1 access +
 `apps.cli.db.sync_d1_to_sqlite`; run where other migrations are applied.
@@ -1520,8 +1526,17 @@ loop so the plan reflects what actually shipped):
   --file=javdb/migrations/d1/2026_05_29_add_parse_run_field_fill.sql` must run before
   the gate is deployed. Until then the gate is harmless (fail-open: no table → read
   error → treated as non-critical), but the sentinel does nothing.
-- **API commit path not gated.** `javdb/storage/sessions/commit.py::commit_session`
-  (via `POST /api/sessions/{id}/commit`) does not call `evaluate_session`. The daily
-  pipeline commits via the CLI, so this is an accepted gap.
+- **API commit path gated (DONE, post-Phase-1).** `javdb/storage/sessions/commit.py::commit_session`
+  (via `POST /api/sessions/{id}/commit`) now calls `evaluate_session` before the drain and
+  `mark_committed` after a successful commit, mirroring the CLI gate (fail-open; `drop_pending`
+  exempt). Closes the operator-bypass gap. Tests: `tests/unit/test_commit_gate_api_site_drift.py`.
+- **TS Worker commit path (cross-backend, OUTSTANDING).** Per the ADR-017 Python↔TS dual-backend
+  sync rule (CLAUDE.md), if the TypeScript Worker backend (`javdb-autospider-web/server/`) exposes
+  an equivalent commit path that flips session status directly against D1 (rather than dispatching
+  the Python CLI), it bypasses this gate. Porting the full sentinel evaluation (`PARSE_CONTRACT` +
+  baseline median over `ParseRunFieldFill`) to TS is non-trivial; flagged here as the linked
+  follow-up. The drift gate is server-side precondition logic, not part of the shared
+  query/auth/response surface, so this is a deliberate, documented cross-repo TODO rather than a
+  same-PR sync obligation. (The separate FE repo is not present in this worktree.)
 - **Detail-page boundary** (contract-ready, not wired) and a **dedicated EMA baseline
   table** remain as documented Phase-2 candidates.
