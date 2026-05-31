@@ -14,6 +14,7 @@ def test_single_clean_video():
     f = extract_file_features(files)
     assert f["total_size_bytes"] == 4_000_000_000
     assert f["main_video_size_bytes"] == 4_000_000_000
+    assert f["main_video_name"] == "ABC-123.mp4"
     assert f["main_video_ratio"] == 1.0
     assert f["video_file_count"] == 1
     assert f["subtitle_file_count"] == 0
@@ -36,6 +37,7 @@ def test_video_with_subtitle_and_junk():
     assert f["non_video_file_count"] == 3  # srt + txt + jpg are non-video
     assert f["junk_size_bytes"] == 201_000  # txt + jpg
     assert f["main_video_size_bytes"] == 5_000_000_000
+    assert f["main_video_name"] == "ABC-123.mkv"
     assert 0.0 < f["junk_size_ratio"] < 0.001
     assert f["suspicious_file_count"] == 2
 
@@ -51,11 +53,13 @@ def test_inflated_torrent_with_ad_archive():
     assert f["junk_size_bytes"] == 3_000_002_000
     assert f["junk_size_ratio"] > 0.7
     assert f["main_video_size_bytes"] == 1_000_000_000
+    assert f["main_video_name"] == "movie.mp4"
     assert f["main_video_ratio"] < 0.3
 
 
 def test_empty_file_list():
     f = extract_file_features([])
     assert f["total_size_bytes"] == 0
+    assert f["main_video_name"] == ""
     assert f["main_video_ratio"] == 0.0
     assert f["video_file_count"] == 0
