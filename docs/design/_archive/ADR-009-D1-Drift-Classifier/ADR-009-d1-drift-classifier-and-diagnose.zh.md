@@ -10,7 +10,7 @@
 - [IMP-ADR009-04](IMP-ADR009-04-drift-diagnose-email-integration.md) —— P3 / 邮件诊断集成。
 
 **决策者**：bake 期 drift 响应（承接 2026-05-17T14:00 UTC 记录在 `reports/D1/d1_drift.jsonl` 中 `kind: drift_resolution` 的手动 forensic 修复）
-**前置**：无——按 [ADR-006](../_archive/ADR-006-Pending-Mode-Rollout/ADR-006-pending-mode-default-rollout.md) amendment 3 属 bake 安全。"bake 安全"准确含义是：**对 D10 gate 输入无影响**（不写 D1/SQLite、不改 schema、不改 `WriteMode` 解析、不动 `.publish-config.yml` pause 机制、不发 `pending_session_verify` 行）。Layer 1 的 D6 *确实*修改 `email-notification` job，但修改内容是带 60 秒 timeout 的只读 subprocess 调用，被调工具自身只在操作员手动 `--apply` 路径才会触碰 D10 监控状态（workflow 内**绝不**触发 `--apply`）。
+**前置**：无——按 [ADR-006](../ADR-006-Pending-Mode-Rollout/ADR-006-pending-mode-default-rollout.md) amendment 3 属 bake 安全。"bake 安全"准确含义是：**对 D10 gate 输入无影响**（不写 D1/SQLite、不改 schema、不改 `WriteMode` 解析、不动 `.publish-config.yml` pause 机制、不发 `pending_session_verify` 行）。Layer 1 的 D6 *确实*修改 `email-notification` job，但修改内容是带 60 秒 timeout 的只读 subprocess 调用，被调工具自身只在操作员手动 `--apply` 路径才会触碰 D10 监控状态（workflow 内**绝不**触发 `--apply`）。
 
 ## 实现状态
 
@@ -217,8 +217,8 @@ Layer 0 + Layer 1 落地后再加 cron 自动 apply 所有 `SAFE_TO_APPLY` verdi
 
 ## 相关决策
 
-- **[ADR-006](../_archive/ADR-006-Pending-Mode-Rollout/ADR-006-pending-mode-default-rollout.md) amendment 3** —— bake 安全划线。Layer 0 完全不动 workflow。Layer 1 D6 确实修改 `email-notification` job，但仅以带严格 timeout 的只读 subprocess 形式触发，不改任何 D10 gate 输入（不写 D1/SQLite、不改 schema、不动 pause 机制）。按上方修正措辞，两者都落在 bake-safe 一侧。
-- **[ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md) PR-2（推迟）** —— 该 PR 的设计 bake 后重启时**应明确**把 L2a（idempotent bookkeeping）列为候选纳入。
+- **[ADR-006](../ADR-006-Pending-Mode-Rollout/ADR-006-pending-mode-default-rollout.md) amendment 3** —— bake 安全划线。Layer 0 完全不动 workflow。Layer 1 D6 确实修改 `email-notification` job，但仅以带严格 timeout 的只读 subprocess 形式触发，不改任何 D10 gate 输入（不写 D1/SQLite、不改 schema、不动 pause 机制）。按上方修正措辞，两者都落在 bake-safe 一侧。
+- **[ADR-005](../ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md) PR-2（推迟）** —— 该 PR 的设计 bake 后重启时**应明确**把 L2a（idempotent bookkeeping）列为候选纳入。
 - **PR #50**（BakeCheck.yml）—— 正交的监控层；drift_diagnose 是补足的*诊断*层，不替代 gate。
 
 ---
