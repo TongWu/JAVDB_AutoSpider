@@ -119,7 +119,7 @@ drift log、port summary、recovery outbox 这些都对可观测性和恢复非�
 
 | 阶段 | IMP | 交付内容 | 推迟内容 |
 | --- | --- | --- | --- |
-| Phase 1 | [IMP-ADR042-01](IMP-ADR042-01-d1-atomic-commit-boundaries.md) | 将边界传播到 CONTEXT.md 以及 storage / handbook 文档 | 任何试图把 SQLite 和 D1 伪装成分布式事务的设计 |
+| Phase 1 ✅ | [IMP-ADR042-01](IMP-ADR042-01-d1-atomic-commit-boundaries.md) | 将边界传播到 CONTEXT.md 以及 storage / handbook 文档 —— **已于 2026-06-01 完成** | 任何试图把 SQLite 和 D1 伪装成分布式事务的设计 |
 
 ## 参考 (References)
 
@@ -139,3 +139,4 @@ drift log、port summary、recovery outbox 这些都对可观测性和恢复非�
 
 - 2026-05-31: Accepted — 将 D1 的会话级原子提交边界与权威写入分类固化下来。
 - 2026-05-31: 在一次设计评审指出 ACID 措辞夸大了 I/D 之后，将术语从"逻辑 ACID"改为"原子提交"，并把保证范围界定为原子性 + 一致性（隔离性靠 `SessionId`/`MovieClaim`，持久性靠 recovery）。
+- 2026-06-01: IMP-ADR042-01 完成 —— 写入边界词汇已传播进 `CONTEXT.md`（`写入边界分类` 章节 + glossary）、storage README 以及 developer / ops handbook。

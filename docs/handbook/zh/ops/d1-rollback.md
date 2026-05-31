@@ -82,6 +82,8 @@ ADR-010 新增 `reports/D1/d1_recovery_outbox.jsonl`，用于记录安全、可�
 - **失败语义：** 如果 outbox 事件本身无法可靠写入，原写入或 commit 仍然失败。
 - **Dead-letter 阻塞：** dead-lettered 工作同样会阻断对应 ordering key。
 
+这种"仅诊断但会阻塞提交"的行为，是 ADR-042 写入分类边界在运维侧的体现：一条 recovery 记录可以**阻塞**一次权威提交，但永远不会把失败的写入**升级**为成功。详见 [ADR-042](../../../design/ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.zh.md)。
+
 检查待恢复工作：
 
 ```bash
