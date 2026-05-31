@@ -1,13 +1,13 @@
 name: Sync Docs to Wiki
 
-on:
-  push:
-    branches: [main]
-    paths:
-      - 'docs/handbook/en/**'
-      - 'scripts/ci/wiki_mapping.json'
-      - 'scripts/ci/sync_docs_to_wiki.py'
-  workflow_dispatch:
+# on:  # DISABLED FOR PUBLIC REPO
+  # push:
+    # branches: [main]
+    # paths:
+      # - 'docs/handbook/en/**'
+      # - 'scripts/ci/wiki_mapping.json'
+      # - 'scripts/ci/sync_docs_to_wiki.py'
+  # workflow_dispatch:
 
 permissions:
   contents: read
