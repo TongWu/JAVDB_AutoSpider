@@ -5,7 +5,7 @@
 | **状态**   | 已完成 — 实现已于 2026-05-28 交付        |
 | **创建**   | 2026-05-28                               |
 | **作者**   | Ted                                      |
-| **关联**   | [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md) |
+| **关联**   | [ADR-017](../ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md) |
 
 ## 背景
 

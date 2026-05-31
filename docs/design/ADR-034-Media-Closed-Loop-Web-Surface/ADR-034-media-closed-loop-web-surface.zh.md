@@ -5,7 +5,7 @@
 | **状态**   | Proposed — ADR-033 的 web 对应面;分期镜像 ADR-033                     |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
-| **关联**   | [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-008](../_archive/ADR-008-Frontend-Rewrite/ADR-008-frontend-rewrite-architecture.md), [ADR-027](../_archive/ADR-027-Stats-Dashboard-Charts/ADR-027-stats-dashboard-chart-expansion.md), [ADR-030](../_archive/ADR-030-Web-Feature-Parity/ADR-030-web-feature-parity.md), [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md) |
+| **关联**   | [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-008](../_archive/ADR-008-Frontend-Rewrite/ADR-008-frontend-rewrite-architecture.md), [ADR-027](../_archive/ADR-027-Stats-Dashboard-Charts/ADR-027-stats-dashboard-charts.md), [ADR-030](../_archive/ADR-030-Web-Feature-Parity/ADR-030-web-feature-parity.md), [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md) |
 
 > 源自 2026-05-29 一次(用了视觉伴侣的)关于
 > [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) 媒体闭环 web 面的头脑风暴。
@@ -91,7 +91,7 @@ FE Phase 1 只依赖 ADR-033 Phase 1（`AcquisitionOutcome`）。Phase 2/3 依�
 
 - [ADR-033 — Media Closed-Loop](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
 - [ADR-008 — Frontend Rewrite](../_archive/ADR-008-Frontend-Rewrite/ADR-008-frontend-rewrite-architecture.md)
-- [ADR-027 — Stats Dashboard Chart Expansion](../_archive/ADR-027-Stats-Dashboard-Charts/ADR-027-stats-dashboard-chart-expansion.md)
+- [ADR-027 — Stats Dashboard Chart Expansion](../_archive/ADR-027-Stats-Dashboard-Charts/ADR-027-stats-dashboard-charts.md)
 - [ADR-030 — Web Feature Parity](../_archive/ADR-030-Web-Feature-Parity/ADR-030-web-feature-parity.md)
 - [ADR-017 — Cloudflare-First Deployment](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md)
 
