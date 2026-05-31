@@ -1,4 +1,4 @@
-# ADR-042：D1 逻辑 ACID 边界与权威写入
+# ADR-042：D1 原子提交边界与权威写入
 
 | 字段 | 值 |
 | --- | --- |
@@ -6,7 +6,7 @@
 | **日期 (Date)** | 2026-05-31 |
 | **作者 (Authors)** | Ted |
 | **关联 (Related)** | [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.zh.md), [ADR-009](../_archive/ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.zh.md), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.zh.md), [ADR-019](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.zh.md), [ADR-032](../ADR-032-Mandatory-Session-Binding/ADR-032-mandatory-session-binding.zh.md), [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.zh.md), [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.zh.md) |
-| **关联实现计划 (Related Implementation Plans)** | [IMP-ADR042-01](IMP-ADR042-01-d1-logical-acid-boundaries.md) - Phase 1 docs follow-through |
+| **关联实现计划 (Related Implementation Plans)** | [IMP-ADR042-01](IMP-ADR042-01-d1-atomic-commit-boundaries.md) - Phase 1 docs follow-through |
 
 > 这份 ADR 来自一次 grill 结论：需要把“D1 本身”与“权威写入边界”分开看。这个区分很重要，因为系统不需要一个分布式事务管理器，但它确实需要一个在会话层面表现得像事务一样的边界。
 
@@ -31,7 +31,7 @@
 
 ## 决策 (Decision)
 
-对权威写入使用 **会话级逻辑 ACID（session-level logical ACID）**，同时把 D1 传输、enrichment 和诊断都留在这个边界之外。
+对权威写入使用 **会话级原子提交（session-level atomic commit）**，同时把 D1 传输、enrichment 和诊断都留在这个边界之外。
 
 ### 设计决策 (Design Decisions)
 
@@ -48,7 +48,9 @@ D1 只需要在它真正能保证的最小边界上是原子的：单个 request
 - 将 pending 行 drain 到 `MovieHistory` / `TorrentHistory`；
 - 失败或中断 session 的 rollback / resume 行为。
 
-这才是需要 ACID-like 语义的边界。
+这才是需要原子提交（atomic-commit）语义的边界。
+
+**保证的范围。** 这里说的"原子提交"指的是 *session 范围内的全有全无* —— 原子性（A）加一致性（C）：权威历史要么作为一个整体提交，要么保持可恢复到干净状态。它刻意**不**主张 SQLite 与 D1 之间的数据库级隔离性（I）或持久性（D）。并发 session 之间靠 `SessionId` 分区和跨进程的 `MovieClaim` 租约隔离（不是靠 DB 事务）；持久性依赖 D1 的单 request / 单 batch 原子性加上 recovery 流程。这也是本 ADR 用"原子提交"而不用"ACID"的原因：这个边界只承诺 A 和 C。
 
 **D3. 增量 enrichment 不属于权威边界。**
 
@@ -57,6 +59,8 @@ D1 只需要在它真正能保证的最小边界上是原子的：单个 request
 **D4. 诊断与恢复记录是运维数据，不是用户真相。**
 
 drift log、port summary、recovery outbox 这些都对可观测性和恢复非常重要，但它们不能把一次失败的权威写变成成功。它们只是在描述发生了什么，而不是重新定义正确性。
+
+注意：recovery 状态仍然可以**阻塞**一次权威提交 —— 未 drain 的 `history:SESSION_ID` recovery ordering key，或一条被 dead-letter 的记录，都会阻止 session 进入 `committed`。这正是重点：一条 recovery 记录可以**阻塞**一次失败被宣告为成功，但它永远无法把失败**升级**为成功。这种 gating 属于 fail-closed 行为，不是 D4 的例外。
 
 **D5. Dual mode 是验证器，不是事务管理器。**
 
@@ -68,7 +72,7 @@ drift log、port summary、recovery outbox 这些都对可观测性和恢复非�
 
 | 类别 | 含义 | 规则 |
 | --- | --- | --- |
-| authoritative | 必须参与会话级逻辑 ACID | 出错时 fail closed；它决定 session 是否正确提交 |
+| authoritative | 必须参与会话级原子提交 | 出错时 fail closed；它决定 session 是否正确提交 |
 | additive | 可以重放或重建 | 优先使用幂等 UPSERT / append-only 行为 |
 | diagnostic | 只负责观察或解释状态 | 绝不能决定用户可见的正确性 |
 
@@ -79,7 +83,7 @@ drift log、port summary、recovery outbox 这些都对可观测性和恢复非�
 - **权威写入 (Authoritative write)** — 决定一个 session 是否正确提交的写入。
 - **增量写入 (Additive write)** — 记录额外状态，但不改变权威 session 的语义。
 - **诊断写入 (Diagnostic write)** — 记录证据、drift 或恢复状态的写入。
-- **会话级逻辑 ACID (Session-level logical ACID)** — 在底层由多层和恢复机制组成，但对权威写入来说表现得像一个原子整体的保证。
+- **会话级原子提交 (Session-level atomic commit)** — 尽管底层由多层和恢复机制组成，但权威 session 在 session 范围内表现得像一个全有全无的整体（原子性 + 一致性）的保证。它不承诺 SQLite 与 D1 之间的数据库级隔离性或持久性。
 
 ## 后果 (Consequences)
 
@@ -115,7 +119,7 @@ drift log、port summary、recovery outbox 这些都对可观测性和恢复非�
 
 | 阶段 | IMP | 交付内容 | 推迟内容 |
 | --- | --- | --- | --- |
-| Phase 1 | [IMP-ADR042-01](IMP-ADR042-01-d1-logical-acid-boundaries.md) | 将边界传播到 CONTEXT.md 以及 storage / handbook 文档 | 任何试图把 SQLite 和 D1 伪装成分布式事务的设计 |
+| Phase 1 | [IMP-ADR042-01](IMP-ADR042-01-d1-atomic-commit-boundaries.md) | 将边界传播到 CONTEXT.md 以及 storage / handbook 文档 | 任何试图把 SQLite 和 D1 伪装成分布式事务的设计 |
 
 ## 参考 (References)
 
@@ -133,4 +137,5 @@ drift log、port summary、recovery outbox 这些都对可观测性和恢复非�
 
 ## 状态日志 (Status Log)
 
-- 2026-05-31: Accepted — 将 D1 的会话级逻辑 ACID 边界与权威写入分类固化下来。
+- 2026-05-31: Accepted — 将 D1 的会话级原子提交边界与权威写入分类固化下来。
+- 2026-05-31: 在一次设计评审指出 ACID 措辞夸大了 I/D 之后，将术语从"逻辑 ACID"改为"原子提交"，并把保证范围界定为原子性 + 一致性（隔离性靠 `SessionId`/`MovieClaim`，持久性靠 recovery）。
