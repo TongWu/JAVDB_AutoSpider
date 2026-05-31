@@ -116,6 +116,14 @@ def test_list_recent_evaluations_orders_by_created_at(conn):
             shadow_rank=2,
         )
     )
+    conn.execute(
+        """
+        UPDATE TorrentQualityEvaluation
+        SET created_at = ?
+        WHERE info_hash = ? AND movie_href = ? AND scoring_version = ?
+        """,
+        ("2026-05-31T00:00:00.000Z", "ABC123", "/v/abc", "v1"),
+    )
     repo.upsert_evaluation(
         EvaluationRecord(
             info_hash="DEF456",
@@ -124,6 +132,14 @@ def test_list_recent_evaluations_orders_by_created_at(conn):
             video_code="DEF-456",
             shadow_rank=1,
         )
+    )
+    conn.execute(
+        """
+        UPDATE TorrentQualityEvaluation
+        SET created_at = ?
+        WHERE info_hash = ? AND movie_href = ? AND scoring_version = ?
+        """,
+        ("2026-05-31T00:00:01.000Z", "DEF456", "/v/def", "v1"),
     )
 
     rows = repo.list_recent_evaluations(limit=1)
