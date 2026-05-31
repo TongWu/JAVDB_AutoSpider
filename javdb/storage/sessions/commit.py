@@ -277,15 +277,20 @@ def commit_session(req: CommitRequest) -> CommitResult:
     elif n == 0:
         logger.info("Session %s already committed (idempotent)", req.session_id)
 
-    # ADR-035: commit went through — this run's fills are now baseline-
-    # eligible. Best-effort; never fail the commit on this (mirrors the CLI).
-    try:
-        _sentinel_mark_committed(str(req.session_id))
-    except Exception:
-        logger.warning(
-            "Site-contract sentinel mark_committed failed for %s",
-            req.session_id, exc_info=True,
-        )
+    # ADR-035: a successful *promotion* makes this run's fills baseline-
+    # eligible. Skip it on the ``drop_pending`` path — that discards the staged
+    # parse data instead of promoting it, so those fill-rates must NOT enter the
+    # soft-field baseline (an operator dropping a bad/failed parse would
+    # otherwise pollute it). Symmetric with the gate's ``drop_pending`` exemption
+    # above. Best-effort; never fail the commit on this (mirrors the CLI).
+    if not req.drop_pending:
+        try:
+            _sentinel_mark_committed(str(req.session_id))
+        except Exception:
+            logger.warning(
+                "Site-contract sentinel mark_committed failed for %s",
+                req.session_id, exc_info=True,
+            )
 
     claim_results: List[Dict[str, Any]] = []
     if req.fanout_claims:

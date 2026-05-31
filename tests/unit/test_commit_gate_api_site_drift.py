@@ -120,16 +120,22 @@ def test_api_commit_fails_open_on_sentinel_error(monkeypatch):
     assert marks == [str(sid)]           # commit proceeded despite the error
 
 
-def test_api_drop_pending_is_exempt_from_gate(monkeypatch):
+def test_api_drop_pending_skips_gate_and_baseline_marking(monkeypatch):
     """``drop_pending`` discards staged rows rather than promoting them, so the
-    gate must not evaluate drift or block it."""
+    gate must not evaluate drift AND the run's fills must NOT be marked
+    baseline-eligible (a dropped bad/failed parse must not pollute the
+    soft-field baseline)."""
     sid = _new_pending_session()
 
     def _should_not_run(*a, **k):
         raise AssertionError("gate evaluated drift on the drop_pending path")
 
     monkeypatch.setattr(sentinel_service, "evaluate_session", _should_not_run)
-    monkeypatch.setattr(sentinel_service, "mark_committed", lambda *a, **k: None)
+    marks: list = []
+    monkeypatch.setattr(
+        sentinel_service, "mark_committed",
+        lambda s, **k: marks.append(s),
+    )
 
     result = commit_session(
         CommitRequest(session_id=str(sid), drop_pending=True),
@@ -137,3 +143,4 @@ def test_api_drop_pending_is_exempt_from_gate(monkeypatch):
 
     assert result.new_state == "committed"
     assert _status(sid) == "committed"
+    assert marks == []   # discarded run must not enter the soft-field baseline
