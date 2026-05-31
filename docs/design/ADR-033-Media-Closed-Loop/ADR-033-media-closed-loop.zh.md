@@ -5,7 +5,7 @@
 | **状态**   | Proposed — 伞型;Phase 1 已实现并完成本地验证;执行下放给各期 IMP       |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
-| **关联**   | [ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-024](../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md), [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-028](../ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md) |
+| **关联**   | [ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-024](../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md), [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-028](../ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md) |
 
 > 源自 2026-05-29 一次关于"现有 ADR 尚未收编的全新方向"的头脑风暴。
 
@@ -24,7 +24,7 @@
 
 1. **去重无法区分"下载中" / "已拥有" / "从未尝试"** —— 它只知道爬虫历史和一份每周的 GDrive 快照。
 2. **失败与卡住不可见** —— 一个永远下不完的种子,留不下任何与"成功"可区分的痕迹。
-3. **被搁置的偏好模型（[ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md) / [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md)）缺了它最强的隐式信号** —— 实际观看行为 —— 因为没有任何东西去读运维者本就在跑的媒体服务器(Emby + Plex)。
+3. **被搁置的偏好模型（[ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md) / [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md)）缺了它最强的隐式信号** —— 实际观看行为 —— 因为没有任何东西去读运维者本就在跑的媒体服务器(Emby + Plex)。
 
 本 ADR 分三层闭环,作为一个 umbrella 初始计划统一治理、分期推进(沿用 [ADR-028](../ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md) 的伞型模式)。
 
@@ -34,7 +34,7 @@
 
 ### 设计决策 (Design Decisions)
 
-**D1. 三张专用 enrichment 表,而非扩展历史表。** 沿用 [ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md) 的先例(它新建独立的 `MovieMetadata` 而非加宽 `MovieHistory`),闭环状态住进新表,写入旁路 Pending→Commit 关键路径。`MovieHistory` / `TorrentHistory` 保持为纯去重/追踪表。
+**D1. 三张专用 enrichment 表,而非扩展历史表。** 沿用 [ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md) 的先例(它新建独立的 `MovieMetadata` 而非加宽 `MovieHistory`),闭环状态住进新表,写入旁路 Pending→Commit 关键路径。`MovieHistory` / `TorrentHistory` 保持为纯去重/追踪表。
 
 ```sql
 -- Per selected torrent: its real fate after qB.
@@ -164,7 +164,7 @@ queued ──→ downloading ──→ completed ──→ in_library
 
 ## 参考 (References)
 
-- [ADR-022 — User Preference Data Foundation](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md)
+- [ADR-022 — User Preference Data Foundation](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md)
 - [ADR-024 — Torrent Quality Evidence Foundation](../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md)
 - [ADR-025 — User Preference Model](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md)
 - [ADR-015 — Integrations Interface Boundary](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md)

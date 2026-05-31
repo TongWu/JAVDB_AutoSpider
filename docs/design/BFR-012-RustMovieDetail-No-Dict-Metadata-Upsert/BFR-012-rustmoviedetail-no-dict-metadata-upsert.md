@@ -4,7 +4,7 @@
 **Date**: 2026-05-31
 **Severity**: High
 **Affected**: `javdb/storage/repos/metadata_repo.py` (`MetadataRepo.upsert`), `javdb/migrations/tools/backfill_movie_metadata.py` (`_process_href`), `javdb/spider/detail/runner.py` (detail-phase metadata persist)
-**Related**: [ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md) (owns the `MovieMetadata` table + `MetadataRepo`), [IMP-ADR022-08](../ADR-022-User-Preference-Foundation/IMP-ADR022-08-metadata-backfill.md) (the metadata backfill that surfaced it), [BFR-010](../BFR-010-Relative-Href-Inconsistency/BFR-010-relative-href-inconsistency.md) (the nested-link href absolutization that the fix must preserve)
+**Related**: [ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md) (owns the `MovieMetadata` table + `MetadataRepo`), [IMP-ADR022-08](../_archive/ADR-022-User-Preference-Foundation/IMP-ADR022-08-metadata-backfill.md) (the metadata backfill that surfaced it), [BFR-010](../BFR-010-Relative-Href-Inconsistency/BFR-010-relative-href-inconsistency.md) (the nested-link href absolutization that the fix must preserve)
 
 ---
 

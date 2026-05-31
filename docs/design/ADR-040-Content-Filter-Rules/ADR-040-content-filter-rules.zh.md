@@ -5,7 +5,7 @@
 | **状态**   | Accepted — Phase 1 已实现;后续阶段待完成                               |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
-| **关联**   | [ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md), [ADR-038](../ADR-038-Agentic-Operator-MCP/ADR-038-agentic-operator-mcp-surface.md) |
+| **关联**   | [ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md), [ADR-038](../ADR-038-Agentic-Operator-MCP/ADR-038-agentic-operator-mcp-surface.md) |
 
 > 源自 2026-05-29 一次头脑风暴:起初是"流式 / 持续摄取"(方向七),后**纠偏**为内容过滤——见背景。
 
@@ -44,7 +44,7 @@ CREATE TABLE ContentFilterRule (
 
 **D5. Phase 1 维度来自现有解析。** 从 `MovieDetail`（`actors` 带 name/href/**gender**、`tags`）:**演员黑名单**（按 name/href exclude）、**tag include/exclude**、**性别**（如要求女主演、排除全男）。**年龄推迟（Phase 2）**——它需要管道今天不做的演员主页查询。**订阅（越过评分门槛的白名单）推迟（Phase 2）**——它是包含侧的对应物,且改动更大。
 
-**D6. 确定性、可解释;与偏好模型正交。** 引擎返回 `FilterDecision(keep, reasons)`;drop 原因被surface（stats / `MovieFiltered` 事件 / MCP）。这是一个**硬的、确定性规则**层——区别于 [ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md) / [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md) 的 **ML 偏好分**。两者正交:规则决定*资格*,模型日后决定*排序*。
+**D6. 确定性、可解释;与偏好模型正交。** 引擎返回 `FilterDecision(keep, reasons)`;drop 原因被surface（stats / `MovieFiltered` 事件 / MCP）。这是一个**硬的、确定性规则**层——区别于 [ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md) / [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md) 的 **ML 偏好分**。两者正交:规则决定*资格*,模型日后决定*排序*。
 
 **D7. 模块形态。** `javdb/spider/services/content_filter.py`（与 `dedup.py` 同级）暴露 `evaluate(detail, rules) -> FilterDecision`;一个 `ContentFilterRepo` 读规则;详情选择路径在入队前调用它。
 
@@ -98,7 +98,7 @@ Phase 1 附加且向后兼容（无规则 → 无变化）。Phase 2/3 拓宽包
 
 ## 参考 (References)
 
-- [ADR-022 — User Preference Data Foundation](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md)
+- [ADR-022 — User Preference Data Foundation](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md)
 - [ADR-025 — User Preference Model](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md)
 - [ADR-036 — Event-Sourced Pipeline Spine](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md)
 - [ADR-038 — Agentic Operator MCP Surface](../ADR-038-Agentic-Operator-MCP/ADR-038-agentic-operator-mcp-surface.md)

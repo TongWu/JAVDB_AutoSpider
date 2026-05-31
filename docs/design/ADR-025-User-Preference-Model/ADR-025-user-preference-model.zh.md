@@ -5,11 +5,11 @@
 | **状态**    | Proposed                                                              |
 | **日期**    | 2026-05-27                                                            |
 | **作者**    | Ted                                                                   |
-| **关联**    | [ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.zh.md), [ADR-024](../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.zh.md) |
+| **关联**    | [ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.zh.md), [ADR-024](../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.zh.md) |
 
 ## 背景
 
-[ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.zh.md)
+[ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.zh.md)
 已经为用户偏好建模创建了数据基础：`MovieMetadata`、`MovieRatings` 和
 `ContentPreferences`。它有意把模型本身推迟为后续设计，因为有意义的模型设计需要足够的
 显式用户评分和偏好标注。
@@ -202,7 +202,7 @@ Candidate 晋升必须满足：
 
 ## 参考
 
-- [ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.zh.md) - metadata、ratings、content preferences 的数据基础。
+- [ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.zh.md) - metadata、ratings、content preferences 的数据基础。
 - [ADR-024](../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.zh.md) - torrent 质量证据和 `quality_score` 归属。
 - `docs/design/ADR-022-User-Preference-Foundation/IMP-ADR022-01-db-schema.md` - 偏好数据 D1-first schema 模式。
 - `docs/design/ADR-022-User-Preference-Foundation/IMP-ADR022-03-preference-repo.md` - rating/preference 写入的 repository 和 API 形态。

@@ -16,6 +16,18 @@
 
 ---
 
+## Status — ✅ Implemented
+
+Both D1 migrations exist (`javdb/migrations/d1/2026_05_27_add_movie_metadata_table.sql`,
+`..._add_ratings_preferences_tables.sql`) and all three tables are mirrored verbatim in
+the checked-in `_HISTORY_DDL` (`javdb/storage/db/_db_migrations.py`), so the D1↔local
+schema-parity guard test
+(`tests/unit/test_rollback_full_fidelity.py::TestD1MigrationsAreCoveredByLocalSchema`)
+passes. See the divergence note below for the two gaps (local-DDL parity and the
+token-gated force-overwrite) that were found and closed during implementation.
+
+---
+
 > **⚠ Divergence note (recorded during implementation, 2026-05-30).** Two gaps in
 > the steps below were found and fixed:
 > 1. **Local DDL parity (`init_db`) was missing.** Task 3 only re-aligns the
@@ -40,7 +52,7 @@
 **Files:**
 - Create: `javdb/migrations/d1/2026_05_27_add_movie_metadata_table.sql`
 
-- [ ] **Step 1: Create the migration file**
+- [x] **Step 1: Create the migration file**
 
 ```sql
 -- 2026-05-27: Add MovieMetadata table (ADR-022 Phase 1).
@@ -80,7 +92,7 @@ CREATE INDEX IF NOT EXISTS idx_movie_metadata_video_code
   ON MovieMetadata(video_code);
 ```
 
-- [ ] **Step 2: Apply to D1**
+- [x] **Step 2: Apply to D1**
 
 ```bash
 wrangler d1 execute javdb-history --remote \
@@ -89,7 +101,7 @@ wrangler d1 execute javdb-history --remote \
 
 Expected: `✅ Successfully applied migration`
 
-- [ ] **Step 3: Verify table exists on D1**
+- [x] **Step 3: Verify table exists on D1**
 
 ```bash
 wrangler d1 execute javdb-history --remote \
@@ -98,7 +110,7 @@ wrangler d1 execute javdb-history --remote \
 
 Expected: one row with `MovieMetadata`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add javdb/migrations/d1/2026_05_27_add_movie_metadata_table.sql
@@ -112,7 +124,7 @@ git commit -m "feat(db): add MovieMetadata table (ADR-022 phase 1)"
 **Files:**
 - Create: `javdb/migrations/d1/2026_05_27_add_ratings_preferences_tables.sql`
 
-- [ ] **Step 1: Create the migration file**
+- [x] **Step 1: Create the migration file**
 
 ```sql
 -- 2026-05-27: Add MovieRatings and ContentPreferences tables (ADR-022 Phase 1).
@@ -150,7 +162,7 @@ CREATE INDEX IF NOT EXISTS idx_content_prefs_hearted
   ON ContentPreferences(content_type, hearted);
 ```
 
-- [ ] **Step 2: Apply to D1**
+- [x] **Step 2: Apply to D1**
 
 ```bash
 wrangler d1 execute javdb-history --remote \
@@ -159,7 +171,7 @@ wrangler d1 execute javdb-history --remote \
 
 Expected: `✅ Successfully applied migration`
 
-- [ ] **Step 3: Verify both tables exist**
+- [x] **Step 3: Verify both tables exist**
 
 ```bash
 wrangler d1 execute javdb-history --remote \
@@ -168,7 +180,7 @@ wrangler d1 execute javdb-history --remote \
 
 Expected: two rows.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add javdb/migrations/d1/2026_05_27_add_ratings_preferences_tables.sql
@@ -179,7 +191,7 @@ git commit -m "feat(db): add MovieRatings and ContentPreferences tables (ADR-022
 
 ## Task 3 — Re-align SQLite mirror
 
-- [ ] **Step 1: Run sync**
+- [x] **Step 1: Run sync**
 
 ```bash
 python3 -m apps.cli.db.sync_d1_to_sqlite --apply --force-overwrite-all
@@ -187,7 +199,7 @@ python3 -m apps.cli.db.sync_d1_to_sqlite --apply --force-overwrite-all
 
 Expected: no errors; `MovieMetadata`, `MovieRatings`, and `ContentPreferences` present in local `reports/history.db`.
 
-- [ ] **Step 2: Verify locally**
+- [x] **Step 2: Verify locally**
 
 ```bash
 python3 -c "
