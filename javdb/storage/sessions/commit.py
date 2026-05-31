@@ -177,19 +177,19 @@ def commit_session(req: CommitRequest) -> CommitResult:
     # mirroring the CLI gate in ``apps/cli/db/commit_session.py``. The
     # operator-facing ``POST /api/sessions/{id}/commit`` path would otherwise
     # bypass that CLI-only gate and promote drifted parse data into the live
-    # history tables. Fail-open: a sentinel evaluation error must NEVER block
-    # the commit (a sentinel bug cannot be allowed to wedge the commit path);
-    # only a successful ``verdict.critical`` refuses. ``drop_pending`` is
-    # exempt — it discards the staged rows instead of promoting them, so there
-    # is nothing drifted to protect against. Imported lazily to preserve this
-    # module's circular-import-safe import posture (sentinel persistence pulls
-    # in ``javdb.storage.db`` at module top).
-    from javdb.ops.sentinel.service import (
-        evaluate_session as _sentinel_evaluate,
-        mark_committed as _sentinel_mark_committed,
-    )
+    # history tables. Fail-open: a sentinel failure must NEVER block the commit
+    # (a sentinel bug cannot be allowed to wedge the commit path); only a
+    # successful ``verdict.critical`` refuses. ``drop_pending`` is exempt — it
+    # discards the staged rows instead of promoting them, so there is nothing
+    # drifted to protect against, and it must not even import the sentinel.
+    # The import is lazy AND inside the try/except so an import-stage failure is
+    # fail-open too; laziness also preserves this module's circular-import-safe
+    # posture (sentinel persistence pulls in ``javdb.storage.db`` at module top).
     if not req.drop_pending:
         try:
+            from javdb.ops.sentinel.service import (
+                evaluate_session as _sentinel_evaluate,
+            )
             verdict = _sentinel_evaluate(str(req.session_id))
         except Exception:
             logger.warning(
@@ -282,9 +282,13 @@ def commit_session(req: CommitRequest) -> CommitResult:
     # parse data instead of promoting it, so those fill-rates must NOT enter the
     # soft-field baseline (an operator dropping a bad/failed parse would
     # otherwise pollute it). Symmetric with the gate's ``drop_pending`` exemption
-    # above. Best-effort; never fail the commit on this (mirrors the CLI).
+    # above. Best-effort; the import is inside the try so an import-stage failure
+    # is fail-open too — never fail the commit on this (mirrors the CLI).
     if not req.drop_pending:
         try:
+            from javdb.ops.sentinel.service import (
+                mark_committed as _sentinel_mark_committed,
+            )
             _sentinel_mark_committed(str(req.session_id))
         except Exception:
             logger.warning(
