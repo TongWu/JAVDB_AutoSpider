@@ -433,4 +433,4 @@ git commit -m "feat(api): register torrent quality router (ADR-024)"
 | 2 | 404 on missing evidence | covered by `test_get_evidence_missing_raises_404` |
 | 3 | Auth-gated | endpoints depend on `_require_auth` (same as diagnostics) |
 | 4 | Routes registered | Task 3 Step 3 prints `routes ok` |
-| 5 | Read-only | `rg -n "@router.(post\|put\|delete)" apps/api/routers/quality.py` → no output |
+| 5 | Read-only | `rg -n "@router.(post\\|put\\|delete)" apps/api/routers/quality.py` → no output |

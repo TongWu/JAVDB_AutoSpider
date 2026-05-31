@@ -436,6 +436,36 @@ def test_force_overrides_disabled_gate(monkeypatch):
         rc = cli.main(["--force"])
     assert rc == 0
     run.assert_called_once()
+
+
+def test_categories_fall_back_to_config(monkeypatch):
+    # --categories omitted → use TORRENT_QUALITY_CATEGORIES from config.
+    monkeypatch.setattr(cli, "_evidence_enabled", lambda: True)
+    monkeypatch.setattr(cli, "cfg", lambda key, default=None: (
+        '["Daily Ingestion"]' if key == "TORRENT_QUALITY_CATEGORIES" else default
+    ))
+    with patch.object(cli, "run_collection", return_value={
+        "scanned": 0, "skipped": 0, "evidence_written": 0,
+        "evaluations_written": 0, "probe_unavailable": 0,
+    }) as run:
+        rc = cli.main([])
+    assert rc == 0
+    assert run.call_args.kwargs["categories"] == ["Daily Ingestion"]
+
+
+def test_cli_categories_override_config(monkeypatch):
+    # --categories wins over the config key.
+    monkeypatch.setattr(cli, "_evidence_enabled", lambda: True)
+    monkeypatch.setattr(cli, "cfg", lambda key, default=None: (
+        '["Daily Ingestion"]' if key == "TORRENT_QUALITY_CATEGORIES" else default
+    ))
+    with patch.object(cli, "run_collection", return_value={
+        "scanned": 0, "skipped": 0, "evidence_written": 0,
+        "evaluations_written": 0, "probe_unavailable": 0,
+    }) as run:
+        rc = cli.main(["--categories", '["Ad Hoc"]'])
+    assert rc == 0
+    assert run.call_args.kwargs["categories"] == ["Ad Hoc"]
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -497,10 +527,26 @@ def _parse_categories(raw: str | None) -> list[str] | None:
     return [str(c) for c in categories if c]
 
 
+def _resolve_categories(cli_categories: str | None) -> list[str] | None:
+    """CLI --categories wins; otherwise fall back to the config key.
+
+    Honours the documented TORRENT_QUALITY_CATEGORIES config knob for direct CLI
+    runs (and scheduled runs that don't pass --categories). An empty/whitespace
+    config value means "no filter" (scan all categories), matching the file
+    filter's behaviour.
+    """
+    if cli_categories is not None:
+        return _parse_categories(cli_categories)
+    configured = (cfg("TORRENT_QUALITY_CATEGORIES", "") or "").strip()
+    if not configured:
+        return None
+    return _parse_categories(configured)
+
+
 def main(argv: list[str] | None = None) -> int:
     try:
         args = parse_args(argv)
-        categories = _parse_categories(args.categories)
+        categories = _resolve_categories(args.categories)
     except (json.JSONDecodeError, argparse.ArgumentTypeError) as exc:
         raise SystemExit(str(exc)) from exc
 

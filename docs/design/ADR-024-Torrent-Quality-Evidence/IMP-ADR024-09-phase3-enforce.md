@@ -29,6 +29,7 @@
 ## Outline task list (expand with writing-plans before executing)
 
 ### Task A — Rollout gate + `policy_mode=enforce`
+
 - Add a narrow, instantly-reversible gate (e.g. enforce only for specific
   categories or a sampled fraction). When enforce is active for a movie+category,
   the uploader selects the quality-ranked candidate instead of the heuristic one.
@@ -36,18 +37,21 @@
   it on for a test category, the selected magnet matches the ranker's top choice.
 
 ### Task B — Threshold tuning + offline replay
+
 - Build an offline tool that replays scoring over historical `TorrentQualityEvidence`
   / `TorrentQualityEvaluation` rows and reports what enforce *would* have changed,
   with precision/recall against operator review labels.
 - Verify: tuning report is reproducible and version-stamped (`scoring_version`).
 
 ### Task C — Backfill + reporting jobs
+
 - Backfill evidence/evaluation for historical torrents where file lists are still
   available; add a periodic quality report (counts by decision, category-mismatch
   rate, junk-ratio distribution).
 - Verify: backfill is idempotent (UPSERT by PK); report numbers reconcile with D1.
 
 ### Task D — Production guardrails
+
 - Add monitoring/alerts for enforce-mode regressions (e.g. spike in
   `needs_review`, drop in main-video-ratio of enforced choices) and an emergency
   off-switch.
