@@ -27,6 +27,7 @@ _ASCII_SUBTITLE_TOKENS = frozenset(
     {"sub", "subs", "subbed", "chinese", "chs", "cht", "zh", "cn"}
 )
 _ASCII_FINAL_SUBTITLE_TOKENS = frozenset({"c", "uc", "cu"})
+_RESOLUTION_PATTERN = re.compile(r"(?<![a-z0-9])(2160p|4k|1080p|720p)(?![a-z0-9])")
 
 
 def _subtitle_name_hint(magnet_name: str) -> bool:
@@ -38,6 +39,18 @@ def _subtitle_name_hint(magnet_name: str) -> bool:
     if any(token in _ASCII_SUBTITLE_TOKENS for token in tokens):
         return True
     return bool(tokens and tokens[-1] in _ASCII_FINAL_SUBTITLE_TOKENS)
+
+
+def _normalize_resolution_marker(marker: str) -> str:
+    return "2160p" if marker == "4k" else marker
+
+
+def _extract_resolution_marker(text: str) -> str | None:
+    lowered = (text or "").lower()
+    match = _RESOLUTION_PATTERN.search(lowered)
+    if match is None:
+        return None
+    return _normalize_resolution_marker(match.group(1))
 
 
 def score_torrent(
@@ -91,6 +104,20 @@ def score_torrent(
         reasons.append("category_mismatch")
         score -= 0.3
 
+    # --- resolution claim check ---
+    resolution_consistent = None
+    claimed_resolution = _extract_resolution_marker(magnet_name)
+    main_video_name = str(features.get("main_video_name") or "")
+    if claimed_resolution and main_video_name:
+        main_resolution = _extract_resolution_marker(main_video_name)
+        if main_resolution == claimed_resolution:
+            resolution_consistent = True
+            reasons.append("resolution_claim_supported")
+        else:
+            resolution_consistent = False
+            reasons.append("resolution_claim_unsupported")
+            score -= 0.1
+
     # --- abnormal file count ---
     if features.get("suspicious_file_count", 0) >= 5:
         reasons.append("abnormal_file_count")
@@ -112,8 +139,8 @@ def score_torrent(
         "reasons": reasons,
         "subtitle_evidence": subtitle_evidence,
         "category_consistent": category_consistent,
+        "resolution_consistent": resolution_consistent,
         "inferred_category": _infer_category(features, context, subtitle_evidence),
-        "resolution_consistent": None,  # deferred: deep resolution check (D10-adjacent)
         "decision": decision,
     }
 
