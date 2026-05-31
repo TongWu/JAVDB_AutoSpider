@@ -1,6 +1,6 @@
 # IMP-ADR024-02: ADR-024 Phase 1 — Models & Repository
 
-**Status:** Proposed — hardened 2026-05-31 after a design review (see Design Review note below).
+**Status:** Completed — implemented 2026-05-31.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -72,7 +72,7 @@ package `javdb/quality/`; record names `EvidenceRecord` / `EvaluationRecord`.
 - Create: `javdb/quality/models.py`
 - Test: `tests/unit/test_torrent_quality_repo.py` (created in Task 2)
 
-- [ ] **Step 1: Create the package marker**
+- [x] **Step 1: Create the package marker**
 
 Create `javdb/quality/__init__.py`:
 
@@ -84,7 +84,7 @@ from javdb.quality.models import EvaluationRecord, EvidenceRecord
 __all__ = ["EvidenceRecord", "EvaluationRecord"]
 ```
 
-- [ ] **Step 2: Create the dataclasses**
+- [x] **Step 2: Create the dataclasses**
 
 Create `javdb/quality/models.py`. These are **pure** dataclasses — no `to_row()`;
 the repo owns all mapping to DB columns.
@@ -159,7 +159,7 @@ class EvaluationRecord:
     reasons: list[str] = field(default_factory=list)
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add javdb/quality/__init__.py javdb/quality/models.py
@@ -174,7 +174,7 @@ git commit -m "feat(quality): add torrent quality record dataclasses (ADR-024)"
 - Create: `javdb/storage/repos/torrent_quality_repo.py`
 - Test: `tests/unit/test_torrent_quality_repo.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_torrent_quality_repo.py`. The fixture mirrors
 `acquisition_outcome_conn` (tests/conftest.py): an in-memory SQLite seeded from
@@ -286,9 +286,51 @@ def test_upsert_and_list_evaluation(conn):
     assert rows[0]["policy_mode"] == "shadow"
     assert rows[0]["would_replace_current_choice"] == 0
     assert "1080p" in rows[0]["javdb_tags_json"]
+
+
+def test_list_recent_evaluations_orders_by_created_at(conn):
+    repo = TorrentQualityRepo(conn)
+    repo.upsert_evaluation(
+        EvaluationRecord(
+            info_hash="ABC123",
+            movie_href="/v/abc",
+            scoring_version="v1",
+            video_code="ABC-123",
+            shadow_rank=2,
+        )
+    )
+    conn.execute(
+        """
+        UPDATE TorrentQualityEvaluation
+        SET created_at = ?
+        WHERE info_hash = ? AND movie_href = ? AND scoring_version = ?
+        """,
+        ("2026-05-31T00:00:00.000Z", "ABC123", "/v/abc", "v1"),
+    )
+    repo.upsert_evaluation(
+        EvaluationRecord(
+            info_hash="DEF456",
+            movie_href="/v/def",
+            scoring_version="v1",
+            video_code="DEF-456",
+            shadow_rank=1,
+        )
+    )
+    conn.execute(
+        """
+        UPDATE TorrentQualityEvaluation
+        SET created_at = ?
+        WHERE info_hash = ? AND movie_href = ? AND scoring_version = ?
+        """,
+        ("2026-05-31T00:00:01.000Z", "DEF456", "/v/def", "v1"),
+    )
+
+    rows = repo.list_recent_evaluations(limit=1)
+    assert len(rows) == 1
+    assert rows[0]["info_hash"] == "DEF456"
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 ```bash
 pytest tests/unit/test_torrent_quality_repo.py -v
@@ -296,7 +338,7 @@ pytest tests/unit/test_torrent_quality_repo.py -v
 
 Expected: FAIL with `ModuleNotFoundError: javdb.quality` / `javdb.storage.repos.torrent_quality_repo`.
 
-- [ ] **Step 3: Implement the repository**
+- [x] **Step 3: Implement the repository**
 
 Create `javdb/storage/repos/torrent_quality_repo.py`:
 
@@ -520,15 +562,15 @@ class TorrentQualityRepo:
         return {col: row[col] for col in columns}
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 ```bash
 pytest tests/unit/test_torrent_quality_repo.py -v
 ```
 
-Expected: PASS (4 tests).
+Expected: PASS (5 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add javdb/storage/repos/torrent_quality_repo.py tests/unit/test_torrent_quality_repo.py
