@@ -191,6 +191,27 @@ def test_commit_unknown_session_404(admin_client):
     assert r.status_code == 404
 
 
+def test_commit_site_drift_returns_409(admin_client, seeded_session_id, monkeypatch):
+    import javdb.storage.sessions as sessions_lib
+
+    def _blocked(req):
+        raise sessions_lib.SiteContractDriftError(
+            "site-contract drift gate: critical drift for session "
+            f"{req.session_id!r} (1 finding(s)); refusing commit"
+        )
+
+    monkeypatch.setattr(sessions_lib, "commit_session", _blocked)
+
+    r = admin_client.post(
+        f"/api/sessions/{seeded_session_id}/commit",
+        json={"force": False, "drop_pending": False},
+    )
+
+    assert r.status_code == 409
+    assert r.json()["detail"]["error"]["code"] == "site_drift"
+    assert "critical drift" in r.json()["detail"]["error"]["message"]
+
+
 # ── Task 14: POST /api/sessions/{id}/rollback ────────────────────────────────
 
 def test_rollback_dry_run_returns_plan(admin_client, seeded_session_id):
