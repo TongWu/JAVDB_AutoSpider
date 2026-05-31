@@ -296,14 +296,22 @@ def main(argv=None) -> int:
             _delete_in(OPERATIONS, table, col, sids)
             print(f"  {table:30} deleted {sum(ops_plan[table].values())} row(s)")
 
-    fkc = _q(REPORTS, "PRAGMA foreign_key_check")
-    print(f"\nPRAGMA foreign_key_check (reports) after cleanup: {len(fkc)} violation(s)")
-    for r in fkc:
-        print("   ", r)
-    if fkc:
+    # Verify FK integrity in EVERY db the cleanup wrote to — history has its own
+    # TorrentHistory -> MovieHistory FK, so a reports-only check could miss a
+    # leftover violation there and falsely report success.
+    total = 0
+    for db_name, db_id in (("history", HISTORY), ("reports", REPORTS),
+                           ("operations", OPERATIONS)):
+        fkc = _q(db_id, "PRAGMA foreign_key_check")
+        print(f"\nPRAGMA foreign_key_check ({db_name}) after cleanup: "
+              f"{len(fkc)} violation(s)")
+        for r in fkc:
+            print("   ", r)
+        total += len(fkc)
+    if total:
         print("FAIL — foreign_key_check still reports violations.")
         return 1
-    print("OK — reports foreign_key_check is clean.")
+    print("OK — foreign_key_check is clean across all three DBs.")
     return 0
 
 

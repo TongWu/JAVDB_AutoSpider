@@ -237,33 +237,21 @@ def _rollback_pending_in_progress(
     sessions' rows.
     """
     _ensure_imports()
-    counts: Dict[str, int] = {
-        "PendingMovieHistoryWrites": 0,
-        "PendingTorrentHistoryWrites": 0,
-    }
+    # Data-driven from ROLLBACK_HISTORY_PENDING_TABLES so the cleared set stays
+    # the single source of truth (the coverage test asserts against it).
+    counts: Dict[str, int] = {t: 0 for t in ROLLBACK_HISTORY_PENDING_TABLES}
     with _get_db(db_path or _HISTORY_DB_PATH) as conn:
-        if dry_run:
-            counts["PendingMovieHistoryWrites"] = (conn.execute(
-                "SELECT COUNT(*) AS n FROM PendingMovieHistoryWrites "
-                "WHERE SessionId=?",
-                (session_id,),
-            ).fetchone() or {"n": 0})["n"]
-            counts["PendingTorrentHistoryWrites"] = (conn.execute(
-                "SELECT COUNT(*) AS n FROM PendingTorrentHistoryWrites "
-                "WHERE SessionId=?",
-                (session_id,),
-            ).fetchone() or {"n": 0})["n"]
-        else:
-            cur_m = conn.execute(
-                "DELETE FROM PendingMovieHistoryWrites WHERE SessionId=?",
-                (session_id,),
-            )
-            cur_t = conn.execute(
-                "DELETE FROM PendingTorrentHistoryWrites WHERE SessionId=?",
-                (session_id,),
-            )
-            counts["PendingMovieHistoryWrites"] = cur_m.rowcount or 0
-            counts["PendingTorrentHistoryWrites"] = cur_t.rowcount or 0
+        for table, col in ROLLBACK_HISTORY_PENDING_TABLES.items():
+            if dry_run:
+                counts[table] = (conn.execute(
+                    f"SELECT COUNT(*) AS n FROM {table} WHERE {col}=?",
+                    (session_id,),
+                ).fetchone() or {"n": 0})["n"]
+            else:
+                counts[table] = (conn.execute(
+                    f"DELETE FROM {table} WHERE {col}=?",
+                    (session_id,),
+                ).rowcount or 0)
     return counts
 
 
