@@ -1,6 +1,6 @@
 # IMP-ADR024-03: ADR-024 Phase 1 — Feature Extraction & Pure Scoring
 
-**Status:** Proposed
+**Status:** Proposed — design-reviewed & code-verified 2026-05-31 (see Design Review note).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -20,6 +20,38 @@
 
 ---
 
+## Design Review note (2026-05-31)
+
+A `brainstorming` review checked this plan against the hardened IMP-02 model
+contract and the codebase; the embedded `features.py` + `scoring.py` were
+extracted and run (**10/10 tests pass**). Outcomes:
+
+- **Category vocabulary is correct.** `scoring.py`'s `{subtitle, no_subtitle,
+  hacked_subtitle, hacked_no_subtitle}` matches the codebase
+  (`javdb/spider/services/dedup.py`, `javdb/pipeline/policies.py`).
+- **Decision — evidence measures the torrent *as published*.** `features.py`
+  intentionally ignores qB `priority`/`progress` and counts ALL files. Rationale:
+  ADR-024's goal is candidate-quality evidence, and the `QBFileFilter` job zeroes
+  junk-file priority on production torrents *before* collection — counting only
+  `priority>0` would hide the "this torrent is junky" signal. The `quality_probe`
+  role is metadata-only (all default priority) anyway.
+- **Integration seam (for IMP-05).** `extract_file_features` returns a FLAT dict
+  whose nine numeric keys (`total_size_bytes` … `suspicious_file_count`) map to
+  `EvidenceRecord`'s promoted named fields, plus `main_video_name` — an audit /
+  scoring-hint breadcrumb that is NOT a column. IMP-05 must map the promoted keys
+  to `EvidenceRecord` fields and route `main_video_name` into
+  `EvidenceRecord.features`; it must NOT dump the whole dict into `.features`
+  (the IMP-02 non-overlap invariant would raise `ValueError`).
+- **`context["javdb_category"]` contract.** IMP-05 must pass one of the four type
+  keys above — never the qB category (`'JavDB'`) nor the `'中字'/'无字'` subtitle
+  axis.
+- **Phase-1 non-signals (intentional):** `javdb_tags` is stored on
+  `EvaluationRecord` but not consumed by `score_torrent`; scoring thresholds are
+  v1 guesses, version-stamped via `SCORING_VERSION` and shadow-only, so they are
+  tunable without a contract change.
+
+---
+
 ## File Map
 
 | Action | Path | Responsibility |
@@ -33,6 +65,7 @@
 ## Scope Boundaries
 
 - No I/O: these modules never call qBittorrent, the DB, or the network.
+- Evidence is **as-published**: `features.py` counts all files and ignores qB `priority`/`progress` (intentional — see Design Review note).
 - No video-content inspection (D10): frame/OCR/watermark detection is out of scope.
 - Do not change production category semantics — scoring is shadow-only.
 - `resolution_claim_unsupported` is a thin best-effort signal here; deep resolution
@@ -136,6 +169,9 @@ into objective evidence features. D10 forbids video-content inspection, so this
 uses file names, extensions, and sizes only. The ``PROBE_SCHEMA_VERSION``
 constant versions the feature shape so stored evidence stays interpretable as
 extraction logic evolves.
+
+``priority`` / ``progress`` are intentionally ignored: evidence describes the
+torrent **as published** (all files), not what is currently selected on disk.
 """
 
 from __future__ import annotations
