@@ -8,7 +8,7 @@
 
 **Goal:** Detect silent field-level parser drift on the daily run by recording per-field fill-rate from the live index parse, then **gate the session commit** — critical-field collapse refuses to commit (protecting the DB), soft-field collapse raises an advisory — reusing the pending→commit lifecycle and the ADR-026 incident surface.
 
-**Architecture:** The spider's index parse boundary feeds a per-run `FieldHealthAccumulator`; at the end of the index flow the fills are **persisted** to a new D1 `ParseRunFieldFill` table keyed by `session_id` (spider and commit are separate processes, so in-process state cannot bridge them). The separate commit step reads those fills, evaluates them against a declarative `PARSE_CONTRACT` (critical = absolute `min_fill`; soft = relative to a baseline computed from recent committed runs), and gates `db_commit_session_history`. Drift becomes an `OpsIncidents` row (`incident_type='site_drift'`).
+**Architecture:** The spider's index parse boundary feeds a per-run `FieldHealthAccumulator`; once the report session id is established (in `run_service`, after the index flow) the fills are **persisted** to a new D1 `ParseRunFieldFill` table keyed by `session_id` (spider and commit are separate processes, so in-process state cannot bridge them). The separate commit step reads those fills, evaluates them against a declarative `PARSE_CONTRACT` (critical = absolute `min_fill`; soft = relative to a baseline computed from recent committed runs), and gates `db_commit_session_history`. Drift becomes an `OpsIncidents` row (`incident_type='site_drift'`).
 
 **Tech Stack:** Python 3, `sqlite3`/D1 via `javdb.storage.db.get_db`, `dataclasses`, `statistics.median`, `pytest`, Cloudflare D1 + `wrangler`.
 
@@ -32,7 +32,7 @@
 | `javdb/ops/sentinel/persistence.py` | Create | `get_db` wiring + `build_drift_incident()` (reuse OpsIncidentRepo) |
 | `javdb/ops/sentinel/service.py` | Create | `persist_run()`, `evaluate_session()`, `mark_committed()` (sole writer of fills/incidents) |
 | `apps/cli/ops/sentinel.py` | Create | CLI: evaluate a session's persisted fills → report + exit code |
-| `javdb/spider/fetch/index.py` | Modify | Observe per-page fills; persist at end of index flow |
+| `javdb/spider/fetch/index.py` | Modify | Observe per-page fills (persistence is centralized later in `run_service` — see As-Built note 8) |
 | `apps/cli/db/commit_session.py` | Modify | Gate before `db_commit_session_history` (critical → fail path) |
 | `config.py.example` | Modify | Document `SENTINEL_MIN_SAMPLE`, `SENTINEL_BASELINE_WINDOW` |
 | `CONTEXT.md`, `docs/handbook/en/developer/cli-reference.md` (+ zh) | Modify | Domain terms + new CLI |
@@ -1512,11 +1512,22 @@ loop so the plan reflects what actually shipped):
    sequential path, but the daily production run uses the **parallel** path
    (`use_parallel = use_proxy AND PROXY_MODE=='pool' AND len(PROXY_POOL)>1`), which
    bypassed the hook — leaving the sentinel dormant on daily runs. The same
-   `start_run`/`observe`/`persist_run` piggyback was added to
-   `javdb/spider/fetch/index_parallel.py::fetch_all_index_pages_parallel`, placed in
+   `start_run`/`observe` piggyback was added to
+   `javdb/spider/fetch/index_parallel.py::fetch_all_index_pages_parallel` (persistence
+   stays centralized in `run_service` — see note 8), placed in
    the **single-threaded** parse loop that runs *after* `backend.shutdown()` (so the
    non-thread-safe `FieldHealthAccumulator`/`_CURRENT` global is never touched from
    worker threads).
+
+8. **Task 8 — persistence is centralized in `run_service`, not the index functions.**
+   The plan (Task 8 Step 6 and the File Structure table) placed `persist_run()` at the
+   end of the index flow inside `index.py`. In the shipped code both
+   `javdb/spider/fetch/index.py` and `index_parallel.py` only `observe` into the
+   process-global accumulator (each carries an explicit "do NOT persist here" comment);
+   the sole `_sentinel_fh.persist_run()` call lives in
+   `javdb/spider/app/run_service.py` immediately after `_set_active_session_id(...)`.
+   Reason: no report session exists during index fetch, so persisting there would key
+   fills to a missing `session_id`.
 
 **Phase 1 close-out updates:**
 

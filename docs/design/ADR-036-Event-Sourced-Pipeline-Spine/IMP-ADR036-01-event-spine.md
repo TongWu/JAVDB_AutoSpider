@@ -4,7 +4,7 @@
 
 **Related:** [ADR-036](ADR-036-event-sourced-pipeline-spine.md) (umbrella) — this is **Phase 1** of three.
 
-**Status:** Implemented and verified (2026-05-30). All 9 tasks landed; the `2026_05_29_add_pipeline_event.sql` migration is applied to remote `javdb-reports` D1 and mirrored locally; GitHub full unit tests passed with no failures. Two plan-vs-code corrections were made during implementation and documented inline (Task 4: `get_db(REPORTS_DB_PATH)` not the literal `"reports"`; Task 7: emit `SessionCommitted` after the status transition succeeds, `SessionFailed` in both failure paths).
+**Status:** Implemented and verified (2026-05-30). All 9 tasks landed; the `2026_05_29_add_pipeline_event.sql` migration is applied to remote `javdb-reports` D1 and mirrored locally; GitHub full unit tests passed with no failures. Two plan-vs-code corrections were made during implementation and documented inline (Task 4: `get_db(REPORTS_DB_PATH)` not the literal `"reports"`; Task 7: emit `SessionCommitted` after the status transition succeeds, `SessionFailed` in both commit-failure `except` blocks — a third `SessionFailed` emit was later added by the ADR-035 site-contract drift gate, see the Step 3 note).
 
 **Goal:** Stand up an additive, append-only `PipelineEvent` log in D1 with a cursor-based consumer framework and a demonstrator projection, proving emit → consume → replay end to end — without touching the authoritative `pending→commit` path.
 
@@ -767,6 +767,12 @@ Transition failure (`except Exception as e:` around `transition(sid, "committed"
 
 > Both ride the commit outcome in the same process; emit is best-effort and cannot
 > change commit behaviour. A true in-transaction outbox is an ADR-036 hardening item.
+
+> **As-built (post-ADR-035):** a *third* `SessionFailed` emit now exists at the
+> site-contract drift gate in `commit_session.py` — the critical-drift branch that
+> also appends to `failed_commits` and `continue`s. It was added by ADR-035 after
+> this plan was written; the two `except` blocks above remain ADR-036's original
+> insertions.
 
 - [ ] **Step 4: Import-smoke + placement regression test**
 

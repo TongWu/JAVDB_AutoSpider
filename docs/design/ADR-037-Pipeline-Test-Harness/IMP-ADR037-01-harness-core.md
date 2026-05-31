@@ -17,7 +17,7 @@
 ## Implementation Reconciliation (Phase 1 shipped — 2026-05-30)
 
 > **Status: Implemented.** The shipped harness is the source of truth
-> (`tests/harness/`, 11 tests green in <0.4s). The Task code blocks below were
+> (`tests/harness/`, 14 tests green in <0.4s). The Task code blocks below were
 > the *plan*; reality diverged on the integration seams flagged in Task 6. The
 > divergences and why the original assumptions were wrong:
 
@@ -65,6 +65,12 @@
 8. **Fixture registration:** the `pipeline_harness` fixture is registered via
    `tests/harness/conftest.py` (a module-level fixture isn't auto-discovered by
    pytest); `__init__.py` only re-exports the names.
+9. **Docs landed at a dedicated page, not `testing.md`.** Task 7 Step 3 planned a
+   "Deterministic pipeline harness" section in
+   `docs/handbook/en/developer/testing.md`, but that file does not exist; the
+   guide shipped as the bilingual pair
+   `docs/handbook/{en,zh}/developer/pipeline-test-harness.md` instead. The Task 7
+   "Files to modify"/Self-Review lines below still name `testing.md` (plan text).
 
 The shipped `PipelineHarness.run_daily` / `_install` / `HistoryView` reflect all
 of the above; treat `tests/harness/pipeline_harness.py` as canonical over the
