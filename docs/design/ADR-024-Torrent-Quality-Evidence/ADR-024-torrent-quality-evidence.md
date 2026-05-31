@@ -198,9 +198,19 @@ production pipeline unchanged.
 
 | Phase | IMP | Ships | Deferred |
 | --- | --- | --- | --- |
-| Phase 1 | Future IMP | D1 evidence schema, production/probe evidence collection, bounded Top-K shadow scoring, qB capability canary, logs/API report | No production download behavior change |
-| Phase 2 | Future IMP | Assist mode that can recommend per-category replacements and surface review actions in API/Web | Fully automatic enforcement |
-| Phase 3 | Future IMP | Enforce mode behind rollout gates, threshold tuning, backfill/reporting jobs | Video frame/CV inspection and heavyweight ML runtimes |
+| Phase 1 | [IMP-ADR024-01](IMP-ADR024-01-d1-schema.md) · [-02](IMP-ADR024-02-models-repo.md) · [-03](IMP-ADR024-03-feature-extraction-scoring.md) · [-04](IMP-ADR024-04-file-filter-modularize.md) · [-05](IMP-ADR024-05-evidence-collection.md) · [-06](IMP-ADR024-06-read-api.md) · [-07](IMP-ADR024-07-docs-verification.md) | D1 evidence schema, **production-download** evidence collection (reusing the QBFileFilter read helpers), explainable shadow scoring, logs + read-only API report | Remote `quality_probe` endpoint + metadata-only capability canary; bounded Top-K runner-up collection; any production download behavior change |
+| Phase 2 | [IMP-ADR024-08](IMP-ADR024-08-phase2-assist.md) (outline) | Assist mode that can recommend per-category replacements and surface review actions in API/Web; movie-context join; Top-K + remote probe prerequisites | Fully automatic enforcement |
+| Phase 3 | [IMP-ADR024-09](IMP-ADR024-09-phase3-enforce.md) (outline) | Enforce mode behind rollout gates, threshold tuning via offline replay, backfill/reporting jobs | Video frame/CV inspection and heavyweight ML runtimes |
+
+> **Phase 1 scope note (2026-05-31, recorded during IMP planning).** The original
+> Phase 1 line bundled remote-probe evidence, bounded Top-K shadow scoring, and a
+> qB metadata-only capability canary. During IMP planning these were split out:
+> Phase 1 now collects evidence for the **production-selected torrent only** (the
+> `production_download` role) by reusing the QBFileFilter read path. The remote
+> `quality_probe` endpoint (D4-D7), the capability canary (D7), and bounded Top-K
+> runner-up collection (D8) are deferred to follow-up IMPs (likely Phase 2
+> prerequisites). This keeps the first rollout the lowest-risk, fully shadow-only
+> slice while still proving the D1 evidence → scoring → report loop.
 
 ## References
 
@@ -216,3 +226,7 @@ production pipeline unchanged.
 ## Status Log
 
 - 2026-05-27: Proposed as ADR-024.
+- 2026-05-31: Phase 1 decomposed into IMP-ADR024-01..07; Phase 2/3 outlined as
+  IMP-ADR024-08/09. Phase 1 scope narrowed to production-download evidence only —
+  remote `quality_probe` endpoint, metadata-only capability canary, and bounded
+  Top-K runner-up collection deferred to follow-up IMPs (see Phase 1 scope note).

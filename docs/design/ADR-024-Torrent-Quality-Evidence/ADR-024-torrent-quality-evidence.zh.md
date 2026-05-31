@@ -162,9 +162,16 @@ Phase 1 的 scoring 刻意保持可解释：
 
 | 阶段 | IMP | 交付内容 | 推迟内容 |
 | --- | --- | --- | --- |
-| Phase 1 | Future IMP | D1 evidence schema、生产/probe evidence 采集、有边界的 Top-K shadow scoring、qB capability canary、日志/API 报告 | 不改变生产下载行为 |
-| Phase 2 | Future IMP | Assist mode，可推荐每个分类的替换候选，并在 API/Web 中暴露 review 动作 | 完全自动执行 |
-| Phase 3 | Future IMP | Enforce mode，带 rollout gate、阈值调优、backfill/reporting jobs | 视频抽帧/CV 检查和重量级 ML runtime |
+| Phase 1 | [IMP-ADR024-01](IMP-ADR024-01-d1-schema.md) · [-02](IMP-ADR024-02-models-repo.md) · [-03](IMP-ADR024-03-feature-extraction-scoring.md) · [-04](IMP-ADR024-04-file-filter-modularize.md) · [-05](IMP-ADR024-05-evidence-collection.md) · [-06](IMP-ADR024-06-read-api.md) · [-07](IMP-ADR024-07-docs-verification.md) | D1 evidence schema、**生产下载**（production_download）evidence 采集（复用 QBFileFilter 读取轮子）、可解释 shadow scoring、日志 + 只读 API 报告 | 远端 `quality_probe` 端点 + 仅元数据能力金丝雀；有边界的 Top-K 候补采集；任何生产下载行为变化 |
+| Phase 2 | [IMP-ADR024-08](IMP-ADR024-08-phase2-assist.md)（轮廓） | Assist mode，可推荐每个分类的替换候选，并在 API/Web 中暴露 review 动作；影片上下文关联；Top-K + 远端探针前置条件 | 完全自动执行 |
+| Phase 3 | [IMP-ADR024-09](IMP-ADR024-09-phase3-enforce.md)（轮廓） | Enforce mode，带 rollout gate、通过离线重放进行阈值调优、backfill/reporting jobs | 视频抽帧/CV 检查和重量级 ML runtime |
+
+> **Phase 1 范围说明（2026-05-31，IMP 规划时记录）。** 原 Phase 1 一行把远端 probe 证据、
+> 有边界的 Top-K shadow scoring、qB 仅元数据能力金丝雀打包在一起。在 IMP 规划过程中这些被
+> 拆分出去：Phase 1 现在只对**生产选中的种子**（`production_download` 角色）采集证据，复用
+> QBFileFilter 读取路径。远端 `quality_probe` 端点（D4-D7）、能力金丝雀（D7）以及有边界的
+> Top-K 候补采集（D8）推迟到后续 IMP（很可能是 Phase 2 的前置条件）。这让首次上线成为风险
+> 最低、完全 shadow 的切片，同时仍验证 D1 证据 → 评分 → 报告 的闭环。
 
 ## 参考
 
@@ -180,3 +187,6 @@ Phase 1 的 scoring 刻意保持可解释：
 ## 状态日志
 
 - 2026-05-27：以 ADR-024 提出。
+- 2026-05-31：Phase 1 拆分为 IMP-ADR024-01..07；Phase 2/3 以 IMP-ADR024-08/09
+  轮廓呈现。Phase 1 范围收窄为仅生产下载证据 —— 远端 `quality_probe` 端点、仅元数据
+  能力金丝雀、以及有边界的 Top-K 候补采集推迟到后续 IMP（见 Phase 1 范围说明）。
