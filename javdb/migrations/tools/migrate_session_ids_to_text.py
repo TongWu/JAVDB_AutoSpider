@@ -132,23 +132,39 @@ def _synthesize_base(date_time_created: str | None) -> str:
 
 
 def build_mapping() -> list[dict]:
-    """Return [{old_id, date_time_created, new_id, synthetic}] for legacy rows."""
+    """Return [{old_id, date_time_created, new_id, synthetic}] for legacy rows.
+
+    Stable across retries: SSSS is a per-base counter, so naively rebuilding
+    after a partial run would shift the suffixes of every same-second row once
+    any sibling is migrated (251 rows share one second here) — re-mapping ids or
+    colliding with an already-committed new id. To keep retries idempotent we
+    reuse the new id any prior run already wrote to ``MAP_FILE`` for a given
+    old_id, and seed each base's counter past the highest suffix it already
+    issued so freshly-seen rows never collide with a committed one.
+    """
     rows = _q(REPORTS, "SELECT Id, DateTimeCreated FROM ReportSessions ORDER BY DateTimeCreated, Id")
     legacy = [r for r in rows if not NEW_ID_RE.match(str(r["Id"]))]
 
-    mapping: list[dict] = []
+    prior = {m["old_id"]: m for m in (_load_json(MAP_FILE) or [])}
     seq_by_base: dict[str, int] = {}
+    for m in prior.values():
+        base, _, suffix = m["new_id"].rpartition("-")
+        seq_by_base[base] = max(seq_by_base.get(base, 0), int(suffix, 16) + 1)
+
+    mapping: list[dict] = []
     for r in legacy:
         old_id = str(r["Id"])
+        if old_id in prior:
+            mapping.append(prior[old_id])  # reuse the committed new id (stable)
+            continue
         base = _synthesize_base(r.get("DateTimeCreated"))
         seq = seq_by_base.get(base, 0)
         seq_by_base[base] = seq + 1
         # SSSS is a 4-char hex field in the canonical format; keep it valid.
-        new_id = f"{base}-{seq:04x}"
         mapping.append({
             "old_id": old_id,
             "date_time_created": r.get("DateTimeCreated"),
-            "new_id": new_id,
+            "new_id": f"{base}-{seq:04x}",
             "synthetic": True,
         })
     return mapping
