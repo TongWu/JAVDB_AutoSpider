@@ -364,6 +364,7 @@ mod tests {
         assert!(!is_plausible_video_code(""));
         assert!(!is_plausible_video_code("X"));
         assert!(!is_plausible_video_code("XYZ-99 Some Title")); // title text leaked in
+        assert!(!is_plausible_video_code("XYZ-99標題")); // CJK title glued on (no space)
         assert!(!is_plausible_video_code("123")); // digits only, no letter/separator
     }
 

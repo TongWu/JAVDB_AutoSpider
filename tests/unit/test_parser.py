@@ -118,6 +118,13 @@ class TestExtractVideoCode:
         a_tag = BeautifulSoup(html, 'html.parser').find('a')
         assert extract_video_code(a_tag) == 'XYZ-99'
 
+    def test_extract_code_without_strong_cjk_suffix_rejected(self):
+        """A code glued to a CJK title with no space is rejected (not returned
+        verbatim) — guards against ASCII/Unicode drift vs the Rust core."""
+        html = '<a class="box" href="/v/x"><div class="video-title">XYZ-99標題</div></a>'
+        a_tag = BeautifulSoup(html, 'html.parser').find('a')
+        assert extract_video_code(a_tag) == ''
+
 
 class TestParseIndex:
     """Test cases for parse_index function."""
