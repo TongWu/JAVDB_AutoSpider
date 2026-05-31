@@ -18,10 +18,12 @@ import javdb.migrations.tools.backfill_movie_metadata as bm
 
 def _patch_get_page(monkeypatch, return_html, recorder):
     def _fake_get_page(url, session=None, use_proxy=False,
-                       module_name='unknown', use_cf_bypass=False, **_kw):
+                       module_name='unknown', use_cf_bypass=False,
+                       use_cookie=False, **_kw):
         recorder['url'] = url
         recorder['use_proxy'] = use_proxy
         recorder['use_cf_bypass'] = use_cf_bypass
+        recorder['use_cookie'] = use_cookie
         return return_html
 
     monkeypatch.setattr(bm.spider_state, 'get_page', _fake_get_page)
@@ -121,6 +123,54 @@ def test_process_href_empty_metadata_is_parse_failed(monkeypatch):
     )
 
     assert result.status == 'parse_failed'
+
+
+def test_process_href_fetch_authenticates_with_session_cookie(monkeypatch):
+    """The fetch must request the login cookie (use_cookie=True) so login-gated
+    movies render metadata instead of a login wall."""
+    recorder = {}
+    _patch_get_page(monkeypatch, '<html>ok</html>', recorder)
+    _patch_parse(monkeypatch)
+    monkeypatch.setattr(bm.MetadataRepo, 'upsert', lambda self, href, detail: None)
+
+    bm._process_href(
+        '/v/abc', 'https://javdb.com/v/abc', session=None,
+        use_proxy=True, dry_run=False,
+    )
+
+    assert recorder['use_cookie'] is True
+
+
+def test_process_href_login_wall_is_login_required(monkeypatch):
+    """A login wall (missing/expired cookie) is reported as login_required,
+    distinct from parse_failed, and short-circuits before parse/upsert."""
+    recorder = {}
+    # Real login page: <title> contains 登入 — is_login_page() detects it.
+    _patch_get_page(
+        monkeypatch,
+        '<html><head><title>登入 - JavDB</title></head><body></body></html>',
+        recorder,
+    )
+    called = {'parsed': False, 'upserted': False}
+
+    def _boom_parse(_html):
+        called['parsed'] = True
+        raise AssertionError('parse_detail_page must not run on a login wall')
+
+    monkeypatch.setattr(bm, 'parse_detail_page', _boom_parse)
+    monkeypatch.setattr(
+        bm.MetadataRepo, 'upsert',
+        lambda self, href, detail: called.__setitem__('upserted', True),
+    )
+
+    result = bm._process_href(
+        '/v/a2nq3', 'https://javdb.com/v/a2nq3', session=None,
+        use_proxy=True, dry_run=False,
+    )
+
+    assert result.status == 'login_required'
+    assert called['parsed'] is False
+    assert called['upserted'] is False
 
 
 def test_detail_url_absolute_href_not_doubled():
