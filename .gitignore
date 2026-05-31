@@ -52,6 +52,7 @@ desktop.ini
 # Temporary files
 *.tmp
 *.temp
+.wrangler/
 
 # Node.js / Vue (Vite) — web/
 node_modules/

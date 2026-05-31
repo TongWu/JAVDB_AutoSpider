@@ -9,7 +9,13 @@ Public surface:
 from javdb.storage.sessions.commit import (  # noqa: F401
     CommitRequest,
     CommitResult,
+    SiteContractDriftError,
     commit_session,
 )
 
-__all__ = ["CommitRequest", "CommitResult", "commit_session"]
+__all__ = [
+    "CommitRequest",
+    "CommitResult",
+    "SiteContractDriftError",
+    "commit_session",
+]
