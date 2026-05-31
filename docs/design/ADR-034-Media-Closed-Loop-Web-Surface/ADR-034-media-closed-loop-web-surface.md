@@ -5,7 +5,7 @@
 | **Status**  | Proposed — web counterpart to ADR-033; phased to mirror it            |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-008](../_archive/ADR-008-Frontend-Rewrite/ADR-008-frontend-rewrite-architecture.md), [ADR-027](../_archive/ADR-027-Stats-Dashboard-Charts/ADR-027-stats-dashboard-chart-expansion.md), [ADR-030](../_archive/ADR-030-Web-Feature-Parity/ADR-030-web-feature-parity.md), [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md) |
+| **Related** | [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-008](../_archive/ADR-008-Frontend-Rewrite/ADR-008-frontend-rewrite-architecture.md), [ADR-027](../_archive/ADR-027-Stats-Dashboard-Charts/ADR-027-stats-dashboard-charts.md), [ADR-030](../_archive/ADR-030-Web-Feature-Parity/ADR-030-web-feature-parity.md), [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md) |
 
 > Originated from a 2026-05-29 brainstorming session (with the visual companion)
 > on the web surface for the [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
@@ -160,7 +160,7 @@ plan reflects the real endpoint shapes rather than a paper contract.
 
 - [ADR-033 — Media Closed-Loop](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
 - [ADR-008 — Frontend Rewrite](../_archive/ADR-008-Frontend-Rewrite/ADR-008-frontend-rewrite-architecture.md)
-- [ADR-027 — Stats Dashboard Chart Expansion](../_archive/ADR-027-Stats-Dashboard-Charts/ADR-027-stats-dashboard-chart-expansion.md)
+- [ADR-027 — Stats Dashboard Chart Expansion](../_archive/ADR-027-Stats-Dashboard-Charts/ADR-027-stats-dashboard-charts.md)
 - [ADR-030 — Web Feature Parity](../_archive/ADR-030-Web-Feature-Parity/ADR-030-web-feature-parity.md)
 - [ADR-017 — Cloudflare-First Deployment](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md)
 

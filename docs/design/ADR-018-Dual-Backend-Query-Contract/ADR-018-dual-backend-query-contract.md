@@ -5,7 +5,7 @@
 | **Status**  | Implemented — Phases 1 & 2 implemented 2026-05-30; local verification complete; optional Phase 3 ("eliminate", D7) deferred until recurring drift justifies it |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-029](../ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md) (auth hardening — owns token revocation), [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md) (dual-backend split), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md) (D1 access port) |
+| **Related** | [ADR-029](../_archive/ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md) (auth hardening — owns token revocation), [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md) (dual-backend split), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md) (D1 access port) |
 
 > Originated from the 2026-05-29 architecture review (Candidate B): [architecture-review-2026-05-29.html](../architecture/architecture-review-2026-05-29.html).
 
@@ -21,7 +21,7 @@ These are **separate git repos**, deployed independently, but run the *same Vue 
 ### What is already covered (and out of scope here)
 
 - **API response shapes** — already a single source of truth: `docs/api/openapi.json` is generated from the Python app and consumed by the TS repo via `scripts/fetch-openapi.mjs` → `openapi-typescript`, with contract tests (`server/__tests__/contract-compliance.test.ts`, `tests/contract/openapi-shapes.spec.ts`) pinning the TS responses. **Not re-litigated here.**
-- **Token revocation / auth hardening** — owned by [ADR-029](../ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md) (KV-backed, TS-only, mutations-only). The deployment topology is **TS Worker is the sole live auth surface** (Cloudflare-first); a given deployment authenticates against one backend, so cross-backend revocation consistency is not required. **Out of scope here.**
+- **Token revocation / auth hardening** — owned by [ADR-029](../_archive/ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md) (KV-backed, TS-only, mutations-only). The deployment topology is **TS Worker is the sole live auth surface** (Cloudflare-first); a given deployment authenticates against one backend, so cross-backend revocation consistency is not required. **Out of scope here.**
 
 ### The remaining gap
 
@@ -93,7 +93,7 @@ Introduce a **Contract Golden**: Python-generated, language-neutral golden fixtu
 
 ## Out of Scope
 
-- **Auth / token revocation** — owned by [ADR-029](../ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md).
+- **Auth / token revocation** — owned by [ADR-029](../_archive/ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md).
 - **API response shapes** — already guarded by `openapi.json` + contract tests.
 - **Cross-backend token consistency** — not required (TS Worker is the sole live auth surface).
 - **Static single-statement queries** — left to the response-shape contract test.
