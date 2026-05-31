@@ -67,6 +67,20 @@ def _minimal_detail(**overrides) -> dict:
     return base
 
 
+class _DetailObject:
+    """MovieDetail-like object that exposes fields as attributes and has NO
+    ``__dict__`` — mirrors the Rust ``RustMovieDetail`` PyO3 object, whose
+    ``__dict__`` access raises ``AttributeError``. Used to pin that ``upsert``
+    coerces an object (not just a mapping). (BFR: RustMovieDetail backfill)
+    """
+
+    __slots__ = tuple(_minimal_detail().keys())
+
+    def __init__(self, **overrides):
+        for key, value in _minimal_detail(**overrides).items():
+            setattr(self, key, value)
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -142,6 +156,22 @@ class TestMetadataRepoUpsert:
         assert stored == 'https://javdb.com/v/abc'
         assert repo.get('/v/abc') is not None
         assert repo.get('https://javdb.com/v/abc') is not None
+
+    def test_upsert_accepts_object_without_dict(self, db_path):
+        # Regression: callers pass the MovieDetail object directly, not
+        # detail.__dict__. The Rust RustMovieDetail object has no __dict__, so
+        # upsert must coerce via getattr while still absolutizing nested links.
+        assert not hasattr(_DetailObject(), '__dict__')
+        repo = MetadataRepo(db_path=db_path)
+        repo.upsert('/v/RUST-1', _DetailObject(video_code='RUST-1'))
+        row = repo.get('/v/RUST-1')
+
+        assert row is not None
+        assert row['video_code'] == 'RUST-1'
+        assert row['title'] == 'Test Movie'
+        # Nested link kept as object → href absolutized (not flattened by to_dict).
+        assert json.loads(row['maker'])['href'] == 'https://javdb.com/makers/001'
+        assert json.loads(row['directors'])[0]['href'] == 'https://javdb.com/directors/abc'
 
     def test_upsert_null_optional_fields(self, db_path):
         repo = MetadataRepo(db_path=db_path)
