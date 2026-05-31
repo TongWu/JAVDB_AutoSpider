@@ -120,6 +120,26 @@ def test_api_commit_fails_open_on_sentinel_error(monkeypatch):
     assert marks == [str(sid)]           # commit proceeded despite the error
 
 
+def test_api_commit_fails_open_on_sentinel_import_error(monkeypatch):
+    """An import-stage failure of the sentinel module must not block the commit.
+
+    Fail-open covers the import itself (lazy + inside the try), not just the
+    ``evaluate_session`` / ``mark_committed`` calls — so a broken sentinel
+    package can never wedge the commit path.
+    """
+    import sys
+
+    sid = _new_pending_session()
+    # A ``None`` entry makes `from javdb.ops.sentinel.service import ...` raise
+    # ImportError when re-executed inside commit_session.
+    monkeypatch.setitem(sys.modules, "javdb.ops.sentinel.service", None)
+
+    result = commit_session(CommitRequest(session_id=str(sid)))
+
+    assert result.new_state == "committed"
+    assert _status(sid) == "committed"
+
+
 def test_api_drop_pending_skips_gate_and_baseline_marking(monkeypatch):
     """``drop_pending`` discards staged rows rather than promoting them, so the
     gate must not evaluate drift AND the run's fills must NOT be marked
