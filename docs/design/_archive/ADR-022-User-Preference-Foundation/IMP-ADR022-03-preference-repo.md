@@ -16,12 +16,24 @@
 
 ---
 
+## Status — ✅ Implemented (with deviations noted below)
+
+`preference_tags.py` (12-tag `VALID_TAGS` + `TAG_GROUPS`), `PreferenceRepo`
+(`javdb/storage/repos/preference_repo.py`, 7 methods incl. `is_actor_blocked`), the 6
+Pydantic schemas, and all 5 FastAPI CRUD endpoints (`apps/api/routers/preferences.py`)
+are merged; the TypeScript backend mirrors the same routes / response shapes / validation
+bounds (IMP-ADR022-05), satisfying the ADR-017 dual-backend parity rule. Minor benign
+deviations from the literal plan: dict-keyed `COUNT` for D1/Dual cursors, bounded
+pagination via `Query(ge=…, le=…)`, and a dropped unused local import.
+
+---
+
 ## Task 1 — Predefined tag vocabulary
 
 **Files:**
 - Create: `javdb/storage/preference_tags.py`
 
-- [ ] **Step 1: Create the file**
+- [x] **Step 1: Create the file**
 
 ```python
 """Predefined tag vocabulary for MovieRatings (ADR-022)."""
@@ -51,7 +63,7 @@ TAG_GROUPS: dict[str, list[str]] = {
 }
 ```
 
-- [ ] **Step 2: Verify import**
+- [x] **Step 2: Verify import**
 
 ```bash
 python3 -c "from javdb.storage.preference_tags import VALID_TAGS; print(len(VALID_TAGS), 'tags')"
@@ -59,7 +71,7 @@ python3 -c "from javdb.storage.preference_tags import VALID_TAGS; print(len(VALI
 
 Expected: `12 tags`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add javdb/storage/preference_tags.py
@@ -73,7 +85,7 @@ git commit -m "feat(storage): add predefined tag vocabulary (ADR-022)"
 **Files:**
 - Create: `javdb/storage/repos/preference_repo.py`
 
-- [ ] **Step 1: Create the file**
+- [x] **Step 1: Create the file**
 
 ```python
 """Repository for MovieRatings and ContentPreferences tables (ADR-022)."""
@@ -224,7 +236,7 @@ class PreferenceRepo:
         return row is not None and row['hearted'] == 0
 ```
 
-- [ ] **Step 2: Verify import**
+- [x] **Step 2: Verify import**
 
 ```bash
 python3 -c "from javdb.storage.repos.preference_repo import PreferenceRepo; print('OK')"
@@ -232,7 +244,7 @@ python3 -c "from javdb.storage.repos.preference_repo import PreferenceRepo; prin
 
 Expected: `OK`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add javdb/storage/repos/preference_repo.py
@@ -246,7 +258,7 @@ git commit -m "feat(storage): add PreferenceRepo for ratings and preferences (AD
 **Files:**
 - Modify: `apps/api/schemas/preferences.py`
 
-- [ ] **Step 1: Add rating and preference schemas**
+- [x] **Step 1: Add rating and preference schemas**
 
 Append to `apps/api/schemas/preferences.py` (after `MovieMetadataResponse`):
 
@@ -291,11 +303,11 @@ class ContentPreferenceListResponse(BaseModel):
     items: List[ContentPreferenceResponse]
 ```
 
-- [ ] **Step 2: Remove the placeholder comment at the bottom of the schemas file**
+- [x] **Step 2: Remove the placeholder comment at the bottom of the schemas file**
 
 Delete the line: `# Rating and preference schemas are added in IMP-ADR022-03.`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/api/schemas/preferences.py
@@ -309,7 +321,7 @@ git commit -m "feat(api): add rating and preference Pydantic schemas (ADR-022)"
 **Files:**
 - Modify: `apps/api/routers/preferences.py`
 
-- [ ] **Step 1: Add imports**
+- [x] **Step 1: Add imports**
 
 At the top of `apps/api/routers/preferences.py`, add to the existing imports:
 
@@ -326,7 +338,7 @@ from javdb.storage.repos.preference_repo import PreferenceRepo
 from javdb.storage.preference_tags import VALID_TAGS
 ```
 
-- [ ] **Step 2: Add constants**
+- [x] **Step 2: Add constants**
 
 After the existing `_NOT_FOUND` constant, add:
 
@@ -340,7 +352,7 @@ _INVALID_CONTENT_TYPE = {
 }
 ```
 
-- [ ] **Step 3: Add row-to-model helpers**
+- [x] **Step 3: Add row-to-model helpers**
 
 After the existing `_row_to_metadata` helper, add:
 
@@ -369,7 +381,7 @@ def _row_to_pref(row: dict) -> ContentPreferenceResponse:
     )
 ```
 
-- [ ] **Step 4: Add the five CRUD endpoints**
+- [x] **Step 4: Add the five CRUD endpoints**
 
 Append to `apps/api/routers/preferences.py`:
 
@@ -450,7 +462,7 @@ def list_content_preferences(
     return ContentPreferenceListResponse(items=[_row_to_pref(r) for r in items])
 ```
 
-- [ ] **Step 5: Verify all endpoints appear in OpenAPI**
+- [x] **Step 5: Verify all endpoints appear in OpenAPI**
 
 ```bash
 python3 -m uvicorn apps.api.server:app --reload --host 127.0.0.1 --port 8100 &
@@ -472,7 +484,7 @@ Expected output (order may vary):
 /api/preferences/{content_type}/{content_id}
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/api/routers/preferences.py

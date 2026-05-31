@@ -16,6 +16,17 @@
 
 ---
 
+## Status — ✅ Implemented
+
+All three test files exist and pass: `tests/unit/test_metadata_repo.py` (9),
+`tests/unit/test_preference_repo.py` (14), and `tests/unit/test_preference_gate.py` (12)
+— **35 passed** locally (the plan estimated 29; code review + BFR-010 added the extras).
+Fixtures were hardened to `read_text()` the canonical D1 migration DDL instead of inline
+`CREATE TABLE` statements, preventing fixture/schema drift. See the divergence note
+below.
+
+---
+
 > **⚠ Divergence note (recorded during implementation, 2026-05-30).** Corrections
 > to the verbatim test code below:
 > 1. **`cfg()` mocking (gate tests).** `@patch('javdb.infra.config.cfg',
@@ -39,7 +50,7 @@
 **Files:**
 - Create: `tests/unit/test_metadata_repo.py`
 
-- [ ] **Step 1: Create the test file**
+- [x] **Step 1: Create the test file**
 
 ```python
 """Unit tests for MetadataRepo (ADR-022)."""
@@ -213,7 +224,7 @@ class TestMetadataRepoGet:
         assert isinstance(row, dict)
 ```
 
-- [ ] **Step 2: Run the tests**
+- [x] **Step 2: Run the tests**
 
 ```bash
 pytest tests/unit/test_metadata_repo.py -v
@@ -221,7 +232,7 @@ pytest tests/unit/test_metadata_repo.py -v
 
 Expected: 8 tests, all PASS.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/unit/test_metadata_repo.py
@@ -235,7 +246,7 @@ git commit -m "test(storage): add MetadataRepo unit tests (ADR-022)"
 **Files:**
 - Create: `tests/unit/test_preference_repo.py`
 
-- [ ] **Step 1: Create the test file**
+- [x] **Step 1: Create the test file**
 
 ```python
 """Unit tests for PreferenceRepo (ADR-022)."""
@@ -416,7 +427,7 @@ class TestContentPreferences:
         assert items[0]['content_id'] == '/actors/A'
 ```
 
-- [ ] **Step 2: Run the tests**
+- [x] **Step 2: Run the tests**
 
 ```bash
 pytest tests/unit/test_preference_repo.py -v
@@ -424,7 +435,7 @@ pytest tests/unit/test_preference_repo.py -v
 
 Expected: 14 tests, all PASS.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/unit/test_preference_repo.py
@@ -438,7 +449,7 @@ git commit -m "test(storage): add PreferenceRepo unit tests (ADR-022)"
 **Files:**
 - Create: `tests/unit/test_preference_gate.py`
 
-- [ ] **Step 1: Create the test file**
+- [x] **Step 1: Create the test file**
 
 ```python
 """Unit tests for the B2 preference gate in the qBittorrent uploader (ADR-022)."""
@@ -491,7 +502,7 @@ class TestPreferenceGate:
         assert _preference_gate_blocks({'actor_link': '/actors/ANY'}) is False
 ```
 
-- [ ] **Step 2: Run the tests**
+- [x] **Step 2: Run the tests**
 
 ```bash
 pytest tests/unit/test_preference_gate.py -v
@@ -499,7 +510,7 @@ pytest tests/unit/test_preference_gate.py -v
 
 Expected: 7 tests, all PASS. (The code block above defines 7 methods — see the divergence note at the top. Code review later added more gate tests for the actor-link resolution path, so the live file has additional cases.)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/unit/test_preference_gate.py
@@ -510,7 +521,7 @@ git commit -m "test(qb): add B2 preference gate unit tests (ADR-022)"
 
 ## Task 4 — Full test suite regression check
 
-- [ ] **Step 1: Run all unit tests**
+- [x] **Step 1: Run all unit tests**
 
 ```bash
 pytest tests/unit/ -v
@@ -518,7 +529,7 @@ pytest tests/unit/ -v
 
 Expected: all pre-existing tests still PASS; the three new test files add passing tests with no failures.
 
-- [ ] **Step 2: Run smoke tests**
+- [x] **Step 2: Run smoke tests**
 
 ```bash
 pytest tests/smoke/ -v

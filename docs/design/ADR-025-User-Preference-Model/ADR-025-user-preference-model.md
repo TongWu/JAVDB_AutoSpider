@@ -5,11 +5,11 @@
 | **Status**  | Proposed                                                              |
 | **Date**    | 2026-05-27                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-024](../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md) |
+| **Related** | [ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-024](../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md) |
 
 ## Context
 
-[ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md)
+[ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md)
 created the data foundation for user preference modeling: `MovieMetadata`,
 `MovieRatings`, and `ContentPreferences`. It intentionally left the model itself
 as a deferred follow-up because useful model design depends on enough explicit
@@ -241,7 +241,7 @@ Training jobs must not automatically switch the primary model.
 
 ## References
 
-- [ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md) - data foundation for metadata, ratings, and content preferences.
+- [ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md) - data foundation for metadata, ratings, and content preferences.
 - [ADR-024](../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md) - torrent quality evidence and `quality_score` ownership.
 - `docs/design/ADR-022-User-Preference-Foundation/IMP-ADR022-01-db-schema.md` - D1-first schema pattern for preference data.
 - `docs/design/ADR-022-User-Preference-Foundation/IMP-ADR022-03-preference-repo.md` - repository and API shape for rating/preference writes.

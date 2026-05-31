@@ -4,7 +4,7 @@
 **Date**: 2026-05-31
 **Severity**: High
 **Affected**: `javdb/storage/db/_db_history_write.py`, `javdb/storage/repos/metadata_repo.py`, `javdb/migrations/tools/absolutize_javdb_urls_in_history.py`, `javdb/migrations/tools/backfill_movie_metadata.py`
-**Related**: [ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md) (MovieMetadata), CONTEXT.md → "Href"
+**Related**: [ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md) (MovieMetadata), CONTEXT.md → "Href"
 
 ---
 

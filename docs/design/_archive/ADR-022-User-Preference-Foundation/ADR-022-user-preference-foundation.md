@@ -1,10 +1,23 @@
 # ADR-022: User Preference Data Foundation
 
-**Status:** Proposed  
+**Status:** Completed  
 **Date:** 2026-05-26  
+**Completed:** 2026-05-31  
 **Author:** Ted  
 
 ---
+
+> **Implementation status — Completed (2026-05-31).** All eight phases are implemented
+> and merged: DB schema ([IMP-ADR022-01](IMP-ADR022-01-db-schema.md)), MetadataRepo +
+> parser wiring ([IMP-ADR022-02](IMP-ADR022-02-metadata-repo.md)), PreferenceRepo +
+> Python/TypeScript CRUD ([IMP-ADR022-03](IMP-ADR022-03-preference-repo.md),
+> [IMP-ADR022-05](IMP-ADR022-05-typescript-sync.md)), the B2 upload gate
+> ([IMP-ADR022-04](IMP-ADR022-04-upload-gate.md)), the web frontend C1/C3/C4/B3
+> ([IMP-ADR022-06](IMP-ADR022-06-web-frontend.md)), unit tests
+> ([IMP-ADR022-07](IMP-ADR022-07-tests.md), 35 passing), and the MovieMetadata backfill
+> ([IMP-ADR022-08](IMP-ADR022-08-metadata-backfill.md)). Follow-up fixes BFR-010 (absolute
+> hrefs) and BFR-012 (Rust `MovieDetail` coercion) also landed. The ML model direction
+> continues in ADR-025.
 
 ## Context
 
@@ -16,7 +29,7 @@ This means:
 2. Valuable metadata (categories, directors, maker) that is already parsed is silently thrown away on every run.
 3. There is no mechanism for the user to express preferences about individual movies or content dimensions (actors, categories, makers).
 
-The goal of this ADR is to establish the **data foundation layer** that will eventually feed a preference model. Model training itself is deferred to [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), whose trainable phase depends on sufficient rating data.
+The goal of this ADR is to establish the **data foundation layer** that will eventually feed a preference model. Model training itself is deferred to [ADR-025](../../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), whose trainable phase depends on sufficient rating data.
 
 ---
 
@@ -135,7 +148,7 @@ The vocabulary is defined as a constant in the Python backend and mirrored in th
 ### 5. Downstream consumers (rule-based placeholders until ADR-025)
 
 **B2 — Upload filter hook:**  
-A preference gate is added to the qBittorrent upload decision path. For ADR-022, the gate uses a simple rule: skip upload if the movie's lead actor has an explicit `hearted = false` entry in `ContentPreferences`. The hook point is implemented so that [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md) can replace this rule with a model score without further refactoring.
+A preference gate is added to the qBittorrent upload decision path. For ADR-022, the gate uses a simple rule: skip upload if the movie's lead actor has an explicit `hearted = false` entry in `ContentPreferences`. The hook point is implemented so that [ADR-025](../../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md) can replace this rule with a model score without further refactoring.
 
 **B3 — Web console preference score:**  
 `/data` and `/browse` pages display a computed preference score alongside each history entry. For ADR-022, the score is a weighted average:
@@ -146,10 +159,10 @@ score = (movie_rating / 5.0) * 0.5
       + (category_match_ratio) * 0.2
 ```
 
-This rule-based score is a placeholder; [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md) replaces it with a trained model output.
+This rule-based score is a placeholder; [ADR-025](../../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md) replaces it with a trained model output.
 
 **B1 — Dynamic crawl-priority adjustment:**  
-Deferred to [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md). The `weight` column in `ContentPreferences` is reserved for this purpose.
+Deferred to [ADR-025](../../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md). The `weight` column in `ContentPreferences` is reserved for this purpose.
 
 ---
 
@@ -169,7 +182,7 @@ Deferred to [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-m
 | Model serving / inference | — | ✅ |
 | C2 email rating prompts | — | ✅ |
 
-[ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md) defines the model direction. Its trainable model phase should still wait until at least 200 movie ratings have been collected via C1/C3, giving enough signal for meaningful model training.
+[ADR-025](../../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md) defines the model direction. Its trainable model phase should still wait until at least 200 movie ratings have been collected via C1/C3, giving enough signal for meaningful model training.
 
 ---
 
@@ -218,8 +231,8 @@ Encode actor/category preferences as special tags (e.g., `actor_hearted:EvkJ`).
 
 ## Related
 
-- [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md) — Pending mode write flow
-- [ADR-011](../_archive/ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) — Parsing module structure and `MovieDetail` dataclass
-- [ADR-014](../_archive/ADR-014-Storage-Cli-Layering/ADR-014-storage-cli-layering.md) — Storage / CLI layering
-- [ADR-030](../_archive/ADR-030-Web-Feature-Parity/ADR-030-web-feature-parity.md) — Web console feature parity
-- [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md) — User Preference Model; depends on this ADR
+- [ADR-005](../ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md) — Pending mode write flow
+- [ADR-011](../ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) — Parsing module structure and `MovieDetail` dataclass
+- [ADR-014](../ADR-014-Storage-Cli-Layering/ADR-014-storage-cli-layering.md) — Storage / CLI layering
+- [ADR-030](../ADR-030-Web-Feature-Parity/ADR-030-web-feature-parity.md) — Web console feature parity
+- [ADR-025](../../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md) — User Preference Model; depends on this ADR

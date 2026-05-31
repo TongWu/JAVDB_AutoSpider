@@ -1,10 +1,22 @@
 # ADR-022：用户偏好数据基础层
 
-**状态：** 提案  
+**状态：** 已完成  
 **日期：** 2026-05-26  
+**完成：** 2026-05-31  
 **作者：** Ted  
 
 ---
+
+> **实现状态 — 已完成（2026-05-31）。** 全部八个阶段均已实现并合并：数据库 schema
+> （[IMP-ADR022-01](IMP-ADR022-01-db-schema.md)）、MetadataRepo + 解析接线
+> （[IMP-ADR022-02](IMP-ADR022-02-metadata-repo.md)）、PreferenceRepo + Python/TypeScript
+> CRUD（[IMP-ADR022-03](IMP-ADR022-03-preference-repo.md)、
+> [IMP-ADR022-05](IMP-ADR022-05-typescript-sync.md)）、B2 上传门
+> （[IMP-ADR022-04](IMP-ADR022-04-upload-gate.md)）、Web 前端 C1/C3/C4/B3
+> （[IMP-ADR022-06](IMP-ADR022-06-web-frontend.md)）、单元测试
+> （[IMP-ADR022-07](IMP-ADR022-07-tests.md)，35 个通过）、以及 MovieMetadata 回填
+> （[IMP-ADR022-08](IMP-ADR022-08-metadata-backfill.md)）。后续修复 BFR-010（绝对 href）
+> 与 BFR-012（Rust `MovieDetail` 强制转换）亦已落地。ML 模型方向在 ADR-025 中继续。
 
 ## 背景
 
@@ -16,7 +28,7 @@ JAVDB AutoSpider 当前完全依赖基于规则的启发式逻辑运行，对用
 2. 已经解析的有价值元数据（类别、导演、片商）在每次运行时被静默丢弃。
 3. 没有机制让用户对单部影片或内容维度（演员、类别、片商）表达偏好。
 
-本 ADR 的目标是建立**数据基础层**，为未来的偏好模型提供数据支撑。模型训练本身推迟到 [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.zh.md)，其可训练阶段依赖足够评分数据。
+本 ADR 的目标是建立**数据基础层**，为未来的偏好模型提供数据支撑。模型训练本身推迟到 [ADR-025](../../ADR-025-User-Preference-Model/ADR-025-user-preference-model.zh.md)，其可训练阶段依赖足够评分数据。
 
 ---
 
@@ -135,7 +147,7 @@ CREATE TABLE ContentPreferences (
 ### 5. 下游消费（ADR-025 前使用基于规则的占位逻辑）
 
 **B2 — 上传过滤 hook：**  
-在 qBittorrent 上传决策路径中加入偏好门控。在 ADR-022 阶段，门控使用简单规则：若影片主演在 `ContentPreferences` 中有 `hearted = false` 的明确记录，则跳过上传。该 hook 点已按接口设计，[ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.zh.md) 可以直接用模型分数替换此规则，无需额外重构。
+在 qBittorrent 上传决策路径中加入偏好门控。在 ADR-022 阶段，门控使用简单规则：若影片主演在 `ContentPreferences` 中有 `hearted = false` 的明确记录，则跳过上传。该 hook 点已按接口设计，[ADR-025](../../ADR-025-User-Preference-Model/ADR-025-user-preference-model.zh.md) 可以直接用模型分数替换此规则，无需额外重构。
 
 **B3 — 控制台偏好分展示：**  
 `/data` 和 `/browse` 页面在每条历史记录旁显示计算出的偏好分。在 ADR-022 阶段，分数采用加权平均的规则计算：
@@ -146,10 +158,10 @@ score = (movie_rating / 5.0) * 0.5
       + (category_match_ratio) * 0.2
 ```
 
-此基于规则的分数是占位逻辑；[ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.zh.md) 将用训练好的模型输出替换它。
+此基于规则的分数是占位逻辑；[ADR-025](../../ADR-025-User-Preference-Model/ADR-025-user-preference-model.zh.md) 将用训练好的模型输出替换它。
 
 **B1 — 动态爬取优先级调整：**  
-推迟至 [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.zh.md)。`ContentPreferences` 表中的 `weight` 列为此功能预留。
+推迟至 [ADR-025](../../ADR-025-User-Preference-Model/ADR-025-user-preference-model.zh.md)。`ContentPreferences` 表中的 `weight` 列为此功能预留。
 
 ---
 
@@ -169,7 +181,7 @@ score = (movie_rating / 5.0) * 0.5
 | 模型服务 / 推理 | — | ✅ |
 | C2 邮件评分提示 | — | ✅ |
 
-[ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.zh.md) 已定义模型方向。其可训练模型阶段仍应等待通过 C1/C3 收集至少 200 条影片评分后再实施，届时才有足够信号支撑有意义的模型训练。
+[ADR-025](../../ADR-025-User-Preference-Model/ADR-025-user-preference-model.zh.md) 已定义模型方向。其可训练模型阶段仍应等待通过 C1/C3 收集至少 200 条影片评分后再实施，届时才有足够信号支撑有意义的模型训练。
 
 ---
 
@@ -218,8 +230,8 @@ python3 -m apps.cli.db.sync_d1_to_sqlite --apply --force-overwrite-all
 
 ## 相关文档
 
-- [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md) — Pending 写入流程
-- [ADR-011](../_archive/ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) — 解析模块结构与 `MovieDetail` 数据类
-- [ADR-014](../_archive/ADR-014-Storage-Cli-Layering/ADR-014-storage-cli-layering.md) — 存储 / CLI 分层
-- [ADR-030](../_archive/ADR-030-Web-Feature-Parity/ADR-030-web-feature-parity.md) — Web 控制台功能对齐
-- [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.zh.md) — 用户偏好模型；依赖本 ADR
+- [ADR-005](../ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md) — Pending 写入流程
+- [ADR-011](../ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) — 解析模块结构与 `MovieDetail` 数据类
+- [ADR-014](../ADR-014-Storage-Cli-Layering/ADR-014-storage-cli-layering.md) — 存储 / CLI 分层
+- [ADR-030](../ADR-030-Web-Feature-Parity/ADR-030-web-feature-parity.md) — Web 控制台功能对齐
+- [ADR-025](../../ADR-025-User-Preference-Model/ADR-025-user-preference-model.zh.md) — 用户偏好模型；依赖本 ADR

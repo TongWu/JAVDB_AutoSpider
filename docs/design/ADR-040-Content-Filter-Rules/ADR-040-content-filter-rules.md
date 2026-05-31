@@ -5,7 +5,7 @@
 | **Status**  | Accepted — Phase 1 implemented; later phases pending                  |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md), [ADR-038](../ADR-038-Agentic-Operator-MCP/ADR-038-agentic-operator-mcp-surface.md) |
+| **Related** | [ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md), [ADR-038](../ADR-038-Agentic-Operator-MCP/ADR-038-agentic-operator-mcp-surface.md) |
 
 > Originated from a 2026-05-29 brainstorming session that started as "streaming /
 > continuous ingestion" (Direction 7) and **pivoted** to content filtering — see
@@ -84,7 +84,7 @@ a larger change.
 engine returns a `FilterDecision(keep, reasons)`; drop reasons are surfaced (stats
 / a `MovieFiltered` event / MCP). This is a **hard, deterministic rules** layer —
 distinct from the **ML preference score** of
-[ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md) /
+[ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md) /
 [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md). The
 two are orthogonal: rules decide *eligibility*, the model later decides *ranking*.
 
@@ -155,7 +155,7 @@ widen the include side and attribute coverage.
 
 ## References
 
-- [ADR-022 — User Preference Data Foundation](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md)
+- [ADR-022 — User Preference Data Foundation](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md)
 - [ADR-025 — User Preference Model](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md)
 - [ADR-036 — Event-Sourced Pipeline Spine](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md)
 - [ADR-038 — Agentic Operator MCP Surface](../ADR-038-Agentic-Operator-MCP/ADR-038-agentic-operator-mcp-surface.md)

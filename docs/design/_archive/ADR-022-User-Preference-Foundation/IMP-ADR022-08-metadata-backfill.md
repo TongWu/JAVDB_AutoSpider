@@ -16,6 +16,18 @@
 
 ---
 
+## Status — ✅ Implemented (with deviations noted below)
+
+The backfill tool (`javdb/migrations/tools/backfill_movie_metadata.py`), its
+`--backfill-metadata` wiring in `javdb/migrations/migrate_to_current.py` (exposed via
+`apps.cli.db.migration`), and the `Migration.yml` dispatch/call inputs are all merged.
+Beyond the divergence note, the committed tool also gained CF-bypass routing, absolute-href
+handling, a relaxed `parse_success` acceptance check, and D1-safe dict-key access. Running
+this backfill against the Rust parser is what surfaced **BFR-012** (since fixed). See the
+divergence note below.
+
+---
+
 > **⚠ Divergence note (recorded during implementation, 2026-05-30).** The Task 1
 > tool below was rewritten; Tasks 2-3 (CLI + workflow wiring) match reality.
 > Corrections:
@@ -63,7 +75,7 @@
 **Files:**
 - Create: `javdb/migrations/tools/backfill_movie_metadata.py`
 
-- [ ] **Step 1: Create the file**
+- [x] **Step 1: Create the file**
 
 ```python
 """Backfill MovieMetadata for existing MovieHistory rows that lack metadata.
@@ -386,7 +398,7 @@ if __name__ == "__main__":
     raise SystemExit(run_backfill_metadata(parse_args()))
 ```
 
-- [ ] **Step 2: Verify the script imports cleanly**
+- [x] **Step 2: Verify the script imports cleanly**
 
 ```bash
 python3 -c "
@@ -397,7 +409,7 @@ print('OK')
 
 Expected: `OK`
 
-- [ ] **Step 3: Verify dry-run completes without errors**
+- [x] **Step 3: Verify dry-run completes without errors**
 
 ```bash
 python3 -m javdb.migrations.tools.backfill_movie_metadata --dry-run --limit 5 --no-proxy
@@ -405,7 +417,7 @@ python3 -m javdb.migrations.tools.backfill_movie_metadata --dry-run --limit 5 --
 
 Expected: logs `MovieMetadata backfill: N hrefs to process (dry-run)` and exits 0.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add javdb/migrations/tools/backfill_movie_metadata.py
@@ -419,7 +431,7 @@ git commit -m "feat(migrations): add MovieMetadata backfill tool (ADR-022)"
 **Files:**
 - Modify: `javdb/migrations/migrate_to_current.py`
 
-- [ ] **Step 1: Add the import**
+- [x] **Step 1: Add the import**
 
 Near the top of `migrate_to_current.py`, alongside the other tool imports (search for `from javdb.migrations.tools` or `run_alignment`), add:
 
@@ -427,7 +439,7 @@ Near the top of `migrate_to_current.py`, alongside the other tool imports (searc
 from javdb.migrations.tools.backfill_movie_metadata import run_backfill_metadata
 ```
 
-- [ ] **Step 2: Add argparse flags**
+- [x] **Step 2: Add argparse flags**
 
 In the `main()` function's `argparse` block, after the existing `--align-*` arguments, add:
 
@@ -473,7 +485,7 @@ In the `main()` function's `argparse` block, after the existing `--align-*` argu
     )
 ```
 
-- [ ] **Step 3: Add delegation block**
+- [x] **Step 3: Add delegation block**
 
 After the existing `if args.align_inventory_history:` block (and its `return arc` line), add:
 
@@ -494,7 +506,7 @@ After the existing `if args.align_inventory_history:` block (and its `return arc
 
 Confirm that `SimpleNamespace` is already imported in `migrate_to_current.py` (it is used for the align block). If not, add `from types import SimpleNamespace` near the top.
 
-- [ ] **Step 4: Verify the flag is registered**
+- [x] **Step 4: Verify the flag is registered**
 
 ```bash
 python3 -m apps.cli.db.migration --help | grep backfill-metadata
@@ -502,7 +514,7 @@ python3 -m apps.cli.db.migration --help | grep backfill-metadata
 
 Expected: at least one line matching `--backfill-metadata`.
 
-- [ ] **Step 5: Verify dry-run via the canonical entrypoint**
+- [x] **Step 5: Verify dry-run via the canonical entrypoint**
 
 ```bash
 python3 -m apps.cli.db.migration \
@@ -515,7 +527,7 @@ python3 -m apps.cli.db.migration \
 
 Expected: exits 0; logs show `MovieMetadata backfill: N hrefs to process (dry-run)`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add javdb/migrations/migrate_to_current.py
@@ -529,7 +541,7 @@ git commit -m "feat(migrations): wire --backfill-metadata into migrate_to_curren
 **Files:**
 - Modify: `.github/workflows/Migration.yml`
 
-- [ ] **Step 1: Add workflow inputs**
+- [x] **Step 1: Add workflow inputs**
 
 In the `workflow_dispatch.inputs:` section, after the existing `align_*` input block, add the following inputs (follow the exact YAML indentation of the surrounding inputs):
 
@@ -571,7 +583,7 @@ In the `workflow_dispatch.inputs:` section, after the existing `align_*` input b
         default: false
 ```
 
-- [ ] **Step 2: Expose inputs as env vars**
+- [x] **Step 2: Expose inputs as env vars**
 
 In the `env:` block of the "Run migration" step (where `INPUT_DRY_RUN`, `INPUT_ALIGN_*` etc. are set), add:
 
@@ -584,7 +596,7 @@ In the `env:` block of the "Run migration" step (where `INPUT_DRY_RUN`, `INPUT_A
           INPUT_BACKFILL_METADATA_SHUFFLE: ${{ inputs.backfill_metadata_shuffle }}
 ```
 
-- [ ] **Step 3: Add CMD construction block**
+- [x] **Step 3: Add CMD construction block**
 
 In the `run:` script of the "Run migration" step, after the existing `if [ "$INPUT_ALIGN_INVENTORY_HISTORY" = "true" ]; then ... fi` block, add:
 
@@ -617,7 +629,7 @@ In the `run:` script of the "Run migration" step, after the existing `if [ "$INP
           fi
 ```
 
-- [ ] **Step 4: Add to Display parameters step**
+- [x] **Step 4: Add to Display parameters step**
 
 In the "Display parameters" step (`echo` block), add display lines for the new inputs after the align parameters:
 
@@ -630,7 +642,7 @@ In the "Display parameters" step (`echo` block), add display lines for the new i
           echo "backfill_metadata_shuffle=${{ inputs.backfill_metadata_shuffle }}"
 ```
 
-- [ ] **Step 5: Validate YAML syntax**
+- [x] **Step 5: Validate YAML syntax**
 
 ```bash
 python3 -c "
@@ -643,7 +655,7 @@ print('YAML valid')
 
 Expected: `YAML valid`
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add .github/workflows/Migration.yml

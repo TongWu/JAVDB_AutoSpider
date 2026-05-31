@@ -16,12 +16,26 @@
 
 ---
 
+## Status — ✅ Implemented (with deviations noted below)
+
+`MetadataRepo` (`javdb/storage/repos/metadata_repo.py`), the spider wiring
+(`javdb/spider/detail/runner.py:1137-1145`), and the `GET /api/preferences/metadata/{href}`
+endpoint (`apps/api/routers/preferences.py`) are all merged. Two follow-up fixes landed
+on top: **BFR-010** (absolute-href normalization) and **BFR-012** — `MetadataRepo.upsert`
+now coerces the Rust `RustMovieDetail` object via `getattr` instead of `.__dict__`
+(fixed in [`#145`](https://github.com/TongWu/JAVDB_AutoSpider_CICD/pull/145), commit
+`9491db55`, now on `main`). **Deviation:** the runner threads `movie_detail` as an
+explicit parameter rather than the `parse_detail()` 7-tuple in the original plan — the
+7-tuple path was descoped (see the Task 2 divergence note).
+
+---
+
 ## Task 1 — Create MetadataRepo
 
 **Files:**
 - Create: `javdb/storage/repos/metadata_repo.py`
 
-- [ ] **Step 1: Create the file**
+- [x] **Step 1: Create the file**
 
 ```python
 """Repository for MovieMetadata table (ADR-022)."""
@@ -153,7 +167,7 @@ class MetadataRepo:
         return dict(row) if row is not None else None
 ```
 
-- [ ] **Step 2: Verify import works**
+- [x] **Step 2: Verify import works**
 
 ```bash
 python3 -c "from javdb.storage.repos.metadata_repo import MetadataRepo; print('OK')"
@@ -161,7 +175,7 @@ python3 -c "from javdb.storage.repos.metadata_repo import MetadataRepo; print('O
 
 Expected: `OK`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add javdb/storage/repos/metadata_repo.py
@@ -205,7 +219,7 @@ non-existent `parse_detail()` shape and were superseded by the divergence note.
 
 `parse_detail()` currently returns a 6-tuple. We append `detail` (the `MovieDetail` object) as a 7th element. All callers are updated to unpack 7 values.
 
-- [ ] **Step 1: Update `parse_detail()` return value**
+- [x] **Step 1: Update `parse_detail()` return value**
 
 In `javdb/spider/parse_legacy_adapters.py`, locate the `parse_detail` function (line ~71). Change the final `return` statement from:
 
@@ -219,7 +233,7 @@ to:
     return magnets, actor_info, actor_gender, actor_link, supporting_actors, parse_success, detail
 ```
 
-- [ ] **Step 2: Find all callers that need updating**
+- [x] **Step 2: Find all callers that need updating**
 
 ```bash
 grep -rn "parse_detail(" javdb/spider/ apps/ --include="*.py" | grep -v "def parse_detail"
@@ -230,7 +244,7 @@ Expected call sites (excluding `javdb/legacy/` and `javdb/migrations/`):
 - `javdb/spider/fetch/fallback.py`
 - `apps/cli/ops/profile_hot_paths.py`
 
-- [ ] **Step 3: Update `javdb/spider/detail/parallel_mode.py`**
+- [x] **Step 3: Update `javdb/spider/detail/parallel_mode.py`**
 
 Locate the unpack line (~line 47):
 ```python
@@ -258,7 +272,7 @@ Then add `movie_detail` to the returned dict:
     }
 ```
 
-- [ ] **Step 4: Update `javdb/spider/fetch/fallback.py`**
+- [x] **Step 4: Update `javdb/spider/fetch/fallback.py`**
 
 Find all lines that unpack `parse_detail(...)` (there are two, ~lines 420 and 432). For each, add `_detail` as the 7th unpack variable:
 
@@ -271,7 +285,7 @@ magnets, actor_info, actor_gender, actor_link, supporting, ok, _detail = \
 
 Match the existing variable names already used in that function body.
 
-- [ ] **Step 5: Update `apps/cli/ops/profile_hot_paths.py`**
+- [x] **Step 5: Update `apps/cli/ops/profile_hot_paths.py`**
 
 Find the call (~line 162):
 ```python
@@ -280,7 +294,7 @@ lambda: parse_detail(html, index=1, skip_sleep=True),
 
 This is a lambda used for profiling — the return value is measured but not unpacked. No change needed here.
 
-- [ ] **Step 6: Verify no remaining 6-tuple unpack errors**
+- [x] **Step 6: Verify no remaining 6-tuple unpack errors**
 
 ```bash
 python3 -c "
@@ -294,7 +308,7 @@ print('OK')
 
 Expected: `OK`
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add javdb/spider/parse_legacy_adapters.py \
@@ -310,7 +324,7 @@ git commit -m "feat(spider): extend parse_detail to return MovieDetail object (A
 **Files:**
 - Modify: `javdb/spider/detail/runner.py`
 
-- [ ] **Step 1: Add import at top of file**
+- [x] **Step 1: Add import at top of file**
 
 In `javdb/spider/detail/runner.py`, add to the existing imports block:
 
@@ -318,7 +332,7 @@ In `javdb/spider/detail/runner.py`, add to the existing imports block:
 from javdb.storage.repos.metadata_repo import MetadataRepo
 ```
 
-- [ ] **Step 2: Add UPSERT call after save_parsed_movie_to_history()**
+- [x] **Step 2: Add UPSERT call after save_parsed_movie_to_history()**
 
 In `persist_parsed_detail_result()`, locate the block ending at line ~1004:
 
@@ -347,7 +361,7 @@ Immediately after that closing parenthesis, add:
                 )
 ```
 
-- [ ] **Step 3: Verify spider dry-run completes cleanly**
+- [x] **Step 3: Verify spider dry-run completes cleanly**
 
 ```bash
 python3 -m apps.cli.spider --dry-run --start-page 1 --end-page 1 --no-proxy
@@ -355,7 +369,7 @@ python3 -m apps.cli.spider --dry-run --start-page 1 --end-page 1 --no-proxy
 
 Expected: completes without errors; no `MovieMetadata upsert failed` in logs.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add javdb/spider/detail/runner.py
@@ -371,7 +385,7 @@ git commit -m "feat(spider): wire MovieMetadata upsert into detail runner (ADR-0
 - Create: `apps/api/routers/preferences.py` (metadata section only — full CRUD added in IMP-ADR022-03)
 - Modify: `apps/api/services/runtime.py`
 
-- [ ] **Step 1: Create `apps/api/schemas/preferences.py`**
+- [x] **Step 1: Create `apps/api/schemas/preferences.py`**
 
 ```python
 """Pydantic schemas for preferences and metadata endpoints (ADR-022)."""
@@ -409,7 +423,7 @@ class MovieMetadataResponse(BaseModel):
 # Rating and preference schemas are added in IMP-ADR022-03.
 ```
 
-- [ ] **Step 2: Create `apps/api/routers/preferences.py`**
+- [x] **Step 2: Create `apps/api/routers/preferences.py`**
 
 ```python
 """Preferences and metadata API routes (ADR-022)."""
@@ -474,7 +488,7 @@ def get_movie_metadata(href: str, _user=Depends(_require_auth)):
     return _row_to_metadata(row)
 ```
 
-- [ ] **Step 3: Register the router in `apps/api/services/runtime.py`**
+- [x] **Step 3: Register the router in `apps/api/services/runtime.py`**
 
 Add the import:
 ```python
@@ -483,7 +497,7 @@ from apps.api.routers.preferences import router as preferences_router
 
 Add `preferences_router` to the `for router in (...)` loop alongside existing routers.
 
-- [ ] **Step 4: Start API and verify endpoint**
+- [x] **Step 4: Start API and verify endpoint**
 
 ```bash
 python3 -m uvicorn apps.api.server:app --reload --host 127.0.0.1 --port 8100
@@ -501,7 +515,7 @@ print(paths)
 
 Expected: `['/api/preferences/metadata/{href}']`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api/schemas/preferences.py \
