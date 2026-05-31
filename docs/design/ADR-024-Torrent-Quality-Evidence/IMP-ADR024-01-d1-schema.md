@@ -1,6 +1,6 @@
 # IMP-ADR024-01: ADR-024 Phase 1 — D1 Schema (Torrent Quality Evidence)
 
-**Status:** Proposed
+**Status:** Completed — 2026-05-31.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -41,7 +41,7 @@
 **Files:**
 - Create: `javdb/migrations/d1/2026_05_31_add_torrent_quality_tables.sql`
 
-- [ ] **Step 1: Create the migration file**
+- [x] **Step 1: Create the migration file**
 
 ```sql
 -- 2026-05-31: Add TorrentQualityEvidence + TorrentQualityEvaluation tables (ADR-024 Phase 1).
@@ -122,7 +122,7 @@ CREATE INDEX IF NOT EXISTS idx_torrent_quality_eval_created_at
     ON TorrentQualityEvaluation(created_at);
 ```
 
-- [ ] **Step 2: Apply to D1**
+- [x] **Step 2: Apply to D1**
 
 Run:
 
@@ -135,7 +135,7 @@ Expected: `✅ Successfully applied migration` (or, if `CLOUDFLARE_API_TOKEN`
 is unavailable locally, run this in CI — see the divergence note style in
 [IMP-ADR022-01](../ADR-022-User-Preference-Foundation/IMP-ADR022-01-db-schema.md)).
 
-- [ ] **Step 3: Verify both tables exist on D1**
+- [x] **Step 3: Verify both tables exist on D1**
 
 Run:
 
@@ -146,7 +146,7 @@ wrangler d1 execute javdb-reports --remote \
 
 Expected: two rows.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add javdb/migrations/d1/2026_05_31_add_torrent_quality_tables.sql
@@ -160,7 +160,7 @@ git commit -m "feat(db): add torrent quality evidence tables (ADR-024 phase 1)"
 **Files:**
 - Modify: `javdb/storage/db/_db_migrations.py`
 
-- [ ] **Step 1: Add both tables to `_REPORTS_DDL`**
+- [x] **Step 1: Add both tables to `_REPORTS_DDL`**
 
 In `javdb/storage/db/_db_migrations.py`, inside the `_REPORTS_DDL = """ ... """`
 block (the same block that defines `OpsIncidents`, `ContentFilterRule`,
@@ -234,7 +234,7 @@ CREATE INDEX IF NOT EXISTS idx_torrent_quality_eval_created_at
     ON TorrentQualityEvaluation(created_at);
 ```
 
-- [ ] **Step 2: Run the parity guard test to verify it passes**
+- [x] **Step 2: Run the parity guard test to verify it passes**
 
 Run:
 
@@ -245,7 +245,7 @@ pytest tests/unit/test_rollback_full_fidelity.py::TestD1MigrationsAreCoveredByLo
 Expected: PASS. If it fails with a missing column, the column name in the
 migration (Task 1) and the `_REPORTS_DDL` block do not match — fix the typo.
 
-- [ ] **Step 3: Materialize tables locally without a token**
+- [x] **Step 3: Materialize tables locally without a token**
 
 `init_db()` is the token-free way to create the new tables in the local SQLite
 mirror (it applies `_REPORTS_DDL`). Run:
@@ -265,7 +265,7 @@ conn.close()
 
 Expected: `['TorrentQualityEvaluation', 'TorrentQualityEvidence']`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add javdb/storage/db/_db_migrations.py
@@ -276,7 +276,7 @@ git commit -m "feat(db): mirror torrent quality tables into local reports DDL (A
 
 ## Task 3 — Re-align SQLite mirror (when a token is present)
 
-- [ ] **Step 1: Force-overwrite the local mirror from D1**
+- [x] **Step 1: Force-overwrite the local mirror from D1**
 
 When `CLOUDFLARE_API_TOKEN` is available (CI or local), reconcile the runtime
 SQLite mirror from D1's verbatim DDL:
