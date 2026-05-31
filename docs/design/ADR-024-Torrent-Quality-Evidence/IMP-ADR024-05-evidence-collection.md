@@ -699,4 +699,4 @@ git commit -m "ci(qb): run torrent quality evidence after file filter (ADR-024)"
 | 3 | Disabled by default | `run_collection` is not called when `TORRENT_QUALITY_EVIDENCE_ENABLED=False` and no `--force` |
 | 4 | Config keys generate | Task 3 Step 3 prints `ok` |
 | 5 | Workflow valid + wired | `yaml ok` + `rg` finds the collector invocation |
-| 6 | No production mutation | `rg -n "set_file_priority|delete_torrents|add_torrent" javdb/quality/collector.py` → no output |
+| 6 | No production mutation | `rg -n "set_file_priority\|delete_torrents\|add_torrent" javdb/quality/collector.py` → no output |
