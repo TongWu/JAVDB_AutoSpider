@@ -30,7 +30,7 @@ The failure was invisible in normal operation because:
 
 Reproduced empirically under `STORAGE_BACKEND=sqlite`:
 
-```
+```text
 sqlite3.DatabaseError: Database file reports is not a valid SQLite file.
 This usually means Git LFS did not pull the real file.
 ```
