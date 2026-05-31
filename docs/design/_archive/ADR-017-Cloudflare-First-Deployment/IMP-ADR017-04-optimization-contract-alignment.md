@@ -14,7 +14,7 @@
 
 **Tech Stack:** Same as prior phases: Hono 4, D1 native bindings, Vitest + `@cloudflare/vitest-pool-workers`
 
-**Working Directory:** All paths are relative to `JAVDB_AutoSpider_Web/` (`/Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web/`).
+**Working Directory:** All paths are relative to `JAVDB_AutoSpider_Web/` (`/Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web/`).
 
 ---
 
