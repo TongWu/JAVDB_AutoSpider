@@ -1,6 +1,6 @@
 # IMP-ADR024-06: ADR-024 Phase 1 — Read-Only API Surface
 
-**Status:** Proposed
+**Status:** Proposed — design-reviewed & hardened 2026-05-31 (see Design Review note).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -17,6 +17,20 @@
 **Depends on:** IMP-02 (repo + tables). Best run after IMP-05 so there is data to read, but not strictly blocked by it.
 
 **Blocks:** Nothing in Phase 1.
+
+---
+
+## Design Review note (2026-05-31)
+
+A `brainstorming` review fixed one defect carried over from the hardened IMP-02:
+
+- **`_repo()` could not construct a connection-less repo.** The draft returned
+  `TorrentQualityRepo()` (no args), which no longer exists — IMP-02 is now
+  conn-injected. Fixed to mirror the diagnostics router's per-request pattern: a
+  `@contextmanager` `_repo()` opens `with get_db(REPORTS_DB_PATH) as conn` and
+  yields `TorrentQualityRepo(conn)`; endpoints use `with _repo() as repo:`. The
+  test's monkeypatch seam is preserved by swapping the fake to
+  `lambda: nullcontext(_FakeRepo())`.
 
 ---
 
@@ -133,6 +147,7 @@ Create `tests/unit/test_quality_api.py`:
 from __future__ import annotations
 
 import json
+from contextlib import nullcontext
 
 from apps.api.routers import quality as quality_router
 
@@ -187,7 +202,7 @@ class _FakeRepo:
 
 
 def test_list_recent_evaluations(monkeypatch):
-    monkeypatch.setattr(quality_router, "_repo", lambda: _FakeRepo())
+    monkeypatch.setattr(quality_router, "_repo", lambda: nullcontext(_FakeRepo()))
     resp = quality_router.list_evaluations(limit=10, movie_href=None, _user={"role": "admin"})
     assert len(resp.items) == 1
     assert resp.items[0].decision == "accepted_shadow"
@@ -196,13 +211,13 @@ def test_list_recent_evaluations(monkeypatch):
 
 
 def test_list_evaluations_for_movie(monkeypatch):
-    monkeypatch.setattr(quality_router, "_repo", lambda: _FakeRepo())
+    monkeypatch.setattr(quality_router, "_repo", lambda: nullcontext(_FakeRepo()))
     resp = quality_router.list_evaluations(limit=10, movie_href="/v/abc", _user={"role": "admin"})
     assert len(resp.items) == 1
 
 
 def test_get_evidence_found(monkeypatch):
-    monkeypatch.setattr(quality_router, "_repo", lambda: _FakeRepo())
+    monkeypatch.setattr(quality_router, "_repo", lambda: nullcontext(_FakeRepo()))
     out = quality_router.get_evidence(info_hash="HASH1", _user={"role": "admin"})
     assert out.info_hash == "HASH1"
     assert out.main_video_ratio == 0.9
@@ -213,7 +228,7 @@ def test_get_evidence_missing_raises_404(monkeypatch):
     import pytest
     from fastapi import HTTPException
 
-    monkeypatch.setattr(quality_router, "_repo", lambda: _FakeRepo())
+    monkeypatch.setattr(quality_router, "_repo", lambda: nullcontext(_FakeRepo()))
     with pytest.raises(HTTPException) as exc:
         quality_router.get_evidence(info_hash="NOPE", _user={"role": "admin"})
     assert exc.value.status_code == 404
@@ -242,7 +257,8 @@ GET /api/quality/evidence/{info_hash}   — torrent-level objective evidence
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, Optional
+from contextlib import contextmanager
+from typing import Any, Dict, Iterator, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -253,6 +269,7 @@ from apps.api.schemas.quality import (
     TorrentQualityEvidenceSchema,
 )
 from javdb.quality.features import PROBE_SCHEMA_VERSION
+from javdb.storage.db import REPORTS_DB_PATH, get_db
 from javdb.storage.repos.torrent_quality_repo import TorrentQualityRepo
 
 router = APIRouter(prefix="/api/quality", tags=["quality"])
@@ -260,8 +277,12 @@ router = APIRouter(prefix="/api/quality", tags=["quality"])
 _PRODUCTION_ROLE = "production_download"
 
 
-def _repo() -> TorrentQualityRepo:
-    return TorrentQualityRepo()
+@contextmanager
+def _repo() -> Iterator[TorrentQualityRepo]:
+    """Yield a conn-injected repo for one request (mirrors the diagnostics
+    router's per-request ``with get_db(...)``)."""
+    with get_db(REPORTS_DB_PATH) as conn:
+        yield TorrentQualityRepo(conn)
 
 
 def _json_list(raw: Optional[str]) -> list:
@@ -329,11 +350,11 @@ def list_evaluations(
     """List recent shadow evaluations, optionally filtered by movie_href."""
     if limit <= 0:
         raise HTTPException(status_code=400, detail="limit must be a positive integer")
-    repo = _repo()
-    if movie_href:
-        rows = repo.list_evaluations_for_movie(movie_href)
-    else:
-        rows = repo.list_recent_evaluations(limit=min(limit, 200))
+    with _repo() as repo:
+        if movie_href:
+            rows = repo.list_evaluations_for_movie(movie_href)
+        else:
+            rows = repo.list_recent_evaluations(limit=min(limit, 200))
     return TorrentQualityEvaluationListResponse(
         items=[_eval_to_schema(r) for r in rows]
     )
@@ -345,7 +366,8 @@ def get_evidence(
     _user: Dict[str, Any] = Depends(_require_auth),
 ) -> TorrentQualityEvidenceSchema:
     """Return torrent-level evidence for the production-download role."""
-    row = _repo().get_evidence(info_hash, PROBE_SCHEMA_VERSION, _PRODUCTION_ROLE)
+    with _repo() as repo:
+        row = repo.get_evidence(info_hash, PROBE_SCHEMA_VERSION, _PRODUCTION_ROLE)
     if row is None:
         raise HTTPException(status_code=404, detail="Evidence not found")
     return _evidence_to_schema(row)

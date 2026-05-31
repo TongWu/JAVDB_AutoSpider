@@ -1,6 +1,6 @@
 # IMP-ADR024-07: ADR-024 Phase 1 — Documentation & Verification Closeout
 
-**Status:** Proposed
+**Status:** Proposed — design-reviewed 2026-05-31 (no changes needed; see Design Review note).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -17,6 +17,18 @@
 **Depends on:** IMP-01..06 (documents what they shipped).
 
 **Blocks:** Nothing.
+
+---
+
+## Design Review note (2026-05-31)
+
+Reviewed; **no changes required**. The verification gate (Task 3 Step 1) already
+lists all seven ADR-024 test files, and the regression neighbors cover the
+file-filter, operations-endpoint, and DDL-parity surfaces touched by IMP-04/05.
+Two cross-references worth noting: the operator page's `category_mismatch` reason
+code is now genuinely emitted (the IMP-05 `AcquisitionOutcome` join activated the
+category-consistency signal), and the IMP statuses now carry `design-reviewed`
+annotations that Step 4 should reconcile to `Completed` as each lands.
 
 ---
 
