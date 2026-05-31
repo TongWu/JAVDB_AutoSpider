@@ -134,23 +134,70 @@ def test_persist_incident_falls_back_to_jsonl_when_d1_fails(tmp_path):
     assert json.loads(lines[0])["incident_id"] == record.incident_id
 
 
-def test_persist_incident_uses_reports_logical_db(monkeypatch):
+def test_persist_incident_calls_get_db_with_reports_path(monkeypatch):
+    """persist_incident must pass the reports DB *path* to get_db, not the
+    logical name "reports". get_db takes a filesystem path — the bare string
+    "reports" has no path/logical-name mapping and raises inside get_db.
+    """
     from javdb.ops.diagnosis import persistence
 
     conn = _conn()
     seen = []
 
-    def fake_get_db(logical_name):
-        seen.append(logical_name)
+    def fake_get_db(db_path):
+        seen.append(db_path)
         return conn
 
     monkeypatch.setattr(persistence, "get_db", fake_get_db)
 
     persisted = persistence.persist_incident(_record())
 
-    assert seen == ["reports"]
+    assert seen == [persistence.REPORTS_DB_PATH]
     assert persisted.persistence_status == "d1_written"
     assert OpsIncidentRepo(conn).get(persisted.incident_id) is not None
+
+
+def test_persist_incident_writes_to_reports_db_without_jsonl_fallback(tmp_path, monkeypatch):
+    """Regression: under sqlite, persist_incident reaches the reports DB through
+    the real get_db(REPORTS_DB_PATH) path and does NOT hit the JSONL fallback.
+
+    Before the fix the code called get_db("reports") (a logical name, not a
+    path). get_db opened the "reports/" directory as a SQLite file and raised;
+    the broad except swallowed it, so every incident silently fell back to
+    JSONL and never landed in the reports DB. This test exercises the real
+    get_db (no mock) so that regression would fail it.
+    """
+    from javdb.ops.diagnosis import persistence
+
+    db_path = tmp_path / "reports.db"
+    setup = sqlite3.connect(db_path)
+    setup.execute(DDL)
+    setup.commit()
+    setup.close()
+
+    monkeypatch.setenv("STORAGE_BACKEND", "sqlite")
+    monkeypatch.delenv("_STORAGE_BACKEND_INIT_OVERRIDE", raising=False)
+    # Point persist_incident at the temp reports DB; do NOT mock get_db.
+    monkeypatch.setattr(persistence, "REPORTS_DB_PATH", str(db_path))
+
+    jsonl_path = tmp_path / "ops_incidents.jsonl"
+    record = _record()
+
+    persisted = persist_incident(record, jsonl_path=jsonl_path)
+
+    # Happy path: the reports write succeeded, no fallback marker.
+    assert persisted.persistence_status == "d1_written"
+    # The JSONL fallback was NOT triggered.
+    assert not jsonl_path.exists()
+    # The row really landed in the reports DB.
+    verify = sqlite3.connect(db_path)
+    verify.row_factory = sqlite3.Row
+    try:
+        fetched = OpsIncidentRepo(verify).get(record.incident_id)
+    finally:
+        verify.close()
+    assert fetched is not None
+    assert fetched.persistence_status == "d1_written"
 
 
 def test_read_incident_jsonl_skips_malformed_lines(tmp_path):
