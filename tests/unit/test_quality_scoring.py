@@ -46,6 +46,29 @@ def test_subtitle_category_without_subtitle_is_flagged():
     assert result["decision"] == "needs_review"
 
 
+def test_resolution_claim_unsupported_is_flagged():
+    feats = _features([{"name": "ABC-123.mp4", "size": 4_000_000_000, "priority": 1}])
+    result = score_torrent(
+        feats,
+        {"javdb_category": "no_subtitle", "magnet_name": "ABC-123 4K", "javdb_tags": []},
+    )
+    assert "resolution_claim_unsupported" in result["reasons"]
+    assert result["resolution_consistent"] is False
+    assert result["score"] > 0.4
+    assert result["decision"] == "accepted_shadow"
+
+
+def test_resolution_claim_supported_is_accepted():
+    feats = _features([{"name": "ABC-123-1080p.mp4", "size": 4_000_000_000, "priority": 1}])
+    result = score_torrent(
+        feats,
+        {"javdb_category": "no_subtitle", "magnet_name": "ABC-123 1080p", "javdb_tags": []},
+    )
+    assert "resolution_claim_supported" in result["reasons"]
+    assert result["resolution_consistent"] is True
+    assert result["decision"] == "accepted_shadow"
+
+
 def test_subtitle_category_with_name_hint_only_is_accepted():
     feats = _features([{"name": "ABC-123.mp4", "size": 4_000_000_000, "priority": 1}])
     result = score_torrent(
