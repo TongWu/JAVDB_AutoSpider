@@ -52,10 +52,10 @@ python3 -m apps.cli.qb.quality_evidence --force --categories '["Daily Ingestion"
 
 ## 查看结果
 
-采集器会打印一行摘要，包含 `scanned`、`evidence`、`evaluations`、
-`probe_unavailable` 和 `skipped` 计数。持久化结果可在 `javdb-reports` 的
-`TorrentQualityEvidence` 与 `TorrentQualityEvaluation` 表中查看。只读 API
-表面有意推迟到 IMP-ADR024-06。
+采集器会打印一行摘要，包含 `scanned`、`evidence_written`、
+`evaluations_written`、`probe_unavailable` 和 `skipped` 计数。持久化结果可在
+`javdb-reports` 的 `TorrentQualityEvidence` 与 `TorrentQualityEvaluation`
+表中查看。只读 API 表面有意推迟到 IMP-ADR024-06。
 
 ## Reason Codes
 

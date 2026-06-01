@@ -129,6 +129,18 @@ def test_invalid_config_categories_when_enabled_raises_system_exit(monkeypatch):
     assert exc_info.value.code != 0
 
 
+def test_non_string_category_entries_when_enabled_raise_system_exit(monkeypatch):
+    cli = _import_cli()
+    _set_config(monkeypatch, cli, enabled=True)
+
+    with patch.object(cli, "run_collection", return_value=_summary()) as run:
+        with pytest.raises(SystemExit) as exc_info:
+            cli.main(["--categories", '[1, {"name": "Daily Ingestion"}]'])
+
+    assert exc_info.value.code != 0
+    run.assert_not_called()
+
+
 @pytest.mark.parametrize(
     ("flag", "expected"),
     [

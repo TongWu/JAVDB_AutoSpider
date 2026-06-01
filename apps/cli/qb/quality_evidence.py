@@ -52,11 +52,14 @@ def _parse_categories(raw_categories: str | None) -> list[str] | None:
     categories = json.loads(raw_categories)
     if not isinstance(categories, list):
         raise argparse.ArgumentTypeError("--categories must be a JSON array")
-    return [
-        category
-        for category in (str(category).strip() for category in categories)
-        if category
-    ]
+    parsed = []
+    for category in categories:
+        if not isinstance(category, str):
+            raise argparse.ArgumentTypeError("--categories entries must be strings")
+        category = category.strip()
+        if category:
+            parsed.append(category)
+    return parsed
 
 
 def _resolve_categories(cli_categories: str | None) -> list[str] | None:

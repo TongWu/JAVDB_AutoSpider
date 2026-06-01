@@ -113,7 +113,8 @@ def collect_production_evidence(
         summary["evaluations_written"] += 1
 
     logger.info(
-        "Quality evidence: scanned=%d evidence=%d evaluations=%d probe_unavailable=%d skipped=%d",
+        "Quality evidence: scanned=%d evidence_written=%d evaluations_written=%d "
+        "probe_unavailable=%d skipped=%d",
         summary["scanned"],
         summary["evidence_written"],
         summary["evaluations_written"],
