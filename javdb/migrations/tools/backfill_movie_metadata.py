@@ -236,6 +236,15 @@ def _apply_metadata_result(result, *, dry_run: bool) -> tuple[int, int]:
     href = task.meta.get('href') or getattr(task, 'url', '')
 
     if not result.success:
+        from javdb.spider.fetch.fetch_engine import PER_WORKER_TASK_CAP_ERROR
+
+        if result.error == PER_WORKER_TASK_CAP_ERROR:
+            logger.info(
+                "[%s] %s skipped — queue flushed after per-worker task cap",
+                idx,
+                href,
+            )
+            return 0, 0
         # In parallel mode FetchEngine owns LoginRequired handling. An
         # uncleared login wall intentionally surfaces as a generic retriable
         # failure; the separate login-gated counter is fallback-only (ADR-045 D3).
