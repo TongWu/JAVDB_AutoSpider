@@ -63,7 +63,7 @@
 ### 与 ADR-043 的关系
 
 `meta-7` 失败是因为某个代理持续过不了 Cloudflare 墙。
-[ADR-043](../ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.zh.md)
+[ADR-043](../_archive/ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.zh.md)
 降低对这类代理的*再次使用*（跨 runner 的 CF 自动 ban）。本 ADR 与之互补且正交：
 它确保**当一次抓取因任何原因失败时，工作项会被重新入队给另一个代理**，而不是被静默丢弃。
 ADR-043 让坏代理更少；ADR-045 让失败的工作可被恢复。
@@ -191,7 +191,7 @@ Phase 3 已退役的路径（规范是 `javdb.spider.fetch.*`）。
 - `javdb/spider/fetch/fetch_engine.py` —— `ParallelFetchBackend` / `FetchEngine` / `WorkerContext` / `results()` / `shutdown()`
 - `javdb/migrations/tools/backfill_movie_metadata.py` —— 被迁移的串行工具（D3–D6）
 - `javdb/migrations/tools/migrate_v7_to_v8.py`、`javdb/migrations/tools/align_inventory_with_moviehistory.py` —— 已有的 `FetchEngine` 调用方，含私有队列泄漏（D1）
-- [ADR-043 — CF Persistent-Failure Auto-Ban](../ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.zh.md) —— 互补：减少坏代理的*再使用*；本 ADR 让失败的*工作*可恢复
+- [ADR-043 — CF Persistent-Failure Auto-Ban](../_archive/ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.zh.md) —— 互补：减少坏代理的*再使用*；本 ADR 让失败的*工作*可恢复
 - [ADR-007 — Monorepo Restructure](../_archive/ADR-007-Monorepo-Restructure/ADR-007-monorepo-restructure-2026-05.zh.md) —— 退役了过时 docstring 仍引用的 `scripts.*` 路径（D8）
 
 ## 状态日志

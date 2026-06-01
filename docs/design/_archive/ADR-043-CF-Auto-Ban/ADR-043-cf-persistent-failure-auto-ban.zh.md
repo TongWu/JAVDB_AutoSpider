@@ -1,6 +1,6 @@
 # ADR-043: 协调器侧 Proxy 封禁共享与 CF 自动封禁
 
-**状态 (Status):** Proposed
+**状态 (Status):** Completed
 **日期 (Date):** 2026-05-31
 **作者 (Author):** Ted
 **关联实现计划 (Related Implementation Plans):**
@@ -35,7 +35,7 @@ JavDB 封禁某 IP 时会返回纯文字封禁页（"banned your access" / "管�
 
 两条封禁路径都汇入 `proxy_pool.ban_proxy(...)` / `get_ban_manager().add_ban(...)`，
 而生产里它们是 **Rust** 池/封禁管理器。据
-[BFR-009](../BFR-009-Rust-Pool-Cross-Runner-Ban-Dispatch/BFR-009-rust-pool-ban-dispatch.zh.md)：
+[BFR-009](../../BFR-009-Rust-Pool-Cross-Runner-Ban-Dispatch/BFR-009-rust-pool-ban-dispatch.zh.md)：
 远程封禁 hook `set_remote_ban_hook(client.mark_proxy_banned)` **已注册**
 （`context.py:880`、`state.py:722`），但 `_dispatch_remote_ban` 只被 *Python* 池/封禁
 管理器调用。Rust 的 `ban_proxy` / `add_ban`（在 PyO3 扩展内）**触达不了** Python hook，
@@ -178,9 +178,9 @@ zero-success 守卫，该代理确实什么都没过去）。短 DO TTL 管的�
 
 ## 参考 (References)
 
-- [BFR-009 — Rust Pool Cross-Runner Ban Dispatch](../BFR-009-Rust-Pool-Cross-Runner-Ban-Dispatch/BFR-009-rust-pool-ban-dispatch.zh.md) —— 本 ADR 关闭的派发缺口（D8）；由 IMP-ADR043-02 修复
-- [ADR-041 — Rust Fallback Policy](../ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.zh.md) —— 让 BFR-009 显形（Rust-Required）
-- [ADR-023 — Proxy Recommendation Policy](../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.zh.md) —— DO 中的代理健康信号（CF/成功/失败事件）
+- [BFR-009 — Rust Pool Cross-Runner Ban Dispatch](../../BFR-009-Rust-Pool-Cross-Runner-Ban-Dispatch/BFR-009-rust-pool-ban-dispatch.zh.md) —— 本 ADR 关闭的派发缺口（D8）；由 IMP-ADR043-02 修复
+- [ADR-041 — Rust Fallback Policy](../../ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.zh.md) —— 让 BFR-009 显形（Rust-Required）
+- [ADR-023 — Proxy Recommendation Policy](../../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.zh.md) —— DO 中的代理健康信号（CF/成功/失败事件）
 - 协调器仓：[`TongWu/JAVDB_AutoSpider_Proxycoordinator`](https://github.com/TongWu/JAVDB_AutoSpider_Proxycoordinator) —— `src/proxy_coordinator.ts`、`src/types.ts`
 - `docs/handbook/zh/self-hoster/proxy-coordinator.md` —— 面向运维的 env 参考
 
@@ -188,3 +188,4 @@ zero-success 守卫，该代理确实什么都没过去）。短 DO TTL 管的�
 
 - 2026-05-31: Proposed
 - 2026-06-01: Phase 2 已实现；BFR-009 已关闭。
+- 2026-06-01: 已完成 (Completed) —— 两个 IMP 均已合并；归档至 `_archive/`。
