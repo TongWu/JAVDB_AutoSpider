@@ -31,6 +31,11 @@ A `brainstorming` review fixed one defect carried over from the hardened IMP-02:
   yields `TorrentQualityRepo(conn)`; endpoints use `with _repo() as repo:`. The
   test's monkeypatch seam is preserved by swapping the fake to
   `lambda: nullcontext(_FakeRepo())`.
+- **Repo rows are already JSON-decoded.** `TorrentQualityRepo._to_dict()` strips
+  the `_json` suffix and returns decoded `reasons` / `javdb_tags` values, so the
+  router adapter consumes list-valued `reasons` from repo rows. Tests may still
+  include raw `reasons_json` fixtures only to prove the adapter tolerates older
+  row shapes.
 
 ---
 
