@@ -1749,11 +1749,11 @@ class ParallelFetchBackend(FetchBackend):
         ``mark_done`` / ``results``) and call :meth:`drain_remaining` in their
         ``except`` block instead.
         """
-        self.start()
-        for task in tasks:
-            self.submit_task(task)
-        self.mark_done()
         try:
+            self.start()
+            for task in tasks:
+                self.submit_task(task)
+            self.mark_done()
             for result in self.results():
                 yield result
         finally:
