@@ -1180,6 +1180,55 @@ class TestRunLifecycle:
 
         assert calls == ['shutdown']
 
+    def test_run_shuts_down_even_when_submit_raises(self):
+        import pytest
+        from javdb.spider.fetch.fetch_engine import (
+            ParallelFetchBackend, EngineTask, FetchRuntimeState,
+        )
+
+        backend = ParallelFetchBackend(
+            process_fn=lambda ctx, task: None,
+            runtime_state=FetchRuntimeState(use_proxy=False, use_cf_bypass=False),
+        )
+        calls = []
+        backend.start = lambda: None
+
+        def _submit(_task):
+            calls.append('submit')
+            raise RuntimeError('boom')
+
+        backend.submit_task = _submit
+        backend.mark_done = lambda: calls.append('mark_done')
+        backend.shutdown = lambda **_kw: (calls.append('shutdown'), [])[1]
+        backend.results = lambda: iter([])
+
+        with pytest.raises(RuntimeError, match='boom'):
+            list(backend.run([EngineTask(url='a')]))
+
+        assert calls == ['submit', 'shutdown']
+
+    def test_run_shuts_down_even_when_start_raises(self):
+        import pytest
+        from javdb.spider.fetch.fetch_engine import (
+            ParallelFetchBackend, EngineTask, FetchRuntimeState,
+        )
+
+        backend = ParallelFetchBackend(
+            process_fn=lambda ctx, task: None,
+            runtime_state=FetchRuntimeState(use_proxy=False, use_cf_bypass=False),
+        )
+        calls = []
+        backend.start = lambda: (_ for _ in ()).throw(RuntimeError('boom'))
+        backend.submit_task = lambda task: calls.append('submit')
+        backend.mark_done = lambda: calls.append('mark_done')
+        backend.shutdown = lambda **_kw: (calls.append('shutdown'), [])[1]
+        backend.results = lambda: iter([])
+
+        with pytest.raises(RuntimeError, match='boom'):
+            list(backend.run([EngineTask(url='a')]))
+
+        assert calls == ['shutdown']
+
     def test_facade_run_forwards_to_backend(self):
         from javdb.spider.fetch.fetch_engine import FetchEngine, EngineTask
 
