@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
+
+import pytest
 
 from javdb.parsing.models import IndexPageResult
 from javdb.pipeline.index_family_blacklist import (
@@ -22,7 +25,7 @@ class _NoopSleepManager:
         pass
 
 
-def _page_result():
+def _page_result() -> IndexPageResult:
     return IndexPageResult(
         has_movie_list=True,
         movies=[
@@ -32,7 +35,11 @@ def _page_result():
     )
 
 
-def _patch_sequential_dependencies(monkeypatch, *, config_blacklist):
+def _patch_sequential_dependencies(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    config_blacklist: Iterable[str] | None,
+) -> None:
     monkeypatch.setattr(
         index_fetch,
         "load_daily_family_blacklist",
@@ -55,7 +62,7 @@ def _patch_sequential_dependencies(monkeypatch, *, config_blacklist):
     )
 
 
-def _run_sequential(tmp_path: Path, custom_url=None):
+def _run_sequential(tmp_path: Path, custom_url: str | None = None) -> dict[str, object]:
     output_csv = "out.csv"
     output_dated_dir = tmp_path
     csv_path = tmp_path / output_csv
