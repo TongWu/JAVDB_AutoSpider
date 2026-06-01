@@ -14,6 +14,19 @@
 
 ---
 
+## Table of Contents
+
+- [Safety Notes](#safety-notes)
+- [File Structure](#file-structure)
+- [Task 1: Parser contract - Python (additive)](#task-1-parser-contract---python-additive)
+- [Task 2: Parser contract - Rust parity (additive)](#task-2-parser-contract---rust-parity-additive)
+- [Task 3: Daily-only config-driven family blacklist](#task-3-daily-only-config-driven-family-blacklist)
+- [Task 4: Config and workflow wiring](#task-4-config-and-workflow-wiring)
+- [Task 5: Documentation follow-through](#task-5-documentation-follow-through)
+- [Task 6: End-to-end verification](#task-6-end-to-end-verification)
+- [Rollback](#rollback)
+- [Out of Scope](#out-of-scope)
+
 ## Safety Notes
 
 - **Recognition is additive.** Do not replace or narrow `_is_plausible_video_code` / `is_plausible_video_code`. Keep the existing logic verbatim and only add the western special-case. A regression here rejects real codes such as `259LUXU-1234`, `H4610-ki220101`, `1pondo-010120_001` and causes worse drift than the original bug.
