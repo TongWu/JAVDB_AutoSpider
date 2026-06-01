@@ -1124,3 +1124,71 @@ class TestDrainRemaining:
         )
 
         assert list(backend.drain_remaining()) == []
+
+
+class TestRunLifecycle:
+
+    def test_run_drives_lifecycle_in_order(self):
+        from javdb.spider.fetch.fetch_engine import (
+            ParallelFetchBackend, EngineTask, EngineResult, FetchRuntimeState,
+        )
+
+        backend = ParallelFetchBackend(
+            process_fn=lambda ctx, task: None,
+            runtime_state=FetchRuntimeState(use_proxy=False, use_cf_bypass=False),
+        )
+        calls = []
+        backend.start = lambda: calls.append('start')
+        backend.submit_task = lambda task: calls.append(('submit', task.url))
+        backend.mark_done = lambda: calls.append('mark_done')
+        backend.shutdown = lambda **_kw: (calls.append('shutdown'), [])[1]
+        backend.results = lambda: iter(
+            [EngineResult(task=EngineTask(url='x'), success=True)]
+        )
+
+        tasks = [EngineTask(url='a'), EngineTask(url='b')]
+        results = list(backend.run(tasks))
+
+        assert calls == ['start', ('submit', 'a'), ('submit', 'b'),
+                         'mark_done', 'shutdown']
+        assert len(results) == 1 and results[0].success is True
+
+    def test_run_shuts_down_even_when_results_raises(self):
+        import pytest
+        from javdb.spider.fetch.fetch_engine import (
+            ParallelFetchBackend, EngineTask, FetchRuntimeState,
+        )
+
+        backend = ParallelFetchBackend(
+            process_fn=lambda ctx, task: None,
+            runtime_state=FetchRuntimeState(use_proxy=False, use_cf_bypass=False),
+        )
+        calls = []
+        backend.start = lambda: None
+        backend.submit_task = lambda task: None
+        backend.mark_done = lambda: None
+        backend.shutdown = lambda **_kw: (calls.append('shutdown'), [])[1]
+
+        def _boom():
+            raise RuntimeError('boom')
+            yield  # pragma: no cover — makes _boom a generator
+
+        backend.results = _boom
+
+        with pytest.raises(RuntimeError, match='boom'):
+            list(backend.run([EngineTask(url='a')]))
+
+        assert calls == ['shutdown']
+
+    def test_facade_run_forwards_to_backend(self):
+        from javdb.spider.fetch.fetch_engine import FetchEngine, EngineTask
+
+        engine = FetchEngine.__new__(FetchEngine)
+        engine._backend = MagicMock()
+        engine._backend.run.return_value = iter(['r1', 'r2'])
+
+        tasks = [EngineTask(url='u')]
+        out = list(engine.run(tasks))
+
+        engine._backend.run.assert_called_once_with(tasks)
+        assert out == ['r1', 'r2']

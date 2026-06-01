@@ -44,7 +44,7 @@ import sys
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, Iterator, List, Optional, Union
+from typing import Any, Callable, Iterable, Iterator, List, Optional, Union
 from urllib.parse import urlparse
 
 from javdb.infra.logging import get_logger
@@ -1737,6 +1737,28 @@ class ParallelFetchBackend(FetchBackend):
                 self._received += 1
             yield result
 
+    def run(self, tasks: Iterable[EngineTask]) -> Iterator[EngineResult]:
+        """Own the full lifecycle for a finite task list (happy-path helper).
+
+        Starts the engine, submits every task, marks done, yields results, and
+        shuts down in a ``finally``. This is **not** the interrupt-salvage
+        path: if ``KeyboardInterrupt`` lands in the caller's loop body Python
+        raises ``GeneratorExit`` here and the buffered results cannot be
+        re-yielded. Callers that must salvage partial progress on interrupt
+        should drive the explicit lifecycle (``start`` / ``submit_task`` /
+        ``mark_done`` / ``results``) and call :meth:`drain_remaining` in their
+        ``except`` block instead.
+        """
+        self.start()
+        for task in tasks:
+            self.submit_task(task)
+        self.mark_done()
+        try:
+            for result in self.results():
+                yield result
+        finally:
+            self.shutdown()
+
     def runtime_state(self) -> FetchRuntimeState:
         return FetchRuntimeState(
             use_proxy=self._runtime_state.use_proxy,
@@ -1931,6 +1953,9 @@ class FetchEngine:
 
     def drain_remaining(self) -> Iterator[EngineResult]:
         return self._backend.drain_remaining()
+
+    def run(self, tasks: Iterable[EngineTask]) -> Iterator[EngineResult]:
+        return self._backend.run(tasks)
 
     def runtime_state(self) -> FetchRuntimeState:
         return self._backend.runtime_state()
