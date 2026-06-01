@@ -150,6 +150,8 @@ pub struct MovieIndexEntry {
     #[pyo3(get, set)]
     pub video_code: String,
     #[pyo3(get, set)]
+    pub video_code_family: String,
+    #[pyo3(get, set)]
     pub title: String,
     #[pyo3(get, set)]
     pub rate: String,
@@ -170,11 +172,12 @@ pub struct MovieIndexEntry {
 #[pymethods]
 impl MovieIndexEntry {
     #[new]
-    #[pyo3(signature = (href, video_code, title=String::new(), rate=String::new(), comment_count=String::new(), release_date=String::new(), tags=vec![], cover_url=String::new(), page=1, ranking=None))]
+    #[pyo3(signature = (href, video_code, video_code_family=String::new(), title=String::new(), rate=String::new(), comment_count=String::new(), release_date=String::new(), tags=vec![], cover_url=String::new(), page=1, ranking=None))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         href: String,
         video_code: String,
+        video_code_family: String,
         title: String,
         rate: String,
         comment_count: String,
@@ -187,6 +190,7 @@ impl MovieIndexEntry {
         Self {
             href,
             video_code,
+            video_code_family,
             title,
             rate,
             comment_count,
@@ -202,6 +206,7 @@ impl MovieIndexEntry {
         let dict = new_dict(py);
         dict.set_item("href", &self.href)?;
         dict.set_item("video_code", &self.video_code)?;
+        dict.set_item("video_code_family", &self.video_code_family)?;
         dict.set_item("title", &self.title)?;
         dict.set_item("rate", &self.rate)?;
         dict.set_item("comment_count", &self.comment_count)?;
@@ -457,9 +462,8 @@ impl MovieDetail {
                 link: crate::scraper::common::normalize_javdb_href_path(&a.href),
             })
             .collect();
-        serde_json::to_string(&rows).map_err(|e| {
-            pyo3::exceptions::PyValueError::new_err(format!("json encode: {e}"))
-        })
+        serde_json::to_string(&rows)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("json encode: {e}")))
     }
 
     fn get_magnets_as_legacy<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyDict>>> {
@@ -796,7 +800,10 @@ impl TagPageResult {
     }
 
     fn get_category_by_id(&self, cid: &str) -> Option<TagCategory> {
-        self.categories.iter().find(|c| c.category_id == cid).cloned()
+        self.categories
+            .iter()
+            .find(|c| c.category_id == cid)
+            .cloned()
     }
 
     fn get_category_by_name(&self, name: &str) -> Option<TagCategory> {
