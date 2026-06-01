@@ -2,7 +2,7 @@
 
 | 字段 | 值 |
 | --- | --- |
-| **状态 (Status)** | Accepted — 已就「加法式 parser 识别 + 纯 config daily 黑名单」达成一致，待实现 |
+| **状态 (Status)** | Completed — 已于 2026-06-01 实现并验证 |
 | **日期 (Date)** | 2026-06-01 |
 | **作者 (Authors)** | Ted |
 | **关联 (Related)** | [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.zh.md), [ADR-040](../ADR-040-Content-Filter-Rules/ADR-040-content-filter-rules.zh.md), [ADR-042](../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.zh.md) |

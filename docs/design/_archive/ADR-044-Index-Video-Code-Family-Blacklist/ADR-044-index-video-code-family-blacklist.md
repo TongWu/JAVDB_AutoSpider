@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| **Status** | Accepted — additive parser recognition + config-only daily blacklist agreed; implementation pending |
+| **Status** | Completed — implemented and verified on 2026-06-01 |
 | **Date** | 2026-06-01 |
 | **Authors** | Ted |
 | **Related** | [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md), [ADR-040](../ADR-040-Content-Filter-Rules/ADR-040-content-filter-rules.md), [ADR-042](../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md) |
