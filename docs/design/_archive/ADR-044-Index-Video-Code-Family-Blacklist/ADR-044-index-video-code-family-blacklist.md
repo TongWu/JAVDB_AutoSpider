@@ -5,7 +5,7 @@
 | **Status** | Completed — implemented and verified on 2026-06-01 |
 | **Date** | 2026-06-01 |
 | **Authors** | Ted |
-| **Related** | [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md), [ADR-040](../ADR-040-Content-Filter-Rules/ADR-040-content-filter-rules.md), [ADR-042](../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md) |
+| **Related** | [ADR-035](../../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md), [ADR-040](../../ADR-040-Content-Filter-Rules/ADR-040-content-filter-rules.md), [ADR-042](../../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md) |
 | **Related Implementation Plans** | [IMP-ADR044-01](IMP-ADR044-01-index-video-code-family-blacklist.md) |
 
 > This ADR came out of a drift investigation: the parser must recognize a new index-card family so the sentinel sees a filled `video_code`, but daily ingestion must still keep that family out of the download queue by default.
@@ -123,18 +123,18 @@ Daily runs report family-level exclusion counts — a total plus a per-family br
 
 ## References
 
-- [ADR-035 — Site Contract Sentinel](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)
-- [ADR-040 — Content Filter Rules](../ADR-040-Content-Filter-Rules/ADR-040-content-filter-rules.md)
-- [ADR-042 — D1 Atomic Commit Boundaries](../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md)
-- [`javdb/parsing/common.py`](../../../javdb/parsing/common.py)
-- [`javdb/rust_core/src/scraper/common.rs`](../../../javdb/rust_core/src/scraper/common.rs)
-- [`javdb/pipeline/index_selection.py`](../../../javdb/pipeline/index_selection.py)
-- [`javdb/spider/fetch/index.py`](../../../javdb/spider/fetch/index.py)
-- [`javdb/spider/fetch/index_parallel.py`](../../../javdb/spider/fetch/index_parallel.py)
-- [`javdb/ops/sentinel/field_health.py`](../../../javdb/ops/sentinel/field_health.py)
-- [`javdb/infra/config_generator.py`](../../../javdb/infra/config_generator.py)
-- [`.github/workflows/DailyIngestion.yml`](../../../.github/workflows/DailyIngestion.yml)
-- [`.github/workflows/AdHocIngestion.yml`](../../../.github/workflows/AdHocIngestion.yml)
+- [ADR-035 — Site Contract Sentinel](../../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)
+- [ADR-040 — Content Filter Rules](../../ADR-040-Content-Filter-Rules/ADR-040-content-filter-rules.md)
+- [ADR-042 — D1 Atomic Commit Boundaries](../../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md)
+- [`javdb/parsing/common.py`](../../../../javdb/parsing/common.py)
+- [`javdb/rust_core/src/scraper/common.rs`](../../../../javdb/rust_core/src/scraper/common.rs)
+- [`javdb/pipeline/index_selection.py`](../../../../javdb/pipeline/index_selection.py)
+- [`javdb/spider/fetch/index.py`](../../../../javdb/spider/fetch/index.py)
+- [`javdb/spider/fetch/index_parallel.py`](../../../../javdb/spider/fetch/index_parallel.py)
+- [`javdb/ops/sentinel/field_health.py`](../../../../javdb/ops/sentinel/field_health.py)
+- [`javdb/infra/config_generator.py`](../../../../javdb/infra/config_generator.py)
+- [`.github/workflows/DailyIngestion.yml`](../../../../.github/workflows/DailyIngestion.yml)
+- [`.github/workflows/AdHocIngestion.yml`](../../../../.github/workflows/AdHocIngestion.yml)
 
 ## Status Log
 
