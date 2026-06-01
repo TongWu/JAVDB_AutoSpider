@@ -64,6 +64,7 @@ class MovieIndexEntry:
     """One movie card as it appears on any listing / index page."""
     href: str
     video_code: str
+    video_code_family: str = ""
     title: str = ''
     rate: str = ''
     comment_count: str = ''
