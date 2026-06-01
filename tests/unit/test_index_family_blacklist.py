@@ -50,7 +50,12 @@ def _patch_sequential_dependencies(
         "load_daily_family_blacklist",
         _load_daily_family_blacklist,
     )
-    monkeypatch.setattr(index_fetch, "get_page_url", lambda page_num, custom_url=None: f"page-{page_num}")
+
+    def _get_page_url(page_num: int, custom_url: str | None = None) -> str:
+        del custom_url
+        return f"page-{page_num}"
+
+    monkeypatch.setattr(index_fetch, "get_page_url", _get_page_url)
     monkeypatch.setattr(
         index_fetch,
         "fetch_index_page_with_fallback",

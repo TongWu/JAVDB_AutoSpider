@@ -95,11 +95,10 @@ def _parallel_page_result() -> IndexPageResult:
     )
 
 
-def _fake_result(page_num: int, html: str) -> SimpleNamespace:
-    return SimpleNamespace(
+def _fake_result(page_num: int, html: str) -> _FakeResult:
+    return _FakeResult(
         success=True,
         data={"has_movie_list": True, "html": html, "is_valid_empty": False},
-        error=None,
         worker_name=f"w{page_num}",
         task=SimpleNamespace(meta={"page_num": page_num}),
     )
