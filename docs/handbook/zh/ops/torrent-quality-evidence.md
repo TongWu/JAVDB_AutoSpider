@@ -32,6 +32,11 @@ Phase 1 是一个仅影子、只读的证据层。它检查生产流水线已经
 当 `TORRENT_QUALITY_EVIDENCE_ENABLED=true` 时，`QBFileFilter.yml` 会在
 qBittorrent file filter 步骤之后立即运行采集器。采集器复用同一份已还原的
 加密配置和同一个生产 qBittorrent 端点。
+手动 dispatch 设置 `dry_run=true` 时会跳过采集器，因为证据行属于持久 D1 写入。
+
+工作流按以下优先级解析 evidence categories：手动 dispatch 的 `categories`
+输入、`TORRENT_QUALITY_CATEGORIES`、最后是工作流默认值
+`["Ad Hoc", "Daily Ingestion", "顶级"]`。
 
 也可以手动运行：
 
@@ -43,6 +48,7 @@ python3 -m apps.cli.qb.quality_evidence --force --categories '["Daily Ingestion"
 ```
 
 如果采集器关闭且未提供 `--force`，CLI 会以状态码 `0` 退出，不读取分类配置，也不触碰 qBittorrent。
+如果直接运行时没有配置或传入分类 JSON 数组，采集会跳过，而不是扫描每个 qBittorrent 分类。
 
 ## 查看结果
 

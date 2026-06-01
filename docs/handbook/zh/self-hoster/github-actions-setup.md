@@ -136,7 +136,7 @@ GitHub Actions 部署提供：
 | `QB_FILE_FILTER_MIN_SIZE_MB` | `100` | 文件过滤器的最小文件大小阈值 |
 | `TORRENT_QUALITY_EVIDENCE_ENABLED` | `false` | 在文件过滤器之后运行 ADR-024 影子证据采集 |
 | `TORRENT_QUALITY_POLICY_MODE` | `shadow` | 预留的 rollout 模式；Phase 1 仍为 shadow-only |
-| `TORRENT_QUALITY_CATEGORIES` | （空） | 可选：要扫描的 qBittorrent 分类 JSON 数组 |
+| `TORRENT_QUALITY_CATEGORIES` | （空） | 可选：当 workflow dispatch 未提供 `categories` 输入时使用的 JSON 数组 |
 
 ### Proxy Variables
 

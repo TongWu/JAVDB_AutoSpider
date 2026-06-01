@@ -136,7 +136,7 @@ These are non-sensitive values. The `config_generator` reads them via `VAR_*` en
 | `QB_FILE_FILTER_MIN_SIZE_MB` | `100` | Minimum file size threshold for the file filter |
 | `TORRENT_QUALITY_EVIDENCE_ENABLED` | `false` | Run ADR-024 shadow evidence collection after the file filter |
 | `TORRENT_QUALITY_POLICY_MODE` | `shadow` | Reserved rollout mode; Phase 1 remains shadow-only |
-| `TORRENT_QUALITY_CATEGORIES` | (empty) | Optional JSON array of qBittorrent categories to scan |
+| `TORRENT_QUALITY_CATEGORIES` | (empty) | Optional JSON array used when the workflow dispatch `categories` input is omitted |
 
 ### Proxy Variables
 

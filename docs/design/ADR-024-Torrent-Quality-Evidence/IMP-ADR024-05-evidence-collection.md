@@ -52,10 +52,12 @@ UPSERTs, CLI/config/workflow gates, and handbook/wiki-source documentation.
 
 During review, the direct CLI/config path was hardened so an empty
 `TORRENT_QUALITY_CATEGORIES` value skips collection instead of scanning every
-qBittorrent category. Workflow dispatches still pass the explicit category list
-from the `QBFileFilter.yml` input/default, so scheduled evidence collection is
-bounded while direct runs fail closed unless the caller provides a JSON category
-array or `--categories`.
+qBittorrent category. `QBFileFilter.yml` resolves evidence categories from the
+manual dispatch input, then `TORRENT_QUALITY_CATEGORIES`, then its explicit
+default list, so scheduled evidence collection is bounded while direct runs fail
+closed unless the caller provides a JSON category array or `--categories`.
+Workflow dry-runs skip the collector because evidence collection writes durable
+D1 rows.
 
 ---
 
