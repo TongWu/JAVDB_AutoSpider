@@ -164,7 +164,7 @@ def wait_for_metadata_readiness(
             ready_needed,
             len(candidates),
         )
-        if pending == 0 or ready >= ready_needed:
+        if ready >= ready_needed or (pending == 0 and api_failures == 0):
             return {
                 "checked": len(candidates),
                 "ready": ready,
