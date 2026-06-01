@@ -148,11 +148,26 @@ def run_collection(
     use_proxy=None,
 ) -> dict[str, int]:
     """Production wiring for the ADR-024 shadow evidence collector."""
+    if not categories:
+        logger.warning(
+            "Skipping quality evidence collection: no categories configured; "
+            "refusing to scan all production qBittorrent categories"
+        )
+        return {
+            "scanned": 0,
+            "skipped": 0,
+            "evidence_written": 0,
+            "evaluations_written": 0,
+            "probe_unavailable": 0,
+        }
+
     import requests
 
     from javdb.integrations.qb import readonly
     from javdb.integrations.qb.file_filter import service as ff
     from javdb.storage.db import OPERATIONS_DB_PATH, REPORTS_DB_PATH, get_db
+    # Prime reconcile package import order before loading the repo class.
+    import javdb.ops.reconcile.service  # noqa: F401
     from javdb.storage.repos.acquisition_outcome_repo import AcquisitionOutcomeRepo
     from javdb.storage.repos.torrent_quality_repo import TorrentQualityRepo
 
