@@ -1,6 +1,6 @@
 # ADR-045：FetchEngine 可复用公开 API 加固
 
-**状态：** Proposed
+**状态：** Completed
 **日期：** 2026-06-01
 **作者：** Ted
 **关联实施计划：** [IMP-ADR045-01](IMP-ADR045-01-fetch-engine-public-api.md)（Phase 1 —— `drain_remaining()` + 薄 `run()`，迁移三个 migration 工具）
@@ -63,7 +63,7 @@
 ### 与 ADR-043 的关系
 
 `meta-7` 失败是因为某个代理持续过不了 Cloudflare 墙。
-[ADR-043](../_archive/ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.zh.md)
+[ADR-043](../ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.zh.md)
 降低对这类代理的*再次使用*（跨 runner 的 CF 自动 ban）。本 ADR 与之互补且正交：
 它确保**当一次抓取因任何原因失败时，工作项会被重新入队给另一个代理**，而不是被静默丢弃。
 ADR-043 让坏代理更少；ADR-045 让失败的工作可被恢复。
@@ -148,7 +148,7 @@ SQLite-only，而 metadata backfill 在 CI 里**已经跑在 D1 上**
 **D8. 修正过时注释与过时的 `scripts.*` 路径引用。** 更正
 `backfill_movie_metadata.py:11-12` 的说法，并更新 `fetch_engine.py` 里仍引用
 `scripts.spider.fetch.*` 的 docstring / `__all__` ——
-那是 [ADR-007](../_archive/ADR-007-Monorepo-Restructure/ADR-007-monorepo-restructure-2026-05.zh.md)
+那是 [ADR-007](../ADR-007-Monorepo-Restructure/ADR-007-monorepo-restructure-2026-05.zh.md)
 Phase 3 已退役的路径（规范是 `javdb.spider.fetch.*`）。
 
 ## 后果
@@ -164,7 +164,7 @@ Phase 3 已退役的路径（规范是 `javdb.spider.fetch.*`）。
   不破坏 migration 工具。
 - 每个 migration / 补抓工具有了唯一的规范抓取路径；那条误导性的"no public API"注释也没了。
 - 仅引擎内部 —— **不属于**
-  [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.zh.md)
+  [ADR-017](../ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.zh.md)
   双后端重叠面（无 D1 查询 / 鉴权 / API 形状变更），故 web 仓库的 TS 后端无需同步。
 
 ### 负面
@@ -191,10 +191,11 @@ Phase 3 已退役的路径（规范是 `javdb.spider.fetch.*`）。
 - `javdb/spider/fetch/fetch_engine.py` —— `ParallelFetchBackend` / `FetchEngine` / `WorkerContext` / `results()` / `shutdown()`
 - `javdb/migrations/tools/backfill_movie_metadata.py` —— 被迁移的串行工具（D3–D6）
 - `javdb/migrations/tools/migrate_v7_to_v8.py`、`javdb/migrations/tools/align_inventory_with_moviehistory.py` —— 已有的 `FetchEngine` 调用方，含私有队列泄漏（D1）
-- [ADR-043 — CF Persistent-Failure Auto-Ban](../_archive/ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.zh.md) —— 互补：减少坏代理的*再使用*；本 ADR 让失败的*工作*可恢复
-- [ADR-007 — Monorepo Restructure](../_archive/ADR-007-Monorepo-Restructure/ADR-007-monorepo-restructure-2026-05.zh.md) —— 退役了过时 docstring 仍引用的 `scripts.*` 路径（D8）
+- [ADR-043 — CF Persistent-Failure Auto-Ban](../ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.zh.md) —— 互补：减少坏代理的*再使用*；本 ADR 让失败的*工作*可恢复
+- [ADR-007 — Monorepo Restructure](../ADR-007-Monorepo-Restructure/ADR-007-monorepo-restructure-2026-05.zh.md) —— 退役了过时 docstring 仍引用的 `scripts.*` 路径（D8）
 
 ## 状态日志
 
 - 2026-06-01：Proposed
 - 2026-06-01：Phase 1 已实现并完成本地验证（[IMP-ADR045-01](IMP-ADR045-01-fetch-engine-public-api.md)）；CLI 表面未变，因此无需更新手册。
+- 2026-06-01：Completed —— Phase 1 经 [PR #156](https://github.com/TongWu/JAVDB_AutoSpider_CICD/pull/156) 合并；按整文件夹归档规则，ADR 已归档至 `_archive/`。
