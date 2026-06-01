@@ -264,11 +264,16 @@ def test_run_collection_wires_runtime_dependencies(monkeypatch):
     fake_reconcile_service.record_queued = lambda *_args, **_kwargs: None
     fake_reconcile_service.run = lambda *_args, **_kwargs: None
 
+    import javdb.integrations.qb as qb_package
+    import javdb.integrations.qb.file_filter as file_filter_package
+
     monkeypatch.setitem(sys.modules, "requests", fake_requests)
     monkeypatch.setitem(sys.modules, "javdb.integrations.qb.readonly", fake_readonly)
+    monkeypatch.setattr(qb_package, "readonly", fake_readonly, raising=False)
     monkeypatch.setitem(
         sys.modules, "javdb.integrations.qb.file_filter.service", fake_ff
     )
+    monkeypatch.setattr(file_filter_package, "service", fake_ff, raising=False)
     monkeypatch.setitem(sys.modules, "javdb.ops.reconcile.service", fake_reconcile_service)
     monkeypatch.setitem(sys.modules, "javdb.storage.db", fake_db)
     monkeypatch.setitem(
