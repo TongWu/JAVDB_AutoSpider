@@ -3,7 +3,7 @@ from __future__ import annotations
 from scripts.ci import validate_d1_write_class as v
 
 
-def _violations(*files: tuple[str, str]):
+def _violations(*files: tuple[str, str]) -> list[v.Violation]:
     return v.find_violations(list(files))
 
 
@@ -43,6 +43,17 @@ def test_na_value_is_rejected_for_migration():
 
 def test_invalid_value_is_rejected():
     content = "-- Write-Class: bogus\nCREATE TABLE Foo (id TEXT);\n"
+    result = _violations(("m.sql", content))
+    assert len(result) == 1
+    assert "bogus" in result[0].message
+
+
+def test_mixed_valid_and_invalid_tags_is_violation():
+    content = (
+        "-- Write-Class: additive\n"
+        "-- Write-Class: bogus\n"
+        "CREATE TABLE Foo (id TEXT);\n"
+    )
     result = _violations(("m.sql", content))
     assert len(result) == 1
     assert "bogus" in result[0].message
