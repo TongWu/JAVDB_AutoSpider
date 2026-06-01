@@ -19,6 +19,16 @@ def _normalize_hash(value: Any) -> str:
     return str(value or "").strip().lower()
 
 
+def _empty_summary() -> dict[str, int]:
+    return {
+        "scanned": 0,
+        "skipped": 0,
+        "evidence_written": 0,
+        "evaluations_written": 0,
+        "probe_unavailable": 0,
+    }
+
+
 def collect_production_evidence(
     *,
     torrents: list[dict],
@@ -28,17 +38,11 @@ def collect_production_evidence(
     probe_target_name: str = "production",
 ) -> dict[str, int]:
     """Collect evidence and shadow evaluations for production torrents."""
-    summary = {
-        "scanned": 0,
-        "skipped": 0,
-        "evidence_written": 0,
-        "evaluations_written": 0,
-        "probe_unavailable": 0,
-    }
+    summary = _empty_summary()
 
     for torrent in torrents:
         summary["scanned"] += 1
-        info_hash = (torrent.get("hash") or "").strip()
+        info_hash = _normalize_hash(torrent.get("hash"))
         if not info_hash:
             summary["skipped"] += 1
             continue
@@ -153,13 +157,7 @@ def run_collection(
             "Skipping quality evidence collection: no categories configured; "
             "refusing to scan all production qBittorrent categories"
         )
-        return {
-            "scanned": 0,
-            "skipped": 0,
-            "evidence_written": 0,
-            "evaluations_written": 0,
-            "probe_unavailable": 0,
-        }
+        return _empty_summary()
 
     import requests
 
@@ -187,13 +185,7 @@ def run_collection(
             use_proxy=use_proxy,
         )
         if not torrents:
-            return {
-                "scanned": 0,
-                "skipped": 0,
-                "evidence_written": 0,
-                "evaluations_written": 0,
-                "probe_unavailable": 0,
-            }
+            return _empty_summary()
 
         readonly.wait_for_metadata_readiness(
             torrents,

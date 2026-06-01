@@ -112,7 +112,7 @@ python3 -m apps.cli.qb.file_filter --min-size 100 --dry-run   # 过滤小文件
 
 # 维护
 python3 -m apps.cli.db.migration --help                        # 数据库迁移
-python3 -m apps.cli.db.rollback --session-id 332               # 回滚会话
+python3 -m apps.cli.db.rollback --session-id 20250601T143012.123456Z-0001-0001  # 回滚会话
 python3 -m apps.cli.login                                      # 刷新 JavDB 登录 cookie
 ```
 

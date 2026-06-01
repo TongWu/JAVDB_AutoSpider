@@ -112,7 +112,7 @@ python3 -m apps.cli.qb.file_filter --min-size 100 --dry-run   # Filter small fil
 
 # Maintenance
 python3 -m apps.cli.db.migration --help                        # Database migrations
-python3 -m apps.cli.db.rollback --session-id 332               # Rollback a session
+python3 -m apps.cli.db.rollback --session-id 20250601T143012.123456Z-0001-0001  # Rollback a session
 python3 -m apps.cli.login                                      # Refresh JavDB session cookie
 ```
 
