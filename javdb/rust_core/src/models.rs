@@ -206,7 +206,6 @@ impl MovieIndexEntry {
         let dict = new_dict(py);
         dict.set_item("href", &self.href)?;
         dict.set_item("video_code", &self.video_code)?;
-        dict.set_item("video_code_family", &self.video_code_family)?;
         dict.set_item("title", &self.title)?;
         dict.set_item("rate", &self.rate)?;
         dict.set_item("comment_count", &self.comment_count)?;
@@ -215,6 +214,7 @@ impl MovieIndexEntry {
         dict.set_item("cover_url", &self.cover_url)?;
         dict.set_item("page", self.page)?;
         dict.set_item("ranking", self.ranking)?;
+        dict.set_item("video_code_family", &self.video_code_family)?;
         Ok(dict)
     }
 

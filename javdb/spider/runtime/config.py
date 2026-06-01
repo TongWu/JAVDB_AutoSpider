@@ -45,9 +45,9 @@ if DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST is None:
 elif not isinstance(DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST, (list, tuple, set)):
     DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST = [DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST]
 DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST = [
-    str(item).strip()
+    stripped
     for item in DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST
-    if str(item).strip()
+    if (stripped := str(item).strip())
 ]
 PROXY_HTTP = cfg('PROXY_HTTP', None)
 PROXY_HTTPS = cfg('PROXY_HTTPS', None)
