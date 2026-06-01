@@ -31,7 +31,7 @@ def load_daily_family_blacklist(custom_url: str | None) -> set[str]:
 
     from javdb.spider.runtime.config import DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST
 
-    return normalize_family_blacklist(DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST)
+    return set(DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST or [])
 
 
 def filter_blacklisted_families(
@@ -46,7 +46,7 @@ def filter_blacklisted_families(
     """
     active_blacklist = set(blacklist or ())
     if not active_blacklist:
-        return movies
+        return list(movies)
     kept = []
     for movie in movies:
         family = getattr(movie, "video_code_family", "") or ""

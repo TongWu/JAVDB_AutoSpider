@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import queue as queue_module
 import sys
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import Any, Dict, Optional
@@ -18,7 +19,6 @@ from javdb.parsing.models import IndexPageResult
 from javdb.pipeline.index_family_blacklist import filter_blacklisted_families
 from javdb.spider.fetch.index_parallel import _check_stop_condition
 from javdb.spider.fetch import index_parallel
-from javdb.spider.runtime import config as runtime_config
 from javdb.spider.fetch.fetch_engine import (
     EngineTask,
     _PriorityTaskQueue,
@@ -58,30 +58,30 @@ def _failed_result(error: str = 'timeout') -> _FakeResult:
 
 
 class _FakeBackend:
-    def __init__(self, results):
-        self._results = list(results)
-        self.submitted = []
+    def __init__(self, results: Iterable[Any]) -> None:
+        self._results: list[Any] = list(results)
+        self.submitted: list[tuple[str, dict[str, Any], str, int]] = []
         self.marked_done = False
         self.started = False
         self.shutdown_called = False
         self.export_called = False
 
-    def start(self):
+    def start(self) -> None:
         self.started = True
 
-    def submit(self, url, meta, entry_index, priority):
+    def submit(self, url: str, meta: dict[str, Any], entry_index: str, priority: int) -> None:
         self.submitted.append((url, meta, entry_index, priority))
 
-    def mark_done(self):
+    def mark_done(self) -> None:
         self.marked_done = True
 
-    def results(self):
+    def results(self) -> Iterator[Any]:
         yield from self._results
 
-    def shutdown(self):
+    def shutdown(self) -> None:
         self.shutdown_called = True
 
-    def export_login_state(self):
+    def export_login_state(self) -> None:
         self.export_called = True
 
 
@@ -345,7 +345,11 @@ def test_parallel_multi_page_applies_blacklist_once_per_page_and_preserves_page_
 
     monkeypatch.setattr(index_parallel, "filter_blacklisted_families", spy_filter(filter_calls, original_filter))
     monkeypatch.setattr(index_parallel, "select_index_entries", spy_select(phase_calls, include_page_num=True))
-    monkeypatch.setattr(runtime_config, "DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST", ["western_studio_date"])
+    monkeypatch.setattr(
+        index_parallel,
+        "load_daily_family_blacklist",
+        lambda custom_url: {"western_studio_date"} if custom_url is None else set(),
+    )
 
     result = index_parallel.fetch_all_index_pages_parallel(
         runtime=None,

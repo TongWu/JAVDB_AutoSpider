@@ -779,7 +779,7 @@ for code in ["Wifey.2026.05.30", "259LUXU-1234", "ABC-123", "H4610-ki220101"]:
 PY
 ```
 
-Expected: `Wifey.2026.05.30 -> western_studio_date`, `259LUXU-1234 -> ` (empty), `ABC-123 -> classic_hyphenated`, `H4610-ki220101 -> ` (empty).
+Expected: `Wifey.2026.05.30 -> western_studio_date`, `259LUXU-1234 ->` (empty), `ABC-123 -> classic_hyphenated`, `H4610-ki220101 ->` (empty).
 
 - [x] **Step 4: Dry-run config rendering.**
 
