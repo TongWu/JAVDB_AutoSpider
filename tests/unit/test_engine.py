@@ -1142,6 +1142,7 @@ class TestRunLifecycle:
         backend.submit_task = lambda task: calls.append(('submit', task.url))
         backend.mark_done = lambda: calls.append('mark_done')
         backend.shutdown = lambda **_kw: (calls.append('shutdown'), [])[1]
+        # Iteration happens between mark_done and shutdown without extra calls.
         backend.results = lambda: iter(
             [EngineResult(task=EngineTask(url='x'), success=True)]
         )
