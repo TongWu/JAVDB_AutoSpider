@@ -409,7 +409,10 @@ class TestGenerateConfigContent:
         key_index = content.index("TORRENT_QUALITY_CATEGORIES = ''")
         section_snippet = content[max(0, key_index - 300):key_index]
         assert "Optional JSON array of qBittorrent categories" in section_snippet
+        assert "direct collection skips" in section_snippet
+        assert "than scanning every qBittorrent category" in section_snippet
         assert "comma-separated category allowlist" not in section_snippet
+        assert "collect evidence for all configured qBittorrent categories" not in section_snippet
     
     def test_github_actions_mode_note(self):
         """Should include GitHub Actions note in that mode."""
