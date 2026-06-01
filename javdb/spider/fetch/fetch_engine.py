@@ -179,7 +179,7 @@ class EngineTask:
     ``url`` is the target to fetch.  ``meta`` carries arbitrary caller data
     that is round-tripped back in the corresponding :class:`EngineResult`.
     ``entry_index`` and ``failed_proxies`` satisfy the duck-typing contract
-    required by :class:`~scripts.spider.fetch.login_coordinator.LoginCoordinator`.
+    required by :class:`~javdb.spider.fetch.login_coordinator.LoginCoordinator`.
 
     ``priority`` controls dequeue order when the engine uses a priority queue
     (lower values are dequeued first).  Default ``0`` preserves FIFO behaviour
@@ -193,7 +193,7 @@ class EngineTask:
     task).  Speculative tasks are never re-queued on failure.
 
     ``login_verified_after_refresh`` is set by
-    :class:`~scripts.spider.fetch.login_coordinator.LoginCoordinator` after a
+    :class:`~javdb.spider.fetch.login_coordinator.LoginCoordinator` after a
     successful auto-login + fixed-page verification cycle.  Once set, any
     further :class:`LoginRequired` raised while the *logged-in worker* is
     processing this task is treated as a page/proxy issue (re-routed to a
@@ -255,7 +255,7 @@ class LoginRequired(Exception):
     """Raised by :meth:`WorkerContext.fetch` when a login page is detected.
 
     The engine's internal run-loop catches this and routes the task to the
-    shared :class:`~scripts.spider.fetch.login_coordinator.LoginCoordinator`.
+    shared :class:`~javdb.spider.fetch.login_coordinator.LoginCoordinator`.
     Callers should **not** catch this inside their *process_fn*.
     """
 
@@ -493,7 +493,7 @@ class _EngineWorker(threading.Thread):
     """Worker thread bound to a single proxy.
 
     Satisfies the duck-typing contract of
-    :class:`~scripts.spider.fetch.login_coordinator.LoginCoordinator`::
+    :class:`~javdb.spider.fetch.login_coordinator.LoginCoordinator`::
 
         worker_id:    int
         proxy_name:   str
@@ -1233,7 +1233,7 @@ class ParallelFetchBackend(FetchBackend):
     """Parallel fetch engine backed by one worker per proxy.
 
     Manages worker lifecycle, task/result queues, and
-    :class:`~scripts.spider.fetch.login_coordinator.LoginCoordinator` integration.
+    :class:`~javdb.spider.fetch.login_coordinator.LoginCoordinator` integration.
     The caller supplies a *process_fn* that receives a :class:`WorkerContext`
     and an :class:`EngineTask` and returns an arbitrary result (or ``None``
     on failure).

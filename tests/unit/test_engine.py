@@ -1,4 +1,4 @@
-"""Tests for scripts.spider.fetch.fetch_engine — FetchEngine, EngineWorker, WorkerContext."""
+"""Tests for javdb.spider.fetch.fetch_engine — FetchEngine, EngineWorker, WorkerContext."""
 
 from __future__ import annotations
 
