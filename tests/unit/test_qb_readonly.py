@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import requests
+
 from javdb.integrations.qb import readonly
 
 
@@ -60,6 +62,15 @@ def test_get_torrent_files_returns_none_on_error_status():
     assert files is None
 
 
+def test_get_torrent_files_returns_none_on_request_exception():
+    class _Session:
+        def get(self, *a, **k):
+            raise requests.RequestException("network error")
+
+    files = readonly.get_torrent_files(_Session(), "http://qb", "HASH")
+    assert files is None
+
+
 def test_get_torrent_files_has_request_defaults():
     class _Resp:
         status_code = 200
@@ -103,6 +114,40 @@ def test_wait_for_metadata_readiness_uses_injected_fetcher():
     assert summary["ready"] == 1
     assert summary["pending"] == 0
     assert calls["n"] == 1
+
+
+def test_wait_for_metadata_readiness_keeps_polling_when_only_api_failures(monkeypatch):
+    now = 1_000_000
+    torrents = [
+        {"hash": "A", "added_on": now - 10},
+        {"hash": "B", "added_on": now - 10},
+    ]
+    calls = {"n": 0}
+    sleeps = []
+    monotonic_values = iter([0.0, 0.0, 2.0])
+
+    monkeypatch.setattr(readonly.time, "monotonic", lambda: next(monotonic_values))
+
+    def fetch(_hash):
+        calls["n"] += 1
+        return None
+
+    summary = readonly.wait_for_metadata_readiness(
+        torrents,
+        fetch_files=fetch,
+        max_wait_seconds=2,
+        poll_interval_seconds=1,
+        recent_window_seconds=900,
+        now=now,
+        sleep=sleeps.append,
+    )
+
+    assert summary["ready"] == 0
+    assert summary["pending"] == 0
+    assert summary["api_failures"] == 2
+    assert summary["waited_seconds"] == 1
+    assert calls["n"] == 4
+    assert sleeps == [1]
 
 
 def test_wait_for_metadata_readiness_has_wait_defaults():
