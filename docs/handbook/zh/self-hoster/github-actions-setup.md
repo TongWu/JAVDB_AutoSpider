@@ -134,6 +134,9 @@ GitHub Actions 部署提供：
 | `REQUEST_TIMEOUT` | `30` | API 请求超时时间（秒） |
 | `DELAY_BETWEEN_ADDITIONS` | `1` | 种子添加间隔（秒） |
 | `QB_FILE_FILTER_MIN_SIZE_MB` | `100` | 文件过滤器的最小文件大小阈值 |
+| `TORRENT_QUALITY_EVIDENCE_ENABLED` | `false` | 在文件过滤器之后运行 ADR-024 影子证据采集 |
+| `TORRENT_QUALITY_POLICY_MODE` | `shadow` | 预留的 rollout 模式；Phase 1 仍为 shadow-only |
+| `TORRENT_QUALITY_CATEGORIES` | （空） | 可选：要扫描的 qBittorrent 分类 JSON 数组 |
 
 ### Proxy Variables
 

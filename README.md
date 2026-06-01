@@ -107,12 +107,12 @@ python3 -m apps.cli.pipeline                                  # Full workflow
 python3 -m apps.cli.pipeline --use-proxy                      # With proxy override
 
 # Uploaders
-python3 -m apps.cli.qb_uploader                               # Upload to qBittorrent
-python3 -m apps.cli.qb_file_filter --min-size 100 --dry-run   # Filter small files
+python3 -m apps.cli.qb.uploader                               # Upload to qBittorrent
+python3 -m apps.cli.qb.file_filter --min-size 100 --dry-run   # Filter small files
 
 # Maintenance
-python3 -m apps.cli.migration --help                           # Database migrations
-python3 -m apps.cli.rollback --session-id 332                  # Rollback a session
+python3 -m apps.cli.db.migration --help                        # Database migrations
+python3 -m apps.cli.db.rollback --session-id 332               # Rollback a session
 python3 -m apps.cli.login                                      # Refresh JavDB session cookie
 ```
 
@@ -133,7 +133,7 @@ For the full CLI reference, see [CLI Reference](docs/handbook/en/developer/cli-r
 |----------|---------|-------------|
 | `DailyIngestion.yml` | Cron 12:00 UTC + manual | Daily scraping pipeline |
 | `AdHocIngestion.yml` | Manual | Custom URL scraping |
-| `QBFileFilter.yml` | Cron 16:00 UTC + manual | Filter small files (4h after daily) |
+| `QBFileFilter.yml` | Cron 16:00 UTC + manual | Filter small files (4h after daily) + optional quality evidence |
 | `WeeklyDedup.yml` | Cron Sunday + manual | Rclone deduplication |
 | `RollbackD1.yml` | Manual | Session rollback |
 | `StaleSessionCleanup.yml` | Cron daily 02:00 UTC | Clean up stuck sessions (>48h) |
@@ -176,6 +176,7 @@ For rollback procedures, see [D1 Rollback Guide](docs/handbook/en/ops/d1-rollbac
 - [Troubleshooting](docs/handbook/en/ops/troubleshooting.md) — Common issues and solutions
 - [Logging](docs/handbook/en/ops/logging.md) — Log configuration and formats
 - [Migration Scripts](docs/handbook/en/ops/migration-scripts.md) — Database migration tools
+- [Torrent Quality Evidence](docs/handbook/en/ops/torrent-quality-evidence.md) — ADR-024 shadow evidence collection
 
 ### Other Resources
 - [CONTEXT.md](CONTEXT.md) — Domain language glossary
