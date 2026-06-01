@@ -339,8 +339,9 @@ python3 -m apps.cli.qb.file_filter --delete-local-files
 
 **模块：** `apps.cli.qb.quality_evidence`
 
-为生产已下载的种子采集 ADR-024 Phase 1 影子证据。采集器对 qBittorrent 只读，
-且只有在 `TORRENT_QUALITY_EVIDENCE_ENABLED=True` 或提供 `--force` 时才会运行。
+为生产选中/最近添加且 qBittorrent metadata 可用的种子采集 ADR-024 Phase 1
+影子证据。采集器对 qBittorrent 只读，且只有在
+`TORRENT_QUALITY_EVIDENCE_ENABLED=True` 或提供 `--force` 时才会运行。
 
 ### 参数
 
