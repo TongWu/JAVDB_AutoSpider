@@ -29,7 +29,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import queue as queue_module
 import shutil
 import sqlite3
 import sys
@@ -528,11 +527,7 @@ def run_actor_backfill(
             orphaned = engine.shutdown(timeout=30)
 
             drained = 0
-            while True:
-                try:
-                    result = engine._result_queue.get_nowait()
-                except queue_module.Empty:
-                    break
+            for result in engine.drain_remaining():
                 drained += 1
                 p, f, s = _apply_backfill_result(
                     result,

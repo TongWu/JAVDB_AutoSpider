@@ -1,10 +1,10 @@
 # IMP-ADR044-01: Index Video Code Family Blacklist Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Related:** [ADR-044](ADR-044-index-video-code-family-blacklist.md) - this is **Phase 1**.
 
-**Status:** Planned - implementation pending. Revised after design review (grill): recognition is strictly additive, the blacklist is config-only, and filtering is an independent pre-selection step.
+**Status:** Completed — implemented and verified on 2026-06-01. Recognition remains strictly additive, the blacklist is config-only, and filtering is an independent pre-selection step.
 
 **Goal:** Teach the index parser to recognize `western_studio_date` video codes **additively** (without rejecting any token the parser accepts today), label every index-card `video_code` with a `video_code_family`, then keep the western family out of daily ingestion by default via a config-driven, daily-only pre-selection filter. Ad hoc ingestion is unchanged.
 
@@ -13,6 +13,19 @@
 **Tech Stack:** Python 3.11 dataclasses, Rust/PyO3 parser models, GitHub Actions config rendering, `pytest`, `cargo test`.
 
 ---
+
+## Table of Contents
+
+- [Safety Notes](#safety-notes)
+- [File Structure](#file-structure)
+- [Task 1: Parser contract - Python (additive)](#task-1-parser-contract---python-additive)
+- [Task 2: Parser contract - Rust parity (additive)](#task-2-parser-contract---rust-parity-additive)
+- [Task 3: Daily-only config-driven family blacklist](#task-3-daily-only-config-driven-family-blacklist)
+- [Task 4: Config and workflow wiring](#task-4-config-and-workflow-wiring)
+- [Task 5: Documentation follow-through](#task-5-documentation-follow-through)
+- [Task 6: End-to-end verification](#task-6-end-to-end-verification)
+- [Rollback](#rollback)
+- [Out of Scope](#out-of-scope)
 
 ## Safety Notes
 
@@ -63,7 +76,7 @@
 - Test: `tests/unit/test_api_parsers.py`
 - Test: `tests/unit/test_api_models.py`
 
-- [ ] **Step 1: Write failing tests for classification, the additive-plausibility guard, and the model field.**
+- [x] **Step 1: Write failing tests for classification, the additive-plausibility guard, and the model field.**
 
 Add to `tests/unit/test_parser.py`:
 
@@ -139,20 +152,11 @@ pytest tests/unit/test_parser.py::TestExtractVideoCode tests/unit/test_parser.py
 
 Expected: `test_classify_video_code_family` and `test_parse_index_page_sets_western_family` fail (classifier/field missing); the western cases of `test_extract_video_code_stays_additive` fail (dotted tokens rejected today); the non-western cases of that test should already pass (proving they must not regress).
 
-- [ ] **Step 2: Add the classifier and widen plausibility additively.**
+- [x] **Step 2: Add the classifier and widen plausibility additively.**
 
 In `javdb/parsing/common.py`, define the family patterns once (the western regex requires at least one letter in the studio segment, so digit-prefixed studios like `21Sextury` match while a pure-numeric dotted token does not):
 
 ```python
-VIDEO_CODE_FAMILIES = (
-    "classic_hyphenated",
-    "multi_hyphen",
-    "numeric_date_hyphen",
-    "numeric_date_underscore",
-    "hyphenless_studio",
-    "western_studio_date",
-)
-
 WESTERN_STUDIO_DATE_RE = re.compile(
     r"^[A-Za-z0-9]*[A-Za-z][A-Za-z0-9]*\.(?:\d{4}|\d{2})\.\d{2}\.\d{2}$"
 )
@@ -165,6 +169,8 @@ _VIDEO_CODE_FAMILY_PATTERNS = (
     ("classic_hyphenated", re.compile(r"^[A-Za-z]+-\d+[A-Za-z0-9]*$")),
     ("hyphenless_studio", re.compile(r"^[A-Za-z]+\d+$")),
 )
+
+VIDEO_CODE_FAMILIES = tuple(family for family, _pattern in _VIDEO_CODE_FAMILY_PATTERNS)
 
 
 def classify_video_code_family(raw: str) -> str:
@@ -215,9 +221,11 @@ Update the `extract_video_code()` docstring to mention dotted western tokens. Ad
 
 > **Decoupling check:** `_is_plausible_video_code` references only `WESTERN_STUDIO_DATE_RE`, never `classify_video_code_family`. Do not change this — the classifier must not gate plausibility.
 
-- [ ] **Step 3: Add `video_code_family` to the Python model without changing legacy rows.**
+- [x] **Step 3: Add `video_code_family` to the Python model without changing legacy rows or positional construction.**
 
-In `javdb/parsing/models.py`, add the field immediately after `video_code`:
+In `javdb/parsing/models.py`, append the field after the existing constructor
+parameters so positional calls like `MovieIndexEntry("/v/x", "ABC-123", "Title")`
+still set `title`; new callers should pass `video_code_family` by keyword:
 
 ```python
 @dataclass
@@ -225,7 +233,6 @@ class MovieIndexEntry:
     """One movie card as it appears on any listing / index page."""
     href: str
     video_code: str
-    video_code_family: str = ""
     title: str = ""
     rate: str = ""
     comment_count: str = ""
@@ -234,11 +241,12 @@ class MovieIndexEntry:
     cover_url: str = ""
     page: int = 1
     ranking: Optional[int] = None
+    video_code_family: str = ""
 ```
 
 `to_dict()` uses `asdict(self)` and picks the field up automatically. Do **not** add the field to `to_legacy_dict()`.
 
-- [ ] **Step 4: Populate the family in the Python fallback parser.**
+- [x] **Step 4: Populate the family in the Python fallback parser.**
 
 In `javdb/parsing/fallback/index_parser.py`, import `classify_video_code_family` alongside the other `javdb.parsing.common` imports. After `video_code = extract_video_code(a)`, add:
 
@@ -248,7 +256,7 @@ In `javdb/parsing/fallback/index_parser.py`, import `classify_video_code_family`
 
 and pass `video_code_family=video_code_family` into the `MovieIndexEntry(...)` constructor.
 
-- [ ] **Step 5: Run Python parser/model tests.**
+- [x] **Step 5: Run Python parser/model tests.**
 
 ```bash
 pytest tests/unit/test_parser.py::TestExtractVideoCode tests/unit/test_parser.py::TestParseIndex tests/unit/test_api_parsers.py tests/unit/test_api_models.py::TestMovieIndexEntry -v
@@ -256,7 +264,7 @@ pytest tests/unit/test_parser.py::TestExtractVideoCode tests/unit/test_parser.py
 
 Expected: all pass, including the additive-plausibility regression guard.
 
-- [ ] **Step 6: Commit the Python parser contract.**
+- [x] **Step 6: Commit the Python parser contract.**
 
 ```bash
 git add javdb/parsing/common.py javdb/parsing/models.py javdb/parsing/fallback/index_parser.py tests/unit/test_parser.py tests/unit/test_api_parsers.py tests/unit/test_api_models.py
@@ -270,7 +278,7 @@ git commit -m "feat(parser): classify index video code families (additive)"
 - Modify: `javdb/rust_core/src/scraper/index_parser.rs`
 - Modify: `javdb/rust_core/src/models.rs`
 
-- [ ] **Step 1: Add Rust tests for western parsing and the additive guard.**
+- [x] **Step 1: Add Rust tests for western parsing and the additive guard.**
 
 In `javdb/rust_core/src/scraper/common.rs` tests, add:
 
@@ -307,7 +315,7 @@ cargo test scraper::common
 
 Expected: fail because the Rust classifier does not exist and dotted tokens are rejected.
 
-- [ ] **Step 2: Implement the Rust classifier and widen plausibility additively.**
+- [x] **Step 2: Implement the Rust classifier and widen plausibility additively.**
 
 Add regexes near the existing static regexes (the western regex requires a letter in the studio segment, matching Python):
 
@@ -384,7 +392,7 @@ fn is_plausible_video_code(raw: &str) -> bool {
 
 > Do **not** rewrite `is_plausible_video_code` as `!classify_video_code_family(raw).is_empty()`. That is the regression D2 forbids.
 
-- [ ] **Step 3: Expose `video_code_family` on the Rust model.**
+- [x] **Step 3: Expose `video_code_family` on the Rust model.**
 
 In `javdb/rust_core/src/models.rs`, add the field after `video_code`:
 
@@ -393,7 +401,7 @@ In `javdb/rust_core/src/models.rs`, add the field after `video_code`:
     pub video_code_family: String,
 ```
 
-Update the constructor `#[pyo3(signature = (...))]` and body to add `video_code_family=String::new()` immediately after `video_code` (matching the Python field order). Add to `to_dict()` only:
+Keep the struct field immediately after `video_code`, but preserve the existing PyO3 constructor positional order. Append optional `video_code_family=String::new()` after the existing constructor parameters (after `ranking=None`) so calls like `RustMovieIndexEntry("/v/x", "ABC-123", "Title")` still set `title`; new callers can also pass it by keyword. Add to `to_dict()` only:
 
 ```rust
 dict.set_item("video_code_family", &self.video_code_family)?;
@@ -401,7 +409,7 @@ dict.set_item("video_code_family", &self.video_code_family)?;
 
 Do **not** add it to `to_legacy_dict()`.
 
-- [ ] **Step 4: Populate `video_code_family` in the Rust index parser.**
+- [x] **Step 4: Populate `video_code_family` in the Rust index parser.**
 
 In `javdb/rust_core/src/scraper/index_parser.rs`, import `classify_video_code_family` from `crate::scraper::common`. After `let video_code = extract_video_code(&a);`, add:
 
@@ -411,7 +419,7 @@ In `javdb/rust_core/src/scraper/index_parser.rs`, import `classify_video_code_fa
 
 and set `video_code_family` in the `MovieIndexEntry { ... }` struct literal.
 
-- [ ] **Step 5: Run Rust tests.**
+- [x] **Step 5: Run Rust tests.**
 
 ```bash
 cd javdb/rust_core
@@ -420,7 +428,7 @@ cargo test
 
 Expected: all Rust tests pass.
 
-- [ ] **Step 6: Rebuild the extension and commit.**
+- [x] **Step 6: Rebuild the extension and commit.**
 
 ```bash
 cd javdb/rust_core && maturin develop --release && cd ../../..
@@ -436,7 +444,7 @@ git commit -m "feat(parser): add rust video code family parity (additive)"
 - Modify: `javdb/spider/fetch/index_parallel.py`
 - Test: `tests/unit/test_index_family_blacklist.py`
 
-- [ ] **Step 1: Write failing tests for normalization and the single-pass filter.**
+- [x] **Step 1: Write failing tests for normalization and the single-pass filter.**
 
 Create `tests/unit/test_index_family_blacklist.py`:
 
@@ -491,7 +499,7 @@ pytest tests/unit/test_index_family_blacklist.py -v
 
 Expected: fail because the module does not exist.
 
-- [ ] **Step 2: Implement the config-only blacklist helpers.**
+- [x] **Step 2: Implement the config-only blacklist helpers.**
 
 Create `javdb/pipeline/index_family_blacklist.py`:
 
@@ -535,7 +543,7 @@ def filter_blacklisted_families(movies, blacklist, counts=None):
     return kept
 ```
 
-- [ ] **Step 3: Wire the daily filter into the sequential fetch.**
+- [x] **Step 3: Wire the daily filter into the sequential fetch.**
 
 In `javdb/spider/fetch/index.py`, import:
 
@@ -577,11 +585,11 @@ Before the function returns, log the aggregate only when non-empty:
 
 > `select_index_entries` is **not** modified. The filter runs before it, so both phase calls operate on the already-filtered `page_result.movies` and exclusions are counted once. `is_adhoc_mode=(custom_url is not None)` already keeps ad hoc runs unaffected because the blacklist set is empty for them.
 
-- [ ] **Step 4: Mirror the wiring in the parallel fetch.**
+- [x] **Step 4: Mirror the wiring in the parallel fetch.**
 
 In `javdb/spider/fetch/index_parallel.py`, apply the same imports, the same daily-only blacklist initialization, the same post-`observe` / pre-`select` filter call against each page's `page_result.movies`, and the same end-of-run aggregate `log_summary_block`. Use a thread-safe accumulation if pages are filtered inside worker threads (e.g. accumulate per-page counts and merge under the existing results lock, or filter on the main thread after each page result is collected).
 
-- [ ] **Step 5: Run blacklist tests.**
+- [x] **Step 5: Run blacklist tests.**
 
 ```bash
 pytest tests/unit/test_index_family_blacklist.py -v
@@ -589,7 +597,7 @@ pytest tests/unit/test_index_family_blacklist.py -v
 
 Expected: pass.
 
-- [ ] **Step 6: Commit the daily filter.**
+- [x] **Step 6: Commit the daily filter.**
 
 ```bash
 git add javdb/pipeline/index_family_blacklist.py javdb/spider/fetch/index.py javdb/spider/fetch/index_parallel.py tests/unit/test_index_family_blacklist.py
@@ -605,7 +613,7 @@ git commit -m "feat(pipeline): filter daily index families (config-only)"
 - Modify: `.github/workflows/DailyIngestion.yml`
 - Modify: `.github/workflows/TestIngestion.yml`
 
-- [ ] **Step 1: Add the runtime config default (normalized to a clean list).**
+- [x] **Step 1: Add the runtime config default (normalized to a clean list).**
 
 In `javdb/spider/runtime/config.py`, near the phase settings:
 
@@ -625,7 +633,7 @@ DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST = [
 ]
 ```
 
-- [ ] **Step 2: Add the default to `config.py.example`.**
+- [x] **Step 2: Add the default to `config.py.example`.**
 
 In the Spider Configuration section after `PHASE2_MIN_COMMENTS`:
 
@@ -637,7 +645,7 @@ In the Spider Configuration section after `PHASE2_MIN_COMMENTS`:
 DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST = ['western_studio_date']
 ```
 
-- [ ] **Step 3: Render the key from GitHub Variables.**
+- [x] **Step 3: Render the key from GitHub Variables.**
 
 In `javdb/infra/config_generator.py`, add a config-map entry in the Spider Configuration section:
 
@@ -651,7 +659,7 @@ In `javdb/infra/config_generator.py`, add a config-map entry in the Spider Confi
 ),
 ```
 
-- [ ] **Step 4: Add workflow env wiring for daily-like runs.**
+- [x] **Step 4: Add workflow env wiring for daily-like runs.**
 
 In `.github/workflows/DailyIngestion.yml`, inside the `Generate config.py from GitHub Variables and Secrets` step env block:
 
@@ -663,7 +671,7 @@ Add the same line to the config-generator step in `.github/workflows/TestIngesti
 
 `AdHocIngestion.yml` needs no change: even if it renders the key via defaults, the fetch layer only loads the blacklist when `custom_url is None`, so ad hoc runs never apply it.
 
-- [ ] **Step 5: Verify config rendering.**
+- [x] **Step 5: Verify config rendering.**
 
 ```bash
 VAR_DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST_JSON='["western_studio_date"]' \
@@ -672,7 +680,7 @@ python3 -m apps.cli.ops.config_generator --dry-run
 
 Expected: output includes `DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST = ["western_studio_date"]`.
 
-- [ ] **Step 6: Commit config and workflow wiring.**
+- [x] **Step 6: Commit config and workflow wiring.**
 
 ```bash
 git add javdb/spider/runtime/config.py config.py.example javdb/infra/config_generator.py .github/workflows/DailyIngestion.yml .github/workflows/TestIngestion.yml
@@ -688,7 +696,7 @@ git commit -m "ci(workflows): wire daily index family blacklist config"
 - Modify: `docs/handbook/en/self-hoster/github-actions-setup.md`
 - Modify: `docs/handbook/zh/self-hoster/github-actions-setup.md`
 
-- [ ] **Step 1: Add domain language to `CONTEXT.md`.**
+- [x] **Step 1: Add domain language to `CONTEXT.md`.**
 
 Insert near the parsing / filter vocabulary (no D1 table is involved):
 
@@ -705,7 +713,7 @@ a single pre-selection pass, after the site-contract sentinel has observed the
 raw parsed cards. Ad hoc ingestion bypasses the blacklist.
 ```
 
-- [ ] **Step 2: Document the config key (en + zh).**
+- [x] **Step 2: Document the config key (en + zh).**
 
 Add to `docs/handbook/en/self-hoster/configuration.md` under Spider configuration:
 
@@ -715,7 +723,7 @@ Add to `docs/handbook/en/self-hoster/configuration.md` under Spider configuratio
 
 Mirror in `docs/handbook/zh/self-hoster/configuration.md` (preserve the config name, path, and default verbatim).
 
-- [ ] **Step 3: Document the GitHub Actions variable (en + zh).**
+- [x] **Step 3: Document the GitHub Actions variable (en + zh).**
 
 In `docs/handbook/en/self-hoster/github-actions-setup.md`, add to the non-sensitive variables table:
 
@@ -725,7 +733,7 @@ In `docs/handbook/en/self-hoster/github-actions-setup.md`, add to the non-sensit
 
 Mirror in the Chinese page.
 
-- [ ] **Step 4: Verify docs and formatting.**
+- [x] **Step 4: Verify docs and formatting.**
 
 ```bash
 rg -n "video code family|video_code_family|DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST" CONTEXT.md docs/handbook/en docs/handbook/zh
@@ -734,7 +742,7 @@ git diff --check
 
 Expected: terms present in the intended docs; no whitespace errors.
 
-- [ ] **Step 5: Commit docs.**
+- [x] **Step 5: Commit docs.**
 
 ```bash
 git add CONTEXT.md docs/handbook/en/self-hoster/configuration.md docs/handbook/zh/self-hoster/configuration.md docs/handbook/en/self-hoster/github-actions-setup.md docs/handbook/zh/self-hoster/github-actions-setup.md
@@ -745,7 +753,7 @@ git commit -m "docs: document daily index family filtering"
 
 **Files:** No new files. Validates the complete branch.
 
-- [ ] **Step 1: Run focused Python tests.**
+- [x] **Step 1: Run focused Python tests.**
 
 ```bash
 pytest \
@@ -758,7 +766,7 @@ pytest \
 
 Expected: all pass — especially the additive-plausibility regression guard (`259LUXU-1234`, `H4610-ki220101`, `1pondo-010120_001` stay valid video codes).
 
-- [ ] **Step 2: Run Rust tests and rebuild.**
+- [x] **Step 2: Run Rust tests and rebuild.**
 
 ```bash
 cd javdb/rust_core && cargo test && maturin develop --release && cd ../../..
@@ -766,7 +774,7 @@ cd javdb/rust_core && cargo test && maturin develop --release && cd ../../..
 
 Expected: all Rust parser/model tests pass and the wheel rebuilds.
 
-- [ ] **Step 3: Cross-engine parity check.**
+- [x] **Step 3: Cross-engine parity check.**
 
 ```bash
 python3 - <<'PY'
@@ -777,9 +785,9 @@ for code in ["Wifey.2026.05.30", "259LUXU-1234", "ABC-123", "H4610-ki220101"]:
 PY
 ```
 
-Expected: `Wifey.2026.05.30 -> western_studio_date`, `259LUXU-1234 -> ` (empty), `ABC-123 -> classic_hyphenated`, `H4610-ki220101 -> ` (empty).
+Expected: `Wifey.2026.05.30 -> western_studio_date`, `259LUXU-1234 ->` (empty), `ABC-123 -> classic_hyphenated`, `H4610-ki220101 ->` (empty).
 
-- [ ] **Step 4: Dry-run config rendering.**
+- [x] **Step 4: Dry-run config rendering.**
 
 ```bash
 VAR_DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST_JSON='["western_studio_date"]' \
@@ -788,7 +796,7 @@ python3 -m apps.cli.ops.config_generator --dry-run
 
 Expected: output includes `DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST = ["western_studio_date"]`.
 
-- [ ] **Step 5: Final hygiene checks.**
+- [x] **Step 5: Final hygiene checks.**
 
 ```bash
 git diff --check

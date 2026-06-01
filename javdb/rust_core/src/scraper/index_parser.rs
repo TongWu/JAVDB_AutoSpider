@@ -3,20 +3,17 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use scraper::{ElementRef, Html, Selector};
 
-use crate::models::{
-    CategoryPageResult, IndexPageResult, MovieIndexEntry, TopPageResult,
-};
+use crate::models::{CategoryPageResult, IndexPageResult, MovieIndexEntry, TopPageResult};
 use crate::scraper::common::{
-    class_contains, detect_page_type, extract_category_name, extract_rate_and_comments,
-    extract_video_code, get_text_content,
+    class_contains, classify_video_code_family, detect_page_type, extract_category_name,
+    extract_rate_and_comments, extract_video_code, get_text_content,
 };
 
 static SEL_TITLE: Lazy<Selector> = Lazy::new(|| Selector::parse("title").unwrap());
 static SEL_ITEM: Lazy<Selector> = Lazy::new(|| Selector::parse("div.item").unwrap());
 static SEL_A_BOX: Lazy<Selector> = Lazy::new(|| Selector::parse("a.box").unwrap());
 static SEL_A: Lazy<Selector> = Lazy::new(|| Selector::parse("a").unwrap());
-static SEL_VIDEO_TITLE: Lazy<Selector> =
-    Lazy::new(|| Selector::parse("div.video-title").unwrap());
+static SEL_VIDEO_TITLE: Lazy<Selector> = Lazy::new(|| Selector::parse("div.video-title").unwrap());
 static SEL_SCORE: Lazy<Selector> = Lazy::new(|| Selector::parse("div.score").unwrap());
 static SEL_VALUE_SPAN: Lazy<Selector> = Lazy::new(|| Selector::parse("span.value").unwrap());
 static SEL_VALUE_DIV: Lazy<Selector> = Lazy::new(|| Selector::parse("div.value").unwrap());
@@ -28,8 +25,7 @@ static SEL_IMG: Lazy<Selector> = Lazy::new(|| Selector::parse("img").unwrap());
 static SEL_RANKING_SPAN: Lazy<Selector> = Lazy::new(|| Selector::parse("span.ranking").unwrap());
 
 static YEAR_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[?&]t=y(\d{4})").unwrap());
-static PERIOD_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"[?&]p=(daily|weekly|monthly)").unwrap());
+static PERIOD_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[?&]p=(daily|weekly|monthly)").unwrap());
 
 fn parse_movie_item(item: &ElementRef, page_num: i32) -> Option<MovieIndexEntry> {
     let a = item
@@ -43,6 +39,7 @@ fn parse_movie_item(item: &ElementRef, page_num: i32) -> Option<MovieIndexEntry>
     }
 
     let video_code = extract_video_code(&a);
+    let video_code_family = classify_video_code_family(&video_code).to_string();
 
     // Title
     let mut title = String::new();
@@ -119,6 +116,7 @@ fn parse_movie_item(item: &ElementRef, page_num: i32) -> Option<MovieIndexEntry>
     Some(MovieIndexEntry {
         href,
         video_code,
+        video_code_family,
         title,
         rate,
         comment_count,
