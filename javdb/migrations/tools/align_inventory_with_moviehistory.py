@@ -29,7 +29,6 @@ import argparse
 import csv
 import json
 import os
-import queue as queue_module
 import random
 import sys
 import threading
@@ -858,11 +857,7 @@ def run_alignment(args: argparse.Namespace) -> int:
             logger.warning("Keyboard interrupt — shutting down engine …")
             orphaned = engine.shutdown(timeout=30)
 
-            while True:
-                try:
-                    result = engine._result_queue.get_nowait()
-                except queue_module.Empty:
-                    break
+            for result in engine.drain_remaining():
                 _apply_align_result(result)
 
             logger.info(
