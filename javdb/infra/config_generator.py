@@ -397,6 +397,10 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         # qBittorrent File Filter Configuration
         ('QB_FILE_FILTER_MIN_SIZE_MB', 'QB_FILE_FILTER_MIN_SIZE_MB', get_env_int, 100, 'QBITTORRENT FILE FILTER CONFIGURATION'),
         ('QB_FILE_FILTER_LOG_FILE', 'QB_FILE_FILTER_LOG_FILE', get_env, 'logs/qb_file_filter.log', 'QBITTORRENT FILE FILTER CONFIGURATION'),
+        # Torrent Quality Evidence
+        ('TORRENT_QUALITY_EVIDENCE_ENABLED', 'TORRENT_QUALITY_EVIDENCE_ENABLED', get_env_bool, False, 'TORRENT QUALITY EVIDENCE'),
+        ('TORRENT_QUALITY_POLICY_MODE', 'TORRENT_QUALITY_POLICY_MODE', get_env, 'shadow', 'TORRENT QUALITY EVIDENCE'),
+        ('TORRENT_QUALITY_CATEGORIES', 'TORRENT_QUALITY_CATEGORIES', get_env, '', 'TORRENT QUALITY EVIDENCE'),
         # Rclone Configuration
         ('RCLONE_CONFIG_BASE64', 'RCLONE_CONFIG_BASE64', get_env, '', 'RCLONE CONFIGURATION'),
         ('RCLONE_FOLDER_PATH', 'RCLONE_FOLDER_PATH', get_env, 'gdrive:', 'RCLONE CONFIGURATION'),
