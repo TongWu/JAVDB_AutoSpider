@@ -61,10 +61,10 @@ class _FakeBackend:
     def __init__(self, results: Iterable[Any]) -> None:
         self._results: list[Any] = list(results)
         self.submitted: list[tuple[str, dict[str, Any], str, int]] = []
-        self.marked_done = False
-        self.started = False
-        self.shutdown_called = False
-        self.export_called = False
+        self.marked_done: bool = False
+        self.started: bool = False
+        self.shutdown_called: bool = False
+        self.export_called: bool = False
 
     def start(self) -> None:
         self.started = True
@@ -85,7 +85,7 @@ class _FakeBackend:
         self.export_called = True
 
 
-def _parallel_page_result():
+def _parallel_page_result() -> IndexPageResult:
     return IndexPageResult(
         has_movie_list=True,
         movies=[
@@ -95,7 +95,7 @@ def _parallel_page_result():
     )
 
 
-def _fake_result(page_num, html):
+def _fake_result(page_num: int, html: str) -> SimpleNamespace:
     return SimpleNamespace(
         success=True,
         data={"has_movie_list": True, "html": html, "is_valid_empty": False},

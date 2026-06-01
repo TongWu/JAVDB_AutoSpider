@@ -154,15 +154,6 @@ def extract_all_movie_links(parent_tag: Tag) -> list:
 # Video-code extraction (ported from utils/parser.py)
 # ---------------------------------------------------------------------------
 
-VIDEO_CODE_FAMILIES = (
-    "classic_hyphenated",
-    "multi_hyphen",
-    "numeric_date_hyphen",
-    "numeric_date_underscore",
-    "hyphenless_studio",
-    "western_studio_date",
-)
-
 WESTERN_STUDIO_DATE_RE = re.compile(
     r"^[A-Za-z0-9]*[A-Za-z][A-Za-z0-9]*\.(?:\d{4}|\d{2})\.\d{2}\.\d{2}$"
 )
@@ -175,6 +166,8 @@ _VIDEO_CODE_FAMILY_PATTERNS = (
     ("classic_hyphenated", re.compile(r"^[A-Za-z]+-\d+[A-Za-z0-9]*$")),
     ("hyphenless_studio", re.compile(r"^[A-Za-z]+\d+$")),
 )
+
+VIDEO_CODE_FAMILIES = tuple(family for family, _pattern in _VIDEO_CODE_FAMILY_PATTERNS)
 
 
 def classify_video_code_family(raw: str) -> str:
