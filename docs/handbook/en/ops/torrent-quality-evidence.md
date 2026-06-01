@@ -58,11 +58,11 @@ instead of scanning every qBittorrent category.
 
 ## Reading Results
 
-The collector prints a summary line with `scanned`, `evidence`, `evaluations`,
-`probe_unavailable`, and `skipped` counts. Stored rows can be inspected in the
-`TorrentQualityEvidence` and `TorrentQualityEvaluation` tables on
-`javdb-reports`. The read-only API surface is intentionally deferred to
-IMP-ADR024-06.
+The collector prints a summary line with `scanned`, `evidence_written`,
+`evaluations_written`, `probe_unavailable`, and `skipped` counts. Stored rows
+can be inspected in the `TorrentQualityEvidence` and
+`TorrentQualityEvaluation` tables on `javdb-reports`. The read-only API surface
+is intentionally deferred to IMP-ADR024-06.
 
 ## Reason Codes
 
