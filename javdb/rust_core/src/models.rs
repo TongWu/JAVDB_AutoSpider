@@ -150,6 +150,8 @@ pub struct MovieIndexEntry {
     #[pyo3(get, set)]
     pub video_code: String,
     #[pyo3(get, set)]
+    pub video_code_family: String,
+    #[pyo3(get, set)]
     pub title: String,
     #[pyo3(get, set)]
     pub rate: String,
@@ -170,7 +172,7 @@ pub struct MovieIndexEntry {
 #[pymethods]
 impl MovieIndexEntry {
     #[new]
-    #[pyo3(signature = (href, video_code, title=String::new(), rate=String::new(), comment_count=String::new(), release_date=String::new(), tags=vec![], cover_url=String::new(), page=1, ranking=None))]
+    #[pyo3(signature = (href, video_code, title=String::new(), rate=String::new(), comment_count=String::new(), release_date=String::new(), tags=vec![], cover_url=String::new(), page=1, ranking=None, video_code_family=String::new()))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         href: String,
@@ -183,10 +185,12 @@ impl MovieIndexEntry {
         cover_url: String,
         page: i32,
         ranking: Option<i32>,
+        video_code_family: String,
     ) -> Self {
         Self {
             href,
             video_code,
+            video_code_family,
             title,
             rate,
             comment_count,
@@ -210,6 +214,7 @@ impl MovieIndexEntry {
         dict.set_item("cover_url", &self.cover_url)?;
         dict.set_item("page", self.page)?;
         dict.set_item("ranking", self.ranking)?;
+        dict.set_item("video_code_family", &self.video_code_family)?;
         Ok(dict)
     }
 

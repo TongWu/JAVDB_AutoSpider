@@ -103,6 +103,7 @@ GitHub Actions 部署提供：
 | `GIT_BRANCH` | `main` | git push 的分支 |
 | `PROXY_MODE` | `pool` | `pool`、`single` 或 `None` |
 | `PROXY_MODULES_JSON` | `["spider"]` | 使用 proxy 的模块 JSON 数组：`spider`、`qbittorrent`、`pikpak`、`all` |
+| `DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST_JSON` | `["western_studio_date"]` | 排除每日抓取的 video-code family 的 JSON 数组，默认 `["western_studio_date"]`。设为 `[]` 可停止排除 western studio/date family。 |
 | `LOG_LEVEL` | `INFO` | `DEBUG`、`INFO`、`WARNING`、`ERROR` |
 | `STORAGE_BACKEND` | `sqlite` | `sqlite`、`d1` 或 `dual` |
 | `D1_RECOVERY_OUTBOX_ENABLED` | `false` | 启用 ADR-010 recovery outbox，处理安全 D1 写入失败。可识别的真值包括 `1`、`true`、`yes`、`on`。 |

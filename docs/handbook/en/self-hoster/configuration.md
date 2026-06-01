@@ -209,6 +209,7 @@ Controls page range and filtering thresholds for the scraping phases.
 | `PAGE_END` | `int` | `20` | Last page number to scrape (inclusive). |
 | `PHASE2_MIN_RATE` | `float` | `4.0` | Minimum user rating for a movie to qualify in Phase 2 (high-rated non-subtitle entries). |
 | `PHASE2_MIN_COMMENTS` | `int` | `100` | Minimum comment count for a movie to qualify in Phase 2. |
+| `DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST` | `list[str]` | `['western_studio_date']` | Daily-only family blacklist applied after index parsing and sentinel accounting. The parser still recognizes these families, and ad-hoc ingestion bypasses this blacklist. In GitHub Actions, set repo Variable `DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST_JSON` to a JSON array such as `[]` to opt out of the static default. |
 | `BASE_URL` | `str` | `'https://javdb.com'` | Base URL for JavDB. Change only if using a mirror. |
 
 ---
