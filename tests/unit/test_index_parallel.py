@@ -6,7 +6,7 @@ import os
 import queue as queue_module
 import sys
 from collections.abc import Iterable, Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any, Dict, Optional
 
