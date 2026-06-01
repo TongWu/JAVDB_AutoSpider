@@ -4,6 +4,7 @@
 **日期 (Date):** YYYY-MM-DD
 **作者 (Author):**
 **关联实现计划 (Related Implementation Plans):** [IMP-ADRNNN-01](IMP-ADRNNN-01-topic.md)（Phase 1 — 描述）
+**D1 写入类别 (D1 Write Class):** authoritative | additive | diagnostic | n/a  <!-- ADR-042 D6：若本 ADR 引入 D1 写入则分类，否则填 n/a -->
 
 ## 背景 (Context)
 
