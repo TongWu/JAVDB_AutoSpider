@@ -172,12 +172,11 @@ pub struct MovieIndexEntry {
 #[pymethods]
 impl MovieIndexEntry {
     #[new]
-    #[pyo3(signature = (href, video_code, video_code_family=String::new(), title=String::new(), rate=String::new(), comment_count=String::new(), release_date=String::new(), tags=vec![], cover_url=String::new(), page=1, ranking=None))]
+    #[pyo3(signature = (href, video_code, title=String::new(), rate=String::new(), comment_count=String::new(), release_date=String::new(), tags=vec![], cover_url=String::new(), page=1, ranking=None, video_code_family=String::new()))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         href: String,
         video_code: String,
-        video_code_family: String,
         title: String,
         rate: String,
         comment_count: String,
@@ -186,6 +185,7 @@ impl MovieIndexEntry {
         cover_url: String,
         page: i32,
         ranking: Option<i32>,
+        video_code_family: String,
     ) -> Self {
         Self {
             href,

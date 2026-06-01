@@ -393,7 +393,7 @@ In `javdb/rust_core/src/models.rs`, add the field after `video_code`:
     pub video_code_family: String,
 ```
 
-Update the constructor `#[pyo3(signature = (...))]` and body to add `video_code_family=String::new()` immediately after `video_code` (matching the Python field order). Add to `to_dict()` only:
+Keep the struct field immediately after `video_code`, but preserve the existing PyO3 constructor positional order. Append optional `video_code_family=String::new()` after the existing constructor parameters (after `ranking=None`) so calls like `RustMovieIndexEntry("/v/x", "ABC-123", "Title")` still set `title`; new callers can also pass it by keyword. Add to `to_dict()` only:
 
 ```rust
 dict.set_item("video_code_family", &self.video_code_family)?;
