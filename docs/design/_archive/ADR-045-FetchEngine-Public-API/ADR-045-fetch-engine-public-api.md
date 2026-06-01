@@ -1,6 +1,6 @@
 # ADR-045: FetchEngine Reusable Public API Hardening
 
-**Status:** Proposed
+**Status:** Completed
 **Date:** 2026-06-01
 **Author:** Ted
 **Related Implementation Plans:** [IMP-ADR045-01](IMP-ADR045-01-fetch-engine-public-api.md) (Phase 1 — `drain_remaining()` + thin `run()`, migrate the three migration tools)
@@ -69,7 +69,7 @@ Hardening — not greenfield — is what is actually needed:
 ### Relationship to ADR-043
 
 `meta-7` failed because a proxy persistently failed the Cloudflare wall.
-[ADR-043](../_archive/ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.md)
+[ADR-043](../ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.md)
 reduces *reuse* of such proxies (cross-runner CF auto-ban). This ADR is
 complementary and orthogonal: it ensures that **when a fetch fails for any
 reason, the work item is re-queued to a different proxy** instead of being
@@ -168,7 +168,7 @@ lifecycle needs and **no** private-state leak, so they are left untouched
 **D8. Fix the stale comment and stale `scripts.*` path references.** Correct the
 `backfill_movie_metadata.py:11-12` claim, and update the `fetch_engine.py`
 docstrings / `__all__` that still reference `scripts.spider.fetch.*` —
-pre-[ADR-007](../_archive/ADR-007-Monorepo-Restructure/ADR-007-monorepo-restructure-2026-05.md)
+pre-[ADR-007](../ADR-007-Monorepo-Restructure/ADR-007-monorepo-restructure-2026-05.md)
 paths retired in Phase 3 (canonical is `javdb.spider.fetch.*`).
 
 ## Consequences
@@ -188,7 +188,7 @@ paths retired in Phase 3 (canonical is `javdb.spider.fetch.*`).
 - One canonical fetch path for every migration / catch-up tool; the misleading
   "no public API" comment is gone.
 - Engine-internal only — **not** part of the
-  [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md)
+  [ADR-017](../ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md)
   dual-backend overlap surface (no D1 query / auth / API-shape change), so the
   web repo's TS backend needs no sync.
 
@@ -219,10 +219,11 @@ paths retired in Phase 3 (canonical is `javdb.spider.fetch.*`).
 - `javdb/spider/fetch/fetch_engine.py` — `ParallelFetchBackend` / `FetchEngine` / `WorkerContext` / `results()` / `shutdown()`
 - `javdb/migrations/tools/backfill_movie_metadata.py` — sequential tool being migrated (D3–D6)
 - `javdb/migrations/tools/migrate_v7_to_v8.py`, `javdb/migrations/tools/align_inventory_with_moviehistory.py` — existing `FetchEngine` callers with the private-queue leak (D1)
-- [ADR-043 — CF Persistent-Failure Auto-Ban](../_archive/ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.md) — complementary: reduces bad-proxy *reuse*; this ADR makes failed *work* recoverable
-- [ADR-007 — Monorepo Restructure](../_archive/ADR-007-Monorepo-Restructure/ADR-007-monorepo-restructure-2026-05.md) — retired the `scripts.*` paths still referenced in stale docstrings (D8)
+- [ADR-043 — CF Persistent-Failure Auto-Ban](../ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.md) — complementary: reduces bad-proxy *reuse*; this ADR makes failed *work* recoverable
+- [ADR-007 — Monorepo Restructure](../ADR-007-Monorepo-Restructure/ADR-007-monorepo-restructure-2026-05.md) — retired the `scripts.*` paths still referenced in stale docstrings (D8)
 
 ## Status Log
 
 - 2026-06-01: Proposed
 - 2026-06-01: Phase 1 implemented and locally verified ([IMP-ADR045-01](IMP-ADR045-01-fetch-engine-public-api.md)); the CLI surface stayed unchanged, so no handbook update was needed.
+- 2026-06-01: Completed — Phase 1 merged via [PR #156](https://github.com/TongWu/JAVDB_AutoSpider_CICD/pull/156); ADR archived to `_archive/` per the whole-folder archival rule.
