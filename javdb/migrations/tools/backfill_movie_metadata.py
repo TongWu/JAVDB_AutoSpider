@@ -213,7 +213,7 @@ def _process_href(
 # Parallel result helpers
 # ---------------------------------------------------------------------------
 
-def _backfill_metadata_parse(html: str, task) -> object | None:
+def _backfill_metadata_parse(html: str, _task) -> object | None:
     """Parse detail HTML for ``FetchEngine.simple``.
 
     Return ``None`` only for genuinely empty/non-detail pages so the engine can
@@ -302,7 +302,7 @@ def run_backfill_metadata(args: SimpleNamespace) -> int:
         # against the effective worker count so workflow-input volume stays
         # comparable to earlier runs.
         if limit_per_worker > 0:
-            num_workers = len(PROXY_POOL) if (use_proxy and PROXY_POOL) else 1
+            num_workers = 1
             hrefs = hrefs[: limit_per_worker * num_workers]
         elif limit > 0:
             hrefs = hrefs[:limit]

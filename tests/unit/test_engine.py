@@ -1151,7 +1151,8 @@ class TestRunLifecycle:
 
         assert calls == ['start', ('submit', 'a'), ('submit', 'b'),
                          'mark_done', 'shutdown']
-        assert len(results) == 1 and results[0].success is True
+        assert len(results) == 1
+        assert results[0].success is True
 
     def test_run_shuts_down_even_when_results_raises(self):
         import pytest
