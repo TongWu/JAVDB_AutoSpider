@@ -354,6 +354,13 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         ('PAGE_END', 'PAGE_END', get_env_int, get_env_int('END_PAGE', 10), 'SPIDER CONFIGURATION'),
         ('PHASE2_MIN_RATE', 'PHASE2_MIN_RATE', get_env_float, 4.0, 'SPIDER CONFIGURATION'),
         ('PHASE2_MIN_COMMENTS', 'PHASE2_MIN_COMMENTS', get_env_int, 85, 'SPIDER CONFIGURATION'),
+        (
+            'DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST',
+            'DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST_JSON',
+            get_env_json,
+            ['western_studio_date'],
+            'SPIDER CONFIGURATION',
+        ),
         ('BASE_URL', 'BASE_URL', get_env, 'https://javdb.com', 'SPIDER CONFIGURATION'),
         # JavDB Login Configuration
         ('JAVDB_USERNAME', 'JAVDB_USERNAME', get_env, '', 'JAVDB LOGIN CONFIGURATION'),

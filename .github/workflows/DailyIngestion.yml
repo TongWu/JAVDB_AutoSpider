@@ -246,6 +246,7 @@ jobs:
           VAR_PAGE_END: ${{ vars.PAGE_END }}
           VAR_PHASE2_MIN_RATE: ${{ vars.PHASE2_MIN_RATE }}
           VAR_PHASE2_MIN_COMMENTS: ${{ vars.PHASE2_MIN_COMMENTS }}
+          VAR_DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST_JSON: ${{ vars.DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST_JSON || '["western_studio_date"]' }}
           VAR_BASE_URL: ${{ vars.BASE_URL || 'https://javdb.com' }}
           VAR_JAVDB_USERNAME: ${{ secrets.JAVDB_USERNAME }}
           VAR_GPT_API_URL: ${{ secrets.GPT_API_URL }}

@@ -246,6 +246,12 @@ PAGE_END = 20
 PHASE2_MIN_RATE = 4.0
 PHASE2_MIN_COMMENTS = 100
 
+# Daily-only index video-code-family blacklist.
+# Defaults to excluding western studio/date cards from daily ingestion while
+# the parser still recognizes them and ad-hoc ingestion still uses them.
+# Set to [] to opt out of the western default.
+DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST = ['western_studio_date']
+
 # Base URL for JavDB
 BASE_URL = 'https://javdb.com'
 

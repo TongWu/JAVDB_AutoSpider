@@ -2,10 +2,10 @@
 
 | Field | Value |
 | --- | --- |
-| **Status** | Accepted — additive parser recognition + config-only daily blacklist agreed; implementation pending |
+| **Status** | Completed — implemented and verified on 2026-06-01 |
 | **Date** | 2026-06-01 |
 | **Authors** | Ted |
-| **Related** | [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md), [ADR-040](../ADR-040-Content-Filter-Rules/ADR-040-content-filter-rules.md), [ADR-042](../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md) |
+| **Related** | [ADR-035](../../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md), [ADR-040](../../ADR-040-Content-Filter-Rules/ADR-040-content-filter-rules.md), [ADR-042](../../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md) |
 | **Related Implementation Plans** | [IMP-ADR044-01](IMP-ADR044-01-index-video-code-family-blacklist.md) |
 
 > This ADR came out of a drift investigation: the parser must recognize a new index-card family so the sentinel sees a filled `video_code`, but daily ingestion must still keep that family out of the download queue by default.
@@ -14,7 +14,7 @@
 
 The parser already distinguishes these page types: `index`, `detail`, `actors`, `makers`, `publishers`, `series`, `directors`, `video_codes`, `search`, `tags`, `top250`, `top_movies`, `top_playback`, and `unknown`. This ADR is narrower than the whole parser surface: it only adds a classification label to index-card `video_code` tokens and changes how daily ingestion treats one newly-recognized family.
 
-In the failure case (run [26716551239](https://github.com/TongWu/JAVDB_AutoSpider_CICD/actions/runs/26716551239)), nine cards out of a 400-card daily sample carried a western studio/date first token (e.g. `Wifey.2026.05.30`, `RKPrime.26.05.28`). The parser's `_is_plausible_video_code` guard rejects any token containing characters outside `[A-Za-z0-9_-]` — the dots made these tokens fail, so they were left with an empty `video_code`. That dropped `index.video_code` fill enough to trip the critical contract sentinel (ADR-035), even though the page content was not actually missing data. At the same time, those cards are intentionally outside the daily ingestion target set, so simply widening the parser without a filter would let them drift into the queue.
+In the failure case (run [26716551239](https://github.com/TongWu/JAVDB_AutoSpider_CICD/actions/runs/26716551239)), nine cards out of a 400-card daily sample carried a western studio/date first-token (e.g. `Wifey.2026.05.30`, `RKPrime.26.05.28`). The parser's `_is_plausible_video_code` guard rejects any token containing characters outside `[A-Za-z0-9_-]` — the dots made these tokens fail, so they were left with an empty `video_code`. That dropped `index.video_code` fill enough to trip the critical contract sentinel (ADR-035), even though the page content was not actually missing data. At the same time, those cards are intentionally outside the daily ingestion target set, so simply widening the parser without a filter would let them drift into the queue.
 
 This is a boundary problem, not just a parsing bug:
 
@@ -63,7 +63,7 @@ The blacklist applies only to `DailyIngestion`. `AdHocIngestion` bypasses it (it
 
 The daily pipeline order is:
 
-```
+```text
 parse index cards -> sentinel accounting -> daily family blacklist (independent step) -> phase 1 / phase 2 selection
 ```
 
@@ -123,18 +123,18 @@ Daily runs report family-level exclusion counts — a total plus a per-family br
 
 ## References
 
-- [ADR-035 — Site Contract Sentinel](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)
-- [ADR-040 — Content Filter Rules](../ADR-040-Content-Filter-Rules/ADR-040-content-filter-rules.md)
-- [ADR-042 — D1 Atomic Commit Boundaries](../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md)
-- [`javdb/parsing/common.py`](../../../javdb/parsing/common.py)
-- [`javdb/rust_core/src/scraper/common.rs`](../../../javdb/rust_core/src/scraper/common.rs)
-- [`javdb/pipeline/index_selection.py`](../../../javdb/pipeline/index_selection.py)
-- [`javdb/spider/fetch/index.py`](../../../javdb/spider/fetch/index.py)
-- [`javdb/spider/fetch/index_parallel.py`](../../../javdb/spider/fetch/index_parallel.py)
-- [`javdb/ops/sentinel/field_health.py`](../../../javdb/ops/sentinel/field_health.py)
-- [`javdb/infra/config_generator.py`](../../../javdb/infra/config_generator.py)
-- [`.github/workflows/DailyIngestion.yml`](../../../.github/workflows/DailyIngestion.yml)
-- [`.github/workflows/AdHocIngestion.yml`](../../../.github/workflows/AdHocIngestion.yml)
+- [ADR-035 — Site Contract Sentinel](../../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)
+- [ADR-040 — Content Filter Rules](../../ADR-040-Content-Filter-Rules/ADR-040-content-filter-rules.md)
+- [ADR-042 — D1 Atomic Commit Boundaries](../../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md)
+- [`javdb/parsing/common.py`](../../../../javdb/parsing/common.py)
+- [`javdb/rust_core/src/scraper/common.rs`](../../../../javdb/rust_core/src/scraper/common.rs)
+- [`javdb/pipeline/index_selection.py`](../../../../javdb/pipeline/index_selection.py)
+- [`javdb/spider/fetch/index.py`](../../../../javdb/spider/fetch/index.py)
+- [`javdb/spider/fetch/index_parallel.py`](../../../../javdb/spider/fetch/index_parallel.py)
+- [`javdb/ops/sentinel/field_health.py`](../../../../javdb/ops/sentinel/field_health.py)
+- [`javdb/infra/config_generator.py`](../../../../javdb/infra/config_generator.py)
+- [`.github/workflows/DailyIngestion.yml`](../../../../.github/workflows/DailyIngestion.yml)
+- [`.github/workflows/AdHocIngestion.yml`](../../../../.github/workflows/AdHocIngestion.yml)
 
 ## Status Log
 

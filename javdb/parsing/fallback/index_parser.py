@@ -29,6 +29,7 @@ from javdb.parsing.models import (
     TopPageResult,
 )
 from javdb.parsing.common import (
+    classify_video_code_family,
     extract_video_code,
     extract_rate_and_comments,
     extract_category_name,
@@ -61,6 +62,7 @@ def _parse_movie_item(item: Tag, page_num: int) -> Optional[MovieIndexEntry]:
 
     # --- video code ---
     video_code = extract_video_code(a)
+    video_code_family = classify_video_code_family(video_code)
 
     # --- title ---
     title = ''
@@ -127,6 +129,7 @@ def _parse_movie_item(item: Tag, page_num: int) -> Optional[MovieIndexEntry]:
     return MovieIndexEntry(
         href=href,
         video_code=video_code,
+        video_code_family=video_code_family,
         title=title,
         rate=rate,
         comment_count=comment_count,

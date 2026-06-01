@@ -12,8 +12,9 @@ sys.path.insert(0, project_root)
 
 from javdb.pipeline.index_selection import select_index_entries
 from javdb.parsing import parse_index_page, parse_detail_page
+from javdb.parsing.fallback.index_parser import parse_index_page as parse_fallback_index_page
 from javdb.parsing.models import IndexPageResult, MovieIndexEntry
-from javdb.parsing.common import extract_video_code
+from javdb.parsing.common import classify_video_code_family, extract_video_code
 from bs4 import BeautifulSoup
 
 
@@ -54,8 +55,49 @@ def _parse_detail(html_content):
     )
 
 
+class TestClassifyVideoCodeFamily:
+    """Test cases for classify_video_code_family function."""
+
+    @pytest.mark.parametrize(
+        ("code", "family"),
+        [
+            ("ABC-123", "classic_hyphenated"),
+            ("FC2-PPV-1234567", "multi_hyphen"),
+            ("062216-179", "numeric_date_hyphen"),
+            ("062216_001", "numeric_date_underscore"),
+            ("n0656", "hyphenless_studio"),
+            ("Wifey.2026.05.30", "western_studio_date"),
+            ("RKPrime.26.05.28", "western_studio_date"),
+            # Real codes that match NO family but MUST stay valid video codes:
+            ("259LUXU-1234", ""),
+            ("H4610-ki220101", ""),
+            ("1pondo-010120_001", ""),
+        ],
+    )
+    def test_classify_video_code_family(self, code, family):
+        assert classify_video_code_family(code) == family
+
+
 class TestExtractVideoCode:
     """Test cases for extract_video_code function."""
+
+    @pytest.mark.parametrize(
+        "code",
+        [
+            "ABC-123",
+            "259LUXU-1234",
+            "H4610-ki220101",
+            "1pondo-010120_001",
+            "n0656",
+            "Wifey.2026.05.30",
+            "RKPrime.26.05.28",
+        ],
+    )
+    def test_extract_video_code_keeps_existing_codes_and_western_studio_date(self, code):
+        html = f'<a class="box" href="/v/x"><div class="video-title"><strong>{code}</strong></div></a>'
+        a_tag = BeautifulSoup(html, 'html.parser').find('a')
+
+        assert extract_video_code(a_tag) == code
     
     def test_extract_valid_code(self):
         """Test extracting valid video code."""
@@ -128,6 +170,25 @@ class TestExtractVideoCode:
 
 class TestParseIndex:
     """Test cases for parse_index function."""
+
+    def test_parse_index_populates_western_studio_date_family(self):
+        html = '''
+        <html><body>
+          <div class="movie-list h cols-4">
+            <div class="item">
+              <a class="box" href="/v/wifey">
+                <div class="video-title"><strong>Wifey.2026.05.30</strong></div>
+              </a>
+            </div>
+          </div>
+        </body></html>
+        '''
+
+        page_result = parse_fallback_index_page(html, page_num=2)
+
+        assert page_result.movies
+        assert page_result.movies[0].video_code == "Wifey.2026.05.30"
+        assert page_result.movies[0].video_code_family == "western_studio_date"
 
     def test_select_index_entries_phase1(self, sample_index_html):
         """Phase 1 should keep subtitle entries with release-date tags."""
