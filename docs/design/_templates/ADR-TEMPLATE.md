@@ -4,6 +4,7 @@
 **Date:** YYYY-MM-DD
 **Author:**
 **Related Implementation Plans:** [IMP-ADRNNN-01](IMP-ADRNNN-01-topic.md) (Phase 1 — description)
+**D1 Write Class:** authoritative | additive | diagnostic | n/a  <!-- ADR-042 D6: if this ADR introduces D1 writes, classify them; otherwise n/a -->
 
 ## Context
 
