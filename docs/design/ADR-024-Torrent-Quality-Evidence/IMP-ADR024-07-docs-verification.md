@@ -1,6 +1,6 @@
 # IMP-ADR024-07: ADR-024 Phase 1 — Documentation & Verification Closeout
 
-**Status:** Proposed — design-reviewed 2026-05-31 (no changes needed; see Design Review note).
+**Status:** Completed — implemented 2026-06-01 (design-reviewed 2026-05-31; see Design Review note).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -211,8 +211,8 @@ python3 -m apps.cli.qb.quality_evidence --force
 Run:
 
 ```bash
-diff <(rg -n "^#" docs/handbook/en/ops/torrent-quality-evidence.md | sed 's/.*#/#/') \
-     <(rg -n "^#" docs/handbook/zh/ops/torrent-quality-evidence.md | sed 's/.*#/#/') && echo "headings aligned"
+diff <(awk 'BEGIN{f=0} /^```/{f=!f; next} !f && /^#{1,6} /{match($0,/^#+/); print substr($0,RSTART,RLENGTH)}' docs/handbook/en/ops/torrent-quality-evidence.md) \
+     <(awk 'BEGIN{f=0} /^```/{f=!f; next} !f && /^#{1,6} /{match($0,/^#+/); print substr($0,RSTART,RLENGTH)}' docs/handbook/zh/ops/torrent-quality-evidence.md) && echo "headings aligned"
 ```
 
 Expected: `headings aligned` (same heading count/order).
