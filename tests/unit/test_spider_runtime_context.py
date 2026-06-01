@@ -75,7 +75,9 @@ def test_runtime_close_releases_runtime_owned_services():
     runtime.services.recommend_proxy_policy = Policy()
     runtime.movie_claim.client_public = Closable("movie-public")
     runtime.movie_claim.client_pending = Closable("movie-pending")
-    ban_manager.set_remote_ban_hook(lambda _name: calls.append(("hook", "ban")))
+    ban_manager.set_remote_ban_hook(
+        lambda _name, reason: calls.append(("hook", "ban", reason))
+    )
     ban_manager.set_remote_unban_hook(lambda _name: calls.append(("hook", "unban")))
 
     runtime.close()
@@ -92,7 +94,7 @@ def test_runtime_close_releases_runtime_owned_services():
     assert runtime.services.recommend_proxy_policy is None
     assert runtime.movie_claim.client_public is None
     assert runtime.movie_claim.client_pending is None
-    ban_manager._dispatch_remote_ban("proxy-a")
+    ban_manager._dispatch_remote_ban("proxy-a", "ban page detected")
     ban_manager._dispatch_remote_unban("proxy-a")
-    assert ("hook", "ban") not in calls
+    assert ("hook", "ban", "ban page detected") not in calls
     assert ("hook", "unban") not in calls

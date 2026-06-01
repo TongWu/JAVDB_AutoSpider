@@ -62,6 +62,7 @@
 - [14. P1-A: Cross-Run Proxy Ban + CF Bypass Sharing (Piggybacking on ProxyCoordinator)](#14-p1-a-cross-run-proxy-ban--cf-bypass-sharing-piggybacking-on-proxycoordinator)
   - [14.1 Protocol Changes (Backward Compatible)](#141-protocol-changes-backward-compatible)
   - [14.2 Default TTLs (`wrangler.toml [vars]`)](#142-default-ttls-wranglertoml-vars)
+  - [14.2.1 CF auto-ban (ADR-043)](#1421-cf-auto-ban-adr-043)
   - [14.3 Ops Cheat Sheet](#143-ops-cheat-sheet)
   - [14.4 Rollback](#144-rollback)
 - [15. P1-B / P2-A: MovieClaim DO (Cross-Runner Detail Mutual Exclusion + Failure Cooldown)](#15-p1-b--p2-a-movieclaim-do-cross-runner-detail-mutual-exclusion--failure-cooldown)
@@ -631,8 +632,17 @@ a single runner's memory onto the `ProxyCoordinator` DO:
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `BAN_TTL_MS` | `259200000` | Default 3 days per `mark_proxy_banned` call |
+| `BAN_TTL_MS` | `259200000` | Fallback TTL for ban reasons the Worker does not map to a more specific cause |
 | `CF_BYPASS_TTL_MS` | Specified by the caller via `ttl_ms`; `0` = permanent | Semantically equivalent to `state.always_bypass_time` |
+
+### 14.2.1 CF auto-ban (ADR-043)
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `CF_AUTO_BAN_ENABLED` | `true` | Auto-ban proxies that keep failing the CF wall. Set `false` to disable. |
+| `CF_AUTO_BAN_THRESHOLD` | `6` | CF events within the penalty window that must occur with zero successes before banning. |
+| `CF_BAN_TTL_MS` | `21600000` (6 h) | Duration of the CF auto-ban. Short by design: CF IP reputation recovers quickly. |
+| `HARD_BAN_TTL_MS` | `691200000` (8 d) | Duration of a JavDB explicit IP ban when the Worker receives a ban report without `ttl_ms`. |
 
 ### 14.3 Ops Cheat Sheet
 
