@@ -14,13 +14,7 @@ from javdb.quality.collector import (
     run_collection,
 )
 
-_ZERO_SUMMARY = {
-    "scanned": 0,
-    "skipped": 0,
-    "evidence_written": 0,
-    "evaluations_written": 0,
-    "probe_unavailable": 0,
-}
+_ZERO_SUMMARY = collector_module._empty_summary()
 
 
 class FakeQualityRepo:
@@ -37,7 +31,7 @@ class FakeQualityRepo:
 
 def test_collects_evidence_and_evaluation_per_torrent():
     repo = FakeQualityRepo()
-    torrent = {"hash": "HASH1", "name": "ABC-123-C 中文字幕"}
+    torrent = {"hash": " HASH1 ", "name": "ABC-123-C 中文字幕"}
     files = [
         {"name": "ABC-123-C.mkv", "size": 5_000_000_000},
         {"name": "ABC-123-C.srt", "size": 60_000},
@@ -45,7 +39,7 @@ def test_collects_evidence_and_evaluation_per_torrent():
 
     summary = collect_production_evidence(
         torrents=[torrent],
-        fetch_files=lambda info_hash: files if info_hash == "HASH1" else None,
+        fetch_files=lambda info_hash: files if info_hash == "hash1" else None,
         repo=repo,
         context_for=lambda _torrent: {
             "movie_href": "/v/abc",
@@ -64,14 +58,14 @@ def test_collects_evidence_and_evaluation_per_torrent():
     assert len(repo.evaluations) == 1
 
     evidence = repo.evidence[0]
-    assert evidence.info_hash == "HASH1"
+    assert evidence.info_hash == "hash1"
     assert evidence.target_role == PRODUCTION_TARGET_ROLE
     assert evidence.metadata_status == "metadata_received"
     assert evidence.main_video_size_bytes == 5_000_000_000
     assert evidence.features == {"main_video_name": "ABC-123-C.mkv"}
 
     evaluation = repo.evaluations[0]
-    assert evaluation.info_hash == "HASH1"
+    assert evaluation.info_hash == "hash1"
     assert evaluation.movie_href == "/v/abc"
     assert evaluation.policy_mode == "shadow"
     assert evaluation.decision == "accepted_shadow"
@@ -93,6 +87,7 @@ def test_records_probe_unavailable_when_metadata_missing():
     assert summary["evidence_written"] == 1
     assert summary["evaluations_written"] == 0
     assert len(repo.evidence) == 1
+    assert repo.evidence[0].info_hash == "hash1"
     assert repo.evidence[0].metadata_status == "probe_unavailable"
     assert repo.evidence[0].reasons == ["probe_unavailable"]
 
@@ -304,6 +299,9 @@ def test_run_collection_wires_runtime_dependencies(monkeypatch):
     assert repos[0].conn == f"conn:{reports_path}"
     assert len(repos[0].evidence) == 1
     assert len(repos[0].evaluations) == 1
+    assert repos[0].evidence[0].info_hash == "hash1"
+    assert repos[0].evaluations[0].info_hash == "hash1"
     assert repos[0].evaluations[0].movie_href == "/v/abc"
     assert repos[0].evaluations[0].javdb_category == "subtitle"
+    assert ("files", session, "hash1", True) in calls
     assert ("session.close",) in calls

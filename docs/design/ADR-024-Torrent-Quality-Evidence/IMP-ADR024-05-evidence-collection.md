@@ -260,6 +260,20 @@ logger = logging.getLogger(__name__)
 PRODUCTION_TARGET_ROLE = "production_download"
 
 
+def _normalize_hash(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _empty_summary() -> dict[str, int]:
+    return {
+        "scanned": 0,
+        "skipped": 0,
+        "evidence_written": 0,
+        "evaluations_written": 0,
+        "probe_unavailable": 0,
+    }
+
+
 def collect_production_evidence(
     *,
     torrents: list[dict],
@@ -274,17 +288,11 @@ def collect_production_evidence(
     row (recording ``probe_unavailable`` when its file list is missing) and, when
     features are available, one evaluation row.
     """
-    summary = {
-        "scanned": 0,
-        "skipped": 0,
-        "evidence_written": 0,
-        "evaluations_written": 0,
-        "probe_unavailable": 0,
-    }
+    summary = _empty_summary()
 
     for torrent in torrents:
         summary["scanned"] += 1
-        info_hash = (torrent.get("hash") or "").strip()
+        info_hash = _normalize_hash(torrent.get("hash"))
         if not info_hash:
             summary["skipped"] += 1
             continue
@@ -409,13 +417,7 @@ def run_collection(
             "Skipping quality evidence collection: no categories configured; "
             "refusing to scan all production qBittorrent categories"
         )
-        return {
-            "scanned": 0,
-            "skipped": 0,
-            "evidence_written": 0,
-            "evaluations_written": 0,
-            "probe_unavailable": 0,
-        }
+        return _empty_summary()
 
     import requests
 
@@ -438,10 +440,7 @@ def run_collection(
             session, days=days, categories=categories, use_proxy=use_proxy
         )
         if not torrents:
-            return {
-                "scanned": 0, "skipped": 0, "evidence_written": 0,
-                "evaluations_written": 0, "probe_unavailable": 0,
-            }
+            return _empty_summary()
 
         # Let qB fetch metadata for freshly added torrents before reading files.
         readonly.wait_for_metadata_readiness(
@@ -454,12 +453,13 @@ def run_collection(
         with get_db(OPERATIONS_DB_PATH) as ops_conn:
             acq_repo = AcquisitionOutcomeRepo(ops_conn)
             for torrent in torrents:
-                h = (torrent.get("hash") or "").strip()
-                if not h:
+                info_hash = (torrent.get("hash") or "").strip()
+                if not info_hash:
                     continue
-                rec = acq_repo.get(h)
+                normalized_hash = _normalize_hash(info_hash)
+                rec = acq_repo.get(normalized_hash) or acq_repo.get(info_hash)
                 if rec is not None:
-                    outcomes[h] = rec
+                    outcomes[normalized_hash] = rec
 
         with get_db(REPORTS_DB_PATH) as conn:
             repo = TorrentQualityRepo(conn)
@@ -468,7 +468,7 @@ def run_collection(
                 fetch_files=lambda h: ff.get_torrent_files(session, h, use_proxy),
                 repo=repo,
                 context_for=lambda t: _build_context(
-                    t, outcomes.get((t.get("hash") or "").strip())
+                    t, outcomes.get(_normalize_hash(t.get("hash")))
                 ),
             )
     finally:
