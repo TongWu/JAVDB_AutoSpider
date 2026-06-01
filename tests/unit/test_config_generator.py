@@ -386,6 +386,30 @@ class TestGenerateConfigContent:
             assert "TORRENT_QUALITY_EVIDENCE_ENABLED = False" in content
             assert "TORRENT_QUALITY_POLICY_MODE = 'shadow'" in content
             assert "TORRENT_QUALITY_CATEGORIES = ''" in content
+
+    def test_torrent_quality_evidence_env_overrides(self):
+        """Should generate torrent quality evidence values from env overrides."""
+        env = {
+            'VAR_TORRENT_QUALITY_EVIDENCE_ENABLED': 'true',
+            'VAR_TORRENT_QUALITY_POLICY_MODE': 'shadow',
+            'VAR_TORRENT_QUALITY_CATEGORIES': '["Daily Ingestion"]',
+        }
+        with patch.dict(os.environ, env, clear=True):
+            content = generate_config_content()
+            assert "TORRENT_QUALITY_EVIDENCE_ENABLED = True" in content
+            assert "TORRENT_QUALITY_POLICY_MODE = 'shadow'" in content
+            assert 'TORRENT_QUALITY_CATEGORIES = \'["Daily Ingestion"]\'' in content
+
+    def test_config_example_describes_torrent_quality_categories_as_json_array(self):
+        """Should document TORRENT_QUALITY_CATEGORIES using the consumer format."""
+        example_path = os.path.join(project_root, 'config.py.example')
+        with open(example_path, encoding='utf-8') as f:
+            content = f.read()
+
+        key_index = content.index("TORRENT_QUALITY_CATEGORIES = ''")
+        section_snippet = content[max(0, key_index - 300):key_index]
+        assert "Optional JSON array of qBittorrent categories" in section_snippet
+        assert "comma-separated category allowlist" not in section_snippet
     
     def test_github_actions_mode_note(self):
         """Should include GitHub Actions note in that mode."""
