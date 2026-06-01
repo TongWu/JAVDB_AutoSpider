@@ -82,8 +82,8 @@ def get_torrent_files(
         )
         return None
 
-    except requests.RequestException as exc:
-        logger.error("Error getting files for torrent %s: %s", torrent_hash, exc)
+    except requests.RequestException:
+        logger.exception("Error getting files for torrent %s", torrent_hash)
         return None
 
 
@@ -97,7 +97,7 @@ def recent_metadata_candidates(
     if now is None:
         now = time.time()
     if window_seconds is None:
-        window_seconds = 15 * 60
+        window_seconds = DEFAULT_RECENT_METADATA_WINDOW_SECONDS
 
     cutoff = now - max(0, window_seconds)
     candidates = []
