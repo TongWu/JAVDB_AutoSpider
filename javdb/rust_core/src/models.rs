@@ -462,8 +462,9 @@ impl MovieDetail {
                 link: crate::scraper::common::normalize_javdb_href_path(&a.href),
             })
             .collect();
-        serde_json::to_string(&rows)
-            .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("json encode: {e}")))
+        serde_json::to_string(&rows).map_err(|e| {
+            pyo3::exceptions::PyValueError::new_err(format!("json encode: {e}"))
+        })
     }
 
     fn get_magnets_as_legacy<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyDict>>> {
@@ -800,10 +801,7 @@ impl TagPageResult {
     }
 
     fn get_category_by_id(&self, cid: &str) -> Option<TagCategory> {
-        self.categories
-            .iter()
-            .find(|c| c.category_id == cid)
-            .cloned()
+        self.categories.iter().find(|c| c.category_id == cid).cloned()
     }
 
     fn get_category_by_name(&self, name: &str) -> Option<TagCategory> {
