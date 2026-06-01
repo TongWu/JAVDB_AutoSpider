@@ -61,8 +61,16 @@ instead of scanning every qBittorrent category.
 The collector prints a summary line with `scanned`, `evidence_written`,
 `evaluations_written`, `probe_unavailable`, and `skipped` counts. Stored rows
 can be inspected in the `TorrentQualityEvidence` and
-`TorrentQualityEvaluation` tables on `javdb-reports`. The read-only API surface
-is intentionally deferred to IMP-ADR024-06.
+`TorrentQualityEvaluation` tables on `javdb-reports`.
+
+The FastAPI read surface exposes the same stored rows:
+
+- `GET /api/quality/evaluations?limit=50` — recent shadow evaluations.
+- `GET /api/quality/evaluations?movie_href=/v/...` — evaluations for one movie.
+- `GET /api/quality/evidence/{info_hash}` — objective file-list evidence for a
+  production-downloaded torrent.
+
+All `/api/quality/*` endpoints are authenticated and read-only.
 
 ## Reason Codes
 

@@ -24,6 +24,11 @@
 - `GET /api/system/state?key=...` — 从 `system_state` 读取 KV 对。
 - `PUT /api/system/state` — 仅 admin;写入 KV 对。
 
+### 种子质量
+
+- `GET /api/quality/evaluations?limit=&movie_href=` — 需认证、只读，列出 ADR-024 影子质量评估。省略 `movie_href` 时返回最近评估。
+- `GET /api/quality/evidence/{info_hash}` — 需认证、只读，返回 `production_download` 角色的种子级证据。
+
 ### 会话(Sessions)
 
 - `GET /api/sessions?state=&cursor=&limit=` — ReportSessions 的游标分页列表。

@@ -3953,6 +3953,328 @@
         "title": "TaskStatsResponse",
         "type": "object"
       },
+      "TorrentQualityEvaluationListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TorrentQualityEvaluationSchema"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "TorrentQualityEvaluationListResponse",
+        "type": "object"
+      },
+      "TorrentQualityEvaluationSchema": {
+        "description": "Movie-context shadow evaluation.",
+        "properties": {
+          "category_consistent": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Consistent"
+          },
+          "decision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision"
+          },
+          "inferred_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inferred Category"
+          },
+          "info_hash": {
+            "title": "Info Hash",
+            "type": "string"
+          },
+          "javdb_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Javdb Category"
+          },
+          "magnet_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Magnet Name"
+          },
+          "movie_href": {
+            "title": "Movie Href",
+            "type": "string"
+          },
+          "policy_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Mode"
+          },
+          "reasons": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "scoring_version": {
+            "title": "Scoring Version",
+            "type": "string"
+          },
+          "shadow_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shadow Rank"
+          },
+          "subtitle_evidence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subtitle Evidence"
+          },
+          "video_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Code"
+          },
+          "would_replace_current_choice": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Would Replace Current Choice"
+          }
+        },
+        "required": [
+          "info_hash",
+          "movie_href",
+          "scoring_version"
+        ],
+        "title": "TorrentQualityEvaluationSchema",
+        "type": "object"
+      },
+      "TorrentQualityEvidenceSchema": {
+        "description": "Torrent-level objective evidence.",
+        "properties": {
+          "info_hash": {
+            "title": "Info Hash",
+            "type": "string"
+          },
+          "junk_size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Junk Size Bytes"
+          },
+          "junk_size_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Junk Size Ratio"
+          },
+          "main_video_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Main Video Ratio"
+          },
+          "main_video_size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Main Video Size Bytes"
+          },
+          "metadata_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata Status"
+          },
+          "non_video_file_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Non Video File Count"
+          },
+          "probe_schema_version": {
+            "title": "Probe Schema Version",
+            "type": "string"
+          },
+          "probe_target_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Probe Target Name"
+          },
+          "reasons": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "subtitle_file_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subtitle File Count"
+          },
+          "suspicious_file_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suspicious File Count"
+          },
+          "target_role": {
+            "title": "Target Role",
+            "type": "string"
+          },
+          "total_size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Size Bytes"
+          },
+          "video_file_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video File Count"
+          }
+        },
+        "required": [
+          "info_hash",
+          "probe_schema_version",
+          "target_role"
+        ],
+        "title": "TorrentQualityEvidenceSchema",
+        "type": "object"
+      },
       "TorrentSearchItem": {
         "description": "A single TorrentHistory row (with joined movie data) in the search response.",
         "properties": {
@@ -7741,6 +8063,107 @@
         "summary": "Upsert Content Preference",
         "tags": [
           "preferences"
+        ]
+      }
+    },
+    "/api/quality/evaluations": {
+      "get": {
+        "operationId": "list_evaluations_api_quality_evaluations_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "movie_href",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Movie Href"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TorrentQualityEvaluationListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Evaluations",
+        "tags": [
+          "quality"
+        ]
+      }
+    },
+    "/api/quality/evidence/{info_hash}": {
+      "get": {
+        "operationId": "get_evidence_api_quality_evidence__info_hash__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "info_hash",
+            "required": true,
+            "schema": {
+              "title": "Info Hash",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TorrentQualityEvidenceSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Evidence",
+        "tags": [
+          "quality"
         ]
       }
     },
