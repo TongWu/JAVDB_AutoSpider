@@ -21,7 +21,7 @@ class _NoopSleepManager:
     def sleep(self) -> None:
         pass
 
-    def apply_volume_multiplier(self, *_args, **_kwargs) -> None:
+    def apply_volume_multiplier(self, *__args: object, **__kwargs: object) -> None:
         pass
 
 
@@ -40,12 +40,15 @@ def _patch_sequential_dependencies(
     *,
     config_blacklist: Iterable[str] | None,
 ) -> None:
+    def _load_daily_family_blacklist(_custom_url: str | None) -> set[str]:
+        if _custom_url is not None:
+            return set()
+        return normalize_family_blacklist(config_blacklist)
+
     monkeypatch.setattr(
         index_fetch,
         "load_daily_family_blacklist",
-        lambda custom_url: set()
-        if custom_url is not None
-        else normalize_family_blacklist(config_blacklist),
+        _load_daily_family_blacklist,
     )
     monkeypatch.setattr(index_fetch, "get_page_url", lambda page_num, custom_url=None: f"page-{page_num}")
     monkeypatch.setattr(

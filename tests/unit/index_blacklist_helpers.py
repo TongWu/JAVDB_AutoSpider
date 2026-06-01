@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, MutableMapping
-from typing import Any
+from typing import Protocol
 
 from javdb.parsing.models import MovieIndexEntry
+
+
+class MoviesLike(Protocol):
+    movies: list[MovieIndexEntry]
+
 
 FilterSpy = Callable[
     [list[MovieIndexEntry], Iterable[str] | None, MutableMapping[str, int] | None],
@@ -34,14 +39,14 @@ def spy_select(
     calls: list[tuple[int, list[str]] | tuple[int, int, list[str]]],
     *,
     include_page_num: bool = False,
-) -> Callable[..., list[dict[str, Any]]]:
+) -> Callable[..., list[dict[str, object]]]:
     def _spy_select(
-        page_result: Any,
+        page_result: MoviesLike,
         *,
         page_num: int,
         phase: int,
-        **_kwargs: Any,
-    ) -> list[dict[str, Any]]:
+        **_kwargs: object,
+    ) -> list[dict[str, object]]:
         payload = [movie.video_code for movie in page_result.movies]
         if include_page_num:
             calls.append((page_num, phase, payload))

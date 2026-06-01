@@ -318,20 +318,20 @@ def test_parallel_multi_page_applies_blacklist_once_per_page_and_preserves_page_
         _fake_result(1, "html-1"),
     ])
     monkeypatch.setattr(index_parallel, "build_parallel_index_backend", lambda **_kwargs: backend)
-    monkeypatch.setattr(index_parallel, "parse_index_page", lambda html, page_num: _parallel_page_result())
+    monkeypatch.setattr(index_parallel, "parse_index_page", lambda _html, _page_num: _parallel_page_result())
     monkeypatch.setattr(
         index_parallel,
         "_sentinel_field_health",
         SimpleNamespace(start_run=lambda: None, current=lambda: None),
     )
-    monkeypatch.setattr(index_parallel, "_check_stop_condition", lambda *args, **kwargs: False)
+    monkeypatch.setattr(index_parallel, "_check_stop_condition", lambda *_args, **_kwargs: False)
     monkeypatch.setattr(index_parallel, "detect_url_type", lambda *_args, **_kwargs: "actors")
     monkeypatch.setattr(index_parallel, "generate_output_csv_name_from_html", lambda *_args, **_kwargs: "resolved.csv")
     summary_calls = []
     monkeypatch.setattr(
         index_parallel,
         "log_family_blacklist_summary",
-        lambda logger, counts: summary_calls.append(
+        lambda _logger, counts: summary_calls.append(
             ("INDEX FAMILY BLACKLIST SUMMARY", [("total", sum(counts.values())), *sorted(counts.items())])
         )
         if counts
