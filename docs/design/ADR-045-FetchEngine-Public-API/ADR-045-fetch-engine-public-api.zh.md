@@ -183,7 +183,7 @@ Phase 3 已退役的路径（规范是 `javdb.spider.fetch.*`）。
 
 | 阶段 | IMP | 交付 | 推迟 |
 | --- | --- | --- | --- |
-| Phase 1 | [IMP-ADR045-01](IMP-ADR045-01-fetch-engine-public-api.md) | 在 `ParallelFetchBackend`（+ `FetchEngine` facade）上加 `drain_remaining()` + 薄 `run()` 并配单元测试；把 `backfill_movie_metadata` 迁移到 `FetchEngine.simple`（D3–D6）；把 `migrate_v7_to_v8` + `align` 的中断处理切到 `drain_remaining()`（D1）；修正过时注释 + `scripts.*` 引用（D8）；CLI 参考手册补注（en/zh） | `PROXY_POOL` 依赖注入；`FetchEngine`/`ParallelFetchBackend` 合并；公开方法重命名（"大重构"选项，未采纳） |
+| Phase 1 | [IMP-ADR045-01](IMP-ADR045-01-fetch-engine-public-api.md) | 在 `ParallelFetchBackend`（+ `FetchEngine` facade）上加 `drain_remaining()` + 薄 `run()` 并配单元测试；把 `backfill_movie_metadata` 迁移到 `FetchEngine.simple`（D3–D6）；把 `migrate_v7_to_v8` + `align` 的中断处理切到 `drain_remaining()`（D1）；修正过时注释 + `scripts.*` 引用（D8）；记录无需手册变更的决定（CLI 表面不变） | `PROXY_POOL` 依赖注入；`FetchEngine`/`ParallelFetchBackend` 合并；公开方法重命名（"大重构"选项，未采纳） |
 
 ## 参考
 
@@ -197,3 +197,4 @@ Phase 3 已退役的路径（规范是 `javdb.spider.fetch.*`）。
 ## 状态日志
 
 - 2026-06-01：Proposed
+- 2026-06-01：Phase 1 已实现并完成本地验证（[IMP-ADR045-01](IMP-ADR045-01-fetch-engine-public-api.md)）；CLI 表面未变，因此无需更新手册。
