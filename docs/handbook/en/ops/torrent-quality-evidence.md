@@ -62,9 +62,11 @@ instead of scanning every qBittorrent category.
 ## Reading Results
 
 The collector prints a summary line with `scanned`, `evidence_written`,
-`evaluations_written`, `probe_unavailable`, and `skipped` counts. Stored rows
-can be inspected in the `TorrentQualityEvidence` and
-`TorrentQualityEvaluation` tables on `javdb-reports`.
+`evaluations_written`, `probe_unavailable`, and `skipped` counts. Persisted
+rows are available in the `TorrentQualityEvidence` and
+`TorrentQualityEvaluation` tables in the active reports database: canonical
+`javdb-reports` in GitHub Actions / D1 mode, or the database selected by
+`STORAGE_BACKEND` for local runs.
 
 The FastAPI read surface exposes the same stored rows:
 
