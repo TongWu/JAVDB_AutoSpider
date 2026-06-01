@@ -63,7 +63,7 @@ The blacklist applies only to `DailyIngestion`. `AdHocIngestion` bypasses it (it
 
 The daily pipeline order is:
 
-```
+```text
 parse index cards -> sentinel accounting -> daily family blacklist (independent step) -> phase 1 / phase 2 selection
 ```
 

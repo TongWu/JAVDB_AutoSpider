@@ -63,7 +63,7 @@ Python 和 Rust 必须做同样的加法式改动，让两套引擎保持一致�
 
 daily 流水线顺序是：
 
-```
+```text
 parse index cards -> sentinel 统计 -> daily 家族黑名单（独立步骤） -> phase 1 / phase 2 选择
 ```
 

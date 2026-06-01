@@ -330,7 +330,7 @@ pub fn validate_index_html(html_content: &str) -> (bool, bool) {
 fn class_contains_in_html(el: &ElementRef, substr: &str) -> bool {
     el.value()
         .attr("class")
-        .map_or(false, |classes| classes.contains(substr))
+        .is_some_and(|classes| classes.contains(substr))
 }
 
 pub fn get_text_content(el: &ElementRef) -> String {
@@ -346,7 +346,7 @@ pub fn get_text_content(el: &ElementRef) -> String {
 }
 
 pub fn has_class(el: &ElementRef, class_name: &str) -> bool {
-    el.value().attr("class").map_or(false, |classes| {
+    el.value().attr("class").is_some_and(|classes| {
         classes.split_whitespace().any(|c| c == class_name)
     })
 }
@@ -354,7 +354,7 @@ pub fn has_class(el: &ElementRef, class_name: &str) -> bool {
 pub fn class_contains(el: &ElementRef, substr: &str) -> bool {
     el.value()
         .attr("class")
-        .map_or(false, |classes| classes.contains(substr))
+        .is_some_and(|classes| classes.contains(substr))
 }
 
 #[cfg(test)]

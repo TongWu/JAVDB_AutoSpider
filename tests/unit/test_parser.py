@@ -14,7 +14,7 @@ from javdb.pipeline.index_selection import select_index_entries
 from javdb.parsing import parse_index_page, parse_detail_page
 from javdb.parsing.fallback.index_parser import parse_index_page as parse_fallback_index_page
 from javdb.parsing.models import IndexPageResult, MovieIndexEntry
-from javdb.parsing.common import extract_video_code
+from javdb.parsing.common import classify_video_code_family, extract_video_code
 from bs4 import BeautifulSoup
 
 
@@ -75,8 +75,6 @@ class TestExtractVideoCode:
         ],
     )
     def test_classify_video_code_family(self, code, family):
-        from javdb.parsing.common import classify_video_code_family
-
         assert classify_video_code_family(code) == family
 
     @pytest.mark.parametrize(

@@ -64,7 +64,6 @@ class MovieIndexEntry:
     """One movie card as it appears on any listing / index page."""
     href: str
     video_code: str
-    video_code_family: str = ""
     title: str = ''
     rate: str = ''
     comment_count: str = ''
@@ -73,6 +72,7 @@ class MovieIndexEntry:
     cover_url: str = ''
     page: int = 1
     ranking: Optional[int] = None
+    video_code_family: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
