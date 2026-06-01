@@ -236,6 +236,9 @@ def _apply_metadata_result(result, *, dry_run: bool) -> tuple[int, int]:
     href = task.meta.get('href') or getattr(task, 'url', '')
 
     if not result.success:
+        # In parallel mode FetchEngine owns LoginRequired handling. An
+        # uncleared login wall intentionally surfaces as a generic retriable
+        # failure; the separate login-gated counter is fallback-only (ADR-045 D3).
         logger.warning(
             "[%s] %s — fetch_failed: %s",
             idx,
@@ -296,16 +299,15 @@ def run_backfill_metadata(args: SimpleNamespace) -> int:
     if parallel_mode:
         if limit > 0:
             hrefs = hrefs[:limit]
-    else:
+    elif limit_per_worker > 0:
         # ``--limit-per-worker`` is primarily a proxy-backed engine cap; in
         # the fallback path it keeps the old precedence and is interpreted
         # against the effective worker count so workflow-input volume stays
         # comparable to earlier runs.
-        if limit_per_worker > 0:
-            num_workers = 1
-            hrefs = hrefs[: limit_per_worker * num_workers]
-        elif limit > 0:
-            hrefs = hrefs[:limit]
+        num_workers = 1
+        hrefs = hrefs[: limit_per_worker * num_workers]
+    elif limit > 0:
+        hrefs = hrefs[:limit]
 
     total = len(hrefs)
     logger.info(
