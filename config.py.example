@@ -454,7 +454,8 @@ TORRENT_QUALITY_EVIDENCE_ENABLED = False
 TORRENT_QUALITY_POLICY_MODE = 'shadow'
 
 # Optional JSON array of qBittorrent categories, e.g. '["Daily Ingestion"]'.
-# Leave empty to collect evidence for all configured qBittorrent categories.
+# Empty means no category filter is configured; direct collection skips rather
+# than scanning every qBittorrent category.
 TORRENT_QUALITY_CATEGORIES = ''
 
 # =============================================================================
