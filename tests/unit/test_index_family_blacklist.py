@@ -1,18 +1,16 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 from javdb.parsing.models import IndexPageResult
-from javdb.parsing.models import MovieIndexEntry
 from javdb.pipeline.index_family_blacklist import (
     normalize_family_blacklist,
     filter_blacklisted_families,
 )
 from javdb.spider.fetch import index as index_fetch
-
-
-def _entry(code, family):
-    return MovieIndexEntry(href=f"/v/{code}", video_code=code, video_code_family=family)
+from tests.unit.index_blacklist_helpers import _entry, spy_filter, spy_select
 
 
 class _NoopSleepManager:
@@ -56,7 +54,10 @@ def _patch_sequential_dependencies(monkeypatch, *, config_blacklist):
     )
 
 
-def _run_sequential(custom_url=None):
+def _run_sequential(tmp_path: Path, custom_url=None):
+    output_csv = "out.csv"
+    output_dated_dir = tmp_path
+    csv_path = tmp_path / output_csv
     return index_fetch._fetch_all_index_pages_sequential(
         runtime=None,
         session=object(),
@@ -69,9 +70,9 @@ def _run_sequential(custom_url=None):
         use_proxy=False,
         use_cf_bypass=False,
         max_consecutive_empty=1,
-        output_csv="out.csv",
-        output_dated_dir="/tmp",
-        csv_path="/tmp/out.csv",
+        output_csv=output_csv,
+        output_dated_dir=str(output_dated_dir),
+        csv_path=str(csv_path),
         user_specified_output=True,
         parsed_movies_history_phase1={},
         parsed_movies_history_phase2={},
@@ -107,26 +108,18 @@ def test_filter_empty_blacklist_keeps_everything():
     assert counts == {}
 
 
-def test_daily_sequential_filters_blacklisted_family_once_before_both_phases(monkeypatch):
+def test_daily_sequential_filters_blacklisted_family_once_before_both_phases(monkeypatch, tmp_path):
     _patch_sequential_dependencies(monkeypatch, config_blacklist=["western_studio_date"])
 
     filter_calls = []
     original_filter = filter_blacklisted_families
 
-    def spy_filter(movies, blacklist, counts=None):
-        filter_calls.append(([movie.video_code for movie in movies], set(blacklist)))
-        return original_filter(movies, blacklist, counts)
-
     phase_calls = []
 
-    def spy_select(page_result, *, page_num, phase, **_kwargs):
-        phase_calls.append((phase, [movie.video_code for movie in page_result.movies]))
-        return [movie.to_legacy_dict() for movie in page_result.movies]
+    monkeypatch.setattr(index_fetch, "filter_blacklisted_families", spy_filter(filter_calls, original_filter))
+    monkeypatch.setattr(index_fetch, "select_index_entries", spy_select(phase_calls))
 
-    monkeypatch.setattr(index_fetch, "filter_blacklisted_families", spy_filter)
-    monkeypatch.setattr(index_fetch, "select_index_entries", spy_select)
-
-    result = _run_sequential(custom_url=None)
+    result = _run_sequential(tmp_path, custom_url=None)
 
     assert filter_calls == [(["Wifey.2026.05.30", "ABC-123"], {"western_studio_date"})]
     assert phase_calls == [(1, ["ABC-123"]), (2, ["ABC-123"])]
@@ -134,22 +127,18 @@ def test_daily_sequential_filters_blacklisted_family_once_before_both_phases(mon
     assert [entry["href"] for entry in result["all_index_results_phase2"]] == ["/v/ABC-123"]
 
 
-def test_adhoc_sequential_bypasses_family_blacklist(monkeypatch):
+def test_adhoc_sequential_bypasses_family_blacklist(monkeypatch, tmp_path):
     _patch_sequential_dependencies(monkeypatch, config_blacklist=["western_studio_date"])
 
-    filter_calls = []
+    filter_spy = Mock(side_effect=AssertionError("family blacklist should be bypassed"))
     phase_calls = []
 
-    def spy_select(page_result, *, page_num, phase, **_kwargs):
-        phase_calls.append((phase, [movie.video_code for movie in page_result.movies]))
-        return [movie.to_legacy_dict() for movie in page_result.movies]
+    monkeypatch.setattr(index_fetch, "filter_blacklisted_families", filter_spy)
+    monkeypatch.setattr(index_fetch, "select_index_entries", spy_select(phase_calls))
 
-    monkeypatch.setattr(index_fetch, "filter_blacklisted_families", lambda *args, **kwargs: filter_calls.append(args))
-    monkeypatch.setattr(index_fetch, "select_index_entries", spy_select)
+    result = _run_sequential(tmp_path, custom_url="https://javdb.com/actors/EvkJ")
 
-    result = _run_sequential(custom_url="https://javdb.com/actors/EvkJ")
-
-    assert filter_calls == []
+    filter_spy.assert_not_called()
     assert phase_calls == [
         (1, ["Wifey.2026.05.30", "ABC-123"]),
         (2, ["Wifey.2026.05.30", "ABC-123"]),

@@ -215,9 +215,11 @@ Update the `extract_video_code()` docstring to mention dotted western tokens. Ad
 
 > **Decoupling check:** `_is_plausible_video_code` references only `WESTERN_STUDIO_DATE_RE`, never `classify_video_code_family`. Do not change this — the classifier must not gate plausibility.
 
-- [x] **Step 3: Add `video_code_family` to the Python model without changing legacy rows.**
+- [x] **Step 3: Add `video_code_family` to the Python model without changing legacy rows or positional construction.**
 
-In `javdb/parsing/models.py`, add the field immediately after `video_code`:
+In `javdb/parsing/models.py`, append the field after the existing constructor
+parameters so positional calls like `MovieIndexEntry("/v/x", "ABC-123", "Title")`
+still set `title`; new callers should pass `video_code_family` by keyword:
 
 ```python
 @dataclass
@@ -225,7 +227,6 @@ class MovieIndexEntry:
     """One movie card as it appears on any listing / index page."""
     href: str
     video_code: str
-    video_code_family: str = ""
     title: str = ""
     rate: str = ""
     comment_count: str = ""
@@ -234,6 +235,7 @@ class MovieIndexEntry:
     cover_url: str = ""
     page: int = 1
     ranking: Optional[int] = None
+    video_code_family: str = ""
 ```
 
 `to_dict()` uses `asdict(self)` and picks the field up automatically. Do **not** add the field to `to_legacy_dict()`.

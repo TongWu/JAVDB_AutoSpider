@@ -181,6 +181,8 @@ class TestParseIndexPageInline:
         </body></html>
         '''
         result = parse_index_page(html, page_num=1)
+        assert result.movies
+        assert result.movies[0].video_code == 'Wifey.2026.05.30'
         assert result.movies[0].video_code_family == 'western_studio_date'
 
 

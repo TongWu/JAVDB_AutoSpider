@@ -91,6 +91,11 @@ class TestMovieIndexEntry:
         assert entry.ranking == 5
         assert len(entry.tags) == 2
 
+    def test_positional_title_compatibility(self):
+        entry = MovieIndexEntry('/v/ABC-123', 'ABC-123', 'Test Movie Title')
+        assert entry.title == 'Test Movie Title'
+        assert entry.video_code_family == ''
+
     def test_to_legacy_dict(self):
         entry = MovieIndexEntry(
             href='/v/ABC-123',

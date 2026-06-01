@@ -15,7 +15,6 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 sys.path.insert(0, project_root)
 
 from javdb.parsing.models import IndexPageResult
-from javdb.parsing.models import MovieIndexEntry
 from javdb.pipeline.index_family_blacklist import filter_blacklisted_families
 from javdb.spider.fetch.index_parallel import _check_stop_condition
 from javdb.spider.fetch import index_parallel
@@ -25,6 +24,7 @@ from javdb.spider.fetch.fetch_engine import (
     _PriorityTaskQueue,
 )
 from javdb.spider.fetch.login_coordinator import requeue_front
+from tests.unit.index_blacklist_helpers import _entry, spy_filter, spy_select
 
 
 # ---------------------------------------------------------------------------
@@ -55,10 +55,6 @@ def _empty_no_flag_result() -> _FakeResult:
 
 def _failed_result(error: str = 'timeout') -> _FakeResult:
     return _FakeResult(success=False, error=error)
-
-
-def _entry(code, family):
-    return MovieIndexEntry(href=f"/v/{code}", video_code=code, video_code_family=family)
 
 
 class _FakeBackend:
@@ -316,35 +312,39 @@ class TestPriorityTaskQueue:
         assert urls == [f'page-{p}' for p in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]]
 
 
-def test_parallel_multi_page_applies_blacklist_once_per_page_and_preserves_page_order(monkeypatch):
+def test_parallel_multi_page_applies_blacklist_once_per_page_and_preserves_page_order(monkeypatch, tmp_path):
     backend = _FakeBackend([
         _fake_result(2, "html-2"),
         _fake_result(1, "html-1"),
     ])
     monkeypatch.setattr(index_parallel, "build_parallel_index_backend", lambda **_kwargs: backend)
     monkeypatch.setattr(index_parallel, "parse_index_page", lambda html, page_num: _parallel_page_result())
-    monkeypatch.setattr(index_parallel, "_sentinel_field_health", SimpleNamespace(start_run=lambda: None, current=lambda: None))
+    monkeypatch.setattr(
+        index_parallel,
+        "_sentinel_field_health",
+        SimpleNamespace(start_run=lambda: None, current=lambda: None),
+    )
     monkeypatch.setattr(index_parallel, "_check_stop_condition", lambda *args, **kwargs: False)
     monkeypatch.setattr(index_parallel, "detect_url_type", lambda *_args, **_kwargs: "actors")
     monkeypatch.setattr(index_parallel, "generate_output_csv_name_from_html", lambda *_args, **_kwargs: "resolved.csv")
     summary_calls = []
-    monkeypatch.setattr(index_parallel, "log_summary_block", lambda logger, title, pairs: summary_calls.append((title, pairs)))
+    monkeypatch.setattr(
+        index_parallel,
+        "log_family_blacklist_summary",
+        lambda logger, counts: summary_calls.append(
+            ("INDEX FAMILY BLACKLIST SUMMARY", [("total", sum(counts.values())), *sorted(counts.items())])
+        )
+        if counts
+        else None,
+    )
 
     filter_calls = []
     original_filter = filter_blacklisted_families
 
-    def spy_filter(movies, blacklist, counts=None):
-        filter_calls.append(([movie.video_code for movie in movies], set(blacklist)))
-        return original_filter(movies, blacklist, counts)
-
     phase_calls = []
 
-    def spy_select(page_result, *, page_num, phase, **_kwargs):
-        phase_calls.append((page_num, phase, [movie.video_code for movie in page_result.movies]))
-        return [movie.to_legacy_dict() for movie in page_result.movies]
-
-    monkeypatch.setattr(index_parallel, "filter_blacklisted_families", spy_filter)
-    monkeypatch.setattr(index_parallel, "select_index_entries", spy_select)
+    monkeypatch.setattr(index_parallel, "filter_blacklisted_families", spy_filter(filter_calls, original_filter))
+    monkeypatch.setattr(index_parallel, "select_index_entries", spy_select(phase_calls, include_page_num=True))
     monkeypatch.setattr(runtime_config, "DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST", ["western_studio_date"])
 
     result = index_parallel.fetch_all_index_pages_parallel(
@@ -359,8 +359,8 @@ def test_parallel_multi_page_applies_blacklist_once_per_page_and_preserves_page_
         use_cf_bypass=False,
         max_consecutive_empty=1,
         output_csv="out.csv",
-        output_dated_dir="/tmp",
-        csv_path="/tmp/out.csv",
+        output_dated_dir=str(tmp_path),
+        csv_path=str(tmp_path / "out.csv"),
         user_specified_output=True,
         cancel_event=None,
     )
