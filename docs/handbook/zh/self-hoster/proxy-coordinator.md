@@ -59,6 +59,7 @@
 - [14. P1-A：跨 run proxy ban + CF bypass 共享（搭车 ProxyCoordinator）](#14-p1-a跨-run-proxy-ban--cf-bypass-共享搭车-proxycoordinator)
   - [14.1 协议改动（向后兼容）](#141-协议改动向后兼容)
   - [14.2 默认 TTL（`wrangler.toml [vars]`）](#142-默认-ttlwranglertoml-vars)
+  - [14.2.1 CF 自动封禁 (ADR-043)](#1421-cf-自动封禁-adr-043)
   - [14.3 运维 cheat sheet](#143-运维-cheat-sheet)
   - [14.4 回滚](#144-回滚)
 - [15. P1-B / P2-A：MovieClaim DO（跨 runner detail 互斥 + 失败冷却）](#15-p1-b--p2-amovieclaim-do跨-runner-detail-互斥--失败冷却)
@@ -615,8 +616,17 @@ login-state 协调。
 
 | 变量 | 默认 | 含义 |
 |---|---|---|
-| `BAN_TTL_MS` | `259200000` | 单次 `mark_proxy_banned` 默认 3 天 |
+| `BAN_TTL_MS` | `259200000` | 当 Worker 不能把 ban 原因映射到更具体 TTL 时的回退时长 |
 | `CF_BYPASS_TTL_MS` | 由调用方按 `ttl_ms` 指定；`0` = 永久 | 与 `state.always_bypass_time` 语义一致 |
+
+### 14.2.1 CF 自动封禁 (ADR-043)
+
+| 变量 | 默认 | 含义 |
+|---|---|---|
+| `CF_AUTO_BAN_ENABLED` | `true` | 自动封禁持续过不了 CF 墙的代理。设为 `false` 可关闭。 |
+| `CF_AUTO_BAN_THRESHOLD` | `6` | penalty 窗口内必须零成功的 CF 事件数达到此值后封禁。 |
+| `CF_BAN_TTL_MS` | `21600000`（6 小时） | CF 自动封禁时长。刻意保持较短：CF IP 信誉通常恢复较快。 |
+| `HARD_BAN_TTL_MS` | `691200000`（8 天） | 当 Worker 收到不带 `ttl_ms` 的 ban 报告时，JavDB 显式 IP 封禁的时长。 |
 
 ### 14.3 运维 cheat sheet
 

@@ -577,7 +577,10 @@ class SpiderRuntime:
         if pool is not None:
             for proxy_id in new_bans:
                 try:
-                    pool.ban_proxy(proxy_id)
+                    pool.ban_proxy(
+                        proxy_id,
+                        legacy_state.REMOTE_BAN_MIRROR_REASON,
+                    )
                     legacy_state.logger.warning(
                         "W5.4 ban_proxy signal applied: %s now banned",
                         proxy_id,
@@ -877,8 +880,16 @@ class SpiderRuntime:
             url,
         )
         self.services.proxy_coordinator = client
-        legacy_state.set_remote_ban_hook(client.mark_proxy_banned)
-        legacy_state.set_remote_unban_hook(client.mark_proxy_unbanned)
+
+        def _remote_ban_hook(proxy_id: str, reason: Optional[str] = None) -> None:
+            client.mark_proxy_banned(proxy_id, reason=reason)
+
+        def _remote_unban_hook(proxy_id: str) -> None:
+            client.mark_proxy_unbanned(proxy_id)
+
+        legacy_state.set_remote_ban_hook(_remote_ban_hook)
+        legacy_state.set_remote_unban_hook(_remote_unban_hook)
+        legacy_state.install_rust_ban_dispatch()
 
         try:
             from javdb.spider.runtime.sleep import ensure_sleep_runtime

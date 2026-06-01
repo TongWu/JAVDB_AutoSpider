@@ -675,6 +675,10 @@ class MovieSleepManager:
         """
         try:
             from javdb.spider.runtime import state as _state
+            from javdb.proxy.ban_manager import (
+                REMOTE_BAN_MIRROR_REASON,
+                get_ban_manager,
+            )
             runtime = self._runtime or _state.get_active_runtime()
             pool = (
                 runtime.services.proxy_pool
@@ -683,19 +687,26 @@ class MovieSleepManager:
             )
             if pool is None:
                 # Without a pool there's nowhere to mark the ban locally; we
-                # still record the proxy in the global ban manager so any
-                # future pool init sees it as banned.
-                from javdb.proxy.ban_manager import get_ban_manager
-                get_ban_manager().add_ban(proxy_id)
+                # still record the proxy in the global ban manager with the
+                # mirror sentinel so any future pool init sees it as banned
+                # without re-broadcasting the same remote ban.
+                get_ban_manager().add_ban(
+                    proxy_id,
+                    None,
+                    REMOTE_BAN_MIRROR_REASON,
+                )
                 return
             ban_proxy = getattr(pool, "ban_proxy", None)
             if callable(ban_proxy):
-                ban_proxy(proxy_id)
+                ban_proxy(proxy_id, REMOTE_BAN_MIRROR_REASON)
             else:
                 # Fallback: at minimum, register the ban so subsequent
-                # ``add_proxy`` calls reject the ID.
-                from javdb.proxy.ban_manager import get_ban_manager
-                get_ban_manager().add_ban(proxy_id)
+                # ``add_proxy`` calls reject the ID, but keep it local-only.
+                get_ban_manager().add_ban(
+                    proxy_id,
+                    None,
+                    REMOTE_BAN_MIRROR_REASON,
+                )
         except Exception:  # noqa: BLE001 — must never block lease processing
             logger.warning(
                 "Failed to mirror remote ban for '%s' into local state",

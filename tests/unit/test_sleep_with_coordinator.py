@@ -324,6 +324,7 @@ class TestSleepMirrorsRemoteBan:
 
     def test_lease_with_banned_true_calls_pool_ban_proxy(self):
         from javdb.spider.runtime import state as _state
+        from javdb.proxy.ban_manager import REMOTE_BAN_MIRROR_REASON
         coord = MagicMock()
         coord.lease.return_value = _mk_lease_with_p1a(
             banned=True, banned_until=999, reason="banned",
@@ -334,7 +335,10 @@ class TestSleepMirrorsRemoteBan:
         try:
             mgr = MovieSleepManager(2.0, 3.0, coordinator=coord, proxy_id="proxy-X")
             mgr.sleep()
-            pool.ban_proxy.assert_called_once_with("proxy-X")
+            pool.ban_proxy.assert_called_once_with(
+                "proxy-X",
+                REMOTE_BAN_MIRROR_REASON,
+            )
         finally:
             _state.global_proxy_pool = original_pool
 

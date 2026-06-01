@@ -1042,10 +1042,18 @@ class _EngineWorker(threading.Thread):
                         self._consecutive_none_count,
                     )
                     if self._consecutive_none_count >= self._none_ban_threshold:
+                        ban_reason = (
+                            f"{self._consecutive_none_count} consecutive "
+                            "None returns"
+                        )
+                        # This is a local soft-ban signal, not a CF wall /
+                        # JavDB ban-page signal, so it intentionally flows
+                        # through the Worker's generic fallback TTL.
                         get_ban_manager().add_ban(
                             self.proxy_name,
                             self.proxy_config.get("http")
                             or self.proxy_config.get("https"),
+                            ban_reason,
                         )
                         logger.warning(
                             "%s Soft-banned after %d consecutive None returns",
@@ -1053,10 +1061,7 @@ class _EngineWorker(threading.Thread):
                         )
                         self._handle_proxy_banned(
                             task,
-                            reason=(
-                                f"{self._consecutive_none_count} consecutive "
-                                "None returns"
-                            ),
+                            reason=ban_reason,
                         )
                         break
                     requeue_front(self.task_queue, task)

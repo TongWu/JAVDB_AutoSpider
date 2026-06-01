@@ -1085,7 +1085,7 @@ class TestProxyBanDetection:
                 'http://test.com', use_proxy=True, module_name='spider'
             )
 
-        mock_pool.ban_proxy.assert_called_once_with('proxy-1')
+        mock_pool.ban_proxy.assert_called_once_with('proxy-1', 'ban page detected')
 
 
 class TestCfBypassBanThreshold:

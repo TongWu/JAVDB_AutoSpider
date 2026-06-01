@@ -45,11 +45,9 @@ logger = get_logger(__name__)
 _DEFAULT_TIMEOUT_SEC = 5.0
 _DEFAULT_USER_AGENT = "javdb-spider-proxy-coordinator-client/1.0"
 
-# P1-A — default ban duration (3 days) used by `mark_proxy_banned` and the
-# Worker's `loadBanTtlMs` fallback.  Keeping the value here lets every spider
-# call site stay consistent without having to thread the constant through
-# config; if ops want to override globally they can set the Worker's
-# `BAN_TTL_MS` via `wrangler.toml [vars]` instead.
+# P1-A — Worker's fallback ban duration (3 days) when a ban report omits
+# ``ttl_ms`` and the Worker cannot map the reason to a more specific TTL.
+# Ops can override globally with `BAN_TTL_MS` in `wrangler.toml [vars]`.
 DEFAULT_BAN_TTL_MS = 3 * 24 * 60 * 60 * 1000  # 259_200_000
 
 # ── Async report dispatch ────────────────────────────────────────────────
@@ -388,9 +386,9 @@ class ProxyCoordinatorClient(BaseDOClient):
         silently bucketed under ``"cf"``.
 
         ``ttl_ms`` is honoured by ``kind="ban"`` and ``kind="cf_bypass"``;
-        ignored otherwise.  ``reason`` is a free-form ops annotation
-        (e.g. ``"manual"``, ``"penalty_2"``); the Worker stores it in the
-        analytics dataset but does not act on it.
+        ignored otherwise.  For ``kind="ban"``, omitting ``ttl_ms`` lets the
+        Worker choose the ban TTL from ``reason`` (hard JavDB ban, CF ban, or
+        default).  ``reason`` is also kept as a free-form ops annotation.
 
         ``latency_ms`` (P2-D) is folded into the per-proxy latency EMA on
         the Worker side and is honoured for any ``kind`` (typically
@@ -520,16 +518,17 @@ class ProxyCoordinatorClient(BaseDOClient):
     def mark_proxy_banned(
         self,
         proxy_id: str,
-        *,
-        ttl_ms: int = DEFAULT_BAN_TTL_MS,
         reason: Optional[str] = None,
+        *,
+        ttl_ms: Optional[int] = None,
     ) -> None:
-        """Persist a cross-runner ban on *proxy_id* (default 3 days).
+        """Persist a cross-runner ban on *proxy_id*.
 
-        The Worker takes the maximum of any concurrent ban TTL so two
-        runners reporting different durations on the same proxy never
-        accidentally shorten an existing ban.  Auto-expires server-side;
-        no client-side cleanup is required.
+        When ``ttl_ms`` is ``None``, the Worker chooses the TTL from
+        ``reason`` (ADR-043 D9: JavDB hard ban → 8 d, CF → 6 h, else 3 d).
+        Explicit ``ttl_ms`` still wins for manual/ops bans. The Worker takes
+        the maximum of concurrent ban TTLs so a shorter report never shortens
+        an existing ban.
         """
         self.report_async(proxy_id, "ban", ttl_ms=ttl_ms, reason=reason)
 

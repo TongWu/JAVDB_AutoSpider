@@ -154,7 +154,11 @@ class TestEngineSimpleMode:
             results = list(engine.results())
             engine.shutdown()
 
-        ban_mgr.add_ban.assert_called_once_with('proxy-a', 'http://a:1')
+        ban_mgr.add_ban.assert_called_once_with(
+            'proxy-a',
+            'http://a:1',
+            '2 consecutive None returns',
+        )
         assert any(result.error == 'all_proxies_banned' for result in results)
 
     @_engine_patches
