@@ -144,6 +144,7 @@ jobs:
           VAR_PAGE_END: '20'
           VAR_PHASE2_MIN_RATE: '4.0'
           VAR_PHASE2_MIN_COMMENTS: '85'
+          VAR_DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST_JSON: ${{ vars.DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST_JSON || '["western_studio_date"]' }}
           VAR_MOVIE_SLEEP: '5,15'
           VAR_LOG_LEVEL: 'INFO'
           VAR_SPIDER_LOG_FILE: 'logs/spider.log'
