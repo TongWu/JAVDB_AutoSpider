@@ -721,8 +721,14 @@ def _setup_proxy_coordinator_legacy() -> Optional[ProxyCoordinatorClient]:
     # P1-A — wire the ProxyBanManager → coordinator bridge.  Bound to ``client``
     # via closure so a later disable / re-init naturally rebinds; pure
     # fire-and-forget so a coordinator outage cannot stall the ban path.
-    set_remote_ban_hook(client.mark_proxy_banned)
-    set_remote_unban_hook(client.mark_proxy_unbanned)
+    def _remote_ban_hook(proxy_id: str, reason: Optional[str] = None) -> None:
+        client.mark_proxy_banned(proxy_id, reason=reason)
+
+    def _remote_unban_hook(proxy_id: str) -> None:
+        client.mark_proxy_unbanned(proxy_id)
+
+    set_remote_ban_hook(_remote_ban_hook)
+    set_remote_unban_hook(_remote_unban_hook)
     install_rust_ban_dispatch()
 
     # P0-5 — inject coordinator into the module-level movie_sleep_mgr singleton.

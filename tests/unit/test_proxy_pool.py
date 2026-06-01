@@ -418,9 +418,9 @@ class TestProxyPool:
 
         pool.proxies[0].cooldown_until = datetime.now() - timedelta(seconds=1)
 
-        banned_proxy = {"http": "http://auto-drain1:8080"}
+        live_proxy = {"http": "http://auto-drain2:8080"}
         for _ in range(4):
-            assert pool.get_next_proxy() != banned_proxy
+            assert pool.get_next_proxy() == live_proxy
     
     def test_mark_failure_and_switch_no_available(self):
         """Test mark_failure_and_switch returns False when no proxy available."""
