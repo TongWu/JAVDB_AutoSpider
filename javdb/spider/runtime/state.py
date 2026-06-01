@@ -31,6 +31,8 @@ from javdb.proxy.coordinator.movie_claim_client import (
     parse_movie_claim_mode,
 )
 from javdb.proxy.ban_manager import (
+    REMOTE_BAN_MIRROR_REASON,
+    install_rust_ban_dispatch,
     set_remote_ban_hook,
     set_remote_unban_hook,
 )
@@ -719,8 +721,15 @@ def _setup_proxy_coordinator_legacy() -> Optional[ProxyCoordinatorClient]:
     # P1-A — wire the ProxyBanManager → coordinator bridge.  Bound to ``client``
     # via closure so a later disable / re-init naturally rebinds; pure
     # fire-and-forget so a coordinator outage cannot stall the ban path.
-    set_remote_ban_hook(lambda name: client.mark_proxy_banned(name))
-    set_remote_unban_hook(lambda name: client.mark_proxy_unbanned(name))
+    def _remote_ban_hook(proxy_id: str, reason: Optional[str] = None) -> None:
+        client.mark_proxy_banned(proxy_id, reason=reason)
+
+    def _remote_unban_hook(proxy_id: str) -> None:
+        client.mark_proxy_unbanned(proxy_id)
+
+    set_remote_ban_hook(_remote_ban_hook)
+    set_remote_unban_hook(_remote_unban_hook)
+    install_rust_ban_dispatch()
 
     # P0-5 — inject coordinator into the module-level movie_sleep_mgr singleton.
     # The singleton is created at import time before the coordinator is
@@ -1287,10 +1296,12 @@ def _apply_active_signals_legacy(signals: list) -> None:
 
     * ``throttle_global`` (factor) → ``movie_sleep_mgr.set_global_factor``.
       When no such signal exists, factor resets to 1.0.
-    * ``ban_proxy`` (proxy_id, ttl) → ``proxy_pool.ban_proxy(name)``.
+    * ``ban_proxy`` (proxy_id, ttl) → ``proxy_pool.ban_proxy(name, reason)``.
       Once banned, the runner does NOT unban (ProxyPool bans are
       session-permanent today). Signal TTL is intentionally not
-      honoured locally — see plan W6 trade-off #1.
+      honoured locally — see plan W6 trade-off #1. The mirrored
+      ``reason`` is a local-only sentinel so this path does not
+      re-broadcast the same ban into the coordinator.
     * ``pause_all`` (ttl) → ``movie_sleep_mgr.set_pause_until_ms``.
       When no such signal exists, the pause expiry resets to 0.
     * ``resume`` never appears in this list (Worker consumes it as a
@@ -1342,7 +1353,7 @@ def _apply_active_signals_legacy(signals: list) -> None:
         )
 
     # Apply ban_proxy deltas. The full reconcile model:
-    #   new_bans     = desired - applied → call pool.ban_proxy()
+    #   new_bans     = desired - applied → call pool.ban_proxy(..., local_only)
     #   removed_bans = applied - desired → call pool.unban_proxy()
     # Bookkeeping uses set replacement (not update) so an empty
     # desired set correctly produces an empty applied set, restoring
@@ -1358,7 +1369,7 @@ def _apply_active_signals_legacy(signals: list) -> None:
         if new_bans:
             for proxy_id in new_bans:
                 try:
-                    pool.ban_proxy(proxy_id)
+                    pool.ban_proxy(proxy_id, REMOTE_BAN_MIRROR_REASON)
                     logger.warning(
                         "W5.4 ban_proxy signal applied: %s now banned",
                         proxy_id,

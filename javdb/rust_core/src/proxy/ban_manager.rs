@@ -14,10 +14,13 @@ pub struct ProxyBanRecord {
     pub proxy_name: String,
     pub ban_time: DateTime<Local>,
     pub proxy_url: Option<String>,
+    pub reason: Option<String>,
 }
 
 struct BanManagerInner {
     banned_proxies: Mutex<HashMap<String, ProxyBanRecord>>,
+    // BFR-009 / ADR-043 D8 — Python callback fired once per newly recorded ban.
+    ban_dispatch: Mutex<Option<PyObject>>,
 }
 
 /// Session-scoped proxy ban manager.  Bans are kept in-memory only and
@@ -37,6 +40,7 @@ impl ProxyBanManager {
         Self {
             inner: Arc::new(BanManagerInner {
                 banned_proxies: Mutex::new(HashMap::new()),
+                ban_dispatch: Mutex::new(None),
             }),
         }
     }
@@ -46,25 +50,43 @@ impl ProxyBanManager {
         banned.contains_key(proxy_name)
     }
 
-    #[pyo3(signature = (proxy_name, proxy_url=None))]
-    pub fn add_ban(&self, proxy_name: &str, proxy_url: Option<String>) {
-        let mut banned = self.inner.banned_proxies.lock();
-        if banned.contains_key(proxy_name) {
-            debug!("Proxy '{}' is already banned this session, not updating", proxy_name);
-            return;
-        }
+    #[pyo3(signature = (proxy_name, proxy_url=None, reason=None))]
+    pub fn add_ban(&self, proxy_name: &str, proxy_url: Option<String>, reason: Option<String>) {
+        let newly_banned = {
+            let mut banned = self.inner.banned_proxies.lock();
+            if banned.contains_key(proxy_name) {
+                debug!("Proxy '{}' is already banned this session, not updating", proxy_name);
+                false
+            } else {
+                let record = ProxyBanRecord {
+                    proxy_name: proxy_name.to_string(),
+                    ban_time: Local::now(),
+                    proxy_url,
+                    reason: reason.clone(),
+                };
+                banned.insert(proxy_name.to_string(), record);
 
-        let record = ProxyBanRecord {
-            proxy_name: proxy_name.to_string(),
-            ban_time: Local::now(),
-            proxy_url,
+                debug!(
+                    "Proxy '{}' banned [session-permanent]",
+                    proxy_name
+                );
+                true
+            }
         };
-        banned.insert(proxy_name.to_string(), record);
 
-        debug!(
-            "Proxy '{}' banned [session-permanent]",
-            proxy_name
-        );
+        if newly_banned {
+            let callback = Python::with_gil(|py| {
+                let cb_guard = self.inner.ban_dispatch.lock();
+                cb_guard.as_ref().map(|cb| cb.clone_ref(py))
+            });
+            if let Some(cb) = callback {
+                Python::with_gil(|py| {
+                    if let Err(e) = cb.call1(py, (proxy_name, reason.as_deref())) {
+                        debug!("ban_dispatch callback for '{}' raised: {}", proxy_name, e);
+                    }
+                });
+            }
+        }
     }
 
     /// W6.A.2 follow-up — drop a ban record so the proxy can be
@@ -82,6 +104,15 @@ impl ProxyBanManager {
             debug!("Proxy '{}' ban removed [W5.4 unban path]", proxy_name);
         }
         removed
+    }
+
+    /// BFR-009 / ADR-043 D8 — register a Python callback invoked once per newly
+    /// recorded ban with ``(proxy_name: str, reason: Optional[str])``. Pass
+    /// ``None`` to clear. The callback must be fast and non-reentrant.
+    #[pyo3(signature = (callback=None))]
+    pub fn set_ban_dispatch_callback(&self, callback: Option<PyObject>) {
+        let mut cb = self.inner.ban_dispatch.lock();
+        *cb = callback;
     }
 
     #[pyo3(signature = (include_ip=false))]

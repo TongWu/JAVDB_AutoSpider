@@ -1,5 +1,7 @@
 # IMP-ADR043-01: Worker-Side CF Auto-Ban Escalation — Implementation Plan
 
+**Status:** Completed (2026-06-01) — Worker CF auto-ban escalation, env knobs, tests, and handbook updates landed.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Related:** [ADR-043](ADR-043-cf-persistent-failure-auto-ban.md) (D1–D7). Phase 2 is [IMP-ADR043-02](IMP-ADR043-02-bfr009-ban-dispatch-and-hardban-ttl.md).
@@ -35,7 +37,7 @@
 - Modify: `src/proxy_coordinator.ts` (add loaders near `loadBanTtlMs`)
 - Test: `test/cf_auto_ban.test.ts`
 
-- [ ] **Step 1: Add constants + Env fields in `src/types.ts`**
+- [x] **Step 1: Add constants + Env fields in `src/types.ts`**
 
 After the existing `export const DEFAULT_BAN_TTL_MS = 3 * 24 * 60 * 60 * 1000;` (line ~113) add:
 
@@ -57,7 +59,7 @@ In the `export interface Env { ... }` block, alongside `BAN_TTL_MS?: string;`, a
   CF_BAN_TTL_MS?: string;
 ```
 
-- [ ] **Step 2: Add exported loaders in `src/proxy_coordinator.ts`**
+- [x] **Step 2: Add exported loaders in `src/proxy_coordinator.ts`**
 
 Import the new constants in the existing `import { ... } from "./types";` block:
 `DEFAULT_CF_AUTO_BAN_ENABLED, DEFAULT_CF_AUTO_BAN_THRESHOLD, DEFAULT_CF_BAN_TTL_MS`.
@@ -89,7 +91,7 @@ export function loadCfBanTtlMs(env: Env): number {
 }
 ```
 
-- [ ] **Step 3: Write loader unit tests** in `test/cf_auto_ban.test.ts`
+- [x] **Step 3: Write loader unit tests** in `test/cf_auto_ban.test.ts`
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -122,12 +124,12 @@ describe("ADR-043 loaders", () => {
 });
 ```
 
-- [ ] **Step 4: Run — expect FAIL (loaders not exported yet if Step 2 skipped) then PASS**
+- [x] **Step 4: Run — expect FAIL (loaders not exported yet if Step 2 skipped) then PASS**
 
 Run: `npm test -- cf_auto_ban`
 Expected after Steps 1–2: PASS (3 tests). Also run `npm run typecheck` → no errors.
 
-- [ ] **Step 5: Commit** (in coordinator repo)
+- [x] **Step 5: Commit** (in coordinator repo)
 
 ```bash
 git add src/types.ts src/proxy_coordinator.ts test/cf_auto_ban.test.ts
@@ -142,7 +144,7 @@ git commit -m "feat(proxy-coordinator): add CF auto-ban env knobs + loaders (ADR
 - Modify: `src/proxy_coordinator.ts` (`CoordinatorState` interface, `loadState`, `handleStateDump`)
 - Test: `test/cf_auto_ban.test.ts`
 
-- [ ] **Step 1: Add the field to `CoordinatorState`**
+- [x] **Step 1: Add the field to `CoordinatorState`**
 
 In `interface CoordinatorState { ... }`, after `banSpikeAlertedBucket: number;` add:
 
@@ -155,7 +157,7 @@ In `interface CoordinatorState { ... }`, after `banSpikeAlertedBucket: number;` 
   bannedReason: string | null;
 ```
 
-- [ ] **Step 2: Default it in `loadState`**
+- [x] **Step 2: Default it in `loadState`**
 
 In the `this.cached = { ... }` normaliser, after `banSpikeAlertedBucket: stored?.banSpikeAlertedBucket ?? 0,` add:
 
@@ -163,13 +165,13 @@ In the `this.cached = { ... }` normaliser, after `banSpikeAlertedBucket: stored?
       bannedReason: stored?.bannedReason ?? null,
 ```
 
-- [ ] **Step 3: Clear it on unban + surface it on state dump**
+- [x] **Step 3: Clear it on unban + surface it on state dump**
 
 In `handleReport`, in the `rawKind === "unban"` branch, after `state.bannedUntil = null;` add `state.bannedReason = null;`.
 
 `handleStateDump` already spreads `...state`, so `bannedReason` is returned automatically — no change needed there.
 
-- [ ] **Step 4: Write the field test** (append to `test/cf_auto_ban.test.ts`)
+- [x] **Step 4: Write the field test** (append to `test/cf_auto_ban.test.ts`)
 
 ```ts
 import {
@@ -207,7 +209,7 @@ describe("ADR-043 bannedReason", () => {
 
 > NOTE: the request path is `/do/state` etc.; confirm the route prefix against `src/index.ts` (the existing `test/proxy_coordinator.test.ts` helpers show the exact prefix used in this repo — mirror it).
 
-- [ ] **Step 5: Run + commit**
+- [x] **Step 5: Run + commit**
 
 Run: `npm test -- cf_auto_ban` → PASS. `npm run typecheck` → clean.
 
@@ -224,7 +226,7 @@ git commit -m "feat(proxy-coordinator): track bannedReason on DO state (ADR-043 
 - Modify: `src/proxy_coordinator.ts`
 - Test: `test/cf_auto_ban.test.ts`
 
-- [ ] **Step 1: Write the failing e2e tests** (append to `test/cf_auto_ban.test.ts`)
+- [x] **Step 1: Write the failing e2e tests** (append to `test/cf_auto_ban.test.ts`)
 
 Helper to report a CF event and to lease:
 
@@ -262,12 +264,12 @@ describe("ADR-043 CF auto-ban escalation", () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect FAIL**
+- [x] **Step 2: Run — expect FAIL**
 
 Run: `npm test -- cf_auto_ban`
 Expected: the "→ banned" test FAILS (`banned` is `false`) because escalation isn't implemented.
 
-- [ ] **Step 3: Implement `maybeCfAutoBan` + call it**
+- [x] **Step 3: Implement `maybeCfAutoBan` + call it**
 
 Add the method to the `ProxyCoordinator` class (near `computePenaltyFactor`):
 
@@ -300,11 +302,11 @@ In `handleReport`, the CF branch is the final `else` (`kind = "cf"; state.cfEven
     }
 ```
 
-- [ ] **Step 4: Run — expect PASS**
+- [x] **Step 4: Run — expect PASS**
 
 Run: `npm test -- cf_auto_ban` → all PASS. `npm run typecheck` → clean. `npm test` (full suite) → no regressions in `proxy_coordinator.test.ts`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/proxy_coordinator.ts test/cf_auto_ban.test.ts
@@ -318,7 +320,7 @@ git commit -m "feat(proxy-coordinator): CF persistent-failure auto-ban escalatio
 **Files:**
 - Modify: `wrangler.toml` (coordinator repo)
 
-- [ ] **Step 1: Add the vars**
+- [x] **Step 1: Add the vars**
 
 In the existing `[vars]` table add (showing defaults explicitly so operators see the knobs):
 
@@ -329,12 +331,12 @@ CF_AUTO_BAN_THRESHOLD = "6"
 CF_BAN_TTL_MS = "21600000"   # 6 hours
 ```
 
-- [ ] **Step 2: Verify config parses**
+- [x] **Step 2: Verify config parses**
 
 Run: `npx wrangler deploy --dry-run` (or `npm run typecheck` if a deploy dry-run needs creds)
 Expected: no config error; the three vars are listed.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add wrangler.toml
@@ -349,7 +351,7 @@ git commit -m "chore(proxy-coordinator): expose CF auto-ban vars in wrangler.tom
 - Modify: `docs/handbook/en/self-hoster/proxy-coordinator.md`
 - Modify: `docs/handbook/zh/self-hoster/proxy-coordinator.md`
 
-- [ ] **Step 1: Add an env-var subsection to the EN handbook**
+- [x] **Step 1: Add an env-var subsection to the EN handbook**
 
 Find the existing env/vars table (search the file for `BAN_TTL_MS` or `PENALTY_WINDOW_SEC`). Add three rows / a short subsection:
 
@@ -363,7 +365,7 @@ Find the existing env/vars table (search the file for `BAN_TTL_MS` or `PENALTY_W
 | `CF_BAN_TTL_MS` | `21600000` (6 h) | How long the CF auto-ban lasts. Short by design — CF IP reputation recovers fast. |
 ```
 
-- [ ] **Step 2: Mirror the same rows into the ZH handbook** (`docs/handbook/zh/self-hoster/proxy-coordinator.md`), translating only the prose (keep env names / numbers verbatim):
+- [x] **Step 2: Mirror the same rows into the ZH handbook** (`docs/handbook/zh/self-hoster/proxy-coordinator.md`), translating only the prose (keep env names / numbers verbatim):
 
 ```markdown
 ### CF 自动封禁 (ADR-043)
@@ -375,7 +377,7 @@ Find the existing env/vars table (search the file for `BAN_TTL_MS` or `PENALTY_W
 | `CF_BAN_TTL_MS` | `21600000`（6 小时） | CF 自动封禁时长。刻意短——CF IP 信誉恢复快。 |
 ```
 
-- [ ] **Step 3: Commit** (CICD repo)
+- [x] **Step 3: Commit** (CICD repo)
 
 ```bash
 git add docs/handbook/en/self-hoster/proxy-coordinator.md docs/handbook/zh/self-hoster/proxy-coordinator.md

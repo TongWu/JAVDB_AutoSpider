@@ -1212,7 +1212,7 @@ class RequestHandler:
         except ProxyBannedError as e:
             logger.debug(f"[{module_name}] Proxy '{e.proxy_name}' banned: {e.reason}")
             if self.proxy_pool:
-                self.proxy_pool.ban_proxy(e.proxy_name)
+                self.proxy_pool.ban_proxy(e.proxy_name, e.reason)
             raise
     
     def _get_page_with_cf_bypass(self, url: str, session: requests.Session, use_cookie: bool,

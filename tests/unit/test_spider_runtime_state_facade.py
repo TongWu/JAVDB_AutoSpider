@@ -160,7 +160,7 @@ def test_bound_runtime_owns_active_signal_facade():
         "FakePool",
         (),
         {
-            "ban_proxy": lambda self, proxy_id: self.banned.append(proxy_id),
+            "ban_proxy": lambda self, proxy_id, _reason=None: self.banned.append(proxy_id),
             "unban_proxy": lambda self, proxy_id: self.unbanned.append(proxy_id),
         },
     )()

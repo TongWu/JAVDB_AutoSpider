@@ -463,58 +463,77 @@ impl ProxyPool {
     }
 
     pub fn mark_failure_and_switch(&self) -> bool {
-        let mut pool = self.inner.lock();
-        if pool.no_proxy_mode || pool.proxies.is_empty() {
-            return false;
-        }
-
-        let idx = pool.current_index;
-        let current_name = pool.proxies[idx].lock().name.clone();
-
-        {
-            let mut proxy = pool.proxies[idx].lock();
-            proxy.failures += 1;
-            proxy.total_requests += 1;
-            proxy.last_failure = Some(Local::now());
-
-            if proxy.failures >= self.max_failures_before_cooldown {
-                let proxy_url = proxy
-                    .http_url
-                    .clone()
-                    .or_else(|| proxy.https_url.clone());
-                self.ban_manager.add_ban(&current_name, proxy_url);
-                proxy.cooldown_until = Some(Local::now() + Duration::seconds(self.cooldown_seconds));
-                proxy.is_available = false;
-                warn!(
-                    "Proxy '{}' reached {} failures, putting in cooldown for {}s (8 days)",
-                    current_name, proxy.failures, self.cooldown_seconds
-                );
-            } else {
-                warn!(
-                    "Proxy '{}' failed ({}/{})",
-                    current_name, proxy.failures, self.max_failures_before_cooldown
-                );
+        let (pending_ban, switched) = {
+            let mut pool = self.inner.lock();
+            if pool.no_proxy_mode || pool.proxies.is_empty() {
+                return false;
             }
-        }
 
-        let len = pool.proxies.len();
-        let original_index = pool.current_index;
+            let idx = pool.current_index;
+            let current_name = pool.proxies[idx].lock().name.clone();
+            let mut pending_ban: Option<(String, Option<String>, String)> = None;
 
-        for _ in 0..len {
-            pool.current_index = (pool.current_index + 1) % len;
-            let proxy = pool.proxies[pool.current_index].lock();
-            if proxy.is_available && !proxy.is_in_cooldown() {
-                debug!(
-                    "Switched from '{}' to '{}'",
-                    current_name, proxy.name
-                );
-                return true;
+            {
+                let mut proxy = pool.proxies[idx].lock();
+                proxy.failures += 1;
+                proxy.total_requests += 1;
+                proxy.last_failure = Some(Local::now());
+
+                if proxy.failures >= self.max_failures_before_cooldown {
+                    let proxy_url = proxy
+                        .http_url
+                        .clone()
+                        .or_else(|| proxy.https_url.clone());
+                    proxy.banned = true;
+                    proxy.cooldown_until = Some(Local::now() + Duration::seconds(self.cooldown_seconds));
+                    proxy.is_available = false;
+                    pending_ban = Some((
+                        current_name.clone(),
+                        proxy_url,
+                        "rust_auto_drain".to_string(),
+                    ));
+                    warn!(
+                        "Proxy '{}' reached {} failures, putting in cooldown for {}s (8 days)",
+                        current_name, proxy.failures, self.cooldown_seconds
+                    );
+                } else {
+                    warn!(
+                        "Proxy '{}' failed ({}/{})",
+                        current_name, proxy.failures, self.max_failures_before_cooldown
+                    );
+                }
             }
+
+            let len = pool.proxies.len();
+            let original_index = pool.current_index;
+            let mut switched = false;
+
+            for _ in 0..len {
+                pool.current_index = (pool.current_index + 1) % len;
+                let proxy = pool.proxies[pool.current_index].lock();
+                if proxy.is_available && !proxy.banned && !proxy.is_in_cooldown() {
+                    debug!(
+                        "Switched from '{}' to '{}'",
+                        current_name, proxy.name
+                    );
+                    switched = true;
+                    break;
+                }
+            }
+
+            if !switched {
+                pool.current_index = original_index;
+                error!("Failed to switch proxy: all proxies are unavailable");
+            }
+
+            (pending_ban, switched)
+        };
+
+        if let Some((proxy_name, proxy_url, reason)) = pending_ban {
+            self.ban_manager.add_ban(&proxy_name, proxy_url, Some(reason));
         }
 
-        pool.current_index = original_index;
-        error!("Failed to switch proxy: all proxies are unavailable");
-        false
+        switched
     }
 
     pub fn get_statistics(&self) -> HashMap<String, PyObject> {
@@ -656,70 +675,81 @@ impl ProxyPool {
         self.ban_manager.get_ban_summary(include_ip)
     }
 
-    #[pyo3(signature = (proxy_name=None))]
-    pub fn ban_proxy(&self, proxy_name: Option<String>) -> bool {
-        let mut pool = self.inner.lock();
-        if pool.no_proxy_mode || pool.proxies.is_empty() {
-            return false;
-        }
-
-        let (target_index, target_name, proxy_url) = match proxy_name {
-            None => {
-                let idx = pool.current_index;
-                let proxy = pool.proxies[idx].lock();
-                let name = proxy.name.clone();
-                let url = proxy.http_url.clone().or_else(|| proxy.https_url.clone());
-                (idx, name, url)
+    #[pyo3(signature = (proxy_name=None, reason=None))]
+    pub fn ban_proxy(&self, proxy_name: Option<String>, reason: Option<String>) -> bool {
+        let (target_name, proxy_url, reason, switched) = {
+            let mut pool = self.inner.lock();
+            if pool.no_proxy_mode || pool.proxies.is_empty() {
+                return false;
             }
-            Some(ref name) => {
-                let found = pool.proxies.iter().enumerate().find(|(_, arc)| {
-                    arc.lock().name == *name
-                });
-                match found {
-                    Some((idx, arc)) => {
-                        let proxy = arc.lock();
-                        let url = proxy.http_url.clone().or_else(|| proxy.https_url.clone());
-                        (idx, name.clone(), url)
-                    }
-                    None => {
-                        warn!("ban_proxy: proxy '{}' not found in pool", name);
-                        return false;
+
+            let (target_index, target_name, proxy_url) = match proxy_name {
+                None => {
+                    let idx = pool.current_index;
+                    let proxy = pool.proxies[idx].lock();
+                    let name = proxy.name.clone();
+                    let url = proxy.http_url.clone().or_else(|| proxy.https_url.clone());
+                    (idx, name, url)
+                }
+                Some(ref name) => {
+                    let found = pool
+                        .proxies
+                        .iter()
+                        .enumerate()
+                        .find(|(_, arc)| arc.lock().name == *name);
+                    match found {
+                        Some((idx, arc)) => {
+                            let proxy = arc.lock();
+                            let url = proxy.http_url.clone().or_else(|| proxy.https_url.clone());
+                            (idx, name.clone(), url)
+                        }
+                        None => {
+                            warn!("ban_proxy: proxy '{}' not found in pool", name);
+                            return false;
+                        }
                     }
                 }
+            };
+
+            {
+                let mut proxy = pool.proxies[target_index].lock();
+                proxy.banned = true;
+                proxy.is_available = false;
             }
+            debug!("Proxy '{}' banned [session-permanent]", target_name);
+
+            let len = pool.proxies.len();
+            let original_index = pool.current_index;
+            let mut candidate = target_index;
+            let mut switched = false;
+            for _ in 0..len {
+                candidate = (candidate + 1) % len;
+                let (available, next_name) = {
+                    let proxy = pool.proxies[candidate].lock();
+                    (
+                        proxy.is_available && !proxy.banned && !proxy.is_in_cooldown(),
+                        proxy.name.clone(),
+                    )
+                };
+                if available {
+                    pool.current_index = candidate;
+                    debug!("Switched from '{}' to '{}'", target_name, next_name);
+                    switched = true;
+                    break;
+                }
+            }
+
+            if !switched {
+                pool.current_index = original_index;
+                debug!("ban_proxy: all proxies are unavailable after ban");
+            }
+
+            (target_name, proxy_url, reason, switched)
         };
 
-        self.ban_manager.add_ban(&target_name, proxy_url);
-        {
-            let mut proxy = pool.proxies[target_index].lock();
-            proxy.banned = true;
-            proxy.is_available = false;
-        }
-        debug!(
-            "Proxy '{}' banned [session-permanent]",
-            target_name
-        );
+        self.ban_manager.add_ban(&target_name, proxy_url, reason);
 
-        let len = pool.proxies.len();
-        let mut candidate = target_index;
-        for _ in 0..len {
-            candidate = (candidate + 1) % len;
-            let (available, next_name) = {
-                let proxy = pool.proxies[candidate].lock();
-                (proxy.is_available && !proxy.banned && !proxy.is_in_cooldown(), proxy.name.clone())
-            };
-            if available {
-                pool.current_index = candidate;
-                debug!(
-                    "Switched from '{}' to '{}'",
-                    target_name, next_name
-                );
-                return true;
-            }
-        }
-
-        debug!("ban_proxy: all proxies are unavailable after ban");
-        false
+        switched
     }
 
     pub fn get_proxy_count(&self) -> usize {

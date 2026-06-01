@@ -1,5 +1,7 @@
 # IMP-ADR043-02: Fix BFR-009 Ban Dispatch + Hard-Ban DO Sharing — Implementation Plan
 
+**Status:** Completed (2026-06-01) — Rust ban dispatch, ban-cause TTL mapping, and BFR-009 closeout landed.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Related:** [ADR-043](ADR-043-cf-persistent-failure-auto-ban.md) (D8/D9/D10), fixes [BFR-009](../BFR-009-Rust-Pool-Cross-Runner-Ban-Dispatch/BFR-009-rust-pool-ban-dispatch.md). Phase 1 is [IMP-ADR043-01](IMP-ADR043-01-cf-auto-ban-worker.md).
@@ -52,7 +54,7 @@
 **Files:**
 - Modify: `javdb/rust_core/src/proxy/ban_manager.rs`
 
-- [ ] **Step 1: Add the callback field + `reason` to the ban record**
+- [x] **Step 1: Add the callback field + `reason` to the ban record**
 
 In `struct BanManagerInner` (lines 19-21), add the callback store (mirrors `pool.rs` `health_provider`):
 
@@ -66,7 +68,7 @@ struct BanManagerInner {
 
 In `ProxyBanRecord` (lines 12-17) add `pub reason: Option<String>,`. Update `ProxyBanManager::new()` to initialise `ban_dispatch: Mutex::new(None)` in the `BanManagerInner { ... }` literal.
 
-- [ ] **Step 2: Add the setter (mirror `set_health_provider`)**
+- [x] **Step 2: Add the setter (mirror `set_health_provider`)**
 
 In the `#[pymethods] impl ProxyBanManager` block, after `remove_ban` (line ~85), add:
 
@@ -82,7 +84,7 @@ pub fn set_ban_dispatch_callback(&self, callback: Option<PyObject>) {
 }
 ```
 
-- [ ] **Step 3: Fire the callback on a NEW ban inside `add_ban`**
+- [x] **Step 3: Fire the callback on a NEW ban inside `add_ban`**
 
 Rewrite `add_ban` (lines 49-68) to take an optional `reason`, detect the new-ban case, drop the map lock BEFORE calling Python (avoid holding the mutex across the GIL), then invoke the callback:
 
@@ -124,12 +126,12 @@ pub fn add_ban(&self, proxy_name: &str, proxy_url: Option<String>, reason: Optio
 
 Ensure `use pyo3::prelude::*;` / `Python`, `PyObject` are in scope (they are, since the file is a `#[pymodule]` member — confirm the import line at the top of the file and add `use pyo3::types::PyAnyMethods;` if `call1` needs it for your PyO3 version).
 
-- [ ] **Step 4: Build**
+- [x] **Step 4: Build**
 
 Run: `cd javdb/rust_core && cargo build 2>&1 | tail -20`
 Expected: compiles. Fix any borrow/lifetime errors surfaced.
 
-- [ ] **Step 5: Install the wheel + commit**
+- [x] **Step 5: Install the wheel + commit**
 
 Run: `cd javdb/rust_core && maturin develop --release && cd ../../..`
 
@@ -145,7 +147,7 @@ git commit -m "feat(rust): add ban-dispatch callback to RustProxyBanManager (BFR
 **Files:**
 - Modify: `javdb/rust_core/src/proxy/pool.rs`
 
-- [ ] **Step 1: Internal drain site (`mark_failure_and_switch`, ~line 480-491)**
+- [x] **Step 1: Internal drain site (`mark_failure_and_switch`, ~line 480-491)**
 
 Update the `add_ban` call to pass a cause:
 
@@ -153,7 +155,7 @@ Update the `add_ban` call to pass a cause:
 self.ban_manager.add_ban(&current_name, proxy_url, Some("rust_auto_drain".to_string()));
 ```
 
-- [ ] **Step 2: Explicit `ban_proxy` (line 659-697) — add a `reason` param and thread it**
+- [x] **Step 2: Explicit `ban_proxy` (line 659-697) — add a `reason` param and thread it**
 
 Change the signature (line 659-660):
 
@@ -168,7 +170,7 @@ At the `add_ban` call (line ~692) pass the reason:
 self.ban_manager.add_ban(&target_name, proxy_url, reason.clone());
 ```
 
-- [ ] **Step 3: Build + install + commit**
+- [x] **Step 3: Build + install + commit**
 
 Run: `cd javdb/rust_core && cargo build 2>&1 | tail -20 && maturin develop --release && cd ../../..`
 Expected: compiles.
@@ -188,7 +190,7 @@ git commit -m "feat(rust): thread ban reason through pool ban sites (BFR-009/ADR
 - Modify: `javdb/spider/runtime/context.py` (line ~876), `javdb/spider/runtime/state.py` (line ~722)
 - Test: `tests/unit/test_proxy_ban_manager.py`
 
-- [ ] **Step 1: Write the failing BFR-009 regression test** (the core proof)
+- [x] **Step 1: Write the failing BFR-009 regression test** (the core proof)
 
 Add to `tests/unit/test_proxy_ban_manager.py`:
 
@@ -223,7 +225,7 @@ def test_set_ban_dispatch_callback_none_clears():
 Run: `pytest tests/unit/test_proxy_ban_manager.py -k ban_dispatch -v`
 Expected: FAIL until the wheel from Tasks 1–2 is installed (then this part PASSES — it validates the Rust side; keep it as the regression anchor).
 
-- [ ] **Step 2: Update `_dispatch_remote_ban` + hook arity in `ban_manager.py`**
+- [x] **Step 2: Update `_dispatch_remote_ban` + hook arity in `ban_manager.py`**
 
 Change the hook type and dispatcher to carry `reason`:
 
@@ -250,7 +252,7 @@ def _dispatch_remote_ban(proxy_name: str, reason: Optional[str] = None) -> None:
         )
 ```
 
-- [ ] **Step 3: Add a module helper that registers the Rust callback**
+- [x] **Step 3: Add a module helper that registers the Rust callback**
 
 In `ban_manager.py`, add a function that bridges the Rust callback → the Python dispatcher (call this from runtime setup):
 
@@ -266,7 +268,7 @@ def install_rust_ban_dispatch() -> None:
     get_ban_manager().set_ban_dispatch_callback(_dispatch_remote_ban)
 ```
 
-- [ ] **Step 4: Let `mark_proxy_banned` omit `ttl_ms` so the Worker decides by cause**
+- [x] **Step 4: Let `mark_proxy_banned` omit `ttl_ms` so the Worker decides by cause**
 
 In `proxy_coordinator_client.py`, change `mark_proxy_banned` to accept `ttl_ms: Optional[int] = None`:
 
@@ -291,7 +293,7 @@ def mark_proxy_banned(
 
 Note the signature now takes `reason` positionally so the Rust callback `(name, reason)` maps directly.
 
-- [ ] **Step 5: Register the callback in runtime setup**
+- [x] **Step 5: Register the callback in runtime setup**
 
 In `javdb/spider/runtime/state.py` (~line 722), the closure becomes 2-arg and we also install the Rust callback:
 
@@ -311,11 +313,11 @@ In `javdb/spider/runtime/context.py` (~line 876): `client.mark_proxy_banned` alr
 
 Ensure `install_rust_ban_dispatch` is importable from `legacy_state` (it re-exports `ban_manager` symbols; add to the import/re-export list in `state.py` if needed, matching how `set_remote_ban_hook` is exposed at `state.py:34`).
 
-- [ ] **Step 6: Update the existing `_dispatch_remote_ban` guard test**
+- [x] **Step 6: Update the existing `_dispatch_remote_ban` guard test**
 
 The Explore notes `test_proxy_ban_manager.py:192-230` tests `_dispatch_remote_ban` input guarding. Update those calls to the new 2-arg form (`_dispatch_remote_ban("name", "reason")`) and add a case asserting a registered hook receives the reason.
 
-- [ ] **Step 7: Run + commit**
+- [x] **Step 7: Run + commit**
 
 Run: `pytest tests/unit/test_proxy_ban_manager.py tests/unit/test_proxy_coordinator_client.py -v`
 Expected: PASS (including the new BFR-009 regression test).
@@ -336,7 +338,7 @@ git commit -m "feat(proxy): wire Rust ban dispatch to coordinator with reason (B
 - Modify: `javdb/spider/fetch/fetch_engine.py` (~line 1045)
 - Test: `tests/unit/test_proxy_pool.py`
 
-- [ ] **Step 1: Pass the reason at the request.py catch site**
+- [x] **Step 1: Pass the reason at the request.py catch site**
 
 ```python
         except ProxyBannedError as e:
@@ -346,11 +348,11 @@ git commit -m "feat(proxy): wire Rust ban dispatch to coordinator with reason (B
             raise
 ```
 
-- [ ] **Step 2: Pass the reason at the fetch_engine.py site**
+- [x] **Step 2: Pass the reason at the fetch_engine.py site**
 
 At `javdb/spider/fetch/fetch_engine.py:1045`, the `get_ban_manager().add_ban(...)` call gains the reason as the 3rd positional arg (it now accepts `reason`). If the surrounding code has the `ProxyBannedError` in scope, pass `e.reason`; otherwise pass a literal matching the cause (e.g. the `except ProxyBannedError as e:` there → `add_ban(e.proxy_name, None, e.reason)`). Confirm the local variable name for the exception at that line and use its `.reason`.
 
-- [ ] **Step 3: Write/extend a test** in `tests/unit/test_proxy_pool.py`
+- [x] **Step 3: Write/extend a test** in `tests/unit/test_proxy_pool.py`
 
 ```python
 def test_ban_proxy_threads_reason_to_dispatch():
@@ -370,7 +372,7 @@ def test_ban_proxy_threads_reason_to_dispatch():
 
 > NOTE: the ban manager is a session singleton; this test sets/clears the callback to avoid leaking into other tests. If pytest isolation is a concern, mark with the existing proxy-test fixture used elsewhere in the file.
 
-- [ ] **Step 4: Run + commit**
+- [x] **Step 4: Run + commit**
 
 Run: `pytest tests/unit/test_proxy_pool.py -v && pytest tests/unit/test_engine.py -v`
 Expected: PASS.
@@ -388,7 +390,7 @@ git commit -m "feat(spider): thread ban reason into ban_proxy at catch sites (AD
 - Modify: `src/types.ts`, `src/proxy_coordinator.ts`, `wrangler.toml`
 - Test: `test/cf_auto_ban.test.ts` (or a new `test/hard_ban_ttl.test.ts`)
 
-- [ ] **Step 1: Constant + Env field + loader**
+- [x] **Step 1: Constant + Env field + loader**
 
 In `src/types.ts` near `DEFAULT_BAN_TTL_MS`:
 
@@ -418,7 +420,7 @@ function ttlForBanReason(reason: string | undefined, env: Env): number {
 }
 ```
 
-- [ ] **Step 2: Write the failing test** (`test/cf_auto_ban.test.ts`)
+- [x] **Step 2: Write the failing test** (`test/cf_auto_ban.test.ts`)
 
 ```ts
 describe("ADR-043 hard-ban TTL by reason", () => {
@@ -443,7 +445,7 @@ describe("ADR-043 hard-ban TTL by reason", () => {
 
 Run: `npm test -- cf_auto_ban` → the hard-ban test FAILS (currently falls back to 3 d).
 
-- [ ] **Step 3: Use the mapping in the `kind === "ban"` branch**
+- [x] **Step 3: Use the mapping in the `kind === "ban"` branch**
 
 In `handleReport`, replace the ban-branch TTL computation (lines 349-358) so the fallback uses the reason map, and tag `bannedReason`:
 
@@ -472,11 +474,11 @@ In `handleReport`, replace the ban-branch TTL computation (lines 349-358) so the
 
 (Depends on `bannedReason` from IMP-01 Task 2 — if IMP-01 hasn't merged, add the field here per IMP-01 Task 2 Steps 1-2.)
 
-- [ ] **Step 4: Run — expect PASS**
+- [x] **Step 4: Run — expect PASS**
 
 Run: `npm test -- cf_auto_ban` → PASS. `npm run typecheck` → clean. `npm test` → no regressions.
 
-- [ ] **Step 5: wrangler.toml + commit**
+- [x] **Step 5: wrangler.toml + commit**
 
 Add to `[vars]`:
 
@@ -498,7 +500,7 @@ git commit -m "feat(proxy-coordinator): map ban reason to TTL; 8d hard-ban (ADR-
 - Modify: `docs/design/BFR-009-Rust-Pool-Cross-Runner-Ban-Dispatch/BFR-009-rust-pool-ban-dispatch.md` + `.zh.md`
 - Modify: `docs/design/ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.md` + `.zh.md`
 
-- [ ] **Step 1: Handbook — add `HARD_BAN_TTL_MS`** to the env table created in IMP-01 Task 5 (en + zh):
+- [x] **Step 1: Handbook — add `HARD_BAN_TTL_MS`** to the env table created in IMP-01 Task 5 (en + zh):
 
 ```markdown
 | `HARD_BAN_TTL_MS` | `691200000` (8 d) | How long a JavDB explicit IP ban is shared cross-runner. Matches JavDB's ~7-day ban window + 1 day margin. |
@@ -506,14 +508,14 @@ git commit -m "feat(proxy-coordinator): map ban reason to TTL; 8d hard-ban (ADR-
 
 (zh: `| HARD_BAN_TTL_MS | 691200000（8 天） | JavDB 显式 IP 封禁跨 runner 共享的时长。对齐 JavDB ~7 天封禁窗口 + 1 天余量。 |`)
 
-- [ ] **Step 2: BFR-009 → Fixed** (both `.md` and `.zh.md`):
+- [x] **Step 2: BFR-009 → Fixed** (both `.md` and `.zh.md`):
   - Change `**Status**: Open` → `**Status**: Fixed`.
   - Check the remaining Follow-Up boxes (production-entry-point dispatch test → done in Task 3 Step 1; surface re-eval → note done/deferred).
   - Add a Status line: `- 2026-06-01: Fixed via IMP-ADR043-02 (Approach 1).`
 
-- [ ] **Step 3: ADR-043 Status Log** — append `- 2026-06-01: Phase 2 (IMP-ADR043-02) implemented; BFR-009 closed.` to both `.md` and `.zh.md`. (Optionally flip ADR Status to `Accepted`/`Completed` once both IMPs merge.)
+- [x] **Step 3: ADR-043 Status Log** — append `- 2026-06-01: Phase 2 (IMP-ADR043-02) implemented; BFR-009 closed.` to both `.md` and `.zh.md`. (Optionally flip ADR Status to `Accepted`/`Completed` once both IMPs merge.)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/handbook/en/self-hoster/proxy-coordinator.md docs/handbook/zh/self-hoster/proxy-coordinator.md \

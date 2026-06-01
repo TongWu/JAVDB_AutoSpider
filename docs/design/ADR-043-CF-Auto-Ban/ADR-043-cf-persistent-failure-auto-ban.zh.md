@@ -187,3 +187,4 @@ zero-success 守卫，该代理确实什么都没过去）。短 DO TTL 管的�
 ## 状态日志 (Status Log)
 
 - 2026-05-31: Proposed
+- 2026-06-01: Phase 2 已实现；BFR-009 已关闭。

@@ -234,3 +234,4 @@ to the local ban duration is needed.
 ## Status Log
 
 - 2026-05-31: Proposed
+- 2026-06-01: Phase 2 implemented; BFR-009 closed.
