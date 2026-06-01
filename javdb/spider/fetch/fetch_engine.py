@@ -1718,6 +1718,25 @@ class ParallelFetchBackend(FetchBackend):
 
         return orphaned
 
+    def drain_remaining(self) -> Iterator[EngineResult]:
+        """Yield results already produced by workers, non-blocking.
+
+        Intended to be called **after** :meth:`shutdown` — once workers are
+        joined no new results can race in — to salvage results that workers
+        had produced but the caller had not yet consumed (e.g. partial
+        progress after a ``KeyboardInterrupt``). Drains only the result
+        queue; tasks that never ran are returned by :meth:`shutdown` as
+        ``orphaned`` and are **not** yielded here.
+        """
+        while True:
+            try:
+                result = self._result_queue.get_nowait()
+            except queue_module.Empty:
+                return
+            with self._count_lock:
+                self._received += 1
+            yield result
+
     def runtime_state(self) -> FetchRuntimeState:
         return FetchRuntimeState(
             use_proxy=self._runtime_state.use_proxy,
@@ -1909,6 +1928,9 @@ class FetchEngine:
 
     def shutdown(self, *, timeout: float = 10) -> List[EngineTask]:
         return self._backend.shutdown(timeout=timeout)
+
+    def drain_remaining(self) -> Iterator[EngineResult]:
+        return self._backend.drain_remaining()
 
     def runtime_state(self) -> FetchRuntimeState:
         return self._backend.runtime_state()

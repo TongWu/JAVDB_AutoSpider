@@ -1090,3 +1090,37 @@ class TestLoginCoordinatorVerifiedShortCircuit:
         assert 'proxy-a' in task.failed_proxies
         assert task_q.qsize() == 1
         assert login_q.qsize() == 0
+
+
+class TestDrainRemaining:
+
+    def test_drain_remaining_yields_queued_results(self):
+        from javdb.spider.fetch.fetch_engine import (
+            ParallelFetchBackend, EngineTask, EngineResult, FetchRuntimeState,
+        )
+
+        backend = ParallelFetchBackend(
+            process_fn=lambda ctx, task: None,
+            runtime_state=FetchRuntimeState(use_proxy=False, use_cf_bypass=False),
+        )
+        t = EngineTask(url='https://javdb.com/v/a', entry_index='1')
+        backend._result_queue.put(EngineResult(task=t, success=True, data={'x': 1}))
+        backend._result_queue.put(EngineResult(task=t, success=False, error='boom'))
+
+        drained = list(backend.drain_remaining())
+
+        assert [r.success for r in drained] == [True, False]
+        assert drained[0].data == {'x': 1}
+        assert drained[1].error == 'boom'
+
+    def test_drain_remaining_empty_when_no_results(self):
+        from javdb.spider.fetch.fetch_engine import (
+            ParallelFetchBackend, FetchRuntimeState,
+        )
+
+        backend = ParallelFetchBackend(
+            process_fn=lambda ctx, task: None,
+            runtime_state=FetchRuntimeState(use_proxy=False, use_cf_bypass=False),
+        )
+
+        assert list(backend.drain_remaining()) == []
