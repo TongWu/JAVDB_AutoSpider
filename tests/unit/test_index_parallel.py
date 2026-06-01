@@ -6,6 +6,7 @@ import os
 import queue as queue_module
 import sys
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from typing import Any, Dict, Optional
 
 import pytest
@@ -13,7 +14,12 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
+from javdb.parsing.models import IndexPageResult
+from javdb.parsing.models import MovieIndexEntry
+from javdb.pipeline.index_family_blacklist import filter_blacklisted_families
 from javdb.spider.fetch.index_parallel import _check_stop_condition
+from javdb.spider.fetch import index_parallel
+from javdb.spider.runtime import config as runtime_config
 from javdb.spider.fetch.fetch_engine import (
     EngineTask,
     _PriorityTaskQueue,
@@ -49,6 +55,58 @@ def _empty_no_flag_result() -> _FakeResult:
 
 def _failed_result(error: str = 'timeout') -> _FakeResult:
     return _FakeResult(success=False, error=error)
+
+
+def _entry(code, family):
+    return MovieIndexEntry(href=f"/v/{code}", video_code=code, video_code_family=family)
+
+
+class _FakeBackend:
+    def __init__(self, results):
+        self._results = list(results)
+        self.submitted = []
+        self.marked_done = False
+        self.started = False
+        self.shutdown_called = False
+        self.export_called = False
+
+    def start(self):
+        self.started = True
+
+    def submit(self, url, meta, entry_index, priority):
+        self.submitted.append((url, meta, entry_index, priority))
+
+    def mark_done(self):
+        self.marked_done = True
+
+    def results(self):
+        yield from self._results
+
+    def shutdown(self):
+        self.shutdown_called = True
+
+    def export_login_state(self):
+        self.export_called = True
+
+
+def _parallel_page_result():
+    return IndexPageResult(
+        has_movie_list=True,
+        movies=[
+            _entry("Wifey.2026.05.30", "western_studio_date"),
+            _entry("ABC-123", "classic_hyphenated"),
+        ],
+    )
+
+
+def _fake_result(page_num, html):
+    return SimpleNamespace(
+        success=True,
+        data={"has_movie_list": True, "html": html, "is_valid_empty": False},
+        error=None,
+        worker_name=f"w{page_num}",
+        task=SimpleNamespace(meta={"page_num": page_num}),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -256,6 +314,76 @@ class TestPriorityTaskQueue:
 
         urls = [t.url for t in out]
         assert urls == [f'page-{p}' for p in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]]
+
+
+def test_parallel_multi_page_applies_blacklist_once_per_page_and_preserves_page_order(monkeypatch):
+    backend = _FakeBackend([
+        _fake_result(2, "html-2"),
+        _fake_result(1, "html-1"),
+    ])
+    monkeypatch.setattr(index_parallel, "build_parallel_index_backend", lambda **_kwargs: backend)
+    monkeypatch.setattr(index_parallel, "parse_index_page", lambda html, page_num: _parallel_page_result())
+    monkeypatch.setattr(index_parallel, "_sentinel_field_health", SimpleNamespace(start_run=lambda: None, current=lambda: None))
+    monkeypatch.setattr(index_parallel, "_check_stop_condition", lambda *args, **kwargs: False)
+    monkeypatch.setattr(index_parallel, "detect_url_type", lambda *_args, **_kwargs: "actors")
+    monkeypatch.setattr(index_parallel, "generate_output_csv_name_from_html", lambda *_args, **_kwargs: "resolved.csv")
+    summary_calls = []
+    monkeypatch.setattr(index_parallel, "log_summary_block", lambda logger, title, pairs: summary_calls.append((title, pairs)))
+
+    filter_calls = []
+    original_filter = filter_blacklisted_families
+
+    def spy_filter(movies, blacklist, counts=None):
+        filter_calls.append(([movie.video_code for movie in movies], set(blacklist)))
+        return original_filter(movies, blacklist, counts)
+
+    phase_calls = []
+
+    def spy_select(page_result, *, page_num, phase, **_kwargs):
+        phase_calls.append((page_num, phase, [movie.video_code for movie in page_result.movies]))
+        return [movie.to_legacy_dict() for movie in page_result.movies]
+
+    monkeypatch.setattr(index_parallel, "filter_blacklisted_families", spy_filter)
+    monkeypatch.setattr(index_parallel, "select_index_entries", spy_select)
+    monkeypatch.setattr(runtime_config, "DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST", ["western_studio_date"])
+
+    result = index_parallel.fetch_all_index_pages_parallel(
+        runtime=None,
+        start_page=1,
+        end_page=2,
+        parse_all=False,
+        phase_mode="all",
+        custom_url=None,
+        ignore_release_date=False,
+        use_proxy=False,
+        use_cf_bypass=False,
+        max_consecutive_empty=1,
+        output_csv="out.csv",
+        output_dated_dir="/tmp",
+        csv_path="/tmp/out.csv",
+        user_specified_output=True,
+        cancel_event=None,
+    )
+
+    assert backend.started is True
+    assert backend.marked_done is True
+    assert backend.shutdown_called is True
+    assert backend.export_called is True
+    assert filter_calls == [
+        (["Wifey.2026.05.30", "ABC-123"], {"western_studio_date"}),
+        (["Wifey.2026.05.30", "ABC-123"], {"western_studio_date"}),
+    ]
+    assert summary_calls == [
+        ("INDEX FAMILY BLACKLIST SUMMARY", [("total", 2), ("western_studio_date", 2)])
+    ]
+    assert phase_calls == [
+        (1, 1, ["ABC-123"]),
+        (1, 2, ["ABC-123"]),
+        (2, 1, ["ABC-123"]),
+        (2, 2, ["ABC-123"]),
+    ]
+    assert [entry["href"] for entry in result["all_index_results_phase1"]] == ["/v/ABC-123", "/v/ABC-123"]
+    assert [entry["href"] for entry in result["all_index_results_phase2"]] == ["/v/ABC-123", "/v/ABC-123"]
 
 
 # ---------------------------------------------------------------------------
