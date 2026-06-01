@@ -2,10 +2,10 @@
 
 | 字段 | 值 |
 | --- | --- |
-| **状态 (Status)** | Accepted — 已就「加法式 parser 识别 + 纯 config daily 黑名单」达成一致，待实现 |
+| **状态 (Status)** | Completed — 已于 2026-06-01 实现并验证 |
 | **日期 (Date)** | 2026-06-01 |
 | **作者 (Authors)** | Ted |
-| **关联 (Related)** | [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.zh.md), [ADR-040](../ADR-040-Content-Filter-Rules/ADR-040-content-filter-rules.zh.md), [ADR-042](../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.zh.md) |
+| **关联 (Related)** | [ADR-035](../../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.zh.md), [ADR-040](../../ADR-040-Content-Filter-Rules/ADR-040-content-filter-rules.zh.md), [ADR-042](../../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.zh.md) |
 | **关联实现计划 (Related Implementation Plans)** | [IMP-ADR044-01](IMP-ADR044-01-index-video-code-family-blacklist.md) |
 
 > 这份 ADR 来自一次 drift 排查：parser 必须识别新的 index-card 家族，让 sentinel 看到非空的 `video_code`；但 daily ingestion 仍然要默认把这个家族排除在下载队列之外。
@@ -63,7 +63,7 @@ Python 和 Rust 必须做同样的加法式改动，让两套引擎保持一致�
 
 daily 流水线顺序是：
 
-```
+```text
 parse index cards -> sentinel 统计 -> daily 家族黑名单（独立步骤） -> phase 1 / phase 2 选择
 ```
 
@@ -123,18 +123,18 @@ daily run 输出 family 级排除统计——一个总数加上按 family 的分
 
 ## 参考 (References)
 
-- [ADR-035 — Site Contract Sentinel](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.zh.md)
-- [ADR-040 — Content Filter Rules](../ADR-040-Content-Filter-Rules/ADR-040-content-filter-rules.zh.md)
-- [ADR-042 — D1 Atomic Commit Boundaries](../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.zh.md)
-- [`javdb/parsing/common.py`](../../../javdb/parsing/common.py)
-- [`javdb/rust_core/src/scraper/common.rs`](../../../javdb/rust_core/src/scraper/common.rs)
-- [`javdb/pipeline/index_selection.py`](../../../javdb/pipeline/index_selection.py)
-- [`javdb/spider/fetch/index.py`](../../../javdb/spider/fetch/index.py)
-- [`javdb/spider/fetch/index_parallel.py`](../../../javdb/spider/fetch/index_parallel.py)
-- [`javdb/ops/sentinel/field_health.py`](../../../javdb/ops/sentinel/field_health.py)
-- [`javdb/infra/config_generator.py`](../../../javdb/infra/config_generator.py)
-- [`.github/workflows/DailyIngestion.yml`](../../../.github/workflows/DailyIngestion.yml)
-- [`.github/workflows/AdHocIngestion.yml`](../../../.github/workflows/AdHocIngestion.yml)
+- [ADR-035 — Site Contract Sentinel](../../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.zh.md)
+- [ADR-040 — Content Filter Rules](../../ADR-040-Content-Filter-Rules/ADR-040-content-filter-rules.zh.md)
+- [ADR-042 — D1 Atomic Commit Boundaries](../../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.zh.md)
+- [`javdb/parsing/common.py`](../../../../javdb/parsing/common.py)
+- [`javdb/rust_core/src/scraper/common.rs`](../../../../javdb/rust_core/src/scraper/common.rs)
+- [`javdb/pipeline/index_selection.py`](../../../../javdb/pipeline/index_selection.py)
+- [`javdb/spider/fetch/index.py`](../../../../javdb/spider/fetch/index.py)
+- [`javdb/spider/fetch/index_parallel.py`](../../../../javdb/spider/fetch/index_parallel.py)
+- [`javdb/ops/sentinel/field_health.py`](../../../../javdb/ops/sentinel/field_health.py)
+- [`javdb/infra/config_generator.py`](../../../../javdb/infra/config_generator.py)
+- [`.github/workflows/DailyIngestion.yml`](../../../../.github/workflows/DailyIngestion.yml)
+- [`.github/workflows/AdHocIngestion.yml`](../../../../.github/workflows/AdHocIngestion.yml)
 
 ## 状态日志 (Status Log)
 

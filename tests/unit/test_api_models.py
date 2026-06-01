@@ -91,6 +91,11 @@ class TestMovieIndexEntry:
         assert entry.ranking == 5
         assert len(entry.tags) == 2
 
+    def test_positional_title_compatibility(self):
+        entry = MovieIndexEntry('/v/ABC-123', 'ABC-123', 'Test Movie Title')
+        assert entry.title == 'Test Movie Title'
+        assert entry.video_code_family == ''
+
     def test_to_legacy_dict(self):
         entry = MovieIndexEntry(
             href='/v/ABC-123',
@@ -108,6 +113,16 @@ class TestMovieIndexEntry:
             'rate': '4.47',
             'comment_number': '595',
         }
+
+    def test_movie_index_entry_family_serializes_but_legacy_dict_does_not(self):
+        entry = MovieIndexEntry(
+            href='/v/wifey',
+            video_code='Wifey.2026.05.30',
+            video_code_family='western_studio_date',
+            page=2,
+        )
+        assert entry.to_dict()['video_code_family'] == 'western_studio_date'
+        assert 'video_code_family' not in entry.to_legacy_dict()
 
     def test_to_dict(self):
         entry = MovieIndexEntry(href='/v/X', video_code='X-1', page=1)

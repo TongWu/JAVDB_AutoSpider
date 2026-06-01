@@ -103,6 +103,7 @@ These are non-sensitive values. The `config_generator` reads them via `VAR_*` en
 | `GIT_BRANCH` | `main` | Branch for git push |
 | `PROXY_MODE` | `pool` | `pool`, `single`, or `None` |
 | `PROXY_MODULES_JSON` | `["spider"]` | JSON array of modules that use proxy: `spider`, `qbittorrent`, `pikpak`, `all` |
+| `DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST_JSON` | `["western_studio_date"]` | JSON array of video-code families excluded from daily ingestion, default `["western_studio_date"]`. Set to `[]` to stop excluding the western studio/date family. |
 | `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 | `STORAGE_BACKEND` | `sqlite` | `sqlite`, `d1`, or `dual` |
 | `D1_RECOVERY_OUTBOX_ENABLED` | `false` | Enable ADR-010 recovery outbox handling for safe D1 write failures. Accepted truthy values include `1`, `true`, `yes`, and `on`. |

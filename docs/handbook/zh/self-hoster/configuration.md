@@ -198,6 +198,7 @@ PROXY_POOL = [
 | `PAGE_END` | `int` | `20` | 结束抓取页码（含）。 |
 | `PHASE2_MIN_RATE` | `float` | `4.0` | Phase 2（高评分非字幕条目）中影片的最低用户评分。 |
 | `PHASE2_MIN_COMMENTS` | `int` | `100` | Phase 2 中影片的最低评论数。 |
+| `DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST` | `list[str]` | `['western_studio_date']` | 仅用于每日模式的 family 黑名单，在索引解析和 sentinel 计数之后应用。解析器仍会识别这些 family，而临时抓取会绕过此黑名单。在 GitHub Actions 中，将仓库 Variable `DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST_JSON` 设为 JSON 数组（例如 `[]`）即可退出静态默认值。 |
 | `BASE_URL` | `str` | `'https://javdb.com'` | JavDB 基础 URL。仅在使用镜像站时更改。 |
 
 ---
