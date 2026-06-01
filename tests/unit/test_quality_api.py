@@ -4,6 +4,7 @@ from contextlib import nullcontext
 
 import pytest
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
 
 from apps.api.routers import quality as quality_router
 
@@ -69,6 +70,34 @@ class _FakeRepo:
     def get_evidence(self, info_hash, probe_schema_version, target_role):
         self.calls.append(("evidence", info_hash, probe_schema_version, target_role))
         return self.evidence
+
+
+def _runtime_client(role="admin"):
+    from apps.api.services.runtime import app, _jwt_encode
+
+    token = _jwt_encode({"sub": role, "role": role, "typ": "access"}, 3600)
+    client = TestClient(app)
+    client.headers.update({"Authorization": f"Bearer {token}"})
+    return client
+
+
+def test_runtime_app_requires_auth_for_quality_evaluations():
+    from apps.api.services.runtime import app
+
+    response = TestClient(app).get("/api/quality/evaluations")
+
+    assert response.status_code in {401, 403}
+
+
+def test_runtime_app_registers_quality_evaluations_route(monkeypatch):
+    repo = _FakeRepo()
+    monkeypatch.setattr(quality_router, "_repo", lambda: nullcontext(repo))
+
+    response = _runtime_client().get("/api/quality/evaluations")
+
+    assert response.status_code == 200
+    assert response.json()["items"][0]["info_hash"] == "HASH1"
+    assert repo.calls == [("recent", 50)]
 
 
 def test_recent_evaluations_list_returns_item_bool_conversion_and_reasons(monkeypatch):
