@@ -339,8 +339,9 @@ python3 -m apps.cli.qb.file_filter --delete-local-files
 
 **Module:** `apps.cli.qb.quality_evidence`
 
-Collects ADR-024 Phase 1 shadow evidence for production-downloaded torrents. The
-collector is read-only against qBittorrent and exits without running unless
+Collects ADR-024 Phase 1 shadow evidence for production-selected/recently added
+torrents whose qBittorrent metadata is available. The collector is read-only
+against qBittorrent and exits without running unless
 `TORRENT_QUALITY_EVIDENCE_ENABLED=True` or `--force` is provided.
 
 ### Arguments

@@ -374,7 +374,7 @@ Google Drive 库存扫描和重复文件清理的设置。
 
 | 变量 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
-| `TORRENT_QUALITY_EVIDENCE_ENABLED` | `bool` | `False` | 为生产已下载种子启用影子证据采集。 |
+| `TORRENT_QUALITY_EVIDENCE_ENABLED` | `bool` | `False` | 为生产选中/最近添加且 qBittorrent metadata 可用的种子启用影子证据采集。 |
 | `TORRENT_QUALITY_POLICY_MODE` | `str` | `'shadow'` | Phase 1 只接受 `shadow` 语义；`assist` 和 `enforce` 为后续阶段保留。 |
 | `TORRENT_QUALITY_CATEGORIES` | `str` | `''` | 可选：要扫描的 qBittorrent 分类 JSON 数组，例如 `'["Daily Ingestion"]'`。直接运行时为空会跳过采集，而不是扫描所有分类。 |
 
