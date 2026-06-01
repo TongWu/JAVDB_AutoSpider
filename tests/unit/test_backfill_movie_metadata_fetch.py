@@ -494,6 +494,26 @@ def test_apply_metadata_result_failed_result_counts_as_failed(monkeypatch):
     assert (ok, failed) == (0, 1)
 
 
+def test_apply_metadata_result_per_worker_cap_is_not_failure(monkeypatch):
+    from javdb.spider.fetch.fetch_engine import PER_WORKER_TASK_CAP_ERROR
+
+    result = _make_metadata_result(
+        success=False,
+        detail=None,
+        error=PER_WORKER_TASK_CAP_ERROR,
+        worker_name='engine',
+    )
+
+    def _boom(*_args, **_kwargs):
+        raise AssertionError('MetadataRepo.upsert must not run for cap flushes')
+
+    monkeypatch.setattr(bm.MetadataRepo, 'upsert', _boom)
+
+    ok, failed = bm._apply_metadata_result(result, dry_run=False)
+
+    assert (ok, failed) == (0, 0)
+
+
 def test_apply_metadata_result_write_failure_counts_as_failed(monkeypatch):
     result = _make_metadata_result()
 
