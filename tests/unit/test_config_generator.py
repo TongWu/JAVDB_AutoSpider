@@ -329,6 +329,27 @@ class TestGetConfigMap:
         assert entry[3] == 'false'
         assert entry[4] == 'RUNNER REGISTRY CONFIGURATION'
 
+    def test_contains_torrent_quality_evidence_keys(self):
+        """Should expose torrent quality evidence config under its own section."""
+        config_map = get_config_map()
+        entries = {item[0]: item for item in config_map if item[0] in {
+            'TORRENT_QUALITY_EVIDENCE_ENABLED',
+            'TORRENT_QUALITY_POLICY_MODE',
+            'TORRENT_QUALITY_CATEGORIES',
+        }}
+
+        assert entries['TORRENT_QUALITY_EVIDENCE_ENABLED'][1] == 'TORRENT_QUALITY_EVIDENCE_ENABLED'
+        assert entries['TORRENT_QUALITY_EVIDENCE_ENABLED'][3] is False
+        assert entries['TORRENT_QUALITY_EVIDENCE_ENABLED'][4] == 'TORRENT QUALITY EVIDENCE'
+
+        assert entries['TORRENT_QUALITY_POLICY_MODE'][1] == 'TORRENT_QUALITY_POLICY_MODE'
+        assert entries['TORRENT_QUALITY_POLICY_MODE'][3] == 'shadow'
+        assert entries['TORRENT_QUALITY_POLICY_MODE'][4] == 'TORRENT QUALITY EVIDENCE'
+
+        assert entries['TORRENT_QUALITY_CATEGORIES'][1] == 'TORRENT_QUALITY_CATEGORIES'
+        assert entries['TORRENT_QUALITY_CATEGORIES'][3] == ''
+        assert entries['TORRENT_QUALITY_CATEGORIES'][4] == 'TORRENT QUALITY EVIDENCE'
+
 
 class TestGenerateConfigContent:
     """Tests for generate_config_content function."""
@@ -355,6 +376,16 @@ class TestGenerateConfigContent:
             content = generate_config_content()
             assert '# GIT CONFIGURATION' in content
             assert '# QBITTORRENT CONFIGURATION' in content
+
+    def test_includes_torrent_quality_evidence_section(self):
+        """Should include torrent quality evidence settings in generated config."""
+        env = {}
+        with patch.dict(os.environ, env, clear=True):
+            content = generate_config_content()
+            assert '# TORRENT QUALITY EVIDENCE' in content
+            assert "TORRENT_QUALITY_EVIDENCE_ENABLED = False" in content
+            assert "TORRENT_QUALITY_POLICY_MODE = 'shadow'" in content
+            assert "TORRENT_QUALITY_CATEGORIES = ''" in content
     
     def test_github_actions_mode_note(self):
         """Should include GitHub Actions note in that mode."""
