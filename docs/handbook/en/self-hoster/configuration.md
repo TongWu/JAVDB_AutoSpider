@@ -395,6 +395,16 @@ download" priority inside torrents. For newly added torrents, it waits up to
 | `QB_FILE_FILTER_MIN_SIZE_MB` | `int` | `100` | Minimum file size in MB. Files smaller than this threshold are set to "do not download" priority. |
 | `QB_FILE_FILTER_LOG_FILE` | `str` | `'logs/qb_file_filter.log'` | Log file path for the file filter script. |
 
+### Torrent Quality Evidence (ADR-024)
+
+| Variable | Type | Default | Description |
+|---|---|---|---|
+| `TORRENT_QUALITY_EVIDENCE_ENABLED` | `bool` | `False` | Enable shadow evidence collection for production-downloaded torrents. |
+| `TORRENT_QUALITY_POLICY_MODE` | `str` | `'shadow'` | Phase 1 only honours `shadow`; `assist` and `enforce` are reserved for later phases. |
+| `TORRENT_QUALITY_CATEGORIES` | `str` | `''` | Optional JSON array of qBittorrent categories to scan, e.g. `'["Daily Ingestion"]'`. Empty direct runs skip collection rather than scanning every category. |
+
+See [Torrent Quality Evidence](../ops/torrent-quality-evidence.md).
+
 ---
 
 ## 15. Media Closed Loop

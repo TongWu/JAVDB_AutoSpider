@@ -40,9 +40,10 @@ D1_STAGING_WORKFLOWS = WORKFLOWS + (
     REPO_ROOT / ".github" / "workflows" / "WeeklyDedup.yml",
 )
 TEST_INGESTION = REPO_ROOT / ".github" / "workflows" / "TestIngestion.yml"
+QB_FILE_FILTER = REPO_ROOT / ".github" / "workflows" / "QBFileFilter.yml"
 ADR010_D1_GATE_WORKFLOWS = D1_STAGING_WORKFLOWS + (
     TEST_INGESTION,
-    REPO_ROOT / ".github" / "workflows" / "QBFileFilter.yml",
+    QB_FILE_FILTER,
     REPO_ROOT / ".github" / "workflows" / "RollbackD1.yml",
     REPO_ROOT / ".github" / "workflows" / "StaleSessionCleanup.yml",
 )
@@ -50,6 +51,11 @@ ADR010_D1_GATE_ENV = {
     "D1_RECOVERY_OUTBOX_ENABLED": "${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}",
     "D1_BATCHING_ENABLED": "${{ vars.D1_BATCHING_ENABLED || 'false' }}",
     "D1_STARTUP_REPLAY_ENABLED": "${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}",
+}
+TORRENT_QUALITY_CONFIG_ENV = {
+    "VAR_TORRENT_QUALITY_EVIDENCE_ENABLED": "${{ vars.TORRENT_QUALITY_EVIDENCE_ENABLED || 'false' }}",
+    "VAR_TORRENT_QUALITY_POLICY_MODE": "${{ vars.TORRENT_QUALITY_POLICY_MODE || 'shadow' }}",
+    "VAR_TORRENT_QUALITY_CATEGORIES": "${{ vars.TORRENT_QUALITY_CATEGORIES || '' }}",
 }
 WORKFLOW_DISPATCH_INPUT_LIMIT = 25
 ALL_WORKFLOW_FILES = tuple(
@@ -721,6 +727,46 @@ def test_d1_gate_environment_vars_are_exported_for_d1_workflow_jobs(workflow):
         f"{workflow.name} does not export ADR-010 D1 gates: "
         + ", ".join(missing)
     )
+
+
+def test_qb_file_filter_collects_torrent_quality_evidence_in_shadow_mode():
+    data = _load_workflow(QB_FILE_FILTER)
+
+    setup_steps = data["jobs"]["setup"]["steps"]
+    config_step = next(
+        step
+        for step in setup_steps
+        if step.get("name") == "Generate config.py from GitHub Variables and Secrets"
+    )
+    for env_name, expected_expr in TORRENT_QUALITY_CONFIG_ENV.items():
+        assert config_step["env"].get(env_name) == expected_expr
+
+    run_steps = data["jobs"]["run-file-filter"]["steps"]
+    step_names = [step.get("name") for step in run_steps]
+    filter_index = step_names.index("Run qBittorrent File Filter")
+    collector_index = step_names.index(
+        "Collect torrent quality evidence (ADR-024, shadow)"
+    )
+
+    assert collector_index == filter_index + 1
+    collector_step = run_steps[collector_index]
+    condition = collector_step.get("if", "")
+    assert "vars.TORRENT_QUALITY_EVIDENCE_ENABLED == 'true'" in condition
+    assert "github.event.inputs.dry_run != 'true'" in condition
+
+    assert collector_step["env"].get("QB_EVIDENCE_CATEGORIES") == (
+        "${{ github.event.inputs.categories || "
+        "vars.TORRENT_QUALITY_CATEGORIES || "
+        """'["Ad Hoc", "Daily Ingestion", "顶级"]' }}"""
+    )
+    assert "QB_FILTER_CATEGORIES" not in collector_step["env"]
+
+    run_script = collector_step.get("run", "")
+    assert "apps.cli.qb.quality_evidence" in run_script
+    assert 'ARGS=(--days "$DAYS")' in run_script
+    assert 'ARGS+=(--categories "$QB_EVIDENCE_CATEGORIES")' in run_script
+    assert '"${ARGS[@]}"' in run_script
+    assert "eval" not in run_script
 
 
 def test_public_publish_refuses_recovery_payloads():
