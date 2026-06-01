@@ -59,6 +59,27 @@ def test_mixed_valid_and_invalid_tags_is_violation():
     assert "bogus" in result[0].message
 
 
+def test_multiple_distinct_valid_classes_is_violation():
+    content = (
+        "-- Write-Class: authoritative\n"
+        "-- Write-Class: diagnostic\n"
+        "CREATE TABLE Foo (id TEXT);\n"
+    )
+    result = _violations(("m.sql", content))
+    assert len(result) == 1
+    assert "multiple write classes" in result[0].message
+
+
+def test_duplicate_identical_class_passes():
+    # Repeating the same class is harmless redundancy, not a conflict.
+    content = (
+        "-- Write-Class: additive\n"
+        "-- Write-Class: additive\n"
+        "CREATE TABLE Foo (id TEXT);\n"
+    )
+    assert _violations(("m.sql", content)) == []
+
+
 def test_multiple_tables_single_tag_passes():
     content = (
         "-- Write-Class: additive\n"
