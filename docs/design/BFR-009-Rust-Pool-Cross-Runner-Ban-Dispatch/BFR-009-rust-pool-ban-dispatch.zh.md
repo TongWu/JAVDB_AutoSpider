@@ -4,7 +4,7 @@
 **日期**: 2026-05-30
 **严重度**: Medium
 **影响范围**: `javdb/proxy/ban_manager.py`(`_dispatch_remote_ban`、`set_remote_ban_hook`)、`javdb/proxy/pool.py`(Python `ProxyPool.ban_proxy` / drain)、`javdb/spider/runtime/state.py:722`、`javdb/spider/runtime/context.py:880`(hook 注册)、`javdb/rust_core/src/proxy/{pool,ban_manager}.rs`
-**关联**: [ADR-041](../ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.zh.md)(在其 Task 4 中暴露——删掉了 dispatcher 的最后几个 Python 调用方)、[ADR-023](../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.zh.md)(代理协调)、CONTEXT.md →「Signal」(`ban_proxy`)
+**关联**: [ADR-043](../ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.zh.md)(修复本缺口——Approach 1，经 IMP-ADR043-02)、[ADR-041](../ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.zh.md)(在其 Task 4 中暴露——删掉了 dispatcher 的最后几个 Python 调用方)、[ADR-023](../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.zh.md)(代理协调)、CONTEXT.md →「Signal」(`ban_proxy`)
 
 ---
 
@@ -38,6 +38,8 @@
 
 方案 2 改动最小,且让 `_dispatch_remote_ban` / `set_remote_ban_hook` 仍有意义;方案 1 长期最干净但要动 Rust crate。
 
+**决定 (2026-06-01):** 选 **方案 1** —— 见 [ADR-043 D8](../ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.zh.md)。Rust 池在自动 drain / 切换代理时还会**内部**记录封禁(`pool.rs:485`、`:692`),这些从不经任何 Python 入口,只有 Rust→Python 回调能保证每次封禁都派发。由 [IMP-ADR043-02](../ADR-043-CF-Auto-Ban/IMP-ADR043-02-bfr009-ban-dispatch-and-hardban-ttl.md) 实现,该 IMP 还会把封禁*原因*穿过派发,使 JavDB 硬封禁用 8 天 DO TTL、CF 原因封禁用 6 小时。
+
 ## 副作用
 
 - **多 runner 运行失去跨 runner 封禁协调。** 一个 runner 判定为坏(CF 挑战、被封)的代理不会被广播;其它 runner 会在它上面浪费请求,直到各自独立封禁。这是效率/协调退化,不是数据损坏。
@@ -46,6 +48,6 @@
 
 ## Follow-Up
 
-- [ ] 决定分发方案(1/2/3)并实现。
+- [x] 决定分发方案 —— **方案 1**(Rust→Python 回调),依据 [ADR-043](../ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.zh.md);实现由 [IMP-ADR043-02](../ADR-043-CF-Auto-Ban/IMP-ADR043-02-bfr009-ban-dispatch-and-hardban-ttl.md) 跟踪。
 - [ ] 加一个测试:经**生产**入口(`get_ban_manager().add_ban` / `create_proxy_pool_from_config(...).ban_proxy`)记录的封禁,对每个新封禁代理恰好触发一次已注册的远程 hook。
 - [ ] 分发路径落地后,重新评估 `_dispatch_remote_ban` / `set_remote_ban_hook` / `set_remote_unban_hook` 这组接口(ADR-041 保留了这些符号,但其唯一调用方是已移除的 Python 池/管理器)。
