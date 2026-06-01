@@ -750,11 +750,23 @@ def test_qb_file_filter_collects_torrent_quality_evidence_in_shadow_mode():
 
     assert collector_index == filter_index + 1
     collector_step = run_steps[collector_index]
-    assert (
-        collector_step.get("if")
-        == "${{ vars.TORRENT_QUALITY_EVIDENCE_ENABLED == 'true' }}"
+    condition = collector_step.get("if", "")
+    assert "vars.TORRENT_QUALITY_EVIDENCE_ENABLED == 'true'" in condition
+    assert "github.event.inputs.dry_run != 'true'" in condition
+
+    assert collector_step["env"].get("QB_EVIDENCE_CATEGORIES") == (
+        "${{ github.event.inputs.categories || "
+        "vars.TORRENT_QUALITY_CATEGORIES || "
+        """'["Ad Hoc", "Daily Ingestion", "顶级"]' }}"""
     )
-    assert "apps.cli.qb.quality_evidence" in collector_step.get("run", "")
+    assert "QB_FILTER_CATEGORIES" not in collector_step["env"]
+
+    run_script = collector_step.get("run", "")
+    assert "apps.cli.qb.quality_evidence" in run_script
+    assert 'ARGS=(--days "$DAYS")' in run_script
+    assert 'ARGS+=(--categories "$QB_EVIDENCE_CATEGORIES")' in run_script
+    assert '"${ARGS[@]}"' in run_script
+    assert "eval" not in run_script
 
 
 def test_public_publish_refuses_recovery_payloads():

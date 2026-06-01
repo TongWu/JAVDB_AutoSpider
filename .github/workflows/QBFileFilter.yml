@@ -343,16 +343,16 @@ jobs:
           python3 -m apps.cli.qb.file_filter "${ARGS[@]}"
 
       - name: Collect torrent quality evidence (ADR-024, shadow)
-        if: ${{ vars.TORRENT_QUALITY_EVIDENCE_ENABLED == 'true' }}
+        if: ${{ vars.TORRENT_QUALITY_EVIDENCE_ENABLED == 'true' && github.event.inputs.dry_run != 'true' }}
         env:
           DAYS: ${{ github.event.inputs.days || '2' }}
-          QB_FILTER_CATEGORIES: ${{ github.event.inputs.categories || '["Ad Hoc", "Daily Ingestion", "顶级"]' }}
+          QB_EVIDENCE_CATEGORIES: ${{ github.event.inputs.categories || vars.TORRENT_QUALITY_CATEGORIES || '["Ad Hoc", "Daily Ingestion", "顶级"]' }}
         run: |
           set -e
           set -o pipefail
           ARGS=(--days "$DAYS")
-          if [ -n "$QB_FILTER_CATEGORIES" ]; then
-            ARGS+=(--categories "$QB_FILTER_CATEGORIES")
+          if [ -n "$QB_EVIDENCE_CATEGORIES" ]; then
+            ARGS+=(--categories "$QB_EVIDENCE_CATEGORIES")
           fi
           echo "Running: python3 -m apps.cli.qb.quality_evidence ${ARGS[*]}"
           python3 -m apps.cli.qb.quality_evidence "${ARGS[@]}"
