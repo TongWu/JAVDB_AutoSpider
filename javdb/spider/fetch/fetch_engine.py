@@ -1754,8 +1754,7 @@ class ParallelFetchBackend(FetchBackend):
             for task in tasks:
                 self.submit_task(task)
             self.mark_done()
-            for result in self.results():
-                yield result
+            yield from self.results()
         finally:
             self.shutdown()
 
