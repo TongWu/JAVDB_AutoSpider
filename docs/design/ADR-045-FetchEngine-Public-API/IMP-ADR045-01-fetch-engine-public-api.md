@@ -558,13 +558,15 @@ with:
     use_proxy = getattr(args, 'use_proxy', True)
     parallel = bool(use_proxy and PROXY_POOL)
 
-    # Resolve the work list. In parallel mode --limit is an absolute pre-submit
-    # cap and --limit-per-worker is enforced by the engine's per_worker_task_limit
-    # (so the list is NOT pre-truncated per worker — matches align). The sequential
-    # fallback has a single worker, so it keeps the original precedence
-    # (--limit-per-worker first, else --limit) as a direct list cap.
+    # Resolve the work list. --limit-per-worker is enforced by the engine's
+    # per_worker_task_limit, so the list is NOT pre-truncated to
+    # limit_per_worker × pool size (ADR-045 D6). Per the CLI contract (--help +
+    # the Migration.yml backfill_metadata_limit input) --limit is IGNORED once
+    # --limit-per-worker is set, so the global cap only applies on its own. The
+    # sequential fallback keeps the same precedence (--limit-per-worker first,
+    # else --limit) as a direct list cap.
     if parallel:
-        if limit > 0:
+        if limit_per_worker <= 0 and limit > 0:
             hrefs = hrefs[:limit]
     else:
         if limit_per_worker > 0:
@@ -572,6 +574,15 @@ with:
         elif limit > 0:
             hrefs = hrefs[:limit]
 ```
+
+> **Post-review correction (PR #156):** the original draft made `--limit` an
+> *absolute pre-submit cap* that applied even in parallel mode. That contradicted
+> the documented CLI contract — both `--help` and the `Migration.yml`
+> `backfill_metadata_limit` input state `--limit` is *ignored when
+> `--limit-per-worker > 0`* — as well as the precedence used by the sequential
+> path and `align_inventory_with_moviehistory`. The parallel branch is therefore
+> gated on `limit_per_worker <= 0`, so `--limit-per-worker` takes precedence
+> consistently across both paths (engine-level cap, no pre-truncation — D6).
 
 - [ ] **Step 6: Add the parallel branch around the result loop**
 

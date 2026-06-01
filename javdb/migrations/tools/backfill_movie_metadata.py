@@ -306,7 +306,12 @@ def run_backfill_metadata(args: SimpleNamespace) -> int:
     parallel_mode = bool(use_proxy and PROXY_POOL)
 
     if parallel_mode:
-        if limit > 0:
+        # ``--limit-per-worker`` is enforced at the engine level
+        # (``per_worker_task_limit``), so the submitted list is intentionally
+        # NOT pre-truncated to ``limit_per_worker × pool size`` (ADR-045 D6).
+        # Per the CLI contract ``--limit`` is ignored once ``--limit-per-worker``
+        # is set, so the global cap only applies on its own.
+        if limit_per_worker <= 0 and limit > 0:
             hrefs = hrefs[:limit]
     elif limit_per_worker > 0:
         # ``--limit-per-worker`` is primarily a proxy-backed engine cap; in
