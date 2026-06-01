@@ -1,6 +1,6 @@
 # IMP-ADR024-04: ADR-024 Phase 1 — Modularize qB Read Helpers
 
-**Status:** Proposed — design-reviewed 2026-05-31 (see Design Review note).
+**Status:** Completed — verified 2026-06-01.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -60,7 +60,7 @@ A `brainstorming` review compared the extracted helpers against the live
 
 ## Task 0 — Capture the baseline
 
-- [ ] **Step 1: Read the existing tests so the contract is known**
+- [x] **Step 1: Read the existing tests so the contract is known**
 
 Run:
 
@@ -72,7 +72,7 @@ Note exactly which `service.*` names the tests patch (expected: `get_torrent_fil
 `get_recent_torrents`, `wait_for_metadata_readiness`, `set_file_priority`). The
 refactor must keep those names importable and patchable on the `service` module.
 
-- [ ] **Step 2: Run the baseline green**
+- [x] **Step 2: Run the baseline green**
 
 Run:
 
@@ -90,7 +90,7 @@ Expected: PASS. Record the passing count — it must be identical after the refa
 - Create: `javdb/integrations/qb/readonly.py`
 - Test: `tests/unit/test_qb_readonly.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_qb_readonly.py`:
 
@@ -179,7 +179,7 @@ def test_wait_for_metadata_readiness_uses_injected_fetcher():
     assert calls["n"] == 1
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run:
 
@@ -189,7 +189,7 @@ pytest tests/unit/test_qb_readonly.py -v
 
 Expected: FAIL with `ModuleNotFoundError: javdb.integrations.qb.readonly`.
 
-- [ ] **Step 3: Implement `readonly.py`**
+- [x] **Step 3: Implement `readonly.py`**
 
 Create `javdb/integrations/qb/readonly.py`. This is the verbatim logic lifted from
 `file_filter/service.py` (`get_torrent_files`, `_recent_metadata_candidates`,
@@ -381,7 +381,7 @@ def wait_for_metadata_readiness(
         waited_seconds += sleep_for
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run:
 
@@ -391,7 +391,7 @@ pytest tests/unit/test_qb_readonly.py -v
 
 Expected: PASS (5 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add javdb/integrations/qb/readonly.py tests/unit/test_qb_readonly.py
@@ -409,7 +409,7 @@ The goal: keep the public function names and signatures identical so
 `tests/unit/test_qb_file_filter.py` (which patches `service.get_torrent_files`
 etc.) stays green, while the HTTP/filter bodies delegate to `readonly.py`.
 
-- [ ] **Step 1: Import the shared module**
+- [x] **Step 1: Import the shared module**
 
 In `javdb/integrations/qb/file_filter/service.py`, after the existing import block
 (near line 27, after the `from javdb.integrations.qb.file_filter.result import ...`),
@@ -419,7 +419,7 @@ add:
 from javdb.integrations.qb import readonly as _qb_readonly
 ```
 
-- [ ] **Step 2: Delegate `get_torrent_files`**
+- [x] **Step 2: Delegate `get_torrent_files`**
 
 Replace the body of `get_torrent_files` (currently lines ~333-366) with a
 delegation that preserves the signature:
@@ -441,7 +441,7 @@ def get_torrent_files(session, torrent_hash, use_proxy=False):
     )
 ```
 
-- [ ] **Step 3: Delegate the time/category filter inside `get_recent_torrents`**
+- [x] **Step 3: Delegate the time/category filter inside `get_recent_torrents`**
 
 In `get_recent_torrents` (lines ~256-330), keep the HTTP GET exactly as-is, but
 replace the in-line cutoff/category filtering loop (lines ~297-317) with a call to
@@ -458,7 +458,7 @@ filtering block with:
 
 Leave the surrounding logging and `return recent_torrents` intact.
 
-- [ ] **Step 4: Delegate `wait_for_metadata_readiness` with an injectable fetcher**
+- [x] **Step 4: Delegate `wait_for_metadata_readiness` with an injectable fetcher**
 
 Replace the body of `wait_for_metadata_readiness` (lines ~501-571) — keeping the
 exact same signature and defaults — with a delegation that injects the **module's
@@ -501,7 +501,7 @@ rg -n "_recent_metadata_candidates" tests/
 If there are no test references, remove it; otherwise leave it and have it
 delegate to `_qb_readonly.recent_metadata_candidates`.
 
-- [ ] **Step 5: Run the file-filter tests — must match the Task 0 baseline**
+- [x] **Step 5: Run the file-filter tests — must match the Task 0 baseline**
 
 Run:
 
@@ -514,7 +514,7 @@ If any file-filter test fails, the delegation broke patchability — re-check th
 `service.get_torrent_files` is still the name the tests patch and that
 `wait_for_metadata_readiness` calls it via the closure above.
 
-- [ ] **Step 6: Run the operations endpoint tests (they patch the package API)**
+- [x] **Step 6: Run the operations endpoint tests (they patch the package API)**
 
 The package-level `run_file_filter` is consumed by the REST API and patched in
 `tests/unit/test_operations_endpoints.py`. Confirm it still imports/works:
@@ -525,7 +525,7 @@ pytest tests/unit/test_operations_endpoints.py -v
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add javdb/integrations/qb/file_filter/service.py
