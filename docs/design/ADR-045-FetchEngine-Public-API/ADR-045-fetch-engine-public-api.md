@@ -211,7 +211,7 @@ paths retired in Phase 3 (canonical is `javdb.spider.fetch.*`).
 
 | Phase | IMP | Ships | Deferred |
 | --- | --- | --- | --- |
-| Phase 1 | [IMP-ADR045-01](IMP-ADR045-01-fetch-engine-public-api.md) | `drain_remaining()` + thin `run()` on `ParallelFetchBackend` (+ `FetchEngine` facade) with unit tests; migrate `backfill_movie_metadata` → `FetchEngine.simple` (D3–D6); switch `migrate_v7_to_v8` + `align` interrupt handlers to `drain_remaining()` (D1); fix stale comment + `scripts.*` refs (D8); CLI-reference handbook note (en/zh) | `PROXY_POOL` dependency injection; `FetchEngine`/`ParallelFetchBackend` merge; public-method renames (the "large refactor" option, not taken) |
+| Phase 1 | [IMP-ADR045-01](IMP-ADR045-01-fetch-engine-public-api.md) | `drain_remaining()` + thin `run()` on `ParallelFetchBackend` (+ `FetchEngine` facade) with unit tests; migrate `backfill_movie_metadata` → `FetchEngine.simple` (D3–D6); switch `migrate_v7_to_v8` + `align` interrupt handlers to `drain_remaining()` (D1); fix stale comment + `scripts.*` refs (D8); record the no-handbook-change decision (CLI surface unchanged) | `PROXY_POOL` dependency injection; `FetchEngine`/`ParallelFetchBackend` merge; public-method renames (the "large refactor" option, not taken) |
 
 ## References
 
@@ -225,3 +225,4 @@ paths retired in Phase 3 (canonical is `javdb.spider.fetch.*`).
 ## Status Log
 
 - 2026-06-01: Proposed
+- 2026-06-01: Phase 1 implemented and locally verified ([IMP-ADR045-01](IMP-ADR045-01-fetch-engine-public-api.md)); the CLI surface stayed unchanged, so no handbook update was needed.

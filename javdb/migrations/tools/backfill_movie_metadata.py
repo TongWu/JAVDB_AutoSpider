@@ -3,15 +3,14 @@
 For each ``MovieHistory.Href`` that has no corresponding ``MovieMetadata`` row,
 fetch the JavDB detail page and upsert via :class:`MetadataRepo`.
 
-Execution model: **single-threaded / sequential**.  Each page is fetched via
-``spider_state.get_page`` which honours the proxy pool when ``use_proxy`` is set
-(``--no-proxy`` forces a direct request).  Detail pages sit behind Cloudflare,
-so the proxy path enables ``use_cf_bypass`` (bypass→direct fallback) — a plain
-direct fetch returns an empty body.  A one-time catch-up job does not need
-the spider's parallel-per-proxy machinery, and ``FetchEngine`` exposes no
-public result-draining API to reuse here, so a simple sequential loop is both
-correct and sufficient.  Writes are OUTSIDE the Pending→Commit session flow --
-failures are logged and retriable on the next run.
+Execution model: proxy-enabled runs use ``FetchEngine.simple`` with one worker
+per configured proxy so failed/empty detail pages can be re-queued to another
+proxy. ``--no-proxy`` and no-pool runs keep the single-threaded debug path via
+``spider_state.get_page``.  Detail pages sit behind Cloudflare, so proxied
+fetches use the engine's direct→CF-bypass cascade; plain direct fetches may
+still return an empty body.  Writes stay in the main thread and are OUTSIDE the
+Pending→Commit session flow -- failures are logged and retriable on the next
+run.
 
 Fetches are authenticated (``use_cookie=True`` attaches ``JAVDB_SESSION_COOKIE``,
 like the ad-hoc spider) so login-gated movies yield metadata rather than a
@@ -211,6 +210,67 @@ def _process_href(
 
 
 # ---------------------------------------------------------------------------
+# Parallel result helpers
+# ---------------------------------------------------------------------------
+
+def _backfill_metadata_parse(html: str, _task) -> object | None:
+    """Parse detail HTML for ``FetchEngine.simple``.
+
+    Return ``None`` only for genuinely empty/non-detail pages so the engine can
+    re-queue the task to another proxy. ``parse_success`` is magnet-specific and
+    intentionally ignored here.
+    """
+    detail = parse_detail_page(html)
+    if getattr(detail, 'video_code', '') or getattr(detail, 'title', ''):
+        return detail
+    return None
+
+
+def _apply_metadata_result(result, *, dry_run: bool) -> tuple[int, int]:
+    """Apply one ``FetchEngine`` result on the main thread.
+
+    Returns ``(ok_delta, failed_delta)`` for the summary counters.
+    """
+    task = result.task
+    idx = getattr(task, 'entry_index', '') or 'meta-?'
+    href = task.meta.get('href') or getattr(task, 'url', '')
+
+    if not result.success:
+        from javdb.spider.fetch.fetch_engine import PER_WORKER_TASK_CAP_ERROR
+
+        if result.error == PER_WORKER_TASK_CAP_ERROR:
+            logger.info(
+                "[%s] %s skipped — queue flushed after per-worker task cap",
+                idx,
+                href,
+            )
+            return 0, 0
+        # In parallel mode FetchEngine owns LoginRequired handling. An
+        # uncleared login wall intentionally surfaces as a generic retriable
+        # failure; the separate login-gated counter is fallback-only (ADR-045 D3).
+        logger.warning(
+            "[%s] %s — fetch_failed: %s",
+            idx,
+            href,
+            result.error or 'all proxies failed',
+        )
+        return 0, 1
+
+    if dry_run:
+        logger.info("[%s] ✓ %s (dry-run)", idx, href)
+        return 1, 0
+
+    try:
+        MetadataRepo().upsert(href, result.data)
+    except Exception as exc:  # noqa: BLE001 — write failures are retriable
+        logger.warning("[%s] %s — write_failed: %s", idx, href, exc)
+        return 0, 1
+
+    logger.info("[%s] ✓ %s", idx, href)
+    return 1, 0
+
+
+# ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 
@@ -242,13 +302,23 @@ def run_backfill_metadata(args: SimpleNamespace) -> int:
     limit = int(getattr(args, 'limit', 0) or 0)
     limit_per_worker = int(getattr(args, 'limit_per_worker', 0) or 0)
     use_proxy = getattr(args, 'use_proxy', True)
+    from javdb.spider.runtime.config import PROXY_POOL
+    parallel_mode = bool(use_proxy and PROXY_POOL)
 
-    # ``--limit-per-worker`` predates the switch to sequential execution; it is
-    # kept for workflow-input compatibility and interpreted against the
-    # configured proxy-pool size so the same input caps a comparable volume.
-    if limit_per_worker > 0:
-        from javdb.spider.runtime.config import PROXY_POOL
-        num_workers = len(PROXY_POOL) if (use_proxy and PROXY_POOL) else 1
+    if parallel_mode:
+        # ``--limit-per-worker`` is enforced at the engine level
+        # (``per_worker_task_limit``), so the submitted list is intentionally
+        # NOT pre-truncated to ``limit_per_worker × pool size`` (ADR-045 D6).
+        # Per the CLI contract ``--limit`` is ignored once ``--limit-per-worker``
+        # is set, so the global cap only applies on its own.
+        if limit_per_worker <= 0 and limit > 0:
+            hrefs = hrefs[:limit]
+    elif limit_per_worker > 0:
+        # ``--limit-per-worker`` is primarily a proxy-backed engine cap; in
+        # the fallback path it keeps the old precedence and is interpreted
+        # against the effective worker count so workflow-input volume stays
+        # comparable to earlier runs.
+        num_workers = 1
         hrefs = hrefs[: limit_per_worker * num_workers]
     elif limit > 0:
         hrefs = hrefs[:limit]
@@ -268,38 +338,93 @@ def run_backfill_metadata(args: SimpleNamespace) -> int:
     spider_state.setup_proxy_pool(use_proxy=use_proxy)
     spider_state.initialize_request_handler()
     base_url = cfg('BASE_URL', 'https://javdb.com').rstrip('/')
-    session = requests.Session()
 
     ok = failed = login_gated = 0
-    for i, href in enumerate(hrefs, 1):
-        idx = f"meta-{i}/{total}"
-        result = _process_href(
-            href, _detail_url(href, base_url), session,
-            use_proxy=use_proxy, dry_run=args.dry_run,
+    if parallel_mode:
+        from javdb.spider.fetch.fetch_engine import FetchEngine
+
+        movie_sleep_mgr.apply_volume_multiplier(
+            total, num_workers=len(PROXY_POOL),
         )
-        if result.status in ('ok', 'dry_run'):
-            logger.info("[%s] ✓ %s", idx, href)
-            ok += 1
-        elif result.status == 'login_required':
-            # Not a hard failure: the page exists but needs a valid session
-            # cookie. Counted separately so it doesn't fail the job, but
-            # surfaced so the operator knows to refresh the cookie.
-            logger.warning(
-                "[%s] %s — login_required: %s", idx, href, result.message
-            )
-            login_gated += 1
-        else:
-            logger.warning(
-                "[%s] %s — %s: %s", idx, href, result.status, result.message
-            )
-            failed += 1
-        if i < total:
-            # Intentional non-cryptographic jitter for crawl timing (anti-ban).
-            time.sleep(
-                random.uniform(  # noqa: S311
-                    movie_sleep_mgr.base_min, movie_sleep_mgr.base_max
+        engine = FetchEngine.simple(
+            parse_fn=_backfill_metadata_parse,
+            use_cookie=True,
+            sleep_min=movie_sleep_mgr.base_min,
+            sleep_max=movie_sleep_mgr.base_max,
+            per_worker_task_limit=(
+                limit_per_worker if limit_per_worker > 0 else 0
+            ),
+        )
+        parallel_interrupted = False
+        orphaned_count = 0
+        try:
+            engine.start()
+            for i, href in enumerate(hrefs, 1):
+                engine.submit(
+                    _detail_url(href, base_url),
+                    entry_index=f"meta-{i}/{total}",
+                    meta={'href': href},
                 )
+            engine.mark_done()
+            for result in engine.results():
+                ok_delta, failed_delta = _apply_metadata_result(
+                    result, dry_run=args.dry_run,
+                )
+                ok += ok_delta
+                failed += failed_delta
+        except KeyboardInterrupt:
+            parallel_interrupted = True
+            logger.warning("Keyboard interrupt — shutting down engine …")
+            orphaned = engine.shutdown(timeout=30)
+            orphaned_count = len(orphaned)
+            for result in engine.drain_remaining():
+                ok_delta, failed_delta = _apply_metadata_result(
+                    result, dry_run=args.dry_run,
+                )
+                ok += ok_delta
+                failed += failed_delta
+        else:
+            engine.shutdown()
+
+        if parallel_interrupted:
+            logger.warning(
+                "MovieMetadata backfill interrupted (parallel, %d workers). "
+                "%d task(s) orphaned; re-run backfill to continue.",
+                len(PROXY_POOL),
+                orphaned_count,
             )
+    else:
+        session = requests.Session()
+
+        for i, href in enumerate(hrefs, 1):
+            idx = f"meta-{i}/{total}"
+            result = _process_href(
+                href, _detail_url(href, base_url), session,
+                use_proxy=use_proxy, dry_run=args.dry_run,
+            )
+            if result.status in ('ok', 'dry_run'):
+                logger.info("[%s] ✓ %s", idx, href)
+                ok += 1
+            elif result.status == 'login_required':
+                # Not a hard failure: the page exists but needs a valid session
+                # cookie. Counted separately so it doesn't fail the job, but
+                # surfaced so the operator knows to refresh the cookie.
+                logger.warning(
+                    "[%s] %s — login_required: %s", idx, href, result.message
+                )
+                login_gated += 1
+            else:
+                logger.warning(
+                    "[%s] %s — %s: %s", idx, href, result.status, result.message
+                )
+                failed += 1
+            if i < total:
+                # Intentional non-cryptographic jitter for crawl timing (anti-ban).
+                time.sleep(
+                    random.uniform(  # noqa: S311
+                        movie_sleep_mgr.base_min, movie_sleep_mgr.base_max
+                    )
+                )
 
     log_summary_block(logger, "MovieMetadata Backfill", {
         "OK": ok,
@@ -313,6 +438,8 @@ def run_backfill_metadata(args: SimpleNamespace) -> int:
             "(run `python3 -m apps.cli.login`) and re-run to backfill them.",
             login_gated,
         )
+    if parallel_mode and parallel_interrupted:
+        return 130
     if failed == 0:
         return 0
     if ok > 0:
