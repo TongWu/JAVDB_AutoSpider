@@ -69,7 +69,7 @@ Hardening — not greenfield — is what is actually needed:
 ### Relationship to ADR-043
 
 `meta-7` failed because a proxy persistently failed the Cloudflare wall.
-[ADR-043](../ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.md)
+[ADR-043](../_archive/ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.md)
 reduces *reuse* of such proxies (cross-runner CF auto-ban). This ADR is
 complementary and orthogonal: it ensures that **when a fetch fails for any
 reason, the work item is re-queued to a different proxy** instead of being
@@ -219,7 +219,7 @@ paths retired in Phase 3 (canonical is `javdb.spider.fetch.*`).
 - `javdb/spider/fetch/fetch_engine.py` — `ParallelFetchBackend` / `FetchEngine` / `WorkerContext` / `results()` / `shutdown()`
 - `javdb/migrations/tools/backfill_movie_metadata.py` — sequential tool being migrated (D3–D6)
 - `javdb/migrations/tools/migrate_v7_to_v8.py`, `javdb/migrations/tools/align_inventory_with_moviehistory.py` — existing `FetchEngine` callers with the private-queue leak (D1)
-- [ADR-043 — CF Persistent-Failure Auto-Ban](../ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.md) — complementary: reduces bad-proxy *reuse*; this ADR makes failed *work* recoverable
+- [ADR-043 — CF Persistent-Failure Auto-Ban](../_archive/ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.md) — complementary: reduces bad-proxy *reuse*; this ADR makes failed *work* recoverable
 - [ADR-007 — Monorepo Restructure](../_archive/ADR-007-Monorepo-Restructure/ADR-007-monorepo-restructure-2026-05.md) — retired the `scripts.*` paths still referenced in stale docstrings (D8)
 
 ## Status Log

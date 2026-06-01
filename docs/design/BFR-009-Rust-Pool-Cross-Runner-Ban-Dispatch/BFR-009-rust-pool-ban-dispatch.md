@@ -4,7 +4,7 @@
 **Date**: 2026-05-30
 **Severity**: Medium
 **Affected**: `javdb/proxy/ban_manager.py` (`_dispatch_remote_ban`, `set_remote_ban_hook`), `javdb/proxy/pool.py` (Python `ProxyPool.ban_proxy` / drain), `javdb/spider/runtime/state.py:722`, `javdb/spider/runtime/context.py:880` (hook registration), `javdb/rust_core/src/proxy/{pool,ban_manager}.rs`
-**Related**: [ADR-043](../ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.md) (fixes this — Approach 1, via IMP-ADR043-02), [ADR-041](../ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md) (surfaced this during Task 4 — removed the last Python callers of the dispatcher), [ADR-023](../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.md) (proxy coordination), CONTEXT.md → "Signal" (`ban_proxy`)
+**Related**: [ADR-043](../_archive/ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.md) (fixes this — Approach 1, via IMP-ADR043-02), [ADR-041](../ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md) (surfaced this during Task 4 — removed the last Python callers of the dispatcher), [ADR-023](../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.md) (proxy coordination), CONTEXT.md → "Signal" (`ban_proxy`)
 
 ---
 
@@ -30,13 +30,13 @@ The `remove_ban` docstring in `ban_manager.py` already half-acknowledges the asy
 
 ## Fix
 
-Implemented via [IMP-ADR043-02](../ADR-043-CF-Auto-Ban/IMP-ADR043-02-bfr009-ban-dispatch-and-hardban-ttl.md) using Approach 1:
+Implemented via [IMP-ADR043-02](../_archive/ADR-043-CF-Auto-Ban/IMP-ADR043-02-bfr009-ban-dispatch-and-hardban-ttl.md) using Approach 1:
 
 1. **Rust→Python ban callback.** Add a `set_ban_dispatch(callback)` to the Rust pool/ban manager, invoked on each *newly recorded* ban (mirroring the Python `newly_banned` dedup), wired from the same runtime setup that registers `set_remote_ban_hook`.
 2. **Python-side dispatch at the call site.** Wrap the production ban entry points (`get_ban_manager().add_ban(...)`, `pool.ban_proxy(...)`) in a thin Python helper that records via Rust *and* fires `_dispatch_remote_ban` — keeping the dispatcher Python-side and not requiring a Rust change.
 3. **Observer/delta poll.** Have the coordinator-integration layer diff the Rust ban manager's banned set against the last-dispatched set and push deltas.
 
-**Decision (2026-06-01):** **Approach 1** chosen — see [ADR-043 D8](../ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.md). The Rust pool also records bans **internally** on auto-drain / proxy-switch (`pool.rs:485`, `:692`) that never pass through a Python entry point, so only the Rust→Python callback guarantees every ban dispatches. Implemented in [IMP-ADR043-02](../ADR-043-CF-Auto-Ban/IMP-ADR043-02-bfr009-ban-dispatch-and-hardban-ttl.md), which also threads the ban *cause* so JavDB hard bans use an 8-day DO TTL while CF-caused bans use 6 h.
+**Decision (2026-06-01):** **Approach 1** chosen — see [ADR-043 D8](../_archive/ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.md). The Rust pool also records bans **internally** on auto-drain / proxy-switch (`pool.rs:485`, `:692`) that never pass through a Python entry point, so only the Rust→Python callback guarantees every ban dispatches. Implemented in [IMP-ADR043-02](../_archive/ADR-043-CF-Auto-Ban/IMP-ADR043-02-bfr009-ban-dispatch-and-hardban-ttl.md), which also threads the ban *cause* so JavDB hard bans use an 8-day DO TTL while CF-caused bans use 6 h.
 
 ## Side Effects
 
@@ -46,7 +46,7 @@ Implemented via [IMP-ADR043-02](../ADR-043-CF-Auto-Ban/IMP-ADR043-02-bfr009-ban-
 
 ## Follow-Up
 
-- [x] Decide the dispatch approach — **Approach 1** (Rust→Python callback), per [ADR-043](../ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.md); implementation tracked in [IMP-ADR043-02](../ADR-043-CF-Auto-Ban/IMP-ADR043-02-bfr009-ban-dispatch-and-hardban-ttl.md).
+- [x] Decide the dispatch approach — **Approach 1** (Rust→Python callback), per [ADR-043](../_archive/ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.md); implementation tracked in [IMP-ADR043-02](../_archive/ADR-043-CF-Auto-Ban/IMP-ADR043-02-bfr009-ban-dispatch-and-hardban-ttl.md).
 - [x] Add a test that a ban recorded through the **production** entry point (`get_ban_manager().add_ban` / `create_proxy_pool_from_config(...).ban_proxy`) fires the registered remote hook exactly once per newly-banned proxy.
 - [x] Re-evaluate the `_dispatch_remote_ban` / `set_remote_ban_hook` / `set_remote_unban_hook` surface once the dispatch path is real — the production path now dispatches through the Rust callback, while the local-only mirror/unban helpers keep the remaining module-level surface intentional.
 

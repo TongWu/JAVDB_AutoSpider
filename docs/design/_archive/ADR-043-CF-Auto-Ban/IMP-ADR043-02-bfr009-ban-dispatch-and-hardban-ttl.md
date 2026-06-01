@@ -4,7 +4,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Related:** [ADR-043](ADR-043-cf-persistent-failure-auto-ban.md) (D8/D9/D10), fixes [BFR-009](../BFR-009-Rust-Pool-Cross-Runner-Ban-Dispatch/BFR-009-rust-pool-ban-dispatch.md). Phase 1 is [IMP-ADR043-01](IMP-ADR043-01-cf-auto-ban-worker.md).
+**Related:** [ADR-043](ADR-043-cf-persistent-failure-auto-ban.md) (D8/D9/D10), fixes [BFR-009](../../BFR-009-Rust-Pool-Cross-Runner-Ban-Dispatch/BFR-009-rust-pool-ban-dispatch.md). Phase 1 is [IMP-ADR043-01](IMP-ADR043-01-cf-auto-ban-worker.md).
 
 **Goal:** Make every production proxy ban (CF-threshold, JavDB hard ban, and Rust-internal auto-drain) publish to the coordinator so peers skip it, with the DO ban TTL chosen by *cause* — JavDB hard bans last 8 days, CF bans 6 h, others 3 days.
 

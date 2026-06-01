@@ -1,6 +1,6 @@
 # ADR-043: Coordinator-Side Proxy Ban Sharing and CF Auto-Ban
 
-**Status:** Proposed
+**Status:** Completed
 **Date:** 2026-05-31
 **Author:** Ted
 **Related Implementation Plans:**
@@ -40,7 +40,7 @@ ban lasts on the order of a **week** (~7 days, JavDB-side policy).
 
 Both ban paths funnel into `proxy_pool.ban_proxy(...)` /
 `get_ban_manager().add_ban(...)`, which in production are the **Rust**
-pool/ban-manager. Per [BFR-009](../BFR-009-Rust-Pool-Cross-Runner-Ban-Dispatch/BFR-009-rust-pool-ban-dispatch.md):
+pool/ban-manager. Per [BFR-009](../../BFR-009-Rust-Pool-Cross-Runner-Ban-Dispatch/BFR-009-rust-pool-ban-dispatch.md):
 the remote-ban hook `set_remote_ban_hook(client.mark_proxy_banned)` **is
 registered** (`context.py:880`, `state.py:722`), but `_dispatch_remote_ban` is
 only called by the *Python* pool/ban-manager. The Rust `ban_proxy` / `add_ban`
@@ -225,9 +225,9 @@ to the local ban duration is needed.
 
 ## References
 
-- [BFR-009 — Rust Pool Cross-Runner Ban Dispatch](../BFR-009-Rust-Pool-Cross-Runner-Ban-Dispatch/BFR-009-rust-pool-ban-dispatch.md) — the dispatch gap this ADR closes (D8); fixed by IMP-ADR043-02
-- [ADR-041 — Rust Fallback Policy](../ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md) — made BFR-009 visible (Rust-Required)
-- [ADR-023 — Proxy Recommendation Policy](../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.md) — proxy health signals (CF/success/failure events) in the DO
+- [BFR-009 — Rust Pool Cross-Runner Ban Dispatch](../../BFR-009-Rust-Pool-Cross-Runner-Ban-Dispatch/BFR-009-rust-pool-ban-dispatch.md) — the dispatch gap this ADR closes (D8); fixed by IMP-ADR043-02
+- [ADR-041 — Rust Fallback Policy](../../ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md) — made BFR-009 visible (Rust-Required)
+- [ADR-023 — Proxy Recommendation Policy](../../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.md) — proxy health signals (CF/success/failure events) in the DO
 - Coordinator repo: [`TongWu/JAVDB_AutoSpider_Proxycoordinator`](https://github.com/TongWu/JAVDB_AutoSpider_Proxycoordinator) — `src/proxy_coordinator.ts`, `src/types.ts`
 - `docs/handbook/en/self-hoster/proxy-coordinator.md` — operator-facing env reference
 
@@ -235,3 +235,4 @@ to the local ban duration is needed.
 
 - 2026-05-31: Proposed
 - 2026-06-01: Phase 2 implemented; BFR-009 closed.
+- 2026-06-01: Completed — both IMPs merged; archived to `_archive/`.
