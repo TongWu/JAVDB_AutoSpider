@@ -448,6 +448,23 @@ QB_FILE_FILTER_MIN_SIZE_MB = 100
 QB_FILE_FILTER_LOG_FILE = 'logs/qb_file_filter.log'
 
 # =============================================================================
+# TORRENT QUALITY EVIDENCE
+# =============================================================================
+
+# ADR-024 Phase 1 is read-only and shadow-only: collect quality evidence without
+# changing torrent selection or download behaviour.
+TORRENT_QUALITY_EVIDENCE_ENABLED = False
+
+# Phase 1 supports only 'shadow'. The 'assist' and 'enforce' modes are reserved
+# for later ADR-024 phases.
+TORRENT_QUALITY_POLICY_MODE = 'shadow'
+
+# Optional JSON array of qBittorrent categories, e.g. '["Daily Ingestion"]'.
+# Empty means no category filter is configured; direct collection skips rather
+# than scanning every qBittorrent category.
+TORRENT_QUALITY_CATEGORIES = ''
+
+# =============================================================================
 # API CONSOLE / BACKEND SERVICE
 # =============================================================================
 # These settings configure the FastAPI service that backs the web console
