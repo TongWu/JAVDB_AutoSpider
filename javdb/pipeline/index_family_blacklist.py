@@ -22,9 +22,9 @@ def normalize_family_blacklist(values: Iterable[str] | None) -> set[str]:
     they need the same family-set semantics outside config loading.
     """
     return {
-        str(value).strip()
+        stripped
         for value in (values or [])
-        if value is not None and str(value).strip()
+        if value is not None and (stripped := str(value).strip())
     }
 
 
