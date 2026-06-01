@@ -1,8 +1,8 @@
 # 种子质量证据 (ADR-024 Phase 1)
 
-Phase 1 是一个仅影子、只读的证据层。它检查生产流水线已经下载的种子的
-文件列表，计算可解释的质量分数，并把结构化证据存入 D1。它不会改变生产
-流水线最终下载哪个种子。
+Phase 1 是一个仅影子、不参与决策的证据层。它检查生产流水线已选中、近期
+加入且 qBittorrent 文件元数据可用的种子文件列表，计算可解释的质量分数，
+并持久化结构化证据。它不会改变生产流水线最终下载哪个种子。
 
 ## 收集内容
 
@@ -13,7 +13,9 @@ Phase 1 是一个仅影子、只读的证据层。它检查生产流水线已经
   `(info_hash, movie_href, scoring_version)`：分数、决策、推断分类、字幕证据、
   分类一致性，以及 reason codes。
 
-两张表都位于规范的 `javdb-reports` D1 数据库。SQLite mirror 只是本地调试副本。
+在 GitHub Actions / D1 模式下，两张表都位于规范的 `javdb-reports` D1
+数据库。本地运行会按照 `STORAGE_BACKEND` 写入，通常是本地 SQLite mirror，
+除非另有配置；SQLite mirror 只是调试副本。
 
 ## 启用方式
 
@@ -32,7 +34,7 @@ Phase 1 是一个仅影子、只读的证据层。它检查生产流水线已经
 当 `TORRENT_QUALITY_EVIDENCE_ENABLED=true` 时，`QBFileFilter.yml` 会在
 qBittorrent file filter 步骤之后立即运行采集器。采集器复用同一份已还原的
 加密配置和同一个生产 qBittorrent 端点。
-手动 dispatch 设置 `dry_run=true` 时会跳过采集器，因为证据行属于持久 D1 写入。
+手动 dispatch 设置 `dry_run=true` 时会跳过采集器，因为证据行属于持久数据库写入。
 
 工作流按以下优先级解析 evidence categories：手动 dispatch 的 `categories`
 输入、`TORRENT_QUALITY_CATEGORIES`、最后是工作流默认值
@@ -61,7 +63,7 @@ FastAPI 只读表面会暴露同一批持久化行：
 
 - `GET /api/quality/evaluations?limit=50` — 最近的影子评估。
 - `GET /api/quality/evaluations?movie_href=/v/...` — 单个影片的评估。
-- `GET /api/quality/evidence/{info_hash}` — 生产已下载种子的客观文件列表证据。
+- `GET /api/quality/evidence/{info_hash}` — 已被生产选中且 qBittorrent 元数据已采集种子的客观文件列表证据。
 
 所有 `/api/quality/*` 端点都需要认证，且只读。
 

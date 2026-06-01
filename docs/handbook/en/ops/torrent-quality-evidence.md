@@ -1,9 +1,10 @@
 # Torrent Quality Evidence (ADR-024 Phase 1)
 
-Phase 1 is a shadow-only, read-only evidence layer. It inspects file lists for
-torrents that the production pipeline already downloaded, computes an
-explainable quality score, and stores structured evidence in D1. It never
-changes which torrent the production pipeline downloads.
+Phase 1 is a shadow-only, non-decisioning evidence layer. It inspects file
+lists for production-selected, recently added torrents whose qBittorrent file
+metadata is available, computes an explainable quality score, and stores
+structured evidence. It never changes which torrent the production pipeline
+downloads.
 
 ## What It Collects
 
@@ -15,8 +16,10 @@ changes which torrent the production pipeline downloads.
   `(info_hash, movie_href, scoring_version)`: score, decision, inferred
   category, subtitle evidence, category consistency, and reason codes.
 
-Both tables live in the canonical `javdb-reports` D1 database. SQLite mirrors
-are local debugging copies only.
+In GitHub Actions / D1 mode, both tables live in the canonical `javdb-reports`
+D1 database. Local runs write according to `STORAGE_BACKEND`, normally the
+local SQLite mirror unless configured otherwise; SQLite mirrors are debugging
+copies only.
 
 ## Enabling It
 
@@ -36,7 +39,7 @@ The collector is disabled by default. Set the GitHub Variable
 filter step when `TORRENT_QUALITY_EVIDENCE_ENABLED=true`. The collector uses the
 same restored encrypted config and the same production qBittorrent endpoint.
 Manual workflow dispatches skip the collector when `dry_run=true`, because
-evidence rows are persistent D1 writes.
+evidence rows are persistent database writes.
 
 The workflow resolves evidence categories in this order: manual dispatch
 `categories` input, then `TORRENT_QUALITY_CATEGORIES`, then the workflow default
@@ -68,7 +71,7 @@ The FastAPI read surface exposes the same stored rows:
 - `GET /api/quality/evaluations?limit=50` — recent shadow evaluations.
 - `GET /api/quality/evaluations?movie_href=/v/...` — evaluations for one movie.
 - `GET /api/quality/evidence/{info_hash}` — objective file-list evidence for a
-  production-downloaded torrent.
+  production-selected torrent whose qBittorrent metadata was captured.
 
 All `/api/quality/*` endpoints are authenticated and read-only.
 
