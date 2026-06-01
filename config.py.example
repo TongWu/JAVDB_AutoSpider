@@ -453,7 +453,7 @@ TORRENT_QUALITY_EVIDENCE_ENABLED = False
 # for later ADR-024 phases.
 TORRENT_QUALITY_POLICY_MODE = 'shadow'
 
-# Optional comma-separated category allowlist for quality evidence collection.
+# Optional JSON array of qBittorrent categories, e.g. '["Daily Ingestion"]'.
 # Leave empty to collect evidence for all configured qBittorrent categories.
 TORRENT_QUALITY_CATEGORIES = ''
 
