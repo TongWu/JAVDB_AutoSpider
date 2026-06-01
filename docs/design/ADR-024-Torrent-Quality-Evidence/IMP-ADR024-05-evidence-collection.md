@@ -404,6 +404,19 @@ def run_collection(
     and writes through a conn-injected ``TorrentQualityRepo`` (one ``reports``
     connection holds every UPSERT for the run). Returns the collector summary dict.
     """
+    if not categories:
+        logger.warning(
+            "Skipping quality evidence collection: no categories configured; "
+            "refusing to scan all production qBittorrent categories"
+        )
+        return {
+            "scanned": 0,
+            "skipped": 0,
+            "evidence_written": 0,
+            "evaluations_written": 0,
+            "probe_unavailable": 0,
+        }
+
     import requests
 
     from javdb.integrations.qb import readonly
@@ -479,7 +492,7 @@ Run:
 pytest tests/unit/test_quality_collector.py -v
 ```
 
-Expected: PASS (5 tests).
+Expected: PASS (7 tests).
 
 - [ ] **Step 5: Commit**
 
@@ -685,7 +698,7 @@ Run:
 pytest tests/unit/test_quality_evidence_cli.py -v
 ```
 
-Expected: PASS (5 tests).
+Expected: PASS (10 tests).
 
 - [ ] **Step 5: Commit**
 
