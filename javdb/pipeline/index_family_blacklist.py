@@ -16,7 +16,11 @@ T = TypeVar("T")
 
 
 def normalize_family_blacklist(values: Iterable[str] | None) -> set[str]:
-    """Trim and drop empties, returning the active family set."""
+    """Public normalization helper: trim and drop empties.
+
+    Runtime config pre-cleans the daily list; callers and tests use this when
+    they need the same family-set semantics outside config loading.
+    """
     return {
         str(value).strip()
         for value in (values or [])
@@ -49,7 +53,7 @@ def filter_blacklisted_families(
         return list(movies)
     kept = []
     for movie in movies:
-        family = getattr(movie, "video_code_family", "") or ""
+        family = (getattr(movie, "video_code_family", None) or "").strip()
         if family and family in active_blacklist:
             if counts is not None:
                 counts[family] = counts.get(family, 0) + 1
