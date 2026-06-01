@@ -1,6 +1,6 @@
 # IMP-ADR024-03: ADR-024 Phase 1 — Feature Extraction & Pure Scoring
 
-**Status:** Proposed — design-reviewed & code-verified 2026-05-31 (see Design Review note).
+**Status:** Completed — implemented 2026-05-31.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -50,6 +50,24 @@ extracted and run (**10/10 tests pass**). Outcomes:
   v1 guesses, version-stamped via `SCORING_VERSION` and shadow-only, so they are
   tunable without a contract change.
 
+## Implementation Review note (2026-05-31)
+
+Implementation added two review-driven hardenings beyond the initial embedded
+draft:
+
+1. **Missing-video rejection is isolated.** `main_video_missing` now applies a
+   strong enough penalty for a non-junk, non-video file list to produce
+   `rejected_shadow`; the unit test uses `readme.md` so it does not rely on the
+   junk-file penalty.
+2. **Subtitle name hints are explainable and token-aware.** Name-derived subtitle
+   evidence emits `subtitle_name_hint`; ASCII hints match tokens instead of broad
+   substrings, so names like `ABC-123 subject` do not suppress
+   `category_mismatch`. Short suffix hints (`c`, `uc`, `cu`) only count as the
+   final token, preserving names such as `ABC-123-C`.
+3. **Resolution claims are thin best-effort signals.** A claimed resolution now
+   emits either `resolution_claim_supported` or `resolution_claim_unsupported`
+   from file-list facts alone; deep verification is still deferred.
+
 ---
 
 ## File Map
@@ -68,8 +86,9 @@ extracted and run (**10/10 tests pass**). Outcomes:
 - Evidence is **as-published**: `features.py` counts all files and ignores qB `priority`/`progress` (intentional — see Design Review note).
 - No video-content inspection (D10): frame/OCR/watermark detection is out of scope.
 - Do not change production category semantics — scoring is shadow-only.
-- `resolution_claim_unsupported` is a thin best-effort signal here; deep resolution
-  verification is deferred. Keep the reason set grounded in file-list facts.
+- `resolution_claim_supported` and `resolution_claim_unsupported` are thin
+  best-effort signals here; deep resolution verification is deferred. Keep the
+  reason set grounded in file-list facts.
 
 ---
 
@@ -79,7 +98,7 @@ extracted and run (**10/10 tests pass**). Outcomes:
 - Create: `javdb/quality/features.py`
 - Test: `tests/unit/test_quality_features.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_quality_features.py`:
 
@@ -100,6 +119,7 @@ def test_single_clean_video():
     f = extract_file_features(files)
     assert f["total_size_bytes"] == 4_000_000_000
     assert f["main_video_size_bytes"] == 4_000_000_000
+    assert f["main_video_name"] == "ABC-123.mp4"
     assert f["main_video_ratio"] == 1.0
     assert f["video_file_count"] == 1
     assert f["subtitle_file_count"] == 0
@@ -119,11 +139,36 @@ def test_video_with_subtitle_and_junk():
     f = extract_file_features(files)
     assert f["video_file_count"] == 1
     assert f["subtitle_file_count"] == 1
-    assert f["non_video_file_count"] == 3  # srt + txt + jpg are non-video
+    assert f["non_video_file_count"] == 1  # only srt is counted outside junk
     assert f["junk_size_bytes"] == 201_000  # txt + jpg
     assert f["main_video_size_bytes"] == 5_000_000_000
+    assert f["main_video_name"] == "ABC-123.mkv"
     assert 0.0 < f["junk_size_ratio"] < 0.001
     assert f["suspicious_file_count"] == 2
+
+
+def test_junk_video_file_is_excluded_from_video_count():
+    files = [
+        {"name": "movie.mkv", "size": 5_000_000_000, "priority": 1},
+        {"name": "sample.mp4", "size": 100_000_000, "priority": 1},
+        {"name": "readme.txt", "size": 1_000, "priority": 1},
+    ]
+    f = extract_file_features(files)
+    assert f["video_file_count"] == 1
+    assert f["main_video_name"] == "movie.mkv"
+    assert f["non_video_file_count"] == 0
+    assert f["junk_size_bytes"] == 100_001_000
+    assert f["suspicious_file_count"] == 2
+
+
+def test_negative_size_file_is_clamped_to_zero():
+    files = [{"name": "bad-size.mp4", "size": -100, "priority": 1}]
+    f = extract_file_features(files)
+    assert f["total_size_bytes"] == 0
+    assert f["main_video_size_bytes"] == 0
+    assert f["main_video_name"] == "bad-size.mp4"
+    assert f["main_video_ratio"] == 0.0
+    assert f["video_file_count"] == 1
 
 
 def test_inflated_torrent_with_ad_archive():
@@ -137,6 +182,7 @@ def test_inflated_torrent_with_ad_archive():
     assert f["junk_size_bytes"] == 3_000_002_000
     assert f["junk_size_ratio"] > 0.7
     assert f["main_video_size_bytes"] == 1_000_000_000
+    assert f["main_video_name"] == "movie.mp4"
     assert f["main_video_ratio"] < 0.3
 
 
@@ -145,9 +191,10 @@ def test_empty_file_list():
     assert f["total_size_bytes"] == 0
     assert f["main_video_ratio"] == 0.0
     assert f["video_file_count"] == 0
+    assert f["main_video_name"] == ""
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run:
 
@@ -157,7 +204,7 @@ pytest tests/unit/test_quality_features.py -v
 
 Expected: FAIL with `ModuleNotFoundError: javdb.quality.features`.
 
-- [ ] **Step 3: Implement `features.py`**
+- [x] **Step 3: Implement `features.py`**
 
 Create `javdb/quality/features.py`:
 
@@ -241,22 +288,25 @@ def extract_file_features(files: Iterable[dict[str, Any]]) -> dict[str, Any]:
             size = int(f.get("size", 0) or 0)
         except (TypeError, ValueError):
             size = 0
+        size = max(0, size)
         total += size
         ext = _ext(name)
+        is_junk = _is_junk(name, ext)
+
+        if is_junk:
+            junk_bytes += size
+            suspicious += 1
+            continue
 
         if ext in VIDEO_EXTENSIONS:
             video_count += 1
-            if size > main_video_size:
+            if size > main_video_size or not main_video_name:
                 main_video_size = size
                 main_video_name = _basename(name)
         else:
             non_video_count += 1
             if ext in SUBTITLE_EXTENSIONS:
                 subtitle_count += 1
-
-        if _is_junk(name, ext):
-            junk_bytes += size
-            suspicious += 1
 
     main_video_ratio = (main_video_size / total) if total > 0 else 0.0
     junk_size_ratio = (junk_bytes / total) if total > 0 else 0.0
@@ -275,7 +325,7 @@ def extract_file_features(files: Iterable[dict[str, Any]]) -> dict[str, Any]:
     }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run:
 
@@ -283,9 +333,9 @@ Run:
 pytest tests/unit/test_quality_features.py -v
 ```
 
-Expected: PASS (5 tests).
+Expected: PASS (7 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add javdb/quality/features.py tests/unit/test_quality_features.py
@@ -300,7 +350,7 @@ git commit -m "feat(quality): add file-list feature extraction (ADR-024)"
 - Create: `javdb/quality/scoring.py`
 - Test: `tests/unit/test_quality_scoring.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_quality_scoring.py`:
 
@@ -309,11 +359,13 @@ Create `tests/unit/test_quality_scoring.py`:
 
 from __future__ import annotations
 
+from typing import Any
+
 from javdb.quality.features import extract_file_features
 from javdb.quality.scoring import SCORING_VERSION, score_torrent
 
 
-def _features(files):
+def _features(files: list[dict[str, Any]]) -> dict[str, Any]:
     return extract_file_features(files)
 
 
@@ -353,6 +405,101 @@ def test_subtitle_category_without_subtitle_is_flagged():
     assert result["decision"] == "needs_review"
 
 
+def test_multi_video_release_does_not_penalize_main_video_ratio():
+    feats = _features(
+        [
+            {"name": "ABC-123-pt1.mkv", "size": 1_000_000_000, "priority": 1},
+            {"name": "ABC-123-pt2.mkv", "size": 1_000_000_000, "priority": 1},
+            {"name": "ABC-123-pt3.mkv", "size": 1_000_000_000, "priority": 1},
+        ]
+    )
+    result = score_torrent(
+        feats,
+        {"javdb_category": "no_subtitle", "magnet_name": "ABC-123", "javdb_tags": []},
+    )
+    assert feats["video_file_count"] == 3
+    assert "main_video_ratio_low" not in result["reasons"]
+    assert result["decision"] == "accepted_shadow"
+
+
+def test_resolution_claim_unsupported_is_flagged():
+    feats = _features([{"name": "ABC-123-720p.mp4", "size": 4_000_000_000, "priority": 1}])
+    result = score_torrent(
+        feats,
+        {"javdb_category": "no_subtitle", "magnet_name": "ABC-123 4K", "javdb_tags": []},
+    )
+    assert "resolution_claim_unsupported" in result["reasons"]
+    assert result["resolution_consistent"] is False
+    assert result["score"] > 0.4
+    assert result["decision"] == "accepted_shadow"
+
+
+def test_resolution_claim_without_file_marker_is_neutral():
+    feats = _features([{"name": "ABC-123.mp4", "size": 4_000_000_000, "priority": 1}])
+    result = score_torrent(
+        feats,
+        {"javdb_category": "no_subtitle", "magnet_name": "ABC-123 4K", "javdb_tags": []},
+    )
+    assert "resolution_claim_unsupported" not in result["reasons"]
+    assert result["resolution_consistent"] is None
+    assert result["decision"] == "accepted_shadow"
+
+
+def test_resolution_claim_supported_is_accepted():
+    feats = _features([{"name": "ABC-123-1080p.mp4", "size": 4_000_000_000, "priority": 1}])
+    result = score_torrent(
+        feats,
+        {"javdb_category": "no_subtitle", "magnet_name": "ABC-123 1080p", "javdb_tags": []},
+    )
+    assert "resolution_claim_supported" in result["reasons"]
+    assert result["resolution_consistent"] is True
+    assert result["decision"] == "accepted_shadow"
+
+
+def test_subtitle_category_with_name_hint_only_is_accepted():
+    feats = _features([{"name": "ABC-123.mp4", "size": 4_000_000_000, "priority": 1}])
+    result = score_torrent(
+        feats,
+        {"javdb_category": "subtitle", "magnet_name": "ABC-123-C", "javdb_tags": []},
+    )
+    assert "subtitle_name_hint" in result["reasons"]
+    assert result["subtitle_evidence"] == "name_hint"
+    assert result["inferred_category"] == "subtitle"
+    assert result["category_consistent"] is True
+    assert result["decision"] == "accepted_shadow"
+
+
+def test_no_subtitle_category_with_subtitle_evidence_is_flagged():
+    feats = _features(
+        [
+            {"name": "ABC-123.mkv", "size": 4_000_000_000, "priority": 1},
+            {"name": "ABC-123.srt", "size": 60_000, "priority": 1},
+        ]
+    )
+    result = score_torrent(
+        feats,
+        {"javdb_category": "no_subtitle", "magnet_name": "ABC-123", "javdb_tags": []},
+    )
+    assert "subtitle_file_present" in result["reasons"]
+    assert "category_mismatch" in result["reasons"]
+    assert result["category_consistent"] is False
+    assert result["decision"] == "needs_review"
+
+
+def test_ascii_name_hint_does_not_match_subject_substring():
+    feats = _features([{"name": "ABC-123.mp4", "size": 4_000_000_000, "priority": 1}])
+    result = score_torrent(
+        feats,
+        {"javdb_category": "subtitle", "magnet_name": "ABC-123 subject", "javdb_tags": []},
+    )
+    assert "subtitle_name_hint" not in result["reasons"]
+    assert "subtitle_file_missing" in result["reasons"]
+    assert "category_mismatch" in result["reasons"]
+    assert result["subtitle_evidence"] == "absent"
+    assert result["category_consistent"] is False
+    assert result["decision"] == "needs_review"
+
+
 def test_inflated_junk_torrent_scores_low():
     feats = _features(
         [
@@ -371,13 +518,14 @@ def test_inflated_junk_torrent_scores_low():
 
 
 def test_no_video_file_is_rejected():
-    feats = _features([{"name": "readme.txt", "size": 1_000, "priority": 1}])
+    feats = _features([{"name": "readme.md", "size": 1_000, "priority": 1}])
     result = score_torrent(feats, {"javdb_category": "no_subtitle", "magnet_name": "x", "javdb_tags": []})
     assert "main_video_missing" in result["reasons"]
     assert result["score"] < 0.4
+    assert result["decision"] == "rejected_shadow"
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run:
 
@@ -387,7 +535,7 @@ pytest tests/unit/test_quality_scoring.py -v
 
 Expected: FAIL with `ModuleNotFoundError: javdb.quality.scoring`.
 
-- [ ] **Step 3: Implement `scoring.py`**
+- [x] **Step 3: Implement `scoring.py`**
 
 Create `javdb/quality/scoring.py`:
 
@@ -403,6 +551,7 @@ is shadow-only — it never changes the production download decision.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 SCORING_VERSION = "adr024-shadow-v1"
@@ -415,12 +564,123 @@ REJECT_SCORE = 0.4
 
 # javdb_category values that claim embedded/sidecar subtitles.
 _SUBTITLE_CATEGORIES = frozenset({"subtitle", "hacked_subtitle"})
-_SUBTITLE_NAME_MARKERS = ("字幕", "中文", "-c", "-uc", "-cu", "chinese", "sub")
+_NO_SUBTITLE_CATEGORIES = frozenset({"no_subtitle", "hacked_no_subtitle"})
+_CJK_SUBTITLE_NAME_MARKERS = ("字幕", "中文", "中字")
+_ASCII_SUBTITLE_TOKENS = frozenset(
+    {"sub", "subs", "subbed", "chinese", "chs", "cht", "zh", "cn"}
+)
+_ASCII_FINAL_SUBTITLE_TOKENS = frozenset({"c", "uc", "cu"})
+_RESOLUTION_PATTERN = re.compile(r"(?<![a-z0-9])(2160p|4k|1080p|720p)(?![a-z0-9])")
 
 
 def _subtitle_name_hint(magnet_name: str) -> bool:
     lowered = (magnet_name or "").lower()
-    return any(marker in lowered for marker in _SUBTITLE_NAME_MARKERS)
+    if any(marker in lowered for marker in _CJK_SUBTITLE_NAME_MARKERS):
+        return True
+
+    tokens = [token for token in re.split(r"[^a-z0-9]+", lowered) if token]
+    if any(token in _ASCII_SUBTITLE_TOKENS for token in tokens):
+        return True
+    return bool(tokens and tokens[-1] in _ASCII_FINAL_SUBTITLE_TOKENS)
+
+
+def _normalize_resolution_marker(marker: str) -> str:
+    return "2160p" if marker == "4k" else marker
+
+
+def _extract_resolution_marker(text: str) -> str | None:
+    lowered = (text or "").lower()
+    match = _RESOLUTION_PATTERN.search(lowered)
+    if match is None:
+        return None
+    return _normalize_resolution_marker(match.group(1))
+
+
+def _main_video_signal(features: dict[str, Any]) -> tuple[float, list[str]]:
+    score_delta = 0.0
+    reasons: list[str] = []
+    if features.get("video_file_count", 0) > 0:
+        reasons.append("main_video_detected")
+    else:
+        reasons.append("main_video_missing")
+        score_delta -= 0.7
+
+    main_ratio = float(features.get("main_video_ratio", 0.0))
+    if (
+        features.get("video_file_count", 0) == 1
+        and main_ratio < MAIN_VIDEO_RATIO_FLOOR
+    ):
+        reasons.append("main_video_ratio_low")
+        score_delta -= 0.25
+    return score_delta, reasons
+
+
+def _junk_signal(features: dict[str, Any]) -> tuple[float, list[str]]:
+    junk_ratio = float(features.get("junk_size_ratio", 0.0))
+    if junk_ratio >= JUNK_RATIO_HIGH:
+        return -min(0.4, junk_ratio), ["junk_ratio_high"]
+    return 0.0, []
+
+
+def _subtitle_signal(
+    features: dict[str, Any], magnet_name: str
+) -> tuple[str, tuple[float, list[str]]]:
+    if features.get("subtitle_file_count", 0) > 0:
+        return "file_present", (0.0, ["subtitle_file_present"])
+    if _subtitle_name_hint(magnet_name):
+        return "name_hint", (0.0, ["subtitle_name_hint"])
+    return "absent", (0.0, [])
+
+
+def _category_signal(
+    javdb_category: str, subtitle_evidence: str
+) -> tuple[bool, tuple[float, list[str]]]:
+    if javdb_category in _NO_SUBTITLE_CATEGORIES and subtitle_evidence != "absent":
+        return False, (-0.3, ["category_mismatch"])
+    if javdb_category in _SUBTITLE_CATEGORIES and subtitle_evidence == "absent":
+        return False, (-0.3, ["subtitle_file_missing", "category_mismatch"])
+    return True, (0.0, [])
+
+
+def _resolution_signal(
+    features: dict[str, Any], magnet_name: str
+) -> tuple[bool | None, tuple[float, list[str]]]:
+    claimed_resolution = _extract_resolution_marker(magnet_name)
+    main_video_name = str(features.get("main_video_name") or "")
+    if not (claimed_resolution and main_video_name):
+        return None, (0.0, [])
+
+    main_resolution = _extract_resolution_marker(main_video_name)
+    if main_resolution is None:
+        return None, (0.0, [])
+    if main_resolution == claimed_resolution:
+        return True, (0.0, ["resolution_claim_supported"])
+    return False, (-0.1, ["resolution_claim_unsupported"])
+
+
+def _abnormal_file_count_signal(features: dict[str, Any]) -> tuple[float, list[str]]:
+    if features.get("suspicious_file_count", 0) >= 5:
+        return -0.1, ["abnormal_file_count"]
+    return 0.0, []
+
+
+def _decide(score: float, *, category_consistent: bool) -> str:
+    if not category_consistent:
+        return "needs_review"
+    if score >= ACCEPT_SCORE:
+        return "accepted_shadow"
+    if score < REJECT_SCORE:
+        return "rejected_shadow"
+    return "needs_review"
+
+
+def _apply_signal(
+    score: float, reasons: list[str], signal: tuple[float, list[str]]
+) -> float:
+    """Append signal reasons into the caller-local accumulator and return score."""
+    score_delta, signal_reasons = signal
+    reasons.extend(signal_reasons)
+    return score + score_delta
 
 
 def score_torrent(
@@ -437,71 +697,38 @@ def score_torrent(
     javdb_category = context.get("javdb_category") or ""
     magnet_name = context.get("magnet_name") or ""
 
-    # --- main video presence ---
-    if features.get("video_file_count", 0) > 0:
-        reasons.append("main_video_detected")
-    else:
-        reasons.append("main_video_missing")
-        score -= 0.6
+    score = _apply_signal(score, reasons, _main_video_signal(features))
+    score = _apply_signal(score, reasons, _junk_signal(features))
 
-    # --- effective main-video size, not raw total ---
-    main_ratio = float(features.get("main_video_ratio", 0.0))
-    if features.get("video_file_count", 0) > 0 and main_ratio < MAIN_VIDEO_RATIO_FLOOR:
-        reasons.append("main_video_ratio_low")
-        score -= 0.25
+    subtitle_evidence, subtitle_signal = _subtitle_signal(features, magnet_name)
+    score = _apply_signal(score, reasons, subtitle_signal)
 
-    # --- junk / ad penalty ---
-    junk_ratio = float(features.get("junk_size_ratio", 0.0))
-    if junk_ratio >= JUNK_RATIO_HIGH:
-        reasons.append("junk_ratio_high")
-        score -= min(0.4, junk_ratio)
+    category_consistent, category_signal = _category_signal(
+        javdb_category, subtitle_evidence
+    )
+    score = _apply_signal(score, reasons, category_signal)
 
-    # --- subtitle evidence ---
-    if features.get("subtitle_file_count", 0) > 0:
-        subtitle_evidence = "file_present"
-        reasons.append("subtitle_file_present")
-    elif _subtitle_name_hint(magnet_name):
-        subtitle_evidence = "name_hint"  # weak signal per ADR Scoring Signals
-    else:
-        subtitle_evidence = "absent"
+    resolution_consistent, resolution_signal = _resolution_signal(
+        features, magnet_name
+    )
+    score = _apply_signal(score, reasons, resolution_signal)
 
-    # --- category consistency ---
-    category_consistent = True
-    if javdb_category in _SUBTITLE_CATEGORIES and subtitle_evidence == "absent":
-        category_consistent = False
-        reasons.append("subtitle_file_missing")
-        reasons.append("category_mismatch")
-        score -= 0.3
-
-    # --- abnormal file count ---
-    if features.get("suspicious_file_count", 0) >= 5:
-        reasons.append("abnormal_file_count")
-        score -= 0.1
-
+    score = _apply_signal(score, reasons, _abnormal_file_count_signal(features))
     score = max(0.0, min(1.0, score))
-
-    if not category_consistent:
-        decision = "needs_review"
-    elif score >= ACCEPT_SCORE:
-        decision = "accepted_shadow"
-    elif score < REJECT_SCORE:
-        decision = "rejected_shadow"
-    else:
-        decision = "needs_review"
 
     return {
         "score": score,
         "reasons": reasons,
         "subtitle_evidence": subtitle_evidence,
         "category_consistent": category_consistent,
-        "inferred_category": _infer_category(features, context, subtitle_evidence),
-        "resolution_consistent": None,  # deferred: deep resolution check (D10-adjacent)
-        "decision": decision,
+        "resolution_consistent": resolution_consistent,
+        "inferred_category": _infer_category(context, subtitle_evidence),
+        "decision": _decide(score, category_consistent=category_consistent),
     }
 
 
 def _infer_category(
-    features: dict[str, Any], context: dict[str, Any], subtitle_evidence: str
+    context: dict[str, Any], subtitle_evidence: str
 ) -> str:
     """Best-effort inferred category from file-list + name hints.
 
@@ -511,13 +738,13 @@ def _infer_category(
     """
     claimed = context.get("javdb_category") or ""
     hacked = claimed.startswith("hacked_")
-    has_subtitle = subtitle_evidence == "file_present"
+    has_subtitle = subtitle_evidence in {"file_present", "name_hint"}
     if hacked:
         return "hacked_subtitle" if has_subtitle else "hacked_no_subtitle"
     return "subtitle" if has_subtitle else "no_subtitle"
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run:
 
@@ -525,9 +752,9 @@ Run:
 pytest tests/unit/test_quality_scoring.py -v
 ```
 
-Expected: PASS (5 tests).
+Expected: PASS (12 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add javdb/quality/scoring.py tests/unit/test_quality_scoring.py
@@ -541,7 +768,7 @@ git commit -m "feat(quality): add explainable shadow scoring (ADR-024)"
 **Files:**
 - Modify: `javdb/quality/__init__.py`
 
-- [ ] **Step 1: Extend the package exports**
+- [x] **Step 1: Extend the package exports**
 
 Replace the body of `javdb/quality/__init__.py` (created in IMP-02) with:
 
@@ -553,16 +780,16 @@ from javdb.quality.models import EvaluationRecord, EvidenceRecord
 from javdb.quality.scoring import SCORING_VERSION, score_torrent
 
 __all__ = [
-    "EvidenceRecord",
-    "EvaluationRecord",
     "PROBE_SCHEMA_VERSION",
     "SCORING_VERSION",
+    "EvaluationRecord",
+    "EvidenceRecord",
     "extract_file_features",
     "score_torrent",
 ]
 ```
 
-- [ ] **Step 2: Verify imports resolve**
+- [x] **Step 2: Verify imports resolve**
 
 Run:
 
@@ -572,7 +799,7 @@ python3 -c "from javdb.quality import PROBE_SCHEMA_VERSION, SCORING_VERSION, ext
 
 Expected: `adr024-probe-v1 adr024-shadow-v1`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add javdb/quality/__init__.py
