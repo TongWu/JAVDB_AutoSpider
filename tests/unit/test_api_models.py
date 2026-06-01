@@ -109,6 +109,16 @@ class TestMovieIndexEntry:
             'comment_number': '595',
         }
 
+    def test_movie_index_entry_family_serializes_but_legacy_dict_does_not(self):
+        entry = MovieIndexEntry(
+            href='/v/wifey',
+            video_code='Wifey.2026.05.30',
+            video_code_family='western_studio_date',
+            page=2,
+        )
+        assert entry.to_dict()['video_code_family'] == 'western_studio_date'
+        assert 'video_code_family' not in entry.to_legacy_dict()
+
     def test_to_dict(self):
         entry = MovieIndexEntry(href='/v/X', video_code='X-1', page=1)
         d = entry.to_dict()
