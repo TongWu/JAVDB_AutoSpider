@@ -463,63 +463,77 @@ impl ProxyPool {
     }
 
     pub fn mark_failure_and_switch(&self) -> bool {
-        let mut pool = self.inner.lock();
-        if pool.no_proxy_mode || pool.proxies.is_empty() {
-            return false;
-        }
-
-        let idx = pool.current_index;
-        let current_name = pool.proxies[idx].lock().name.clone();
-
-        {
-            let mut proxy = pool.proxies[idx].lock();
-            proxy.failures += 1;
-            proxy.total_requests += 1;
-            proxy.last_failure = Some(Local::now());
-
-            if proxy.failures >= self.max_failures_before_cooldown {
-                let proxy_url = proxy
-                    .http_url
-                    .clone()
-                    .or_else(|| proxy.https_url.clone());
-                self.ban_manager.add_ban(
-                    &current_name,
-                    proxy_url,
-                    Some("rust_auto_drain".to_string()),
-                );
-                proxy.banned = true;
-                proxy.cooldown_until = Some(Local::now() + Duration::seconds(self.cooldown_seconds));
-                proxy.is_available = false;
-                warn!(
-                    "Proxy '{}' reached {} failures, putting in cooldown for {}s (8 days)",
-                    current_name, proxy.failures, self.cooldown_seconds
-                );
-            } else {
-                warn!(
-                    "Proxy '{}' failed ({}/{})",
-                    current_name, proxy.failures, self.max_failures_before_cooldown
-                );
+        let (pending_ban, switched) = {
+            let mut pool = self.inner.lock();
+            if pool.no_proxy_mode || pool.proxies.is_empty() {
+                return false;
             }
-        }
 
-        let len = pool.proxies.len();
-        let original_index = pool.current_index;
+            let idx = pool.current_index;
+            let current_name = pool.proxies[idx].lock().name.clone();
+            let mut pending_ban: Option<(String, Option<String>, String)> = None;
 
-        for _ in 0..len {
-            pool.current_index = (pool.current_index + 1) % len;
-            let proxy = pool.proxies[pool.current_index].lock();
-            if proxy.is_available && !proxy.banned && !proxy.is_in_cooldown() {
-                debug!(
-                    "Switched from '{}' to '{}'",
-                    current_name, proxy.name
-                );
-                return true;
+            {
+                let mut proxy = pool.proxies[idx].lock();
+                proxy.failures += 1;
+                proxy.total_requests += 1;
+                proxy.last_failure = Some(Local::now());
+
+                if proxy.failures >= self.max_failures_before_cooldown {
+                    let proxy_url = proxy
+                        .http_url
+                        .clone()
+                        .or_else(|| proxy.https_url.clone());
+                    proxy.banned = true;
+                    proxy.cooldown_until = Some(Local::now() + Duration::seconds(self.cooldown_seconds));
+                    proxy.is_available = false;
+                    pending_ban = Some((
+                        current_name.clone(),
+                        proxy_url,
+                        "rust_auto_drain".to_string(),
+                    ));
+                    warn!(
+                        "Proxy '{}' reached {} failures, putting in cooldown for {}s (8 days)",
+                        current_name, proxy.failures, self.cooldown_seconds
+                    );
+                } else {
+                    warn!(
+                        "Proxy '{}' failed ({}/{})",
+                        current_name, proxy.failures, self.max_failures_before_cooldown
+                    );
+                }
             }
+
+            let len = pool.proxies.len();
+            let original_index = pool.current_index;
+            let mut switched = false;
+
+            for _ in 0..len {
+                pool.current_index = (pool.current_index + 1) % len;
+                let proxy = pool.proxies[pool.current_index].lock();
+                if proxy.is_available && !proxy.banned && !proxy.is_in_cooldown() {
+                    debug!(
+                        "Switched from '{}' to '{}'",
+                        current_name, proxy.name
+                    );
+                    switched = true;
+                    break;
+                }
+            }
+
+            if !switched {
+                pool.current_index = original_index;
+                error!("Failed to switch proxy: all proxies are unavailable");
+            }
+
+            (pending_ban, switched)
+        };
+
+        if let Some((proxy_name, proxy_url, reason)) = pending_ban {
+            self.ban_manager.add_ban(&proxy_name, proxy_url, Some(reason));
         }
 
-        pool.current_index = original_index;
-        error!("Failed to switch proxy: all proxies are unavailable");
-        false
+        switched
     }
 
     pub fn get_statistics(&self) -> HashMap<String, PyObject> {
