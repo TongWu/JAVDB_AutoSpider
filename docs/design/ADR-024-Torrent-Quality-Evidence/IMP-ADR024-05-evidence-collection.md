@@ -633,9 +633,8 @@ def _resolve_categories(cli_categories: str | None) -> list[str] | None:
     """CLI --categories wins; otherwise fall back to the config key.
 
     Honours the documented TORRENT_QUALITY_CATEGORIES config knob for direct CLI
-    runs (and scheduled runs that don't pass --categories). An empty/whitespace
-    config value means "no filter" (scan all categories), matching the file
-    filter's behaviour.
+    runs. An empty/whitespace config value returns None; run_collection then
+    fails closed and skips rather than scanning every qBittorrent category.
     """
     if cli_categories is not None:
         return _parse_categories(cli_categories)
@@ -648,13 +647,17 @@ def _resolve_categories(cli_categories: str | None) -> list[str] | None:
 def main(argv: list[str] | None = None) -> int:
     try:
         args = parse_args(argv)
-        categories = _resolve_categories(args.categories)
     except (json.JSONDecodeError, argparse.ArgumentTypeError) as exc:
         raise SystemExit(str(exc)) from exc
 
     if not args.force and not _evidence_enabled():
         print("Torrent quality evidence disabled (TORRENT_QUALITY_EVIDENCE_ENABLED=False); skipping.")
         return 0
+
+    try:
+        categories = _resolve_categories(args.categories)
+    except (json.JSONDecodeError, argparse.ArgumentTypeError) as exc:
+        raise SystemExit(str(exc)) from exc
 
     summary = run_collection(
         days=args.days,
@@ -727,7 +730,9 @@ In `config.py.example`, after the "qBittorrent File Filter Configuration" block
 # 'shadow' in Phase 1; 'assist'/'enforce' are reserved for later phases.
 TORRENT_QUALITY_EVIDENCE_ENABLED = False
 TORRENT_QUALITY_POLICY_MODE = 'shadow'
-# Optional JSON array of qB categories to scan (empty = same as file filter).
+# Optional JSON array of qB categories to scan.
+# Empty means no category filter is configured; direct collection skips instead
+# of scanning every qBittorrent category.
 TORRENT_QUALITY_CATEGORIES = ''
 ```
 
@@ -774,16 +779,16 @@ add:
 
 ```yaml
       - name: Collect torrent quality evidence (ADR-024, shadow)
-        if: ${{ vars.TORRENT_QUALITY_EVIDENCE_ENABLED == 'true' }}
+        if: ${{ vars.TORRENT_QUALITY_EVIDENCE_ENABLED == 'true' && github.event.inputs.dry_run != 'true' }}
         env:
           DAYS: ${{ github.event.inputs.days || '2' }}
-          QB_FILTER_CATEGORIES: ${{ github.event.inputs.categories || '["Ad Hoc", "Daily Ingestion", "顶级"]' }}
+          QB_EVIDENCE_CATEGORIES: ${{ github.event.inputs.categories || vars.TORRENT_QUALITY_CATEGORIES || '["Ad Hoc", "Daily Ingestion", "顶级"]' }}
         run: |
           set -e
           set -o pipefail
           ARGS=(--days "$DAYS")
-          if [ -n "$QB_FILTER_CATEGORIES" ]; then
-            ARGS+=(--categories "$QB_FILTER_CATEGORIES")
+          if [ -n "$QB_EVIDENCE_CATEGORIES" ]; then
+            ARGS+=(--categories "$QB_EVIDENCE_CATEGORIES")
           fi
           echo "Running: python3 -m apps.cli.qb.quality_evidence ${ARGS[*]}"
           python3 -m apps.cli.qb.quality_evidence "${ARGS[@]}"
