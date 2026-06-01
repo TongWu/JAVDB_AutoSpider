@@ -71,7 +71,6 @@ def _resolve_categories(cli_categories: str | None) -> list[str] | None:
 def main(argv: list[str] | None = None) -> int:
     try:
         args = parse_args(argv)
-        categories = _resolve_categories(args.categories)
     except (json.JSONDecodeError, argparse.ArgumentTypeError) as exc:
         raise SystemExit(str(exc)) from exc
 
@@ -81,6 +80,11 @@ def main(argv: list[str] | None = None) -> int:
             "(TORRENT_QUALITY_EVIDENCE_ENABLED=False); skipping."
         )
         return 0
+
+    try:
+        categories = _resolve_categories(args.categories)
+    except (json.JSONDecodeError, argparse.ArgumentTypeError) as exc:
+        raise SystemExit(str(exc)) from exc
 
     summary = run_collection(
         days=args.days,
