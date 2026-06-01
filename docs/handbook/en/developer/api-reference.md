@@ -24,6 +24,11 @@ These endpoints were added in 2026-05 to support the new web console (`javdb-aut
 - `GET /api/system/state?key=...` — reads a KV pair from `system_state`.
 - `PUT /api/system/state` — admin-only; writes a KV pair.
 
+### Torrent quality
+
+- `GET /api/quality/evaluations?limit=&movie_href=` — authenticated, read-only list of ADR-024 shadow quality evaluations. When `movie_href` is omitted, returns recent evaluations.
+- `GET /api/quality/evidence/{info_hash}` — authenticated, read-only torrent-level evidence for the `production_download` role.
+
 ### Sessions
 
 - `GET /api/sessions?state=&cursor=&limit=` — cursor-paginated list of ReportSessions.

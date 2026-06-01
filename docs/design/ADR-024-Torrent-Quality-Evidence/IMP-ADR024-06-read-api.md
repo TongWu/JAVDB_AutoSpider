@@ -1,6 +1,6 @@
 # IMP-ADR024-06: ADR-024 Phase 1 — Read-Only API Surface
 
-**Status:** Proposed — design-reviewed & hardened 2026-05-31 (see Design Review note).
+**Status:** Completed — implemented 2026-06-01 (design-reviewed & hardened 2026-05-31; see Design Review note).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

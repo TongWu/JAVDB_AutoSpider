@@ -55,7 +55,15 @@ python3 -m apps.cli.qb.quality_evidence --force --categories '["Daily Ingestion"
 采集器会打印一行摘要，包含 `scanned`、`evidence_written`、
 `evaluations_written`、`probe_unavailable` 和 `skipped` 计数。持久化结果可在
 `javdb-reports` 的 `TorrentQualityEvidence` 与 `TorrentQualityEvaluation`
-表中查看。只读 API 表面有意推迟到 IMP-ADR024-06。
+表中查看。
+
+FastAPI 只读表面会暴露同一批持久化行：
+
+- `GET /api/quality/evaluations?limit=50` — 最近的影子评估。
+- `GET /api/quality/evaluations?movie_href=/v/...` — 单个影片的评估。
+- `GET /api/quality/evidence/{info_hash}` — 生产已下载种子的客观文件列表证据。
+
+所有 `/api/quality/*` 端点都需要认证，且只读。
 
 ## Reason Codes
 
