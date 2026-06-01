@@ -35,6 +35,12 @@ The collector is disabled by default. Set the GitHub Variable
 `QBFileFilter.yml` runs the collector immediately after the qBittorrent file
 filter step when `TORRENT_QUALITY_EVIDENCE_ENABLED=true`. The collector uses the
 same restored encrypted config and the same production qBittorrent endpoint.
+Manual workflow dispatches skip the collector when `dry_run=true`, because
+evidence rows are persistent D1 writes.
+
+The workflow resolves evidence categories in this order: manual dispatch
+`categories` input, then `TORRENT_QUALITY_CATEGORIES`, then the workflow default
+`["Ad Hoc", "Daily Ingestion", "顶级"]`.
 
 You can also run it manually:
 
@@ -46,7 +52,9 @@ python3 -m apps.cli.qb.quality_evidence --force --categories '["Daily Ingestion"
 ```
 
 If the collector is disabled and `--force` is not provided, the CLI exits with
-status `0` without reading category config or touching qBittorrent.
+status `0` without reading category config or touching qBittorrent. If no
+category JSON array is configured or passed for a direct run, collection skips
+instead of scanning every qBittorrent category.
 
 ## Reading Results
 
