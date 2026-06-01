@@ -1,6 +1,6 @@
 # IMP-ADR024-05: ADR-024 Phase 1 — Evidence Collection (CLI + Workflow + Config)
 
-**Status:** Proposed — design-reviewed & hardened 2026-05-31 (see Design Review note).
+**Status:** Completed — implemented 2026-06-01 (design-reviewed & hardened 2026-05-31; see Design Review note).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -43,6 +43,19 @@ The features→`EvidenceRecord` seam was already correct in the draft
 (`features={k: feats[k] for k in ("main_video_name",)}` — promoted keys go to
 named fields, only the non-promoted hint goes to `.features`, respecting the
 IMP-02 non-overlap invariant).
+
+## Completion note (2026-06-01)
+
+Implemented in branch `adr-024-imp-05`. The delivered slice keeps the IMP scope:
+`production_download` only, read-only qB access, direct `TorrentQualityRepo`
+UPSERTs, CLI/config/workflow gates, and handbook/wiki-source documentation.
+
+During review, the direct CLI/config path was hardened so an empty
+`TORRENT_QUALITY_CATEGORIES` value skips collection instead of scanning every
+qBittorrent category. Workflow dispatches still pass the explicit category list
+from the `QBFileFilter.yml` input/default, so scheduled evidence collection is
+bounded while direct runs fail closed unless the caller provides a JSON category
+array or `--categories`.
 
 ---
 
