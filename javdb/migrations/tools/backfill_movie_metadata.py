@@ -297,8 +297,8 @@ def run_backfill_metadata(args: SimpleNamespace) -> int:
         if limit > 0:
             hrefs = hrefs[:limit]
     else:
-        # ``--limit-per-worker`` predates the switch to sequential execution;
-        # in the fallback path it keeps the old precedence and is interpreted
+        # ``--limit-per-worker`` is primarily a proxy-backed engine cap; in
+        # the fallback path it keeps the old precedence and is interpreted
         # against the effective worker count so workflow-input volume stays
         # comparable to earlier runs.
         if limit_per_worker > 0:
