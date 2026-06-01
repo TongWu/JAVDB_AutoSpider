@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, MutableMapping
 from typing import Protocol
 
-from javdb.parsing.models import MovieIndexEntry
+from javdb.parsing.models import IndexPageResult, MovieIndexEntry
 
 
 class MoviesLike(Protocol):
@@ -18,6 +18,16 @@ FilterSpy = Callable[
 
 def _entry(code: str, family: str) -> MovieIndexEntry:
     return MovieIndexEntry(href=f"/v/{code}", video_code=code, video_code_family=family)
+
+
+def _page_result() -> IndexPageResult:
+    return IndexPageResult(
+        has_movie_list=True,
+        movies=[
+            _entry("Wifey.2026.05.30", "western_studio_date"),
+            _entry("ABC-123", "classic_hyphenated"),
+        ],
+    )
 
 
 def spy_filter(

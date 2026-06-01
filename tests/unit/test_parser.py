@@ -55,8 +55,8 @@ def _parse_detail(html_content):
     )
 
 
-class TestExtractVideoCode:
-    """Test cases for extract_video_code function."""
+class TestClassifyVideoCodeFamily:
+    """Test cases for classify_video_code_family function."""
 
     @pytest.mark.parametrize(
         ("code", "family"),
@@ -76,6 +76,10 @@ class TestExtractVideoCode:
     )
     def test_classify_video_code_family(self, code, family):
         assert classify_video_code_family(code) == family
+
+
+class TestExtractVideoCode:
+    """Test cases for extract_video_code function."""
 
     @pytest.mark.parametrize(
         "code",
