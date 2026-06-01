@@ -7,14 +7,13 @@ from unittest.mock import Mock
 
 import pytest
 
-from javdb.parsing.models import IndexPageResult
 from javdb.pipeline.index_family_blacklist import (
     filter_blacklisted_families,
     load_daily_family_blacklist,
     normalize_family_blacklist,
 )
 from javdb.spider.fetch import index as index_fetch
-from tests.unit.index_blacklist_helpers import _entry, spy_filter, spy_select
+from tests.unit.index_blacklist_helpers import _entry, _page_result, spy_filter, spy_select
 
 
 class _NoopSleepManager:
@@ -23,16 +22,6 @@ class _NoopSleepManager:
 
     def apply_volume_multiplier(self, *__args: object, **__kwargs: object) -> None:
         pass
-
-
-def _page_result() -> IndexPageResult:
-    return IndexPageResult(
-        has_movie_list=True,
-        movies=[
-            _entry("Wifey.2026.05.30", "western_studio_date"),
-            _entry("ABC-123", "classic_hyphenated"),
-        ],
-    )
 
 
 def _patch_sequential_dependencies(
@@ -122,6 +111,14 @@ def test_filter_empty_blacklist_keeps_everything():
     counts = {}
     assert filter_blacklisted_families(movies, set(), counts) == movies
     assert counts == {}
+
+
+def test_filter_coerces_non_string_family_values():
+    movie = SimpleNamespace(video_code_family=123)
+    counts: dict[str, int] = {}
+
+    assert filter_blacklisted_families([movie], {"123"}, counts) == []
+    assert counts == {"123": 1}
 
 
 def test_load_daily_family_blacklist_uses_runtime_config(monkeypatch):

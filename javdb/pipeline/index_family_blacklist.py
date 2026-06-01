@@ -53,7 +53,8 @@ def filter_blacklisted_families(
         return list(movies)
     kept = []
     for movie in movies:
-        family = (getattr(movie, "video_code_family", None) or "").strip()
+        family_value = getattr(movie, "video_code_family", None) or ""
+        family = str(family_value).strip()
         if family and family in active_blacklist:
             if counts is not None:
                 counts[family] = counts.get(family, 0) + 1

@@ -15,7 +15,6 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from javdb.parsing.models import IndexPageResult
 from javdb.pipeline.index_family_blacklist import filter_blacklisted_families
 from javdb.spider.fetch.index_parallel import _check_stop_condition
 from javdb.spider.fetch import index_parallel
@@ -24,7 +23,7 @@ from javdb.spider.fetch.fetch_engine import (
     _PriorityTaskQueue,
 )
 from javdb.spider.fetch.login_coordinator import requeue_front
-from tests.unit.index_blacklist_helpers import _entry, spy_filter, spy_select
+from tests.unit.index_blacklist_helpers import _page_result, spy_filter, spy_select
 
 
 # ---------------------------------------------------------------------------
@@ -83,16 +82,6 @@ class _FakeBackend:
 
     def export_login_state(self) -> None:
         self.export_called = True
-
-
-def _parallel_page_result() -> IndexPageResult:
-    return IndexPageResult(
-        has_movie_list=True,
-        movies=[
-            _entry("Wifey.2026.05.30", "western_studio_date"),
-            _entry("ABC-123", "classic_hyphenated"),
-        ],
-    )
 
 
 def _fake_result(page_num: int, html: str) -> _FakeResult:
@@ -317,7 +306,7 @@ def test_parallel_multi_page_applies_blacklist_once_per_page_and_preserves_page_
         _fake_result(1, "html-1"),
     ])
     monkeypatch.setattr(index_parallel, "build_parallel_index_backend", lambda **_kwargs: backend)
-    monkeypatch.setattr(index_parallel, "parse_index_page", lambda _html, _page_num: _parallel_page_result())
+    monkeypatch.setattr(index_parallel, "parse_index_page", lambda _html, _page_num: _page_result())
     monkeypatch.setattr(
         index_parallel,
         "_sentinel_field_health",
