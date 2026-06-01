@@ -545,7 +545,7 @@ def test_report_omits_ttl_ms_and_reason_when_not_provided():
         c.close(wait=True, timeout=2.0)
 
 
-def test_mark_proxy_banned_dispatches_default_3_day_ttl():
+def test_mark_proxy_banned_omits_ttl_so_worker_maps_reason():
     c = _make_client(async_workers=1)
     captured: list = []
 
@@ -554,14 +554,14 @@ def test_mark_proxy_banned_dispatches_default_3_day_ttl():
 
     try:
         with patch.object(c, "report", side_effect=fake_report):
-            c.mark_proxy_banned("proxy-A")
+            c.mark_proxy_banned("proxy-A", "ban page detected")
             c._async_queue.join()
         assert len(captured) == 1
         proxy_id, kind, ttl_ms, reason = captured[0]
         assert proxy_id == "proxy-A"
         assert kind == "ban"
-        assert ttl_ms == DEFAULT_BAN_TTL_MS
-        assert reason is None
+        assert ttl_ms is None
+        assert reason == "ban page detected"
     finally:
         c.close(wait=True, timeout=2.0)
 

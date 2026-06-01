@@ -482,7 +482,12 @@ impl ProxyPool {
                     .http_url
                     .clone()
                     .or_else(|| proxy.https_url.clone());
-                self.ban_manager.add_ban(&current_name, proxy_url);
+                self.ban_manager.add_ban(
+                    &current_name,
+                    proxy_url,
+                    Some("rust_auto_drain".to_string()),
+                );
+                proxy.banned = true;
                 proxy.cooldown_until = Some(Local::now() + Duration::seconds(self.cooldown_seconds));
                 proxy.is_available = false;
                 warn!(
@@ -503,7 +508,7 @@ impl ProxyPool {
         for _ in 0..len {
             pool.current_index = (pool.current_index + 1) % len;
             let proxy = pool.proxies[pool.current_index].lock();
-            if proxy.is_available && !proxy.is_in_cooldown() {
+            if proxy.is_available && !proxy.banned && !proxy.is_in_cooldown() {
                 debug!(
                     "Switched from '{}' to '{}'",
                     current_name, proxy.name
@@ -656,8 +661,8 @@ impl ProxyPool {
         self.ban_manager.get_ban_summary(include_ip)
     }
 
-    #[pyo3(signature = (proxy_name=None))]
-    pub fn ban_proxy(&self, proxy_name: Option<String>) -> bool {
+    #[pyo3(signature = (proxy_name=None, reason=None))]
+    pub fn ban_proxy(&self, proxy_name: Option<String>, reason: Option<String>) -> bool {
         let mut pool = self.inner.lock();
         if pool.no_proxy_mode || pool.proxies.is_empty() {
             return false;
@@ -689,7 +694,7 @@ impl ProxyPool {
             }
         };
 
-        self.ban_manager.add_ban(&target_name, proxy_url);
+        self.ban_manager.add_ban(&target_name, proxy_url, reason);
         {
             let mut proxy = pool.proxies[target_index].lock();
             proxy.banned = true;

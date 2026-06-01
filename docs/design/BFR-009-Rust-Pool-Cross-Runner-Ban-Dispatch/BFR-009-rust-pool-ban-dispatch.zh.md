@@ -1,6 +1,6 @@
 # BFR-009: 跨 runner 封禁分发在 Rust 池/封禁管理器路径上不触发
 
-**状态**: Open
+**状态**: Fixed
 **日期**: 2026-05-30
 **严重度**: Medium
 **影响范围**: `javdb/proxy/ban_manager.py`(`_dispatch_remote_ban`、`set_remote_ban_hook`)、`javdb/proxy/pool.py`(Python `ProxyPool.ban_proxy` / drain)、`javdb/spider/runtime/state.py:722`、`javdb/spider/runtime/context.py:880`(hook 注册)、`javdb/rust_core/src/proxy/{pool,ban_manager}.rs`
@@ -30,13 +30,11 @@
 
 ## 修复
 
-尚未实现 —— 在此跟踪,从 ADR-041 中延后(ADR-041 是 fallback 策略变更,不是协调变更)。候选方案(在 follow-up 中决定):
+已通过 [IMP-ADR043-02](../ADR-043-CF-Auto-Ban/IMP-ADR043-02-bfr009-ban-dispatch-and-hardban-ttl.md) 按方案 1 实现:
 
 1. **Rust→Python 封禁回调。** 给 Rust 池/封禁管理器加 `set_ban_dispatch(callback)`,在每次*新记录*的封禁时调用(对应 Python 的 `newly_banned` 去重),由注册 `set_remote_ban_hook` 的同一运行时 setup 接线。
 2. **在 Python 调用点分发。** 把生产封禁入口(`get_ban_manager().add_ban(...)`、`pool.ban_proxy(...)`)包一层薄 Python helper,既经 Rust 记录又触发 `_dispatch_remote_ban` —— dispatcher 留在 Python 侧,无需改 Rust。
 3. **观察者/增量轮询。** 让协调器集成层把 Rust 封禁管理器的封禁集合与上次已分发集合做 diff 并推送增量。
-
-方案 2 改动最小,且让 `_dispatch_remote_ban` / `set_remote_ban_hook` 仍有意义;方案 1 长期最干净但要动 Rust crate。
 
 **决定 (2026-06-01):** 选 **方案 1** —— 见 [ADR-043 D8](../ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.zh.md)。Rust 池在自动 drain / 切换代理时还会**内部**记录封禁(`pool.rs:485`、`:692`),这些从不经任何 Python 入口,只有 Rust→Python 回调能保证每次封禁都派发。由 [IMP-ADR043-02](../ADR-043-CF-Auto-Ban/IMP-ADR043-02-bfr009-ban-dispatch-and-hardban-ttl.md) 实现,该 IMP 还会把封禁*原因*穿过派发,使 JavDB 硬封禁用 8 天 DO TTL、CF 原因封禁用 6 小时。
 
@@ -49,5 +47,9 @@
 ## Follow-Up
 
 - [x] 决定分发方案 —— **方案 1**(Rust→Python 回调),依据 [ADR-043](../ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.zh.md);实现由 [IMP-ADR043-02](../ADR-043-CF-Auto-Ban/IMP-ADR043-02-bfr009-ban-dispatch-and-hardban-ttl.md) 跟踪。
-- [ ] 加一个测试:经**生产**入口(`get_ban_manager().add_ban` / `create_proxy_pool_from_config(...).ban_proxy`)记录的封禁,对每个新封禁代理恰好触发一次已注册的远程 hook。
-- [ ] 分发路径落地后,重新评估 `_dispatch_remote_ban` / `set_remote_ban_hook` / `set_remote_unban_hook` 这组接口(ADR-041 保留了这些符号,但其唯一调用方是已移除的 Python 池/管理器)。
+- [x] 加一个测试:经**生产**入口(`get_ban_manager().add_ban` / `create_proxy_pool_from_config(...).ban_proxy`)记录的封禁,对每个新封禁代理恰好触发一次已注册的远程 hook。
+- [x] 分发路径落地后,重新评估 `_dispatch_remote_ban` / `set_remote_ban_hook` / `set_remote_unban_hook` 这组接口——生产路径现在经由 Rust 回调派发,而本地镜像/解封辅助函数保留该模块级接口仍是有意为之。
+
+## 状态日志
+
+- 2026-06-01: 通过 IMP-ADR043-02 修复(方案 1)。

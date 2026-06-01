@@ -27,23 +27,30 @@ logger = logging.getLogger(__name__)
 
 # P1-A — cross-runner ban dispatcher.  ``state.setup_proxy_coordinator``
 # registers a hook here that fires
-# ``ProxyCoordinatorClient.mark_proxy_banned(name)`` when the local ban
-# manager records a new ban; this propagates the ban into the Worker
+# ``ProxyCoordinatorClient.mark_proxy_banned(name, reason)`` when the local
+# ban manager records a new ban; this propagates the ban into the Worker
 # Durable Object so peer runners pick it up via their next ``/lease``.
 #
 # The hook is intentionally module-level (not threaded through ProxyBanManager
 # constructors) because:
-#   1. The Rust ban manager bypasses the Python ``add_ban`` entry point, so
-#      a constructor-injected hook would miss Rust-mediated bans;
+#   1. The Rust ban manager installs a callback onto this module-level
+#      dispatcher, keeping the coordinator client out of the extension;
 #   2. Tests can simply ``set_remote_ban_hook(None)`` to short-circuit;
 #   3. Fail-open is preserved: when the coordinator is not configured the
 #      hook stays ``None`` and behaviour matches the pre-coordinator world.
-_remote_ban_hook: Optional[Callable[[str], None]] = None
+_remote_ban_hook: Optional[Callable[[str, Optional[str]], None]] = None
 _remote_unban_hook: Optional[Callable[[str], None]] = None
+# Internal sentinel used by runtime code when mirroring a coordinator ban
+# locally.  The ban must stay local-only to avoid re-broadcasting the same
+# remote ban back into the Worker.
+REMOTE_BAN_MIRROR_REASON = "remote_mirror"
 
 
-def set_remote_ban_hook(hook: Optional[Callable[[str], None]]) -> None:
-    """Register the cross-runner ban dispatcher.  Pass ``None`` to clear."""
+def set_remote_ban_hook(hook: Optional[Callable[[str, Optional[str]], None]]) -> None:
+    """Register the cross-runner ban dispatcher.
+
+    The hook receives ``(proxy_name, reason)``. Pass ``None`` to clear.
+    """
     global _remote_ban_hook
     _remote_ban_hook = hook
 
@@ -54,7 +61,7 @@ def set_remote_unban_hook(hook: Optional[Callable[[str], None]]) -> None:
     _remote_unban_hook = hook
 
 
-def _dispatch_remote_ban(proxy_name: str) -> None:
+def _dispatch_remote_ban(proxy_name: str, reason: Optional[str] = None) -> None:
     """Best-effort fire of the registered remote-ban hook.
 
     Never raises; failures are logged at WARNING and otherwise ignored so
@@ -63,15 +70,34 @@ def _dispatch_remote_ban(proxy_name: str) -> None:
     is naturally idempotent: the Worker takes the max TTL of concurrent bans).
     """
     hook = _remote_ban_hook
-    if hook is None or not proxy_name:
+    if hook is None or not proxy_name or reason == REMOTE_BAN_MIRROR_REASON:
         return
     try:
-        hook(proxy_name)
+        hook(proxy_name, reason)
     except Exception:  # noqa: BLE001 — must NEVER escape the ban path
         logger.warning(
             "Remote ban hook for '%s' failed; ban remains local-only",
             proxy_name, exc_info=True,
         )
+
+
+def install_rust_ban_dispatch() -> None:
+    """Wire Rust ban-manager callbacks into ``_dispatch_remote_ban``.
+
+    Idempotent; safe to call after registering the coordinator hook. No-op when
+    the Rust core is unavailable.
+    """
+    if not RUST_BAN_MANAGER_AVAILABLE:
+        return
+    manager = get_ban_manager()
+    setter = getattr(manager, "set_ban_dispatch_callback", None)
+    if setter is None:
+        logger.warning(
+            "Rust ban manager lacks set_ban_dispatch_callback; "
+            "remote ban dispatch remains local-only",
+        )
+        return
+    setter(_dispatch_remote_ban)
 
 
 def _dispatch_remote_unban(proxy_name: str) -> None:
