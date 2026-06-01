@@ -55,9 +55,10 @@ python3 -m apps.cli.qb.quality_evidence --force --categories '["Daily Ingestion"
 ## 查看结果
 
 采集器会打印一行摘要，包含 `scanned`、`evidence_written`、
-`evaluations_written`、`probe_unavailable` 和 `skipped` 计数。持久化结果可在
-`javdb-reports` 的 `TorrentQualityEvidence` 与 `TorrentQualityEvaluation`
-表中查看。
+`evaluations_written`、`probe_unavailable` 和 `skipped` 计数。写入后的行位于
+当前 reports 数据库的 `TorrentQualityEvidence` 与 `TorrentQualityEvaluation`
+表：GitHub Actions / D1 模式下是规范的 `javdb-reports`，本地运行则使用
+`STORAGE_BACKEND` 选择的数据库。
 
 FastAPI 只读表面会暴露同一批持久化行：
 
