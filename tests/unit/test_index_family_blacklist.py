@@ -6,18 +6,19 @@ from unittest.mock import Mock
 
 from javdb.parsing.models import IndexPageResult
 from javdb.pipeline.index_family_blacklist import (
-    normalize_family_blacklist,
     filter_blacklisted_families,
+    load_daily_family_blacklist,
+    normalize_family_blacklist,
 )
 from javdb.spider.fetch import index as index_fetch
 from tests.unit.index_blacklist_helpers import _entry, spy_filter, spy_select
 
 
 class _NoopSleepManager:
-    def sleep(self):
+    def sleep(self) -> None:
         pass
 
-    def apply_volume_multiplier(self, *_args, **_kwargs):
+    def apply_volume_multiplier(self, *_args, **_kwargs) -> None:
         pass
 
 
@@ -32,12 +33,12 @@ def _page_result():
 
 
 def _patch_sequential_dependencies(monkeypatch, *, config_blacklist):
-    from javdb.spider.runtime import config as runtime_config
-
     monkeypatch.setattr(
-        runtime_config,
-        "DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST",
-        config_blacklist,
+        index_fetch,
+        "load_daily_family_blacklist",
+        lambda custom_url: set()
+        if custom_url is not None
+        else normalize_family_blacklist(config_blacklist),
     )
     monkeypatch.setattr(index_fetch, "get_page_url", lambda page_num, custom_url=None: f"page-{page_num}")
     monkeypatch.setattr(
@@ -108,6 +109,19 @@ def test_filter_empty_blacklist_keeps_everything():
     assert counts == {}
 
 
+def test_load_daily_family_blacklist_uses_runtime_config(monkeypatch):
+    from javdb.spider.runtime import config as runtime_config
+
+    monkeypatch.setattr(
+        runtime_config,
+        "DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST",
+        ["western_studio_date"],
+    )
+
+    assert load_daily_family_blacklist(None) == {"western_studio_date"}
+    assert load_daily_family_blacklist("https://javdb.com/actors/EvkJ") == set()
+
+
 def test_daily_sequential_filters_blacklisted_family_once_before_both_phases(monkeypatch, tmp_path):
     _patch_sequential_dependencies(monkeypatch, config_blacklist=["western_studio_date"])
 
@@ -144,6 +158,10 @@ def test_adhoc_sequential_bypasses_family_blacklist(monkeypatch, tmp_path):
         (2, ["Wifey.2026.05.30", "ABC-123"]),
     ]
     assert [entry["href"] for entry in result["all_index_results_phase1"]] == [
+        "/v/Wifey.2026.05.30",
+        "/v/ABC-123",
+    ]
+    assert [entry["href"] for entry in result["all_index_results_phase2"]] == [
         "/v/Wifey.2026.05.30",
         "/v/ABC-123",
     ]
