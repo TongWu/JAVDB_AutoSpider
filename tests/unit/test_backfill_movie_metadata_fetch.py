@@ -436,6 +436,70 @@ def test_parallel_backfill_submit_interrupt_drains_remaining(monkeypatch):
     assert upserts['href'] == '/v/drained'
 
 
+def test_parallel_backfill_limit_per_worker_overrides_limit(monkeypatch):
+    """In parallel mode --limit-per-worker is an engine-level cap: --limit is
+    ignored (no pre-truncation, ADR-045 D6), every href is submitted, and
+    per_worker_task_limit is forwarded to FetchEngine.simple."""
+    import javdb.spider.fetch.fetch_engine as fetch_engine_module
+    import javdb.spider.runtime.config as runtime_config
+
+    hrefs = [f'/v/{i}' for i in range(5)]
+    monkeypatch.setattr(bm, '_load_hrefs_without_metadata', lambda only=None: list(hrefs))
+    monkeypatch.setattr(
+        runtime_config,
+        'PROXY_POOL',
+        [{'name': 'proxy-a'}, {'name': 'proxy-b'}],
+    )
+    monkeypatch.setattr(bm.spider_state, 'setup_proxy_pool', lambda **_kw: None)
+    monkeypatch.setattr(bm.spider_state, 'initialize_request_handler', lambda: None)
+    monkeypatch.setattr(bm.movie_sleep_mgr, 'apply_volume_multiplier',
+                        lambda *args, **kwargs: None)
+    monkeypatch.setattr(bm.movie_sleep_mgr, 'base_min', 1.0)
+    monkeypatch.setattr(bm.movie_sleep_mgr, 'base_max', 2.0)
+
+    captured = {'submitted': [], 'simple_kwargs': None}
+
+    class _FakeEngine:
+        def start(self):
+            pass
+
+        def submit(self, url, *, entry_index='', meta=None, priority=0):
+            captured['submitted'].append(url)
+
+        def mark_done(self):
+            pass
+
+        def results(self):
+            return iter([])
+
+        def shutdown(self, *, timeout=10):
+            return []
+
+    def _fake_simple(**kwargs):
+        captured['simple_kwargs'] = kwargs
+        return _FakeEngine()
+
+    monkeypatch.setattr(fetch_engine_module.FetchEngine, 'simple', _fake_simple)
+
+    # Both flags set: per the CLI contract --limit is ignored when
+    # --limit-per-worker > 0, so the smaller --limit must NOT pre-truncate.
+    args = types.SimpleNamespace(
+        hrefs='',
+        shuffle=False,
+        limit=2,
+        limit_per_worker=3,
+        use_proxy=True,
+        dry_run=True,
+    )
+
+    assert bm.run_backfill_metadata(args) == 0
+
+    # --limit=2 ignored: all 5 hrefs submitted in order (no pre-truncation).
+    assert [u.rsplit('/', 1)[-1] for u in captured['submitted']] == ['0', '1', '2', '3', '4']
+    # The per-worker cap is forwarded to the engine.
+    assert captured['simple_kwargs']['per_worker_task_limit'] == 3
+
+
 def _make_metadata_result(*, href='/v/abc', success=True, detail=None,
                           error='', worker_name='proxy-1'):
     if detail is None:
