@@ -59,9 +59,11 @@ def find_violations(files: list[tuple[str, str]]) -> list[Violation]:
     """Pure core: return ADR-042 D6 violations for the given (path, content) pairs.
 
     Only ``.sql`` files that contain ``CREATE TABLE`` are checked. Such a file
-    must declare at least one valid ``Write-Class:`` (authoritative / additive /
-    diagnostic). ``n/a`` is rejected on purpose: it is an ADR-template-only
-    value, never valid for a concrete migration that creates a table.
+    must declare exactly one valid ``Write-Class:`` (authoritative / additive /
+    diagnostic): missing, invalid, and two *different* classes in one file are
+    all violations (one migration file = one write class). ``n/a`` is rejected
+    on purpose -- it is an ADR-template-only value, never valid for a concrete
+    migration that creates a table.
     """
     violations: list[Violation] = []
     for path, content in files:
@@ -86,6 +88,17 @@ def find_violations(files: list[tuple[str, str]]) -> list[Violation]:
                     path,
                     f"invalid Write-Class value(s) {invalid}; allowed: "
                     f"{', '.join(VALID_CLASSES)} (n/a is ADR-template-only).",
+                )
+            )
+            continue
+        distinct = sorted(set(classes))
+        if len(distinct) > 1:
+            violations.append(
+                Violation(
+                    path,
+                    f"declares multiple write classes {distinct}; one migration "
+                    "file = one write class — split into separate migrations "
+                    "(ADR-042 D6).",
                 )
             )
     return violations
