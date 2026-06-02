@@ -356,12 +356,14 @@ class TestProxyModeDisabled:
         orig_mode = getattr(session_mod, 'PROXY_MODE', None)
         try:
             import javdb.spider.runtime.config as cfg_mod
-            # ``_setup_proxy_pool_legacy`` unconditionally initialises the four
-            # cross-instance coordinators *before* the disabled-mode check, so
-            # without these stubs the test would dial the live coordinator
-            # (real ``config.py`` URL) and leak a ``ProxyCoordinatorClient`` into
-            # the module-global ``movie_sleep_mgr``. This test only cares about
-            # the pool-disabled branch, so neutralise the coordinator wiring.
+            # ``_setup_proxy_pool_legacy`` unconditionally runs the six
+            # cross-instance setup/enforce calls (proxy coordinator, login
+            # state, movie claim, movie-claim D1 enforcement, runner registry,
+            # work distributor) *before* the disabled-mode check, so without
+            # these stubs the test would dial the live coordinator (real
+            # ``config.py`` URL) and leak a ``ProxyCoordinatorClient`` into the
+            # module-global ``movie_sleep_mgr``. This test only cares about the
+            # pool-disabled branch, so neutralise the coordinator wiring.
             with patch.object(cfg_mod, 'PROXY_MODE', 'none'), \
                  patch('javdb.spider.runtime.state.PROXY_MODE', 'none'), \
                  patch('javdb.spider.runtime.state.PROXY_POOL', [{'name': 'X', 'http': 'http://x:1'}]), \

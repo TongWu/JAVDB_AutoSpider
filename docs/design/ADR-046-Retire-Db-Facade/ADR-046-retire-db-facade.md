@@ -77,7 +77,7 @@ Finish ADR-005's direction: **the repository is the deep storage seam, and sessi
 
 ## Domain Language (additions for CONTEXT.md)
 
-- **Session-Bound Repo** — a repository instance that carries its `session_id` from construction (`HistoryRepo(session_id=...)`). Write methods use the bound session; a write with no bound session raises. Replaces the ambient `get_active_session_id()` fallback.
+- **Session-Bound Repo** — a repository instance that carries its `session_id` from construction (`HistoryRepo(session_id=...)`). Writes resolve their session as **explicit arg > constructor-bound session > raise**; the process-global `get_active_session_id()` is never read.
 - **Deep Storage Seam** — the principle that the repository, not the module-level `db_*` function layer, is the single public way to read/write storage; `db_*` becomes a private implementation detail behind it (retired in phases per this ADR).
 
 ## Alternatives Considered
