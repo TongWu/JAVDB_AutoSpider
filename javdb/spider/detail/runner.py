@@ -862,6 +862,7 @@ def process_detail_entries(
         history_file=history_file,
         visited_hrefs=visited_hrefs,
         actor_updates=actor_updates,
+        session_id=_session_id_str or None,
     )
 
     logger.info(
@@ -1157,10 +1158,15 @@ def finalize_detail_phase(
     history_file: str,
     visited_hrefs: set,
     actor_updates: list,
+    session_id: Optional[str],
 ) -> None:
-    """Flush shared per-phase side effects after detail processing completes."""
+    """Flush shared per-phase side effects after detail processing completes.
+
+    ``session_id`` is the explicit run session (ADR-046 D2); it is bound onto
+    the write repo rather than read from a process-global.
+    """
 
     if use_history_for_saving and not dry_run and visited_hrefs:
         if use_sqlite() and actor_updates:
-            HistoryRepo().batch_update_movie_actors(actor_updates)
-        batch_update_last_visited(history_file, visited_hrefs)
+            HistoryRepo(session_id=session_id).batch_update_movie_actors(actor_updates)
+        batch_update_last_visited(history_file, visited_hrefs, session_id=session_id)

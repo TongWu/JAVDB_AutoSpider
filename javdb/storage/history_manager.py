@@ -220,12 +220,18 @@ def validate_history_file(history_file):
     return _csv_validate_history_file(history_file)
 
 
-def batch_update_last_visited(history_file, visited_hrefs):
-    """Update last_visited_datetime for a set of hrefs."""
+def batch_update_last_visited(history_file, visited_hrefs, *, session_id):
+    """Update last_visited_datetime for a set of hrefs.
+
+    ``session_id`` is the explicit run session (ADR-046 D2), bound onto the
+    write repo instead of resolved from a process-global.
+    """
     if use_sqlite():
         _ensure_db()
     if use_sqlite():
-        updated = HistoryRepo().batch_update_last_visited(list(visited_hrefs))
+        updated = HistoryRepo(session_id=session_id).batch_update_last_visited(
+            list(visited_hrefs)
+        )
         if updated:
             logger.debug(f"Updated last_visited_datetime for {updated} movies")
 
@@ -726,6 +732,13 @@ if not use_sqlite():
             mark_torrent_as_downloaded,
         )
         RUST_HISTORY_AVAILABLE = True
+        # ADR-046 D2: the module-level batch_update_last_visited takes a
+        # keyword-only session_id (the SQLite pending path uses it). CSV mode
+        # has no sessions, so wrap the Rust fn to accept and ignore it — keeping
+        # the call signature identical across storage modes.
+        _rust_batch_update_last_visited = batch_update_last_visited
+        def batch_update_last_visited(history_file, visited_hrefs, *, session_id):  # noqa: F811
+            return _rust_batch_update_last_visited(history_file, visited_hrefs)
         logger.debug("Rust history manager loaded - using high-performance Rust implementation")
     except ImportError as e:
         logger.warning(f"Rust history manager not available (ImportError: {e}) - using pure-Python implementation")
