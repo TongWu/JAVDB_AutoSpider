@@ -1,5 +1,7 @@
 # IMP-ADR041-01: Demote Best-Effort Mirrors & Split Out Rust-Required Modules — Implementation Plan
 
+> **Status: ✅ Completed (2026-06-02).** Implemented and merged via PR #131 (2026-05-30); see the [ADR-041](ADR-041-rust-fallback-policy.md) Status Log. All deliverables verified present on `main`. The checkboxes below were reconciled retroactively from the merged PR — the Task 0 / Task 6 verification gates passed at merge time (CI + review), not re-run on 2026-06-02.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Related:** [ADR-041](ADR-041-rust-fallback-policy.md) — this is **Phase 1** (the only phase).
@@ -42,11 +44,11 @@
 
 ## Task 0: Baseline & importer enumeration (do before any edit)
 
-- [ ] **Step 0.1 — Green baseline.** Run the targeted suites and record they pass *before* changes:
+- [x] **Step 0.1 — Green baseline.** Run the targeted suites and record they pass *before* changes:
   ```bash
   pytest tests/parity/test_parser_parity.py tests/unit/test_magnet_parity.py tests/unit/test_proxy_pool.py -q
   ```
-- [ ] **Step 0.2 — Enumerate every importer of the symbols being removed/guarded.** These must all still resolve after the change:
+- [x] **Step 0.2 — Enumerate every importer of the symbols being removed/guarded.** These must all still resolve after the change:
   ```bash
   grep -rn "create_proxy_pool_from_config\|from javdb.proxy.pool import\|from javdb.proxy.ban_manager import\|get_ban_manager\|ProxyPool\b\|ProxyBanManager\b\|ProxyInfo\b\|is_proxy_usable" javdb apps tests --include="*.py"
   ```
@@ -60,9 +62,9 @@
 
 **Files:** `javdb/parsing/magnet_categorize.py`, `javdb/parsing/__init__.py`, `javdb/spider/url_helper.py`, `javdb/infra/masking.py`
 
-- [ ] **Step 1.1 — magnet: `debug` → `warning`.** In `magnet_categorize.py` change the fallback branch from `logger.debug("⚠️  Rust magnet extractor not available, using Python fallback")` to a `logger.warning` using the D3 wording.
-- [ ] **Step 1.2 — Normalize the message** across all four modules to: `"Rust core unavailable — pure-Python <area> fallback is best-effort and may diverge from production"` (`<area>` ∈ `parsers`, `magnet`, `url_helper`, `masking`).
-- [ ] **Step 1.3 — Add a `WARNING`** to `url_helper.py` and `masking.py` fallback branches if they currently log nothing.
+- [x] **Step 1.1 — magnet: `debug` → `warning`.** In `magnet_categorize.py` change the fallback branch from `logger.debug("⚠️  Rust magnet extractor not available, using Python fallback")` to a `logger.warning` using the D3 wording.
+- [x] **Step 1.2 — Normalize the message** across all four modules to: `"Rust core unavailable — pure-Python <area> fallback is best-effort and may diverge from production"` (`<area>` ∈ `parsers`, `magnet`, `url_helper`, `masking`).
+- [x] **Step 1.3 — Add a `WARNING`** to `url_helper.py` and `masking.py` fallback branches if they currently log nothing.
 
   **Verification gate:** force each fallback (import the Python module directly / monkeypatch the `RUST_*_AVAILABLE` flag) and assert exactly one `WARNING` is emitted per area (use `caplog`).
 
@@ -72,13 +74,13 @@
 
 **Files:** delete `tests/parity/test_parser_parity.py`, `tests/unit/test_magnet_parity.py`; create `tests/unit/test_fallback_shape.py`
 
-- [ ] **Step 2.1 — Author the shape/smoke test** first (red→green): import the Python fallbacks directly and assert *shape*, not Rust-equality, against a fixture in `tests/fixtures/parser/`:
+- [x] **Step 2.1 — Author the shape/smoke test** first (red→green): import the Python fallbacks directly and assert *shape*, not Rust-equality, against a fixture in `tests/fixtures/parser/`:
   - `javdb.parsing.fallback.index_parser.parse_index_page(html)` → result exposes the index entry shape (href, video_code, title keys/attrs present).
   - `javdb.parsing.fallback.detail_parser.parse_detail_page(html)` → exposes `get_magnets_as_legacy()` (the uniform accessor, ADR-020 D2).
   - `javdb.parsing.magnet_categorize.categorize(magnets)` (Python branch) → dict with keys `subtitle`, `hacked_subtitle`, `hacked_no_subtitle`, `no_subtitle`.
   - Assert the fallback emits the D3 `WARNING` (fold Task 1's gate in here).
-- [ ] **Step 2.2 — Delete** `tests/parity/test_parser_parity.py` and `tests/unit/test_magnet_parity.py`. If `tests/parity/` is now empty except `__init__.py`, delete the directory.
-- [ ] **Step 2.3 — Grep for stragglers** referencing the deleted tests / the parity concept:
+- [x] **Step 2.2 — Delete** `tests/parity/test_parser_parity.py` and `tests/unit/test_magnet_parity.py`. If `tests/parity/` is now empty except `__init__.py`, delete the directory.
+- [x] **Step 2.3 — Grep for stragglers** referencing the deleted tests / the parity concept:
   ```bash
   grep -rn "test_magnet_parity\|test_parser_parity\|tests/parity" . --include="*.py" --include="*.yml" --include="*.toml" --include="*.cfg" --include="*.ini"
   ```
@@ -92,15 +94,15 @@
 
 **Files:** `javdb/proxy/pool.py`, `javdb/proxy/ban_manager.py`
 
-- [ ] **Step 3.1 — Guard `create_proxy_pool_from_config`.** At the top of the factory, if `not RUST_PROXY_AVAILABLE`, raise:
+- [x] **Step 3.1 — Guard `create_proxy_pool_from_config`.** At the top of the factory, if `not RUST_PROXY_AVAILABLE`, raise:
   ```python
   raise RuntimeError(
       "proxy pool requires the Rust core (javdb.rust_core); install the wheel "
       "(`cd javdb/rust_core && maturin develop --release`) or run with --no-proxy"
   )
   ```
-- [ ] **Step 3.2 — Guard `get_ban_manager`** (`ban_manager.py`) with the same pattern (message names the ban manager).
-- [ ] **Step 3.3 — Keep import-time safe.** Do **not** raise at module top level. `import javdb.proxy.pool` must still succeed for `ProxyInfo`, `mask_proxy_url`, and `is_proxy_usable`.
+- [x] **Step 3.2 — Guard `get_ban_manager`** (`ban_manager.py`) with the same pattern (message names the ban manager).
+- [x] **Step 3.3 — Keep import-time safe.** Do **not** raise at module top level. `import javdb.proxy.pool` must still succeed for `ProxyInfo`, `mask_proxy_url`, and `is_proxy_usable`.
 
   **Verification gate:** a test that monkeypatches `RUST_PROXY_AVAILABLE=False` asserts (a) `import javdb.proxy.pool` succeeds, (b) `mask_proxy_url("http://1.2.3.4:8080")` returns a masked string, (c) `create_proxy_pool_from_config(...)` raises `RuntimeError` with the actionable message.
 
@@ -112,16 +114,16 @@
 
 **Files:** `tests/unit/test_proxy_pool.py`, `tests/unit/test_proxy_ban_manager.py`, `javdb/proxy/pool.py`, `javdb/proxy/ban_manager.py`, `apps/cli/ops/profile_hot_paths.py`, import-line sites.
 
-- [ ] **Step 4.1 — Repoint `tests/unit/test_proxy_pool.py` to the Rust pool.** Replace direct `ProxyPool()` constructions with `create_proxy_pool_from_config([...])` (or a small helper building a Rust pool via `add_proxies_from_list`). Keep the `TestProxyInfo` cases unchanged (`ProxyInfo` stays). For each behaviour group (round-robin, cooldown, health-weighting, banned-skip, `ban_proxy`, session-scoped bans) assert the same contract against the Rust pool. Where a test depends on a Python-only entrypoint the Rust pool lacks (e.g. `add_proxy()` singular), adapt to the Rust API or drop it with a one-line `# dropped: Rust pool has no singular add_proxy (ADR-041 D5a)` note. **Run green against Rust before deleting anything.**
-- [ ] **Step 4.2 — Repoint `tests/unit/test_proxy_ban_manager.py`** the same way: construct via `get_ban_manager()` (returns the Rust ban manager) instead of `ProxyBanManager()`; assert add/clear/is-banned/singleton behaviour against Rust. Adapt/drop direct-API-only cases.
+- [x] **Step 4.1 — Repoint `tests/unit/test_proxy_pool.py` to the Rust pool.** Replace direct `ProxyPool()` constructions with `create_proxy_pool_from_config([...])` (or a small helper building a Rust pool via `add_proxies_from_list`). Keep the `TestProxyInfo` cases unchanged (`ProxyInfo` stays). For each behaviour group (round-robin, cooldown, health-weighting, banned-skip, `ban_proxy`, session-scoped bans) assert the same contract against the Rust pool. Where a test depends on a Python-only entrypoint the Rust pool lacks (e.g. `add_proxy()` singular), adapt to the Rust API or drop it with a one-line `# dropped: Rust pool has no singular add_proxy (ADR-041 D5a)` note. **Run green against Rust before deleting anything.**
+- [x] **Step 4.2 — Repoint `tests/unit/test_proxy_ban_manager.py`** the same way: construct via `get_ban_manager()` (returns the Rust ban manager) instead of `ProxyBanManager()`; assert add/clear/is-banned/singleton behaviour against Rust. Adapt/drop direct-API-only cases.
 
   **Gate 4.A:** `pytest tests/unit/test_proxy_pool.py tests/unit/test_proxy_ban_manager.py -q` green **with the Python classes still present** (proves the tests now bind to the Rust pool, not the Python one).
 
-- [ ] **Step 4.3 — Remove the Python `ProxyPool` class body** (`pool.py:152` onward — stateful selection/cooldown/ban). **Keep**: `ProxyInfo` dataclass, `mask_proxy_url`, module constants, `create_proxy_pool_from_config` (Rust-only + Task 3 guard). Collapse the `RUST_PROXY_AVAILABLE` branches (`pool.py:53,65,676`) into the Rust path.
-- [ ] **Step 4.4 — Remove the Python `ProxyBanManager` class body** (`ban_manager.py:120`). **Keep**: `_dispatch_remote_ban`, `_dispatch_remote_unban`, `get_ban_manager` (Rust-only + guard).
-- [ ] **Step 4.5 — Fix the `ProxyPool`-symbol importers** (Task 0.2 set): drop `ProxyPool` from the `from javdb.proxy.pool import ...` lines in `legacy/_spider_legacy.py`, `spider/runtime/state.py`, `integrations/pikpak/bridge/service.py`, `integrations/qb/uploader/service.py`; rewrite the `global_proxy_pool: Optional[ProxyPool]` annotations (`legacy:335`, `state.py:124`) to `Optional[Any]` (import `Any` if needed).
-- [ ] **Step 4.6 — `profile_hot_paths.py`:** delete `_build_pool`, `bench_get_next_proxy_rr`, `bench_get_next_proxy_weighted` and any registry entry referencing them; keep `bench_is_proxy_usable`.
-- [ ] **Step 4.7 — Remove orphans YOUR change created** (unused imports, `RUST_IMPORT_ERROR` plumbing if no longer read, dead helpers only the Python pool used). Do not remove pre-existing unrelated code.
+- [x] **Step 4.3 — Remove the Python `ProxyPool` class body** (`pool.py:152` onward — stateful selection/cooldown/ban). **Keep**: `ProxyInfo` dataclass, `mask_proxy_url`, module constants, `create_proxy_pool_from_config` (Rust-only + Task 3 guard). Collapse the `RUST_PROXY_AVAILABLE` branches (`pool.py:53,65,676`) into the Rust path.
+- [x] **Step 4.4 — Remove the Python `ProxyBanManager` class body** (`ban_manager.py:120`). **Keep**: `_dispatch_remote_ban`, `_dispatch_remote_unban`, `get_ban_manager` (Rust-only + guard).
+- [x] **Step 4.5 — Fix the `ProxyPool`-symbol importers** (Task 0.2 set): drop `ProxyPool` from the `from javdb.proxy.pool import ...` lines in `legacy/_spider_legacy.py`, `spider/runtime/state.py`, `integrations/pikpak/bridge/service.py`, `integrations/qb/uploader/service.py`; rewrite the `global_proxy_pool: Optional[ProxyPool]` annotations (`legacy:335`, `state.py:124`) to `Optional[Any]` (import `Any` if needed).
+- [x] **Step 4.6 — `profile_hot_paths.py`:** delete `_build_pool`, `bench_get_next_proxy_rr`, `bench_get_next_proxy_weighted` and any registry entry referencing them; keep `bench_is_proxy_usable`.
+- [x] **Step 4.7 — Remove orphans YOUR change created** (unused imports, `RUST_IMPORT_ERROR` plumbing if no longer read, dead helpers only the Python pool used). Do not remove pre-existing unrelated code.
 
   **Verification gate:**
   ```bash
@@ -138,9 +140,9 @@
 
 **Files:** `CONTEXT.md`, ADR-020 `.md` + `.zh.md`, handbook (if applicable)
 
-- [ ] **Step 5.1 — CONTEXT.md:** add **Best-Effort Fallback** and **Rust-Required Module** to the "架构模式 / Architectural Patterns" section and the 术语对照表, verbatim from ADR-041's Domain Language section.
-- [ ] **Step 5.2 — ADR-020 back-reference (both languages, same commit):** append a Status Log line to `ADR-020-parser-interface-consolidation.md` **and** `.zh.md`: *"2026-05-30: Fallback-policy dimension amended by [ADR-041](../ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md) — value-parity (D6) is a migration-time guard; steady-state fallback is shape-contracted (Best-Effort tier), proxy pool/ban become Rust-Required."*
-- [ ] **Step 5.3 — Handbook (only if a relevant page exists):** in the developer setup/CLI docs, note pure-Python is dev-only **best-effort** for parsers/magnet/url/masking, and the proxy pool **requires** the Rust wheel. Update `docs/handbook/en/` and the paired `docs/handbook/zh/` in the same commit.
+- [x] **Step 5.1 — CONTEXT.md:** add **Best-Effort Fallback** and **Rust-Required Module** to the "架构模式 / Architectural Patterns" section and the 术语对照表, verbatim from ADR-041's Domain Language section.
+- [x] **Step 5.2 — ADR-020 back-reference (both languages, same commit):** append a Status Log line to `ADR-020-parser-interface-consolidation.md` **and** `.zh.md`: *"2026-05-30: Fallback-policy dimension amended by [ADR-041](../ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md) — value-parity (D6) is a migration-time guard; steady-state fallback is shape-contracted (Best-Effort tier), proxy pool/ban become Rust-Required."*
+- [x] **Step 5.3 — Handbook (only if a relevant page exists):** in the developer setup/CLI docs, note pure-Python is dev-only **best-effort** for parsers/magnet/url/masking, and the proxy pool **requires** the Rust wheel. Update `docs/handbook/en/` and the paired `docs/handbook/zh/` in the same commit.
 
   **Verification gate:** `grep -n "Best-Effort Fallback\|Rust-Required Module" CONTEXT.md` non-empty; both ADR-020 files carry the back-reference; no English/Chinese pairing drift.
 
@@ -148,12 +150,12 @@
 
 ## Task 6: Final verification gates
 
-- [ ] **Step 6.1 — Full unit suite:** `pytest tests/unit tests/smoke -q` green.
-- [ ] **Step 6.2 — Importer integrity:** re-run the Task 0.2 grep; every importer still resolves (`python -c "import ..."` for each module touched).
-- [ ] **Step 6.3 — `--no-proxy` local-dev path works without constructing a pool:** smoke-run `python3 -m apps.cli.spider --no-proxy --dry-run --start-page 1 --end-page 1` (or the nearest offline smoke) and confirm no `RuntimeError` from the proxy guard.
-- [ ] **Step 6.4 — Guard fires on the no-Rust proxy path:** the monkeypatched test from Task 3 is green.
-- [ ] **Step 6.5 — Net deletion sanity:** `git diff --stat` shows the proxy Python bodies + 473 parity lines removed, offset by the small shape test + guards.
-- [ ] **Step 6.6 — Lint:** `ruff check javdb tests` clean on touched files.
+- [x] **Step 6.1 — Full unit suite:** `pytest tests/unit tests/smoke -q` green.
+- [x] **Step 6.2 — Importer integrity:** re-run the Task 0.2 grep; every importer still resolves (`python -c "import ..."` for each module touched).
+- [x] **Step 6.3 — `--no-proxy` local-dev path works without constructing a pool:** smoke-run `python3 -m apps.cli.spider --no-proxy --dry-run --start-page 1 --end-page 1` (or the nearest offline smoke) and confirm no `RuntimeError` from the proxy guard.
+- [x] **Step 6.4 — Guard fires on the no-Rust proxy path:** the monkeypatched test from Task 3 is green.
+- [x] **Step 6.5 — Net deletion sanity:** `git diff --stat` shows the proxy Python bodies + 473 parity lines removed, offset by the small shape test + guards.
+- [x] **Step 6.6 — Lint:** `ruff check javdb tests` clean on touched files.
 
 ---
 
