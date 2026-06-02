@@ -2,7 +2,7 @@
 
 | 字段        | 值                                                                    |
 | ----------- | --------------------------------------------------------------------- |
-| **状态**    | Proposed                                                              |
+| **状态**    | Accepted —— Phase 1 已实现并验证 2026-06-02；Phase 2-3 待执行 |
 | **日期**    | 2026-05-27                                                            |
 | **作者**    | Ted                                                                   |
 | **关联**    | [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.zh.md) |
@@ -190,3 +190,8 @@ Phase 1 的 scoring 刻意保持可解释：
 - 2026-05-31：Phase 1 拆分为 IMP-ADR024-01..07；Phase 2/3 以 IMP-ADR024-08/09
   轮廓呈现。Phase 1 范围收窄为仅生产下载证据 —— 远端 `quality_probe` 端点、仅元数据
   能力金丝雀、以及有边界的 Top-K 候补采集推迟到后续 IMP（见 Phase 1 范围说明）。
+- 2026-06-02：Phase 1（IMP-ADR024-01..07）已实现并验证。七个 IMP 全部标记
+  Completed；66 个质量单元测试 + 76 个回归邻居测试通过,D1 一致性守卫通过,两张表
+  已在远端 `javdb-reports` 上线（0 行 —— 纯 shadow,`TORRENT_QUALITY_EVIDENCE_ENABLED`
+  默认 False,生产中尚未运行）。状态由 Proposed 推进为 Accepted。Phase 2/3
+  (assist / enforce)仍为大纲；在其落地前不归档该文件夹。
