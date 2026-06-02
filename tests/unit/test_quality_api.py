@@ -213,6 +213,11 @@ def test_openapi_documents_quality_error_contracts():
 
     app.openapi_schema = None
     schema = app.openapi()
+    assert schema["components"]["securitySchemes"]["BearerAuth"] == {
+        "bearerFormat": "JWT",
+        "scheme": "bearer",
+        "type": "http",
+    }
 
     evaluations = schema["paths"]["/api/quality/evaluations"]["get"]
     limit_param = next(
@@ -221,12 +226,18 @@ def test_openapi_documents_quality_error_contracts():
     assert limit_param["schema"]["default"] == 50
     assert limit_param["schema"]["minimum"] == 1
     assert "truncated to 200" in limit_param["description"]
+    assert evaluations["security"] == [{"BearerAuth": []}]
+    assert evaluations["responses"]["401"]["description"] == "Unauthorized"
+    assert evaluations["responses"]["403"]["description"] == "Forbidden"
     assert evaluations["responses"]["400"]["description"] == "Bad Request"
     assert evaluations["responses"]["400"]["content"]["application/json"]["schema"][
         "properties"
     ]["detail"]["type"] == "string"
 
     evidence = schema["paths"]["/api/quality/evidence/{info_hash}"]["get"]
+    assert evidence["security"] == [{"BearerAuth": []}]
+    assert evidence["responses"]["401"]["description"] == "Unauthorized"
+    assert evidence["responses"]["403"]["description"] == "Forbidden"
     assert evidence["responses"]["404"]["description"] == "Not Found"
     assert evidence["responses"]["404"]["content"]["application/json"]["schema"][
         "properties"

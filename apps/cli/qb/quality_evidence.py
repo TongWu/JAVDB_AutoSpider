@@ -56,9 +56,9 @@ def _parse_categories(raw_categories: str | None) -> list[str] | None:
     for category in categories:
         if not isinstance(category, str):
             raise argparse.ArgumentTypeError("--categories entries must be strings")
-        category = category.strip()
-        if category:
-            parsed.append(category)
+        stripped = category.strip()
+        if stripped:
+            parsed.append(stripped)
     return parsed
 
 
