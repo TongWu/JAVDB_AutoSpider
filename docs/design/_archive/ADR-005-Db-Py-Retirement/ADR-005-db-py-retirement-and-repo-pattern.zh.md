@@ -65,6 +65,8 @@ PR-1（Repo 类）✅ 已交付：`HistoryRepo`、`OperationsRepo`、`StatsRepo`
 
 - **2026-05-29 amendment 8**：**amendment-2 的"全局已消除"声明不完整；补完工作记于 [ADR-032](../../ADR-032-Mandatory-Session-Binding/ADR-032-mandatory-session-binding.md)。** amendment-2 断言 D5 目标（消除 `db_session._active` 全局）已由 per-method `session_id` 满足。实际上 `_SESSION_ID_SENTINEL` 全局回退仍存活于 `_db_operations.py`（~10 个函数）与两个 `_db_history_write.py` batch 函数，故部分写入仍无声回退到全局。ADR-032 补完该目标（使 `session_id` 必填）并整合 `db_*` / Repo 双接口。per-method 绑定保留；构造时绑定仍被拒。
 
+- 2026-06-02：方向由 [ADR-046](../../ADR-046-Retire-Db-Facade/ADR-046-retire-db-facade.zh.md) 延续——Repo 成为存储深接缝、`db_*` 分阶段退役；Phase 1 让 History 写绑定 session（不再读进程级全局）。
+
 ---
 
 ## D10 Gate 核查结果
