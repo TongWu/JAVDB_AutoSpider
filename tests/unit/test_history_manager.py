@@ -762,7 +762,7 @@ class TestBatchUpdateLastVisited:
         before = db_load_history()['/v/ABC-123']['DateTimeVisited']
 
         with _active_session() as sid:
-            batch_update_last_visited(history_file, {'/v/ABC-123'})
+            batch_update_last_visited(history_file, {'/v/ABC-123'}, session_id=sid)
         db_commit_session_history(sid)
 
         history = db_load_history()
@@ -776,7 +776,8 @@ class TestBatchUpdateLastVisited:
             f.write('href,phase,video_code,create_datetime,update_datetime,last_visited_datetime,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle\n')
             f.write('/v/ABC-123,1,ABC-123,2024-01-01 10:00:00,2024-01-01 10:00:00,2024-01-01 10:00:00,,,,\n')
 
-        batch_update_last_visited(history_file, set())
+        with _active_session() as sid:
+            batch_update_last_visited(history_file, set(), session_id=sid)
 
         with open(history_file, 'r', encoding='utf-8-sig') as f:
             reader = csv.DictReader(f)
@@ -789,7 +790,7 @@ class TestBatchUpdateLastVisited:
         ignores it). Runs inside a session per the ADR-032 pending contract."""
         history_file = os.path.join(temp_dir, 'nonexistent.csv')
         with _active_session() as sid:
-            batch_update_last_visited(history_file, {'/v/ABC-123'})
+            batch_update_last_visited(history_file, {'/v/ABC-123'}, session_id=sid)
         db_commit_session_history(sid)
 
     def test_unknown_hrefs_ignored(self, temp_dir):
@@ -807,7 +808,7 @@ class TestBatchUpdateLastVisited:
         before = db_load_history()['/v/ABC-123']['DateTimeVisited']
 
         with _active_session() as sid:
-            batch_update_last_visited(history_file, {'/v/UNKNOWN'})
+            batch_update_last_visited(history_file, {'/v/UNKNOWN'}, session_id=sid)
         db_commit_session_history(sid)
 
         history = db_load_history()
@@ -833,7 +834,7 @@ class TestStorageModeDb:
     def test_batch_update_sqlite_only(self, temp_dir, storage_mode_db):
         with _active_session() as sid:
             save_parsed_movie_to_history('', '/v/SM-002', 1, 'SM-002')
-            batch_update_last_visited('', {'/v/SM-002'})
+            batch_update_last_visited('', {'/v/SM-002'}, session_id=sid)
         db_commit_session_history(sid)
         history = load_parsed_movies_history('')
         assert history['/v/SM-002']['DateTimeVisited'] != ''

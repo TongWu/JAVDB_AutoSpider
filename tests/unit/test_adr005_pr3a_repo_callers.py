@@ -71,7 +71,7 @@ def test_history_manager_sqlite_paths_use_history_repo(monkeypatch):
         actor_link="/actors/a",
         supporting_actors="[]",
     )
-    hm.batch_update_last_visited("history.csv", {"/v/A", "/v/B"})
+    hm.batch_update_last_visited("history.csv", {"/v/A", "/v/B"}, session_id="sess-x")
     assert hm.check_torrent_in_history("history.csv", "/v/A", "subtitle") is True
 
     repo.load_history.assert_called_once_with(phase=1)
@@ -142,10 +142,11 @@ def test_detail_runner_finalize_uses_history_repo_for_actor_updates(monkeypatch)
         history_file="history.csv",
         visited_hrefs={"/v/A"},
         actor_updates=actor_updates,
+        session_id="sess-x",
     )
 
     repo.batch_update_movie_actors.assert_called_once_with(actor_updates)
-    batch_last_visited.assert_called_once_with("history.csv", {"/v/A"})
+    batch_last_visited.assert_called_once_with("history.csv", {"/v/A"}, session_id="sess-x")
 
 
 def _patch_legacy_actor_update_dependencies(monkeypatch, legacy, repo_cls):
