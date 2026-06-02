@@ -1,0 +1,100 @@
+# ADR-046: Retire the `db_*` Facade — Repos as the Deep Storage Seam (session-bound writes)
+
+| Field       | Value                                                                 |
+| ----------- | --------------------------------------------------------------------- |
+| **Status**  | Proposed — Phase 1 execution in IMP-ADR046-01                          |
+| **Date**    | 2026-06-02                                                            |
+| **Authors** | Ted                                                                   |
+| **Related** | [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md) (predecessor — killed the `db.py` monolith, introduced the Repo pattern, but left `db_*` public), [ADR-019](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md) (deepened the session *commit lifecycle* via a transition validator), [ADR-014](../_archive/ADR-014-Storage-Cli-Layering/ADR-014-storage-cli-layering.md) (storage/CLI layering) |
+
+> Originated from the 2026-05-29 architecture review (Candidate C — "make the Repo deep; retire the `db_*` function facade"): [architecture-review-2026-05-29.html](../architecture/architecture-review-2026-05-29.html). A 2026-06-02 follow-up verified the candidate is still live and scoped it into the phased plan below.
+
+## Context
+
+[ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md) deleted the 4,497-line `db.py` god-module by **redistributing** its code into `_`-prefixed shell modules (`javdb/storage/db/_db_history_write.py`, `_db_reports.py`, `_db_rollback.py`, `_db_operations.py`, …) and introduced the repository classes (`HistoryRepo`, `OperationsRepo`, …) as the typed interface. It did **not**, however, make the relocated module-level functions private. The result, today:
+
+- **~60 public `db_*` functions** live in the (convention-private) `_db_*.py` modules and are re-exported from `javdb/storage/db/__init__.py` and/or imported directly.
+- **The repos are shallow pass-throughs.** `HistoryRepo`/`OperationsRepo`/`StatsRepo`/`SessionLifecycleRepo` mostly forward method-for-method to the `db_*` functions; there are **two public ways to do every write** (the repo method and the `db_*` function), and **~42 production call sites + ~40 test files** bind directly to the `db_*` layer rather than to the repo.
+- **`session_id` resolves from process-global state.** `javdb/storage/db/_db_session.py` holds a module-global `_active_session_id_value` plus a `_SESSION_ID_SENTINEL` / `_resolve_session_id()` fallback. The spider sets it once per run (`javdb/spider/app/run_service.py:592`) and clears it at the end. Writes that omit `session_id` silently read this global.
+
+The session-global is the part that actively causes bugs. `HistoryRepo`'s `batch_update_last_visited` and `batch_update_movie_actors` call `get_active_session_id()` deep in the spider call-tree (`javdb/storage/history_manager.py:228`, `javdb/spider/detail/runner.py:1165`). If the global is unset, stale, or wrong for the current unit of work, the write silently lands in the wrong session — exactly the failure mode behind the session/rollback bug cluster (e.g. orphaned pending rows, mis-attributed history). This is *ambient* state crossing a seam that should be explicit.
+
+[ADR-019](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md) already deepened one half of this: the session **commit lifecycle** now routes through a `transition()` validator that makes illegal status transitions unrepresentable. The remaining leak is **session *identity***, which is still ambient.
+
+Note: the commit/rollback orchestration (`javdb/storage/sessions/commit.py`, `javdb/storage/rollback/core.py`) calls `db_commit_session_history` / `db_rollback_session` directly but **already passes an explicit `session_id`** — so it is not part of the ambient-state problem, only of the broader "two ways in" duplication.
+
+## Decision
+
+Finish ADR-005's direction: **the repository is the deep storage seam, and session identity is explicit, not ambient.** Execute it in phases, smallest-blast-radius and highest-bug-value first.
+
+### Design Decisions
+
+**D1. The repo is the single deep interface; `db_*` is an implementation detail (retired in phases).** The end-state is: callers go through repo instances, and the `db_*` functions become genuinely private (`_`-prefixed) helpers behind the repos, no longer re-exported from `__init__.py`. This is a multi-phase migration (see Roadmap), not a single PR.
+
+**D2. `session_id` is explicit, never ambient.** A write-capable repo can carry its session: `HistoryRepo(*, db_path=None, session_id=None)`. **Write resolution order is: explicit `session_id` argument → constructor-bound `self._session_id` → raise `RuntimeError`** (actionable message, e.g. *"HistoryRepo write requires a session_id (pass it, or bind via HistoryRepo(session_id=...))"*). **The process-global `get_active_session_id()` is never consulted.** Methods that already take an explicit `session_id` (`commit_session`, `resume_finalizing_session`, `stage_*`, `pending_session_stats`) keep it — a single repo can still service a *sweep* over many sessions (e.g. `apps/cli/db/cleanup_stale_in_progress.py`). The concrete Phase 1 fix is therefore scoped to the only two write methods that today read the global with no explicit argument — `batch_update_last_visited` and `batch_update_movie_actors` — which now resolve from the constructor-bound session and raise if it is absent.
+
+**D3. Reads stay session-agnostic; one class, runtime write-guard.** Per the chosen seam (single class + constructor binding + write guard), read methods (`load_history`, `search_movies`, `export_*`, `check_torrent_in_history`, …) work on a plain `HistoryRepo()` with no session. Only the write methods assert a bound session. This keeps the migration small and makes the pattern a copyable template for the other repos, while still removing the ambient-state footgun. (A separate `HistoryWriter` type and factory classmethods were considered — see Alternatives.)
+
+**D4. The global session-state machinery is removed only after all writers are migrated.** `OperationsRepo` and `_db_operations.py` also lean on `get_active_session_id()`. Phase 1 removes *History*'s dependence on the global; the global (`_active_session_id_value`, `_SESSION_ID_SENTINEL`, `_resolve_session_id`, `set/get_active_session_id`) is deleted only once Operations and Stats are session-bound too (later phase). Until then it remains for the unmigrated writers and is marked deprecated.
+
+**D5. Relationship to ADR-005 / ADR-019 — finish, don't reopen.** ADR-005 (archived) killed the monolith and introduced the repo; ADR-019 (archived) deepened the *commit lifecycle*. ADR-046 is the **next step neither took**: making the repo (not the function layer) the seam, and session identity explicit. It supersedes neither — it completes the trajectory. A back-reference is added to ADR-005's Status Log.
+
+## Consequences
+
+### Positive
+
+- **Removes the ambient-session footgun** in the History write path — the highest-value bug-reduction in the storage core. A write can no longer silently target the wrong session; the failure becomes a loud, immediate `RuntimeError` at the call site instead of a mis-attributed row discovered later.
+- **One write path, one test surface.** Tests construct a session-bound repo instead of setting a process-global and calling a module function; no global setup/teardown.
+- **Establishes a copyable template** ("session-bound deep repo") for Operations/Stats in later phases.
+- **Inverted deletion test holds** — once a writer is migrated, its `db_*` write functions have no remaining public callers and can be made private without complexity reappearing.
+
+### Negative
+
+- **Migration touches real call sites.** Phase 1 alone rewrites ~6 History write construction sites (move `session_id` from the global / method arg to the constructor) plus their tests. Later phases are larger.
+- **Transitional dual-state.** Between phases, some repos are session-bound and some still read the global; the global lingers until the last writer migrates (D4). This is intentional and bounded by the Roadmap.
+
+### Risks
+
+- **A write caller that relied on the global now raises.** Mitigated: the History write construction sites are enumerated (Phase 1 IMP), and raising loudly at the seam is strictly safer than silently writing to the wrong session. Read callers are unaffected (D3).
+- **A caller bypasses the repo and calls a `db_*` write function directly.** Phase 1 does not yet make `db_*` private, so this stays possible until Phase 4; the IMP greps for direct write-function callers and routes the History ones through the repo.
+
+## Implementation Roadmap
+
+| Phase | IMP | Ships | Deferred |
+| --- | --- | --- | --- |
+| **Phase 1 — History write seam** | IMP-ADR046-01 | `HistoryRepo(*, db_path=None, session_id=None)`; write methods use `self._session_id` + raise without it; remove `get_active_session_id()` fallback from `batch_update_last_visited` / `batch_update_movie_actors`; migrate the ~6 History write sites + the 2 CLI write sites; tests (write-without-session raises; reads still work session-less) | Everything below |
+| Phase 2 — Operations/Stats write seam | IMP-ADR046-02 | Bind `session_id` on `OperationsRepo`/`StatsRepo` writes; **then delete** the global session machinery in `_db_session.py` | — |
+| Phase 3 — route orchestration through repos | IMP-ADR046-03 | `sessions/commit.py` + `rollback/core.py` call the repo, not `db_commit_session_history` / `db_rollback_session` directly | — |
+| Phase 4 — privatize `db_*` | IMP-ADR046-04 | `_`-prefix the `db_*` functions, drop `__init__.py` re-exports, migrate remaining direct callers + tests | — |
+
+### Explicit non-goals (YAGNI)
+
+- **Not a big-bang retirement** — the 60-function / 42-caller / 40-test migration is explicitly phased; no single unreviewable PR.
+- **Phase 1 does not privatize `db_*`** — the functions stay public until their callers are migrated (Phase 4).
+- **Phase 1 does not delete the global session state** — Operations/Stats still use it (D4); deletion is Phase 2.
+- **Not changing the read interface** — reads are already fine; only their `db_*` privatization (Phase 4) is in scope, not their shape.
+- **Not reworking the ADR-019 commit lifecycle** — it stays; ADR-046 only changes how `session_id` reaches it.
+
+## Domain Language (additions for CONTEXT.md)
+
+- **Session-Bound Repo** — a repository instance that carries its `session_id` from construction (`HistoryRepo(session_id=...)`). Write methods use the bound session; a write with no bound session raises. Replaces the ambient `get_active_session_id()` fallback.
+- **Deep Storage Seam** — the principle that the repository, not the module-level `db_*` function layer, is the single public way to read/write storage; `db_*` becomes a private implementation detail behind it (retired in phases per this ADR).
+
+## Alternatives Considered
+
+- **(b) Separate `HistoryWriter(session_id)` write handle** (reads on `HistoryRepo`, writes on a session-typed handle) — rejected *for Phase 1*: it makes "write without a session" unrepresentable at the type level (cleaner), but splits a cohesive class and enlarges the migration. May be revisited if the runtime guard proves insufficient.
+- **(c) Factory classmethods** (`HistoryRepo.for_session(sid)` / `.read_only()`) — rejected for Phase 1: middle ground, but adds surface without the type-level guarantee of (b); the chosen (a) is simpler for a template.
+- **Big-bang full retirement** (all 60 `db_*` private, all ~42 callers + ~40 tests in one PR) — rejected: unreviewable, high blast radius, and most of the tail is low-bug-value mechanical migration.
+- **Keep the status quo** (ambient global session) — rejected: the global is a live source of session/rollback bugs; it is exactly the kind of ambient state a deep seam should make explicit.
+
+## References
+
+- [ADR-005 — db.py Retirement & Repo Pattern](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md)
+- [ADR-019 — Session Lifecycle Authority](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md)
+- [ADR-014 — Storage/CLI Layering](../_archive/ADR-014-Storage-Cli-Layering/ADR-014-storage-cli-layering.md)
+- 2026-05-29 architecture review (Candidate C): [architecture-review-2026-05-29.html](../architecture/architecture-review-2026-05-29.html)
+
+## Status Log
+
+- 2026-06-02: Proposed. Scoped from the 2026-05-29 architecture review (Candidate C) after a 2026-06-02 follow-up verification: 60 public `db_*` functions remain, repos are shallow pass-throughs, and `session_id` resolves from a process-global in `_db_session.py`. Chosen seam: single class + constructor-bound `session_id` + runtime write-guard (D2/D3). Phase 1 (IMP-ADR046-01) covers the History write seam only; the global session machinery is deleted in Phase 2 once Operations/Stats are migrated.
+- 2026-06-02: D2 clarified during IMP-ADR046-01 authoring (design-feedback-loop). Reading the code showed `commit_session` / `resume_finalizing_session` / `stage_*` already take an **explicit** `session_id`, and `cleanup_stale_in_progress` relies on that to sweep many sessions with one repo. So the fix is not "all writes move to the constructor" but a resolution order **explicit arg → bound session → raise**; the concrete Phase 1 change is scoped to the two methods that read the process-global with no explicit argument (`batch_update_last_visited`, `batch_update_movie_actors`). D2 reworded accordingly.
