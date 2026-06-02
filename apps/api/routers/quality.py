@@ -73,6 +73,10 @@ def _list_from_jsonish(value: Any) -> list[str]:
     return []
 
 
+def _normalize_info_hash(value: str) -> str:
+    return str(value or "").strip().lower()
+
+
 def _row_reasons(row: dict[str, Any]) -> list[str]:
     reasons = _list_from_jsonish(row.get("reasons"))
     if reasons:
@@ -132,8 +136,9 @@ def get_evidence(
     info_hash: str,
     _user=Depends(_require_auth),
 ) -> TorrentQualityEvidenceSchema:
+    normalized_hash = _normalize_info_hash(info_hash)
     with _repo() as repo:
-        row = repo.get_evidence(info_hash, PROBE_SCHEMA_VERSION, _PRODUCTION_ROLE)
+        row = repo.get_evidence(normalized_hash, PROBE_SCHEMA_VERSION, _PRODUCTION_ROLE)
 
     if row is None:
         raise HTTPException(status_code=404, detail="Evidence not found")
