@@ -129,19 +129,23 @@ class TestHistoryRepoWrites:
         return_value=2,
     )
     def test_batch_update_last_visited_delegates(self, mock_fn):
-        repo = HistoryRepo(db_path="/tmp/h.db")
+        # ADR-046 D2: writes resolve session as explicit arg > bound
+        # session > raise; the constructor-bound session is forwarded.
+        repo = HistoryRepo(db_path="/tmp/h.db", session_id="sess-x")
         result = repo.batch_update_last_visited(["/a", "/b"])
         assert result == 2
         mock_fn.assert_called_once_with(
-            ["/a", "/b"], db_path="/tmp/h.db", session_id=None)
+            ["/a", "/b"], db_path="/tmp/h.db", session_id="sess-x")
 
     @patch(
         "javdb.storage.db._db_history_write.db_batch_update_movie_actors",
         return_value=1,
     )
     def test_batch_update_movie_actors_delegates(self, mock_fn):
-        repo = HistoryRepo()
+        # ADR-046 D2: the constructor-bound session is forwarded.
+        repo = HistoryRepo(session_id="sess-y")
         updates = [("/m/1", "Actor", "M", "/actors/1", "[]")]
         result = repo.batch_update_movie_actors(updates)
         assert result == 1
-        mock_fn.assert_called_once_with(updates, db_path=None, session_id=None)
+        mock_fn.assert_called_once_with(
+            updates, db_path=None, session_id="sess-y")
