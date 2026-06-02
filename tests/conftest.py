@@ -154,6 +154,45 @@ def _isolate_sqlite(tmp_path):
         os.environ["STORAGE_BACKEND"] = orig_storage_backend
 
 
+@pytest.fixture(autouse=True)
+def _reset_global_sleep_coordinator():
+    """Stop the module-global ``movie_sleep_mgr`` leaking a coordinator.
+
+    The no-runtime proxy-pool setup path
+    (``_setup_proxy_coordinator_legacy``) injects a live
+    ``ProxyCoordinatorClient`` into the module-level ``movie_sleep_mgr``
+    singleton and never restores it. A later test that calls
+    ``ensure_sleep_runtime`` then copies that stale coordinator into its
+    fresh runtime manager (the global is the documented fallback source),
+    breaking order-independent assertions such as
+    ``test_runtime_proxy_coordinator_injects_runtime_sleep`` — it sees the
+    leaked client instead of its own MagicMock.
+
+    Snapshot the coordinator-related fields before each test and restore
+    them afterwards so the global never leaks a coordinator between tests.
+    Lazy-imported so tests that never touch the spider runtime pay only the
+    (cached) import cost.
+    """
+    from javdb.spider.runtime import sleep as _sleep_mod
+
+    mgr = _sleep_mod.movie_sleep_mgr
+    saved = (
+        mgr._coordinator,
+        mgr._proxy_id,
+        mgr._coord_failures,
+        mgr._degraded,
+    )
+    try:
+        yield
+    finally:
+        (
+            mgr._coordinator,
+            mgr._proxy_id,
+            mgr._coord_failures,
+            mgr._degraded,
+        ) = saved
+
+
 @pytest.fixture
 def storage_mode_db(monkeypatch):
     """Force STORAGE_MODE='db' for the test."""
