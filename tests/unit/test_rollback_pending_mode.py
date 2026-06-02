@@ -844,7 +844,9 @@ class TestBatchUpdatesRouteToPending:
 
         sid = self._setup_pending_session()
         try:
-            n = HistoryRepo().batch_update_movie_actors([
+            # ADR-046 D2: bind the active pending session explicitly; the
+            # repo no longer reads the process-global active session.
+            n = HistoryRepo(session_id=sid).batch_update_movie_actors([
                 ("/v/R-ACT-001", "Repo Actor", "female", "/actors/repo", None),
             ])
             assert n == 1

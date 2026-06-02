@@ -356,9 +356,23 @@ class TestProxyModeDisabled:
         orig_mode = getattr(session_mod, 'PROXY_MODE', None)
         try:
             import javdb.spider.runtime.config as cfg_mod
+            # ``_setup_proxy_pool_legacy`` unconditionally runs the six
+            # cross-instance setup/enforce calls (proxy coordinator, login
+            # state, movie claim, movie-claim D1 enforcement, runner registry,
+            # work distributor) *before* the disabled-mode check, so without
+            # these stubs the test would dial the live coordinator (real
+            # ``config.py`` URL) and leak a ``ProxyCoordinatorClient`` into the
+            # module-global ``movie_sleep_mgr``. This test only cares about the
+            # pool-disabled branch, so neutralise the coordinator wiring.
             with patch.object(cfg_mod, 'PROXY_MODE', 'none'), \
                  patch('javdb.spider.runtime.state.PROXY_MODE', 'none'), \
-                 patch('javdb.spider.runtime.state.PROXY_POOL', [{'name': 'X', 'http': 'http://x:1'}]):
+                 patch('javdb.spider.runtime.state.PROXY_POOL', [{'name': 'X', 'http': 'http://x:1'}]), \
+                 patch.object(state_mod, 'setup_proxy_coordinator', lambda: None), \
+                 patch.object(state_mod, 'setup_login_state_client', lambda: None), \
+                 patch.object(state_mod, 'setup_movie_claim_client', lambda: None), \
+                 patch.object(state_mod, 'enforce_movie_claim_for_d1', lambda: None), \
+                 patch.object(state_mod, 'setup_runner_registry_client', lambda: None), \
+                 patch.object(state_mod, 'setup_work_distributor_client', lambda: None):
                 state_mod.setup_proxy_pool(True)
                 assert state_mod.global_proxy_pool is None
         finally:
