@@ -4,7 +4,7 @@
 **日期**: 2026-05-30
 **严重度**: Medium
 **影响范围**: `javdb/proxy/ban_manager.py`(`_dispatch_remote_ban`、`set_remote_ban_hook`)、`javdb/proxy/pool.py`(Python `ProxyPool.ban_proxy` / drain)、`javdb/spider/runtime/state.py:722`、`javdb/spider/runtime/context.py:880`(hook 注册)、`javdb/rust_core/src/proxy/{pool,ban_manager}.rs`
-**关联**: [ADR-043](../_archive/ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.zh.md)(修复本缺口——Approach 1，经 IMP-ADR043-02)、[ADR-041](../ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.zh.md)(在其 Task 4 中暴露——删掉了 dispatcher 的最后几个 Python 调用方)、[ADR-023](../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.zh.md)(代理协调)、CONTEXT.md →「Signal」(`ban_proxy`)
+**关联**: [ADR-043](../_archive/ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.zh.md)(修复本缺口——Approach 1，经 IMP-ADR043-02)、[ADR-041](../_archive/ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.zh.md)(在其 Task 4 中暴露——删掉了 dispatcher 的最后几个 Python 调用方)、[ADR-023](../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.zh.md)(代理协调)、CONTEXT.md →「Signal」(`ban_proxy`)
 
 ---
 
@@ -24,7 +24,7 @@
 
 跨 runner 封禁分发(P1-A)被实现为一个**Python 模块级 hook**,从 Python 池/封禁管理器内部触发。当 Rust 池/封禁管理器成为生产默认后,分发调用点**未**移植进 Rust 扩展,也没有加 Rust→Python 的封禁回调。Rust 扩展没有机制(没有 `set_ban_callback` 之类的 setter)在记录封禁时通知 Python。
 
-这是一个**既有的**潜伏缺口——它早于 [ADR-041](../ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.zh.md)。ADR-041 只是让它**显形**:移除 Python `ProxyPool` / `ProxyBanManager`(改为 Rust-Required)删掉了 `_dispatch_remote_ban` 的最后三个调用方,使 dispatcher 和已注册的 hook 从"只在生产里死"变成"明确地死"。
+这是一个**既有的**潜伏缺口——它早于 [ADR-041](../_archive/ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.zh.md)。ADR-041 只是让它**显形**:移除 Python `ProxyPool` / `ProxyBanManager`(改为 Rust-Required)删掉了 `_dispatch_remote_ban` 的最后三个调用方,使 dispatcher 和已注册的 hook 从"只在生产里死"变成"明确地死"。
 
 `ban_manager.py` 中 `remove_ban` 的 docstring 其实已半承认这种不对称:它指出 Rust manager "从扩展内无法触达 Python 的 `_dispatch_remote_unban` hook",并把 unban 分发交给 `ProxyPool.unban_proxy` —— 但 Rust 池的 `ban_proxy` 有同样的限制,且没有等价的分发。
 
