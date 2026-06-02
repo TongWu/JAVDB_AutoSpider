@@ -179,7 +179,7 @@ zero-success 守卫，该代理确实什么都没过去）。短 DO TTL 管的�
 ## 参考 (References)
 
 - [BFR-009 — Rust Pool Cross-Runner Ban Dispatch](../../BFR-009-Rust-Pool-Cross-Runner-Ban-Dispatch/BFR-009-rust-pool-ban-dispatch.zh.md) —— 本 ADR 关闭的派发缺口（D8）；由 IMP-ADR043-02 修复
-- [ADR-041 — Rust Fallback Policy](../../ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.zh.md) —— 让 BFR-009 显形（Rust-Required）
+- [ADR-041 — Rust Fallback Policy](../ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.zh.md) —— 让 BFR-009 显形（Rust-Required）
 - [ADR-023 — Proxy Recommendation Policy](../../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.zh.md) —— DO 中的代理健康信号（CF/成功/失败事件）
 - 协调器仓：[`TongWu/JAVDB_AutoSpider_Proxycoordinator`](https://github.com/TongWu/JAVDB_AutoSpider_Proxycoordinator) —— `src/proxy_coordinator.ts`、`src/types.ts`
 - `docs/handbook/zh/self-hoster/proxy-coordinator.md` —— 面向运维的 env 参考

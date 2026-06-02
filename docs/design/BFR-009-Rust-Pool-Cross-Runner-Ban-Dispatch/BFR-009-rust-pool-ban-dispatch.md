@@ -4,7 +4,7 @@
 **Date**: 2026-05-30
 **Severity**: Medium
 **Affected**: `javdb/proxy/ban_manager.py` (`_dispatch_remote_ban`, `set_remote_ban_hook`), `javdb/proxy/pool.py` (Python `ProxyPool.ban_proxy` / drain), `javdb/spider/runtime/state.py:722`, `javdb/spider/runtime/context.py:880` (hook registration), `javdb/rust_core/src/proxy/{pool,ban_manager}.rs`
-**Related**: [ADR-043](../_archive/ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.md) (fixes this — Approach 1, via IMP-ADR043-02), [ADR-041](../ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md) (surfaced this during Task 4 — removed the last Python callers of the dispatcher), [ADR-023](../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.md) (proxy coordination), CONTEXT.md → "Signal" (`ban_proxy`)
+**Related**: [ADR-043](../_archive/ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.md) (fixes this — Approach 1, via IMP-ADR043-02), [ADR-041](../_archive/ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md) (surfaced this during Task 4 — removed the last Python callers of the dispatcher), [ADR-023](../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.md) (proxy coordination), CONTEXT.md → "Signal" (`ban_proxy`)
 
 ---
 
@@ -24,7 +24,7 @@ Net effect: every production ban is recorded **locally only**; the `client.mark_
 
 The cross-runner ban dispatch (P1-A) was implemented as a **Python module-level hook** fired from inside the Python pool/ban-manager. When the Rust pool/ban-manager became the production default, the dispatch call sites were **not** ported into the Rust extension, and no Rust→Python ban callback was added. The Rust extension has no mechanism (no `set_ban_callback`-style setter) to notify Python when a ban is recorded.
 
-This is a latent **pre-existing** gap — it predates [ADR-041](../ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md). ADR-041 only made it **visible**: removing the Python `ProxyPool` / `ProxyBanManager` (now Rust-Required) deletes the last three callers of `_dispatch_remote_ban`, so the dispatcher and the registered hook become unambiguously dead rather than dead-only-in-production.
+This is a latent **pre-existing** gap — it predates [ADR-041](../_archive/ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md). ADR-041 only made it **visible**: removing the Python `ProxyPool` / `ProxyBanManager` (now Rust-Required) deletes the last three callers of `_dispatch_remote_ban`, so the dispatcher and the registered hook become unambiguously dead rather than dead-only-in-production.
 
 The `remove_ban` docstring in `ban_manager.py` already half-acknowledges the asymmetry: it notes the Rust manager "can't reach the Python `_dispatch_remote_unban` hook from inside the extension" and defers unban dispatch to `ProxyPool.unban_proxy` — but the Rust pool's `ban_proxy` has the same limitation and no equivalent dispatch.
 
