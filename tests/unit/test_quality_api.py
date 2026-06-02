@@ -185,3 +185,49 @@ def test_adapter_tolerates_legacy_reasons_json_string(monkeypatch):
         "main_video_detected",
         "subtitle_file_present",
     ]
+
+
+def test_adapter_filters_non_string_reason_entries(monkeypatch):
+    repo = _FakeRepo(
+        evaluations=[
+            _evaluation_row(
+                reasons=["main_video_detected", 1, {"code": "bad"}, None],
+            )
+        ],
+        evidence=_evidence_row(
+            reasons=None,
+            reasons_json='["main_video_detected", 2, {"code": "bad"}, null]',
+        ),
+    )
+    monkeypatch.setattr(quality_router, "_repo", lambda: nullcontext(repo))
+
+    evaluations = quality_router.list_evaluations()
+    evidence = quality_router.get_evidence("HASH1")
+
+    assert evaluations.items[0].reasons == ["main_video_detected"]
+    assert evidence.reasons == ["main_video_detected"]
+
+
+def test_openapi_documents_quality_error_contracts():
+    from apps.api.services.runtime import app
+
+    app.openapi_schema = None
+    schema = app.openapi()
+
+    evaluations = schema["paths"]["/api/quality/evaluations"]["get"]
+    limit_param = next(
+        param for param in evaluations["parameters"] if param["name"] == "limit"
+    )
+    assert limit_param["schema"]["default"] == 50
+    assert limit_param["schema"]["minimum"] == 1
+    assert "truncated to 200" in limit_param["description"]
+    assert evaluations["responses"]["400"]["description"] == "Bad Request"
+    assert evaluations["responses"]["400"]["content"]["application/json"]["schema"][
+        "properties"
+    ]["detail"]["type"] == "string"
+
+    evidence = schema["paths"]["/api/quality/evidence/{info_hash}"]["get"]
+    assert evidence["responses"]["404"]["description"] == "Not Found"
+    assert evidence["responses"]["404"]["content"]["application/json"]["schema"][
+        "properties"
+    ]["detail"]["type"] == "string"

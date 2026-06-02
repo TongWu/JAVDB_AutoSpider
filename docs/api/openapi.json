@@ -8071,11 +8071,14 @@
         "operationId": "list_evaluations_api_quality_evaluations_get",
         "parameters": [
           {
+            "description": "Number of recent evaluations to return. Values greater than 200 are truncated to 200 by the server.",
             "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
               "default": 50,
+              "description": "Number of recent evaluations to return. Values greater than 200 are truncated to 200 by the server.",
+              "minimum": 1,
               "title": "Limit",
               "type": "integer"
             }
@@ -8107,6 +8110,24 @@
               }
             },
             "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "detail"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
           },
           "422": {
             "content": {
@@ -8149,6 +8170,24 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "detail"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Not Found"
           },
           "422": {
             "content": {

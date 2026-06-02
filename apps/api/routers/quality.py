@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any, Optional
+from typing import Annotated, Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from apps.api.infra.auth import _require_auth
 from apps.api.schemas.quality import (
@@ -21,6 +21,27 @@ from javdb.storage.repos.torrent_quality_repo import TorrentQualityRepo
 
 router = APIRouter(prefix="/api/quality", tags=["quality"])
 _PRODUCTION_ROLE = "production_download"
+_DETAIL_STRING_RESPONSE_SCHEMA = {
+    "content": {
+        "application/json": {
+            "schema": {
+                "type": "object",
+                "required": ["detail"],
+                "properties": {"detail": {"type": "string"}},
+            }
+        }
+    }
+}
+_LimitQuery = Annotated[
+    int,
+    Query(
+        description=(
+            "Number of recent evaluations to return. Values greater than 200 "
+            "are truncated to 200 by the server."
+        ),
+        json_schema_extra={"minimum": 1},
+    ),
+]
 
 
 @contextmanager
@@ -41,14 +62,14 @@ def _list_from_jsonish(value: Any) -> list[str]:
     if value is None:
         return []
     if isinstance(value, list):
-        return [str(item) for item in value]
+        return [item for item in value if isinstance(item, str)]
     if isinstance(value, str):
         try:
             parsed = json.loads(value)
         except (TypeError, ValueError):
             return []
         if isinstance(parsed, list):
-            return [str(item) for item in parsed]
+            return [item for item in parsed if isinstance(item, str)]
     return []
 
 
@@ -78,9 +99,10 @@ def _evidence_from_row(row: dict[str, Any]) -> TorrentQualityEvidenceSchema:
 @router.get(
     "/evaluations",
     response_model=TorrentQualityEvaluationListResponse,
+    responses={400: {"description": "Bad Request", **_DETAIL_STRING_RESPONSE_SCHEMA}},
 )
 def list_evaluations(
-    limit: int = 50,
+    limit: _LimitQuery = 50,
     movie_href: Optional[str] = None,
     _user=Depends(_require_auth),
 ) -> TorrentQualityEvaluationListResponse:
@@ -104,6 +126,7 @@ def list_evaluations(
 @router.get(
     "/evidence/{info_hash}",
     response_model=TorrentQualityEvidenceSchema,
+    responses={404: {"description": "Not Found", **_DETAIL_STRING_RESPONSE_SCHEMA}},
 )
 def get_evidence(
     info_hash: str,
