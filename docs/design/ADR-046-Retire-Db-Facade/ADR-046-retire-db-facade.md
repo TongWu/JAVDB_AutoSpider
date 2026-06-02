@@ -2,7 +2,7 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Proposed — Phase 1 execution in IMP-ADR046-01                          |
+| **Status**  | Accepted — Phase 1 implemented 2026-06-02 (branch `adr046-p1-history-write-seam`); Phases 2–4 pending. See IMP-ADR046-01 |
 | **Date**    | 2026-06-02                                                            |
 | **Authors** | Ted                                                                   |
 | **Related** | [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md) (predecessor — killed the `db.py` monolith, introduced the Repo pattern, but left `db_*` public), [ADR-019](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md) (deepened the session *commit lifecycle* via a transition validator), [ADR-014](../_archive/ADR-014-Storage-Cli-Layering/ADR-014-storage-cli-layering.md) (storage/CLI layering) |
@@ -62,7 +62,7 @@ Finish ADR-005's direction: **the repository is the deep storage seam, and sessi
 
 | Phase | IMP | Ships | Deferred |
 | --- | --- | --- | --- |
-| **Phase 1 — History write seam** | IMP-ADR046-01 | `HistoryRepo(*, db_path=None, session_id=None)`; write methods use `self._session_id` + raise without it; remove `get_active_session_id()` fallback from `batch_update_last_visited` / `batch_update_movie_actors`; migrate the ~6 History write sites + the 2 CLI write sites; tests (write-without-session raises; reads still work session-less) | Everything below |
+| **Phase 1 — History write seam** ✅ *(implemented 2026-06-02)* | IMP-ADR046-01 | `HistoryRepo(*, db_path=None, session_id=None)`; write methods use `self._session_id` + raise without it; remove `get_active_session_id()` fallback from `batch_update_last_visited` / `batch_update_movie_actors`; migrate the ~6 History write sites + the 2 CLI write sites; tests (write-without-session raises; reads still work session-less) | Everything below |
 | Phase 2 — Operations/Stats write seam | IMP-ADR046-02 | Bind `session_id` on `OperationsRepo`/`StatsRepo` writes; **then delete** the global session machinery in `_db_session.py` | — |
 | Phase 3 — route orchestration through repos | IMP-ADR046-03 | `sessions/commit.py` + `rollback/core.py` call the repo, not `db_commit_session_history` / `db_rollback_session` directly | — |
 | Phase 4 — privatize `db_*` | IMP-ADR046-04 | `_`-prefix the `db_*` functions, drop `__init__.py` re-exports, migrate remaining direct callers + tests | — |
@@ -98,3 +98,4 @@ Finish ADR-005's direction: **the repository is the deep storage seam, and sessi
 
 - 2026-06-02: Proposed. Scoped from the 2026-05-29 architecture review (Candidate C) after a 2026-06-02 follow-up verification: 60 public `db_*` functions remain, repos are shallow pass-throughs, and `session_id` resolves from a process-global in `_db_session.py`. Chosen seam: single class + constructor-bound `session_id` + runtime write-guard (D2/D3). Phase 1 (IMP-ADR046-01) covers the History write seam only; the global session machinery is deleted in Phase 2 once Operations/Stats are migrated.
 - 2026-06-02: D2 clarified during IMP-ADR046-01 authoring (design-feedback-loop). Reading the code showed `commit_session` / `resume_finalizing_session` / `stage_*` already take an **explicit** `session_id`, and `cleanup_stale_in_progress` relies on that to sweep many sessions with one repo. So the fix is not "all writes move to the constructor" but a resolution order **explicit arg → bound session → raise**; the concrete Phase 1 change is scoped to the two methods that read the process-global with no explicit argument (`batch_update_last_visited`, `batch_update_movie_actors`). D2 reworded accordingly.
+- 2026-06-02: **Phase 1 implemented** on branch `adr046-p1-history-write-seam` — `HistoryRepo` session-resolution + write-guard; detail-phase threading (`finalize_detail_phase` → `history_manager.batch_update_last_visited`, incl. a CSV-mode wrapper so the Rust override accepts the `session_id` kwarg); legacy sites preserved; affected tests updated to the session-required contract; CONTEXT.md terms + ADR-005 back-reference. Full unit suite: 3658 passed, 1 xfailed; the 2 remaining failures are **pre-existing and unrelated** (stale local Rust `.so` missing `video_code_family`; a flaky `movie_sleep_mgr` global-isolation test — both fail at the merge-base). Phases 2–4 pending.

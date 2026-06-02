@@ -2,7 +2,7 @@
 
 | 字段       | 值                                                                    |
 | ---------- | --------------------------------------------------------------------- |
-| **状态**   | Proposed —— Phase 1 执行见 IMP-ADR046-01                              |
+| **状态**   | Accepted —— Phase 1 已实现 2026-06-02（分支 `adr046-p1-history-write-seam`）；Phases 2–4 待做。见 IMP-ADR046-01 |
 | **日期**   | 2026-06-02                                                           |
 | **作者**   | Ted                                                                  |
 | **关联**   | [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.zh.md)（前序——拆掉了 `db.py` 巨石、引入 Repo 模式，但把 `db_*` 留作公开）、[ADR-019](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.zh.md)（用 transition 校验器把 session **commit 生命周期**做深）、[ADR-014](../_archive/ADR-014-Storage-Cli-Layering/ADR-014-storage-cli-layering.zh.md)（storage/CLI 分层） |
@@ -62,7 +62,7 @@
 
 | 阶段 | IMP | 交付 | 推迟 |
 | --- | --- | --- | --- |
-| **Phase 1 —— History 写接缝** | IMP-ADR046-01 | `HistoryRepo(*, db_path=None, session_id=None)`；写方法用 `self._session_id`、缺失即抛错；从 `batch_update_last_visited` / `batch_update_movie_actors` 移除 `get_active_session_id()` 回退；迁移 ~6 个 History 写点 + 2 个 CLI 写点；测试（无 session 写即抛错；读仍可无 session 工作） | 下面全部 |
+| **Phase 1 —— History 写接缝** ✅ *(已实现 2026-06-02)* | IMP-ADR046-01 | `HistoryRepo(*, db_path=None, session_id=None)`；写方法用 `self._session_id`、缺失即抛错；从 `batch_update_last_visited` / `batch_update_movie_actors` 移除 `get_active_session_id()` 回退；迁移 ~6 个 History 写点 + 2 个 CLI 写点；测试（无 session 写即抛错；读仍可无 session 工作） | 下面全部 |
 | Phase 2 —— Operations/Stats 写接缝 | IMP-ADR046-02 | 给 `OperationsRepo`/`StatsRepo` 写操作绑定 `session_id`；**然后删除** `_db_session.py` 的全局 session 机制 | —— |
 | Phase 3 —— 编排改道走 repo | IMP-ADR046-03 | `sessions/commit.py` + `rollback/core.py` 调用 repo，而非直接调 `db_commit_session_history` / `db_rollback_session` | —— |
 | Phase 4 —— 私有化 `db_*` | IMP-ADR046-04 | 给 `db_*` 函数加 `_` 前缀、去掉 `__init__.py` 重新导出、迁移剩余直接调用方 + 测试 | —— |
@@ -98,3 +98,4 @@
 
 - 2026-06-02：Proposed。源自 2026-05-29 架构评审（候选 C），经 2026-06-02 复验后切分：60 个公开 `db_*` 函数仍在、repo 是浅转发、`session_id` 从 `_db_session.py` 的进程级全局解析。选定接缝：单类 + 构造绑定 `session_id` + 运行时写守卫（D2/D3）。Phase 1（IMP-ADR046-01）仅覆盖 History 写接缝；全局 session 机制在 Phase 2（Operations/Stats 迁移后）删除。
 - 2026-06-02：D2 在 IMP-ADR046-01 编写期澄清（design-feedback-loop）。读码后发现 `commit_session` / `resume_finalizing_session` / `stage_*` 已经接收**显式** `session_id`，且 `cleanup_stale_in_progress` 正依赖此特性用一个 repo 扫过多个 session。故修复不是“所有写都改成构造绑定”，而是解析顺序 **显式参数 → 构造绑定 → 抛错**；Phase 1 的具体改动仅限于在无显式参数时读进程级全局的两个方法（`batch_update_last_visited`、`batch_update_movie_actors`）。D2 据此改写。
+- 2026-06-02：**Phase 1 已实现**，在分支 `adr046-p1-history-write-seam` —— `HistoryRepo` 会话解析 + 写守卫；detail-phase 线程化（`finalize_detail_phase` → `history_manager.batch_update_last_visited`，含 CSV 模式包装使 Rust override 接受 `session_id` 关键字）；legacy 站点保留；受影响测试更新到 session-required 契约；CONTEXT.md 术语 + ADR-005 反向链接。全量 unit：3658 passed、1 xfailed；剩余 2 个失败为**既有且无关**（本地 Rust `.so` 过期缺 `video_code_family`；一个 `movie_sleep_mgr` 全局隔离的 flaky 测试——两者在 merge-base 处亦失败）。Phases 2–4 待做。
