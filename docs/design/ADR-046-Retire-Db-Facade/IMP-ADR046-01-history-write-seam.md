@@ -1,5 +1,7 @@
 # IMP-ADR046-01: ADR-046 Phase 1 — History Write Seam (session-bound writes) Implementation Plan
 
+> **Status: ✅ Implemented 2026-06-02** on branch `adr046-p1-history-write-seam` (subagent-driven execution). All tasks landed; full unit suite 3658 passed (2 pre-existing unrelated failures). The checkboxes below were the execution plan; completion is recorded in the ADR-046 Status Log.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Related:** [ADR-046](ADR-046-retire-db-facade.md) — this is **Phase 1** (History write seam only).
