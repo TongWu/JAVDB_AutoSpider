@@ -6,6 +6,7 @@ import logging
 from collections.abc import Callable
 from typing import Any, Optional
 
+from javdb.infra.logging import log_summary_block
 from javdb.quality.features import PROBE_SCHEMA_VERSION, extract_file_features
 from javdb.quality.models import EvaluationRecord, EvidenceRecord
 from javdb.quality.scoring import SCORING_VERSION, score_torrent
@@ -112,14 +113,16 @@ def collect_production_evidence(
         )
         summary["evaluations_written"] += 1
 
-    logger.info(
-        "Quality evidence: scanned=%d evidence_written=%d evaluations_written=%d "
-        "probe_unavailable=%d skipped=%d",
-        summary["scanned"],
-        summary["evidence_written"],
-        summary["evaluations_written"],
-        summary["probe_unavailable"],
-        summary["skipped"],
+    log_summary_block(
+        logger,
+        "Quality Evidence Summary",
+        {
+            "scanned": summary["scanned"],
+            "evidence_written": summary["evidence_written"],
+            "evaluations_written": summary["evaluations_written"],
+            "probe_unavailable": summary["probe_unavailable"],
+            "skipped": summary["skipped"],
+        },
     )
     return summary
 
