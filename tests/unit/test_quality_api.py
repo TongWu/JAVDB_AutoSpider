@@ -125,21 +125,21 @@ def test_movie_href_filter_calls_movie_specific_path(monkeypatch):
     assert response.items[0].movie_href == "/v/abc"
 
 
-def test_evidence_found_returns_schema_with_reasons(monkeypatch):
-    repo = _FakeRepo(evidence=_evidence_row())
+def test_evidence_lookup_normalizes_info_hash(monkeypatch):
+    repo = _FakeRepo(evidence=_evidence_row(info_hash="hash1"))
     monkeypatch.setattr(quality_router, "_repo", lambda: nullcontext(repo))
 
-    response = quality_router.get_evidence("HASH1")
+    response = quality_router.get_evidence(" HASH1 ")
 
     assert repo.calls == [
         (
             "evidence",
-            "HASH1",
+            "hash1",
             quality_router.PROBE_SCHEMA_VERSION,
             "production_download",
         )
     ]
-    assert response.info_hash == "HASH1"
+    assert response.info_hash == "hash1"
     assert response.target_role == "production_download"
     assert response.reasons == ["main_video_detected"]
 
