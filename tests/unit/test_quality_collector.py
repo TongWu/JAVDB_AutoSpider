@@ -108,6 +108,38 @@ def test_skips_torrents_without_hash():
     assert repo.evaluations == []
 
 
+def test_collect_production_evidence_emits_summary_block(monkeypatch):
+    repo = FakeQualityRepo()
+    emitted = []
+
+    monkeypatch.setattr(
+        collector_module,
+        "log_summary_block",
+        lambda logger, title, pairs: emitted.append((logger, title, pairs)),
+    )
+
+    collect_production_evidence(
+        torrents=[{"name": "ABC-123"}],
+        fetch_files=lambda _info_hash: [],
+        repo=repo,
+        context_for=lambda _torrent: {},
+    )
+
+    assert emitted == [
+        (
+            collector_module.logger,
+            "Quality Evidence Summary",
+            {
+                "scanned": 1,
+                "evidence_written": 0,
+                "evaluations_written": 0,
+                "probe_unavailable": 0,
+                "skipped": 1,
+            },
+        )
+    ]
+
+
 def test_build_context_uses_acquisition_outcome_join():
     torrent = {"hash": "HASH1", "name": "ABC-123-C", "category": "qB category"}
     outcome = SimpleNamespace(
