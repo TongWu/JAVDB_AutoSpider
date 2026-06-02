@@ -6,6 +6,7 @@ import os
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 
 from apps.api.infra.auth import (
@@ -193,6 +194,30 @@ for router in (
 if os.getenv("TEST_MODE") == "1":
     from apps.api.routers.test_mode import router as test_mode_router
     app.include_router(test_mode_router)
+
+
+def _custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    security_schemes = schema.setdefault("components", {}).setdefault(
+        "securitySchemes", {}
+    )
+    security_schemes["BearerAuth"] = {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+    }
+    app.openapi_schema = schema
+    return app.openapi_schema
+
+
+app.openapi = _custom_openapi
 
 
 __all__ = [
