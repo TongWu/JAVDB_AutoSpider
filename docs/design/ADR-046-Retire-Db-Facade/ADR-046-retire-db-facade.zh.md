@@ -77,7 +77,7 @@
 
 ## 领域语言（CONTEXT.md 新增）
 
-- **Session-Bound Repo（session 绑定的 repo）** —— 在构造时携带 `session_id` 的仓库实例（`HistoryRepo(session_id=...)`）。写方法使用绑定的 session；未绑定 session 的写会抛错。取代环境式的 `get_active_session_id()` 回退。
+- **Session-Bound Repo（session 绑定的 repo）** —— 在构造时携带 `session_id` 的仓库实例（`HistoryRepo(session_id=...)`）。写操作解析顺序为 **显式参数 > 构造绑定 > 报错**；进程级 `get_active_session_id()` 绝不被读取。
 - **Deep Storage Seam（存储深接缝）** —— 一条原则：仓库（而非模块级 `db_*` 函数层）是读写存储的唯一公开入口；`db_*` 变成藏在其背后的私有实现细节（按本 ADR 分阶段退役）。
 
 ## 考虑过的替代方案

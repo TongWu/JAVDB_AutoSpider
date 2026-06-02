@@ -778,6 +778,7 @@ class TestBatchUpdateLastVisited:
 
         with _active_session() as sid:
             batch_update_last_visited(history_file, set(), session_id=sid)
+        db_commit_session_history(sid)
 
         with open(history_file, 'r', encoding='utf-8-sig') as f:
             reader = csv.DictReader(f)
