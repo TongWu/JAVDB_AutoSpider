@@ -478,6 +478,24 @@ class LoginCoordinator:
                 len(self._pending_login_tasks),
             )
 
+    def stop_poller(self, *, timeout: float = 2.0) -> None:
+        """Signal the background login-state poller to exit and join it.
+
+        Sets :attr:`_stop_polling` so the loop's interruptible wait returns
+        immediately, waits up to *timeout* seconds for the daemon to
+        finish, then drops the reference.  Idempotent and safe to call when
+        no poller is running — used for graceful runtime shutdown and to
+        keep daemon lifetime bounded in tests instead of poking the private
+        lifecycle fields directly.
+        """
+        thread = self._poll_thread
+        self._stop_polling.set()
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=timeout)
+        with self._lock:
+            if self._poll_thread is thread:
+                self._poll_thread = None
+
     def _poll_login_state_loop(self) -> None:
         """Drain :attr:`_pending_login_tasks` as the DO publishes new cookies.
 
@@ -612,10 +630,12 @@ class LoginCoordinator:
 
             login_ctx = self._login_state()
             current_version = login_ctx.current_login_state_version or 0
-            if not isinstance(snapshot.version, int):
+            if type(snapshot.version) is not int:
                 # Defensive: the DO contract guarantees an integer version,
                 # but a malformed response would otherwise crash the daemon
-                # on the comparison below.  Treat it as "no progress".
+                # on the comparison below.  Treat it as "no progress".  A
+                # strict type check (not ``isinstance``) also rejects bool,
+                # which is never a valid version.
                 logger.warning(
                     "Login-state poller: DO returned non-integer version "
                     "(%r); treating as no progress",

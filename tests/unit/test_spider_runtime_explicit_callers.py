@@ -685,10 +685,7 @@ def test_login_coordinator_uses_explicit_runtime_do_client_and_holder(monkeypatc
     # Parking spins up the real ``login-state-poller`` daemon; stop it so it
     # does not outlive the test polling the MagicMock DO client on its own
     # cadence (mirrors test_login_coordinator_park._stop_leaked_pollers).
-    poller = coordinator._poll_thread
-    coordinator._stop_polling.set()
-    if poller is not None:
-        poller.join(timeout=2.0)
+    coordinator.stop_poller()
     assert coordinator._pending_login_tasks[0][0] == "proxy-a"
 
 

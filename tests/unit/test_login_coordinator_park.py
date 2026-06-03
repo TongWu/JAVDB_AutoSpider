@@ -98,7 +98,7 @@ def _reset_state(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _stop_leaked_pollers(monkeypatch):
+def _stop_leaked_pollers(monkeypatch, _reset_state):
     """Stop every ``login-state-poller`` daemon a test starts.
 
     Park-path tests spin up the real poller thread (``_poll_thread``).
@@ -109,24 +109,23 @@ def _stop_leaked_pollers(monkeypatch):
     test.  Track every coordinator built during the test and join its
     poller deterministically in teardown so no thread outlives the test.
 
-    Runs its teardown *before* :func:`_reset_state` (reverse fixture
-    order) so the daemon is joined while the module globals it reads are
-    still in place.
+    Depends on :func:`_reset_state` purely to pin teardown order: a
+    fixture that requests another tears down *before* it, so this poller
+    stop runs before ``_reset_state`` restores the module globals —
+    rather than relying on same-scope autouse definition order.
     """
     created: list[LoginCoordinator] = []
     orig_init = LoginCoordinator.__init__
 
     def _tracking_init(self, *args, **kwargs):
+        """Record each constructed coordinator so its poller can be joined."""
         orig_init(self, *args, **kwargs)
         created.append(self)
 
     monkeypatch.setattr(LoginCoordinator, "__init__", _tracking_init)
     yield
     for coord in created:
-        thread = coord._poll_thread
-        coord._stop_polling.set()
-        if thread is not None and thread.is_alive():
-            thread.join(timeout=2.0)
+        coord.stop_poller()
         with coord._lock:
             coord._pending_login_tasks.clear()
 
