@@ -2,7 +2,7 @@
 
 | 字段       | 值                                                                    |
 | ---------- | --------------------------------------------------------------------- |
-| **状态**   | Accepted —— Phase 1 已实现 2026-06-02（分支 `adr046-p1-history-write-seam`）；Phases 2–4 待做。见 IMP-ADR046-01 |
+| **状态**   | Accepted —— Phase 1 已实现 2026-06-02（分支 `adr046-p1-history-write-seam`）；Phases 2–5 待做。见 IMP-ADR046-01 |
 | **日期**   | 2026-06-02                                                           |
 | **作者**   | Ted                                                                  |
 | **关联**   | [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.zh.md)（前序——拆掉了 `db.py` 巨石、引入 Repo 模式，但把 `db_*` 留作公开）、[ADR-019](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.zh.md)（用 transition 校验器把 session **commit 生命周期**做深）、[ADR-014](../_archive/ADR-014-Storage-Cli-Layering/ADR-014-storage-cli-layering.zh.md)（storage/CLI 分层） |
@@ -63,15 +63,16 @@
 | 阶段 | IMP | 交付 | 推迟 |
 | --- | --- | --- | --- |
 | **Phase 1 —— History 写接缝** ✅ *(已实现 2026-06-02)* | IMP-ADR046-01 | `HistoryRepo(*, db_path=None, session_id=None)`；写方法用 `self._session_id`、缺失即抛错；从 `batch_update_last_visited` / `batch_update_movie_actors` 移除 `get_active_session_id()` 回退；迁移 ~6 个 History 写点 + 2 个 CLI 写点；测试（无 session 写即抛错；读仍可无 session 工作） | 下面全部 |
-| Phase 2 —— Operations/Stats 写接缝 | IMP-ADR046-02 | 给 `OperationsRepo`/`StatsRepo` 写操作绑定 `session_id`；**然后删除** `_db_session.py` 的全局 session 机制 | —— |
+| Phase 2 —— Operations/Stats 写接缝 | IMP-ADR046-02 | 给 `OperationsRepo` 写绑定 `session_id`（照搬 Phase 1）；`StatsRepo` 已全显式。*（2026-06-03 重界定：删全局移至 Phase 5——它有 ~17 处跨模块读取方。）* | —— |
 | Phase 3 —— 编排改道走 repo | IMP-ADR046-03 | `sessions/commit.py` + `rollback/core.py` 调用 repo，而非直接调 `db_commit_session_history` / `db_rollback_session` | —— |
-| Phase 4 —— 私有化 `db_*` | IMP-ADR046-04 | 给 `db_*` 函数加 `_` 前缀、去掉 `__init__.py` 重新导出、迁移剩余直接调用方 + 测试 | —— |
+| Phase 4 —— 私有化 `db_*` | IMP-ADR046-04 | 从 `__init__.py`/`__all__` 撤销 `db_*` 重导出（有 repo 等价物的门面函数）；先补 7 个缺失 wrapper；迁移剩余调用方 + 测试 | —— |
+| Phase 5 —— 删除全局 session 机制 | IMP-ADR046-05 *(尚未编写)* | 迁移 `get_active_session_id()` 剩余 ~17 个读取方（爬虫 runtime、rclone/pikpak/notify、ops/sentinel、align 工具、`SessionLifecycleRepo.get_active_session_id`）+ 3 个 setter 到显式 session；然后从 `_db_session.py` 删除 `_active_session_id_value` / `_SESSION_ID_SENTINEL` / `_resolve_session_id` / `get`+`set_active_session_id` | —— |
 
 ### 明确的非目标（YAGNI）
 
 - **不是一次性退役** —— 60 函数 / 42 调用 / 40 测试的迁移明确分阶段；没有单个无法 review 的大 PR。
 - **Phase 1 不私有化 `db_*`** —— 函数保持公开，直到其调用方迁移完（Phase 4）。
-- **Phase 1 不删除全局 session 态** —— Operations/Stats 仍在用（D4）；删除是 Phase 2。
+- **Phase 1 不删除全局 session 态** —— Operations/Stats 仍在用（D4）；删除是 **Phase 5**（重界定——全局有 ~17 处跨模块读取方）。
 - **不改读接口** —— 读本身没问题；只有读的 `db_*` 私有化（Phase 4）在范围内，其形状不动。
 - **不重做 ADR-019 的 commit 生命周期** —— 它保留；ADR-046 只改变 `session_id` 如何抵达它。
 
@@ -99,3 +100,4 @@
 - 2026-06-02：Proposed。源自 2026-05-29 架构评审（候选 C），经 2026-06-02 复验后切分：60 个公开 `db_*` 函数仍在、repo 是浅转发、`session_id` 从 `_db_session.py` 的进程级全局解析。选定接缝：单类 + 构造绑定 `session_id` + 运行时写守卫（D2/D3）。Phase 1（IMP-ADR046-01）仅覆盖 History 写接缝；全局 session 机制在 Phase 2（Operations/Stats 迁移后）删除。
 - 2026-06-02：D2 在 IMP-ADR046-01 编写期澄清（design-feedback-loop）。读码后发现 `commit_session` / `resume_finalizing_session` / `stage_*` 已经接收**显式** `session_id`，且 `cleanup_stale_in_progress` 正依赖此特性用一个 repo 扫过多个 session。故修复不是“所有写都改成构造绑定”，而是解析顺序 **显式参数 → 构造绑定 → 抛错**；Phase 1 的具体改动仅限于在无显式参数时读进程级全局的两个方法（`batch_update_last_visited`、`batch_update_movie_actors`）。D2 据此改写。
 - 2026-06-02：**Phase 1 已实现**，在分支 `adr046-p1-history-write-seam` —— `HistoryRepo` 会话解析 + 写守卫；detail-phase 线程化（`finalize_detail_phase` → `history_manager.batch_update_last_visited`，含 CSV 模式包装使 Rust override 接受 `session_id` 关键字）；legacy 站点保留；受影响测试更新到 session-required 契约；CONTEXT.md 术语 + ADR-005 反向链接。全量 unit：3658 passed、1 xfailed；剩余 2 个失败为**既有且无关**（本地 Rust `.so` 过期缺 `video_code_family`；一个 `movie_sleep_mgr` 全局隔离的 flaky 测试——两者在 merge-base 处亦失败）。Phases 2–4 待做。
+- 2026-06-03：**Phase 2/3/4 的 IMP 已写出**（IMP-ADR046-02/03/04）+ 路线图经跨仓库 grilling **重界定**。Phase 2 收窄为仅绑定 Operations/Stats——`StatsRepo` 已全显式，`OperationsRepo` 仅 `replace_rclone_inventory` 一处读全局；**删全局拆为新 Phase 5**（全局有 ~17 处跨模块读取方，不宜作 Phase 2 尾巴）。Phase 3 的改道目标全部已存在为 repo 方法（含 `SessionLifecycleRepo.rollback_session`）；`rollback/core.py` 的 `_self` monkeypatch 接缝用“委托 repo 的模块级函数”保住。Phase 4 私有化范围限定为有 repo 等价物的门面函数（infra 如 `get_db`/`init_db` 保留公开）；7 个未包装的 session 读先补 wrapper；迁移以测试面为主（~37 文件 / ~594 处）。Phase 4 的 IMP 是**方向性**的——执行时必须先做 Task 0 重新盘点（2/3/5 会重塑调用方集合）。Phase 5 的 IMP 尚未编写。
