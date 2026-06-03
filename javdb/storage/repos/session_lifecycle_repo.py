@@ -222,3 +222,29 @@ class SessionLifecycleRepo:
         from javdb.storage.db._db_reports import db_insert_report_rows
 
         return db_insert_report_rows(session_id, rows, self._db_path)
+
+    def count_in_progress_sessions_for_run(
+        self,
+        run_id: str,
+        run_attempt: Optional[int] = None,
+    ) -> int:
+        """Count 'in_progress' sessions belonging to a (RunId, RunAttempt) pair."""
+        from javdb.storage.db._db_reports import db_count_in_progress_sessions_for_run
+
+        return db_count_in_progress_sessions_for_run(
+            run_id,
+            run_attempt,
+            db_path=self._db_path,
+        )
+
+    def begin_finalize_session(self, session_id: str) -> int:
+        """Flip ``Status`` from ``in_progress`` to ``finalizing``."""
+        from javdb.storage.db._db_reports import db_begin_finalize_session
+
+        return db_begin_finalize_session(session_id, db_path=self._db_path)
+
+    def finish_commit_session(self, session_id: str) -> int:
+        """Flip ``Status`` from ``finalizing`` to ``committed``."""
+        from javdb.storage.db._db_reports import db_finish_commit_session
+
+        return db_finish_commit_session(session_id, db_path=self._db_path)

@@ -180,3 +180,58 @@ class SessionsRepo:
             ).fetchall()
         ]
         return movies, torrents
+
+    # ── Thin db_* read delegates (ADR-046 Phase 4 Task 0) ─────────────
+    #
+    # 1:1 wrappers over the read-family helpers in
+    # ``javdb/storage/db/_db_reports.py`` so the public ``db_*`` facade can
+    # be privatized. Unlike this repo's conn-owned reads above, these target
+    # ``db_*`` functions open their own connection from ``db_path`` (auto-
+    # routed by STORAGE_BACKEND), so callers thread ``db_path`` explicitly
+    # rather than reusing ``self._conn``. ``db_path=None`` defaults to
+    # REPORTS_DB_PATH, mirroring the underlying functions.
+
+    def get_session_status(
+        self,
+        session_id: str,
+        *,
+        db_path: str | None = None,
+    ) -> tuple[str, str] | None:
+        """Return ``(WriteMode, Status)`` for *session_id*, or ``None``."""
+        from javdb.storage.db._db_reports import db_get_session_status
+
+        return db_get_session_status(session_id, db_path=db_path)
+
+    def get_report_rows(
+        self,
+        session_id: str,
+        *,
+        db_path: str | None = None,
+    ) -> list[dict]:
+        """Return all rows for a session as flat (legacy-format) dicts."""
+        from javdb.storage.db._db_reports import db_get_report_rows
+
+        return db_get_report_rows(session_id, db_path)
+
+    def get_latest_session(
+        self,
+        report_type: str | None = None,
+        *,
+        db_path: str | None = None,
+    ) -> dict | None:
+        """Return the latest session (by Id DESC), optionally by report type."""
+        from javdb.storage.db._db_reports import db_get_latest_session
+
+        return db_get_latest_session(report_type, db_path)
+
+    def get_sessions_by_date(
+        self,
+        report_date: str,
+        report_type: str | None = None,
+        *,
+        db_path: str | None = None,
+    ) -> list[dict]:
+        """Return all sessions for *report_date* (optionally by report type)."""
+        from javdb.storage.db._db_reports import db_get_sessions_by_date
+
+        return db_get_sessions_by_date(report_date, report_type, db_path)
