@@ -97,6 +97,40 @@ def _reset_state(monkeypatch):
     yield
 
 
+@pytest.fixture(autouse=True)
+def _stop_leaked_pollers(monkeypatch):
+    """Stop every ``login-state-poller`` daemon a test starts.
+
+    Park-path tests spin up the real poller thread (``_poll_thread``).
+    Left running it polls module-global login state on its own cadence
+    and, reading a *later* test's bare ``MagicMock`` client, raises
+    ``TypeError`` on the ``snapshot.version`` comparison — surfacing as a
+    ``PytestUnhandledThreadExceptionWarning`` attributed to an unrelated
+    test.  Track every coordinator built during the test and join its
+    poller deterministically in teardown so no thread outlives the test.
+
+    Runs its teardown *before* :func:`_reset_state` (reverse fixture
+    order) so the daemon is joined while the module globals it reads are
+    still in place.
+    """
+    created: list[LoginCoordinator] = []
+    orig_init = LoginCoordinator.__init__
+
+    def _tracking_init(self, *args, **kwargs):
+        orig_init(self, *args, **kwargs)
+        created.append(self)
+
+    monkeypatch.setattr(LoginCoordinator, "__init__", _tracking_init)
+    yield
+    for coord in created:
+        thread = coord._poll_thread
+        coord._stop_polling.set()
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=2.0)
+        with coord._lock:
+            coord._pending_login_tasks.clear()
+
+
 # ── _try_acquire_login_lease ────────────────────────────────────────────────
 
 
@@ -446,6 +480,46 @@ class TestPollerDispatch:
         assert "P1" in task.failed_proxies
         assert len(coord._pending_login_tasks) == 0
         assert coord._poll_thread is None
+
+    def test_poller_treats_non_integer_version_as_no_progress(self):
+        """A malformed snapshot (non-int ``version``) must not crash the
+        daemon.  The poller logs and keeps polling — the parked task stays
+        parked rather than the thread dying on the version comparison.
+
+        Without the guard the thread raises
+        ``TypeError: '<=' not supported between instances of 'MagicMock'
+        and 'int'`` and dies, so ``is_alive()`` would be ``False``.
+        """
+        worker = _make_worker(0, "P1")
+        coord = LoginCoordinator(all_workers=[worker])
+        client = MagicMock()
+        client.acquire_lease.return_value = AcquireLeaseResult(
+            acquired=False, holder_id="winner", target_proxy_name="P1",
+            lease_expires_at=10_000, server_time_ms=5_000,
+        )
+        # A bare MagicMock snapshot → ``.version`` is a MagicMock, not int.
+        client.get_state.return_value = MagicMock()
+        state_mod.global_login_state_client = client
+        login_queue: queue.Queue = queue.Queue()
+        task = _make_task()
+
+        with patch.object(lc_mod, "_POLL_INTERVAL_SEC", 0.02):
+            with patch.object(coord, "_login_and_verify"):
+                _, _, parked = coord._login_and_verify_with_lease(
+                    worker, task, login_queue,
+                )
+            assert parked is True
+            # Let the poller take several ticks against the bad version.
+            assert self._wait_until(
+                lambda: client.get_state.call_count >= 2, timeout=2.0,
+            ), "poller did not poll the DO"
+
+        # Survived the malformed version: thread alive, task still parked,
+        # nothing dispatched.
+        assert coord._poll_thread is not None
+        assert coord._poll_thread.is_alive()
+        assert len(coord._pending_login_tasks) == 1
+        assert login_queue.empty()
 
 
 # ── End-to-end fail-open ─────────────────────────────────────────────────────
