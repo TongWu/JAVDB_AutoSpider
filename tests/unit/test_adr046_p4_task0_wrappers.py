@@ -217,7 +217,7 @@ def test_count_in_progress_sessions_for_run_without_attempt(reports_db):
 
 
 def test_begin_finalize_session_matches_underlying(reports_db):
-    path, conn = reports_db
+    path, _ = reports_db
     repo = SessionLifecycleRepo(db_path=path)
     # sess-B is in_progress -> the repo flips it to finalizing (rowcount 1).
     assert repo.begin_finalize_session("sess-B") == 1
@@ -239,7 +239,7 @@ def test_begin_finalize_session_threads_db_path_no_op_on_wrong_state(reports_db)
 
 
 def test_finish_commit_session_matches_underlying(reports_db):
-    path, conn = reports_db
+    path, _ = reports_db
     repo = SessionLifecycleRepo(db_path=path)
     # sess-C is finalizing -> the repo flips it to committed (rowcount 1).
     assert repo.finish_commit_session("sess-C") == 1
