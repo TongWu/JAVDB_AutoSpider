@@ -104,48 +104,85 @@ def _raw_db_forbidden(name):
 
 
 def test_validate_dedup_self_heal_routes_through_operations_repo(monkeypatch):
-    """ADR-032 2a.2: the dedup self-heal must read/write via OperationsRepo,
-    never the raw ``db_*`` helpers."""
+    """ADR-032 2a.2 + ADR-046 P2 review fix: the dedup self-heal must read/write
+    via OperationsRepo (never raw ``db_*`` helpers) AND must not raise when run
+    with no active session.
+
+    This now uses a REAL OperationsRepo against the temp DB (autouse
+    ``_isolate_sqlite``) with NO active session. Previously it mocked
+    OperationsRepo and merely asserted ``session_id is None`` — that mock
+    swallowed the regression where the standalone WeeklyDedup CLI (no session)
+    hit a raising ``_require_session`` and crashed with an uncaught
+    RuntimeError. The real repo proves the self-heal completes session-less and
+    tags the orphan with SessionId NULL.
+    """
     import javdb.integrations.rclone.manager.service as rm
-    import javdb.storage.db._db_operations as ops_db
+    from javdb.storage.db import (
+        set_active_session_id,
+        db_replace_rclone_inventory,
+        db_append_dedup_record,
+        get_db,
+        OPERATIONS_DB_PATH,
+    )
 
-    repo = MagicMock()
-    repo.load_rclone_inventory.return_value = {
-        'A': [{'FolderPath': '2025/Actor/A/有码-中字'}],
-    }
-    repo.load_dedup_records.return_value = [{
-        'IsDeleted': 0,
-        'ExistingGdrivePath': '2025/Actor/ORPHAN/有码-中字',
-        'DeletionReason': 'Subtitle upgrade',
-    }]
-    repo.mark_orphan_records.return_value = 1
-    repo_cls = MagicMock(return_value=repo)
+    # No active session — the standalone WeeklyDedup CLI never sets one.
+    set_active_session_id(None)
 
-    monkeypatch.setattr(rm, 'OperationsRepo', repo_cls)
-    session_repo = MagicMock()
-    session_repo.get_active_session_id.return_value = None
-    monkeypatch.setattr(rm, 'SessionLifecycleRepo', MagicMock(return_value=session_repo))
+    # Seed inventory truth-set (one surviving path) and a pending dedup record
+    # whose path is NOT in the inventory (an orphan to be self-healed).
+    db_replace_rclone_inventory(
+        [{
+            'video_code': 'A',
+            'sensor_category': '有码',
+            'subtitle_category': '中字',
+            'folder_path': '2025/Actor/A/有码-中字',
+            'folder_size': 1,
+            'file_count': 1,
+            'scan_datetime': '2026-01-01 00:00:00',
+        }],
+        session_id=None,
+    )
+    db_append_dedup_record(
+        {
+            'VideoCode': 'ORPHAN',
+            'ExistingGdrivePath': '2025/Actor/ORPHAN/有码-中字',
+            'DeletionReason': 'Subtitle upgrade',
+            'IsDeleted': 0,
+        },
+        session_id=None,
+    )
+
     monkeypatch.setattr(rm, '_write_dedup_orphan_csv', lambda *_, **__: None)
 
-    # Any raw db_* call would be a regression — fail loudly.
+    # ADR-032 2a.2: the service module must reach the DB only via OperationsRepo,
+    # never by importing raw db_* helpers (the AST test above is the structural
+    # guard; this asserts the names are simply absent from the module namespace).
     for name in (
         'db_load_rclone_inventory',
         'db_load_dedup_records',
         'db_mark_orphan_records',
     ):
-        monkeypatch.setattr(ops_db, name, _raw_db_forbidden(name))
+        assert not hasattr(rm, name), (
+            f"service module must not import {name} directly"
+        )
 
+    # Must NOT raise even though no session is active (ADR-046 P2 review fix).
     count, orphans = rm.validate_dedup_records_against_inventory()
 
     assert count == 1
     assert len(orphans) == 1
-    repo.load_rclone_inventory.assert_called_once_with()
-    repo.load_dedup_records.assert_called_once_with()
-    repo.mark_orphan_records.assert_called_once()
-    # ADR-046 P2: the resolved session is now bound on the repo constructor,
-    # not passed as a per-call kwarg.
-    assert repo.mark_orphan_records.call_args.kwargs.get('session_id') is None
-    assert repo_cls.call_args.kwargs['session_id'] is None
+    assert orphans[0]['ExistingGdrivePath'] == '2025/Actor/ORPHAN/有码-中字'
+
+    # The orphan row is now marked deleted and tagged with SessionId NULL.
+    with get_db(OPERATIONS_DB_PATH) as conn:
+        row = conn.execute(
+            "SELECT IsDeleted, SessionId FROM DedupRecords "
+            "WHERE ExistingGdrivePath = ?",
+            ('2025/Actor/ORPHAN/有码-中字',),
+        ).fetchone()
+    assert row is not None
+    assert int(row['IsDeleted']) == 1
+    assert row['SessionId'] is None
 
 
 def test_run_validate_inventory_prunes_through_operations_repo(monkeypatch):
