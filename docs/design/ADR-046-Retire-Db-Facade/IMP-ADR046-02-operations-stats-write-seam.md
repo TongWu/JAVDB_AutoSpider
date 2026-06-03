@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Related:** [ADR-046](ADR-046-retire-db-facade.md) — **Phase 2 (re-scoped)**. Depends on Phase 1 ([IMP-ADR046-01](IMP-ADR046-01-history-write-seam.md)) for the `_require_session` / constructor-`session_id` pattern. **Scope was narrowed (see ADR-046 roadmap amendment):** this phase only binds the session on `OperationsRepo`/`StatsRepo` writes; **deleting the global session machinery moved to a new Phase 5** (the global has ~17 readers across the codebase — too large to be a tail of this phase).
+**Related:** [ADR-046](ADR-046-retire-db-facade.md) — **Phase 2 (re-scoped)**. Depends on Phase 1 ([IMP-ADR046-01](IMP-ADR046-01-history-write-seam.md)) for the constructor-`session_id` pattern — but Operations uses a **non-raising** `_resolve_session` (explicit > bound > None), **not** Phase 1's raising `_require_session`, because its `SessionId` columns are nullable. **Scope was narrowed (see ADR-046 roadmap amendment):** this phase only binds the session on `OperationsRepo`/`StatsRepo` writes; **deleting the global session machinery moved to a new Phase 5** (the global has ~17 readers across the codebase — too large to be a tail of this phase).
 
-**Goal:** Make `OperationsRepo`/`StatsRepo` session-tagging writes resolve `session_id` explicitly (explicit arg > constructor-bound > raise), removing the lone ambient `get_active_session_id()` read in `OperationsRepo.replace_rclone_inventory`, and thread an explicit session from their callers.
+**Goal:** Make `OperationsRepo`/`StatsRepo` session-tagging writes resolve `session_id` explicitly (explicit arg > constructor-bound > None — **non-raising**, since these tables' `SessionId` is nullable), removing the lone ambient `get_active_session_id()` read in `OperationsRepo.replace_rclone_inventory`, and thread an explicit session from their callers.
 
-**Architecture:** Mirror Phase 1's `HistoryRepo` exactly — add `session_id` to the repo constructor + a `_require_session(explicit=None)` helper, and route session-tagging writes through it. **`StatsRepo` already takes `session_id` explicitly on every method (no global)** — it needs only an optional constructor param for API symmetry; its writes are otherwise unchanged. The process-global stays in place (Phase 5 deletes it once all ~17 readers migrate).
+**Architecture:** Add `session_id` to the repo constructor + a **non-raising** `_resolve_session(explicit=None)` helper (explicit > bound > None) and route session-tagging writes through it. Unlike Phase 1's `HistoryRepo` (whose `MovieHistory`/`TorrentHistory` are NOT NULL, so it uses a **raising** `_require_session`), Operations' session-tagging tables (`DedupRecords`, `PikpakHistory`, `InventoryAlignNoExactMatch`) have **nullable** `SessionId` — session-less standalone writes are valid, so the resolver returns `None` rather than raising. **`StatsRepo` already takes `session_id` explicitly on every method (no global)** — it needs only an optional constructor param for API symmetry; its writes are otherwise unchanged. The process-global stays in place (Phase 5 deletes it once all ~17 readers migrate).
 
 **Tech Stack:** Python 3 + `pytest`. Test command (broken venv): `PYTHONPATH=javdb/rust_core/python /opt/anaconda3/bin/python3 -m pytest <files> -q`. Branch off this Phase-2 worktree; commit with `git -c user.name=Ted -c user.email=ted@wu.engineer` + the `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>` trailer.
 
@@ -16,47 +16,51 @@
 
 | Path | Modify/Test | Responsibility |
 | --- | --- | --- |
-| `javdb/storage/repos/operations_repo.py` | Modify | Add ctor `session_id` + `_require_session`; route `replace_rclone_inventory` (and the session-tagging writes) through it |
+| `javdb/storage/repos/operations_repo.py` | Modify | Add ctor `session_id` + **non-raising** `_resolve_session`; route `replace_rclone_inventory` (and the session-tagging writes) through it |
 | `javdb/storage/repos/stats_repo.py` | Modify | Add optional ctor `session_id` for symmetry; writes already explicit (no behavior change) |
 | `tests/unit/test_adr046_p2_operations_session.py` | **Create** | Pin OperationsRepo session resolution + guard |
 | (caller modules — discovered in Task 3) | Modify | Construct `OperationsRepo(session_id=sid)` instead of relying on the global |
 
 ---
 
-## Task 1: `OperationsRepo` — constructor session + `_require_session` + fix the global read
+## Task 1: `OperationsRepo` — constructor session + non-raising `_resolve_session` + fix the global read
 
 **Files:** `javdb/storage/repos/operations_repo.py`; create `tests/unit/test_adr046_p2_operations_session.py`.
 
 - [ ] **Step 1.1 — Failing test.** Create `tests/unit/test_adr046_p2_operations_session.py`:
 ```python
 """ADR-046 Phase 2: OperationsRepo resolves session explicitly (arg > bound >
-raise); replace_rclone_inventory no longer reads the process-global."""
+None, NON-raising); replace_rclone_inventory no longer reads the process-global.
+
+These writes target NULLABLE SessionId columns (DedupRecords, PikpakHistory,
+InventoryAlignNoExactMatch), so a session-less write is valid and must NOT
+raise — the resolver returns None and the row persists untagged."""
 import inspect
-import pytest
 from javdb.storage.repos.operations_repo import OperationsRepo
 
 _SID = "20260603T000000.000000Z-aaaa-0000"
 
 
-def test_require_session_order():
-    assert OperationsRepo(session_id=_SID)._require_session() == _SID
-    assert OperationsRepo(session_id=_SID)._require_session("OTHER") == "OTHER"
-    with pytest.raises(RuntimeError, match="requires a session_id"):
-        OperationsRepo()._require_session()
+def test_resolve_session_order():
+    # explicit arg > bound session > None (never raises)
+    assert OperationsRepo(session_id=_SID)._resolve_session() == _SID
+    assert OperationsRepo(session_id=_SID)._resolve_session("OTHER") == "OTHER"
+    assert OperationsRepo()._resolve_session() is None
+    assert OperationsRepo()._resolve_session("X") == "X"
+
+
+def test_operations_repo_has_no_require_session():
+    # Only HistoryRepo (NOT NULL tables) keeps a raising _require_session.
+    assert not hasattr(OperationsRepo, "_require_session")
 
 
 def test_replace_rclone_inventory_no_longer_reads_global():
     src = inspect.getsource(OperationsRepo.replace_rclone_inventory)
     assert "get_active_session_id" not in src
-
-
-def test_replace_rclone_inventory_without_session_raises():
-    with pytest.raises(RuntimeError, match="requires a session_id"):
-        OperationsRepo().replace_rclone_inventory([])
 ```
 Run → FAIL. (`PYTHONPATH=javdb/rust_core/python /opt/anaconda3/bin/python3 -m pytest tests/unit/test_adr046_p2_operations_session.py -q`)
 
-- [ ] **Step 1.2 — Add ctor + helper** (copy Phase 1's `HistoryRepo` shape verbatim). Replace:
+- [ ] **Step 1.2 — Add ctor + helper** (constructor mirrors Phase 1; the resolver is **non-raising**). Replace:
 ```python
     def __init__(self, *, db_path: Optional[str] = None) -> None:
         self._db_path = db_path
@@ -69,15 +73,11 @@ with:
         self._db_path = db_path
         self._session_id = session_id
 
-    def _require_session(self, explicit: Optional[str] = None) -> str:
-        """Resolve a write session: explicit arg > bound session > raise (ADR-046)."""
-        sid = explicit if explicit is not None else self._session_id
-        if not sid:
-            raise RuntimeError(
-                "OperationsRepo write requires a session_id "
-                "(pass it, or bind via OperationsRepo(session_id=...))"
-            )
-        return sid
+    def _resolve_session(self, explicit: Optional[str] = None) -> Optional[str]:
+        """Resolve a write session WITHOUT requiring one: explicit arg > bound
+        session > None (ADR-046). Operations' session-tagging tables have a
+        NULLABLE SessionId, so a session-less write is valid; never raise."""
+        return explicit if explicit is not None else self._session_id
 ```
 
 - [ ] **Step 1.3 — Fix the lone global read.** In `replace_rclone_inventory`, replace:
@@ -96,11 +96,11 @@ with:
         return db_replace_rclone_inventory(
             entries=entries,
             db_path=self._db_path,
-            session_id=self._require_session(),
+            session_id=self._resolve_session(),
         )
 ```
 
-- [ ] **Step 1.4 — Route the explicit session-tagging writes through the NON-RAISING resolver.** For the writes that accept `session_id=None` and forward it (`append_dedup_record`, `append_pikpak_history`, `mark_records_deleted`, `mark_orphan_records`, `upsert_align_no_exact_match`), change `session_id=session_id` → `session_id=self._resolve_session(session_id)` — resolution **explicit > bound > None**, which **never raises**. **These tables' `SessionId` columns are NULLABLE** (`DedupRecords`, `PikpakHistory`), and standalone jobs (WeeklyDedup, ad-hoc PikPak) legitimately write **session-less** — a raising guard here would crash them / silently drop rows. So use the non-raising `_resolve_session`, **NOT** a mandatory `_require_session`. *(As-built correction, 2026-06-03: `OperationsRepo` uses `_resolve_session` for ALL its session-tagging writes — including `replace_rclone_inventory` (Step 1.3) — and carries **no** `_require_session`. The earlier draft of Steps 1.2–1.4 said `_require_session`; that was an over-reach that a quality review caught and reverted, since these columns are nullable.)* **Do NOT touch** the non-tagging writes (`clear_rclone_inventory`, `append_rclone_inventory` — `RcloneInventory` has no `SessionId` column) or the already-explicit staging writes (`open/append/merge/drop_rclone_staging`, `swap_rclone_inventory`). Tests: a session-less nullable-table write must **NOT** raise and must persist with `SessionId` NULL (see `tests/unit/test_adr046_p2_session_less_writes.py`).
+- [ ] **Step 1.4 — Route the explicit session-tagging writes through the NON-RAISING resolver.** For the writes that accept `session_id=None` and forward it (`append_dedup_record`, `append_pikpak_history`, `mark_records_deleted`, `mark_orphan_records`, `upsert_align_no_exact_match`), change `session_id=session_id` → `session_id=self._resolve_session(session_id)` — resolution **explicit > bound > None**, which **never raises**. **These tables' `SessionId` columns are NULLABLE** (`DedupRecords`, `PikpakHistory`), and standalone jobs (WeeklyDedup, ad-hoc PikPak) legitimately write **session-less** — a raising guard here would crash them / silently drop rows. So use the non-raising `_resolve_session`, **NOT** a mandatory `_require_session`. *(Steps 1.1–1.3 above reflect the as-built **non-raising** `_resolve_session`: `OperationsRepo` uses it for ALL its session-tagging writes — including `replace_rclone_inventory` (Step 1.3) — and carries **no** `_require_session`. An earlier draft of these steps used a raising `_require_session`; that was an over-reach a quality review caught and reverted, since these columns are nullable.)* **Do NOT touch** the non-tagging writes (`clear_rclone_inventory`, `append_rclone_inventory` — `RcloneInventory` has no `SessionId` column) or the already-explicit staging writes (`open/append/merge/drop_rclone_staging`, `swap_rclone_inventory`). Tests: a session-less nullable-table write must **NOT** raise and must persist with `SessionId` NULL (see `tests/unit/test_adr046_p2_session_less_writes.py`).
 
 - [ ] **Step 1.5 — Run, verify PASS.** `pytest tests/unit/test_adr046_p2_operations_session.py tests/unit/test_operations_repo.py -q` → PASS (update any `test_operations_repo.py` case that called a session-tagging write with no session).
 
@@ -151,4 +151,4 @@ Expected: the rclone manager service (`javdb/integrations/rclone/manager/service
 ## Self-Review
 
 - Scope honored: only `OperationsRepo` had an ambient read (`replace_rclone_inventory`); `StatsRepo` was already explicit (Task 2 is near-no-op). The global is **not** deleted (Phase 5).
-- Pattern: identical to Phase 1's `HistoryRepo` (`_require_session`, ctor `session_id`).
+- Pattern: constructor `session_id` mirrors Phase 1, but resolution is the **non-raising** `_resolve_session` (NOT `_require_session`) because Operations' `SessionId` columns are nullable.
