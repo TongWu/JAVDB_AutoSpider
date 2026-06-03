@@ -166,8 +166,9 @@ def stats_summary(
     ) or 0
 
     total_torrents = _safe_query_one(
-        REPORTS_DB_PATH,
-        "SELECT COUNT(*) FROM ReportTorrents",
+        HISTORY_DB_PATH,
+        # ADR-047: match the TS backend by summarizing committed history, not run reports.
+        "SELECT COUNT(*) FROM TorrentHistory",
     ) or 0
 
     total_pikpak = _safe_query_one(
@@ -182,10 +183,17 @@ def stats_summary(
 
     proxy_bans_last_7d = _count_proxy_bans_in_logs(7)
 
+    avg_duration_raw = _safe_query_one(
+        REPORTS_DB_PATH,
+        "SELECT AVG(CAST((julianday(CommittedAt) - julianday(DateTimeCreated)) * 86400 AS INTEGER)) "
+        "FROM ReportSessions WHERE Status='committed' AND CommittedAt IS NOT NULL",
+    )
+    avg_duration_seconds = round(float(avg_duration_raw)) if avg_duration_raw is not None else None
+
     return StatsSummary(
         total_runs=int(total_runs),
         success_rate=success_rate,
-        avg_duration_seconds=None,
+        avg_duration_seconds=avg_duration_seconds,
         total_movies=int(total_movies),
         total_torrents=int(total_torrents),
         total_pikpak=int(total_pikpak),

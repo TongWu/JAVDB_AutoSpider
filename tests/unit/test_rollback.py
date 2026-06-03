@@ -25,6 +25,7 @@ from javdb.storage.db import (
     get_db,
     set_active_session_id, SESSION_ID_PATTERN as _SESSION_ID_PATTERN,
     db_create_report_session, db_mark_session_committed, db_mark_session_failed,
+    db_begin_finalize_session, db_finish_commit_session,
     db_find_in_progress_sessions, db_count_in_progress_sessions_for_run,
     db_find_sessions_by_run,
     db_rollback_session, _session_id_to_identifier_suffix,
@@ -74,15 +75,56 @@ class TestSessionStatusLifecycle:
         assert n == 1
         with get_db() as conn:
             row = conn.execute(
-                "SELECT Status FROM ReportSessions WHERE Id=?", (sid,)
+                "SELECT Status, CommittedAt FROM ReportSessions WHERE Id=?", (sid,)
             ).fetchone()
         assert row["Status"] == "committed"
+        assert row["CommittedAt"] is not None
+        with get_db() as conn:
+            duration = conn.execute(
+                "SELECT julianday(CommittedAt) - julianday(DateTimeCreated) AS d "
+                "FROM ReportSessions WHERE Id=?",
+                (sid,),
+            ).fetchone()["d"]
+        assert duration is not None
 
     def test_mark_committed_idempotent(self):
         sid = _create_session()
         db_mark_session_committed(sid)
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE ReportSessions SET CommittedAt=? WHERE Id=?",
+                ("2000-01-01T00:00:00.000Z", sid),
+            )
         n = db_mark_session_committed(sid)
         assert n == 0  # nothing changed second time
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT CommittedAt FROM ReportSessions WHERE Id=?", (sid,)
+            ).fetchone()
+        assert row["CommittedAt"] == "2000-01-01T00:00:00.000Z"
+
+    def test_finish_commit_sets_committed_at_and_is_idempotent(self):
+        sid = _create_session()
+        assert db_begin_finalize_session(sid) == 1
+        assert db_finish_commit_session(sid) == 1
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT Status, CommittedAt FROM ReportSessions WHERE Id=?", (sid,)
+            ).fetchone()
+        assert row["Status"] == "committed"
+        assert row["CommittedAt"] is not None
+
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE ReportSessions SET CommittedAt=? WHERE Id=?",
+                ("2000-01-01T00:00:00.000Z", sid),
+            )
+        assert db_finish_commit_session(sid) == 0
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT CommittedAt FROM ReportSessions WHERE Id=?", (sid,)
+            ).fetchone()
+        assert row["CommittedAt"] == "2000-01-01T00:00:00.000Z"
 
     def test_mark_failed(self):
         sid = _create_session()
