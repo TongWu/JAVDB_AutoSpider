@@ -30,6 +30,25 @@ from javdb.spider.detail.runner import _dedup_log_variant_label
 
 
 # ============================================================================
+# Fixtures
+# ============================================================================
+
+@pytest.fixture(autouse=True)
+def _active_dedup_session():
+    """Bind an active session for the dedup writes (ADR-046 P2).
+
+    ``append_dedup_record`` / ``mark_records_deleted`` now resolve the active
+    session at the caller (via ``SessionLifecycleRepo`` → process-global) and
+    require one — an untagged dedup write raises. The pipeline always runs
+    these inside a session; mirror that here.
+    """
+    from javdb.storage.db import set_active_session_id
+    set_active_session_id("20260603T000000.000000Z-dedp-0001")
+    yield
+    set_active_session_id(None)
+
+
+# ============================================================================
 # Helpers
 # ============================================================================
 

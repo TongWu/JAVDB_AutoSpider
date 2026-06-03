@@ -560,7 +560,13 @@ def append_dedup_record(dedup_csv_path: str, record: DedupRecord) -> bool:
         return False
 
     _ensure_db()
-    row_id = OperationsRepo().append_dedup_record(record._asdict())
+    # ADR-046 P2: session-tagging writes resolve the session explicitly at the
+    # caller (the global is never read inside OperationsRepo). The active
+    # session is resolved here and bound on the repo; Phase 5 migrates this
+    # ambient read.
+    from javdb.storage.repos.session_lifecycle_repo import SessionLifecycleRepo
+    sid = SessionLifecycleRepo().get_active_session_id()
+    row_id = OperationsRepo(session_id=sid).append_dedup_record(record._asdict())
 
     if row_id == -1:
         logger.debug(f"Skipped duplicate dedup for path: {gdrive_path}")
@@ -583,7 +589,11 @@ def mark_records_deleted(
     a CSV snapshot from the DB when needed.
     """
     _ensure_db()
-    updated = OperationsRepo().mark_records_deleted(path_datetime_pairs)
+    # ADR-046 P2: resolve + bind the active session at the caller (see
+    # append_dedup_record). Phase 5 migrates this ambient read.
+    from javdb.storage.repos.session_lifecycle_repo import SessionLifecycleRepo
+    sid = SessionLifecycleRepo().get_active_session_id()
+    updated = OperationsRepo(session_id=sid).mark_records_deleted(path_datetime_pairs)
 
     # Invalidate cache so next append sees the new state
     if _pending_paths_cache is not None:
