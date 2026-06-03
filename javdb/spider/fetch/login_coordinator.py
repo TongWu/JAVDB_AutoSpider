@@ -184,6 +184,12 @@ class LoginCoordinator:
         # iterations.  Touched only while holding ``self._lock`` for
         # creation; the thread itself uses ``self._lock`` to mutate state.
         self._poll_thread: Optional[threading.Thread] = None
+        # Signals :meth:`_poll_login_state_loop` to exit promptly.  The
+        # loop waits on this Event in place of a bare ``time.sleep`` so a
+        # stop request interrupts the poll cadence immediately instead of
+        # blocking for the full interval.  Used for graceful shutdown and
+        # by tests to join the daemon deterministically.
+        self._stop_polling = threading.Event()
         # P2-C — wall-clock ms epoch until which the cross-runner login
         # pool is in cooldown after repeated failures crossed the
         # Worker-side ``LOGIN_COOLDOWN_THRESHOLD`` inside
@@ -457,6 +463,10 @@ class LoginCoordinator:
         """
         self._pending_login_tasks.append((worker.proxy_name, task, login_queue))
         if self._poll_thread is None or not self._poll_thread.is_alive():
+            # Reset the stop flag in case a previous poller was asked to
+            # exit — otherwise the freshly spawned thread would see a stale
+            # "stop" and quit on its first wait.
+            self._stop_polling.clear()
             self._poll_thread = threading.Thread(
                 target=self._poll_login_state_loop,
                 name="login-state-poller",
@@ -467,6 +477,24 @@ class LoginCoordinator:
                 "Started login-state poller (daemon) — %d task(s) parked",
                 len(self._pending_login_tasks),
             )
+
+    def stop_poller(self, *, timeout: float = 2.0) -> None:
+        """Signal the background login-state poller to exit and join it.
+
+        Sets :attr:`_stop_polling` so the loop's interruptible wait returns
+        immediately, waits up to *timeout* seconds for the daemon to
+        finish, then drops the reference.  Idempotent and safe to call when
+        no poller is running — used for graceful runtime shutdown and to
+        keep daemon lifetime bounded in tests instead of poking the private
+        lifecycle fields directly.
+        """
+        thread = self._poll_thread
+        self._stop_polling.set()
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=timeout)
+        with self._lock:
+            if self._poll_thread is thread:
+                self._poll_thread = None
 
     def _poll_login_state_loop(self) -> None:
         """Drain :attr:`_pending_login_tasks` as the DO publishes new cookies.
@@ -491,7 +519,13 @@ class LoginCoordinator:
         idle_iterations = 0
         consecutive_get_state_failures = 0
         while True:
-            time.sleep(_POLL_INTERVAL_SEC)
+            # Interruptible sleep: returns immediately when a stop is
+            # requested so the daemon does not outlive its coordinator.
+            if self._stop_polling.wait(_POLL_INTERVAL_SEC):
+                with self._lock:
+                    self._poll_thread = None
+                logger.debug("Login-state poller stopped on request")
+                return
 
             with self._lock:
                 if not self._pending_login_tasks:
@@ -596,6 +630,18 @@ class LoginCoordinator:
 
             login_ctx = self._login_state()
             current_version = login_ctx.current_login_state_version or 0
+            if type(snapshot.version) is not int:
+                # Defensive: the DO contract guarantees an integer version,
+                # but a malformed response would otherwise crash the daemon
+                # on the comparison below.  Treat it as "no progress".  A
+                # strict type check (not ``isinstance``) also rejects bool,
+                # which is never a valid version.
+                logger.warning(
+                    "Login-state poller: DO returned non-integer version "
+                    "(%r); treating as no progress",
+                    snapshot.version,
+                )
+                continue
             if snapshot.version <= current_version:
                 continue
             if not snapshot.proxy_name or not snapshot.cookie:
