@@ -46,7 +46,7 @@ from javdb.infra.logging import get_logger
 logger = get_logger(__name__)
 
 
-def db_rollback_session(session_id, **kwargs):
+def db_rollback_session(session_id, **kwargs: Any):
     """ADR-046 P3: module-level seam that routes rollback through the repo.
 
     Kept as a module-level name so the ``_self.db_rollback_session`` call site
@@ -57,7 +57,7 @@ def db_rollback_session(session_id, **kwargs):
     return SessionLifecycleRepo().rollback_session(session_id, **kwargs)
 
 
-def db_pending_session_stats(session_id, **kwargs):
+def db_pending_session_stats(session_id, **kwargs: Any):
     """ADR-046 P3: route pending-stats through the repo (module-level seam)."""
     from javdb.storage.repos.history_repo import HistoryRepo
     return HistoryRepo().pending_session_stats(session_id, **kwargs)
