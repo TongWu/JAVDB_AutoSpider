@@ -161,7 +161,10 @@ def db_mark_session_committed(
 
     with _get_db(db_path or _REPORTS_DB_PATH) as conn:
         cur = conn.execute(
-            "UPDATE ReportSessions SET Status='committed' WHERE Id=? "
+            "UPDATE ReportSessions "
+            "SET Status='committed', "
+            "CommittedAt=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') "
+            "WHERE Id=? "
             "AND Status IS NOT 'committed'",
             (session_id,),
         )
@@ -763,7 +766,9 @@ def db_finish_commit_session(
     _ensure_imports()
     with _get_db(db_path or _REPORTS_DB_PATH) as conn:
         cur = conn.execute(
-            "UPDATE ReportSessions SET Status='committed' "
+            "UPDATE ReportSessions "
+            "SET Status='committed', "
+            "CommittedAt=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') "
             "WHERE Id=? AND Status='finalizing'",
             (session_id,),
         )
