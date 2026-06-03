@@ -151,10 +151,10 @@ def _emit_commit_metrics(
         append_jsonl_record,
         attach_run_identity,
     )
-    from javdb.storage.db._db_reports import db_pending_session_stats
+    from javdb.storage.repos.history_repo import HistoryRepo
 
     try:
-        stats = db_pending_session_stats(session_id)
+        stats = HistoryRepo().pending_session_stats(session_id)
     except Exception:
         stats = {}
 
@@ -207,7 +207,7 @@ def commit_session(req: CommitRequest) -> CommitResult:
         get_db,
         REPORTS_DB_PATH,
     )
-    from javdb.storage.db._db_history_write import db_commit_session_history
+    from javdb.storage.repos.history_repo import HistoryRepo
     # Lazy import: lifecycle imports the _db_reports primitives at module top,
     # so importing it here (rather than at module top) avoids a circular import
     # while javdb.storage.db is still initializing.
@@ -277,7 +277,7 @@ def commit_session(req: CommitRequest) -> CommitResult:
             # Promote pending writes to live tables.
             try:
                 t0 = time.monotonic()
-                drain = db_commit_session_history(req.session_id)
+                drain = HistoryRepo().commit_session(req.session_id)
                 drained_pending_session = True
                 commit_duration_ms = int((time.monotonic() - t0) * 1000)
                 if drain.get("residual_cleanup"):
@@ -294,7 +294,7 @@ def commit_session(req: CommitRequest) -> CommitResult:
                     )
             except Exception as exc:
                 raise RuntimeError(
-                    f"db_commit_session_history failed for {req.session_id!r}: {exc}"
+                    f"HistoryRepo().commit_session failed for {req.session_id!r}: {exc}"
                 ) from exc
 
     # Flip the status row. Routing through transition refuses illegal edges
