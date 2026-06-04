@@ -821,7 +821,7 @@ def test_scan_failure_marks_locally_created_session_failed(
     monkeypatch.setattr(rm, "check_rclone_installed", lambda: (True, "ok"))
     monkeypatch.setattr(rm, "check_remote_exists", lambda _remote: (True, "ok"))
     monkeypatch.setattr(rm, "scan_inventory", fake_scan)
-    # Default mocks: get_active_session_id -> None, so a local session (id=123)
+    # Standalone CLI path (main → session_id=None), so a local session (id=123)
     # is created and _created_local_staging_session becomes True.
     _patch_rclone_repo_mocks(monkeypatch, rm, order)
     monkeypatch.setattr(
