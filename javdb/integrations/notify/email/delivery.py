@@ -10,6 +10,7 @@ import os
 import shutil
 import smtplib
 from email.message import EmailMessage
+from typing import Optional
 
 from javdb.infra.logging import get_logger
 
@@ -55,8 +56,15 @@ def convert_log_to_txt(log_path):
     return txt_path
 
 
-def send_email(subject, body, attachments=None, dry_run=False):
-    """Send email with attachments"""
+def send_email(subject, body, attachments=None, dry_run=False,
+               session_id: Optional[str] = None):
+    """Send email with attachments.
+
+    ``session_id`` (ADR-046 P5) tags the EmailNotificationHistory row with the
+    active pipeline session so a rollback can scope to just these rows. The
+    column is NULLABLE: a session-less call (``None``) persists the row
+    untagged — never raises.
+    """
     if dry_run:
         # The body can carry failed-fetch URLs, session ids, and other
         # bits an operator probably does not want in CI logs verbatim.
@@ -105,12 +113,8 @@ def send_email(subject, body, attachments=None, dry_run=False):
 
     logger.info(f'Connecting to SMTP server {mask_server(SMTP_SERVER)}:{SMTP_PORT}...')
 
-    # Resolve session id and attachment basenames once, before the SMTP block.
-    try:
-        from javdb.storage.db import get_active_session_id
-        _active_session_id = get_active_session_id()
-    except Exception:
-        _active_session_id = None
+    # Resolve attachment basenames once, before the SMTP block. The session id
+    # arrives explicitly via ``session_id`` (ADR-046 P5 — no ambient global).
     # Record only filenames actually attached to the message — attachment
     # processing above skips missing / empty files.
     _attachment_names = [
@@ -123,7 +127,7 @@ def send_email(subject, body, attachments=None, dry_run=False):
         try:
             from javdb.storage.repos.operations_repo import OperationsRepo
             OperationsRepo().append_email_history(
-                _active_session_id,
+                session_id,
                 EMAIL_TO,
                 subject,
                 status,
