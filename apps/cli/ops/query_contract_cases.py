@@ -35,6 +35,10 @@ MOVIE_FILTER_CASES = [
     ("movie_filters", "actor_hires_session", {"actor": "Jane", "hi_res": True, "session_id": "S1"}),
     ("movie_filters", "date_range_cursor", {"date_from": "2026-01-01", "date_to": "2026-02-01", "cursor_id": 42}),
 ]
+MOVIE_COUNT_CASES = [
+    ("movie_count", name, kwargs)
+    for _, name, kwargs in MOVIE_FILTER_CASES
+]
 TORRENT_FILTER_CASES = [
     ("torrent_filters", "empty", {}),
     ("torrent_filters", "cursor_only", {"cursor_id": 7}),
@@ -52,6 +56,10 @@ TORRENT_FILTER_CASES = [
         {"resolution_type": 1, "has_subtitle": True, "uncensored": False},
     ),
     ("torrent_filters", "date_range_cursor", {"date_from": "2026-01-01", "date_to": "2026-02-01", "cursor_id": 7}),
+]
+TORRENT_COUNT_CASES = [
+    ("torrent_count", name, kwargs)
+    for _, name, kwargs in TORRENT_FILTER_CASES
 ]
 SESSION_QUERY_CASES = [
     ("session_query", "default", {"state": None, "cursor": None, "limit": 50}),

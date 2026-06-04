@@ -11,9 +11,11 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from apps.cli.ops.query_contract_cases import (  # noqa: E402
+    MOVIE_COUNT_CASES,
     MOVIE_FILTER_CASES,
     SESSION_QUERY_CASES,
     STATS_TREND_QUERY_CASES,
+    TORRENT_COUNT_CASES,
     TORRENT_FILTER_CASES,
     normalize_sql,
 )
@@ -21,6 +23,8 @@ from apps.api.routers.stats_query_builders import build_stats_trend_query  # noq
 from javdb.storage.repos.history_repo import (  # noqa: E402
     _build_movie_filters,
     _build_torrent_filters,
+    build_movie_count,
+    build_torrent_count,
 )
 from javdb.storage.repos.sessions_repo import (  # noqa: E402
     _build_session_query,
@@ -45,7 +49,9 @@ def _build_stats_trend_query_for_contract(*, metric: str, cutoff: str) -> tuple[
 
 _BUILDERS = {
     "movie_filters": _build_movie_filters,
+    "movie_count": build_movie_count,
     "torrent_filters": _build_torrent_filters,
+    "torrent_count": build_torrent_count,
     "session_query": _build_session_query,
     "stats_trend_query": _build_stats_trend_query_for_contract,
 }
@@ -64,7 +70,9 @@ def main() -> int:
     cases = []
     for builder_id, name, kwargs in (
         *MOVIE_FILTER_CASES,
+        *MOVIE_COUNT_CASES,
         *TORRENT_FILTER_CASES,
+        *TORRENT_COUNT_CASES,
         *SESSION_QUERY_CASES,
         *STATS_TREND_QUERY_CASES,
     ):
