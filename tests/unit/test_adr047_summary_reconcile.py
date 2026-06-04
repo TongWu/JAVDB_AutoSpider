@@ -14,3 +14,4 @@ def test_summary_counts_torrent_history_and_computes_avg_duration(monkeypatch):
     assert (stats.HISTORY_DB_PATH, "SELECT COUNT(*) FROM TorrentHistory") in calls
     assert all("ReportTorrents" not in sql for _, sql in calls), "must not count ReportTorrents"
     assert any("CommittedAt" in sql for _, sql in calls), "avg_duration must query CommittedAt"
+    assert any("IsDeleted=1" in sql for _, sql in calls), "dedup must filter IsDeleted=1"
