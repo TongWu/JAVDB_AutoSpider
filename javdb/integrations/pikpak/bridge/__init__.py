@@ -2,8 +2,7 @@
 
 ``pikpak_bridge(days, dry_run, ...)`` is the programmatic entry point consumed
 by the REST layer (``apps/api/routers/operations.py``) and is re-exported here
-with its original signature and session set/clear wrapper. ``run_bridge`` is the
-CLI-facing service wrapper. Domain helpers imported by the unit tests are also
+with its original signature. ``run_bridge`` is the CLI-facing service wrapper. Domain helpers imported by the unit tests are also
 re-exported so the package import path stays stable.
 """
 
