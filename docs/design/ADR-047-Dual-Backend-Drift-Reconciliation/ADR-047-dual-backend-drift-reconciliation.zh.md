@@ -2,7 +2,7 @@
 
 | 字段       | 值                                                                    |
 | ---------- | --------------------------------------------------------------------- |
-| **状态**   | Proposed                                                              |
+| **状态**   | 已本地实现 —— Phase 1 校正 + Phase 2 定向 guard 已于 2026-06-04 落地；跨仓库 PR 待创建 |
 | **日期**   | 2026-06-02                                                           |
 | **作者**   | Ted                                                                  |
 | **关联**   | [ADR-018](../ADR-018-Dual-Backend-Query-Contract/ADR-018-dual-backend-query-contract.zh.md)（Contract Golden——本 ADR 扩展其 guard）、[ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.zh.md)（双后端拆分）、[ADR-029](../_archive/ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.zh.md)（auth——拥有 token 吊销）、[ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.zh.md)（`audit` 写模式已退役） |
@@ -68,26 +68,26 @@
 ### 正面
 
 - **用户从任一后端得到一致答案**——三个真实 bug（过期 `audit`、封顶 vs 不封顶计数、错误的 `total_torrents` 表）被移除。
-- **漂过的面无法再静默分歧**——窄 golden + Contract-Values fixture 把它机械化，复用 ADR-018 已验证的分发路径。
+- **漂过的面无法再静默分歧**——窄幅 SQL golden 扩展 + 两端对称单测把它机械化；其中跨仓库 guard 继续复用 ADR-018 已验证的分发路径。
 - **最小、证据驱动**——只守漂过的，对其余尊重 ADR-018 的"低杠杆"判断。
 - **建立在既有基础设施上**——无新跨仓库机制；`repository_dispatch` 重新 vendored 流水线已存在。
 
 ### 负面
 
 - **跨仓库 PR**——每个修复在 Python 仓库与 TS 仓库各落一份，由 golden 绑定（ADR-018 的摩擦，现扩到多几个用例）。
-- **一种新 guard 类型**（Contract-Values fixture）在两端各加少量测试基础设施。
+- **更多两端单测**——静态 `/summary` 查询与 `write_mode` mapper 现在在两个后端各有对称测试。
 
 ### 风险
 
-- **Contract-Values 机制可能越界。** 缓解：仅限这几个已校正的默认值；抵制其膨胀为通用响应快照测试（那是 OpenAPI 契约的职责）。
-- **某校正决策日后被证明有误**（如 `total_torrents` 语义）。缓解：该值现钉在一个 fixture 里，改它就是跨两后端的一处可见 diff。
+- **对称静态查询测试可能越界。** 缓解：仅限已实证漂移的少数默认值和静态查询；抵制其膨胀为宽泛响应快照（那是 OpenAPI 契约的职责）。
+- **某校正决策日后被证明有误**（如 `total_torrents` 语义）。缓解：受影响的 SQL/count 语句与 summary 语义现由 SQL golden 用例加两端对称测试钉住，改它们会在两端产生可见的测试/golden diff。
 
 ## 实施路线图
 
 | 阶段 | 交付 | 推迟 |
 | --- | --- | --- |
-| **Phase 1 —— 校正** | 在两个仓库修掉 3 个真实 bug（D1a Python `write_mode`→pending；D1b TS `total_estimate` 封顶；D1c Python stats `/summary` `total_torrents`→TorrentHistory + `avg_duration`）；清理表面死字段（D4）；记录有意/部署内禀项（D2/D3） | guard |
-| **Phase 2 —— guard** | 用已校正的 count 语句扩展 golden（D5a）+ 新增 `response-values.golden.json` Contract-Values fixture（D5b），经既有流水线在 TS vendored + CI 校验 | 宽泛静态查询 guard（明确排除——D6） |
+| **Phase 1 —— 校正** | **已本地实现（2026-06-04）。** 在两个仓库修掉 3 个真实 bug（D1a Python `write_mode`→pending；D1b TS `total_estimate` 封顶；D1c Python stats `/summary` `total_torrents`→TorrentHistory + `avg_duration`）；清理表面死字段（D4）；记录有意/部署内禀项（D2/D3） | guard |
+| **Phase 2 —— guard** | **已本地实现（2026-06-04）。** 用已校正的 count 语句扩展 ADR-018 SQL golden（D5a），经既有流水线在 TS re-vendor + CI 校验，并用两端对称单测钉住 `/summary` + `write_mode`（D5b） | 宽泛静态查询 guard（明确排除——D6） |
 
 ### 明确的非目标（YAGNI）
 
@@ -98,7 +98,7 @@
 
 ## 领域语言（CONTEXT.md 新增）
 
-- **Contract Values fixture（契约值夹具）** —— 由 Python 生成的 golden（`docs/api/contract/response-values.golden.json`），钉住已校正的*响应值*默认/语义（非 SQL），两个后端都对它断言；是 ADR-018 SQL Contract Golden 的值级别同胞。
+- **Symmetric static-query guard（对称静态查询 guard）** —— 两个后端各自放置匹配单测，用来钉住已实证漂移的静态查询或 mapper 值，而不是把它们加入跨仓库 SQL golden。ADR-047 用它守护 `/summary`（`TorrentHistory`、`CommittedAt`、`IsDeleted=1`）以及 `write_mode` NULL→`"pending"`。
 - **Deployment-intrinsic field（部署内禀字段）** —— 一个 API 字段，因为各报告各自部署的环境而*正确地*在后端间不同（`storage_backend`、`deployment`、`git_sha`、`proxy_bans_last_7d`）；明确排除在跨后端相等契约之外。
 
 ## 考虑过的替代方案
@@ -119,3 +119,4 @@
 
 - 2026-06-02：Proposed。源自 2026-05-29 评审候选 B + 2026-06-02 跨仓库复扫——后者发现 ADR-018 有意不守护的静态/响应面已漂移（7 项分歧；3 个真实用户可见 bug）。决策已固化：`write_mode`→`pending`（D1a）、`total_estimate` 两端封顶 10000（D1b）、stats `total_torrents`→`TorrentHistory`（D1c）；仅窄幅扩展 guard（D6）。把候选 B 从 ADR-018 Phase 3（"消除"）重新定向为修漂移 + 加宽 guard，因为被守护的 builder 是干净的、漂的是未守护面。
 - 2026-06-02：**两个 IMP 已写出**（IMP-ADR047-01 校正、IMP-ADR047-02 守护）。编写期**修订 D5b**：弃用独立 `response-values.golden.json` fixture —— count 语句并入 ADR-018 SQL golden（D5a）；静态 `/summary` 查询与 `write_mode` 默认值由两端对称单测钉住。理由：已漂的面大多是 SQL，单个非-SQL 值不值得新建一种工件类型 + vendor 流水线。
+- 2026-06-04：**Phase 1 与 Phase 2 已在本地实现**，覆盖 Python 仓库与独立 TypeScript Worker 仓库。Phase 1 校正了 `write_mode` NULL→`pending`、`total_estimate` 封顶计数、`/summary.total_torrents` 使用 `TorrentHistory`、`avg_duration_seconds` 使用 `CommittedAt`、以及 dedup `IsDeleted=1` 过滤。Phase 2 增加 `movie_count` / `torrent_count` SQL golden cases，re-vendor 了 TS fixture，加入 TS conformance，并用两端对称测试钉住 `/summary` + `write_mode`。漂移模拟确认 guard 生效：把 TS cap 改成 `9999` 会让 22 个 conformance case 失败；把 Python cap 改成 `9999` 会重新生成可见 golden diff。
