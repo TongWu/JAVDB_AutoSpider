@@ -551,7 +551,7 @@ def _sync_legacy_globals_from_runtime(runtime: SpiderRuntime) -> None:
     global_proxy_coordinator = runtime.services.proxy_coordinator
     global_login_state_client = runtime.services.login_state_client
     global_runner_registry_client = runtime.services.runner_registry_client
-    global_recommend_proxy_policy = runtime.services.recommend_proxy_policy
+    global_recommend_proxy_policy = runtime.services.proxy_selection_signal
     global_work_distributor_client = runtime.services.work_distributor_client
     runtime.services.movie_claim_client = runtime.movie_claim.client_public
     global_movie_claim_client = runtime.movie_claim.client_public
@@ -584,7 +584,7 @@ def _clear_runtime_service_globals(runtime: SpiderRuntime) -> None:
         ("global_proxy_coordinator", "proxy_coordinator"),
         ("global_login_state_client", "login_state_client"),
         ("global_runner_registry_client", "runner_registry_client"),
-        ("global_recommend_proxy_policy", "recommend_proxy_policy"),
+        ("global_recommend_proxy_policy", "proxy_selection_signal"),
         ("global_work_distributor_client", "work_distributor_client"),
     )
     for global_name, service_name in service_globals:

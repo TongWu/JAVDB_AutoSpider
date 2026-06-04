@@ -1152,7 +1152,7 @@ def test_clear_active_runtime_clears_runtime_service_globals_only():
     runtime.services.proxy_coordinator = object()
     runtime.services.login_state_client = object()
     runtime.services.runner_registry_client = object()
-    runtime.services.recommend_proxy_policy = object()
+    runtime.services.proxy_selection_signal = object()
     runtime.services.work_distributor_client = object()
     runtime.movie_claim.client_public = object()
 
