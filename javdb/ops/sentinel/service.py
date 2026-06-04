@@ -35,20 +35,11 @@ def _incident_ctx(repo: Any) -> Iterator[Any]:
             yield opened
 
 
-def _active_session_id() -> str | None:
-    try:
-        from javdb.storage.db import get_active_session_id
-        return get_active_session_id()
-    except Exception:  # noqa: BLE001 - best-effort; absence of a session is non-fatal
-        logger.debug(
-            "get_active_session_id failed; treating as no active session",
-            exc_info=True,
-        )
-        return None
-
-
 def persist_run(fills: list[FieldFill], *, session_id: str | None = None, repo=None) -> int:
-    sid = session_id or _active_session_id()
+    # ADR-046 P5/D2: session is resolved ONLY from the explicit param — the
+    # process-global is never consulted. A session-less call (no run yet) is a
+    # no-op; callers (run_service) thread the owning session in explicitly.
+    sid = session_id
     if not sid or not fills:
         return 0
     with _fill_ctx(repo) as r:
