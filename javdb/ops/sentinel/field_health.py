@@ -74,9 +74,13 @@ def current() -> FieldHealthAccumulator | None:
     return _CURRENT
 
 
-def persist_run(*, repo=None) -> int:
+def persist_run(*, session_id: str | None = None, repo=None) -> int:
     """Persist the current run's fills via the service. No-op if no run started.
-    Best-effort: logs and swallows on failure (must not break the spider)."""
+    Best-effort: logs and swallows on failure (must not break the spider).
+
+    *session_id* is the explicit run session (ADR-046 D2 — never ambient),
+    forwarded to the service so the fills are tagged with the owning session.
+    """
     acc = _CURRENT
     if acc is None:
         return 0
@@ -85,7 +89,7 @@ def persist_run(*, repo=None) -> int:
         return 0
     try:
         from javdb.ops.sentinel.service import persist_run as _svc_persist
-        return _svc_persist(fills, repo=repo)
+        return _svc_persist(fills, session_id=session_id, repo=repo)
     except Exception:
         logger.warning("field_health.persist_run failed", exc_info=True)
         return 0
