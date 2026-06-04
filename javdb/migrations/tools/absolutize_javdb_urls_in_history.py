@@ -33,7 +33,8 @@ from javdb.parsing.common import (
 )
 from javdb.infra.config import cfg
 from javdb.infra.logging import get_logger, setup_logging
-from javdb.storage.db import get_db, HISTORY_DB_PATH, REPORTS_DB_PATH
+from javdb.storage import db as _db
+from javdb.storage.db import get_db
 
 setup_logging()
 logger = get_logger(__name__)
@@ -69,7 +70,7 @@ _HISTORY_CANDIDATE_SQL = """
 
 def _process_history(base_url: str, dry_run: bool) -> RunStats:
     stats = RunStats()
-    with get_db(HISTORY_DB_PATH) as conn:
+    with get_db(_db.HISTORY_DB_PATH) as conn:
         rows = conn.execute(_HISTORY_CANDIDATE_SQL).fetchall()
     stats.scanned = len(rows)
 
@@ -95,7 +96,7 @@ def _process_history(base_url: str, dry_run: bool) -> RunStats:
 
     # Apply in small chunks; each get_db context commits (flushes D1) on exit.
     for chunk in _chunked(changes, 50):
-        with get_db(HISTORY_DB_PATH) as conn:
+        with get_db(_db.HISTORY_DB_PATH) as conn:
             for new_href, new_actor, new_sup, row_id in chunk:
                 conn.execute(
                     "UPDATE MovieHistory SET Href=?, ActorLink=?, "
@@ -108,7 +109,7 @@ def _process_history(base_url: str, dry_run: bool) -> RunStats:
 
 def _process_reports(base_url: str, dry_run: bool) -> RunStats:
     stats = RunStats()
-    with get_db(REPORTS_DB_PATH) as conn:
+    with get_db(_db.REPORTS_DB_PATH) as conn:
         rows = conn.execute(
             "SELECT Id AS Id, Href AS Href FROM ReportMovies WHERE Href LIKE '/%'"
         ).fetchall()
@@ -128,7 +129,7 @@ def _process_reports(base_url: str, dry_run: bool) -> RunStats:
         return stats
 
     for chunk in _chunked(changes, 50):
-        with get_db(REPORTS_DB_PATH) as conn:
+        with get_db(_db.REPORTS_DB_PATH) as conn:
             for new_href, row_id in chunk:
                 conn.execute(
                     "UPDATE ReportMovies SET Href=? WHERE Id=?",
