@@ -86,6 +86,35 @@ def test_record_queued_ignores_unparseable_magnet(repo):
     assert repo.list_active() == []
 
 
+def test_record_queued_honours_monkeypatched_operations_db_path(tmp_path, monkeypatch):
+    """Regression (BFR-016): with no injected repo, record_queued must resolve
+    OPERATIONS_DB_PATH at call time so a monkeypatched path is honoured.
+
+    Before the fix ``reconcile.persistence`` bound OPERATIONS_DB_PATH at import,
+    so the queued row landed in the real operations DB and was invisible to the
+    test path — this asserts it now lands in the patched temp DB. Note: no
+    ``repo=`` is passed, so the write goes through ``open_outcome_repo`` ->
+    ``get_db(OPERATIONS_DB_PATH)`` (the path that used to be import-bound).
+    """
+    from javdb.storage import db as _db
+    from javdb.storage.db import get_db
+
+    ops_db = tmp_path / "ops_runtime.db"
+    _db.init_db(str(ops_db))  # full schema incl. AcquisitionOutcome
+    monkeypatch.setattr(_db, "OPERATIONS_DB_PATH", str(ops_db))
+
+    qb_hash = "a" * 40
+    service.record_queued({"magnet": "magnet:?xt=urn:btih:" + qb_hash}, "sess-1")
+
+    with get_db(str(ops_db)) as conn:
+        rows = conn.execute(
+            "SELECT qb_hash, state, session_id FROM AcquisitionOutcome"
+        ).fetchall()
+    assert [(r["qb_hash"], r["state"], r["session_id"]) for r in rows] == [
+        (qb_hash, "queued", "sess-1")
+    ]
+
+
 def test_apply_cleanup_completed_marks_hashes(repo):
     repo.upsert(AcquisitionOutcomeRecord(qb_hash="h1", href="/v/1", state="queued"))
     res = service.apply_cleanup_completed({"hashes": ["h1", "h2"]}, repo=repo)

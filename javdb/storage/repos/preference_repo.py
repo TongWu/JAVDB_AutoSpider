@@ -7,7 +7,8 @@ import re
 from typing import List, Optional, Tuple
 from urllib.parse import unquote, urlparse
 
-from javdb.storage.db import get_db, HISTORY_DB_PATH
+from javdb.storage import db as _db
+from javdb.storage.db import get_db
 
 
 def _derive_rating_video_code(href: str) -> str:
@@ -23,7 +24,9 @@ class PreferenceRepo:
     """Typed wrapper over MovieRatings and ContentPreferences in history.db."""
 
     def __init__(self, *, db_path: Optional[str] = None) -> None:
-        self._db_path = db_path or HISTORY_DB_PATH
+        # Resolve HISTORY_DB_PATH at construction via ``_db`` (not bound at
+        # import) so pytest's path monkeypatch is honoured (BFR-016).
+        self._db_path = db_path or _db.HISTORY_DB_PATH
 
     # ------------------------------------------------------------------
     # MovieRatings
