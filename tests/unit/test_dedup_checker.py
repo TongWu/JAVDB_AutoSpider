@@ -30,24 +30,6 @@ from javdb.spider.detail.runner import _dedup_log_variant_label
 
 
 # ============================================================================
-# Fixtures
-# ============================================================================
-
-@pytest.fixture(autouse=True)
-def _clear_dedup_session():
-    """ADR-046 P5: dedup writes bind the session via an explicit ``session_id``
-    param (the process-global is never read). Pin the global to ``None`` so any
-    accidental ambient read would surface — the behavior tests below call the
-    dedup functions without a session_id (DedupRecords.SessionId is nullable),
-    and the explicit-session contract is covered by ``TestDedupExplicitSession``.
-    """
-    from javdb.storage.db import set_active_session_id
-    set_active_session_id(None)
-    yield
-    set_active_session_id(None)
-
-
-# ============================================================================
 # Helpers
 # ============================================================================
 
@@ -279,8 +261,6 @@ class TestDedupExplicitSession:
     def test_append_dedup_record_session_none_is_untagged_and_does_not_raise(self):
         """No session_id ⇒ DedupRecords.SessionId NULL, never raises
         (nullable-table Phase-2 contract)."""
-        from javdb.storage.db import set_active_session_id
-        set_active_session_id(None)
         r = DedupRecord('A-001', 's', 'sub', 'gdrive:/p-untagged', 100, 'cat', 'r', 't', 'False', '')
 
         assert append_dedup_record('', r, session_id=None) is True

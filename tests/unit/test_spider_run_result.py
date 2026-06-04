@@ -299,7 +299,6 @@ def test_run_spider_clears_db_context(monkeypatch):
     cleared = []
 
     monkeypatch.setattr(db_module, "set_active_write_mode", lambda value: cleared.append(value))
-    monkeypatch.setattr(db_module, "set_active_session_id", lambda value: None)
     monkeypatch.setattr(db_module, "set_active_run_identity", lambda run_id, run_attempt: None)
 
     result = run_service.run_spider(options)
@@ -346,9 +345,7 @@ def test_run_spider_writes_failure_sidecar_and_clears_context(tmp_path, monkeypa
     cleared = []
 
     monkeypatch.setattr(db_module, "set_active_write_mode", lambda value: cleared.append(value))
-    monkeypatch.setattr(db_module, "set_active_session_id", lambda value: None)
     monkeypatch.setattr(db_module, "set_active_run_identity", lambda run_id, run_attempt: None)
-    monkeypatch.setattr(db_module, "get_active_session_id", lambda: None)
 
     with pytest.raises(RuntimeError, match="boom"):
         run_service.run_spider(options)
@@ -401,9 +398,7 @@ def test_run_spider_suppresses_sidecar_when_cancelled(tmp_path, monkeypatch):
     )
 
     monkeypatch.setattr(db_module, "set_active_write_mode", lambda value: None)
-    monkeypatch.setattr(db_module, "set_active_session_id", lambda value: None)
     monkeypatch.setattr(db_module, "set_active_run_identity", lambda run_id, run_attempt: None)
-    monkeypatch.setattr(db_module, "get_active_session_id", lambda: None)
 
     with pytest.raises(RuntimeError, match="late boom"):
         run_service.run_spider(options)

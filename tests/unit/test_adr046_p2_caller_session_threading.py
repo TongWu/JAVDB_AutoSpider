@@ -2,24 +2,11 @@
 resolve the active session and bind it on the repo constructor (not the
 process-global inside the repo).
 
-Each test monkeypatches ``OperationsRepo`` with a capturing fake and sets the
-active session via the process-global (the canonical "a run is in progress"
-signal these callers still read; Phase 5 migrates that read).
+Each test monkeypatches ``OperationsRepo`` with a capturing fake and asserts
+the explicit ``session_id`` threaded by the caller reaches the repo ctor (ADR-046
+P5: there is no ambient session global to fall back on).
 """
 from unittest.mock import MagicMock
-
-import pytest
-
-from javdb.storage.db import set_active_session_id
-
-_SID = "20260603T000000.000000Z-call-0001"
-
-
-@pytest.fixture
-def active_session():
-    set_active_session_id(_SID)
-    yield _SID
-    set_active_session_id(None)
 
 
 def _capturing_repo():
@@ -29,9 +16,8 @@ def _capturing_repo():
     return repo_cls, repo
 
 
-def test_dedup_append_binds_explicit_session(monkeypatch, active_session):
-    """ADR-046 P5: the explicit ``session_id`` param is bound on the repo ctor;
-    the process-global (set to ``active_session`` by the fixture) is ignored."""
+def test_dedup_append_binds_explicit_session(monkeypatch):
+    """ADR-046 P5: the explicit ``session_id`` param is bound on the repo ctor."""
     import javdb.spider.services.dedup as dedup
     from javdb.spider.services.dedup import DedupRecord, append_dedup_record
 
@@ -45,15 +31,14 @@ def test_dedup_append_binds_explicit_session(monkeypatch, active_session):
     rec = DedupRecord("A-001", "s", "sub", "gdrive:/p", 100, "cat", "r", "t", "False", "")
     append_dedup_record("", rec, session_id=explicit)
 
-    # The explicit param wins over the ambient global (active_session).
+    # The explicit param reaches the repo ctor.
     assert repo_cls.call_args.kwargs["session_id"] == explicit
-    assert repo_cls.call_args.kwargs["session_id"] != active_session
     # The session is bound on the ctor, not passed to the write method.
     assert "session_id" not in repo.append_dedup_record.call_args.kwargs
 
 
-def test_dedup_mark_records_deleted_binds_explicit_session(monkeypatch, active_session):
-    """ADR-046 P5: explicit ``session_id`` on the ctor; global ignored."""
+def test_dedup_mark_records_deleted_binds_explicit_session(monkeypatch):
+    """ADR-046 P5: explicit ``session_id`` on the ctor."""
     import javdb.spider.services.dedup as dedup
     from javdb.spider.services.dedup import mark_records_deleted
 
@@ -66,13 +51,12 @@ def test_dedup_mark_records_deleted_binds_explicit_session(monkeypatch, active_s
     mark_records_deleted("", [("gdrive:/p", "2026-01-02 00:00:00")], session_id=explicit)
 
     assert repo_cls.call_args.kwargs["session_id"] == explicit
-    assert repo_cls.call_args.kwargs["session_id"] != active_session
     assert "session_id" not in repo.mark_records_deleted.call_args.kwargs
 
 
-def test_pikpak_append_history_binds_explicit_session(monkeypatch, active_session):
+def test_pikpak_append_history_binds_explicit_session(monkeypatch):
     """ADR-046 P5: ``save_to_pikpak_history`` binds the explicit ``session_id``
-    param on the repo ctor; the process-global (active_session) is ignored."""
+    param on the repo ctor."""
     import javdb.storage.repos.operations_repo as ops_repo_mod
     import javdb.storage.db as db_mod
     from javdb.integrations.pikpak.bridge.service import save_to_pikpak_history
@@ -98,15 +82,14 @@ def test_pikpak_append_history_binds_explicit_session(monkeypatch, active_sessio
     explicit = "20260604T000000.000000Z-call-9004"
     save_to_pikpak_history(torrent_info, "success", session_id=explicit)
 
-    # The explicit param wins over the ambient global (active_session).
+    # The explicit param reaches the repo ctor.
     assert repo_cls.call_args.kwargs["session_id"] == explicit
-    assert repo_cls.call_args.kwargs["session_id"] != active_session
     assert "session_id" not in repo.append_pikpak_history.call_args.kwargs
 
 
-def test_rclone_self_heal_binds_explicit_session(monkeypatch, active_session):
+def test_rclone_self_heal_binds_explicit_session(monkeypatch):
     """ADR-046 P5: the dedup self-heal binds the explicit ``session_id`` param
-    on the repo ctor; the process-global (active_session) is ignored."""
+    on the repo ctor."""
     import javdb.integrations.rclone.manager.service as rm
 
     repo_cls, repo = _capturing_repo()
@@ -125,7 +108,6 @@ def test_rclone_self_heal_binds_explicit_session(monkeypatch, active_session):
     explicit = "20260604T000000.000000Z-call-9003"
     rm.validate_dedup_records_against_inventory(session_id=explicit)
 
-    # The mark_orphan_records repo binds the explicit param, not the global.
+    # The mark_orphan_records repo binds the explicit param.
     assert repo_cls.call_args.kwargs["session_id"] == explicit
-    assert repo_cls.call_args.kwargs["session_id"] != active_session
     assert "session_id" not in repo.mark_orphan_records.call_args.kwargs

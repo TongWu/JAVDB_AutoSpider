@@ -25,23 +25,22 @@ from javdb.storage.history_manager import (
     is_downloaded_torrent,
 )
 from javdb.storage.db import db_create_report_session, db_stage_history_write, db_commit_session_history, db_load_history
-import javdb.storage.db._db_session as _db_session
 from contextlib import contextmanager
 
 
 @contextmanager
 def _active_session():
-    """Set up an active pending session for tests that call save_parsed_movie_to_history."""
+    """Create a pending ReportSession and yield its id.
+
+    Callers thread the yielded ``sid`` into the history helpers via an explicit
+    ``session_id=`` argument (ADR-046 P5: no ambient session global).
+    """
     sid = db_create_report_session(
         report_type="DailyReport",
         report_date="2026-01-01",
         csv_filename="test-session.csv",
     )
-    _db_session.set_active_session_id(sid)
-    try:
-        yield sid
-    finally:
-        _db_session.set_active_session_id(None)
+    yield sid
 
 
 def _seed_history_sqlite(records):
@@ -908,20 +907,15 @@ class TestStorageModeDuo:
     """In duo mode, both SQLite and CSV are written."""
 
     def test_save_writes_both(self, temp_dir, storage_mode_duo):
-        import javdb.storage.db._db_session as db_session
         hf = os.path.join(temp_dir, 'history.csv')
         sid = db_create_report_session(
             report_type="DailyReport",
             report_date="2026-01-01",
             csv_filename="duo-test.csv",
         )
-        db_session.set_active_session_id(sid)
-        try:
-            save_parsed_movie_to_history(hf, '/v/DUO-001', 1, 'DUO-001',
-                                         {'no_subtitle': 'magnet:?xt=urn:btih:d1'},
-                                         session_id=sid)
-        finally:
-            db_session.set_active_session_id(None)
+        save_parsed_movie_to_history(hf, '/v/DUO-001', 1, 'DUO-001',
+                                     {'no_subtitle': 'magnet:?xt=urn:btih:d1'},
+                                     session_id=sid)
         db_commit_session_history(sid)
         history_sqlite = db_load_history()
         assert '/v/DUO-001' in history_sqlite

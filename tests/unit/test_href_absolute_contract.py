@@ -18,7 +18,6 @@ from javdb.storage.db import (
     db_commit_session_history,
     get_db,
 )
-import javdb.storage.db._db_session as _db_session
 from javdb.storage.repos.metadata_repo import MetadataRepo
 
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -62,26 +61,22 @@ def test_public_writers_never_persist_relative_hrefs():
         report_date="2026-01-01",
         csv_filename="contract.csv",
     )
-    _db_session.set_active_session_id(sid)
-    try:
-        db_stage_history_write(
-            sid,
-            "movie",
-            {
-                "Href": "/v/rel1",
-                "VideoCode": "REL-1",
-                "ActorName": "Lead",
-                "ActorGender": "female",
-                "ActorLink": "/actors/rel-lead",
-                "SupportingActors": json.dumps(
-                    [{"name": "Sup", "gender": "male", "link": "/actors/rel-sup"}]
-                ),
-                "DateTimeVisited": "2026-01-01 00:00:00",
-            },
-        )
-        db_commit_session_history(sid)
-    finally:
-        _db_session.set_active_session_id(None)
+    db_stage_history_write(
+        sid,
+        "movie",
+        {
+            "Href": "/v/rel1",
+            "VideoCode": "REL-1",
+            "ActorName": "Lead",
+            "ActorGender": "female",
+            "ActorLink": "/actors/rel-lead",
+            "SupportingActors": json.dumps(
+                [{"name": "Sup", "gender": "male", "link": "/actors/rel-sup"}]
+            ),
+            "DateTimeVisited": "2026-01-01 00:00:00",
+        },
+    )
+    db_commit_session_history(sid)
 
     # --- MovieMetadata: upsert with relative href + embedded links ---
     # MetadataRepo captures HISTORY_DB_PATH at import time, so target the
