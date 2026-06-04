@@ -79,6 +79,41 @@ def test_recommend_returns_typed_recommendations():
         c.close()
 
 
+def test_recommend_ignores_adr023_shadow_fields():
+    c = _make_client()
+    body = {
+        "recommendations": [
+            {
+                "proxy_id": "P-1",
+                "score": 0.9,
+                "heuristic_score": 0.9,
+                "model_score": 0.73,
+                "confidence": 0.42,
+                "reason_code": "stable_recently",
+                "cooldown_until": None,
+                "model_version": "adr023-shadow-v1",
+                "latency_ema_ms": 120.0,
+                "success_count": 200,
+                "failure_count": 5,
+                "banned": False,
+                "requires_cf_bypass": False,
+                "available": True,
+            }
+        ],
+        "queried_proxy_ids": ["P-1"],
+        "server_time": 1234,
+    }
+    try:
+        with patch.object(c._session, "get", return_value=_mock_response(200, body)):
+            r = c.recommend(["P-1"])
+        assert len(r.recommendations) == 1
+        assert r.recommendations[0].proxy_id == "P-1"
+        assert r.recommendations[0].score == pytest.approx(0.9)
+        assert r.recommendations[0].available is True
+    finally:
+        c.close()
+
+
 def test_recommend_empty_proxy_ids_short_circuits():
     c = _make_client()
     try:
