@@ -902,6 +902,10 @@ latency_ema_ms / score ∈ [0,1]`）。Python 端 `ProxyPool.get_next_proxy`
   latency_ema_ms, score } | null`（老 client 忽略；新 client 在缺字段
   时退回到 0.5 中性分）。
 - 写路径同步刷新 `cached`，避免同 instance 后续 `/lease` 读到旧值。
+- `GET /recommend_proxy` 的 recommendation 行新增 ADR-023 的可选 shadow
+  字段：`heuristic_score`、`model_score`、`confidence`、`reason_code`、
+  `cooldown_until` 和 `model_version`。Phase 1 **不会**按 `model_score`
+  排序；现有 `score` 字段仍然是排序依据。
 
 ### 18.3 客户端集成
 
@@ -920,6 +924,11 @@ latency_ema_ms / score ∈ [0,1]`）。Python 端 `ProxyPool.get_next_proxy`
 - `ratio = success_count / (success_count + failure_count)`
 - `latency_penalty = clamp((latency_ema_ms - 500) / 10000, 0, 0.5)`
 - `score = ratio - latency_penalty`（无样本时 `score = 0.5`）
+
+ADR-023 Phase 1 只把 shadow policy 字段用于可观测性。运维可以在
+`/recommend_proxy` 响应中对比 `heuristic_score` 和 `model_score`，观察
+policy 会在哪些场景下产生分歧；真正改变代理排序要等后续 rollout flag
+阶段。
 
 如需更激进（坏代理更快被旁路），可在 Python 端把
 `ProxyPool._safe_health_score` 的地板从 `0.05` 降到 `0.01`；如需更
