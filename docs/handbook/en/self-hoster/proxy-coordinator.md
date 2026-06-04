@@ -948,6 +948,10 @@ while bad proxies retain a 5% floor probability to allow recovery.
   back to 0.5 neutral score when the field is missing).
 - Write path synchronously refreshes `cached` to prevent subsequent `/lease`
   reads on the same instance from seeing stale values.
+- `GET /recommend_proxy` recommendation rows add optional ADR-023 shadow
+  fields: `heuristic_score`, `model_score`, `confidence`, `reason_code`,
+  `cooldown_until`, and `model_version`. Phase 1 does **not** sort by
+  `model_score`; the existing `score` field remains the ranking source.
 
 ### 18.3 Client Integration
 
@@ -967,6 +971,11 @@ Health score formula (`proxy_coordinator.ts` `computeHealthSnapshot`):
 - `ratio = success_count / (success_count + failure_count)`
 - `latency_penalty = clamp((latency_ema_ms - 500) / 10000, 0, 0.5)`
 - `score = ratio - latency_penalty` (no samples -> `score = 0.5`)
+
+ADR-023 Phase 1 adds shadow policy fields for observability only. Operators can
+compare `heuristic_score` and `model_score` in `/recommend_proxy` responses to
+understand where the policy would disagree, but proxy ordering remains
+unchanged until the later rollout-flag phase.
 
 For more aggressive behavior (bad proxies bypassed faster), lower the floor in
 `ProxyPool._safe_health_score` from `0.05` to `0.01` on the Python side; for
