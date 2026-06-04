@@ -39,22 +39,6 @@ from javdb.spider.services.dedup import (
 )
 
 
-@pytest.fixture
-def active_dedup_session():
-    """Bind an active session for dedup writes (ADR-046 P2).
-
-    The dedup module functions (``append_dedup_record`` /
-    ``mark_records_deleted``) and the dedup self-heal (``mark_orphan_records``)
-    now resolve the active session at the caller and require one — an untagged
-    write raises. Tests that exercise these against a real DB opt in here; the
-    pipeline always runs them inside a session.
-    """
-    from javdb.storage.db import set_active_session_id
-    set_active_session_id("20260603T000000.000000Z-rclo-0001")
-    yield
-    set_active_session_id(None)
-
-
 # ============================================================================
 # Raw-DB boundary regression (Issue #79)
 # ============================================================================
@@ -122,7 +106,6 @@ def test_validate_dedup_self_heal_routes_through_operations_repo(monkeypatch):
     """
     import javdb.integrations.rclone.manager.service as rm
     from javdb.storage.db import (
-        set_active_session_id,
         db_replace_rclone_inventory,
         db_append_dedup_record,
         get_db,
@@ -130,7 +113,6 @@ def test_validate_dedup_self_heal_routes_through_operations_repo(monkeypatch):
     )
 
     # No active session — the standalone WeeklyDedup CLI never sets one.
-    set_active_session_id(None)
 
     # Seed inventory truth-set (one surviving path) and a pending dedup record
     # whose path is NOT in the inventory (an orphan to be self-healed).
@@ -191,20 +173,16 @@ def test_validate_dedup_self_heal_routes_through_operations_repo(monkeypatch):
 
 def test_validate_dedup_self_heal_tags_orphan_with_explicit_session(monkeypatch):
     """ADR-046 P5: when an explicit ``session_id`` is threaded into the dedup
-    self-heal, the orphan row is tagged with it (the ambient global is never
-    read). The standalone path passes ``None`` (covered above)."""
+    self-heal, the orphan row is tagged with it. The standalone path passes
+    ``None`` (covered above)."""
     import javdb.integrations.rclone.manager.service as rm
     from javdb.storage.db import (
-        set_active_session_id,
         db_replace_rclone_inventory,
         db_append_dedup_record,
         get_db,
         OPERATIONS_DB_PATH,
     )
 
-    # Active session left empty on purpose: the explicit param must win and the
-    # global must never be consulted.
-    set_active_session_id(None)
     explicit_sid = "20260604T000000.000000Z-rclo-9999"
 
     db_replace_rclone_inventory(
@@ -469,7 +447,7 @@ def test_scan_sqlite_uses_staging_when_no_active_session(
     monkeypatch, tmp_path, storage_mode_db
 ):
     import javdb.integrations.rclone.manager.service as rm
-    from javdb.storage.db import set_active_session_id, db_replace_rclone_inventory, get_db
+    from javdb.storage.db import db_replace_rclone_inventory, get_db
 
     output = tmp_path / "inventory.csv"
     seed = {
@@ -488,7 +466,6 @@ def test_scan_sqlite_uses_staging_when_no_active_session(
         "scan_datetime": "2026-05-05 00:00:00",
     })
 
-    set_active_session_id(None)
     db_replace_rclone_inventory([seed], session_id=None)
 
     def fake_scan(*_args, row_callback=None, **_kwargs):
@@ -1235,7 +1212,6 @@ class TestLoadInventoryAsFolderStructure:
 # Test dedup CSV filtering (is_deleted skip logic) — migrated from executor
 # ============================================================================
 
-@pytest.mark.usefixtures("active_dedup_session")
 class TestDedupCsvFiltering:
     def _create_dedup_csv(self, tmp_path, records):
         path = str(tmp_path / 'dedup.csv')
@@ -1266,7 +1242,6 @@ class TestDedupCsvFiltering:
 # Test is_deleted column update
 # ============================================================================
 
-@pytest.mark.usefixtures("active_dedup_session")
 class TestIsDeletedUpdate:
     def test_mark_records_deleted_preserves_structure(self, tmp_path):
         path = str(tmp_path / 'dedup.csv')
@@ -1287,7 +1262,6 @@ class TestIsDeletedUpdate:
 # Test execute mode (dry-run)
 # ============================================================================
 
-@pytest.mark.usefixtures("active_dedup_session")
 class TestExecuteMode:
     @patch('javdb.integrations.rclone.manager.service.get_configured_drive_name', return_value='gdrive')
     @patch('javdb.integrations.rclone.helper.subprocess.run')
@@ -1550,7 +1524,6 @@ def _add_dedup_pending(code, path, reason='Subtitle upgrade'):
     }, session_id=None)
 
 
-@pytest.mark.usefixtures("active_dedup_session")
 class TestValidateDedupRecords:
     def test_marks_only_orphan_pendings(self, storage_mode_db, tmp_path, monkeypatch):
         import javdb.integrations.rclone.manager.service as rm
@@ -1616,7 +1589,6 @@ class TestValidateDedupRecords:
         assert ORPHAN_REASON_SUFFIX in text
 
 
-@pytest.mark.usefixtures("active_dedup_session")
 class TestRunValidateInventory:
     def test_prunes_inventory_and_chains_dedup_self_heal(
         self, storage_mode_db, tmp_path, monkeypatch,

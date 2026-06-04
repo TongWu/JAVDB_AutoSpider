@@ -187,19 +187,15 @@ class TestPikpakBridgeLogic:
 
     def test_pikpak_bridge_passes_session_id_to_impl(self, monkeypatch):
         """ADR-046 P5: ``pikpak_bridge`` is a thin pass-through — it threads the
-        explicit ``session_id`` straight to ``_pikpak_bridge_impl`` and never
-        touches the process-global session machinery."""
+        explicit ``session_id`` straight to ``_pikpak_bridge_impl``."""
         import javdb.integrations.pikpak.bridge as pikpak_mod
         import javdb.integrations.pikpak.bridge.service as pikpak_service
-        import javdb.storage.db._db_session as db_sess
 
         sid = "20260604T000000.000000Z-pikp-0001"
         captured = {}
 
         def fake_impl(*_args, **kwargs):
             captured["session_id"] = kwargs.get("session_id")
-            # The bridge no longer mutates the ambient global (ADR-046 P5).
-            assert db_sess.get_active_session_id() is None
             return "done"
 
         monkeypatch.setattr(pikpak_service, "_pikpak_bridge_impl", fake_impl)
@@ -208,8 +204,6 @@ class TestPikpakBridgeLogic:
             3, True, session_id=sid, root_folder="/root",
         ) == "done"
         assert captured["session_id"] == sid
-        # The bridge must not have set/cleared the process-global.
-        assert db_sess.get_active_session_id() is None
 
     def test_run_bridge_populates_result_from_stats(self, monkeypatch):
         """``run_bridge`` must surface the stats dict returned by

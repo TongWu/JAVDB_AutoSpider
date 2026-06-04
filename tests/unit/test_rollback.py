@@ -23,7 +23,7 @@ import pytest
 
 from javdb.storage.db import (
     get_db,
-    set_active_session_id, SESSION_ID_PATTERN as _SESSION_ID_PATTERN,
+    SESSION_ID_PATTERN as _SESSION_ID_PATTERN,
     db_create_report_session, db_mark_session_committed, db_mark_session_failed,
     db_find_in_progress_sessions, db_count_in_progress_sessions_for_run,
     db_find_sessions_by_run,
@@ -488,20 +488,17 @@ class TestRollbackOperations:
         assert row["SessionId"] is None
         assert backup is None
 
-    def test_explicit_none_session_id_opts_out_of_active_context(self):
-        sid = _create_session()
-        set_active_session_id(sid)
-        try:
-            dedup_id = db_append_dedup_record(
-                {"video_code": "ABC-004", "existing_gdrive_path": "/a/4"},
-                session_id=None,
-            )
-            db_upsert_align_no_exact_match(
-                "XYZ-004",
-                session_id=None,
-            )
-        finally:
-            set_active_session_id(None)
+    def test_explicit_none_session_id_writes_untagged_rows(self):
+        # ADR-046 P5: an explicit ``session_id=None`` writes an untagged row
+        # (SessionId NULL) and must never raise — nullable Operations tables.
+        dedup_id = db_append_dedup_record(
+            {"video_code": "ABC-004", "existing_gdrive_path": "/a/4"},
+            session_id=None,
+        )
+        db_upsert_align_no_exact_match(
+            "XYZ-004",
+            session_id=None,
+        )
 
         with get_db() as conn:
             dedup = conn.execute(

@@ -68,12 +68,10 @@ def test_persist_requires_explicit_session_then_writes_once_supplied():
     assert got["href"].fill_rate == 1.0
 
 
-def test_persist_ignores_ambient_global_session():
+def test_service_persist_run_requires_explicit_session():
     """ADR-046 P5: ``service.persist_run`` resolves the session ONLY from the
-    explicit ``session_id`` param — the process-global is never consulted. With
-    a global session active but no explicit param, persist must be a no-op."""
-    from javdb.storage.db import set_active_session_id
-
+    explicit ``session_id`` param. With no explicit param it is a no-op; once a
+    session id is supplied it writes the buffered fills."""
     c = sqlite3.connect(":memory:")
     c.executescript(_DDL)
     repo = ParseRunFieldFillRepo(c)
@@ -82,10 +80,11 @@ def test_persist_ignores_ambient_global_session():
     acc.observe("index", [_Entry(href="/v/1", video_code="A-1", title="t", rate="4.0")])
     fills = acc.fill_rates()
 
-    try:
-        set_active_session_id("AMBIENT")  # a run is "active" via the global
-        # No explicit session_id -> no-op (the ambient value is ignored).
-        assert service.persist_run(fills, repo=repo) == 0
-        assert c.execute("SELECT COUNT(*) FROM ParseRunFieldFill").fetchone()[0] == 0
-    finally:
-        set_active_session_id(None)
+    # No explicit session_id -> no-op (no row written).
+    assert service.persist_run(fills, repo=repo) == 0
+    assert c.execute("SELECT COUNT(*) FROM ParseRunFieldFill").fetchone()[0] == 0
+
+    # Explicit session id -> the buffered fills persist.
+    assert service.persist_run(fills, session_id="S1", repo=repo) >= 1
+    got = {f.field: f for f in repo.get_fills("S1")}
+    assert got["href"].fill_rate == 1.0

@@ -34,7 +34,7 @@ import pytest
 
 from javdb.storage.db import (
     get_db,
-    set_active_session_id, set_active_run_identity, set_active_write_mode,
+    set_active_run_identity, set_active_write_mode,
     db_create_report_session, db_get_session_status, db_pending_session_stats,
     db_begin_finalize_session, db_finish_commit_session,
     db_stage_history_write, db_commit_session_history,
@@ -585,7 +585,6 @@ class TestSpiderWritePathRoutesToPending:
         from javdb.storage.history_manager import (
             save_parsed_movie_to_history,
         )
-        set_active_session_id(None)
         set_active_run_identity(None, None)
         set_active_write_mode(None)
         sid = db_create_report_session(
@@ -594,7 +593,6 @@ class TestSpiderWritePathRoutesToPending:
             csv_filename="wire-pending.csv",
             write_mode="pending",
         )
-        set_active_session_id(sid)
         set_active_run_identity("rid-wire", 1)
         set_active_write_mode("pending")
         try:
@@ -617,7 +615,6 @@ class TestSpiderWritePathRoutesToPending:
                 session_id=sid,
             )
         finally:
-            set_active_session_id(None)
             set_active_run_identity(None, None)
             set_active_write_mode(None)
 
@@ -729,7 +726,6 @@ class TestBatchUpdatesRouteToPending:
     """
 
     def _setup_pending_session(self) -> int:
-        set_active_session_id(None)
         set_active_run_identity(None, None)
         set_active_write_mode(None)
         sid = db_create_report_session(
@@ -738,13 +734,11 @@ class TestBatchUpdatesRouteToPending:
             csv_filename="batch-pending.csv",
             write_mode="pending",
         )
-        set_active_session_id(sid)
         set_active_run_identity("rid-batch", 1)
         set_active_write_mode("pending")
         return sid
 
     def _teardown(self):
-        set_active_session_id(None)
         set_active_run_identity(None, None)
         set_active_write_mode(None)
 
