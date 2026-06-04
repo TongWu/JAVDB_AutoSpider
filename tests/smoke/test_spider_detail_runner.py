@@ -165,7 +165,7 @@ def test_persist_parsed_detail_result_writes_report_dedup_and_history(monkeypatc
     monkeypatch.setattr(
         dc,
         'append_dedup_record',
-        lambda csv_path, record: dedup_appends.append((csv_path, record)),
+        lambda csv_path, record, session_id=None: dedup_appends.append((csv_path, record)),
     )
 
     outcome = persist_parsed_detail_result(
