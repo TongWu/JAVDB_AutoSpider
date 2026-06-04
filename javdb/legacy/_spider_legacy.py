@@ -1582,9 +1582,8 @@ def process_detail_entries_parallel(
 
     if use_history_for_saving and not dry_run and visited_hrefs:
         if use_sqlite() and actor_updates:
-            from javdb.storage.db import get_active_session_id
             HistoryRepo(
-                session_id=get_active_session_id()
+                session_id=None
             ).batch_update_movie_actors(actor_updates)
 
     logger.info(
@@ -1761,9 +1760,8 @@ def process_phase_entries_sequential(
 
     if use_history_for_saving and not dry_run and visited_hrefs:
         if use_sqlite() and actor_updates:
-            from javdb.storage.db import get_active_session_id
             HistoryRepo(
-                session_id=get_active_session_id()
+                session_id=None
             ).batch_update_movie_actors(actor_updates)
 
     logger.info(
