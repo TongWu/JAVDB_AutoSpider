@@ -77,10 +77,10 @@ assert "TorrentQueued" in harness.events()  # 当 ADR-036 已建
 | 阶段 | IMP | 交付内容 | 推迟内容 |
 | --- | --- | --- | --- |
 | Phase 1 — Harness 核心 + 金场景 | [IMP-ADR037-01](IMP-ADR037-01-harness-core.md) | `tests/harness/`（FixtureHTTP 回放、FakeQB、`pipeline_harness` fixture、场景+断言 API）;一个金 daily 场景（index → 详情 → 加种 → commit）断言 history（+ 事件,若 ADR-036 已建） | record 模式;场景库;SMTP/pikpak/rclone 接缝 |
-| Phase 2 — 场景库 + record + 接缝 | IMP-ADR037-02（占位） | record 模式;漂移/完成/失败场景;SMTP/pikpak/rclone fake | — |
-| Phase 3 — 金 run diff（可选） | IMP-ADR037-03（占位） | 录一次真实 run 的输入+输出;CI 回放 + diff | — |
+| Phase 2 — 场景库 + record + 接缝 | [IMP-ADR037-02](IMP-ADR037-02-scenario-library-record-seams.md)（已规划） | record 模式;漂移/完成/失败场景;SMTP/pikpak/rclone fake | — |
+| Phase 3 — 金 run diff（可选） | [IMP-ADR037-03](IMP-ADR037-03-golden-run-diff.md)（已规划） | 录一次真实 run 的输入+输出;CI 回放 + diff | — |
 
-Phase 1 独立成立、只加测试支撑代码。Phase 2/3 扩展覆盖。
+Phase 1 独立成立、只加测试支撑代码。Phase 2/3 扩展覆盖。Phase 2/3 的 IMP 已撰写(计划);规划期间的发现见状态日志。
 
 ### 明确的非目标 (YAGNI)
 
@@ -115,3 +115,4 @@ Phase 1 独立成立、只加测试支撑代码。Phase 2/3 扩展覆盖。
 
 - 2026-05-29: Proposed(伞型;三期已划定,IMP 待出)。
 - 2026-05-30: Phase 1 已实现（[IMP-ADR037-01](IMP-ADR037-01-harness-core.md)）—— `tests/harness/` 交付 FixtureHTTP + FakeQB + `pipeline_harness` fixture 与一个黄金每日场景（index → 2 个 detail → queued → commit），断言历史落地 2 行 + qB 入队 2 个 hash；14 个测试 <0.4s 全绿。实现与计划的偏差见 IMP 的 "Implementation Reconciliation"（三步 `run_spider`→`run_uploader`→`commit_session`、session 取自 `SpiderRunResult`、`STORAGE_MODE=duo` 以打通 CSV 交接）。Phase 2/3 仍为 stub。
+- 2026-06-04: Phase 2 与 Phase 3 实现计划已撰写([IMP-ADR037-02](IMP-ADR037-02-scenario-library-record-seams.md)、[IMP-ADR037-03](IMP-ADR037-03-golden-run-diff.md))—— 仅为计划,尚未实现。规划期间用一个临时探针端到端验证了场景,并发现 `javdb/ops/reconcile/persistence.py` 与 `javdb/ops/sentinel/persistence.py` 在 import 期绑定 DB 路径常量(`from javdb.storage.db import OPERATIONS_DB_PATH`/`REPORTS_DB_PATH`),`_isolate_sqlite` 的重定向够不到它,导致闭环/哨兵写入落到非测试 DB。IMP-02 在 harness `_install` 中把这些名字 repoint 到临时 DB 以使写入对测试可见;更广的测试隔离修复在本 ADR 之外跟踪。

@@ -152,7 +152,8 @@ def test_persist_incident_calls_get_db_with_reports_path(monkeypatch):
 
     persisted = persistence.persist_incident(_record())
 
-    assert seen == [persistence.REPORTS_DB_PATH]
+    # REPORTS_DB_PATH is resolved at call time via persistence._db (BFR-016).
+    assert seen == [persistence._db.REPORTS_DB_PATH]
     assert persisted.persistence_status == "d1_written"
     assert OpsIncidentRepo(conn).get(persisted.incident_id) is not None
 
@@ -178,7 +179,9 @@ def test_persist_incident_writes_to_reports_db_without_jsonl_fallback(tmp_path, 
     monkeypatch.setenv("STORAGE_BACKEND", "sqlite")
     monkeypatch.delenv("_STORAGE_BACKEND_INIT_OVERRIDE", raising=False)
     # Point persist_incident at the temp reports DB; do NOT mock get_db.
-    monkeypatch.setattr(persistence, "REPORTS_DB_PATH", str(db_path))
+    # persist_incident resolves REPORTS_DB_PATH at call time via persistence._db
+    # (the javdb.storage.db package), so patch the path there (BFR-016).
+    monkeypatch.setattr(persistence._db, "REPORTS_DB_PATH", str(db_path))
 
     jsonl_path = tmp_path / "ops_incidents.jsonl"
     record = _record()
