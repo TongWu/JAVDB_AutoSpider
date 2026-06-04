@@ -133,6 +133,137 @@
     },
     {
       "bindings": [],
+      "builder": "movie_count",
+      "name": "empty",
+      "params": {},
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM MovieHistory m"
+    },
+    {
+      "bindings": [
+        42
+      ],
+      "builder": "movie_count",
+      "name": "cursor_only",
+      "params": {
+        "cursor_id": 42
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM MovieHistory m WHERE m.Id > ?"
+    },
+    {
+      "bindings": [
+        "%ABC-123%",
+        "%ABC-123%",
+        "%ABC-123%"
+      ],
+      "builder": "movie_count",
+      "name": "q_only",
+      "params": {
+        "q": "ABC-123"
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM MovieHistory m WHERE (m.VideoCode LIKE ? OR m.ActorName LIKE ? OR m.SupportingActors LIKE ?)"
+    },
+    {
+      "bindings": [
+        "%ABC%",
+        "%ABC%",
+        "%ABC%",
+        1
+      ],
+      "builder": "movie_count",
+      "name": "q_and_perfect_match",
+      "params": {
+        "perfect_match": true,
+        "q": "ABC"
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM MovieHistory m WHERE (m.VideoCode LIKE ? OR m.ActorName LIKE ? OR m.SupportingActors LIKE ?) AND m.PerfectMatchIndicator = ?"
+    },
+    {
+      "bindings": [
+        0
+      ],
+      "builder": "movie_count",
+      "name": "perfect_match_false",
+      "params": {
+        "perfect_match": false
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM MovieHistory m WHERE m.PerfectMatchIndicator = ?"
+    },
+    {
+      "bindings": [
+        "Jane"
+      ],
+      "builder": "movie_count",
+      "name": "actor_only",
+      "params": {
+        "actor": "Jane"
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM MovieHistory m WHERE m.ActorName = ?"
+    },
+    {
+      "bindings": [
+        1
+      ],
+      "builder": "movie_count",
+      "name": "hi_res_true",
+      "params": {
+        "hi_res": true
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM MovieHistory m WHERE m.HiResIndicator = ?"
+    },
+    {
+      "bindings": [
+        0
+      ],
+      "builder": "movie_count",
+      "name": "hi_res_false",
+      "params": {
+        "hi_res": false
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM MovieHistory m WHERE m.HiResIndicator = ?"
+    },
+    {
+      "bindings": [
+        "S1"
+      ],
+      "builder": "movie_count",
+      "name": "session_only",
+      "params": {
+        "session_id": "S1"
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM MovieHistory m WHERE m.SessionId = ?"
+    },
+    {
+      "bindings": [
+        "Jane",
+        1,
+        "S1"
+      ],
+      "builder": "movie_count",
+      "name": "actor_hires_session",
+      "params": {
+        "actor": "Jane",
+        "hi_res": true,
+        "session_id": "S1"
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM MovieHistory m WHERE m.ActorName = ? AND m.HiResIndicator = ? AND m.SessionId = ?"
+    },
+    {
+      "bindings": [
+        42,
+        "2026-01-01 00:00:00",
+        "2026-02-01 23:59:59"
+      ],
+      "builder": "movie_count",
+      "name": "date_range_cursor",
+      "params": {
+        "cursor_id": 42,
+        "date_from": "2026-01-01",
+        "date_to": "2026-02-01"
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM MovieHistory m WHERE m.Id > ? AND m.DateTimeCreated >= ? AND m.DateTimeCreated <= ?"
+    },
+    {
+      "bindings": [],
       "builder": "torrent_filters",
       "name": "empty",
       "params": {},
@@ -250,6 +381,126 @@
         "date_to": "2026-02-01"
       },
       "sql": "WHERE t.Id > ? AND t.DateTimeCreated >= ? AND t.DateTimeCreated <= ?"
+    },
+    {
+      "bindings": [],
+      "builder": "torrent_count",
+      "name": "empty",
+      "params": {},
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM TorrentHistory t JOIN MovieHistory m ON m.Id = t.MovieHistoryId"
+    },
+    {
+      "bindings": [
+        7
+      ],
+      "builder": "torrent_count",
+      "name": "cursor_only",
+      "params": {
+        "cursor_id": 7
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM TorrentHistory t JOIN MovieHistory m ON m.Id = t.MovieHistoryId WHERE t.Id > ?"
+    },
+    {
+      "bindings": [
+        "%ABC-123%"
+      ],
+      "builder": "torrent_count",
+      "name": "q_only",
+      "params": {
+        "q": "ABC-123"
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM TorrentHistory t JOIN MovieHistory m ON m.Id = t.MovieHistoryId WHERE m.VideoCode LIKE ?"
+    },
+    {
+      "bindings": [
+        1
+      ],
+      "builder": "torrent_count",
+      "name": "resolution_only",
+      "params": {
+        "resolution_type": 1
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM TorrentHistory t JOIN MovieHistory m ON m.Id = t.MovieHistoryId WHERE t.ResolutionType = ?"
+    },
+    {
+      "bindings": [
+        1
+      ],
+      "builder": "torrent_count",
+      "name": "has_subtitle_true",
+      "params": {
+        "has_subtitle": true
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM TorrentHistory t JOIN MovieHistory m ON m.Id = t.MovieHistoryId WHERE t.SubtitleIndicator = ?"
+    },
+    {
+      "bindings": [
+        0
+      ],
+      "builder": "torrent_count",
+      "name": "has_subtitle_false",
+      "params": {
+        "has_subtitle": false
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM TorrentHistory t JOIN MovieHistory m ON m.Id = t.MovieHistoryId WHERE t.SubtitleIndicator = ?"
+    },
+    {
+      "bindings": [],
+      "builder": "torrent_count",
+      "name": "uncensored_true",
+      "params": {
+        "uncensored": true
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM TorrentHistory t JOIN MovieHistory m ON m.Id = t.MovieHistoryId WHERE t.CensorIndicator = 0"
+    },
+    {
+      "bindings": [],
+      "builder": "torrent_count",
+      "name": "uncensored_false",
+      "params": {
+        "uncensored": false
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM TorrentHistory t JOIN MovieHistory m ON m.Id = t.MovieHistoryId WHERE t.CensorIndicator != 0"
+    },
+    {
+      "bindings": [
+        "S1"
+      ],
+      "builder": "torrent_count",
+      "name": "session_only",
+      "params": {
+        "session_id": "S1"
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM TorrentHistory t JOIN MovieHistory m ON m.Id = t.MovieHistoryId WHERE t.SessionId = ?"
+    },
+    {
+      "bindings": [
+        1,
+        1
+      ],
+      "builder": "torrent_count",
+      "name": "resolution_subtitle_uncensored",
+      "params": {
+        "has_subtitle": true,
+        "resolution_type": 1,
+        "uncensored": false
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM TorrentHistory t JOIN MovieHistory m ON m.Id = t.MovieHistoryId WHERE t.ResolutionType = ? AND t.SubtitleIndicator = ? AND t.CensorIndicator != 0"
+    },
+    {
+      "bindings": [
+        7,
+        "2026-01-01 00:00:00",
+        "2026-02-01 23:59:59"
+      ],
+      "builder": "torrent_count",
+      "name": "date_range_cursor",
+      "params": {
+        "cursor_id": 7,
+        "date_from": "2026-01-01",
+        "date_to": "2026-02-01"
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM TorrentHistory t JOIN MovieHistory m ON m.Id = t.MovieHistoryId WHERE t.Id > ? AND t.DateTimeCreated >= ? AND t.DateTimeCreated <= ?"
     },
     {
       "bindings": [
@@ -373,5 +624,5 @@
     }
   ],
   "normalization": "collapse-whitespace-runs-to-single-space-and-trim",
-  "version": "85fef51b76f3decc"
+  "version": "439006fcad451495"
 }
