@@ -977,6 +977,17 @@ compare `heuristic_score` and `model_score` in `/recommend_proxy` responses to
 understand where the policy would disagree, but proxy ordering remains
 unchanged until the later rollout-flag phase.
 
+ADR-023 Phase 2 adds two Worker vars:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `RECOMMEND_PROXY_POLICY_MODE` | `"shadow"` | `"shadow"` keeps existing heuristic ordering; `"policy"` sorts by blended `rank_score`. |
+| `RECOMMEND_PROXY_EXPLORATION_FLOOR` | `"0.02"` | Minimum rank score for available proxies in policy mode, capped at 0.2 server-side. |
+
+Rollback is a one-line Worker var change: set
+`RECOMMEND_PROXY_POLICY_MODE = "shadow"` and redeploy. No Python client change
+is required because clients still read the stable `score` field.
+
 For more aggressive behavior (bad proxies bypassed faster), lower the floor in
 `ProxyPool._safe_health_score` from `0.05` to `0.01` on the Python side; for
 more conservative behavior (avoid oscillation), square the weights:
