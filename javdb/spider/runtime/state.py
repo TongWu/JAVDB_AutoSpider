@@ -2124,59 +2124,43 @@ def _setup_proxy_pool_legacy(use_proxy) -> None:
             logger.warning("Proxy enabled but no proxy configuration found (neither PROXY_POOL nor PROXY_HTTP/PROXY_HTTPS)")
         global_proxy_pool = None
 
-    # W6.B (W5.5) — when the operator has enabled cross-DO health
-    # aggregation via RECOMMEND_PROXY_ENABLED=true, prefer that policy
-    # over the local per-proxy cache: it integrates cohort-wide health
-    # data rather than only this runner's lease history. The local
-    # ``coord.get_proxy_health_score`` fallback runs unchanged when
-    # RecommendProxy is disabled or unreachable.
+    # ADR-023 Phase 4 (IMP-ADR023-04 Task 5): route the no-active-runtime
+    # legacy global path through ProxySelectionSignal, mirroring the runtime
+    # path in RuntimeContext.setup_proxy_pool. The signal collapses the W5.5
+    # /recommend_proxy primary (preferred when RECOMMEND_PROXY_ENABLED=true,
+    # for cohort-wide health data) and the P2-D coordinator-cache fallback
+    # into a single fail-open chain. ``global_recommend_proxy_policy`` keeps
+    # its name for compatibility but now holds the signal (matching the
+    # runtime _sync_legacy_globals_from_runtime mapping). atexit registers
+    # signal.close (→ inner RecommendProxyPolicy.shutdown) so the policy's
+    # background refresh thread is still stopped — no leaked thread.
     if (
         global_proxy_pool is not None
         and hasattr(global_proxy_pool, "set_health_provider")
     ):
-        provider_label = None
+        from javdb.proxy.selection.signal import ProxySelectionSignal
+
+        global global_recommend_proxy_policy
         try:
-            from javdb.proxy.recommend.client import (
-                create_recommend_proxy_client_from_env,
+            proxy_ids = [p.get('name', '') for p in (PROXY_POOL or [])
+                         if isinstance(p, dict) and p.get('name')]
+            signal = ProxySelectionSignal.from_runtime_config(
+                proxy_ids=proxy_ids,
+                coordinator=global_proxy_coordinator,
             )
-            from javdb.proxy.recommend.policy import (
-                RecommendProxyPolicy,
-            )
-            global global_recommend_proxy_policy
-            rec_client = create_recommend_proxy_client_from_env()
-            if rec_client is not None:
-                proxy_ids = [p.get('name', '') for p in (PROXY_POOL or [])
-                             if isinstance(p, dict) and p.get('name')]
-                policy = RecommendProxyPolicy(rec_client, proxy_ids=proxy_ids)
-                policy.start()
-                global_recommend_proxy_policy = policy
-                global_proxy_pool.set_health_provider(policy.score_for)
-                atexit.register(policy.shutdown)
-                provider_label = "W5.5 /recommend_proxy"
+            if signal is not None:
+                signal.start()
+                global_proxy_pool.set_health_provider(signal.score_for)
+                global_recommend_proxy_policy = signal
+                atexit.register(signal.close)
+                logger.info(
+                    "Proxy pool health-weighted selection enabled (%s)",
+                    signal.label,
+                )
         except Exception:  # noqa: BLE001 — Worker policy is best-effort
             logger.warning(
-                "Failed to wire RecommendProxy policy; will fall back to local cache",
+                "Failed to wire ProxySelectionSignal; falling back to round-robin",
                 exc_info=True,
-            )
-
-        # Fallback: existing P2-D local-cache provider when RecommendProxy
-        # is off or failed to start.
-        if provider_label is None and global_proxy_coordinator is not None:
-            try:
-                global_proxy_pool.set_health_provider(
-                    global_proxy_coordinator.get_proxy_health_score
-                )
-                provider_label = "P2-D coordinator cache"
-            except Exception:  # noqa: BLE001
-                logger.warning(
-                    "Failed to wire proxy health provider; falling back to round-robin",
-                    exc_info=True,
-                )
-
-        if provider_label is not None:
-            logger.info(
-                "Proxy pool health-weighted selection enabled (%s)",
-                provider_label,
             )
 
 # ---------------------------------------------------------------------------
