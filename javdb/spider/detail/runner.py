@@ -1112,7 +1112,7 @@ def persist_parsed_detail_result(
     worker_tag = f"[{worker_name}] " if worker_name else ""
     for rec in plan.dedup_records:
         if not dry_run and dedup_csv_path:
-            append_dedup_record(dedup_csv_path, rec)
+            append_dedup_record(dedup_csv_path, rec, session_id=session_id)
         if entry_index:
             variant = _dedup_log_variant_label(rec)
             logger.info(

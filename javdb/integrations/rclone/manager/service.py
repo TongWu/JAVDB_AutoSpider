@@ -434,7 +434,7 @@ def run_report_from_inventory(
 
     print_summary(csv_report, 0, 0, 0, 0, dry_run=True)
 
-    _persist_dedup_records(dedup_results)
+    _persist_dedup_records(dedup_results, session_id=session_id)
 
     # Self-heal: drop any pending DedupRecords whose path is no longer in
     # the freshly loaded inventory. Zero remote calls; safe to run always.
@@ -445,11 +445,16 @@ def run_report_from_inventory(
     return 0
 
 
-def _persist_dedup_records(dedup_results: List[DedupResult]) -> None:
+def _persist_dedup_records(
+    dedup_results: List[DedupResult], session_id: Optional[str] = None,
+) -> None:
     """Save dedup records to DB via spider/dedup_checker.
 
     Records are always written with ``is_deleted=False``.  The execute
     phase is responsible for updating the flag after purging.
+
+    *session_id* (ADR-046 D2) tags the dedup-record writes; standalone
+    callers pass ``None`` (DedupRecords.SessionId is nullable).
 
     No per-run CSV file is generated; use :func:`export_dedup_history`
     to produce a consolidated ``dedup_history.csv`` from the DB.
@@ -475,7 +480,7 @@ def _persist_dedup_records(dedup_results: List[DedupResult]) -> None:
                     delete_datetime='',
                 )
                 # csv_path arg kept for API compat but no longer written
-                if append_dedup_record('', rec):
+                if append_dedup_record('', rec, session_id=session_id):
                     appended += 1
                 else:
                     skipped += 1
@@ -920,6 +925,7 @@ def run_execute_from_csv(
     dedup_csv: str,
     dry_run: bool = False,
     from_file_only: bool = False,
+    session_id: Optional[str] = None,
 ) -> int:
     """Read pending dedup records, purge them, and update the DB.
 
@@ -929,6 +935,9 @@ def run_execute_from_csv(
 
     After execution (non-dry-run), the DB state is exported to
     ``reports/dedup_history.csv``.
+
+    *session_id* (ADR-046 D2) tags the deletion update; standalone callers
+    pass ``None`` (DedupRecords.SessionId is nullable).
 
     Returns 0 when at least one purge succeeded (or nothing to do);
     returns 1 only when all attempted purges failed.
@@ -990,7 +999,7 @@ def run_execute_from_csv(
             fail_count += 1
 
     if not dry_run and purged_pairs:
-        mark_records_deleted(dedup_csv, purged_pairs)
+        mark_records_deleted(dedup_csv, purged_pairs, session_id=session_id)
         logger.info(f"Marked {len(purged_pairs)} paths as deleted in DB")
 
     if not dry_run:
@@ -1297,7 +1306,9 @@ def run_rclone_manager(
     # ── Execute phase ─────────────────────────────────────────────────────
     if execute:
         dedup_csv = os.path.join(REPORTS_DIR, 'dedup_history.csv')
-        exit_code = run_execute_from_csv(dedup_csv, dry_run=dry_run)
+        exit_code = run_execute_from_csv(
+            dedup_csv, dry_run=dry_run, session_id=session_id,
+        )
         phase_results["execute"] = {"exit_code": exit_code, "dry_run": dry_run}
 
     return {"phase_results": phase_results, "dry_run": dry_run}
@@ -1350,7 +1361,10 @@ def run_manager_from_options(
             # a fallback path inside load_dedup_csv when DB is empty.
             dedup_csv = os.path.join(REPORTS_DIR, 'dedup_history.csv')
             from_file_only = False
-        return run_execute_from_csv(dedup_csv, dry_run=options.dry_run, from_file_only=from_file_only)
+        return run_execute_from_csv(
+            dedup_csv, dry_run=options.dry_run,
+            from_file_only=from_file_only, session_id=session_id,
+        )
 
     if options.execute_soft_delete and not options.scan and not options.report and not options.execute:
         soft_delete_csv = options.soft_delete_csv or os.path.join(REPORTS_DIR, SOFT_DELETE_CSV)
@@ -1699,7 +1713,10 @@ def run_manager_from_options(
             # read from DB (authoritative source).
             dedup_csv = os.path.join(REPORTS_DIR, 'dedup_history.csv')
             from_file_only = False
-        return run_execute_from_csv(dedup_csv, dry_run=options.dry_run, from_file_only=from_file_only)
+        return run_execute_from_csv(
+            dedup_csv, dry_run=options.dry_run,
+            from_file_only=from_file_only, session_id=session_id,
+        )
 
     if options.execute_soft_delete:
         logger.info("")
