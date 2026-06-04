@@ -264,8 +264,15 @@ class TestRollbackCliTargetResolution:
             "window-scan failures must not silently succeed"
         )
 
-    def test_main_continues_after_refused_session(self, monkeypatch):
+    def test_main_continues_after_refused_session(self, monkeypatch, tmp_path):
         from apps.cli.db import rollback as rollback_cli
+
+        # ``main`` reaches ``_emit_metrics`` → ``append_jsonl_record``, which
+        # appends a ``rollback_summary`` line to ``$REPORTS_DIR/D1/d1_drift.jsonl``
+        # (resolved at call time, defaulting to the real ``reports/`` dir). Point
+        # REPORTS_DIR at a tmp path so this test never dirties the git-tracked
+        # production drift log.
+        monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
 
         calls = []
         closed = []
