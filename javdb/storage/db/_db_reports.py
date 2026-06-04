@@ -13,9 +13,8 @@ ReportMovies and ReportTorrents store the snapshot of movies and torrents
 discovered in each run (used for CSV report generation).
 """
 
-import os
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 import sqlite3
 from typing import Dict, List, Optional, Tuple
 
@@ -123,7 +122,7 @@ def db_create_report_session(
         )
 
     if created_at is None:
-        created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        created_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     sid = session_id if session_id is not None else _generate_session_id()
     resolved_mode = _resolve_write_mode(write_mode)
 
