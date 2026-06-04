@@ -9,7 +9,8 @@ from urllib.parse import urljoin
 
 from javdb.infra.logging import get_logger
 from javdb.infra.config import use_sqlite
-from javdb.storage.db import get_db, REPORTS_DB_PATH
+from javdb.storage import db as _db
+from javdb.storage.db import get_db
 from javdb.storage.history_manager import (
     save_parsed_movie_to_history,
     batch_update_last_visited,
@@ -68,7 +69,9 @@ def _dedup_log_variant_label(record: DedupRecord | object) -> str:
 
 
 def _load_content_filter_rules() -> list[Rule]:
-    with get_db(REPORTS_DB_PATH) as conn:
+    # Resolve REPORTS_DB_PATH at call time so pytest's path monkeypatch is
+    # honoured (BFR-016).
+    with get_db(_db.REPORTS_DB_PATH) as conn:
         return ContentFilterRepo(conn).load_rules()
 
 

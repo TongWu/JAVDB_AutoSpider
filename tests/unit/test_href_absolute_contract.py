@@ -79,9 +79,8 @@ def test_public_writers_never_persist_relative_hrefs():
     db_commit_session_history(sid)
 
     # --- MovieMetadata: upsert with relative href + embedded links ---
-    # MetadataRepo captures HISTORY_DB_PATH at import time, so target the
-    # conftest-isolated DB explicitly (and create the ADR-022 table on it)
-    # rather than touching the real reports/history.db.
+    # Target the conftest-isolated DB explicitly (and create the ADR-022 table
+    # on it) rather than touching the real reports/history.db.
     hist_path = _dbpkg.HISTORY_DB_PATH
     _c = sqlite3.connect(hist_path)
     _c.executescript(_METADATA_DDL)
