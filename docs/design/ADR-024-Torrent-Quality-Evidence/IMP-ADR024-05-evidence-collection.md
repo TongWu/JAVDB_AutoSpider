@@ -1,6 +1,6 @@
 # IMP-ADR024-05: ADR-024 Phase 1 — Evidence Collection (CLI + Workflow + Config)
 
-**Status:** Proposed — design-reviewed & hardened 2026-05-31 (see Design Review note).
+**Status:** Completed — implemented 2026-06-01 (design-reviewed & hardened 2026-05-31; see Design Review note).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -43,6 +43,21 @@ The features→`EvidenceRecord` seam was already correct in the draft
 (`features={k: feats[k] for k in ("main_video_name",)}` — promoted keys go to
 named fields, only the non-promoted hint goes to `.features`, respecting the
 IMP-02 non-overlap invariant).
+
+## Completion note (2026-06-01)
+
+Implemented in branch `adr-024-imp-05`. The delivered slice keeps the IMP scope:
+`production_download` only, read-only qB access, direct `TorrentQualityRepo`
+UPSERTs, CLI/config/workflow gates, and handbook/wiki-source documentation.
+
+During review, the direct CLI/config path was hardened so an empty
+`TORRENT_QUALITY_CATEGORIES` value skips collection instead of scanning every
+qBittorrent category. `QBFileFilter.yml` resolves evidence categories from the
+manual dispatch input, then `TORRENT_QUALITY_CATEGORIES`, then its explicit
+default list, so scheduled evidence collection is bounded while direct runs fail
+closed unless the caller provides a JSON category array or `--categories`.
+Workflow dry-runs skip the collector because evidence collection writes durable
+D1 rows.
 
 ---
 
@@ -245,6 +260,20 @@ logger = logging.getLogger(__name__)
 PRODUCTION_TARGET_ROLE = "production_download"
 
 
+def _normalize_hash(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _empty_summary() -> dict[str, int]:
+    return {
+        "scanned": 0,
+        "skipped": 0,
+        "evidence_written": 0,
+        "evaluations_written": 0,
+        "probe_unavailable": 0,
+    }
+
+
 def collect_production_evidence(
     *,
     torrents: list[dict],
@@ -259,17 +288,11 @@ def collect_production_evidence(
     row (recording ``probe_unavailable`` when its file list is missing) and, when
     features are available, one evaluation row.
     """
-    summary = {
-        "scanned": 0,
-        "skipped": 0,
-        "evidence_written": 0,
-        "evaluations_written": 0,
-        "probe_unavailable": 0,
-    }
+    summary = _empty_summary()
 
     for torrent in torrents:
         summary["scanned"] += 1
-        info_hash = (torrent.get("hash") or "").strip()
+        info_hash = _normalize_hash(torrent.get("hash"))
         if not info_hash:
             summary["skipped"] += 1
             continue
@@ -389,6 +412,13 @@ def run_collection(
     and writes through a conn-injected ``TorrentQualityRepo`` (one ``reports``
     connection holds every UPSERT for the run). Returns the collector summary dict.
     """
+    if not categories:
+        logger.warning(
+            "Skipping quality evidence collection: no categories configured; "
+            "refusing to scan all production qBittorrent categories"
+        )
+        return _empty_summary()
+
     import requests
 
     from javdb.integrations.qb import readonly
@@ -410,10 +440,7 @@ def run_collection(
             session, days=days, categories=categories, use_proxy=use_proxy
         )
         if not torrents:
-            return {
-                "scanned": 0, "skipped": 0, "evidence_written": 0,
-                "evaluations_written": 0, "probe_unavailable": 0,
-            }
+            return _empty_summary()
 
         # Let qB fetch metadata for freshly added torrents before reading files.
         readonly.wait_for_metadata_readiness(
@@ -426,12 +453,13 @@ def run_collection(
         with get_db(OPERATIONS_DB_PATH) as ops_conn:
             acq_repo = AcquisitionOutcomeRepo(ops_conn)
             for torrent in torrents:
-                h = (torrent.get("hash") or "").strip()
-                if not h:
+                info_hash = (torrent.get("hash") or "").strip()
+                if not info_hash:
                     continue
-                rec = acq_repo.get(h)
+                normalized_hash = _normalize_hash(info_hash)
+                rec = acq_repo.get(normalized_hash) or acq_repo.get(info_hash)
                 if rec is not None:
-                    outcomes[h] = rec
+                    outcomes[normalized_hash] = rec
 
         with get_db(REPORTS_DB_PATH) as conn:
             repo = TorrentQualityRepo(conn)
@@ -440,7 +468,7 @@ def run_collection(
                 fetch_files=lambda h: ff.get_torrent_files(session, h, use_proxy),
                 repo=repo,
                 context_for=lambda t: _build_context(
-                    t, outcomes.get((t.get("hash") or "").strip())
+                    t, outcomes.get(_normalize_hash(t.get("hash")))
                 ),
             )
     finally:
@@ -464,7 +492,7 @@ Run:
 pytest tests/unit/test_quality_collector.py -v
 ```
 
-Expected: PASS (5 tests).
+Expected: PASS (7 tests).
 
 - [ ] **Step 5: Commit**
 
@@ -618,9 +646,8 @@ def _resolve_categories(cli_categories: str | None) -> list[str] | None:
     """CLI --categories wins; otherwise fall back to the config key.
 
     Honours the documented TORRENT_QUALITY_CATEGORIES config knob for direct CLI
-    runs (and scheduled runs that don't pass --categories). An empty/whitespace
-    config value means "no filter" (scan all categories), matching the file
-    filter's behaviour.
+    runs. An empty/whitespace config value returns None; run_collection then
+    fails closed and skips rather than scanning every qBittorrent category.
     """
     if cli_categories is not None:
         return _parse_categories(cli_categories)
@@ -633,13 +660,17 @@ def _resolve_categories(cli_categories: str | None) -> list[str] | None:
 def main(argv: list[str] | None = None) -> int:
     try:
         args = parse_args(argv)
-        categories = _resolve_categories(args.categories)
     except (json.JSONDecodeError, argparse.ArgumentTypeError) as exc:
         raise SystemExit(str(exc)) from exc
 
     if not args.force and not _evidence_enabled():
         print("Torrent quality evidence disabled (TORRENT_QUALITY_EVIDENCE_ENABLED=False); skipping.")
         return 0
+
+    try:
+        categories = _resolve_categories(args.categories)
+    except (json.JSONDecodeError, argparse.ArgumentTypeError) as exc:
+        raise SystemExit(str(exc)) from exc
 
     summary = run_collection(
         days=args.days,
@@ -667,7 +698,7 @@ Run:
 pytest tests/unit/test_quality_evidence_cli.py -v
 ```
 
-Expected: PASS (5 tests).
+Expected: PASS (10 tests).
 
 - [ ] **Step 5: Commit**
 
@@ -712,7 +743,9 @@ In `config.py.example`, after the "qBittorrent File Filter Configuration" block
 # 'shadow' in Phase 1; 'assist'/'enforce' are reserved for later phases.
 TORRENT_QUALITY_EVIDENCE_ENABLED = False
 TORRENT_QUALITY_POLICY_MODE = 'shadow'
-# Optional JSON array of qB categories to scan (empty = same as file filter).
+# Optional JSON array of qB categories to scan.
+# Empty means no category filter is configured; direct collection skips instead
+# of scanning every qBittorrent category.
 TORRENT_QUALITY_CATEGORIES = ''
 ```
 
@@ -759,16 +792,16 @@ add:
 
 ```yaml
       - name: Collect torrent quality evidence (ADR-024, shadow)
-        if: ${{ vars.TORRENT_QUALITY_EVIDENCE_ENABLED == 'true' }}
+        if: ${{ vars.TORRENT_QUALITY_EVIDENCE_ENABLED == 'true' && github.event.inputs.dry_run != 'true' }}
         env:
           DAYS: ${{ github.event.inputs.days || '2' }}
-          QB_FILTER_CATEGORIES: ${{ github.event.inputs.categories || '["Ad Hoc", "Daily Ingestion", "顶级"]' }}
+          QB_EVIDENCE_CATEGORIES: ${{ github.event.inputs.categories || vars.TORRENT_QUALITY_CATEGORIES || '["Ad Hoc", "Daily Ingestion", "顶级"]' }}
         run: |
           set -e
           set -o pipefail
           ARGS=(--days "$DAYS")
-          if [ -n "$QB_FILTER_CATEGORIES" ]; then
-            ARGS+=(--categories "$QB_FILTER_CATEGORIES")
+          if [ -n "$QB_EVIDENCE_CATEGORIES" ]; then
+            ARGS+=(--categories "$QB_EVIDENCE_CATEGORIES")
           fi
           echo "Running: python3 -m apps.cli.qb.quality_evidence ${ARGS[*]}"
           python3 -m apps.cli.qb.quality_evidence "${ARGS[@]}"

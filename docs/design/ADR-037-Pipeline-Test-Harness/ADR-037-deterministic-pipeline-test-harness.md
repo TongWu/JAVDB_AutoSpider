@@ -135,10 +135,10 @@ seams. Phase 3 (optional) layers golden-run record/replay diffing on top.
 | Phase | IMP | Ships | Deferred |
 | --- | --- | --- | --- |
 | Phase 1 — Harness core + golden scenario | [IMP-ADR037-01](IMP-ADR037-01-harness-core.md) | `tests/harness/` (FixtureHTTP replay, FakeQB, `pipeline_harness` fixture, scenario+assert API); one golden daily scenario (index → details → queued → commit) asserting history (+ events if ADR-036 built) | record mode; scenario library; SMTP/pikpak/rclone seams |
-| Phase 2 — Scenario library + record + seams | IMP-ADR037-02 (stub) | record mode; drift/completion/failure scenarios; SMTP/pikpak/rclone fakes | — |
-| Phase 3 — Golden-run diff (optional) | IMP-ADR037-03 (stub) | record a real run's inputs+outputs; replay + diff in CI | — |
+| Phase 2 — Scenario library + record + seams | [IMP-ADR037-02](IMP-ADR037-02-scenario-library-record-seams.md) (planned) | record mode; drift/completion/failure scenarios; SMTP/pikpak/rclone fakes | — |
+| Phase 3 — Golden-run diff (optional) | [IMP-ADR037-03](IMP-ADR037-03-golden-run-diff.md) (planned) | record a real run's inputs+outputs; replay + diff in CI | — |
 
-Phase 1 stands alone and adds only test-support code. Phases 2/3 grow coverage.
+Phase 1 stands alone and adds only test-support code. Phases 2/3 grow coverage. Phase 2/3 IMPs are authored (plans); see the Status Log for the planning-time finding the plans encode.
 
 ### Explicit non-goals (YAGNI)
 
@@ -183,3 +183,4 @@ Phase 1 stands alone and adds only test-support code. Phases 2/3 grow coverage.
 
 - 2026-05-29: Proposed (umbrella; three phases scoped, IMPs pending).
 - 2026-05-30: Phase 1 implemented ([IMP-ADR037-01](IMP-ADR037-01-harness-core.md)) — `tests/harness/` ships FixtureHTTP + FakeQB + the `pipeline_harness` fixture and one golden daily scenario (index → 2 details → queued → commit) asserting history (2 rows) + qB queue (2 hashes); 14 tests green in <0.4s. See the IMP's "Implementation Reconciliation" for where the shipped composition diverged from the plan (3-step `run_spider`→`run_uploader`→`commit_session`, session from `SpiderRunResult`, `STORAGE_MODE=duo` for the CSV handoff). Phases 2/3 remain stubs.
+- 2026-06-04: Phase 2 & 3 implementation plans authored ([IMP-ADR037-02](IMP-ADR037-02-scenario-library-record-seams.md), [IMP-ADR037-03](IMP-ADR037-03-golden-run-diff.md)) — plans only, implementation pending. A throwaway probe during planning verified the scenarios end to end and surfaced a stale module-level DB-path import in `javdb/ops/reconcile/persistence.py` and `javdb/ops/sentinel/persistence.py` (`from javdb.storage.db import OPERATIONS_DB_PATH`/`REPORTS_DB_PATH` binds the path at import, so `_isolate_sqlite`'s repath never reaches it). IMP-02's harness `_install` repoints those names at the temp DB so the closed-loop/sentinel writes are test-visible; the broader test-isolation fix is tracked outside this ADR.

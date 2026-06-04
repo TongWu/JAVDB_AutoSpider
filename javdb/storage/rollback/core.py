@@ -40,12 +40,27 @@ from javdb.storage.sessions.lifecycle_helpers import (
 )
 import javdb.storage.db as _db_pkg
 from javdb.storage.db import get_db
-from javdb.storage.db._db_reports import db_pending_session_stats
-from javdb.storage.db._db_rollback import db_rollback_session
 from javdb.infra.logging import get_logger
 
 
 logger = get_logger(__name__)
+
+
+def db_rollback_session(session_id, **kwargs: object):
+    """ADR-046 P3: module-level seam that routes rollback through the repo.
+
+    Kept as a module-level name so the ``_self.db_rollback_session`` call site
+    (and the existing test monkeypatch surface) resolve unchanged, while the
+    actual work now goes through ``SessionLifecycleRepo``.
+    """
+    from javdb.storage.repos.session_lifecycle_repo import SessionLifecycleRepo
+    return SessionLifecycleRepo().rollback_session(session_id, **kwargs)
+
+
+def db_pending_session_stats(session_id, **kwargs: object):
+    """ADR-046 P3: route pending-stats through the repo (module-level seam)."""
+    from javdb.storage.repos.history_repo import HistoryRepo
+    return HistoryRepo().pending_session_stats(session_id, **kwargs)
 
 _CROSS_DAY_REJECT_HOURS = 1
 

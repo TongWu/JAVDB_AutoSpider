@@ -406,14 +406,34 @@ class HistoryRepo:
     surface so callers can migrate incrementally; PR-2 will inline the
     SQL here and retire the underlying functions.
 
-    Construction takes only an optional ``db_path`` override (used in
-    tests / smoke runs against a fresh DB). Methods that mutate state
-    take ``session_id`` per call so a single Repo instance can service
-    multiple sessions (e.g. a sweep over stale runs) without rebuild.
+    Construction takes an optional ``db_path`` override and an optional
+    ``session_id``. Writes resolve their session as **explicit arg >
+    constructor-bound session > raise** (ADR-046 D2) — the process-global
+    is never read. Methods that take an explicit ``session_id``
+    (``commit_session``, ``resume_finalizing_session``, ``stage_*``,
+    ``pending_session_stats``) still let one Repo service a sweep over many
+    sessions; the bulk ``batch_update_*`` writes use the bound session.
     """
 
-    def __init__(self, *, db_path: Optional[str] = None) -> None:
+    def __init__(
+        self, *, db_path: Optional[str] = None, session_id: Optional[str] = None,
+    ) -> None:
         self._db_path = db_path
+        self._session_id = session_id
+
+    def _require_session(self, explicit: Optional[str] = None) -> str:
+        """Resolve the session for a write: explicit arg > bound session > raise.
+
+        The process-global ``get_active_session_id()`` is never consulted
+        (ADR-046 D2).
+        """
+        sid = explicit if explicit is not None else self._session_id
+        if not sid:
+            raise RuntimeError(
+                "HistoryRepo write requires a session_id "
+                "(pass it, or bind via HistoryRepo(session_id=...))"
+            )
+        return sid
 
     # ── Reads (no session_id required) ────────────────────────────
 
@@ -491,12 +511,11 @@ class HistoryRepo:
 
     def batch_update_last_visited(self, hrefs: List[str]) -> int:
         """Bump LastVisited on each href; staging-aware under pending mode."""
-        from javdb.storage.db import get_active_session_id
         from javdb.storage.db._db_history_write import db_batch_update_last_visited
         return db_batch_update_last_visited(
             hrefs,
             db_path=self._db_path,
-            session_id=get_active_session_id(),
+            session_id=self._require_session(),
         )
 
     def batch_update_movie_actors(
@@ -504,12 +523,11 @@ class HistoryRepo:
     ) -> int:
         """Bulk overwrite actor fields, preserving pending-mode staging."""
         # The db.py facade owns pending-mode staging for actor-only writes.
-        from javdb.storage.db import get_active_session_id
         from javdb.storage.db._db_history_write import db_batch_update_movie_actors
         return db_batch_update_movie_actors(
             updates,
             db_path=self._db_path,
-            session_id=get_active_session_id(),
+            session_id=self._require_session(),
         )
 
     # ── Search / export (Phase 2, Task 1) ────────────────────────────

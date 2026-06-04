@@ -6,6 +6,7 @@ import os
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 
 from apps.api.infra.auth import (
@@ -52,6 +53,7 @@ from apps.api.routers.operations import router as operations_router
 from apps.api.routers.stats import router as stats_router
 from apps.api.routers.system_state import router as system_state_router
 from apps.api.routers.preferences import router as preferences_router
+from apps.api.routers.quality import router as quality_router
 from apps.api.routers.config import (
     get_config,
     get_config_meta,
@@ -185,6 +187,7 @@ for router in (
     logs_router,
     stats_router,
     preferences_router,
+    quality_router,
 ):
     app.include_router(router)
 
@@ -193,11 +196,43 @@ if os.getenv("TEST_MODE") == "1":
     app.include_router(test_mode_router)
 
 
+def _custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    security_schemes = schema.setdefault("components", {}).setdefault(
+        "securitySchemes", {}
+    )
+    security_schemes["BearerAuth"] = {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+    }
+    app.openapi_schema = schema
+    return app.openapi_schema
+
+
+app.openapi = _custom_openapi
+
+
 __all__ = [
     "ACCESS_TOKEN_EXPIRE_SECONDS",
     "ACTIVE_TOKENS",
     "ALLOWED_HOSTS",
     "API_SECRET_KEY",
+    "MAX_SESSIONS_PER_USER",
+    "PASSWORD_CTX",
+    "READONLY_USERNAME",
+    "REFRESH_TOKEN_EXPIRE_SECONDS",
+    "REVOKED_JTI",
+    "RUST_CORE_AVAILABLE",
+    "USERS",
+    "_AUTH_LOCK",
     "AdhocTaskPayload",
     "CrawlIndexPayload",
     "DailyTaskPayload",
@@ -210,17 +245,9 @@ __all__ = [
     "HealthResponse",
     "HtmlPayload",
     "LoginPayload",
-    "MAX_SESSIONS_PER_USER",
-    "PASSWORD_CTX",
-    "READONLY_USERNAME",
-    "REFRESH_TOKEN_EXPIRE_SECONDS",
-    "REVOKED_JTI",
-    "RUST_CORE_AVAILABLE",
     "SpiderJobPayload",
-    "USERS",
     "UrlPayload",
     "VideoCodeSearchPayload",
-    "_AUTH_LOCK",
     "_access_token_from_request",
     "_bearer_token",
     "_is_valid_javdb_host",
@@ -250,6 +277,7 @@ __all__ = [
     "auth_csrf_middleware",
     "config_service",
     "create_gateway",
+    "diagnostics_router",
     "explore_download_magnet",
     "explore_index_status",
     "explore_one_click",
@@ -262,23 +290,22 @@ __all__ = [
     "get_config_meta",
     "get_task",
     "get_task_stream",
+    "gh_actions_router",
     "global_exception_handler",
     "health_check",
     "history_router",
-    "operations_router",
-    "diagnostics_router",
-    "gh_actions_router",
-    "logs_router",
-    "migrations_router",
-    "stats_router",
     "list_tasks",
     "login",
     "logout",
+    "logs_router",
+    "migrations_router",
+    "operations_router",
     "refresh_javdb_session",
     "refresh_token",
     "require_role",
     "run_health_check",
     "spider_jobs",
+    "stats_router",
     "task_service",
     "task_stats",
     "trigger_adhoc",

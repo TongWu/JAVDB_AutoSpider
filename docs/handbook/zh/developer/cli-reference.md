@@ -14,18 +14,19 @@ python3 -m apps.cli.<command> [options]
 
 - [Spider CLI](#spider-cli)（`apps.cli.spider`）
 - [Pipeline CLI](#pipeline-cli)（`apps.cli.pipeline`）
-- [qBittorrent 上传器](#qbittorrent-上传器)（`apps.cli.qb_uploader`）
-- [qBittorrent 文件过滤器](#qbittorrent-文件过滤器)（`apps.cli.qb_file_filter`）
-- [PikPak Bridge](#pikpak-bridge)（`apps.cli.pikpak_bridge`）
-- [Migration CLI](#migration-cli)（`apps.cli.migration`）
+- [qBittorrent 上传器](#qbittorrent-上传器)（`apps.cli.qb.uploader`）
+- [qBittorrent 文件过滤器](#qbittorrent-文件过滤器)（`apps.cli.qb.file_filter`）
+- [种子质量证据](#种子质量证据)（`apps.cli.qb.quality_evidence`）
+- [PikPak Bridge](#pikpak-bridge)（`apps.cli.pikpak.bridge`）
+- [Migration CLI](#migration-cli)（`apps.cli.db.migration`）
 - [Login CLI](#login-cli)（`apps.cli.login`）
-- [Rollback CLI](#rollback-cli)（`apps.cli.rollback`）
+- [Rollback CLI](#rollback-cli)（`apps.cli.db.rollback`）
 - [运维诊断 CLI](#运维诊断-cli)（`apps.cli.ops.diagnose_run`）
 - [采集结果对账 CLI](#采集结果对账-cli)（`apps.cli.ops.reconcile`）
 - [内容过滤 CLI](#内容过滤-cli)（`apps.cli.ops.content_filter`）
 - [事件主线消费者 CLI](#事件主线消费者-cli)（`apps.cli.ops.events`）
 - [站点契约哨兵 CLI](#站点契约哨兵-cli)（`apps.cli.ops.sentinel`）
-- [Config Generator CLI](#config-generator-cli)（`apps.cli.config_generator`）
+- [Config Generator CLI](#config-generator-cli)（`apps.cli.ops.config_generator`）
 - [Spider 完整参数参考](#spider-完整参数参考)
 
 ---
@@ -250,7 +251,7 @@ Pipeline 按以下顺序执行这些步骤：
 
 ## qBittorrent 上传器
 
-**模块：** `apps.cli.qb_uploader`
+**模块：** `apps.cli.qb.uploader`
 
 将 spider CSV 输出中的种子磁力链接上传到 qBittorrent。
 
@@ -270,26 +271,26 @@ Pipeline 按以下顺序执行这些步骤：
 
 ```bash
 # 每日模式（默认）
-python3 -m apps.cli.qb_uploader
+python3 -m apps.cli.qb.uploader
 
 # Ad-hoc 模式（用于自定义 URL 抓取结果）
-python3 -m apps.cli.qb_uploader --mode adhoc
+python3 -m apps.cli.qb.uploader --mode adhoc
 
 # 指定输入文件
-python3 -m apps.cli.qb_uploader --input-file my_results.csv
+python3 -m apps.cli.qb.uploader --input-file my_results.csv
 
 # 为 qBittorrent API 使用代理
-python3 -m apps.cli.qb_uploader --use-proxy
+python3 -m apps.cli.qb.uploader --use-proxy
 
 # 覆盖分类
-python3 -m apps.cli.qb_uploader --mode adhoc --category "Custom Category"
+python3 -m apps.cli.qb.uploader --mode adhoc --category "Custom Category"
 ```
 
 ---
 
 ## qBittorrent 文件过滤器
 
-**模块：** `apps.cli.qb_file_filter`
+**模块：** `apps.cli.qb.file_filter`
 
 过滤 qBittorrent 中最近添加的种子中的小文件。将低于大小阈值的不需要的文件设置为"不下载"优先级。对于刚添加的种子，过滤器会最多等待 90 秒让 qBittorrent metadata 就绪，以便小文件在开始下载前就被过滤。
 
@@ -310,33 +311,60 @@ python3 -m apps.cli.qb_uploader --mode adhoc --category "Custom Category"
 
 ```bash
 # 默认：使用 config 中的阈值
-python3 -m apps.cli.qb_file_filter
+python3 -m apps.cli.qb.file_filter
 
 # 覆盖阈值（例如 50MB）和天数
-python3 -m apps.cli.qb_file_filter --min-size 50
-python3 -m apps.cli.qb_file_filter --min-size 100 --days 3
+python3 -m apps.cli.qb.file_filter --min-size 50
+python3 -m apps.cli.qb.file_filter --min-size 100 --days 3
 
 # 试运行（预览但不更改）
-python3 -m apps.cli.qb_file_filter --dry-run
+python3 -m apps.cli.qb.file_filter --dry-run
 
 # 仅过滤特定分类
-python3 -m apps.cli.qb_file_filter --category JavDB
+python3 -m apps.cli.qb.file_filter --category JavDB
 
 # 过滤多个分类
-python3 -m apps.cli.qb_file_filter --categories '["Ad Hoc", "Daily Ingestion"]'
+python3 -m apps.cli.qb.file_filter --categories '["Ad Hoc", "Daily Ingestion"]'
 
 # 使用代理
-python3 -m apps.cli.qb_file_filter --use-proxy
+python3 -m apps.cli.qb.file_filter --use-proxy
 
 # 删除已下载的小文件
-python3 -m apps.cli.qb_file_filter --delete-local-files
+python3 -m apps.cli.qb.file_filter --delete-local-files
+```
+
+---
+
+## 种子质量证据
+
+**模块：** `apps.cli.qb.quality_evidence`
+
+为生产选中/最近添加且 qBittorrent metadata 可用的种子采集 ADR-024 Phase 1
+影子证据。采集器对 qBittorrent 只读，且只有在
+`TORRENT_QUALITY_EVIDENCE_ENABLED=True` 或提供 `--force` 时才会运行。
+
+### 参数
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--days` | 向前查找生产种子的天数 | `2` |
+| `--categories` | 要扫描的 qBittorrent 分类 JSON 数组 | `TORRENT_QUALITY_CATEGORIES` |
+| `--force` | 即使配置中禁用了证据采集也运行 | `False` |
+| `--use-proxy` | 强制启用代理用于 qBittorrent API 请求 | 自动 |
+| `--no-proxy` | 强制禁用代理用于 qBittorrent API 请求 | 自动 |
+
+### 示例
+
+```bash
+python3 -m apps.cli.qb.quality_evidence --days 2 --categories '["Daily Ingestion"]'
+python3 -m apps.cli.qb.quality_evidence --force --categories '["Daily Ingestion"]'
 ```
 
 ---
 
 ## PikPak Bridge
 
-**模块：** `apps.cli.pikpak_bridge`
+**模块：** `apps.cli.pikpak.bridge`
 
 将旧种子从 qBittorrent 转移到 PikPak 云存储。
 
@@ -357,32 +385,32 @@ python3 -m apps.cli.qb_file_filter --delete-local-files
 
 ```bash
 # 默认：批量模式处理超过 3 天的种子
-python3 -m apps.cli.pikpak_bridge
+python3 -m apps.cli.pikpak.bridge
 
 # 自定义天数阈值
-python3 -m apps.cli.pikpak_bridge --days 7
+python3 -m apps.cli.pikpak.bridge --days 7
 
 # 试运行模式
-python3 -m apps.cli.pikpak_bridge --dry-run
+python3 -m apps.cli.pikpak.bridge --dry-run
 
 # 单个模式（逐个处理而非批量）
-python3 -m apps.cli.pikpak_bridge --individual
+python3 -m apps.cli.pikpak.bridge --individual
 
 # 使用代理
-python3 -m apps.cli.pikpak_bridge --use-proxy
+python3 -m apps.cli.pikpak.bridge --use-proxy
 
 # 自定义根文件夹
-python3 -m apps.cli.pikpak_bridge --root-folder "/My Videos"
+python3 -m apps.cli.pikpak.bridge --root-folder "/My Videos"
 
 # 组合选项
-python3 -m apps.cli.pikpak_bridge --days 5 --dry-run --use-proxy
+python3 -m apps.cli.pikpak.bridge --days 5 --dry-run --use-proxy
 ```
 
 ---
 
 ## Migration CLI
 
-**模块：** `apps.cli.migration`
+**模块：** `apps.cli.db.migration`
 
 将 SQLite 数据库迁移到当前 schema 版本。还提供回填和对齐子命令。
 
@@ -423,31 +451,31 @@ python3 -m apps.cli.pikpak_bridge --days 5 --dry-run --use-proxy
 
 ```bash
 # 运行 schema 迁移
-python3 -m apps.cli.migration
+python3 -m apps.cli.db.migration
 
 # 预览迁移但不实际更改
-python3 -m apps.cli.migration --dry-run
+python3 -m apps.cli.db.migration --dry-run
 
 # 迁移前备份
-python3 -m apps.cli.migration --backup
+python3 -m apps.cli.db.migration --backup
 
 # 验证当前 schema 版本
-python3 -m apps.cli.migration --verify
+python3 -m apps.cli.db.migration --verify
 
 # 从 JavDB 回填演员名称（带限制）
-python3 -m apps.cli.migration --backfill-actors --limit 100
+python3 -m apps.cli.db.migration --backfill-actors --limit 100
 
 # 使用 CF 绕过回填
-python3 -m apps.cli.migration --backfill-actors --use-cf-bypass
+python3 -m apps.cli.db.migration --backfill-actors --use-cf-bypass
 
 # 规范化日期时间列
-python3 -m apps.cli.migration --normalize-datetimes
+python3 -m apps.cli.db.migration --normalize-datetimes
 
 # 对齐库存与历史记录
-python3 -m apps.cli.migration --align-inventory-history --align-limit 50
+python3 -m apps.cli.db.migration --align-inventory-history --align-limit 50
 
 # 使用随机队列和每 worker 限制进行对齐
-python3 -m apps.cli.migration --align-inventory-history --align-shuffle --align-limit-per-worker 20
+python3 -m apps.cli.db.migration --align-inventory-history --align-shuffle --align-limit-per-worker 20
 ```
 
 ---
@@ -482,7 +510,7 @@ python3 -m apps.cli.login
 
 ## Rollback CLI
 
-**模块：** `apps.cli.rollback`
+**模块：** `apps.cli.db.rollback`
 
 撤销来自进行中或失败的工作流运行的 D1/SQLite 写入。支持自动的失败清理和手动的定向回滚。
 
@@ -522,27 +550,27 @@ python3 -m apps.cli.login
 
 ```bash
 # 试运行定向回滚
-python3 -m apps.cli.rollback --session-id 42
+python3 -m apps.cli.db.rollback --session-id 42
 
 # 实际执行定向回滚
-python3 -m apps.cli.rollback --session-id 42 --apply
+python3 -m apps.cli.db.rollback --session-id 42 --apply
 
 # 按 GitHub 运行标识回滚
-python3 -m apps.cli.rollback --run-id 12345 --attempt 1
+python3 -m apps.cli.db.rollback --run-id 12345 --attempt 1
 
 # 失败时自动清理（自动化场景，不知道具体 session）
-python3 -m apps.cli.rollback \
+python3 -m apps.cli.db.rollback \
   --run-id 12345 --attempt 1 \
   --run-started-at 2026-05-04T19:30:00Z
 
 # 限定范围
-python3 -m apps.cli.rollback --session-id 42 --scope history
+python3 -m apps.cli.db.rollback --session-id 42 --scope history
 
 # 强制回滚已提交的 session
-python3 -m apps.cli.rollback --session-id 42 --apply --force
+python3 -m apps.cli.db.rollback --session-id 42 --apply --force
 
 # 遗留清扫（包含时间窗口内的孤立 session）
-python3 -m apps.cli.rollback --session-id 42 \
+python3 -m apps.cli.db.rollback --session-id 42 \
   --run-started-at 2026-05-04T19:30:00Z --include-orphaned
 ```
 
@@ -781,7 +809,7 @@ python3 -m apps.cli.ops.sentinel \
 
 ## Config Generator CLI
 
-**模块：** `apps.cli.config_generator`
+**模块：** `apps.cli.ops.config_generator`
 
 从环境变量生成 `config.py`。GitHub Actions 工作流使用此工具，根据 `VAR_*` 环境变量（来自仓库 secrets / variables）在运行时物化配置文件。通常不需要手动运行，除非在本地调试 GH Actions 配置。
 
@@ -789,7 +817,7 @@ python3 -m apps.cli.ops.sentinel \
 
 ```bash
 # GitHub Actions 模式 —— 读取 VAR_* 环境变量并写入 config.py
-python3 -m apps.cli.config_generator --github-actions
+python3 -m apps.cli.ops.config_generator --github-actions
 ```
 
 ### 行为

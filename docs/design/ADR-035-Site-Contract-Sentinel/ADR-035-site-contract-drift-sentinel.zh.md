@@ -90,8 +90,8 @@ PARSE_CONTRACT = {
 | 阶段 | IMP | 交付内容 | 推迟内容 |
 | --- | --- | --- | --- |
 | Phase 1 — 搭车 + 门控 | [IMP-ADR035-01](IMP-ADR035-01-piggyback-and-gate.md) | `parse_contract`;`field_health` 每次 run 遥测;`detectors`;`ParseRunFieldFill` 已提交行中位数基线;daily run 上的分级动作（关键门控 + 软 incident）;`site_drift` incident 类型 | 独立 canary;web/AI 面 |
-| Phase 2 — 独立 canary | IMP-ADR035-02（占位） | `probes` + `SiteContractSentinel.yml` cron + pinned 页 + golden anchor;两次 run 之间检测 | — |
-| Phase 3 — 面（可选） | IMP-ADR035-03（占位） | 逐字段健康度上 web（ADR-034 模式）/ AI 漂移摘要 | — |
+| Phase 2 — 独立 canary | [IMP-ADR035-02](IMP-ADR035-02-independent-canary.md) | `probes` + `SiteContractSentinel.yml` cron + pinned 页 + golden anchor;两次 run 之间检测 | — |
+| Phase 3 — 面（可选） | [IMP-ADR035-03](IMP-ADR035-03-surface.md) | 逐字段健康度上 web（ADR-034 模式）/ AI 漂移摘要 | — |
 
 Phase 1 以**零新增抓取**交付头号价值（抓住漂移 + 保护 DB）。Phase 2 增加两次 run 之间的提前量。Phase 3 是可选打磨。
 
@@ -134,3 +134,10 @@ Phase 1 以**零新增抓取**交付头号价值（抓住漂移 + 保护 DB）�
   fail-open 放行),`apps.cli.ops.sentinel`,以及 API 提交路径。生产 D1 迁移已在
   `javdb-reports` 上验证完成。偏离计划之处见 IMP 的 "As-Built Notes"。第二、三期仍
   待定,故伞型 ADR 维持 Proposed。
+- 2026-06-03: 第二、三期计划已撰写 ——
+  [IMP-ADR035-02](IMP-ADR035-02-independent-canary.md)(独立 canary:`probes`、
+  golden anchor、`run_canary`、`--canary`/`--capture-anchors` CLI、
+  `SiteContractSentinel.yml`)与
+  [IMP-ADR035-03](IMP-ADR035-03-surface.md)(漂移面:`incident_type` 过滤、
+  `parse-field-health` 端点、`site_drift_sentinel` 能力开关、OpenAPI + TS 镜像
+  跟进)。两者均已写好、可执行;实现尚未开始,故伞型 ADR 维持 Proposed。

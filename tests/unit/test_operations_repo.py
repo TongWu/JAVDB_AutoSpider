@@ -35,11 +35,13 @@ class TestOperationsRepoRcloneInventory:
         return_value=5,
     )
     def test_replace_rclone_inventory_delegates(self, mock_fn):
-        repo = OperationsRepo()
+        # ADR-046 P2: replace_rclone_inventory is session-tagging, so the
+        # session must be bound (no process-global fallback).
+        repo = OperationsRepo(session_id="s1")
         entries = [{"VideoCode": "X"}]
         assert repo.replace_rclone_inventory(entries) == 5
         mock_fn.assert_called_once_with(
-            entries=entries, db_path=None, session_id=None)
+            entries=entries, db_path=None, session_id="s1")
 
     @patch(
         "javdb.storage.db._db_operations.db_swap_rclone_inventory",
@@ -138,10 +140,12 @@ class TestOperationsRepoDedupLifecycle:
         "javdb.storage.db._db_operations.db_mark_records_deleted",
         return_value=0,
     )
-    def test_mark_records_deleted_without_session(self, mock_fn):
-        repo = OperationsRepo()
-        repo.mark_records_deleted([], session_id=None)
-        mock_fn.assert_called_once_with([], db_path=None, session_id=None)
+    def test_mark_records_deleted_uses_bound_session(self, mock_fn):
+        # ADR-046 P2: mark_records_deleted is session-tagging; with no
+        # per-call arg it falls back to the bound session.
+        repo = OperationsRepo(session_id="s1")
+        repo.mark_records_deleted([])
+        mock_fn.assert_called_once_with([], db_path=None, session_id="s1")
 
     @patch(
         "javdb.storage.db._db_operations.db_cleanup_deleted_records",
@@ -238,13 +242,15 @@ class TestOperationsRepoAlignNoExactMatch:
 
     @patch("javdb.storage.db._db_operations.db_upsert_align_no_exact_match")
     def test_upsert_custom_reason(self, mock_fn):
-        repo = OperationsRepo()
+        # ADR-046 P2: upsert is session-tagging; bind the session so the
+        # write resolves it (no process-global fallback).
+        repo = OperationsRepo(session_id="s1")
         repo.upsert_align_no_exact_match("X-001", reason="custom_reason")
         mock_fn.assert_called_once_with(
             "X-001",
             reason="custom_reason",
             db_path=None,
-            session_id=None,
+            session_id="s1",
         )
 
     @patch(

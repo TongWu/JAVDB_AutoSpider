@@ -6,7 +6,7 @@
 | **Date**    | 2026-05-31                                                            |
 | **Authors** | Ted                                                                   |
 | **Related** | [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md), [ADR-009](../_archive/ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-019](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md), [ADR-032](../ADR-032-Mandatory-Session-Binding/ADR-032-mandatory-session-binding.md), [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md) |
-| **Related Implementation Plans** | [IMP-ADR042-01](IMP-ADR042-01-d1-atomic-commit-boundaries.md) - Phase 1 docs follow-through |
+| **Related Implementation Plans** | [IMP-ADR042-01](IMP-ADR042-01-d1-atomic-commit-boundaries.md) - Phase 1 docs follow-through; [IMP-ADR042-02](IMP-ADR042-02-d1-write-class-enforcement.md) - Phase 2 D6 enforcement |
 
 > This ADR was written after a grilling session that separated "D1 itself" from "the authoritative write boundary". That distinction matters: the system does not need a distributed transaction manager, but it does need a session-level boundary that behaves like one for the authoritative history path.
 
@@ -78,6 +78,8 @@ New D1-backed write paths must be classified during design review as one of:
 
 If a write cannot be classified, it is too ambiguous to land.
 
+**Enforcement (Phase 2).** D6 is enforced at two points: (1) every `CREATE TABLE` migration under `javdb/migrations/d1/` must carry a `-- Write-Class: <class>` header, checked on every PR by `.github/workflows/validate-d1-write-class.yml` (fail-closed); and (2) the ADR template carries a `D1 Write Class` field so the class is prompted at design-review time. Column adds, indexes, version bumps, and drops are not new write surfaces and are exempt. See [IMP-ADR042-02](IMP-ADR042-02-d1-write-class-enforcement.md).
+
 ## Domain Language
 
 - **Authoritative write** — a write that decides whether a session committed correctly.
@@ -120,6 +122,7 @@ Rejected. The repository already has additive enrichment and diagnostic surfaces
 | Phase | IMP | Ships | Deferred |
 | --- | --- | --- | --- |
 | Phase 1 ✅ | [IMP-ADR042-01](IMP-ADR042-01-d1-atomic-commit-boundaries.md) | Propagate the boundary into CONTEXT.md and the storage / handbook docs — **done 2026-06-01** | Any distributed-transaction fantasy across SQLite and D1 |
+| Phase 2 ✅ | [IMP-ADR042-02](IMP-ADR042-02-d1-write-class-enforcement.md) | Enforce D6: a `Write-Class:` header is required on new `CREATE TABLE` migrations (CI fail-closed) + a `D1 Write Class` field in the ADR template — **done 2026-06-01** | Backfilling existing migrations; gating code-level writes to existing tables; CI-enforcing the (soft-by-design) ADR field |
 
 ## References
 
@@ -140,3 +143,4 @@ Rejected. The repository already has additive enrichment and diagnostic surfaces
 - 2026-05-31: Accepted — codified the session-level atomic-commit boundary for authoritative D1 writes.
 - 2026-05-31: Renamed from "logical ACID" to "atomic commit" and scoped the guarantee to atomicity + consistency (isolation via `SessionId`/`MovieClaim`, durability via recovery) after a design review flagged the ACID framing as overclaiming I/D.
 - 2026-06-01: IMP-ADR042-01 completed — write-boundary vocabulary propagated into `CONTEXT.md` (the `写入边界分类` section + glossary), the storage READMEs, and the developer / ops handbooks.
+- 2026-06-01: IMP-ADR042-02 (Phase 2) completed — D6 is now enforced by a CI gate (a `Write-Class:` header is required on new `CREATE TABLE` migrations) plus a `D1 Write Class` field in the ADR template. This closes the D6-enforcement item deferred by IMP-ADR042-01.

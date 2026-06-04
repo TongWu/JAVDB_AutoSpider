@@ -2,7 +2,7 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Proposed                                                              |
+| **Status**  | Accepted — Phase 1 implemented & verified 2026-06-02; Phases 2-3 pending |
 | **Date**    | 2026-05-27                                                            |
 | **Authors** | Ted                                                                   |
 | **Related** | [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md) |
@@ -230,3 +230,9 @@ production pipeline unchanged.
   IMP-ADR024-08/09. Phase 1 scope narrowed to production-download evidence only —
   remote `quality_probe` endpoint, metadata-only capability canary, and bounded
   Top-K runner-up collection deferred to follow-up IMPs (see Phase 1 scope note).
+- 2026-06-02: Phase 1 (IMP-ADR024-01..07) implemented and verified. All seven IMPs
+  marked Completed; 66 quality unit tests + 76 regression-neighbor tests pass, the
+  D1 parity guard is green, and both tables are live on remote `javdb-reports`
+  (0 rows — shadow-only, `TORRENT_QUALITY_EVIDENCE_ENABLED` defaults False, so
+  nothing has run in production). Status advanced Proposed → Accepted. Phase 2/3
+  (assist / enforce) remain outlines; the folder is not archived until they land.
