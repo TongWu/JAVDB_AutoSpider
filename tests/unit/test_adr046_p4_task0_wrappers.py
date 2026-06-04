@@ -49,6 +49,7 @@ def _create_schema(conn: sqlite3.Connection) -> None:
         "  RunId TEXT,"
         "  RunAttempt INTEGER,"
         "  DateTimeCreated TEXT,"
+        "  CommittedAt TEXT,"
         "  ReportType TEXT,"
         "  ReportDate TEXT,"
         "  DisplayName TEXT,"
