@@ -92,9 +92,15 @@ INVENTORY_FIELDNAMES = [
 ]
 
 
-def run_manager(options: RcloneManagerOptions) -> RcloneManagerResult:
-    """Public service entry point: run the manager for the given options."""
-    exit_code = run_manager_from_options(options)
+def run_manager(
+    options: RcloneManagerOptions, session_id: Optional[str] = None,
+) -> RcloneManagerResult:
+    """Public service entry point: run the manager for the given options.
+
+    *session_id* (ADR-046 D2 — never ambient) is forwarded as the
+    standalone-vs-inherited signal; the standalone CLI passes ``None``.
+    """
+    exit_code = run_manager_from_options(options, session_id=session_id)
     return RcloneManagerResult(exit_code=exit_code)
 
 
@@ -390,12 +396,16 @@ def run_report_from_inventory(
     csv_path: str,
     max_workers: int = 4,
     incremental: bool = False,
+    session_id: Optional[str] = None,
 ) -> int:
     """Analyse inventory for duplicates and generate a report.
 
     This function never executes deletions — it only persists dedup
     records with ``is_deleted=False``.  Actual deletion is handled
     separately by :func:`run_execute_from_csv`.
+
+    *session_id* (ADR-046 D2) tags the dedup-record writes; standalone
+    callers pass ``None`` (DedupRecords.SessionId is nullable).
 
     Returns 0 on success, 1 on failure.
     """
@@ -428,7 +438,7 @@ def run_report_from_inventory(
 
     # Self-heal: drop any pending DedupRecords whose path is no longer in
     # the freshly loaded inventory. Zero remote calls; safe to run always.
-    validate_dedup_records_against_inventory()
+    validate_dedup_records_against_inventory(session_id=session_id)
 
     export_dedup_history()
 
@@ -530,7 +540,9 @@ def _write_inventory_orphan_csv(rows: List[dict]) -> Optional[str]:
     return out_path
 
 
-def validate_dedup_records_against_inventory() -> Tuple[int, List[dict]]:
+def validate_dedup_records_against_inventory(
+    session_id: Optional[str] = None,
+) -> Tuple[int, List[dict]]:
     """Self-heal DedupRecords whose path no longer exists in the inventory.
 
     The truth set is the current ``RcloneInventory`` (FolderPath column,
@@ -541,6 +553,10 @@ def validate_dedup_records_against_inventory() -> Tuple[int, List[dict]]:
     - ``DeletionReason`` is suffixed with :data:`ORPHAN_REASON_SUFFIX`.
     - The original row dicts are returned (and persisted to a CSV report
       by the caller) so operators can audit the self-heal.
+
+    *session_id* (ADR-046 D2 — never ambient) tags the orphan write. DedupRecords
+    has a nullable SessionId, so a standalone caller passes ``None`` and the row
+    persists untagged (the orphan update is non-raising).
 
     Returns ``(orphan_count, orphan_rows)``. Zero remote calls are made.
     """
@@ -593,10 +609,10 @@ def validate_dedup_records_against_inventory() -> Tuple[int, List[dict]]:
         return 0, []
 
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    # ADR-046 P2: bind the resolved session on the repo (the global is never
-    # read inside OperationsRepo). Phase 5 migrates this ambient read.
-    sid = SessionLifecycleRepo().get_active_session_id()
-    updated = OperationsRepo(session_id=sid).mark_orphan_records(
+    # ADR-046 D2: bind the explicit session on the repo (the global is never
+    # read). DedupRecords.SessionId is nullable, so a None session_id persists
+    # the orphan untagged without raising (Phase-2 contract).
+    updated = OperationsRepo(session_id=session_id).mark_orphan_records(
         orphan_paths, ORPHAN_REASON_SUFFIX, now_str,
     )
     for r in orphans:
@@ -711,6 +727,7 @@ def run_validate_inventory(
     year_filter: Optional[List[str]] = None,
     max_workers: int = 4,
     prune: bool = True,
+    session_id: Optional[str] = None,
 ) -> int:
     """Re-validate ``RcloneInventory`` against the remote.
 
@@ -793,7 +810,7 @@ def run_validate_inventory(
 
     # Chain dedup self-heal so callers don't need to run --report just to
     # clean up dedup pendings that referenced removed paths.
-    validate_dedup_records_against_inventory()
+    validate_dedup_records_against_inventory(session_id=session_id)
 
     return 0
 
@@ -1144,6 +1161,7 @@ def run_rclone_manager(
     report: bool = True,
     execute: bool = False,
     dry_run: bool = True,
+    session_id: Optional[str] = None,
 ) -> dict:
     """Programmatic entry point for the rclone manager pipeline.
 
@@ -1153,6 +1171,11 @@ def run_rclone_manager(
 
     Only the phases that actually ran appear in ``phase_results``.  Each
     phase's value is a dict with at least ``{"exit_code": int}``.
+
+    *session_id* (ADR-046 D2 — never ambient) is the standalone-vs-inherited
+    signal: ``None`` (the default, used by every standalone caller) makes this
+    run create + own + finalize a local report session; a caller-supplied id is
+    treated as inherited (we use it but don't finalize it).
 
     Raises:
         ValueError: Invalid flag combination (e.g. execute without report).
@@ -1204,9 +1227,12 @@ def run_rclone_manager(
         operations_repo = OperationsRepo()
 
         session_repo.init_storage()
-        staging_sid = session_repo.get_active_session_id()
+        # ADR-046 D2: the active session is passed in explicitly (never read
+        # from the process-global). A None session_id means "standalone" — we
+        # create + own + finalize a local session here.
+        staging_sid = session_id
         # Only finalize (commit/fail) a session we created ourselves — an
-        # inherited active session is owned by the caller.
+        # inherited session is owned by the caller.
         created_local_session = staging_sid is None
         if created_local_session:
             staging_sid = session_repo.create_report_session(
@@ -1265,7 +1291,7 @@ def run_rclone_manager(
             # Report-only: resolve remote for CSV path but don't scan.
             os.makedirs(REPORTS_DIR, exist_ok=True)
         output_path = os.path.join(REPORTS_DIR, RCLONE_INVENTORY_CSV)
-        exit_code = run_report_from_inventory(output_path)
+        exit_code = run_report_from_inventory(output_path, session_id=session_id)
         phase_results["report"] = {"exit_code": exit_code}
 
     # ── Execute phase ─────────────────────────────────────────────────────
@@ -1297,7 +1323,12 @@ def _describe_mode(options: "RcloneManagerOptions") -> str:
     return '+'.join(parts) or 'NONE'
 
 
-def run_manager_from_options(options: "RcloneManagerOptions") -> int:
+def run_manager_from_options(
+    options: "RcloneManagerOptions", session_id: Optional[str] = None,
+) -> int:
+    # ADR-046 D2: session_id is the explicit standalone-vs-inherited signal
+    # (never read from the process-global). None ⇒ standalone: create + own +
+    # finalize a local staging session below.
     setup_logging(log_level=options.log_level)
 
     mode_label = _describe_mode(options)
@@ -1391,6 +1422,7 @@ def run_manager_from_options(options: "RcloneManagerOptions") -> int:
             year_filter=year_filter,
             max_workers=options.workers,
             prune=options.validate_prune,
+            session_id=session_id,
         )
 
     # ── Scan phase ───────────────────────────────────────────────────
@@ -1407,7 +1439,8 @@ def run_manager_from_options(options: "RcloneManagerOptions") -> int:
         if _use_sqlite():
             try:
                 session_repo.init_storage()
-                _staging_session_id = session_repo.get_active_session_id()
+                # ADR-046 D2: inherit the explicit session_id (never the global).
+                _staging_session_id = session_id
                 if _staging_session_id is None:
                     _staging_session_id = session_repo.create_report_session(
                         report_type="rclone_inventory",
@@ -1646,6 +1679,7 @@ def run_manager_from_options(options: "RcloneManagerOptions") -> int:
             csv_path=output_path,
             max_workers=options.workers,
             incremental=options.incremental,
+            session_id=session_id,
         )
         if rc != 0:
             return rc
