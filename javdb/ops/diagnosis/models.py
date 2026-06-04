@@ -166,3 +166,10 @@ class OpsIncidentFeatures:
     evidence_kinds_json: str
     created_at: str
     updated_at: str
+
+
+@dataclass(frozen=True)
+class SimilarIncident:
+    incident_id: str
+    score: float
+    matched_reasons: list[str]
