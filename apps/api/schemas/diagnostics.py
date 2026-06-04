@@ -77,11 +77,33 @@ class OpsIncidentListResponse(BaseModel):
     items: list[OpsIncidentSchema]
 
 
+class SimilarIncidentSchema(BaseModel):
+    incident_id: str
+    score: float
+    matched_reasons: list[str]
+
+
+class OpsIncidentSimilarityResponse(BaseModel):
+    incident_id: str
+    items: list[SimilarIncidentSchema]
+
+
+class OpsIncidentAnalyticsResponse(BaseModel):
+    total: int
+    by_type: dict[str, int]
+    by_status: dict[str, int]
+    by_confidence: dict[str, int]
+    open_high_confidence: int
+
+
 __all__ = [
     "EvidenceRefSchema",
     "JavdbSessionRefreshRequest",
     "JavdbSessionRefreshResponse",
     "JavdbSessionStatus",
+    "OpsIncidentAnalyticsResponse",
     "OpsIncidentListResponse",
     "OpsIncidentSchema",
+    "OpsIncidentSimilarityResponse",
+    "SimilarIncidentSchema",
 ]

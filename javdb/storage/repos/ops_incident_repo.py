@@ -129,7 +129,7 @@ class OpsIncidentRepo:
         if clauses:
             sql += " WHERE " + " AND ".join(clauses)
         sql += " ORDER BY created_at DESC LIMIT ?"
-        params.append(max(1, min(limit, 100)))
+        params.append(max(1, limit))
         return [
             _row_to_record(row)
             for row in self._conn.execute(sql, params).fetchall()
