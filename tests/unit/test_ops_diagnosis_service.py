@@ -9,9 +9,13 @@ from javdb.ops.diagnosis.service import diagnose_incident
 class CapturingRepo:
     def __init__(self):
         self.records = []
+        self.features = []
 
     def upsert(self, record):
         self.records.append(record)
+
+    def upsert_features(self, features):
+        self.features.append(features)
 
 
 def test_service_runs_detector_and_persists_record():
@@ -55,3 +59,44 @@ def test_service_uses_ai_synthesizer_when_available():
 
     assert record.model_version == "fake-ai-v1"
     assert json.loads(record.confirmed_findings_json)[-1] == "AI summary produced"
+
+
+def test_service_persists_feature_row_when_incident_is_written():
+    repo = CapturingRepo()
+    bundle = IncidentBundle(
+        trigger_source="workflow_failure",
+        workflow_name="DailyIngestion",
+        workflow_result="failure",
+        session_id="20260527T120000.000000Z-0001-0001",
+    )
+
+    record = diagnose_incident(bundle, repo=repo)
+
+    assert record.persistence_status == "d1_written"
+    assert repo.features[0].incident_id == record.incident_id
+    assert repo.features[0].workflow_name == "DailyIngestion"
+
+
+def test_service_does_not_persist_feature_row_on_jsonl_fallback(tmp_path):
+    class FailingUpsertRepo:
+        def __init__(self):
+            self.features = []
+
+        def upsert(self, record):
+            raise RuntimeError("simulated D1 failure")
+
+        def upsert_features(self, features):
+            self.features.append(features)
+
+    repo = FailingUpsertRepo()
+    bundle = IncidentBundle(
+        trigger_source="workflow_failure",
+        workflow_name="DailyIngestion",
+        workflow_result="failure",
+        session_id=None,
+    )
+
+    record = diagnose_incident(bundle, repo=repo, jsonl_path=tmp_path / "fallback.jsonl")
+
+    assert record.persistence_status == "d1_failed_jsonl_written"
+    assert repo.features == []
