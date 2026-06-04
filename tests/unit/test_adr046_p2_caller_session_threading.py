@@ -70,7 +70,9 @@ def test_dedup_mark_records_deleted_binds_explicit_session(monkeypatch, active_s
     assert "session_id" not in repo.mark_records_deleted.call_args.kwargs
 
 
-def test_pikpak_append_history_binds_active_session(monkeypatch, active_session):
+def test_pikpak_append_history_binds_explicit_session(monkeypatch, active_session):
+    """ADR-046 P5: ``save_to_pikpak_history`` binds the explicit ``session_id``
+    param on the repo ctor; the process-global (active_session) is ignored."""
     import javdb.storage.repos.operations_repo as ops_repo_mod
     import javdb.storage.db as db_mod
     from javdb.integrations.pikpak.bridge.service import save_to_pikpak_history
@@ -93,9 +95,12 @@ def test_pikpak_append_history_binds_active_session(monkeypatch, active_session)
         "magnet_uri": "magnet:?xt=...",
         "added_on": 1_700_000_000,
     }
-    save_to_pikpak_history(torrent_info, "success")
+    explicit = "20260604T000000.000000Z-call-9004"
+    save_to_pikpak_history(torrent_info, "success", session_id=explicit)
 
-    assert repo_cls.call_args.kwargs["session_id"] == active_session
+    # The explicit param wins over the ambient global (active_session).
+    assert repo_cls.call_args.kwargs["session_id"] == explicit
+    assert repo_cls.call_args.kwargs["session_id"] != active_session
     assert "session_id" not in repo.append_pikpak_history.call_args.kwargs
 
 
