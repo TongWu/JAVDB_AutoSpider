@@ -1,9 +1,11 @@
 """ADR-047 D1a: NULL WriteMode maps to pending, matching the TS backend."""
 
+from typing import Any
+
 from javdb.storage.repos.sessions_repo import _row_to_session
 
 
-def _row(**over):
+def _row(**over: Any) -> dict[str, Any]:
     base = {
         "Id": "S1",
         "Status": None,

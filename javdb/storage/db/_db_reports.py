@@ -165,7 +165,7 @@ def db_mark_session_committed(
             "SET Status='committed', "
             "CommittedAt=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') "
             "WHERE Id=? "
-            "AND Status IS NOT 'committed'",
+            "AND (Status IS NULL OR Status != 'committed')",
             (session_id,),
         )
         marked = cur.rowcount or 0

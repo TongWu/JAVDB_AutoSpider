@@ -287,7 +287,7 @@ def _rollback_reports(
                 ).fetchone() or {'n': 0})['n']
             counts['ReportSessions'] = (conn.execute(
                 "SELECT COUNT(*) AS n FROM ReportSessions "
-                "WHERE Id=? AND Status IS NOT 'committed'",
+                "WHERE Id=? AND (Status IS NULL OR Status != 'committed')",
                 (session_id,),
             ).fetchone() or {'n': 0})['n']
             return counts
@@ -305,7 +305,7 @@ def _rollback_reports(
         # late-arriving rollback can never wipe a successful run).
         counts['ReportSessions'] = (conn.execute(
             "DELETE FROM ReportSessions "
-            "WHERE Id=? AND Status IS NOT 'committed'",
+            "WHERE Id=? AND (Status IS NULL OR Status != 'committed')",
             (session_id,),
         ).rowcount or 0)
     return counts
