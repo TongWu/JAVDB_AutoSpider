@@ -993,6 +993,29 @@ For more aggressive behavior (bad proxies bypassed faster), lower the floor in
 more conservative behavior (avoid oscillation), square the weights:
 `weights[i] **= 2`.
 
+### ADR-023 Rollout Gate
+
+Before switching `RECOMMEND_PROXY_POLICY_MODE` from `"shadow"` to `"policy"`:
+
+1. Call `/recommend_proxy?proxy_ids=<ids>&include_unhealthy=1` for the active
+   pool and inspect `policy_summary`.
+2. Do not enable policy mode while `policy_summary.rollout_gate` is
+   `blocked_global_instability`.
+3. Treat high `disagreement_count` as a review signal: compare
+   `heuristic_score`, `model_score`, `rank_score`, and `reason_code` for the
+   largest disagreements.
+4. Enable policy mode for one deploy window first, then watch ban rate,
+   `cf_bypass` rate, Session committed rate, and request success rate.
+5. Roll back by setting `RECOMMEND_PROXY_POLICY_MODE = "shadow"` and redeploying.
+
+Smoke check:
+
+```bash
+curl -sS -H "Authorization: Bearer $PROXY_COORDINATOR_TOKEN" \
+  "$PROXY_COORDINATOR_URL/recommend_proxy?proxy_ids=P1,P2&include_unhealthy=1" \
+  | jq '.policy_summary, .recommendations[] | {proxy_id, score, rank_score, reason_code}'
+```
+
 ### 18.5 Rollback
 
 Soft disable is the same as S8.1. On the Worker side, you cannot "disable only
