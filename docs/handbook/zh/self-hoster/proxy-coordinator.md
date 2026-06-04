@@ -945,6 +945,28 @@ ADR-023 Phase 2 新增两个 Worker 变量：
 `ProxyPool._safe_health_score` 的地板从 `0.05` 降到 `0.01`；如需更
 保守（避免抖动），可把权重做平方：`weights[i] **= 2`。
 
+### ADR-023 Rollout Gate
+
+在把 `RECOMMEND_PROXY_POLICY_MODE` 从 `"shadow"` 切到 `"policy"` 前：
+
+1. 对活跃代理池调用 `/recommend_proxy?proxy_ids=<ids>&include_unhealthy=1`，
+   检查 `policy_summary`。
+2. 当 `policy_summary.rollout_gate` 是 `blocked_global_instability` 时，
+   不要启用 policy mode。
+3. 如果 `disagreement_count` 很高，把它当成 review 信号：对比最大分歧项的
+   `heuristic_score`、`model_score`、`rank_score` 和 `reason_code`。
+4. 先只启用一个部署窗口，然后观察 ban rate、`cf_bypass` rate、Session
+   committed rate 和 request success rate。
+5. 回滚方式是把 `RECOMMEND_PROXY_POLICY_MODE = "shadow"` 并重新部署。
+
+Smoke check：
+
+```bash
+curl -sS -H "Authorization: Bearer $PROXY_COORDINATOR_TOKEN" \
+  "$PROXY_COORDINATOR_URL/recommend_proxy?proxy_ids=P1,P2&include_unhealthy=1" \
+  | jq '.policy_summary, .recommendations[] | {proxy_id, score, rank_score, reason_code}'
+```
+
 ### 18.5 回滚
 
 软关同 §8.1。Worker 端不能单独「只关 P2-D 保留 P1-A」——它们共用同一
