@@ -930,6 +930,17 @@ ADR-023 Phase 1 只把 shadow policy 字段用于可观测性。运维可以在
 policy 会在哪些场景下产生分歧；真正改变代理排序要等后续 rollout flag
 阶段。
 
+ADR-023 Phase 2 新增两个 Worker 变量：
+
+| 变量 | 默认值 | 含义 |
+|---|---|---|
+| `RECOMMEND_PROXY_POLICY_MODE` | `"shadow"` | `"shadow"` 保持现有 heuristic 排序；`"policy"` 按 blended `rank_score` 排序。 |
+| `RECOMMEND_PROXY_EXPLORATION_FLOOR` | `"0.02"` | policy 模式下可用代理的最低 rank score，服务端最高限制为 0.2。 |
+
+回滚只需要改一个 Worker 变量：设置
+`RECOMMEND_PROXY_POLICY_MODE = "shadow"` 并重新部署。Python 客户端无需变更，
+因为客户端仍然读取稳定的 `score` 字段。
+
 如需更激进（坏代理更快被旁路），可在 Python 端把
 `ProxyPool._safe_health_score` 的地板从 `0.05` 降到 `0.01`；如需更
 保守（避免抖动），可把权重做平方：`weights[i] **= 2`。
