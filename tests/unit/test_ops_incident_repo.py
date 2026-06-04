@@ -283,3 +283,21 @@ def test_repo_filters_incidents_by_incident_type_and_confidence():
     items = repo.list(incident_type="d1_drift", confidence="high", limit=20)
 
     assert [item.incident_id for item in items] == ["opsinc_drift"]
+
+
+def test_repo_list_honors_large_limit_for_analytics():
+    """Regression: repo.list(limit=500) must return >100 rows.
+
+    Before the fix, list() clamped to min(limit, 100), silently truncating
+    the analytics window to at most 100 incidents.  This test inserts 120
+    distinct rows and asserts all 120 are returned with limit=500.
+    """
+    conn = _conn()
+    repo = OpsIncidentRepo(conn)
+    base = _record()
+    for i in range(120):
+        repo.upsert(OpsIncidentRecord(**{**base.__dict__, "incident_id": f"opsinc_{i}"}))
+
+    items = repo.list(limit=500)
+
+    assert len(items) == 120, f"expected 120 rows, got {len(items)} (repo may still be clamping)"
