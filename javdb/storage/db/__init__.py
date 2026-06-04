@@ -43,8 +43,6 @@ from ._db_migrations import (  # noqa: F401
 
 # ── Session state ──────────────────────────────────────────────────────
 from ._db_session import (  # noqa: F401
-    set_active_session_id,
-    get_active_session_id,
     set_active_run_identity,
     get_active_run_identity,
     set_active_write_mode,
@@ -52,8 +50,6 @@ from ._db_session import (  # noqa: F401
     generate_session_id,
     generate_integer_id,
     SESSION_ID_PATTERN,
-    _SESSION_ID_SENTINEL,
-    _resolve_session_id,
     _resolve_write_mode,
     _INT_ID_EPOCH_BASE_MS,
 )
@@ -210,14 +206,12 @@ __all__ = [
     "generate_integer_id",
     "generate_session_id",
     "get_active_run_identity",
-    "get_active_session_id",
     "get_active_write_mode",
     "get_db",
     "get_local_sqlite_db",
     "init_db",
     "moviehistory_actor_layout_ok",
     "set_active_run_identity",
-    "set_active_session_id",
     "set_active_write_mode",
     "verify_d1_schema_versions",
 ]
