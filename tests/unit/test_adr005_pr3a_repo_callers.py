@@ -70,6 +70,7 @@ def test_history_manager_sqlite_paths_use_history_repo(monkeypatch):
         actor_gender="F",
         actor_link="/actors/a",
         supporting_actors="[]",
+        session_id="sess-1",
     )
     hm.batch_update_last_visited("history.csv", {"/v/A", "/v/B"}, session_id="sess-x")
     assert hm.check_torrent_in_history("history.csv", "/v/A", "subtitle") is True
@@ -111,6 +112,7 @@ def test_history_manager_pending_writes_use_history_repo_staging(monkeypatch):
         2,
         "P",
         {"subtitle": "magnet:?xt=urn:btih:p"},
+        session_id="sess-pending",
     )
 
     repo.stage_movie.assert_called_once()

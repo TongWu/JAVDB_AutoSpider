@@ -614,6 +614,7 @@ class TestSpiderWritePathRoutesToPending:
                 actor_gender="female",
                 actor_link="/actors/wire",
                 supporting_actors=None,
+                session_id=sid,
             )
         finally:
             set_active_session_id(None)
