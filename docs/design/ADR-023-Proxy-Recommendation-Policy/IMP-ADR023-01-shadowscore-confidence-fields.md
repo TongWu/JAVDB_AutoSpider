@@ -182,6 +182,16 @@ describe("recommend_policy shadow scoring", () => {
     expect(shadow.reason_code).toBe("cf_bypass_cooldown");
     expect(shadow.cooldown_until).toBe(0);
   });
+
+  it("applies cooldown penalty to an unseen banned proxy", () => {
+    const rows = [input({ proxy_id: "P-BANNED-NEW", banned: true, banned_until: 999 })];
+    const baseline = computeGlobalRecommendationBaseline(rows);
+    const shadow = computeRecommendationShadow(rows[0], baseline, 1_000);
+
+    expect(shadow.model_score).toBeCloseTo(0.05, 5);
+    expect(shadow.reason_code).toBe("banned_cooldown");
+    expect(shadow.cooldown_until).toBe(999);
+  });
 });
 ```
 
@@ -287,7 +297,7 @@ export function computeRecommendationShadow(
   const cooldownPenalty = input.banned ? 0.45 : input.requires_cf_bypass ? 0.25 : 0;
   const modelScore =
     count === 0
-      ? 0.5
+      ? clamp(0.5 - cooldownPenalty, 0, 1)
       : clamp(successRate - relativeFailurePenalty - latencyPenalty - cooldownPenalty, 0, 1);
 
   let confidence = count / (count + 20);
@@ -402,6 +412,10 @@ Add this test under `describe("W5.5 /recommend_proxy — ranking", () => { ... }
       );
       expect(rec.model_version).toBe("adr023-shadow-v1");
     }
+
+    expect(r.body.recommendations[0].model_score).toBeGreaterThan(
+      r.body.recommendations[1].model_score,
+    );
   });
 ```
 
@@ -523,10 +537,11 @@ Inside `recommendProxies()`, replace the current `const ranked: Recommendation[]
     available: r.available,
   }));
   const baseline = computeGlobalRecommendationBaseline(policyInputs);
+  const nowMs = Date.now();
   const policyByProxyId = new Map(
     policyInputs.map((input) => [
       input.proxy_id,
-      computeRecommendationShadow(input, baseline, Date.now()),
+      computeRecommendationShadow(input, baseline, nowMs),
     ]),
   );
 
@@ -567,6 +582,26 @@ Expected: PASS.
 git add JAVDB_AutoSpider_Proxycoordinator/src/index.ts JAVDB_AutoSpider_Proxycoordinator/test/recommend_proxy.test.ts
 git commit -m "feat(proxy): expose shadow recommendation fields"
 ```
+
+### As-built review adjustments (commit a0635451)
+
+Code review of Task 2 surfaced two Phase-2-facing hardening points (approved and applied on top of `12e913c`):
+
+- **Hoist the timestamp:** `Date.now()` is captured once as `nowMs` before the
+  `policyByProxyId` Map and passed into every
+  `computeRecommendationShadow(input, baseline, nowMs)` call, instead of being
+  read per-proxy inside the Map callback. Phase 1 leaves `_nowMs` unused, but
+  this honors the function contract before Phase 2 makes it load-bearing.
+- **Dedup `proxy_ids`:** both query-param parse sites — `recommendProxies()`
+  and the ops-snapshot path `aggregateOpsSnapshot()` — now dedup normalized ids
+  via `...new Set(...)` before the existing `.slice(0, 32)` cap (result is "up
+  to 32 distinct ids"). This makes `policyByProxyId.get(r.proxy_id)!` provably
+  1-to-1.
+- **Tests:** the shadow-fields test additionally asserts
+  `recommendations[0].model_score > recommendations[1].model_score` (the policy
+  actually differentiates GOOD vs BAD), and a new test
+  `"deduplicates repeated proxy_ids in the query"` proves a repeated id yields a
+  single recommendation row.
 
 ---
 
