@@ -2,7 +2,7 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Proposed                                                              |
+| **Status**  | Accepted                                                              |
 | **Date**    | 2026-05-27                                                            |
 | **Authors** | Ted                                                                   |
 | **Related** | [ADR-004](../_archive/ADR-004-Proxy-Discovery/ADR-004-proxy-discovery-via-runner-pool-upload.md), [ADR-013](../_archive/ADR-013-Runner-Runtime-State/ADR-013-runner-runtime-state-consolidation.md) |
@@ -104,3 +104,4 @@ When the policy has low confidence, the heuristic dominates. When the policy has
 
 - 2026-05-27: Proposed as ADR-023.
 - 2026-05-27: Added Phase 4 plan for the Python Selection Signal deepening.
+- 2026-06-05: Accepted. All four phases implemented and verified — Phase 1-3 (shadow scoring, flagged policy ordering, observability) in the `JAVDB_AutoSpider_Proxycoordinator` repo; Phase 4 (Python `ProxySelectionSignal`) in CICD. IMP-01..04 marked Completed.
