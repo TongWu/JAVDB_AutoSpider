@@ -545,8 +545,12 @@ Check attached logs for details.
     if ops_advisory:
         body = ops_advisory + body
 
-    # Send email
-    email_sent = send_email(subject, body, attachments, options.dry_run)
+    # Send email (ADR-046 P5: thread the session explicitly — standalone /
+    # ad-hoc callers pass None and the history row persists untagged).
+    email_sent = send_email(
+        subject, body, attachments, options.dry_run,
+        session_id=options.session_id,
+    )
 
     # Clean up temporary txt files
     for txt_path in txt_attachments:
