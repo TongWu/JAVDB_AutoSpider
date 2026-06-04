@@ -149,8 +149,8 @@ the D1-canonical baseline for Phase 1. Drift events reuse `OpsIncidents` (D6).
 | Phase | IMP | Ships | Deferred |
 | --- | --- | --- | --- |
 | Phase 1 — Piggyback + gate | [IMP-ADR035-01](IMP-ADR035-01-piggyback-and-gate.md) | `parse_contract`; `field_health` per-run telemetry; `detectors`; `ParseRunFieldFill` committed-only median baseline; tiered action (critical gate + soft incident) on the daily run; `site_drift` incident type | Independent canary; web/AI surface |
-| Phase 2 — Independent canary | IMP-ADR035-02 (stub) | `probes` + `SiteContractSentinel.yml` cron + pinned pages + golden anchors; between-run detection | — |
-| Phase 3 — Surface (optional) | IMP-ADR035-03 (stub) | Per-field health on web (ADR-034 pattern) / AI drift summary | — |
+| Phase 2 — Independent canary | [IMP-ADR035-02](IMP-ADR035-02-independent-canary.md) | `probes` + `SiteContractSentinel.yml` cron + pinned pages + golden anchors; between-run detection | — |
+| Phase 3 — Surface (optional) | [IMP-ADR035-03](IMP-ADR035-03-surface.md) | Per-field health on web (ADR-034 pattern) / AI drift summary | — |
 
 Phase 1 delivers the headline value (catch drift + protect the DB) with **zero new
 fetch**. Phase 2 adds between-run lead time. Phase 3 is optional polish.
@@ -207,3 +207,11 @@ fetch**. Phase 2 adds between-run lead time. Phase 3 is optional polish.
   commit path. The production D1 migration has been verified on `javdb-reports`.
   See the IMP's "As-Built Notes" for deviations. Phases 2–3 remain pending, so
   the umbrella stays Proposed.
+- 2026-06-03: Phases 2–3 plans authored —
+  [IMP-ADR035-02](IMP-ADR035-02-independent-canary.md) (independent canary:
+  `probes`, golden anchors, `run_canary`, `--canary`/`--capture-anchors` CLI,
+  `SiteContractSentinel.yml`) and
+  [IMP-ADR035-03](IMP-ADR035-03-surface.md) (drift surface: `incident_type`
+  filter, `parse-field-health` endpoint, `site_drift_sentinel` capability flag,
+  OpenAPI + TS-mirror follow-up). Both are written and ready to execute;
+  implementation is pending, so the umbrella stays Proposed.
