@@ -16,13 +16,19 @@ class StatsRepo:
     so callers can migrate incrementally; PR-2 will inline the SQL here
     and retire the underlying functions.
 
-    Construction takes only an optional ``db_path`` override (used in
-    tests / smoke runs against a fresh DB). Every method takes
-    ``session_id`` explicitly — no thread-local global.
+    Construction takes an optional ``db_path`` override (used in tests /
+    smoke runs against a fresh DB) and an optional ``session_id`` (kept for
+    repo-API symmetry with ``HistoryRepo`` / ``OperationsRepo``; ADR-046 P2).
+    Every method already takes ``session_id`` explicitly — there is no
+    thread-local global to remove here, so the bound session is currently
+    informational only.
     """
 
-    def __init__(self, *, db_path: Optional[str] = None) -> None:
+    def __init__(
+        self, *, db_path: Optional[str] = None, session_id: Optional[str] = None,
+    ) -> None:
         self._db_path = db_path
+        self._session_id = session_id
 
     # ── Save (session_id required) ───────────────────────────────
 

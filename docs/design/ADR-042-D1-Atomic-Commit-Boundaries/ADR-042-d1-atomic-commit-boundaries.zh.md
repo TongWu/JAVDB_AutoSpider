@@ -6,7 +6,7 @@
 | **日期 (Date)** | 2026-05-31 |
 | **作者 (Authors)** | Ted |
 | **关联 (Related)** | [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.zh.md), [ADR-009](../_archive/ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.zh.md), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.zh.md), [ADR-019](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.zh.md), [ADR-032](../ADR-032-Mandatory-Session-Binding/ADR-032-mandatory-session-binding.zh.md), [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.zh.md), [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.zh.md) |
-| **关联实现计划 (Related Implementation Plans)** | [IMP-ADR042-01](IMP-ADR042-01-d1-atomic-commit-boundaries.md) - Phase 1 docs follow-through |
+| **关联实现计划 (Related Implementation Plans)** | [IMP-ADR042-01](IMP-ADR042-01-d1-atomic-commit-boundaries.md) - Phase 1 docs follow-through；[IMP-ADR042-02](IMP-ADR042-02-d1-write-class-enforcement.md) - Phase 2 D6 强制执行 |
 
 > 这份 ADR 来自一次 grill 结论：需要把“D1 本身”与“权威写入边界”分开看。这个区分很重要，因为系统不需要一个分布式事务管理器，但它确实需要一个在会话层面表现得像事务一样的边界。
 
@@ -78,6 +78,8 @@ drift log、port summary、recovery outbox 这些都对可观测性和恢复非�
 
 如果一个写入无法被分类，就说明它还不够清楚，不能合并。
 
+**强制方式（Phase 2）。** D6 在两处强制执行：(1) `javdb/migrations/d1/` 下每个 `CREATE TABLE` 迁移都必须带 `-- Write-Class: <类别>` header，由 `.github/workflows/validate-d1-write-class.yml` 在每个 PR 上校验（fail-closed）；(2) ADR 模板带一个 `D1 Write Class` 字段，在设计评审期提示分类。加列、索引、版本号 bump、drop 不是新写入面，豁免。详见 [IMP-ADR042-02](IMP-ADR042-02-d1-write-class-enforcement.md)。
+
 ## 术语 (Domain Language)
 
 - **权威写入 (Authoritative write)** — 决定一个 session 是否正确提交的写入。
@@ -120,6 +122,7 @@ drift log、port summary、recovery outbox 这些都对可观测性和恢复非�
 | 阶段 | IMP | 交付内容 | 推迟内容 |
 | --- | --- | --- | --- |
 | Phase 1 ✅ | [IMP-ADR042-01](IMP-ADR042-01-d1-atomic-commit-boundaries.md) | 将边界传播到 CONTEXT.md 以及 storage / handbook 文档 —— **已于 2026-06-01 完成** | 任何试图把 SQLite 和 D1 伪装成分布式事务的设计 |
+| Phase 2 ✅ | [IMP-ADR042-02](IMP-ADR042-02-d1-write-class-enforcement.md) | 强制 D6：新增 `CREATE TABLE` 迁移必须带 `Write-Class:` header（CI fail-closed）+ ADR 模板加 `D1 Write Class` 字段 —— **已于 2026-06-01 完成** | 回填存量迁移；对写入既有表的代码级写入做门禁；对 ADR 字段做 CI 强制（设计上即软提示） |
 
 ## 参考 (References)
 
@@ -140,3 +143,4 @@ drift log、port summary、recovery outbox 这些都对可观测性和恢复非�
 - 2026-05-31: Accepted — 将 D1 的会话级原子提交边界与权威写入分类固化下来。
 - 2026-05-31: 在一次设计评审指出 ACID 措辞夸大了 I/D 之后，将术语从"逻辑 ACID"改为"原子提交"，并把保证范围界定为原子性 + 一致性（隔离性靠 `SessionId`/`MovieClaim`，持久性靠 recovery）。
 - 2026-06-01: IMP-ADR042-01 完成 —— 写入边界词汇已传播进 `CONTEXT.md`（`写入边界分类` 章节 + glossary）、storage README 以及 developer / ops handbook。
+- 2026-06-01: IMP-ADR042-02（Phase 2）完成 —— D6 现在由 CI 门禁强制（新增 `CREATE TABLE` 迁移必须带 `Write-Class:` header）外加 ADR 模板的 `D1 Write Class` 字段。这闭合了 IMP-ADR042-01 推迟的 D6 强制执行事项。

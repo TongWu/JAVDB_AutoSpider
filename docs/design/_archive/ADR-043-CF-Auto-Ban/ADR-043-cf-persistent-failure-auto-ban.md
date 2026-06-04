@@ -226,7 +226,7 @@ to the local ban duration is needed.
 ## References
 
 - [BFR-009 — Rust Pool Cross-Runner Ban Dispatch](../../BFR-009-Rust-Pool-Cross-Runner-Ban-Dispatch/BFR-009-rust-pool-ban-dispatch.md) — the dispatch gap this ADR closes (D8); fixed by IMP-ADR043-02
-- [ADR-041 — Rust Fallback Policy](../../ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md) — made BFR-009 visible (Rust-Required)
+- [ADR-041 — Rust Fallback Policy](../ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md) — made BFR-009 visible (Rust-Required)
 - [ADR-023 — Proxy Recommendation Policy](../../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.md) — proxy health signals (CF/success/failure events) in the DO
 - Coordinator repo: [`TongWu/JAVDB_AutoSpider_Proxycoordinator`](https://github.com/TongWu/JAVDB_AutoSpider_Proxycoordinator) — `src/proxy_coordinator.ts`, `src/types.ts`
 - `docs/handbook/en/self-hoster/proxy-coordinator.md` — operator-facing env reference

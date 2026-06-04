@@ -593,9 +593,11 @@ def validate_dedup_records_against_inventory() -> Tuple[int, List[dict]]:
         return 0, []
 
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    updated = OperationsRepo().mark_orphan_records(
+    # ADR-046 P2: bind the resolved session on the repo (the global is never
+    # read inside OperationsRepo). Phase 5 migrates this ambient read.
+    sid = SessionLifecycleRepo().get_active_session_id()
+    updated = OperationsRepo(session_id=sid).mark_orphan_records(
         orphan_paths, ORPHAN_REASON_SUFFIX, now_str,
-        session_id=SessionLifecycleRepo().get_active_session_id(),
     )
     for r in orphans:
         r['DateTimeDeleted'] = now_str

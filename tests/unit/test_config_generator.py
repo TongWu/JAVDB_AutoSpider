@@ -329,6 +329,27 @@ class TestGetConfigMap:
         assert entry[3] == 'false'
         assert entry[4] == 'RUNNER REGISTRY CONFIGURATION'
 
+    def test_contains_torrent_quality_evidence_keys(self):
+        """Should expose torrent quality evidence config under its own section."""
+        config_map = get_config_map()
+        entries = {item[0]: item for item in config_map if item[0] in {
+            'TORRENT_QUALITY_EVIDENCE_ENABLED',
+            'TORRENT_QUALITY_POLICY_MODE',
+            'TORRENT_QUALITY_CATEGORIES',
+        }}
+
+        assert entries['TORRENT_QUALITY_EVIDENCE_ENABLED'][1] == 'TORRENT_QUALITY_EVIDENCE_ENABLED'
+        assert entries['TORRENT_QUALITY_EVIDENCE_ENABLED'][3] is False
+        assert entries['TORRENT_QUALITY_EVIDENCE_ENABLED'][4] == 'TORRENT QUALITY EVIDENCE'
+
+        assert entries['TORRENT_QUALITY_POLICY_MODE'][1] == 'TORRENT_QUALITY_POLICY_MODE'
+        assert entries['TORRENT_QUALITY_POLICY_MODE'][3] == 'shadow'
+        assert entries['TORRENT_QUALITY_POLICY_MODE'][4] == 'TORRENT QUALITY EVIDENCE'
+
+        assert entries['TORRENT_QUALITY_CATEGORIES'][1] == 'TORRENT_QUALITY_CATEGORIES'
+        assert entries['TORRENT_QUALITY_CATEGORIES'][3] == ''
+        assert entries['TORRENT_QUALITY_CATEGORIES'][4] == 'TORRENT QUALITY EVIDENCE'
+
 
 class TestGenerateConfigContent:
     """Tests for generate_config_content function."""
@@ -355,6 +376,43 @@ class TestGenerateConfigContent:
             content = generate_config_content()
             assert '# GIT CONFIGURATION' in content
             assert '# QBITTORRENT CONFIGURATION' in content
+
+    def test_includes_torrent_quality_evidence_section(self):
+        """Should include torrent quality evidence settings in generated config."""
+        env = {}
+        with patch.dict(os.environ, env, clear=True):
+            content = generate_config_content()
+            assert '# TORRENT QUALITY EVIDENCE' in content
+            assert "TORRENT_QUALITY_EVIDENCE_ENABLED = False" in content
+            assert "TORRENT_QUALITY_POLICY_MODE = 'shadow'" in content
+            assert "TORRENT_QUALITY_CATEGORIES = ''" in content
+
+    def test_torrent_quality_evidence_env_overrides(self):
+        """Should generate torrent quality evidence values from env overrides."""
+        env = {
+            'VAR_TORRENT_QUALITY_EVIDENCE_ENABLED': 'true',
+            'VAR_TORRENT_QUALITY_POLICY_MODE': 'shadow',
+            'VAR_TORRENT_QUALITY_CATEGORIES': '["Daily Ingestion"]',
+        }
+        with patch.dict(os.environ, env, clear=True):
+            content = generate_config_content()
+            assert "TORRENT_QUALITY_EVIDENCE_ENABLED = True" in content
+            assert "TORRENT_QUALITY_POLICY_MODE = 'shadow'" in content
+            assert 'TORRENT_QUALITY_CATEGORIES = \'["Daily Ingestion"]\'' in content
+
+    def test_config_example_describes_torrent_quality_categories_as_json_array(self):
+        """Should document TORRENT_QUALITY_CATEGORIES using the consumer format."""
+        example_path = os.path.join(project_root, 'config.py.example')
+        with open(example_path, encoding='utf-8') as f:
+            content = f.read()
+
+        key_index = content.index("TORRENT_QUALITY_CATEGORIES = ''")
+        section_snippet = content[max(0, key_index - 300):key_index]
+        assert "Optional JSON array of qBittorrent categories" in section_snippet
+        assert "direct collection skips" in section_snippet
+        assert "than scanning every qBittorrent category" in section_snippet
+        assert "comma-separated category allowlist" not in section_snippet
+        assert "collect evidence for all configured qBittorrent categories" not in section_snippet
     
     def test_github_actions_mode_note(self):
         """Should include GitHub Actions note in that mode."""

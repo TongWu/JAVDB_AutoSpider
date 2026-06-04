@@ -14,18 +14,19 @@ python3 -m apps.cli.<command> [options]
 
 - [Spider CLI](#spider-cli) (`apps.cli.spider`)
 - [Pipeline CLI](#pipeline-cli) (`apps.cli.pipeline`)
-- [qBittorrent Uploader](#qbittorrent-uploader) (`apps.cli.qb_uploader`)
-- [qBittorrent File Filter](#qbittorrent-file-filter) (`apps.cli.qb_file_filter`)
-- [PikPak Bridge](#pikpak-bridge) (`apps.cli.pikpak_bridge`)
-- [Migration CLI](#migration-cli) (`apps.cli.migration`)
+- [qBittorrent Uploader](#qbittorrent-uploader) (`apps.cli.qb.uploader`)
+- [qBittorrent File Filter](#qbittorrent-file-filter) (`apps.cli.qb.file_filter`)
+- [Torrent Quality Evidence](#torrent-quality-evidence) (`apps.cli.qb.quality_evidence`)
+- [PikPak Bridge](#pikpak-bridge) (`apps.cli.pikpak.bridge`)
+- [Migration CLI](#migration-cli) (`apps.cli.db.migration`)
 - [Login CLI](#login-cli) (`apps.cli.login`)
-- [Rollback CLI](#rollback-cli) (`apps.cli.rollback`)
+- [Rollback CLI](#rollback-cli) (`apps.cli.db.rollback`)
 - [Operations Diagnosis CLI](#operations-diagnosis-cli) (`apps.cli.ops.diagnose_run`)
 - [Acquisition Reconcile CLI](#acquisition-reconcile-cli) (`apps.cli.ops.reconcile`)
 - [Content Filter CLI](#content-filter-cli) (`apps.cli.ops.content_filter`)
 - [Event Spine Consumer CLI](#event-spine-consumer-cli) (`apps.cli.ops.events`)
 - [Site-Contract Sentinel CLI](#site-contract-sentinel-cli) (`apps.cli.ops.sentinel`)
-- [Config Generator CLI](#config-generator-cli) (`apps.cli.config_generator`)
+- [Config Generator CLI](#config-generator-cli) (`apps.cli.ops.config_generator`)
 - [Complete Spider Argument Reference](#complete-spider-argument-reference)
 
 ---
@@ -250,7 +251,7 @@ The pipeline executes these steps in order:
 
 ## qBittorrent Uploader
 
-**Module:** `apps.cli.qb_uploader`
+**Module:** `apps.cli.qb.uploader`
 
 Uploads torrent magnet links from spider CSV output to qBittorrent.
 
@@ -270,26 +271,26 @@ Uploads torrent magnet links from spider CSV output to qBittorrent.
 
 ```bash
 # Daily mode (default)
-python3 -m apps.cli.qb_uploader
+python3 -m apps.cli.qb.uploader
 
 # Ad-hoc mode (for custom URL scraping results)
-python3 -m apps.cli.qb_uploader --mode adhoc
+python3 -m apps.cli.qb.uploader --mode adhoc
 
 # Specify input file
-python3 -m apps.cli.qb_uploader --input-file my_results.csv
+python3 -m apps.cli.qb.uploader --input-file my_results.csv
 
 # Use proxy for qBittorrent API
-python3 -m apps.cli.qb_uploader --use-proxy
+python3 -m apps.cli.qb.uploader --use-proxy
 
 # Override category
-python3 -m apps.cli.qb_uploader --mode adhoc --category "Custom Category"
+python3 -m apps.cli.qb.uploader --mode adhoc --category "Custom Category"
 ```
 
 ---
 
 ## qBittorrent File Filter
 
-**Module:** `apps.cli.qb_file_filter`
+**Module:** `apps.cli.qb.file_filter`
 
 Filters out small files from recently added torrents in qBittorrent. Sets unwanted files (below the size threshold) to "do not download" priority. For newly added torrents, the filter waits up to 90 seconds for qBittorrent metadata before processing so small files can be filtered before they download.
 
@@ -310,33 +311,61 @@ Filters out small files from recently added torrents in qBittorrent. Sets unwant
 
 ```bash
 # Default: use threshold from config
-python3 -m apps.cli.qb_file_filter
+python3 -m apps.cli.qb.file_filter
 
 # Override threshold (e.g. 50MB) and days
-python3 -m apps.cli.qb_file_filter --min-size 50
-python3 -m apps.cli.qb_file_filter --min-size 100 --days 3
+python3 -m apps.cli.qb.file_filter --min-size 50
+python3 -m apps.cli.qb.file_filter --min-size 100 --days 3
 
 # Dry run (preview without changes)
-python3 -m apps.cli.qb_file_filter --dry-run
+python3 -m apps.cli.qb.file_filter --dry-run
 
 # Filter specific category only
-python3 -m apps.cli.qb_file_filter --category JavDB
+python3 -m apps.cli.qb.file_filter --category JavDB
 
 # Filter multiple categories
-python3 -m apps.cli.qb_file_filter --categories '["Ad Hoc", "Daily Ingestion"]'
+python3 -m apps.cli.qb.file_filter --categories '["Ad Hoc", "Daily Ingestion"]'
 
 # With proxy
-python3 -m apps.cli.qb_file_filter --use-proxy
+python3 -m apps.cli.qb.file_filter --use-proxy
 
 # Delete already-downloaded small files
-python3 -m apps.cli.qb_file_filter --delete-local-files
+python3 -m apps.cli.qb.file_filter --delete-local-files
+```
+
+---
+
+## Torrent Quality Evidence
+
+**Module:** `apps.cli.qb.quality_evidence`
+
+Collects ADR-024 Phase 1 shadow evidence for production-selected/recently added
+torrents whose qBittorrent metadata is available. The collector is read-only
+against qBittorrent and exits without running unless
+`TORRENT_QUALITY_EVIDENCE_ENABLED=True` or `--force` is provided.
+
+### Arguments
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--days` | Number of days to look back for production torrents | `2` |
+| `--categories` | JSON array of qBittorrent categories to scan | `TORRENT_QUALITY_CATEGORIES` |
+| `--force` | Run even when evidence collection is disabled in config | `False` |
+| `--use-proxy` | Force-enable proxy for qBittorrent API requests | Auto |
+| `--no-proxy` | Force-disable proxy for qBittorrent API requests | Auto |
+
+### Examples
+
+```bash
+python3 -m apps.cli.qb.quality_evidence --days 2 --categories '["Daily Ingestion"]'
+python3 -m apps.cli.qb.quality_evidence --force --categories '["Daily Ingestion"]'
 ```
 
 ---
 
 ## PikPak Bridge
 
-**Module:** `apps.cli.pikpak_bridge`
+**Module:** `apps.cli.pikpak.bridge`
 
 Transfers old torrents from qBittorrent to PikPak cloud storage.
 
@@ -357,32 +386,32 @@ Transfers old torrents from qBittorrent to PikPak cloud storage.
 
 ```bash
 # Default: process torrents older than 3 days in batch mode
-python3 -m apps.cli.pikpak_bridge
+python3 -m apps.cli.pikpak.bridge
 
 # Custom days threshold
-python3 -m apps.cli.pikpak_bridge --days 7
+python3 -m apps.cli.pikpak.bridge --days 7
 
 # Dry run mode
-python3 -m apps.cli.pikpak_bridge --dry-run
+python3 -m apps.cli.pikpak.bridge --dry-run
 
 # Individual mode (one by one instead of batch)
-python3 -m apps.cli.pikpak_bridge --individual
+python3 -m apps.cli.pikpak.bridge --individual
 
 # With proxy
-python3 -m apps.cli.pikpak_bridge --use-proxy
+python3 -m apps.cli.pikpak.bridge --use-proxy
 
 # Custom root folder
-python3 -m apps.cli.pikpak_bridge --root-folder "/My Videos"
+python3 -m apps.cli.pikpak.bridge --root-folder "/My Videos"
 
 # Combine options
-python3 -m apps.cli.pikpak_bridge --days 5 --dry-run --use-proxy
+python3 -m apps.cli.pikpak.bridge --days 5 --dry-run --use-proxy
 ```
 
 ---
 
 ## Migration CLI
 
-**Module:** `apps.cli.migration`
+**Module:** `apps.cli.db.migration`
 
 Migrates SQLite databases to the current schema version. Also provides backfill and alignment sub-commands.
 
@@ -423,31 +452,31 @@ These arguments control the `--align-inventory-history` sub-command, which align
 
 ```bash
 # Run schema migration
-python3 -m apps.cli.migration
+python3 -m apps.cli.db.migration
 
 # Preview migration without changes
-python3 -m apps.cli.migration --dry-run
+python3 -m apps.cli.db.migration --dry-run
 
 # Backup before migration
-python3 -m apps.cli.migration --backup
+python3 -m apps.cli.db.migration --backup
 
 # Verify current schema version
-python3 -m apps.cli.migration --verify
+python3 -m apps.cli.db.migration --verify
 
 # Backfill actor names from JavDB (with limit)
-python3 -m apps.cli.migration --backfill-actors --limit 100
+python3 -m apps.cli.db.migration --backfill-actors --limit 100
 
 # Backfill with CF bypass
-python3 -m apps.cli.migration --backfill-actors --use-cf-bypass
+python3 -m apps.cli.db.migration --backfill-actors --use-cf-bypass
 
 # Normalize datetime columns
-python3 -m apps.cli.migration --normalize-datetimes
+python3 -m apps.cli.db.migration --normalize-datetimes
 
 # Align inventory with history
-python3 -m apps.cli.migration --align-inventory-history --align-limit 50
+python3 -m apps.cli.db.migration --align-inventory-history --align-limit 50
 
 # Align with shuffled queue and per-worker limit
-python3 -m apps.cli.migration --align-inventory-history --align-shuffle --align-limit-per-worker 20
+python3 -m apps.cli.db.migration --align-inventory-history --align-shuffle --align-limit-per-worker 20
 ```
 
 ---
@@ -482,7 +511,7 @@ The script will:
 
 ## Rollback CLI
 
-**Module:** `apps.cli.rollback`
+**Module:** `apps.cli.db.rollback`
 
 Undoes D1/SQLite writes from an in-progress or failed workflow run. Supports both automated cleanup-on-failure and manual targeted rollback.
 
@@ -522,27 +551,27 @@ Undoes D1/SQLite writes from an in-progress or failed workflow run. Supports bot
 
 ```bash
 # Dry-run targeted rollback
-python3 -m apps.cli.rollback --session-id 42
+python3 -m apps.cli.db.rollback --session-id 42
 
 # Apply targeted rollback
-python3 -m apps.cli.rollback --session-id 42 --apply
+python3 -m apps.cli.db.rollback --session-id 42 --apply
 
 # Rollback by GitHub run identity
-python3 -m apps.cli.rollback --run-id 12345 --attempt 1
+python3 -m apps.cli.db.rollback --run-id 12345 --attempt 1
 
 # Cleanup-on-failure (automated, no specific session known)
-python3 -m apps.cli.rollback \
+python3 -m apps.cli.db.rollback \
   --run-id 12345 --attempt 1 \
   --run-started-at 2026-05-04T19:30:00Z
 
 # Partial scope
-python3 -m apps.cli.rollback --session-id 42 --scope history
+python3 -m apps.cli.db.rollback --session-id 42 --scope history
 
 # Force rollback of committed session
-python3 -m apps.cli.rollback --session-id 42 --apply --force
+python3 -m apps.cli.db.rollback --session-id 42 --apply --force
 
 # Legacy sweep (include orphaned sessions in window)
-python3 -m apps.cli.rollback --session-id 42 \
+python3 -m apps.cli.db.rollback --session-id 42 \
   --run-started-at 2026-05-04T19:30:00Z --include-orphaned
 ```
 
@@ -796,7 +825,7 @@ python3 -m apps.cli.ops.sentinel \
 
 ## Config Generator CLI
 
-**Module:** `apps.cli.config_generator`
+**Module:** `apps.cli.ops.config_generator`
 
 Generates `config.py` from environment variables. Used by GitHub Actions workflows to materialize a runtime config from `VAR_*` env vars (which in turn come from repository secrets / variables). Not typically run manually except for debugging the GH Actions setup locally.
 
@@ -804,7 +833,7 @@ Generates `config.py` from environment variables. Used by GitHub Actions workflo
 
 ```bash
 # GitHub Actions mode — reads VAR_* env vars and writes config.py
-python3 -m apps.cli.config_generator --github-actions
+python3 -m apps.cli.ops.config_generator --github-actions
 ```
 
 ### Behavior

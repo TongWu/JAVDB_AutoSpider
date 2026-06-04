@@ -283,8 +283,21 @@ class OperationsRepo:
     _EMAIL_STATUSES = frozenset({"sent", "failed", "resent"})
     _EMAIL_CREATED_BY = frozenset({"pipeline", "manual", "resend"})
 
-    def __init__(self, *, db_path: Optional[str] = None) -> None:
+    def __init__(
+        self, *, db_path: Optional[str] = None, session_id: Optional[str] = None,
+    ) -> None:
         self._db_path = db_path
+        self._session_id = session_id
+
+    def _resolve_session(self, explicit: Optional[str] = None) -> Optional[str]:
+        """Resolve a write session without requiring one: explicit arg > bound
+        session > None. Used for tables whose SessionId is nullable (DedupRecords,
+        PikpakHistory, …) where session-less standalone writes are valid (ADR-046 P2).
+
+        The process-global ``get_active_session_id()`` is never consulted
+        (ADR-046 D2); callers thread the active session in explicitly.
+        """
+        return explicit if explicit is not None else self._session_id
 
     # ── Rclone inventory ──────────────────────────────────────────
 
@@ -294,13 +307,17 @@ class OperationsRepo:
         return db_load_rclone_inventory(db_path=self._db_path)
 
     def replace_rclone_inventory(self, entries: List[dict]) -> int:
-        """Replace the full RcloneInventory atomically. Returns row count."""
-        from javdb.storage.db import get_active_session_id
+        """Replace the full RcloneInventory atomically. Returns row count.
+
+        Uses the bound session (ADR-046 D2): the process-global is never read.
+        A session-less call (no bound session) falls back to the legacy
+        single-shot replace path inside ``db_replace_rclone_inventory``.
+        """
         from javdb.storage.db._db_operations import db_replace_rclone_inventory
         return db_replace_rclone_inventory(
             entries=entries,
             db_path=self._db_path,
-            session_id=get_active_session_id(),
+            session_id=self._resolve_session(),
         )
 
     def swap_rclone_inventory(self, session_id: str) -> int:
@@ -350,7 +367,7 @@ class OperationsRepo:
         if row is None:
             raise TypeError("append_dedup_record requires record or payload")
         return db_append_dedup_record(
-            row, session_id=session_id, db_path=self._db_path,
+            row, session_id=self._resolve_session(session_id), db_path=self._db_path,
         )
 
     # ── PikpakHistory ─────────────────────────────────────────────
@@ -368,7 +385,7 @@ class OperationsRepo:
         if row is None:
             raise TypeError("append_pikpak_history requires record or payload")
         return db_append_pikpak_history(
-            row, session_id=session_id, db_path=self._db_path,
+            row, session_id=self._resolve_session(session_id), db_path=self._db_path,
         )
 
     def list_pikpak_history(
@@ -436,7 +453,7 @@ class OperationsRepo:
         return db_mark_records_deleted(
             path_datetime_pairs,
             db_path=self._db_path,
-            session_id=session_id,
+            session_id=self._resolve_session(session_id),
         )
 
     def cleanup_deleted_records(self, older_than_days: int = 30) -> int:
@@ -461,7 +478,7 @@ class OperationsRepo:
             reason_suffix=reason_suffix,
             when=when,
             db_path=self._db_path,
-            session_id=session_id,
+            session_id=self._resolve_session(session_id),
         )
 
     # ── Rclone staging ───────────────────────────────────────────
@@ -520,7 +537,7 @@ class OperationsRepo:
             video_code,
             reason=reason,
             db_path=self._db_path,
-            session_id=session_id,
+            session_id=self._resolve_session(session_id),
         )
 
     def load_align_no_exact_match_codes(self) -> set:

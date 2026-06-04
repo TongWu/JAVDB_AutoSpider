@@ -135,6 +135,9 @@ These are non-sensitive values. The `config_generator` reads them via `VAR_*` en
 | `REQUEST_TIMEOUT` | `30` | API request timeout in seconds |
 | `DELAY_BETWEEN_ADDITIONS` | `1` | Delay in seconds between torrent additions |
 | `QB_FILE_FILTER_MIN_SIZE_MB` | `100` | Minimum file size threshold for the file filter |
+| `TORRENT_QUALITY_EVIDENCE_ENABLED` | `false` | Run ADR-024 shadow evidence collection after the file filter |
+| `TORRENT_QUALITY_POLICY_MODE` | `shadow` | Reserved rollout mode; Phase 1 remains shadow-only |
+| `TORRENT_QUALITY_CATEGORIES` | (empty) | Optional JSON array used when the workflow dispatch `categories` input is omitted |
 
 ### Proxy Variables
 

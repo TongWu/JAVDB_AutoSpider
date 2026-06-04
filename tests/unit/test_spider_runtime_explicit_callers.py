@@ -682,6 +682,10 @@ def test_login_coordinator_uses_explicit_runtime_do_client_and_holder(monkeypatc
     # Smoke the unknown-target park path without relying on a global client.
     task_queue = queue.Queue()
     coordinator._park_login_task_for_unknown_target(object(), task_queue, "proxy-a")
+    # Parking spins up the real ``login-state-poller`` daemon; stop it so it
+    # does not outlive the test polling the MagicMock DO client on its own
+    # cadence (mirrors test_login_coordinator_park._stop_leaked_pollers).
+    coordinator.stop_poller()
     assert coordinator._pending_login_tasks[0][0] == "proxy-a"
 
 

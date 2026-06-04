@@ -432,8 +432,10 @@ def save_to_pikpak_history(torrent_info, transfer_status, error_msg=None):
             )
             from javdb.storage.repos.operations_repo import OperationsRepo
             init_db()
-            OperationsRepo().append_pikpak_history(
-                record, session_id=get_active_session_id(),
+            # ADR-046 P2: bind the resolved session on the repo (the global is
+            # never read inside OperationsRepo). Phase 5 migrates this read.
+            OperationsRepo(session_id=get_active_session_id()).append_pikpak_history(
+                record,
             )
         except Exception as e:
             logger.warning(f"Failed to write pikpak history to db backend: {e}")

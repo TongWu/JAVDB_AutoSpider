@@ -129,6 +129,9 @@ jobs:
           VAR_PIKPAK_ROOT_FOLDER: ${{ vars.PIKPAK_ROOT_FOLDER || '/Javdb_AutoSpider' }}
           VAR_QB_FILE_FILTER_MIN_SIZE_MB: ${{ vars.QB_FILE_FILTER_MIN_SIZE_MB }}
           VAR_QB_FILE_FILTER_LOG_FILE: ${{ vars.QB_FILE_FILTER_LOG_FILE || 'logs/qb_file_filter.log' }}
+          VAR_TORRENT_QUALITY_EVIDENCE_ENABLED: ${{ vars.TORRENT_QUALITY_EVIDENCE_ENABLED || 'false' }}
+          VAR_TORRENT_QUALITY_POLICY_MODE: ${{ vars.TORRENT_QUALITY_POLICY_MODE || 'shadow' }}
+          VAR_TORRENT_QUALITY_CATEGORIES: ${{ vars.TORRENT_QUALITY_CATEGORIES || '' }}
           VAR_STORAGE_MODE: ${{ vars.STORAGE_MODE }}
           # D1 / Cloudflare (only required when STORAGE_BACKEND in {d1,dual})
           VAR_STORAGE_BACKEND: ${{ vars.STORAGE_BACKEND || 'sqlite' }}
@@ -338,6 +341,21 @@ jobs:
           
           echo "Running: python3 -m apps.cli.qb.file_filter ${ARGS[*]}"
           python3 -m apps.cli.qb.file_filter "${ARGS[@]}"
+
+      - name: Collect torrent quality evidence (ADR-024, shadow)
+        if: ${{ vars.TORRENT_QUALITY_EVIDENCE_ENABLED == 'true' && github.event.inputs.dry_run != 'true' }}
+        env:
+          DAYS: ${{ github.event.inputs.days || '2' }}
+          QB_EVIDENCE_CATEGORIES: ${{ github.event.inputs.categories || vars.TORRENT_QUALITY_CATEGORIES || '["Ad Hoc", "Daily Ingestion", "顶级"]' }}
+        run: |
+          set -e
+          set -o pipefail
+          ARGS=(--days "$DAYS")
+          if [ -n "$QB_EVIDENCE_CATEGORIES" ]; then
+            ARGS+=(--categories "$QB_EVIDENCE_CATEGORIES")
+          fi
+          echo "Running: python3 -m apps.cli.qb.quality_evidence ${ARGS[*]}"
+          python3 -m apps.cli.qb.quality_evidence "${ARGS[@]}"
 
   # =============================================================================
   # Job 3: Run File Filter on Adhoc qBittorrent (only when QB_URL_ADHOC is set)

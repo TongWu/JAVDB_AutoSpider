@@ -1,6 +1,6 @@
 # IMP-ADR024-06: ADR-024 Phase 1 — Read-Only API Surface
 
-**Status:** Proposed — design-reviewed & hardened 2026-05-31 (see Design Review note).
+**Status:** Completed — implemented 2026-06-01 (design-reviewed & hardened 2026-05-31; see Design Review note).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -31,6 +31,11 @@ A `brainstorming` review fixed one defect carried over from the hardened IMP-02:
   yields `TorrentQualityRepo(conn)`; endpoints use `with _repo() as repo:`. The
   test's monkeypatch seam is preserved by swapping the fake to
   `lambda: nullcontext(_FakeRepo())`.
+- **Repo rows are already JSON-decoded.** `TorrentQualityRepo._to_dict()` strips
+  the `_json` suffix and returns decoded `reasons` / `javdb_tags` values, so the
+  router adapter consumes list-valued `reasons` from repo rows. Tests may still
+  include raw `reasons_json` fixtures only to prove the adapter tolerates older
+  row shapes.
 
 ---
 
@@ -285,9 +290,11 @@ def _repo() -> Iterator[TorrentQualityRepo]:
         yield TorrentQualityRepo(conn)
 
 
-def _json_list(raw: Optional[str]) -> list:
+def _json_list(raw: Any) -> list:
     if not raw:
         return []
+    if isinstance(raw, list):
+        return raw
     try:
         value = json.loads(raw)
     except (TypeError, json.JSONDecodeError):
@@ -299,6 +306,10 @@ def _bool_or_none(value: Any) -> Optional[bool]:
     if value is None:
         return None
     return bool(value)
+
+
+def _row_reasons(row: dict) -> list:
+    return _json_list(row.get("reasons")) or _json_list(row.get("reasons_json"))
 
 
 def _eval_to_schema(row: dict) -> TorrentQualityEvaluationSchema:
@@ -317,7 +328,7 @@ def _eval_to_schema(row: dict) -> TorrentQualityEvaluationSchema:
         would_replace_current_choice=_bool_or_none(row.get("would_replace_current_choice")),
         policy_mode=row.get("policy_mode"),
         decision=row.get("decision"),
-        reasons=_json_list(row.get("reasons_json")),
+        reasons=_row_reasons(row),
     )
 
 
@@ -337,7 +348,7 @@ def _evidence_to_schema(row: dict) -> TorrentQualityEvidenceSchema:
         junk_size_bytes=row.get("junk_size_bytes"),
         junk_size_ratio=row.get("junk_size_ratio"),
         suspicious_file_count=row.get("suspicious_file_count"),
-        reasons=_json_list(row.get("reasons_json")),
+        reasons=_row_reasons(row),
     )
 
 
