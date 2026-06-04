@@ -9,7 +9,8 @@ from typing import Any, Optional
 
 from javdb.infra.config import cfg
 from javdb.parsing.common import javdb_absolute_url
-from javdb.storage.db import get_db, HISTORY_DB_PATH
+from javdb.storage import db as _db
+from javdb.storage.db import get_db
 
 
 # Fields read by ``upsert`` below. Used to coerce a MovieDetail object (Python
@@ -31,7 +32,9 @@ class MetadataRepo:
     """Thin typed wrapper over MovieMetadata in history.db."""
 
     def __init__(self, *, db_path: Optional[str] = None) -> None:
-        self._db_path = db_path or HISTORY_DB_PATH
+        # Resolve HISTORY_DB_PATH at construction via ``_db`` (not bound at
+        # import) so pytest's path monkeypatch is honoured (BFR-016).
+        self._db_path = db_path or _db.HISTORY_DB_PATH
 
     def upsert(self, href: str, detail: Any) -> None:
         """UPSERT a MovieDetail into MovieMetadata.

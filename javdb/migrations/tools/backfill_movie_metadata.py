@@ -43,7 +43,8 @@ from javdb.infra.config import cfg
 from javdb.infra.logging import get_logger, log_summary_block, setup_logging
 from javdb.parsing import parse_detail_page
 from javdb.spider.html_validators import is_login_page
-from javdb.storage.db import get_db, HISTORY_DB_PATH
+from javdb.storage import db as _db
+from javdb.storage.db import get_db
 from javdb.storage.repos.metadata_repo import MetadataRepo
 import javdb.spider.runtime.state as spider_state
 from javdb.spider.runtime.sleep import movie_sleep_mgr
@@ -79,7 +80,7 @@ def _load_hrefs_without_metadata(
         WHERE  mm.href IS NULL
         ORDER  BY mh.DateTimeCreated DESC
     """
-    with get_db(HISTORY_DB_PATH) as conn:
+    with get_db(_db.HISTORY_DB_PATH) as conn:
         present = {
             r["name"] for r in conn.execute(
                 "SELECT name AS name FROM sqlite_master WHERE type='table' "

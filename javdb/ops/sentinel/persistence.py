@@ -8,20 +8,23 @@ import json
 
 from javdb.ops.diagnosis.models import OpsIncidentRecord, build_incident_id
 from javdb.ops.sentinel.models import SentinelVerdict, utc_now_iso
-from javdb.storage.db import REPORTS_DB_PATH, get_db
+from javdb.storage import db as _db
+from javdb.storage.db import get_db
 from javdb.storage.repos.ops_incident_repo import OpsIncidentRepo
 from javdb.storage.repos.parse_run_field_fill_repo import ParseRunFieldFillRepo
 
 
+# REPORTS_DB_PATH is resolved at call time via ``_db`` (not bound at import) so
+# pytest's path monkeypatch is honoured (BFR-016).
 @contextlib.contextmanager
 def open_fill_repo():
-    with get_db(REPORTS_DB_PATH) as conn:
+    with get_db(_db.REPORTS_DB_PATH) as conn:
         yield ParseRunFieldFillRepo(conn)
 
 
 @contextlib.contextmanager
 def open_incident_repo():
-    with get_db(REPORTS_DB_PATH) as conn:
+    with get_db(_db.REPORTS_DB_PATH) as conn:
         yield OpsIncidentRepo(conn)
 
 
