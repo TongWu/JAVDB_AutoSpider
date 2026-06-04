@@ -92,6 +92,8 @@ def test_recommend_ignores_adr023_shadow_fields():
                 "reason_code": "stable_recently",
                 "cooldown_until": None,
                 "model_version": "adr023-shadow-v1",
+                "rank_score": 0.84,
+                "ranking_mode": "policy",
                 "latency_ema_ms": 120.0,
                 "success_count": 200,
                 "failure_count": 5,
