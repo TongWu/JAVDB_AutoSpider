@@ -165,3 +165,52 @@ def test_check_d1_schema_passes_when_present(monkeypatch):
     from javdb.infra import health_check
     ok, msg = health_check.check_d1_schema()
     assert ok is True, msg
+
+
+def test_check_d1_schema_audits_dual_backend(monkeypatch):
+    """The 'dual' backend is audited too, not only 'd1'."""
+    monkeypatch.setenv("STORAGE_BACKEND", "dual")
+    fake = _FakeD1Conn({"ReportSessions": ["Id", "Status"]})  # CommittedAt absent
+    monkeypatch.setattr(
+        "javdb.storage.d1_client.make_d1_connection",
+        lambda logical: fake,
+    )
+    from javdb.infra import health_check
+    ok, msg = health_check.check_d1_schema()
+    assert ok is False
+    assert "CommittedAt" in msg
+
+
+def test_check_d1_schema_reports_connection_failure(monkeypatch):
+    """A D1 connection error (e.g. missing creds) fails the check cleanly."""
+    monkeypatch.setenv("STORAGE_BACKEND", "d1")
+
+    def _boom(logical):
+        raise RuntimeError("missing CLOUDFLARE_API_TOKEN")
+
+    monkeypatch.setattr("javdb.storage.d1_client.make_d1_connection", _boom)
+    from javdb.infra import health_check
+    ok, msg = health_check.check_d1_schema()
+    assert ok is False
+    assert "Cannot connect to D1" in msg
+
+
+def test_check_d1_schema_reports_audit_error(monkeypatch):
+    """An unexpected error during the audit surfaces as a failed check."""
+    monkeypatch.setenv("STORAGE_BACKEND", "d1")
+    fake = _FakeD1Conn({"ReportSessions": ["Id"]})
+    monkeypatch.setattr(
+        "javdb.storage.d1_client.make_d1_connection",
+        lambda logical: fake,
+    )
+
+    def _boom(conn):
+        raise RuntimeError("PRAGMA blew up")
+
+    monkeypatch.setattr(
+        "javdb.storage.db._db_migrations.find_missing_rollback_columns", _boom,
+    )
+    from javdb.infra import health_check
+    ok, msg = health_check.check_d1_schema()
+    assert ok is False
+    assert "Error auditing" in msg
