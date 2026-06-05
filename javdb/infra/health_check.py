@@ -3,13 +3,15 @@
 Health Check Script for JAVDB AutoSpider
 
 This script performs pre-flight health checks before running the main pipeline.
-It verifies connectivity to services:
 
-Critical checks (will fail the pipeline if not passed):
-- Proxy pool availability (when PROXY_MODE='pool' and all proxies banned)
+Critical checks (abort the run with exit 1 if not passed):
+- D1 schema drift on the rollback/pending columns (D1/dual backends only;
+  see BFR-017) — aborts before the spider runs if remote D1 is missing a
+  column the commit/rollback path writes.
 
 Non-critical checks (warnings only, pipeline continues):
 - qBittorrent Web UI (uploader step may fail, but spider can still run)
+- Proxy pool availability (informational; the ban manager is session-scoped)
 - SMTP server (optional, email notification may fail)
 
 Usage:
