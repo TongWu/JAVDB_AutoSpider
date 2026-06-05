@@ -57,7 +57,7 @@ commit 边界。该 session 卡在 `Status='finalizing'`，其已暂存的 pendi
 **即时补救（数据）：**
 - 对远程 D1 `javdb-reports` 执行了 `ALTER TABLE ReportSessions ADD COLUMN CommittedAt TEXT`。
 - 对卡住的 session `20260605T125521.738770Z-c765-0000` 重跑 commit
-  （`apps.cli.db.commit_session --session-id … --no-claim-commit`）：45 部影片 / 76 个种子
+  （`python3 -m apps.cli.db.commit_session --session-id … --no-claim-commit`）：45 部影片 / 76 个种子
   提升进正式表，204 行 pending 清空，`Status` → `committed`，`CommittedAt` 已写入。D1 恢复一致。
 
 **防止复发（代码）：**

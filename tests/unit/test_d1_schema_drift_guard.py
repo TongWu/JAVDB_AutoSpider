@@ -73,9 +73,19 @@ class _FakeD1Conn:
 
 def test_specs_match_real_schema_no_drift():
     """The unified init_db schema must satisfy every spec; otherwise the
-    constant has drifted from the DDL and the guard would cry wolf."""
-    with get_db() as conn:
-        assert find_missing_rollback_columns(conn) == []
+    constant has drifted from the DDL and the guard would cry wolf.
+
+    Audit each filesystem PATH db explicitly (paths read dynamically so the
+    conftest fixture's per-test patching is honoured) instead of the single
+    default get_db(), so every spec'd table is covered even if the fixture
+    ever stops collapsing the three logical DBs into one file.
+    """
+    import javdb.storage.db._db_connection as _conn
+    missing = []
+    for attr in ("HISTORY_DB_PATH", "REPORTS_DB_PATH", "OPERATIONS_DB_PATH"):
+        with get_db(getattr(_conn, attr)) as conn:
+            missing.extend(find_missing_rollback_columns(conn))
+    assert missing == []
 
 
 def test_detects_missing_committedat_the_bfr017_shape():
@@ -133,7 +143,9 @@ def test_check_d1_schema_reports_drift(monkeypatch):
     ok, msg = health_check.check_d1_schema()
     assert ok is False
     assert "CommittedAt" in msg
-    assert fake.closed is True
+    # The read-only audit must NOT close the connection: D1Connection.close()
+    # writes the git-tracked d1_port_summary.json (see check_d1_schema). (PR #170)
+    assert fake.closed is False
 
 
 def test_check_d1_schema_passes_when_present(monkeypatch):

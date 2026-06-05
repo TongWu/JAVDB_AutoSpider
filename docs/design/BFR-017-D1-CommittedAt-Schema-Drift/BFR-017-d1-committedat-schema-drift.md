@@ -63,7 +63,7 @@ full scrape — rather than at startup.
 - Applied `ALTER TABLE ReportSessions ADD COLUMN CommittedAt TEXT` to remote D1
   `javdb-reports`.
 - Resume-committed the stranded session `20260605T125521.738770Z-c765-0000`
-  (`apps.cli.db.commit_session --session-id … --no-claim-commit`): 45 movies / 76
+  (`python3 -m apps.cli.db.commit_session --session-id … --no-claim-commit`): 45 movies / 76
   torrents promoted to the live tables, 204 pending rows drained, `Status` →
   `committed`, `CommittedAt` set. D1 is consistent again.
 

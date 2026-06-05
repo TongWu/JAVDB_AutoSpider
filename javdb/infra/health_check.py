@@ -246,15 +246,21 @@ def check_d1_schema() -> Tuple[bool, str]:
     Only meaningful for the D1 / dual backends; SQLite self-heals via
     ``_ensure_rollback_columns`` at init, so this is skipped there.
     """
-    backend = (os.environ.get('STORAGE_BACKEND') or 'sqlite').strip().lower()
-    if backend not in ('d1', 'dual'):
-        return True, f"Skipped (STORAGE_BACKEND={backend!r} — D1 audit not applicable)"
-
     try:
+        from javdb.storage.db._db_connection import current_backend
         from javdb.storage.d1_client import make_d1_connection
         from javdb.storage.db._db_migrations import find_missing_rollback_columns
     except Exception as e:  # pragma: no cover - import wiring
         return False, f"Cannot import D1 schema helpers: {e}"
+
+    # Resolve the backend the way get_db() does — env var OR config.py — not
+    # os.environ alone: a self-hosted / API-triggered run may set
+    # STORAGE_BACKEND only in config.py, where reading os.environ would
+    # mis-detect 'sqlite' and silently skip the audit while get_db() still
+    # connects to D1. (PR #170 review)
+    backend = current_backend()
+    if backend not in ('d1', 'dual'):
+        return True, f"Skipped (backend={backend!r} — D1 audit not applicable)"
 
     missing: List[str] = []
     for logical in ('history', 'reports', 'operations'):
@@ -267,11 +273,13 @@ def check_d1_schema() -> Tuple[bool, str]:
                 missing.append(f"{logical}.{table}.{column}")
         except Exception as e:
             return False, f"Error auditing D1 '{logical}' schema: {e}"
-        finally:
-            try:
-                conn.close()
-            except Exception:
-                pass
+        # Intentionally no conn.close(): D1Connection.close() calls
+        # write_summary(), mutating the git-tracked
+        # reports/D1/d1_port_summary.json. The workflow runs `git pull
+        # --rebase` immediately after the health check, and a dirty tracked
+        # file there would break the rebase. This is a read-only PRAGMA audit
+        # (no pending writes to flush), and health_check is a short-lived CLI
+        # whose HTTP session is reclaimed on process exit. (PR #170 review)
 
     if missing:
         return False, (
