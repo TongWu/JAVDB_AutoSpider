@@ -319,9 +319,30 @@ def append_jsonl_record(
     ``reports_dir`` defaults to ``$REPORTS_DIR`` or ``reports``. The
     function never raises: metric emission must not block the primary
     operation. Any failure is logged at WARNING and discarded.
+
+    Under pytest, a call with neither ``reports_dir`` nor ``$REPORTS_DIR``
+    would land in the git-tracked ``reports/D1/<filename>``; that is refused
+    (see the guard below) so a test that forgot to isolate the metric sink
+    cannot pollute the tracked drift log.
     """
+    base = reports_dir or os.environ.get("REPORTS_DIR")
+    if not base:
+        # Neither an explicit ``reports_dir`` nor ``$REPORTS_DIR`` is set, so
+        # the write would land in the git-tracked ``reports/D1/<filename>``.
+        # Under pytest that means a test forgot to isolate the metric sink;
+        # refuse rather than pollute the tracked file. This mirrors the
+        # last-line guard in ``dual_connection._append_drift_record`` so the
+        # two drift-log writers are protected symmetrically.
+        if os.environ.get("PYTEST_CURRENT_TEST"):
+            logger.warning(
+                "Refusing to append %s to the default reports/ dir under "
+                "PYTEST_CURRENT_TEST=%s; the test must set REPORTS_DIR or pass "
+                "reports_dir= to isolate the metric sink.",
+                filename, os.environ.get("PYTEST_CURRENT_TEST"),
+            )
+            return
+        base = "reports"
     try:
-        base = reports_dir or os.environ.get("REPORTS_DIR", "reports")
         path = os.path.join(base, "D1", filename)
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         with open(path, "a", encoding="utf-8") as f:
