@@ -8,14 +8,20 @@ from javdb.ops.diagnosis.models import OpsIncidentFeatures, SimilarIncident
 
 
 def _list(raw: str) -> list[str]:
-    value = json.loads(raw or "[]")
+    try:
+        value = json.loads(raw or "[]")
+    except json.JSONDecodeError:
+        return []
     if not isinstance(value, list):
         return []
     return [str(item) for item in value]
 
 
 def _categorical(raw: str) -> dict[str, str]:
-    value = json.loads(raw or "{}")
+    try:
+        value = json.loads(raw or "{}")
+    except json.JSONDecodeError:
+        return {}
     if not isinstance(value, dict):
         return {}
     return {str(key): str(item) for key, item in value.items()}
