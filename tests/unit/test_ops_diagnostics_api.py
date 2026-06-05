@@ -199,6 +199,11 @@ def test_get_similar_ops_incidents_returns_ranked_items(monkeypatch, admin_clien
     assert payload["items"][1]["matched_reasons"] == ["same_type"]
 
 
+def test_get_similar_ops_incidents_rejects_non_positive_limit(admin_client: TestClient):
+    response = admin_client.get("/api/diag/ops-incidents/opsinc_test/similar?limit=0")
+    assert response.status_code == 400
+
+
 def test_get_similar_ops_incidents_returns_404_when_no_features(
     monkeypatch, admin_client: TestClient
 ):

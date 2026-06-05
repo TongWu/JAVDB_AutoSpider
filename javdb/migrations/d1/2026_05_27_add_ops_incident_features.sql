@@ -4,6 +4,8 @@
 --   wrangler d1 execute javdb-reports --remote \
 --     --file=javdb/migrations/d1/2026_05_27_add_ops_incident_features.sql
 --
+-- Write-Class: diagnostic
+--
 -- OpsIncidentFeatures stores compact, explainable similarity metadata.
 -- It is derived from OpsIncidents and never stores full raw logs.
 

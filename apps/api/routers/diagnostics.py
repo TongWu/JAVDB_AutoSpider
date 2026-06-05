@@ -224,6 +224,8 @@ def get_similar_ops_incidents(
     _user: Dict[str, Any] = Depends(_require_auth),
 ) -> OpsIncidentSimilarityResponse:
     """Return incidents most similar to the given incident, ranked by feature overlap."""
+    if limit <= 0:
+        raise HTTPException(status_code=400, detail="limit must be a positive integer")
     items = _similar_ops_incident_records(incident_id, limit=min(limit, 20))
     if items is None:
         raise HTTPException(status_code=404, detail="Incident features not found")
