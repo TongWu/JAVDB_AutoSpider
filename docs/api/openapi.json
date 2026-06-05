@@ -2473,6 +2473,48 @@
         "title": "OnboardingTestResponse",
         "type": "object"
       },
+      "OpsIncidentAnalyticsResponse": {
+        "properties": {
+          "by_confidence": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Confidence",
+            "type": "object"
+          },
+          "by_status": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Status",
+            "type": "object"
+          },
+          "by_type": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Type",
+            "type": "object"
+          },
+          "open_high_confidence": {
+            "title": "Open High Confidence",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "by_type",
+          "by_status",
+          "by_confidence",
+          "open_high_confidence"
+        ],
+        "title": "OpsIncidentAnalyticsResponse",
+        "type": "object"
+      },
       "OpsIncidentListResponse": {
         "description": "List response for operations incidents.",
         "properties": {
@@ -2639,6 +2681,27 @@
           "updated_at"
         ],
         "title": "OpsIncidentSchema",
+        "type": "object"
+      },
+      "OpsIncidentSimilarityResponse": {
+        "properties": {
+          "incident_id": {
+            "title": "Incident Id",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SimilarIncidentSchema"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "incident_id",
+          "items"
+        ],
+        "title": "OpsIncidentSimilarityResponse",
         "type": "object"
       },
       "PikPakQueueItem": {
@@ -3530,6 +3593,32 @@
           "summary"
         ],
         "title": "SessionRollbackResponse",
+        "type": "object"
+      },
+      "SimilarIncidentSchema": {
+        "properties": {
+          "incident_id": {
+            "title": "Incident Id",
+            "type": "string"
+          },
+          "matched_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Matched Reasons",
+            "type": "array"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "incident_id",
+          "score",
+          "matched_reasons"
+        ],
+        "title": "SimilarIncidentSchema",
         "type": "object"
       },
       "SpiderJobPayload": {
@@ -5196,6 +5285,38 @@
           },
           {
             "in": "query",
+            "name": "incident_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Incident Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "confidence",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Confidence"
+            }
+          },
+          {
+            "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
@@ -5228,6 +5349,28 @@
           }
         },
         "summary": "List Ops Incidents",
+        "tags": [
+          "diagnostics"
+        ]
+      }
+    },
+    "/api/diag/ops-incidents/analytics": {
+      "get": {
+        "description": "Return aggregated analytics over persisted operations incidents.",
+        "operationId": "get_ops_incident_analytics_api_diag_ops_incidents_analytics_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpsIncidentAnalyticsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Ops Incident Analytics",
         "tags": [
           "diagnostics"
         ]
@@ -5271,6 +5414,59 @@
           }
         },
         "summary": "Get Ops Incident",
+        "tags": [
+          "diagnostics"
+        ]
+      }
+    },
+    "/api/diag/ops-incidents/{incident_id}/similar": {
+      "get": {
+        "description": "Return incidents most similar to the given incident, ranked by feature overlap.",
+        "operationId": "get_similar_ops_incidents_api_diag_ops_incidents__incident_id__similar_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 5,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpsIncidentSimilarityResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Similar Ops Incidents",
         "tags": [
           "diagnostics"
         ]
