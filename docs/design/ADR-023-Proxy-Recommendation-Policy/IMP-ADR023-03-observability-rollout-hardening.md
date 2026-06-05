@@ -1,6 +1,6 @@
 # IMP-ADR023-03: ADR-023 Phase 3 - Observability And Rollout Hardening
 
-**Status:** Proposed
+**Status:** Completed
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -172,6 +172,7 @@ export function computeRecommendationPolicySummary(
   } else if (
     mode === "policy" &&
     candidateCount > 0 &&
+    available.length > 0 &&
     averageConfidence >= 0.6 &&
     maxDelta < 0.2
   ) {
@@ -632,4 +633,17 @@ git add \
   docs/handbook/zh/self-hoster/proxy-coordinator.md
 git commit -m "feat(proxy): harden recommendation policy rollout"
 ```
+
+---
+
+## As-built review adjustments (PR #4, commit f0c5110)
+
+Automated PR review (Codex + CodeRabbit) on the Phase 1-3 PR surfaced fixes applied on top of the original plan:
+
+- **Rollout gate requires an available candidate** (Codex P2): `computeRecommendationPolicySummary`'s `ready` gate now also requires `available.length > 0`, so a pool where every candidate is unavailable (e.g. all banned-but-experienced) reports `observe`, not `ready`. Added a regression test.
+- **`.pill.info` CSS** (CodeRabbit): `dashboard_html.ts` gained `td .pill.info { background: rgba(56, 189, 248, 0.12); color: var(--accent); }` so the policy badge's `class="pill info"` renders with the intended styling.
+- **Policy constants extracted** (CodeRabbit nitpick): the shadow-scoring magic numbers (`UNSTABLE_POOL_MIN_SAMPLES=6`, `UNSTABLE_POOL_FAILURE_THRESHOLD=0.65`, cooldown/latency penalties, `CONFIDENCE_PRIOR_SAMPLES=20`) are now named module-level constants in `recommend_policy.ts` — behavior identical.
+- **Plural disagreements test** added to `dashboard_html.test.ts`.
+
+Deferred (intentional): wiring `renderPolicySummaryBadge` into the dashboard refresh. The dashboard consumes `/ops/snapshot`, and Task 3 deliberately adds no new data fetch this phase; the helper stays exported + unit-tested, with dashboard data-flow wiring tracked as a follow-up.
 

@@ -1,6 +1,6 @@
 # IMP-ADR023-02: ADR-023 Phase 2 - Policy Rollout Flag
 
-**Status:** Proposed
+**Status:** Completed
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -416,6 +416,31 @@ git add \
   JAVDB_AutoSpider_Proxycoordinator/test/recommend_proxy.test.ts
 git commit -m "feat(proxy): gate recommendation policy ordering"
 ```
+
+### As-built review adjustments (commit b107996e)
+
+Code review of Task 2 (Approved with minor notes) surfaced test-coverage gaps and one comment, applied on top of `c30fe2b`:
+
+- **Pin default ordering:** the default-mode test now asserts
+  `recommendations[0].proxy_id` (the heuristic winner), not just
+  `rank_score === score`, so an ordering regression is caught. Renamed to drop
+  the misleading "even when model_score disagrees" (heuristic and model derive
+  from the same event data).
+- **Exploration floor:** the policy-mode test now asserts every available row's
+  `rank_score >= 0.02`, verifying the env → `parseExplorationFloor` →
+  `rank_score` plumbing.
+- **Banned `heuristic_score` comment:** added an inline note at the
+  `policyInputs` map — banned proxies carry `heuristic_score = 0` (neutral
+  prior) while `score`/`rank_score = -1`; callers must use `available` or
+  `rank_score < 0` to detect banned, not `heuristic_score`.
+
+Deferred (intentional):
+- **Integration test for the blend formula** is impractical here: heuristic and
+  model scores derive from the same event data and won't diverge enough to flip
+  ordering in a route test. The blend math is covered by the
+  `computeRecommendationRankScore` unit tests in Task 1.
+- **Lift `ranking_mode` to a top-level response field** (it is constant per
+  response, currently repeated per row) is deferred to Phase 3 observability.
 
 ---
 

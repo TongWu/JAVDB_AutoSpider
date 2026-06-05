@@ -948,6 +948,10 @@ while bad proxies retain a 5% floor probability to allow recovery.
   back to 0.5 neutral score when the field is missing).
 - Write path synchronously refreshes `cached` to prevent subsequent `/lease`
   reads on the same instance from seeing stale values.
+- `GET /recommend_proxy` recommendation rows add optional ADR-023 shadow
+  fields: `heuristic_score`, `model_score`, `confidence`, `reason_code`,
+  `cooldown_until`, and `model_version`. Phase 1 does **not** sort by
+  `model_score`; the existing `score` field remains the ranking source.
 
 ### 18.3 Client Integration
 
@@ -968,10 +972,49 @@ Health score formula (`proxy_coordinator.ts` `computeHealthSnapshot`):
 - `latency_penalty = clamp((latency_ema_ms - 500) / 10000, 0, 0.5)`
 - `score = ratio - latency_penalty` (no samples -> `score = 0.5`)
 
+ADR-023 Phase 1 adds shadow policy fields for observability only. Operators can
+compare `heuristic_score` and `model_score` in `/recommend_proxy` responses to
+understand where the policy would disagree, but proxy ordering remains
+unchanged until the later rollout-flag phase.
+
+ADR-023 Phase 2 adds two Worker vars:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `RECOMMEND_PROXY_POLICY_MODE` | `"shadow"` | `"shadow"` keeps existing heuristic ordering; `"policy"` sorts by blended `rank_score`. |
+| `RECOMMEND_PROXY_EXPLORATION_FLOOR` | `"0.02"` | Minimum rank score for available proxies in policy mode, capped at 0.2 server-side. |
+
+Rollback is a one-line Worker var change: set
+`RECOMMEND_PROXY_POLICY_MODE = "shadow"` and redeploy. No Python client change
+is required because clients still read the stable `score` field.
+
 For more aggressive behavior (bad proxies bypassed faster), lower the floor in
 `ProxyPool._safe_health_score` from `0.05` to `0.01` on the Python side; for
 more conservative behavior (avoid oscillation), square the weights:
 `weights[i] **= 2`.
+
+### ADR-023 Rollout Gate
+
+Before switching `RECOMMEND_PROXY_POLICY_MODE` from `"shadow"` to `"policy"`:
+
+1. Call `/recommend_proxy?proxy_ids=<ids>&include_unhealthy=1` for the active
+   pool and inspect `policy_summary`.
+2. Do not enable policy mode while `policy_summary.rollout_gate` is
+   `blocked_global_instability`.
+3. Treat high `disagreement_count` as a review signal: compare
+   `heuristic_score`, `model_score`, `rank_score`, and `reason_code` for the
+   largest disagreements.
+4. Enable policy mode for one deploy window first, then watch ban rate,
+   `cf_bypass` rate, Session committed rate, and request success rate.
+5. Roll back by setting `RECOMMEND_PROXY_POLICY_MODE = "shadow"` and redeploying.
+
+Smoke check:
+
+```bash
+curl -sS -H "Authorization: Bearer $PROXY_COORDINATOR_TOKEN" \
+  "$PROXY_COORDINATOR_URL/recommend_proxy?proxy_ids=P1,P2&include_unhealthy=1" \
+  | jq '.policy_summary, .recommendations[] | {proxy_id, score, rank_score, reason_code}'
+```
 
 ### 18.5 Rollback
 
