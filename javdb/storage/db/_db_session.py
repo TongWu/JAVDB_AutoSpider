@@ -46,7 +46,7 @@ def set_active_run_identity(
 ) -> None:
     """Set the GitHub Actions workflow identity for subsequent writes.
 
-    Called by the spider alongside set_active_session_id() so that
+    Called by the spider at run start so that
     every pending write staged by this process is stamped with the
     run that produced it. Allows the rollback CLI to look up sessions
     by (RunId, RunAttempt).

@@ -973,7 +973,8 @@ def run_spider(options: SpiderRunOptions) -> SpiderRunResult:
             _set_active_write_mode(None)
         except Exception as _e:
             logger.warning(
-                f"Could not clear db audit run-identity/write-mode on exit: {_e}"
+                "Could not clear db audit run-identity/write-mode on exit: %s",
+                _e,
             )
         _result_context.reset(token)
         if owns_runtime:

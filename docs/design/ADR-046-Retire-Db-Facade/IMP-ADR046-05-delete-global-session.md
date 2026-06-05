@@ -23,7 +23,7 @@
 
 **Out-of-scope adjacent mechanism (do NOT touch):** `javdb/infra/csv_writer.py` has its **own** `_active_session_id` module-global with its own `set_active_session_id` — a SEPARATE mechanism unrelated to `_db_session.py`. Leave it entirely alone.
 
-**Tech Stack:** Python 3 + `pytest`. Test command (this worktree lacks the gitignored Rust `.so`, so point `PYTHONPATH` at the main checkout's pure-Python fallback): `PYTHONPATH=/Users/tedwu/JAVDB_AutoSpider_CICD/javdb/rust_core/python /opt/anaconda3/bin/python3 -m pytest <files> -q`. Commit identity: `git -c user.name=Ted -c user.email=ted@wu.engineer`; trailer `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`.
+**Tech Stack:** Python 3 + `pytest`. Test command (this worktree lacks the gitignored Rust `.so`, so point `PYTHONPATH` at the checkout's pure-Python fallback): `PYTHONPATH=javdb/rust_core/python python3 -m pytest <files> -q`. Commit identity: `git -c user.name=Ted -c user.email=ted@wu.engineer`; trailer `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`.
 
 > **⚠ Line numbers are a 2026-06-04 snapshot.** Re-grep each site before editing; functions may have shifted.
 
