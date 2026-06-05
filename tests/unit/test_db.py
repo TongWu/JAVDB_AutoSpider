@@ -349,6 +349,7 @@ class TestInitDb:
             assert 'SessionId' in _columns(history_path, 'MovieHistory')
             assert 'SessionId' in _columns(history_path, 'TorrentHistory')
             assert 'Status' in _columns(reports_path, 'ReportSessions')
+            assert 'CommittedAt' in _columns(reports_path, 'ReportSessions')
             assert 'SessionId' in _columns(operations_path, 'PikpakHistory')
             assert 'SessionId' in _columns(operations_path, 'DedupRecords')
             assert 'SessionId' in _columns(

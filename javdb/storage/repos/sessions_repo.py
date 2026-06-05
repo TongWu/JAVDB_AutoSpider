@@ -36,7 +36,6 @@ class SessionRow:
 class SessionList:
     items: list[SessionRow]
     next_cursor: str | None
-    total_estimate: int | None = None
 
 
 def _encode_cursor(session_id: str) -> str:
@@ -85,7 +84,8 @@ def _row_to_session(r: sqlite3.Row) -> SessionRow:
     return SessionRow(
         session_id=r["Id"],
         state=r["Status"] or "in_progress",
-        write_mode=r["WriteMode"] or "audit",
+        # ADR-047: legacy NULL WriteMode rows map to the only live mode.
+        write_mode=r["WriteMode"] or "pending",
         run_id=r["RunId"],
         run_attempt=r["RunAttempt"],
         created_at=r["DateTimeCreated"],

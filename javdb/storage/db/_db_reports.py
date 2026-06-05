@@ -13,9 +13,8 @@ ReportMovies and ReportTorrents store the snapshot of movies and torrents
 discovered in each run (used for CSV report generation).
 """
 
-import os
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 import sqlite3
 from typing import Dict, List, Optional, Tuple
 
@@ -123,7 +122,7 @@ def db_create_report_session(
         )
 
     if created_at is None:
-        created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        created_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     sid = session_id if session_id is not None else _generate_session_id()
     resolved_mode = _resolve_write_mode(write_mode)
 
@@ -161,8 +160,11 @@ def db_mark_session_committed(
 
     with _get_db(db_path or _REPORTS_DB_PATH) as conn:
         cur = conn.execute(
-            "UPDATE ReportSessions SET Status='committed' WHERE Id=? "
-            "AND Status IS NOT 'committed'",
+            "UPDATE ReportSessions "
+            "SET Status='committed', "
+            "CommittedAt=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') "
+            "WHERE Id=? "
+            "AND (Status IS NULL OR Status != 'committed')",
             (session_id,),
         )
         marked = cur.rowcount or 0
@@ -763,7 +765,9 @@ def db_finish_commit_session(
     _ensure_imports()
     with _get_db(db_path or _REPORTS_DB_PATH) as conn:
         cur = conn.execute(
-            "UPDATE ReportSessions SET Status='committed' "
+            "UPDATE ReportSessions "
+            "SET Status='committed', "
+            "CommittedAt=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') "
             "WHERE Id=? AND Status='finalizing'",
             (session_id,),
         )

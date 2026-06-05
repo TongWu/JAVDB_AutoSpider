@@ -1,6 +1,6 @@
 # IMP-ADR047-01: ADR-047 Phase 1 — Reconcile Dual-Backend Drift (cross-repo) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Related:** [ADR-047](ADR-047-dual-backend-drift-reconciliation.md) — this is **Phase 1 (Reconcile)**. Phase 2 (Guard) is IMP-ADR047-02.
 
@@ -37,7 +37,7 @@
 
 **Files:** Modify `javdb/storage/repos/sessions_repo.py`; create `tests/unit/test_adr047_write_mode.py`.
 
-- [ ] **Step 1.1 — Write the failing test.** Create `tests/unit/test_adr047_write_mode.py`:
+- [x] **Step 1.1 — Write the failing test.** Create `tests/unit/test_adr047_write_mode.py`:
 
 ```python
 """ADR-047 D1a: a session row with NULL WriteMode maps to 'pending' (not the
@@ -65,9 +65,9 @@ def test_explicit_write_mode_preserved():
 
 (`_row_to_session` reads rows via `r["x"]` and `r.keys()`; a plain `dict` satisfies both, so no DB is needed.)
 
-- [ ] **Step 1.2 — Run it, verify it FAILS.** `PYTHONPATH=javdb/rust_core/python /opt/anaconda3/bin/python3 -m pytest tests/unit/test_adr047_write_mode.py -q` → FAIL (`test_null_write_mode_defaults_to_pending` gets `"audit"`).
+- [x] **Step 1.2 — Run it, verify it FAILS.** `PYTHONPATH=javdb/rust_core/python /opt/anaconda3/bin/python3 -m pytest tests/unit/test_adr047_write_mode.py -q` → FAIL (`test_null_write_mode_defaults_to_pending` gets `"audit"`).
 
-- [ ] **Step 1.3 — Fix the fallback.** In `javdb/storage/repos/sessions_repo.py`, in `_row_to_session`, replace:
+- [x] **Step 1.3 — Fix the fallback.** In `javdb/storage/repos/sessions_repo.py`, in `_row_to_session`, replace:
 
 ```python
         write_mode=r["WriteMode"] or "audit",
@@ -77,7 +77,7 @@ with:
         write_mode=r["WriteMode"] or "pending",  # ADR-047 D1a: 'audit' retired (ADR-005 PR-4)
 ```
 
-- [ ] **Step 1.4 — Drop the dead `total_estimate` field (guarded).** First confirm it is unused:
+- [x] **Step 1.4 — Drop the dead `total_estimate` field (guarded).** First confirm it is unused:
 
 ```bash
 grep -rn "\.total_estimate\|total_estimate=" javdb apps tests --include='*.py' | grep -i session
@@ -99,9 +99,9 @@ class SessionList:
 ```
 **If** the grep shows any other reference, SKIP this removal (leave the field) and note it in the task report — the `write_mode` fix is the load-bearing part of this task.
 
-- [ ] **Step 1.5 — Run it, verify PASS.** `PYTHONPATH=javdb/rust_core/python /opt/anaconda3/bin/python3 -m pytest tests/unit/test_adr047_write_mode.py tests/unit/test_sessions_repo.py -q` (include the existing sessions-repo suite if present) → PASS. If any existing test asserted the old `"audit"` default, update it to `"pending"` (intended contract change).
+- [x] **Step 1.5 — Run it, verify PASS.** `PYTHONPATH=javdb/rust_core/python /opt/anaconda3/bin/python3 -m pytest tests/unit/test_adr047_write_mode.py tests/unit/test_sessions_repo.py -q` (include the existing sessions-repo suite if present) → PASS. If any existing test asserted the old `"audit"` default, update it to `"pending"` (intended contract change).
 
-- [ ] **Step 1.6 — Commit (Python repo).**
+- [x] **Step 1.6 — Commit (Python repo).**
 ```bash
 git add javdb/storage/repos/sessions_repo.py tests/unit/test_adr047_write_mode.py
 git -c user.name=Ted -c user.email=ted@wu.engineer commit -m "fix(api): session write_mode NULL defaults to pending, not retired audit (ADR-047 D1a)" -m "Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
@@ -113,7 +113,7 @@ git -c user.name=Ted -c user.email=ted@wu.engineer commit -m "fix(api): session 
 
 **Files:** Modify `apps/api/routers/stats.py`; create `tests/unit/test_adr047_summary_reconcile.py`.
 
-- [ ] **Step 2.1 — Write the failing test.** Create `tests/unit/test_adr047_summary_reconcile.py`:
+- [x] **Step 2.1 — Write the failing test.** Create `tests/unit/test_adr047_summary_reconcile.py`:
 
 ```python
 """ADR-047 D1c: /summary counts TorrentHistory (not ReportTorrents) and computes
@@ -134,9 +134,9 @@ def test_summary_counts_torrent_history_and_computes_avg_duration(monkeypatch):
     assert any("CommittedAt" in s for s in calls), "avg_duration must query CommittedAt"
 ```
 
-- [ ] **Step 2.2 — Run it, verify it FAILS.** `PYTHONPATH=javdb/rust_core/python /opt/anaconda3/bin/python3 -m pytest tests/unit/test_adr047_summary_reconcile.py -q` → FAIL (handler still counts `ReportTorrents`; no `CommittedAt` query).
+- [x] **Step 2.2 — Run it, verify it FAILS.** `PYTHONPATH=javdb/rust_core/python /opt/anaconda3/bin/python3 -m pytest tests/unit/test_adr047_summary_reconcile.py -q` → FAIL (handler still counts `ReportTorrents`; no `CommittedAt` query).
 
-- [ ] **Step 2.3 — Count `TorrentHistory`.** In `apps/api/routers/stats.py` `stats_summary`, replace:
+- [x] **Step 2.3 — Count `TorrentHistory`.** In `apps/api/routers/stats.py` `stats_summary`, replace:
 ```python
     total_torrents = _safe_query_one(
         REPORTS_DB_PATH,
@@ -153,7 +153,7 @@ with:
 ```
 (`HISTORY_DB_PATH` is already imported — `total_movies` uses it.)
 
-- [ ] **Step 2.4 — Compute `avg_duration_seconds`.** Still in `stats_summary`, immediately before the `return StatsSummary(`, add:
+- [x] **Step 2.4 — Compute `avg_duration_seconds`.** Still in `stats_summary`, immediately before the `return StatsSummary(`, add:
 ```python
     # ADR-047 D1c: compute avg committed-session duration (mirrors the TS backend).
     avg_duration_raw = _safe_query_one(
@@ -173,9 +173,9 @@ with:
 ```
 Leave `proxy_bans_last_7d=_count_proxy_bans_in_logs(7)` unchanged (ADR-047 D2: deployment-intrinsic).
 
-- [ ] **Step 2.5 — Run it, verify PASS.** `PYTHONPATH=javdb/rust_core/python /opt/anaconda3/bin/python3 -m pytest tests/unit/test_adr047_summary_reconcile.py tests/unit/test_stats*.py -q` → PASS. Fix any existing stats test that asserted the old `ReportTorrents`/`None` behavior (intended change).
+- [x] **Step 2.5 — Run it, verify PASS.** `PYTHONPATH=javdb/rust_core/python /opt/anaconda3/bin/python3 -m pytest tests/unit/test_adr047_summary_reconcile.py tests/unit/test_stats*.py -q` → PASS. Fix any existing stats test that asserted the old `ReportTorrents`/`None` behavior (intended change).
 
-- [ ] **Step 2.6 — Commit (Python repo).**
+- [x] **Step 2.6 — Commit (Python repo).**
 ```bash
 git add apps/api/routers/stats.py tests/unit/test_adr047_summary_reconcile.py
 git -c user.name=Ted -c user.email=ted@wu.engineer commit -m "fix(api): /summary counts TorrentHistory + computes avg_duration to match TS backend (ADR-047 D1c)" -m "Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
@@ -187,12 +187,12 @@ git -c user.name=Ted -c user.email=ted@wu.engineer commit -m "fix(api): /summary
 
 **Repo:** `JAVDB_AutoSpider_Web/` (separate git repo). **Files:** Modify `server/routes/history.ts`, `server/routes/stats.ts`; create `server/__tests__/adr047-reconcile.test.ts`.
 
-- [ ] **Step 3.0 — Branch the TS repo.**
+- [x] **Step 3.0 — Branch the TS repo.**
 ```bash
 git -C JAVDB_AutoSpider_Web switch -c adr047-dual-backend-drift
 ```
 
-- [ ] **Step 3.1 — Write the failing test.** Create `JAVDB_AutoSpider_Web/server/__tests__/adr047-reconcile.test.ts`:
+- [x] **Step 3.1 — Write the failing test.** Create `JAVDB_AutoSpider_Web/server/__tests__/adr047-reconcile.test.ts`:
 
 ```typescript
 import { describe, it, expect } from "vitest";
@@ -220,9 +220,9 @@ describe("ADR-047 reconciliation", () => {
 ```
 (A source-assertion test is the robust, DB-free way to pin these — the Worker's D1 binding is not available in unit tests. The byte-level guard comes in Phase 2 via the golden.)
 
-- [ ] **Step 3.2 — Run it, verify FAILS.** `cd JAVDB_AutoSpider_Web && npx vitest run server/__tests__/adr047-reconcile.test.ts` → FAIL (no `MIN(...)`; `Status='completed'` present).
+- [x] **Step 3.2 — Run it, verify FAILS.** `cd JAVDB_AutoSpider_Web && npx vitest run server/__tests__/adr047-reconcile.test.ts` → FAIL (no `MIN(...)`; `Status='completed'` present).
 
-- [ ] **Step 3.3 — Cap the movie count.** In `server/routes/history.ts`, replace:
+- [x] **Step 3.3 — Cap the movie count.** In `server/routes/history.ts`, replace:
 ```typescript
   const countSql = `SELECT COUNT(*) AS cnt FROM MovieHistory m ${where}`;
 ```
@@ -232,7 +232,7 @@ with:
   const countSql = `SELECT MIN(COUNT(*), 10000) AS cnt FROM MovieHistory m ${where}`;
 ```
 
-- [ ] **Step 3.4 — Cap the torrent count.** In the same file, replace:
+- [x] **Step 3.4 — Cap the torrent count.** In the same file, replace:
 ```typescript
   const countSql = `
     SELECT COUNT(*) AS cnt
@@ -250,11 +250,11 @@ with:
     ${where}`;
 ```
 
-- [ ] **Step 3.5 — Align the dedup filter.** In `server/routes/stats.ts`, find the dedup-freed query (around line 93, `WHERE Status='completed'`) and change its `WHERE` to `WHERE IsDeleted=1` so it matches the Python query (`SELECT COALESCE(SUM(ExistingFolderSize), 0) FROM DedupRecords WHERE IsDeleted=1`). Confirm by reading the surrounding lines first; replace only the `WHERE` predicate of that one statement. (`DedupRecords.IsDeleted` is the schema column; `Status` is not a DedupRecords column.)
+- [x] **Step 3.5 — Align the dedup filter.** In `server/routes/stats.ts`, find the dedup-freed query (around line 93, `WHERE Status='completed'`) and change its `WHERE` to `WHERE IsDeleted=1` so it matches the Python query (`SELECT COALESCE(SUM(ExistingFolderSize), 0) FROM DedupRecords WHERE IsDeleted=1`). Confirm by reading the surrounding lines first; replace only the `WHERE` predicate of that one statement. (`DedupRecords.IsDeleted` is the schema column; `Status` is not a DedupRecords column.)
 
-- [ ] **Step 3.6 — Run it, verify PASS + full server suite.** `cd JAVDB_AutoSpider_Web && npx vitest run server/__tests__/adr047-reconcile.test.ts && npm run test:server` → both PASS. Fix any existing TS test that asserted the uncapped count or the old dedup filter.
+- [x] **Step 3.6 — Run it, verify PASS + full server suite.** `cd JAVDB_AutoSpider_Web && npx vitest run server/__tests__/adr047-reconcile.test.ts && npm run test:server` → both PASS. Fix any existing TS test that asserted the uncapped count or the old dedup filter.
 
-- [ ] **Step 3.7 — Commit (TS repo).**
+- [x] **Step 3.7 — Commit (TS repo).**
 ```bash
 git -C JAVDB_AutoSpider_Web add server/routes/history.ts server/routes/stats.ts server/__tests__/adr047-reconcile.test.ts
 git -C JAVDB_AutoSpider_Web -c user.name=Ted -c user.email=ted@wu.engineer commit -m "fix(server): cap total_estimate at 10000 + dedup filter IsDeleted=1 to match Python (ADR-047 D1b/D1c)" -m "Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
@@ -264,17 +264,17 @@ git -C JAVDB_AutoSpider_Web -c user.name=Ted -c user.email=ted@wu.engineer commi
 
 ## Task 4: cross-backend sanity + scope note
 
-- [ ] **Step 4.1 — Confirm the reconciled fields now agree (manual reasoning + the per-task tests).** For each fixed field, the two backends now issue equivalent queries: `write_mode` NULL→`pending` (both); `total_estimate` `MIN(COUNT(*),10000)` (both); `/summary.total_torrents` ← `TorrentHistory` (both); `/summary.avg_duration_seconds` ← `CommittedAt` formula (both); `total_dedup_freed_bytes` ← `IsDeleted=1` (both). Record this in the task report.
+- [x] **Step 4.1 — Confirm the reconciled fields now agree (manual reasoning + the per-task tests).** For each fixed field, the two backends now issue equivalent queries: `write_mode` NULL→`pending` (both); `total_estimate` `MIN(COUNT(*),10000)` (both); `/summary.total_torrents` ← `TorrentHistory` (both); `/summary.avg_duration_seconds` ← `CommittedAt` formula (both); `total_dedup_freed_bytes` ← `IsDeleted=1` (both). Record this in the task report.
 
-- [ ] **Step 4.2 — Confirm the deliberately-divergent fields are untouched (ADR-047 D2/D3).** `proxy_bans_last_7d` (Python log-scan / TS 0), `/capabilities` `storage_backend`/`deployment`/`git_sha`, revocation enforcement scope, and the `plain:` dev hatch remain as-is — they are deployment-intrinsic or owned by ADR-029. No code change; just verify the diff did not touch them.
+- [x] **Step 4.2 — Confirm the deliberately-divergent fields are untouched (ADR-047 D2/D3).** `proxy_bans_last_7d` (Python log-scan / TS 0), `/capabilities` `storage_backend`/`deployment`/`git_sha`, revocation enforcement scope, and the `plain:` dev hatch remain as-is — they are deployment-intrinsic or owned by ADR-029. No code change; just verify the diff did not touch them.
 
-- [ ] **Step 4.3 — Full Python unit suite (no regressions).** `PYTHONPATH=javdb/rust_core/python /opt/anaconda3/bin/python3 -m pytest tests/unit tests/smoke -q`. Expect green except any pre-existing unrelated failures (a stale Rust `.so` test and a flaky `movie_sleep_mgr` test are known-pre-existing per ADR-046 Phase 1 notes — confirm any failure is one of those, not introduced here).
+- [x] **Step 4.3 — Full Python unit suite (no regressions).** `PYTHONPATH=javdb/rust_core/python /opt/anaconda3/bin/python3 -m pytest tests/unit tests/smoke -q`. Expect green except any pre-existing unrelated failures (a stale Rust `.so` test and a flaky `movie_sleep_mgr` test are known-pre-existing per ADR-046 Phase 1 notes — confirm any failure is one of those, not introduced here).
 
-> **Guard note:** Phase 1 only *reconciles* the values. The mechanical guard that stops them re-diverging (golden cases for the count statements + a `response-values.golden.json` Contract-Values fixture) is **Phase 2 — IMP-ADR047-02**. Do not add the guard here.
+> **Guard note:** Phase 1 only *reconciles* the values. The mechanical guard that stops them re-diverging (golden cases for the count statements + symmetric per-backend tests for `/summary` and `write_mode`) is **Phase 2 — IMP-ADR047-02**. Do not add the guard here.
 
 ## Out of Scope (Phase 2 or later)
 
-- The Contract-Values fixture + golden extension (IMP-ADR047-02).
+- The count-statement golden extension + symmetric static-query tests (IMP-ADR047-02).
 - Any change to `proxy_bans`, `/capabilities` env fields, auth revocation scope, the `plain:` hatch (ADR-047 D2/D3).
 - ADR-018 Phase 3 ("eliminate" the builders).
 

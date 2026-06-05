@@ -250,6 +250,7 @@ CREATE TABLE IF NOT EXISTS ReportSessions (
     CsvFilename TEXT NOT NULL,
     DateTimeCreated TEXT NOT NULL,
     Status TEXT DEFAULT 'in_progress',
+    CommittedAt TEXT,
     RunId TEXT,
     RunAttempt INTEGER,
     FailureReason TEXT,
@@ -960,6 +961,7 @@ def _ensure_rollback_columns(conn: sqlite3.Connection) -> None:
 
     Adds:
       - ReportSessions.Status TEXT DEFAULT 'in_progress'
+      - ReportSessions.CommittedAt TEXT
       - ReportSessions.RunId, ReportSessions.RunAttempt,
         ReportSessions.FailureReason  (added 2026-05-08; identifies the
         owning GitHub Actions workflow run and stores rollback context)
@@ -974,6 +976,7 @@ def _ensure_rollback_columns(conn: sqlite3.Connection) -> None:
     """
     add_column_specs = [
         ('ReportSessions', 'Status', "TEXT DEFAULT 'in_progress'"),
+        ('ReportSessions', 'CommittedAt', 'TEXT'),
         ('ReportSessions', 'RunId', 'TEXT'),
         ('ReportSessions', 'RunAttempt', 'INTEGER'),
         ('ReportSessions', 'FailureReason', 'TEXT'),

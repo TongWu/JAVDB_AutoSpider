@@ -2,7 +2,7 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Proposed                                                              |
+| **Status**  | Implemented locally — Phase 1 reconciliation + Phase 2 targeted guard landed 2026-06-04; cross-repo PRs pending |
 | **Date**    | 2026-06-02                                                           |
 | **Authors** | Ted                                                                  |
 | **Related** | [ADR-018](../ADR-018-Dual-Backend-Query-Contract/ADR-018-dual-backend-query-contract.md) (Contract Golden — this extends its guard), [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md) (dual-backend split), [ADR-029](../_archive/ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md) (auth — owns token revocation), [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md) (`audit` write-mode retired) |
@@ -68,26 +68,26 @@ Reconcile the confirmed drift to one correct behavior per item, then extend the 
 ### Positive
 
 - **Users get consistent answers** from whichever backend serves them — the three real bugs (stale `audit`, capped-vs-uncapped counts, wrong `total_torrents` table) are removed.
-- **The drifted surface can't silently re-diverge** — the narrow golden + Contract-Values fixture mechanize it, reusing ADR-018's proven distribution path.
+- **The drifted surface can't silently re-diverge** — the narrow SQL golden extension + symmetric per-backend tests mechanize it, reusing ADR-018's proven distribution path where the guard is cross-repo.
 - **Minimal, evidence-driven** — guards exactly what drifted; honours ADR-018's "low-leverage" judgment for everything else.
 - **Builds on existing infrastructure** — no new cross-repo mechanism; the `repository_dispatch` re-vendor pipeline already exists.
 
 ### Negative
 
 - **Cross-repo PRs** — each fix lands in both the Python repo and the TS repo, with the golden tying them together (the ADR-018 friction, now extended to a few more cases).
-- **A new guard kind** (the Contract-Values fixture) adds a small amount of test infrastructure on both sides.
+- **More per-backend tests** — static `/summary` queries and the `write_mode` mapper now have symmetric tests on both backends.
 
 ### Risks
 
-- **Contract-Values mechanism could over-reach.** Mitigate: keep it to the handful of reconciled defaults; resist growing it into a general response-snapshot test (that is the OpenAPI contract's job).
-- **A reconciliation decision proves wrong later** (e.g. `total_torrents` semantics). Mitigate: the value is now pinned in one fixture, so changing it is a single visible diff across both backends.
+- **Symmetric static-query tests could over-reach.** Mitigate: keep them to the handful of reconciled defaults and static queries with demonstrated drift; resist growing them into broad response snapshots (that is the OpenAPI contract's job).
+- **A reconciliation decision proves wrong later** (e.g. `total_torrents` semantics). Mitigate: the affected SQL/count statements and summary semantics are now pinned by SQL golden cases plus symmetric backend tests, so changing them creates visible test/golden diffs across both backends.
 
 ## Implementation Roadmap
 
 | Phase | Ships | Deferred |
 | --- | --- | --- |
-| **Phase 1 — Reconcile** | Fix the 3 real bugs in both repos (D1a Python `write_mode`→pending; D1b TS `total_estimate` cap; D1c Python stats `/summary` `total_torrents`→TorrentHistory + `avg_duration`); cosmetic dead-field cleanup (D4); document the intentional/deployment-intrinsic items (D2/D3) | The guard |
-| **Phase 2 — Guard** | Extend the golden with the reconciled count statements (D5a) + the new `response-values.golden.json` Contract-Values fixture (D5b), vendored + CI-checked in TS via the existing pipeline | Broad static-query guard (explicitly out — D6) |
+| **Phase 1 — Reconcile** | **Implemented locally (2026-06-04).** Fix the 3 real bugs in both repos (D1a Python `write_mode`→pending; D1b TS `total_estimate` cap; D1c Python stats `/summary` `total_torrents`→TorrentHistory + `avg_duration`); cosmetic dead-field cleanup (D4); document the intentional/deployment-intrinsic items (D2/D3) | The guard |
+| **Phase 2 — Guard** | **Implemented locally (2026-06-04).** Extend the ADR-018 SQL golden with the reconciled count statements (D5a), re-vendor + CI-check in TS via the existing pipeline, and pin `/summary` + `write_mode` with symmetric per-backend unit tests (D5b) | Broad static-query guard (explicitly out — D6) |
 
 ### Explicit non-goals (YAGNI)
 
@@ -98,7 +98,7 @@ Reconcile the confirmed drift to one correct behavior per item, then extend the 
 
 ## Domain Language (additions for CONTEXT.md)
 
-- **Contract Values fixture** — a Python-generated golden (`docs/api/contract/response-values.golden.json`) pinning reconciled *response-value* defaults/semantics (not SQL) that both backends assert against; the value-level sibling of ADR-018's SQL Contract Golden.
+- **Symmetric static-query guard** — matched unit tests in both backends that pin a demonstrated-drift static query or mapper value without adding it to the cross-repo SQL golden. ADR-047 uses this for `/summary` (`TorrentHistory`, `CommittedAt`, `IsDeleted=1`) and `write_mode` NULL→`"pending"`.
 - **Deployment-intrinsic field** — an API field that *correctly* differs between backends because it reports each deployment's own environment (`storage_backend`, `deployment`, `git_sha`, `proxy_bans_last_7d`); explicitly excluded from cross-backend equality contracts.
 
 ## Alternatives Considered
@@ -119,3 +119,4 @@ Reconcile the confirmed drift to one correct behavior per item, then extend the 
 
 - 2026-06-02: Proposed. From the 2026-05-29 review Candidate B + a 2026-06-02 cross-repo scan that found drift in ADR-018's deliberately-unguarded static/response surface (7 divergences; 3 real user-facing bugs). Decisions baked in: `write_mode`→`pending` (D1a), `total_estimate` cap-both-at-10000 (D1b), stats `total_torrents`→`TorrentHistory` (D1c); narrow guard extension only (D6). Reframes Candidate B away from ADR-018 Phase 3 ("eliminate") toward fix-the-drift + widen-the-guard, since the guarded builders are clean and the unguarded surface is where drift occurred.
 - 2026-06-02: **IMPs written** (IMP-ADR047-01 reconcile, IMP-ADR047-02 guard). **D5b amended** during authoring: the standalone `response-values.golden.json` fixture is dropped — the count statements join ADR-018's SQL golden (D5a); the static `/summary` queries + `write_mode` default are pinned by symmetric per-backend unit tests. Rationale: the drifted surface is mostly SQL; one non-SQL value does not justify a new artifact type + vendor pipeline.
+- 2026-06-04: **Phase 1 and Phase 2 implemented locally** across the Python repo and the separate TypeScript Worker repo. Phase 1 reconciled `write_mode` NULL→`pending`, `total_estimate` capped count behavior, `/summary.total_torrents` from `TorrentHistory`, `avg_duration_seconds` from `CommittedAt`, and the dedup `IsDeleted=1` filter. Phase 2 added `movie_count` / `torrent_count` SQL golden cases, re-vendored the TS fixture, added TS conformance, and pinned `/summary` + `write_mode` with symmetric tests. Drift simulations confirmed the guard: changing the TS cap to `9999` makes 22 conformance cases fail; changing the Python cap to `9999` regenerates a visible golden diff.

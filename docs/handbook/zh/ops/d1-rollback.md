@@ -124,7 +124,7 @@ Startup replay 是显式开启且受 outbox 状态约束的。如果 replay 将�
 
 | 表族 | 回滚技术 | Schema 新增 |
 |---|---|---|
-| `ReportMovies`, `ReportTorrents`, `ReportSessions`, `SpiderStats`, `UploaderStats`, `PikpakStats` | 按 `SessionId` 级联删除（这四个 FK 子表声明了 `REFERENCES ReportSessions(Id)`）；拒绝删除 `Status='committed'` 的 `ReportSessions` 行 | `ReportSessions.Status TEXT DEFAULT 'in_progress'`；Phase 3 新增 `WriteMode` 和 `Status` 的 `finalizing` 值 |
+| `ReportMovies`, `ReportTorrents`, `ReportSessions`, `SpiderStats`, `UploaderStats`, `PikpakStats` | 按 `SessionId` 级联删除（这四个 FK 子表声明了 `REFERENCES ReportSessions(Id)`）；拒绝删除 `Status='committed'` 的 `ReportSessions` 行 | `ReportSessions.Status TEXT DEFAULT 'in_progress'`；成功提交时会写入 `CommittedAt TEXT`；Phase 3 新增 `WriteMode` 和 `Status` 的 `finalizing` 值 |
 | `MovieHistory`, `TorrentHistory`（Pending 模式 — Phase 3 默认） | 所有写入先暂存到 `PendingMovie/TorrentHistoryWrites`；提交时一次性重算派生字段并 UPSERT 到正式表；回滚时对 `Status='in_progress'` 的行执行 `DELETE`，对 `Status='finalizing'` 的行执行 `db_resume_finalizing_session`。无需 audit 重放。 | `PendingMovieHistoryWrites` 和 `PendingTorrentHistoryWrites` 表（各含显式应用生成的雪花 `Seq`、`ApplyState`、`SessionId` / `RunId` / `RunAttempt`） |
 | `MovieHistory`, `TorrentHistory`（已退役 audit 回退） | 已由 ADR-005 退役。`JAVDB_HISTORY_WRITE_MODE=audit` 不再启用 audit replay；会降级为 pending。 | Audit 表和 archive/cleanup 工具已删除。 |
 | `PikpakHistory`, `DedupRecords`, `InventoryAlignNoExactMatch` | 删除按 session 范围划定的行。`DedupRecords` 的软删除/孤立更新会先将其前像快照到 `DedupRecordsRollback_<session_id>`，因此回滚可恢复已有行并删除失败 session 创建的行 | 每个表上的 `SessionId`；按 session 的 `DedupRecordsRollback_<session_id>` 备份表 |
@@ -178,7 +178,7 @@ CLI（[`apps/cli/db/rollback.py`](../../../../apps/cli/db/rollback.py)）按顺�
 
 ### 提交时的 Pending 清理
 
-一旦 `db_mark_session_committed` 将 session 翻转为 `Status='committed'`，rollback CLI 将拒绝回滚它（除非使用 `--force`）。如果 crash 在 status flip 后留下 pending-table 行，committed-session 分支只删除 pending-table 残留，不会重跑正式表 upsert。
+一旦 `db_mark_session_committed` 或 `db_finish_commit_session` 将 session 翻转为 `Status='committed'`，它也会写入 `CommittedAt` 供耗时统计使用，rollback CLI 将拒绝回滚它（除非使用 `--force`）。如果 crash 在 status flip 后留下 pending-table 行，committed-session 分支只删除 pending-table 残留，不会重跑正式表 upsert。
 
 ### 冒烟测试清理策略
 
