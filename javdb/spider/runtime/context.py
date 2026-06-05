@@ -1088,6 +1088,7 @@ class SpiderRuntime:
         ):
             from javdb.proxy.selection.signal import ProxySelectionSignal
 
+            signal = None
             try:
                 proxy_ids = [p.get("name", "") for p in (legacy_state.PROXY_POOL or [])
                              if isinstance(p, dict) and p.get("name")]
@@ -1104,6 +1105,11 @@ class SpiderRuntime:
                         signal.label,
                     )
             except Exception:
+                # A failure after signal.start() would otherwise leak the
+                # primary's background refresh thread — close best-effort.
+                if signal is not None:
+                    with contextlib.suppress(Exception):
+                        signal.close()
                 legacy_state.logger.warning(
                     "Failed to wire ProxySelectionSignal; falling back to round-robin",
                     exc_info=True,

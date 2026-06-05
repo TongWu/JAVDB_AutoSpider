@@ -254,3 +254,62 @@ def test_label_default_when_not_supplied():
     )
     assert isinstance(signal.label, str)
     assert signal.label != ""
+
+
+# --- from_runtime_config: recommend failure preserves fallback -----------
+
+
+def test_from_runtime_config_recommend_failure_preserves_coordinator_fallback(
+    monkeypatch,
+):
+    """A recommend (primary) setup error must not strip the coordinator
+    fallback. The factory should fall through with no primary and still
+    return a fallback-only signal — fail-open to coordinator health, not
+    all the way down to round-robin.
+    """
+    import javdb.proxy.recommend.client as rec_client_mod
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("recommend client construction blew up")
+
+    monkeypatch.setattr(
+        rec_client_mod, "create_recommend_proxy_client_from_env", boom
+    )
+
+    class FakeCoordinator:
+        def get_proxy_health_score(self, proxy_name):
+            return {"A": 0.7}.get(proxy_name)
+
+    signal = ProxySelectionSignal.from_runtime_config(
+        proxy_ids=["A"],
+        coordinator=FakeCoordinator(),
+    )
+
+    # Primary failed → only the coordinator fallback remains wired.
+    assert signal is not None
+    assert signal.score_for("A") == 0.7
+    assert "coordinator_health" in (signal.label or "")
+    assert "recommend_proxy" not in (signal.label or "")
+
+
+def test_from_runtime_config_recommend_failure_no_coordinator_returns_none(
+    monkeypatch,
+):
+    """Recommend setup raises AND no coordinator → ``None`` (round-robin),
+    never a propagated exception into the bootstrap path.
+    """
+    import javdb.proxy.recommend.client as rec_client_mod
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("recommend client construction blew up")
+
+    monkeypatch.setattr(
+        rec_client_mod, "create_recommend_proxy_client_from_env", boom
+    )
+
+    signal = ProxySelectionSignal.from_runtime_config(
+        proxy_ids=["A"],
+        coordinator=None,
+    )
+
+    assert signal is None
