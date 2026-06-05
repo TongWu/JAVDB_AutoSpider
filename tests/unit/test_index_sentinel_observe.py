@@ -40,35 +40,51 @@ def test_start_observe_persist_roundtrip():
     assert got["rate"].fill_rate == 1.0
 
 
-def test_persist_requires_active_session_then_writes_once_set():
-    """Regression for the ADR-035 ordering bug (PR #141 review).
+def test_persist_requires_explicit_session_then_writes_once_supplied():
+    """Regression for the ADR-035 ordering bug (PR #141 review), now under
+    ADR-046 D2 (session is explicit, never ambient).
 
     The index fetch fills the accumulator BEFORE the report session exists, so a
-    parameterless ``field_health.persist_run()`` is a no-op until the session is
-    active. run_service therefore must persist AFTER ``set_active_session_id``.
-    This pins both halves: no-op without a session, and that the buffered
-    accumulator still persists once the session id is set.
+    ``field_health.persist_run()`` with no ``session_id`` is a no-op until run
+    service supplies one. run_service therefore must persist AFTER the session is
+    created, threading it in explicitly. This pins both halves: no-op without a
+    session id, and that the buffered accumulator still persists once supplied.
     """
-    from javdb.storage.db import set_active_session_id
-
     c = sqlite3.connect(":memory:")
     c.executescript(_DDL)
     repo = ParseRunFieldFillRepo(c)
 
-    set_active_session_id(None)  # index fetch runs before the session exists
-    acc = field_health.start_run()
+    acc = field_health.start_run()  # index fetch runs before the session exists
     acc.observe("index", [_Entry(href="/v/1", video_code="A-1", title="t", rate="4.0")])
 
-    # No active session yet -> persist is a no-op (the original bug's symptom).
+    # No session supplied yet -> persist is a no-op (the original bug's symptom).
     assert field_health.persist_run(repo=repo) == 0
     assert c.execute("SELECT COUNT(*) FROM ParseRunFieldFill").fetchone()[0] == 0
 
-    # run_service sets the session active, THEN persists the buffered accumulator.
-    try:
-        set_active_session_id("S1")
-        assert field_health.persist_run(repo=repo) >= 1
-    finally:
-        set_active_session_id(None)
+    # run_service threads the session id in explicitly, THEN persists.
+    assert field_health.persist_run(session_id="S1", repo=repo) >= 1
 
+    got = {f.field: f for f in repo.get_fills("S1")}
+    assert got["href"].fill_rate == 1.0
+
+
+def test_service_persist_run_requires_explicit_session():
+    """ADR-046 P5: ``service.persist_run`` resolves the session ONLY from the
+    explicit ``session_id`` param. With no explicit param it is a no-op; once a
+    session id is supplied it writes the buffered fills."""
+    c = sqlite3.connect(":memory:")
+    c.executescript(_DDL)
+    repo = ParseRunFieldFillRepo(c)
+
+    acc = field_health.start_run()
+    acc.observe("index", [_Entry(href="/v/1", video_code="A-1", title="t", rate="4.0")])
+    fills = acc.fill_rates()
+
+    # No explicit session_id -> no-op (no row written).
+    assert service.persist_run(fills, repo=repo) == 0
+    assert c.execute("SELECT COUNT(*) FROM ParseRunFieldFill").fetchone()[0] == 0
+
+    # Explicit session id -> the buffered fills persist.
+    assert service.persist_run(fills, session_id="S1", repo=repo) >= 1
     got = {f.field: f for f in repo.get_fills("S1")}
     assert got["href"].fill_rate == 1.0

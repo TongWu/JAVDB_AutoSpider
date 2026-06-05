@@ -10,7 +10,7 @@ from urllib.parse import urljoin
 from javdb.infra.logging import get_logger
 from javdb.infra.config import use_sqlite
 from javdb.storage import db as _db
-from javdb.storage.db import get_active_session_id, get_db
+from javdb.storage.db import get_db
 from javdb.storage.history_manager import (
     save_parsed_movie_to_history,
     batch_update_last_visited,
@@ -123,6 +123,7 @@ def _claim_detail_candidates(
     candidates: List["DetailEntryCandidate"],
     *,
     runtime=None,
+    session_id: Optional[str] = None,
 ) -> Tuple[List["DetailEntryCandidate"], int, int, Optional[str], Set[str]]:
     """Acquire MovieClaim leases for *candidates* before submitting fetches.
 
@@ -173,8 +174,7 @@ def _claim_detail_candidates(
     # session.  Falls back to an empty string when the session context
     # is not yet set (e.g. legacy callers, dry-runs, or test harnesses);
     # the Worker treats that as "legacy claim with no session affinity".
-    session_id_int = get_active_session_id()
-    session_id_str = str(session_id_int) if session_id_int is not None else ""
+    session_id_str = str(session_id) if session_id is not None else ""
     kept: List["DetailEntryCandidate"] = []
     leased: Set[str] = set()
     skipped_completed = 0
@@ -448,8 +448,15 @@ def process_detail_entries(
     log_duplicate_skips: bool = False,
     cancel_event: Event | None = None,
     content_filter_rules: Optional[list[Rule]] = None,
+    session_id: Optional[str] = None,
 ) -> dict:
-    """Run the shared detail pipeline against a concrete fetch backend."""
+    """Run the shared detail pipeline against a concrete fetch backend.
+
+    *session_id* is the explicit run session (ADR-046 D2 — never ambient). It
+    is threaded into the MovieClaim affinity, the ``stage_complete`` calls, and
+    the history write path. ``None`` keeps the legacy no-session-affinity
+    behaviour (dry-runs, tests).
+    """
     runtime = _resolve_runtime(runtime)
     holder_id = _holder_id(runtime)
 
@@ -484,14 +491,15 @@ def process_detail_entries(
         skipped_contention,
         shard_date,
         leased_hrefs,
-    ) = _claim_detail_candidates(prepared_entries, runtime=runtime)
-    # Phase-1 — capture the active ReportSessions.Id once at the top so
-    # every ``stage_complete`` call below carries the same session
+    ) = _claim_detail_candidates(
+        prepared_entries, runtime=runtime, session_id=session_id,
+    )
+    # Phase-1 — the explicit ReportSessions.Id (ADR-046 D2) is carried into
+    # every ``stage_complete`` call below so they share the same session
     # affinity.  Empty string when no DB session is active (dry-runs,
     # tests, etc.); ``_stage_complete_movie_claim`` falls back to legacy
     # ``complete_movie`` semantics in that case.
-    _active_session_id = get_active_session_id()
-    _session_id_str = str(_active_session_id) if _active_session_id is not None else ""
+    _session_id_str = str(session_id) if session_id is not None else ""
     skipped_history += skipped_completed
     if skipped_contention:
         logger.info(
@@ -777,6 +785,7 @@ def process_detail_entries(
                 supporting_actors=data['supporting'],
                 magnet_links=magnet_links,
                 movie_detail=movie_detail,
+                session_id=session_id,
             )
             skipped_history += outcome.skipped_history
             no_new_torrents += outcome.no_new_torrents
@@ -1037,8 +1046,14 @@ def persist_parsed_detail_result(
     supporting_actors: str = '',
     magnet_links: Optional[dict] = None,
     movie_detail: Optional[object] = None,
+    session_id: Optional[str] = None,
 ) -> DetailPersistOutcome:
-    """Build ingestion plan, write outputs, and return outcome metadata."""
+    """Build ingestion plan, write outputs, and return outcome metadata.
+
+    *session_id* is the explicit run session (ADR-046 D2 — never ambient),
+    forwarded to the history write so the staged rows are tagged with the
+    owning session.
+    """
 
     href = entry['href']
     video_code = entry['video_code']
@@ -1100,7 +1115,7 @@ def persist_parsed_detail_result(
     worker_tag = f"[{worker_name}] " if worker_name else ""
     for rec in plan.dedup_records:
         if not dry_run and dedup_csv_path:
-            append_dedup_record(dedup_csv_path, rec)
+            append_dedup_record(dedup_csv_path, rec, session_id=session_id)
         if entry_index:
             variant = _dedup_log_variant_label(rec)
             logger.info(
@@ -1136,6 +1151,7 @@ def persist_parsed_detail_result(
                 actor_gender=actor_gender,
                 actor_link=actor_link,
                 supporting_actors=supporting_actors,
+                session_id=session_id,
             )
         # ADR-022: persist rich metadata outside the session flow
         if movie_detail is not None and not dry_run:

@@ -76,7 +76,7 @@ from javdb.storage.db import (
     db_load_align_no_exact_match_codes,
     db_load_rclone_inventory,
     db_upsert_align_no_exact_match,
-    get_active_session_id,
+    SESSION_ID_PATTERN,
 )
 
 
@@ -807,7 +807,7 @@ def run_alignment(args: argparse.Namespace) -> int:
                     db_upsert_align_no_exact_match(
                         video_code,
                         reason=data.get('message', ''),
-                        session_id=get_active_session_id(),
+                        session_id=args.session_id,
                     )
                 logger.info("[%s][%s] No exact match for %s", idx_str, worker_label, video_code)
                 _log_per_worker_cap_after_movie_line(result)
@@ -942,7 +942,7 @@ def run_alignment(args: argparse.Namespace) -> int:
                 )
                 if not args.dry_run:
                     db_upsert_align_no_exact_match(
-                        code, session_id=get_active_session_id(),
+                        code, session_id=args.session_id,
                     )
                 if not (use_proxy and PROXY_POOL):
                     movie_sleep_mgr.sleep()
@@ -1148,10 +1148,10 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         '--session-id',
-        type=int,
+        type=str,
         default=None,
         help='Tag every D1 write inside this run with the given ReportSessions.Id '
-             'so a downstream cleanup can roll back precisely. Optional; if omitted '
+             '(TEXT: YYYYMMDDTHHMMSS.ffffffZ-TTTT-SSSS). Optional; if omitted '
              'no SessionId is recorded and the writes are immune to scoped rollback.',
     )
     args = parser.parse_args()
@@ -1163,23 +1163,18 @@ def parse_args() -> argparse.Namespace:
             'Use --no-proxy to disable proxy.',
         )
     setattr(args, 'use_proxy', not args.no_proxy)
+    if args.session_id is not None:
+        args.session_id = args.session_id.strip()
+        if not SESSION_ID_PATTERN.match(args.session_id):
+            parser.error(
+                '--session-id must match the TEXT format '
+                'YYYYMMDDTHHMMSS.ffffffZ-TTTT-SSSS'
+            )
     return args
 
 
 def main() -> int:
     args = parse_args()
-    # Propagate the (optional) session_id into the db audit context so all
-    # db_upsert_history / db_upsert_align_no_exact_match calls inside this
-    # process tag their writes with it.
-    if getattr(args, 'session_id', None) is not None:
-        try:
-            from javdb.storage.db import set_active_session_id
-            set_active_session_id(args.session_id)
-        except Exception as e:
-            logger.warning(
-                f"Could not set active session_id={args.session_id} for align run: {e}"
-            )
-            raise
     return run_alignment(args)
 
 

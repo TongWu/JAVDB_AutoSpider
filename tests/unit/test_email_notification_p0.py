@@ -306,7 +306,7 @@ def _install_main_stubs(monkeypatch, en, captured_body):
     string appended to it when ``send_email`` is invoked, so tests can
     assert against the final rendered body.
     """
-    def _capture_send(subject, body, attachments, dry_run):
+    def _capture_send(subject, body, attachments, dry_run, session_id=None):
         captured_body.append(body)
         return True
 

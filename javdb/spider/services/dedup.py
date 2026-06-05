@@ -541,7 +541,11 @@ def load_dedup_csv(csv_path: str, from_file_only: bool = False) -> List[Dict[str
     return rows
 
 
-def append_dedup_record(dedup_csv_path: str, record: DedupRecord) -> bool:
+def append_dedup_record(
+    dedup_csv_path: str,
+    record: DedupRecord,
+    session_id: Optional[str] = None,
+) -> bool:
     """Append a single DedupRecord to persistent storage (DB only).
 
     Returns ``True`` if the record was appended, ``False`` if a pending
@@ -550,6 +554,10 @@ def append_dedup_record(dedup_csv_path: str, record: DedupRecord) -> bool:
     The *dedup_csv_path* parameter is kept for API compatibility but is
     no longer written to.  Use :func:`export_dedup_db_to_csv` to produce
     a CSV snapshot from the DB when needed.
+
+    *session_id* (ADR-046 D2 — never ambient) tags the write. DedupRecords
+    has a nullable SessionId, so a ``None`` session_id persists the row
+    untagged without raising (Phase-2 contract).
     """
     gdrive_path = record.existing_gdrive_path
 
@@ -560,13 +568,10 @@ def append_dedup_record(dedup_csv_path: str, record: DedupRecord) -> bool:
         return False
 
     _ensure_db()
-    # ADR-046 P2: session-tagging writes resolve the session explicitly at the
-    # caller (the global is never read inside OperationsRepo). The active
-    # session is resolved here and bound on the repo; Phase 5 migrates this
-    # ambient read.
-    from javdb.storage.repos.session_lifecycle_repo import SessionLifecycleRepo
-    sid = SessionLifecycleRepo().get_active_session_id()
-    row_id = OperationsRepo(session_id=sid).append_dedup_record(record._asdict())
+    # ADR-046 D2: the write session is passed in explicitly (the global is
+    # never read). DedupRecords.SessionId is nullable, so a None session_id
+    # persists the row untagged without raising (Phase-2 contract).
+    row_id = OperationsRepo(session_id=session_id).append_dedup_record(record._asdict())
 
     if row_id == -1:
         logger.debug(f"Skipped duplicate dedup for path: {gdrive_path}")
@@ -581,19 +586,22 @@ def append_dedup_record(dedup_csv_path: str, record: DedupRecord) -> bool:
 def mark_records_deleted(
     csv_path: str,
     path_datetime_pairs: List[Tuple[str, str]],
+    session_id: Optional[str] = None,
 ) -> int:
     """Mark specific dedup records as deleted (DB only).
 
     The *csv_path* parameter is kept for API compatibility but is no
     longer written to.  Use :func:`export_dedup_db_to_csv` to produce
     a CSV snapshot from the DB when needed.
+
+    *session_id* (ADR-046 D2 — never ambient) tags the update; ``None``
+    leaves the row untagged without raising (DedupRecords.SessionId is
+    nullable — the Phase-2 contract).
     """
     _ensure_db()
-    # ADR-046 P2: resolve + bind the active session at the caller (see
-    # append_dedup_record). Phase 5 migrates this ambient read.
-    from javdb.storage.repos.session_lifecycle_repo import SessionLifecycleRepo
-    sid = SessionLifecycleRepo().get_active_session_id()
-    updated = OperationsRepo(session_id=sid).mark_records_deleted(path_datetime_pairs)
+    # ADR-046 D2: bind the explicit session on the repo (the global is never
+    # read). A None session_id is valid for this nullable-SessionId table.
+    updated = OperationsRepo(session_id=session_id).mark_records_deleted(path_datetime_pairs)
 
     # Invalidate cache so next append sees the new state
     if _pending_paths_cache is not None:
