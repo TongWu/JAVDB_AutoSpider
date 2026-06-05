@@ -206,14 +206,26 @@ class ProxySelectionSignal:
         if coordinator is not None:
             fallback = getattr(coordinator, "get_proxy_health_score", None)
 
+        # Recommend (primary) setup is best-effort: a failure here must
+        # not strip the coordinator fallback and drop the run all the way
+        # to round-robin. Catch it and fall through with no primary so a
+        # fallback-only signal can still be built when a coordinator is
+        # present — preserving the documented primary→fallback→None chain.
         primary = None
         primary_label = None
-        rec_client = create_recommend_proxy_client_from_env()
-        if rec_client is not None:
-            primary = RecommendProxyPolicy(
-                rec_client, proxy_ids=list(proxy_ids or []),
+        try:
+            rec_client = create_recommend_proxy_client_from_env()
+            if rec_client is not None:
+                primary = RecommendProxyPolicy(
+                    rec_client, proxy_ids=list(proxy_ids or []),
+                )
+                primary_label = "recommend_proxy"
+        except Exception:  # noqa: BLE001 — preserve coordinator fallback
+            logger.warning(
+                "RecommendProxy setup failed; falling back to "
+                "coordinator health if available",
+                exc_info=True,
             )
-            primary_label = "recommend_proxy"
 
         if primary is None and fallback is None:
             return None

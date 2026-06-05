@@ -148,6 +148,64 @@ def test_state_setup_proxy_pool_uses_active_runtime_services(monkeypatch):
     assert runtime.services.proxy_pool is proxy_pool
 
 
+def test_runtime_setup_proxy_pool_closes_signal_when_wiring_fails(monkeypatch):
+    """Runtime path must not leak the refresh thread when wiring fails.
+
+    ADR-023 Phase 4: if ``set_health_provider`` raises after the signal
+    has started, the started signal is closed (best-effort) and never
+    stored on ``runtime.services.proxy_selection_signal``. The bootstrap
+    stays fail-open (no raise).
+    """
+    import javdb.spider.runtime.state as state
+    import javdb.proxy.selection.signal as signal_mod
+
+    runtime = SpiderRuntime()
+
+    class FailingPool:
+        def set_health_provider(self, _provider):
+            raise RuntimeError("pool rejected provider")
+
+    failing_pool = FailingPool()
+    fake_signal = MagicMock()
+    fake_signal.label = "recommend_proxy+coordinator_health"
+
+    monkeypatch.setattr(
+        state,
+        "create_proxy_pool_from_config",
+        lambda *_args, **_kwargs: failing_pool,
+    )
+    monkeypatch.setattr(state, "setup_proxy_coordinator", lambda: None)
+    monkeypatch.setattr(state, "setup_login_state_client", lambda: None)
+    monkeypatch.setattr(state, "setup_movie_claim_client", lambda: None)
+    monkeypatch.setattr(state, "enforce_movie_claim_for_d1", lambda: None)
+    monkeypatch.setattr(state, "setup_runner_registry_client", lambda: None)
+    monkeypatch.setattr(state, "setup_work_distributor_client", lambda: None)
+    monkeypatch.setattr(state, "PROXY_MODE", "pool")
+    monkeypatch.setattr(
+        state,
+        "PROXY_POOL",
+        [{"name": "proxy-a", "http": "http://a:1", "https": "http://a:1"}],
+    )
+    monkeypatch.setattr(state, "PROXY_HTTP", "")
+    monkeypatch.setattr(state, "PROXY_HTTPS", "")
+    monkeypatch.setattr(
+        signal_mod.ProxySelectionSignal,
+        "from_runtime_config",
+        MagicMock(return_value=fake_signal),
+    )
+
+    state.bind_active_runtime(runtime)
+    try:
+        # Must not raise — the wiring failure is swallowed (fail-open).
+        state.setup_proxy_pool(True)
+    finally:
+        state.clear_active_runtime(runtime)
+
+    fake_signal.start.assert_called_once_with()
+    fake_signal.close.assert_called_once_with()
+    assert runtime.services.proxy_selection_signal is None
+
+
 def test_runtime_request_handler_callbacks_use_runtime_coordinator(monkeypatch):
     import javdb.spider.runtime.state as state
 

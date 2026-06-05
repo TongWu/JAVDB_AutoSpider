@@ -6,6 +6,7 @@ compatibility helpers in this module until the facade is frozen or removed.
 """
 
 import atexit
+import contextlib
 import json
 import os
 import re
@@ -2141,6 +2142,7 @@ def _setup_proxy_pool_legacy(use_proxy) -> None:
         from javdb.proxy.selection.signal import ProxySelectionSignal
 
         global global_recommend_proxy_policy
+        signal = None
         try:
             proxy_ids = [p.get('name', '') for p in (PROXY_POOL or [])
                          if isinstance(p, dict) and p.get('name')]
@@ -2158,6 +2160,11 @@ def _setup_proxy_pool_legacy(use_proxy) -> None:
                     signal.label,
                 )
         except Exception:  # noqa: BLE001 — Worker policy is best-effort
+            # A failure after signal.start() (before atexit.register) would
+            # otherwise leak the primary's refresh thread — close best-effort.
+            if signal is not None:
+                with contextlib.suppress(Exception):
+                    signal.close()
             logger.warning(
                 "Failed to wire ProxySelectionSignal; falling back to round-robin",
                 exc_info=True,
