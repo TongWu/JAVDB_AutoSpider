@@ -94,6 +94,25 @@ def test_append_jsonl_record_honours_explicit_reports_dir(tmp_path):
     assert json.loads(path.read_text().strip()) == {"k": "v"}
 
 
+def test_append_jsonl_record_refuses_default_reports_dir_under_pytest(
+    tmp_path, monkeypatch,
+):
+    """With neither ``reports_dir`` nor ``$REPORTS_DIR``, the call must not
+    write to the default ``reports/D1/`` dir under pytest — that path is the
+    git-tracked production drift log, and an unisolated test would pollute it.
+
+    ``chdir(tmp_path)`` keeps the assertion hermetic: even if the guard
+    regressed, the relative ``reports`` default would resolve under tmp, never
+    the real repo, so the test can never dirty the tracked file.
+    """
+    monkeypatch.delenv("REPORTS_DIR", raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    helpers.append_jsonl_record({"would": "pollute"})
+
+    assert not (tmp_path / "reports" / "D1" / "d1_drift.jsonl").exists()
+
+
 def test_append_jsonl_record_swallows_exceptions(monkeypatch):
     """Best-effort: a write failure must NOT raise (callers rely on
     metric emission never blocking the primary operation)."""
