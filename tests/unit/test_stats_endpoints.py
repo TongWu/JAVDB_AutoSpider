@@ -102,7 +102,7 @@ def _build_populated_db_map() -> Dict[str, sqlite3.Connection]:
             "CREATE TABLE ReportSessions ("
             "Id TEXT PRIMARY KEY, ReportType TEXT NOT NULL, ReportDate TEXT NOT NULL, "
             "CsvFilename TEXT NOT NULL, DateTimeCreated TEXT NOT NULL, "
-            "Status TEXT DEFAULT 'in_progress'"
+            "Status TEXT DEFAULT 'in_progress', CommittedAt TEXT"
             ");"
             "CREATE TABLE ReportMovies ("
             "Id INTEGER PRIMARY KEY AUTOINCREMENT, SessionId TEXT NOT NULL, "
@@ -116,6 +116,10 @@ def _build_populated_db_map() -> Dict[str, sqlite3.Connection]:
             "Id INTEGER PRIMARY KEY AUTOINCREMENT, VideoCode TEXT NOT NULL, "
             "Href TEXT NOT NULL UNIQUE, DateTimeCreated TEXT"
             ");"
+            "CREATE TABLE TorrentHistory ("
+            "Id INTEGER PRIMARY KEY AUTOINCREMENT, VideoCode TEXT NOT NULL, "
+            "MagnetUri TEXT NOT NULL UNIQUE, DateTimeCreated TEXT"
+            ");"
             "CREATE TABLE PikpakHistory ("
             "Id INTEGER PRIMARY KEY AUTOINCREMENT, TorrentHash TEXT, "
             "TorrentName TEXT, DateTimeUploadedToPikpak TEXT"
@@ -125,12 +129,12 @@ def _build_populated_db_map() -> Dict[str, sqlite3.Connection]:
             "DateTimeDetected TEXT, IsDeleted INTEGER DEFAULT 0"
             ")",
             [
-                ("INSERT INTO ReportSessions VALUES (?, ?, ?, ?, ?, ?)",
-                 ("s1", "daily", "2026-05-20", "f1.csv", "2026-05-20T10:00:00Z", "committed")),
-                ("INSERT INTO ReportSessions VALUES (?, ?, ?, ?, ?, ?)",
-                 ("s2", "daily", "2026-05-21", "f2.csv", "2026-05-21T10:00:00Z", "committed")),
-                ("INSERT INTO ReportSessions VALUES (?, ?, ?, ?, ?, ?)",
-                 ("s3", "daily", "2026-05-22", "f3.csv", "2026-05-22T10:00:00Z", "failed")),
+                ("INSERT INTO ReportSessions VALUES (?, ?, ?, ?, ?, ?, ?)",
+                 ("s1", "daily", "2026-05-20", "f1.csv", "2026-05-20T10:00:00Z", "committed", "2026-05-20T10:05:00Z")),
+                ("INSERT INTO ReportSessions VALUES (?, ?, ?, ?, ?, ?, ?)",
+                 ("s2", "daily", "2026-05-21", "f2.csv", "2026-05-21T10:00:00Z", "committed", "2026-05-21T10:10:00Z")),
+                ("INSERT INTO ReportSessions VALUES (?, ?, ?, ?, ?, ?, ?)",
+                 ("s3", "daily", "2026-05-22", "f3.csv", "2026-05-22T10:00:00Z", "failed", None)),
                 ("INSERT INTO ReportMovies VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                  (1, "s1", "/v/abc", "ABC-001", 1, "Actor A", 4.5, 10)),
                 ("INSERT INTO ReportMovies VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -151,6 +155,12 @@ def _build_populated_db_map() -> Dict[str, sqlite3.Connection]:
                  (2, "DEF-002", "/v/def", "2026-05-21T10:00:00Z")),
                 ("INSERT INTO MovieHistory VALUES (?, ?, ?, ?)",
                  (3, "GHI-003", "/v/ghi", "2026-05-22T10:00:00Z")),
+                ("INSERT INTO TorrentHistory VALUES (?, ?, ?, ?)",
+                 (1, "ABC-001", "magnet:?xt=1", "2026-05-20T10:00:00Z")),
+                ("INSERT INTO TorrentHistory VALUES (?, ?, ?, ?)",
+                 (2, "ABC-001", "magnet:?xt=2", "2026-05-20T10:00:00Z")),
+                ("INSERT INTO TorrentHistory VALUES (?, ?, ?, ?)",
+                 (3, "DEF-002", "magnet:?xt=3", "2026-05-21T10:00:00Z")),
                 ("INSERT INTO PikpakHistory VALUES (?, ?, ?, ?)",
                  (1, "hash1", "torrent1", "2026-05-20T10:00:00Z")),
                 ("INSERT INTO PikpakHistory VALUES (?, ?, ?, ?)",
@@ -167,7 +177,7 @@ def _build_populated_db_map() -> Dict[str, sqlite3.Connection]:
         "CREATE TABLE ReportSessions ("
         "Id TEXT PRIMARY KEY, ReportType TEXT NOT NULL, ReportDate TEXT NOT NULL, "
         "CsvFilename TEXT NOT NULL, DateTimeCreated TEXT NOT NULL, "
-        "Status TEXT DEFAULT 'in_progress'"
+        "Status TEXT DEFAULT 'in_progress', CommittedAt TEXT"
         ");"
         "CREATE TABLE ReportMovies ("
         "Id INTEGER PRIMARY KEY AUTOINCREMENT, SessionId TEXT NOT NULL, "
@@ -178,12 +188,12 @@ def _build_populated_db_map() -> Dict[str, sqlite3.Connection]:
         "VideoCode TEXT, MagnetUri TEXT, Size TEXT, FileCount INTEGER"
         ")",
         [
-            ("INSERT INTO ReportSessions VALUES (?, ?, ?, ?, ?, ?)",
-             ("s1", "daily", "2026-05-20", "f1.csv", "2026-05-20T10:00:00Z", "committed")),
-            ("INSERT INTO ReportSessions VALUES (?, ?, ?, ?, ?, ?)",
-             ("s2", "daily", "2026-05-21", "f2.csv", "2026-05-21T10:00:00Z", "committed")),
-            ("INSERT INTO ReportSessions VALUES (?, ?, ?, ?, ?, ?)",
-             ("s3", "daily", "2026-05-22", "f3.csv", "2026-05-22T10:00:00Z", "failed")),
+            ("INSERT INTO ReportSessions VALUES (?, ?, ?, ?, ?, ?, ?)",
+             ("s1", "daily", "2026-05-20", "f1.csv", "2026-05-20T10:00:00Z", "committed", "2026-05-20T10:05:00Z")),
+            ("INSERT INTO ReportSessions VALUES (?, ?, ?, ?, ?, ?, ?)",
+             ("s2", "daily", "2026-05-21", "f2.csv", "2026-05-21T10:00:00Z", "committed", "2026-05-21T10:10:00Z")),
+            ("INSERT INTO ReportSessions VALUES (?, ?, ?, ?, ?, ?, ?)",
+             ("s3", "daily", "2026-05-22", "f3.csv", "2026-05-22T10:00:00Z", "failed", None)),
             ("INSERT INTO ReportMovies VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
              (1, "s1", "/v/abc", "ABC-001", 1, "Actor A", 4.5, 10)),
             ("INSERT INTO ReportMovies VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -205,6 +215,10 @@ def _build_populated_db_map() -> Dict[str, sqlite3.Connection]:
         "CREATE TABLE MovieHistory ("
         "Id INTEGER PRIMARY KEY AUTOINCREMENT, VideoCode TEXT NOT NULL, "
         "Href TEXT NOT NULL UNIQUE, DateTimeCreated TEXT"
+        ");"
+        "CREATE TABLE TorrentHistory ("
+        "Id INTEGER PRIMARY KEY AUTOINCREMENT, VideoCode TEXT NOT NULL, "
+        "MagnetUri TEXT NOT NULL UNIQUE, DateTimeCreated TEXT"
         ")",
         [
             ("INSERT INTO MovieHistory VALUES (?, ?, ?, ?)",
@@ -213,6 +227,12 @@ def _build_populated_db_map() -> Dict[str, sqlite3.Connection]:
              (2, "DEF-002", "/v/def", "2026-05-21T10:00:00Z")),
             ("INSERT INTO MovieHistory VALUES (?, ?, ?, ?)",
              (3, "GHI-003", "/v/ghi", "2026-05-22T10:00:00Z")),
+            ("INSERT INTO TorrentHistory VALUES (?, ?, ?, ?)",
+             (1, "ABC-001", "magnet:?xt=1", "2026-05-20T10:00:00Z")),
+            ("INSERT INTO TorrentHistory VALUES (?, ?, ?, ?)",
+             (2, "ABC-001", "magnet:?xt=2", "2026-05-20T10:00:00Z")),
+            ("INSERT INTO TorrentHistory VALUES (?, ?, ?, ?)",
+             (3, "DEF-002", "magnet:?xt=3", "2026-05-21T10:00:00Z")),
         ],
     )
 
@@ -259,13 +279,17 @@ def _build_empty_db_map() -> Dict[str, sqlite3.Connection]:
         "CREATE TABLE ReportSessions ("
         "Id TEXT PRIMARY KEY, ReportType TEXT NOT NULL, ReportDate TEXT NOT NULL, "
         "CsvFilename TEXT NOT NULL, DateTimeCreated TEXT NOT NULL, "
-        "Status TEXT DEFAULT 'in_progress'"
+        "Status TEXT DEFAULT 'in_progress', CommittedAt TEXT"
         ");"
         "CREATE TABLE ReportMovies (Id INTEGER PRIMARY KEY AUTOINCREMENT, SessionId TEXT NOT NULL);"
         "CREATE TABLE ReportTorrents (Id INTEGER PRIMARY KEY AUTOINCREMENT, ReportMovieId INTEGER NOT NULL);"
         "CREATE TABLE MovieHistory ("
         "Id INTEGER PRIMARY KEY AUTOINCREMENT, VideoCode TEXT NOT NULL, "
         "Href TEXT NOT NULL UNIQUE, DateTimeCreated TEXT"
+        ");"
+        "CREATE TABLE TorrentHistory ("
+        "Id INTEGER PRIMARY KEY AUTOINCREMENT, VideoCode TEXT NOT NULL, "
+        "MagnetUri TEXT NOT NULL UNIQUE, DateTimeCreated TEXT"
         ");"
         "CREATE TABLE PikpakHistory (Id INTEGER PRIMARY KEY AUTOINCREMENT, DateTimeUploadedToPikpak TEXT);"
         "CREATE TABLE DedupRecords (Id INTEGER PRIMARY KEY AUTOINCREMENT, ExistingFolderSize INTEGER, DateTimeDetected TEXT)"
@@ -281,7 +305,7 @@ def _build_empty_db_map() -> Dict[str, sqlite3.Connection]:
             "CREATE TABLE ReportSessions ("
             "Id TEXT PRIMARY KEY, ReportType TEXT NOT NULL, ReportDate TEXT NOT NULL, "
             "CsvFilename TEXT NOT NULL, DateTimeCreated TEXT NOT NULL, "
-            "Status TEXT DEFAULT 'in_progress'"
+            "Status TEXT DEFAULT 'in_progress', CommittedAt TEXT"
             ");"
             "CREATE TABLE ReportMovies (Id INTEGER PRIMARY KEY AUTOINCREMENT, SessionId TEXT NOT NULL);"
             "CREATE TABLE ReportTorrents (Id INTEGER PRIMARY KEY AUTOINCREMENT, ReportMovieId INTEGER NOT NULL)"
@@ -290,6 +314,10 @@ def _build_empty_db_map() -> Dict[str, sqlite3.Connection]:
             "CREATE TABLE MovieHistory ("
             "Id INTEGER PRIMARY KEY AUTOINCREMENT, VideoCode TEXT NOT NULL, "
             "Href TEXT NOT NULL UNIQUE, DateTimeCreated TEXT"
+            ");"
+            "CREATE TABLE TorrentHistory ("
+            "Id INTEGER PRIMARY KEY AUTOINCREMENT, VideoCode TEXT NOT NULL, "
+            "MagnetUri TEXT NOT NULL UNIQUE, DateTimeCreated TEXT"
             ")"
         ),
         OPERATIONS_DB_PATH: _make_in_memory_db(
@@ -326,9 +354,9 @@ class TestStatsSummary:
         assert data["total_runs"] == 3
         assert data["success_rate"] is not None
         assert abs(data["success_rate"] - 2.0 / 3.0) < 0.01
-        assert data["avg_duration_seconds"] is None
+        assert data["avg_duration_seconds"] == 450
         assert data["total_movies"] == 3
-        assert data["total_torrents"] == 4
+        assert data["total_torrents"] == 3
         assert data["total_pikpak"] == 2
         assert data["total_dedup_freed_bytes"] == 1073741824  # only IsDeleted=1 record counts
         assert data["proxy_bans_last_7d"] == 0
@@ -394,6 +422,7 @@ class TestStatsSummary:
         data = resp.json()
         assert data["total_runs"] == 0
         assert data["success_rate"] is None
+        assert data["avg_duration_seconds"] is None
         assert data["total_movies"] == 0
         assert data["total_torrents"] == 0
         assert data["total_pikpak"] == 0
@@ -595,8 +624,8 @@ class TestStatsTrend:
         # Insert an old session dated 2025-01-01 — well outside any period window.
         conn = db_map[stats_module.REPORTS_DB_PATH]
         conn.execute(
-            "INSERT INTO ReportSessions VALUES (?, ?, ?, ?, ?, ?)",
-            ("s_old", "daily", "2025-01-01", "old.csv", "2025-01-01T10:00:00Z", "committed"),
+            "INSERT INTO ReportSessions VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("s_old", "daily", "2025-01-01", "old.csv", "2025-01-01T10:00:00Z", "committed", "2025-01-01T10:05:00Z"),
         )
         conn.commit()
         _patch_stats_db(monkeypatch, db_map)

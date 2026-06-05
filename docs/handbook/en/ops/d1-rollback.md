@@ -119,7 +119,7 @@ The original X3 audit hybrid plan in `.cursor/plans/d1_workflow_rollback_plan_*.
 
 | Table family | Rollback technique | Schema additions |
 |---|---|---|
-| `ReportMovies`, `ReportTorrents`, `ReportSessions`, `SpiderStats`, `UploaderStats`, `PikpakStats` | Cascade-delete by `SessionId` (these four FK children declare `REFERENCES ReportSessions(Id)`); refuse to delete `ReportSessions` rows whose `Status='committed'` | `ReportSessions.Status TEXT DEFAULT 'in_progress'`; Phase 3 added `WriteMode` and the `finalizing` value to `Status` |
+| `ReportMovies`, `ReportTorrents`, `ReportSessions`, `SpiderStats`, `UploaderStats`, `PikpakStats` | Cascade-delete by `SessionId` (these four FK children declare `REFERENCES ReportSessions(Id)`); refuse to delete `ReportSessions` rows whose `Status='committed'` | `ReportSessions.Status TEXT DEFAULT 'in_progress'`; `CommittedAt TEXT` is stamped on successful commit; Phase 3 added `WriteMode` and the `finalizing` value to `Status` |
 | `MovieHistory`, `TorrentHistory` (Pending mode — Phase 3 default) | All writes stage into `PendingMovie/TorrentHistoryWrites` first; commit recomputes derived fields once and UPSERTs live in one pass; rollback `DELETE`s the staged rows for `Status='in_progress'` and `db_resume_finalizing_session` for `Status='finalizing'`. No audit replay needed. | `PendingMovieHistoryWrites` and `PendingTorrentHistoryWrites` tables (each with explicit application-generated snowflake `Seq`, `ApplyState`, `SessionId` / `RunId` / `RunAttempt`) |
 | `MovieHistory`, `TorrentHistory` (retired audit fallback) | Retired by ADR-005. `JAVDB_HISTORY_WRITE_MODE=audit` no longer enables audit replay; it falls back to pending. | Audit tables and archive/cleanup tooling removed. |
 | `PikpakHistory`, `DedupRecords`, `InventoryAlignNoExactMatch` | Delete session-scoped rows. `DedupRecords` soft-delete/orphan updates first snapshot their pre-image into `DedupRecordsRollback_<session_id>`, so rollback restores pre-existing rows and deletes rows created by the failed session | `SessionId` on each table; per-session `DedupRecordsRollback_<session_id>` backup table |
@@ -173,7 +173,7 @@ Cross-day sanity filter: every candidate session's `DateTimeCreated` is checked 
 
 ### Pending cleanup on commit
 
-Once `db_mark_session_committed` flips a session to `Status='committed'`, the rollback CLI refuses to roll it back (without `--force`). If a crash leaves pending-table rows behind after the status flip, the committed-session branch only deletes pending-table residue and does not re-run live-table upserts.
+Once `db_mark_session_committed` or `db_finish_commit_session` flips a session to `Status='committed'`, it also stamps `CommittedAt` for duration reporting, and the rollback CLI refuses to roll it back (without `--force`). If a crash leaves pending-table rows behind after the status flip, the committed-session branch only deletes pending-table residue and does not re-run live-table upserts.
 
 ### Smoke-test cleanup strategy
 

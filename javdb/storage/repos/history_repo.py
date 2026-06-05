@@ -327,6 +327,61 @@ def _build_torrent_filters(
     return where_clause, params
 
 
+def build_movie_count(
+    *,
+    q: Optional[str] = None,
+    actor: Optional[str] = None,
+    perfect_match: Optional[bool] = None,
+    hi_res: Optional[bool] = None,
+    session_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    cursor_id: Optional[int] = None,
+) -> Tuple[str, List]:
+    where_clause, params = _build_movie_filters(
+        q=q,
+        actor=actor,
+        perfect_match=perfect_match,
+        hi_res=hi_res,
+        session_id=session_id,
+        date_from=date_from,
+        date_to=date_to,
+        cursor_id=cursor_id,
+    )
+    sql = f"SELECT MIN(COUNT(*), 10000) AS cnt FROM MovieHistory m {where_clause}"
+    return sql, params
+
+
+def build_torrent_count(
+    *,
+    q: Optional[str] = None,
+    resolution_type: Optional[int] = None,
+    has_subtitle: Optional[bool] = None,
+    uncensored: Optional[bool] = None,
+    session_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    cursor_id: Optional[int] = None,
+) -> Tuple[str, List]:
+    where_clause, params = _build_torrent_filters(
+        q=q,
+        resolution_type=resolution_type,
+        has_subtitle=has_subtitle,
+        uncensored=uncensored,
+        session_id=session_id,
+        date_from=date_from,
+        date_to=date_to,
+        cursor_id=cursor_id,
+    )
+    sql = (
+        "SELECT MIN(COUNT(*), 10000) AS cnt "
+        "FROM TorrentHistory t "
+        "JOIN MovieHistory m ON m.Id = t.MovieHistoryId "
+        f"{where_clause}"
+    )
+    return sql, params
+
+
 # ── HistoryRepo (ADR-005 PR-1) ────────────────────────────────────────
 #
 # A typed surface over the write-domain function family in
@@ -509,7 +564,17 @@ class HistoryRepo:
             except Exception:
                 raise ValueError("invalid cursor")
 
-        where_clause, params = _build_movie_filters(
+        count_sql, params = build_movie_count(
+            q=q,
+            actor=actor,
+            perfect_match=perfect_match,
+            hi_res=hi_res,
+            session_id=session_id,
+            date_from=date_from,
+            date_to=date_to,
+            cursor_id=cursor_id,
+        )
+        where_clause, _ = _build_movie_filters(
             q=q,
             actor=actor,
             perfect_match=perfect_match,
@@ -520,7 +585,6 @@ class HistoryRepo:
             cursor_id=cursor_id,
         )
 
-        count_sql = f"SELECT MIN(COUNT(*), 10000) FROM MovieHistory m {where_clause}"
         data_sql = f"""
             SELECT
                 m.Id,
@@ -588,7 +652,7 @@ class HistoryRepo:
             except Exception:
                 raise ValueError("invalid cursor")
 
-        where_clause, params = _build_torrent_filters(
+        count_sql, params = build_torrent_count(
             q=q,
             resolution_type=resolution_type,
             has_subtitle=has_subtitle,
@@ -598,13 +662,16 @@ class HistoryRepo:
             date_to=date_to,
             cursor_id=cursor_id,
         )
-
-        count_sql = f"""
-            SELECT MIN(COUNT(*), 10000)
-            FROM TorrentHistory t
-            JOIN MovieHistory m ON m.Id = t.MovieHistoryId
-            {where_clause}
-        """
+        where_clause, _ = _build_torrent_filters(
+            q=q,
+            resolution_type=resolution_type,
+            has_subtitle=has_subtitle,
+            uncensored=uncensored,
+            session_id=session_id,
+            date_from=date_from,
+            date_to=date_to,
+            cursor_id=cursor_id,
+        )
         data_sql = f"""
             SELECT
                 t.Id,
