@@ -65,14 +65,14 @@ def test_runtime_close_releases_runtime_owned_services():
         def close(self):
             calls.append(("close", self.label))
 
-    class Policy:
-        def shutdown(self):
-            calls.append(("shutdown", "policy"))
+    class Signal:
+        def close(self):
+            calls.append(("close", "signal"))
 
     runtime.services.proxy_coordinator = Closable("proxy")
     runtime.services.login_state_client = Closable("login")
     runtime.services.work_distributor_client = Closable("work")
-    runtime.services.recommend_proxy_policy = Policy()
+    runtime.services.proxy_selection_signal = Signal()
     runtime.movie_claim.client_public = Closable("movie-public")
     runtime.movie_claim.client_pending = Closable("movie-pending")
     ban_manager.set_remote_ban_hook(
@@ -85,16 +85,45 @@ def test_runtime_close_releases_runtime_owned_services():
     assert ("close", "proxy") in calls
     assert ("close", "login") in calls
     assert ("close", "work") in calls
-    assert ("shutdown", "policy") in calls
+    assert calls.count(("close", "signal")) == 1
     assert ("close", "movie-public") in calls
     assert ("close", "movie-pending") in calls
     assert runtime.services.proxy_coordinator is None
     assert runtime.services.login_state_client is None
     assert runtime.services.work_distributor_client is None
-    assert runtime.services.recommend_proxy_policy is None
+    assert runtime.services.proxy_selection_signal is None
     assert runtime.movie_claim.client_public is None
     assert runtime.movie_claim.client_pending is None
     ban_manager._dispatch_remote_ban("proxy-a", "ban page detected")
     ban_manager._dispatch_remote_unban("proxy-a")
     assert ("hook", "ban", "ban page detected") not in calls
     assert ("hook", "unban") not in calls
+
+
+def test_runtime_close_is_safe_without_proxy_selection_signal():
+    runtime = SpiderRuntime()
+
+    assert runtime.services.proxy_selection_signal is None
+    runtime.close()
+
+    assert runtime.closed is True
+    assert runtime.services.proxy_selection_signal is None
+
+
+def test_runtime_close_fails_open_when_signal_close_raises():
+    runtime = SpiderRuntime()
+    calls = []
+
+    class ExplodingSignal:
+        def close(self):
+            calls.append("close")
+            raise RuntimeError("boom")
+
+    runtime.services.proxy_selection_signal = ExplodingSignal()
+
+    # close() must swallow the signal's failure and still clear the field.
+    runtime.close()
+
+    assert calls == ["close"]
+    assert runtime.closed is True
+    assert runtime.services.proxy_selection_signal is None

@@ -2,7 +2,7 @@
 
 | 字段        | 值                                                                    |
 | ----------- | --------------------------------------------------------------------- |
-| **状态**    | Proposed                                                              |
+| **状态**    | Accepted                                                              |
 | **日期**    | 2026-05-27                                                            |
 | **作者**    | Ted                                                                   |
 | **关联**    | [ADR-004](../_archive/ADR-004-Proxy-Discovery/ADR-004-proxy-discovery-via-runner-pool-upload.md), [ADR-013](../_archive/ADR-013-Runner-Runtime-State/ADR-013-runner-runtime-state-consolidation.md) |
@@ -104,3 +104,4 @@ policy 会把最终排序分数拆成三部分：
 
 - 2026-05-27：以 ADR-023 提出。
 - 2026-05-27：新增 Python Selection Signal 深化工作的 Phase 4 实施计划。
+- 2026-06-05：Accepted。四个 phase 全部实现并验证——Phase 1-3（shadow 评分、flagged policy 排序、可观测性）在 `JAVDB_AutoSpider_Proxycoordinator` repo；Phase 4（Python `ProxySelectionSignal`）在 CICD。IMP-01..04 标记为 Completed。

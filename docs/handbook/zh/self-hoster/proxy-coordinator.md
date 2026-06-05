@@ -902,6 +902,10 @@ latency_ema_ms / score ∈ [0,1]`）。Python 端 `ProxyPool.get_next_proxy`
   latency_ema_ms, score } | null`（老 client 忽略；新 client 在缺字段
   时退回到 0.5 中性分）。
 - 写路径同步刷新 `cached`，避免同 instance 后续 `/lease` 读到旧值。
+- `GET /recommend_proxy` 的 recommendation 行新增 ADR-023 的可选 shadow
+  字段：`heuristic_score`、`model_score`、`confidence`、`reason_code`、
+  `cooldown_until` 和 `model_version`。Phase 1 **不会**按 `model_score`
+  排序；现有 `score` 字段仍然是排序依据。
 
 ### 18.3 客户端集成
 
@@ -921,9 +925,47 @@ latency_ema_ms / score ∈ [0,1]`）。Python 端 `ProxyPool.get_next_proxy`
 - `latency_penalty = clamp((latency_ema_ms - 500) / 10000, 0, 0.5)`
 - `score = ratio - latency_penalty`（无样本时 `score = 0.5`）
 
+ADR-023 Phase 1 只把 shadow policy 字段用于可观测性。运维可以在
+`/recommend_proxy` 响应中对比 `heuristic_score` 和 `model_score`，观察
+policy 会在哪些场景下产生分歧；真正改变代理排序要等后续 rollout flag
+阶段。
+
+ADR-023 Phase 2 新增两个 Worker 变量：
+
+| 变量 | 默认值 | 含义 |
+|---|---|---|
+| `RECOMMEND_PROXY_POLICY_MODE` | `"shadow"` | `"shadow"` 保持现有 heuristic 排序；`"policy"` 按 blended `rank_score` 排序。 |
+| `RECOMMEND_PROXY_EXPLORATION_FLOOR` | `"0.02"` | policy 模式下可用代理的最低 rank score，服务端最高限制为 0.2。 |
+
+回滚只需要改一个 Worker 变量：设置
+`RECOMMEND_PROXY_POLICY_MODE = "shadow"` 并重新部署。Python 客户端无需变更，
+因为客户端仍然读取稳定的 `score` 字段。
+
 如需更激进（坏代理更快被旁路），可在 Python 端把
 `ProxyPool._safe_health_score` 的地板从 `0.05` 降到 `0.01`；如需更
 保守（避免抖动），可把权重做平方：`weights[i] **= 2`。
+
+### ADR-023 Rollout Gate
+
+在把 `RECOMMEND_PROXY_POLICY_MODE` 从 `"shadow"` 切到 `"policy"` 前：
+
+1. 对活跃代理池调用 `/recommend_proxy?proxy_ids=<ids>&include_unhealthy=1`，
+   检查 `policy_summary`。
+2. 当 `policy_summary.rollout_gate` 是 `blocked_global_instability` 时，
+   不要启用 policy mode。
+3. 如果 `disagreement_count` 很高，把它当成 review 信号：对比最大分歧项的
+   `heuristic_score`、`model_score`、`rank_score` 和 `reason_code`。
+4. 先只启用一个部署窗口，然后观察 ban rate、`cf_bypass` rate、Session
+   committed rate 和 request success rate。
+5. 回滚方式是把 `RECOMMEND_PROXY_POLICY_MODE = "shadow"` 并重新部署。
+
+Smoke check：
+
+```bash
+curl -sS -H "Authorization: Bearer $PROXY_COORDINATOR_TOKEN" \
+  "$PROXY_COORDINATOR_URL/recommend_proxy?proxy_ids=P1,P2&include_unhealthy=1" \
+  | jq '.policy_summary, .recommendations[] | {proxy_id, score, rank_score, reason_code}'
+```
 
 ### 18.5 回滚
 

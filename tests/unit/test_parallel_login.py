@@ -379,6 +379,106 @@ class TestProxyModeDisabled:
             state_mod.global_proxy_pool = orig_pool
             session_mod.PROXY_MODE = orig_mode
 
+    def test_setup_proxy_pool_legacy_wires_selection_signal(self):
+        """Legacy global path routes health-weighting through ProxySelectionSignal.
+
+        IMP-ADR023-04 Task 5: the no-active-runtime path must build a
+        ProxySelectionSignal via from_runtime_config, start() it, install
+        signal.score_for as the pool health provider, store the signal in
+        global_recommend_proxy_policy, and register signal.close (NOT the
+        inner policy.shutdown) with atexit so the refresh thread is stopped.
+        """
+        import javdb.proxy.selection.signal as signal_mod
+
+        orig_pool = state_mod.global_proxy_pool
+        orig_policy = state_mod.global_recommend_proxy_policy
+        try:
+            fake_pool = MagicMock()
+            fake_pool.set_health_provider = MagicMock()
+            fake_signal = MagicMock()
+            fake_signal.label = "recommend_proxy+coordinator_health"
+
+            with patch('javdb.spider.runtime.state.PROXY_MODE', 'pool'), \
+                 patch('javdb.spider.runtime.state.PROXY_POOL',
+                       [{'name': 'eu', 'http': 'http://eu:1'}]), \
+                 patch('javdb.spider.runtime.state.create_proxy_pool_from_config',
+                       return_value=fake_pool), \
+                 patch.object(state_mod, 'setup_proxy_coordinator', lambda: None), \
+                 patch.object(state_mod, 'setup_login_state_client', lambda: None), \
+                 patch.object(state_mod, 'setup_movie_claim_client', lambda: None), \
+                 patch.object(state_mod, 'enforce_movie_claim_for_d1', lambda: None), \
+                 patch.object(state_mod, 'setup_runner_registry_client', lambda: None), \
+                 patch.object(state_mod, 'setup_work_distributor_client', lambda: None), \
+                 patch.object(signal_mod.ProxySelectionSignal, 'from_runtime_config',
+                              return_value=fake_signal) as mock_factory, \
+                 patch('javdb.spider.runtime.state.atexit.register') as mock_register:
+                state_mod.setup_proxy_pool(True)
+
+            # Signal built from PROXY_POOL names + the global coordinator.
+            mock_factory.assert_called_once_with(
+                proxy_ids=['eu'],
+                coordinator=state_mod.global_proxy_coordinator,
+            )
+            fake_signal.start.assert_called_once_with()
+            fake_pool.set_health_provider.assert_called_once_with(
+                fake_signal.score_for
+            )
+            # Global compat name now holds the signal, not a raw policy.
+            assert state_mod.global_recommend_proxy_policy is fake_signal
+            # atexit stops the refresh thread via signal.close, never shutdown.
+            mock_register.assert_any_call(fake_signal.close)
+        finally:
+            state_mod.global_proxy_pool = orig_pool
+            state_mod.global_recommend_proxy_policy = orig_policy
+
+    def test_setup_proxy_pool_legacy_closes_signal_when_wiring_fails(self):
+        """Legacy path must not leak the refresh thread when wiring fails.
+
+        If ``set_health_provider`` raises after the signal has started,
+        the started signal must be closed (best-effort) and never stored
+        as ``global_recommend_proxy_policy`` nor registered with atexit.
+        ``setup_proxy_pool`` itself must stay fail-open (no raise).
+        """
+        import javdb.proxy.selection.signal as signal_mod
+
+        orig_pool = state_mod.global_proxy_pool
+        orig_policy = state_mod.global_recommend_proxy_policy
+        try:
+            fake_pool = MagicMock()
+            fake_pool.set_health_provider = MagicMock(
+                side_effect=RuntimeError("pool rejected provider")
+            )
+            fake_signal = MagicMock()
+            fake_signal.label = "recommend_proxy+coordinator_health"
+
+            with patch('javdb.spider.runtime.state.PROXY_MODE', 'pool'), \
+                 patch('javdb.spider.runtime.state.PROXY_POOL',
+                       [{'name': 'eu', 'http': 'http://eu:1'}]), \
+                 patch('javdb.spider.runtime.state.create_proxy_pool_from_config',
+                       return_value=fake_pool), \
+                 patch.object(state_mod, 'setup_proxy_coordinator', lambda: None), \
+                 patch.object(state_mod, 'setup_login_state_client', lambda: None), \
+                 patch.object(state_mod, 'setup_movie_claim_client', lambda: None), \
+                 patch.object(state_mod, 'enforce_movie_claim_for_d1', lambda: None), \
+                 patch.object(state_mod, 'setup_runner_registry_client', lambda: None), \
+                 patch.object(state_mod, 'setup_work_distributor_client', lambda: None), \
+                 patch.object(signal_mod.ProxySelectionSignal, 'from_runtime_config',
+                              return_value=fake_signal), \
+                 patch('javdb.spider.runtime.state.atexit.register') as mock_register:
+                # Must not raise — the wiring failure is swallowed.
+                state_mod.setup_proxy_pool(True)
+
+            # Signal started, then wiring failed → best-effort close, no leak.
+            fake_signal.start.assert_called_once_with()
+            fake_signal.close.assert_called_once_with()
+            # Never registered for atexit nor stored as the global policy.
+            registered = [c.args[0] for c in mock_register.call_args_list if c.args]
+            assert fake_signal.close not in registered
+            assert state_mod.global_recommend_proxy_policy is not fake_signal
+        finally:
+            state_mod.global_proxy_pool = orig_pool
+            state_mod.global_recommend_proxy_policy = orig_policy
+
 
 class TestCrossRuntimeDoIntegration:
     """Verify ``attempt_login_refresh`` publishes to the GlobalLoginState DO
