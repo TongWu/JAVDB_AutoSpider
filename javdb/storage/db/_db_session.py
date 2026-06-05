@@ -1,9 +1,11 @@
 """Session state management for JAVDB AutoSpider.
 
-Manages the active session context (Session ID, Run ID, Write Mode) used by
-the spider pipeline. These values are stored in module-global variables so
-subprocess workers and the main pipeline share a single "current session"
-once the spider sets it via set_active_session_id().
+Manages the active run context (Run ID, Write Mode) used by the spider
+pipeline. These values are stored in module-global variables so subprocess
+workers and the main pipeline share them once the spider sets them. Session
+identity is NOT ambient — it is threaded explicitly (ADR-046 Phase 5); this
+module only generates session ids (``generate_session_id``) and no longer
+holds a "current session" global.
 
 Session IDs are application-generated TEXT values in the format:
     YYYYMMDDTHHMMSS.ffffffZ-TTTT-SSSS
@@ -27,57 +29,12 @@ logger = get_logger(__name__)
 # ── Active session context ───────────────────────────────────────────────
 
 _active_session_id_lock = threading.Lock()
-_active_session_id_value: Optional[str] = None
 _active_run_id_value: Optional[str] = None
 _active_run_attempt_value: Optional[int] = None
 _active_write_mode_value: Optional[str] = None
 
 # Allowed write modes
 _ALLOWED_WRITE_MODES = {'pending'}
-
-
-# ── Session ID setters/getters ───────────────────────────────────────────
-
-
-def set_active_session_id(session_id: Optional[str]) -> None:
-    """Set the current pipeline ReportSessions.Id.
-
-    Called by the spider once after creating the report session. All
-    subsequent db_batch_update_last_visited /
-    db_batch_update_movie_actors / etc. that don't pass an explicit
-    session_id= will tag their writes with this value.
-
-    Pass None to clear the context (e.g. between pipeline phases in
-    long-lived processes / tests).
-
-    Args:
-        session_id: Session identifier (TEXT format) or None to clear
-    """
-    global _active_session_id_value
-    with _active_session_id_lock:
-        _active_session_id_value = session_id
-
-
-def get_active_session_id() -> Optional[str]:
-    """Return the currently-active ReportSessions.Id or None.
-
-    Returns:
-        Session ID string or None if not set
-    """
-    with _active_session_id_lock:
-        return _active_session_id_value
-
-
-# ── Session ID resolution ───────────────────────────────────────────────
-
-_SESSION_ID_SENTINEL = object()
-
-
-def _resolve_session_id(explicit=_SESSION_ID_SENTINEL) -> Optional[str]:
-    """Pick the explicit override or fall back to the active context."""
-    if explicit is _SESSION_ID_SENTINEL:
-        return get_active_session_id()
-    return explicit
 
 
 # ── Run identity setters/getters ─────────────────────────────────────────
@@ -89,7 +46,7 @@ def set_active_run_identity(
 ) -> None:
     """Set the GitHub Actions workflow identity for subsequent writes.
 
-    Called by the spider alongside set_active_session_id() so that
+    Called by the spider at run start so that
     every pending write staged by this process is stamped with the
     run that produced it. Allows the rollback CLI to look up sessions
     by (RunId, RunAttempt).

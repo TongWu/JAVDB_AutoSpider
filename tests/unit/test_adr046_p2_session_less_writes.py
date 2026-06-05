@@ -16,19 +16,7 @@ deliberate, valid state for standalone jobs:
 These tests use a REAL ``OperationsRepo`` against the autouse temp DB
 (``_isolate_sqlite``) — no mocks — so a reintroduced raise would fail here.
 """
-import pytest
-
 from javdb.storage.repos.operations_repo import OperationsRepo
-
-
-@pytest.fixture(autouse=True)
-def _no_active_session():
-    """Every test here runs with NO active session (standalone-job shape)."""
-    from javdb.storage.db import set_active_session_id
-
-    set_active_session_id(None)
-    yield
-    set_active_session_id(None)
 
 
 def test_mark_orphan_records_session_less_persists_null_session():

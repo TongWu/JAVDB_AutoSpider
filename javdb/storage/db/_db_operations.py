@@ -112,7 +112,7 @@ def db_swap_rclone_inventory(
     if session_id is None:
         raise ValueError(
             "db_swap_rclone_inventory requires a session_id "
-            "(set via set_active_session_id or pass explicitly)."
+            "(pass it explicitly)."
         )
     _ensure_imports()
     with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
@@ -519,7 +519,7 @@ def db_merge_rclone_inventory_from_stage(
     if session_id is None:
         raise ValueError(
             "db_merge_rclone_inventory_from_stage requires a "
-            "session_id (set via set_active_session_id or pass explicitly)."
+            "session_id (pass it explicitly)."
         )
     if years is None:
         raise ValueError("db_merge_rclone_inventory_from_stage requires years")

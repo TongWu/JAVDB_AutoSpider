@@ -583,21 +583,19 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
             try:
                 from javdb.storage.db import (
                     set_active_run_identity as _set_active_run_identity,
-                    set_active_session_id as _set_active_session_id,
                     set_active_write_mode as _set_active_write_mode,
                 )
                 from javdb.storage.db._db_reports import (
                     db_get_session_status as _db_get_session_status,
                 )
-                _set_active_session_id(_session_id)
                 # ADR-035: the index fetch above filled the field-health
                 # accumulator BEFORE this session existed (the CSV name, and
                 # thus the session, can only be resolved from the fetch
-                # result). Persist it now that the active session id is set so
+                # result). Persist it now that the session id is known so
                 # the commit gate can read this run's fills. Best-effort:
                 # field_health.persist_run swallows its own errors.
                 from javdb.ops.sentinel import field_health as _sentinel_fh
-                _sentinel_fh.persist_run()
+                _sentinel_fh.persist_run(session_id=result_context.session_id)
                 _emit_event("RunStarted", session_id=str(_session_id),
                             entity_type="session", entity_id=str(_session_id),
                             run_id=run_id, run_attempt=run_attempt)  # ADR-036
@@ -639,8 +637,8 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
         except Exception as e:
             logger.error(
                 "Aborting after init_db/db_create_report_session failure under "
-                "use_db_storage=True; downstream DB writes require "
-                "set_active_session/_set_active_session_id: %s",
+                "use_db_storage=True; downstream DB writes require a valid "
+                "result_context.session_id: %s",
                 e,
             )
             sys.exit(1)
@@ -697,6 +695,7 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
             log_duplicate_skips=not use_parallel,
             cancel_event=options.cancel_event,
             content_filter_rules=content_filter_rules,
+            session_id=result_context.session_id,
         )
         use_proxy = p1_result['use_proxy']
         use_cf_bypass = p1_result['use_cf_bypass']
@@ -770,6 +769,7 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
             log_duplicate_skips=not use_parallel,
             cancel_event=options.cancel_event,
             content_filter_rules=content_filter_rules,
+            session_id=result_context.session_id,
         )
         use_proxy = p2_result['use_proxy']
         use_cf_bypass = p2_result['use_cf_bypass']
@@ -947,15 +947,12 @@ def run_spider(options: SpiderRunOptions) -> SpiderRunResult:
             logger.debug("Spider result sidecar failure write skipped", exc_info=True)
         try:
             from javdb.spider.runtime import state as _runtime_state
-            from javdb.storage.db import (
-                get_active_session_id as _get_active_session_id,
-            )
             should_mark_failed = True
             if isinstance(exc, SystemExit):
                 code = exc.code if exc.code is not None else 0
                 should_mark_failed = code != 0
             if should_mark_failed:
-                active_sess = _get_active_session_id()
+                active_sess = result_context.session_id
                 if active_sess is not None:
                     _runtime_state.set_active_runner_session(
                         session_id=str(active_sess),
@@ -969,16 +966,15 @@ def run_spider(options: SpiderRunOptions) -> SpiderRunResult:
     finally:
         try:
             from javdb.storage.db import (
-                set_active_session_id as _set_active_session_id,
                 set_active_run_identity as _set_active_run_identity,
                 set_active_write_mode as _set_active_write_mode,
             )
-            _set_active_session_id(None)
             _set_active_run_identity(None, None)
             _set_active_write_mode(None)
         except Exception as _e:
             logger.warning(
-                f"Could not clear db audit session context on exit: {_e}"
+                "Could not clear db audit run-identity/write-mode on exit: %s",
+                _e,
             )
         _result_context.reset(token)
         if owns_runtime:

@@ -21,11 +21,6 @@ class SessionLifecycleRepo:
 
         init_db(db_path=self._db_path)
 
-    def get_active_session_id(self) -> Optional[str]:
-        from javdb.storage.db import get_active_session_id
-
-        return get_active_session_id()
-
     def create_report_session(
         self,
         *,

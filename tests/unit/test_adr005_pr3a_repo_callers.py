@@ -30,7 +30,6 @@ def test_history_manager_sqlite_paths_use_history_repo(monkeypatch):
 
     import javdb.storage.db._db_history_read as read_db
     import javdb.storage.db._db_history_write as write_db
-    import javdb.storage.db._db_session as session_db
 
     monkeypatch.setattr(
         read_db, "db_load_history", _raw_db_forbidden("db_load_history")
@@ -50,9 +49,6 @@ def test_history_manager_sqlite_paths_use_history_repo(monkeypatch):
         "db_check_torrent_in_history",
         _raw_db_forbidden("db_check_torrent_in_history"),
     )
-    monkeypatch.setattr(session_db, "get_active_session_id", lambda: "sess-1")
-    import javdb.storage.db as _db_pkg
-    monkeypatch.setattr(_db_pkg, "get_active_session_id", lambda: "sess-1")
 
     assert hm.load_parsed_movies_history("history.csv", phase=1) == {
         "/v/A": {"VideoCode": "A"}
@@ -70,6 +66,7 @@ def test_history_manager_sqlite_paths_use_history_repo(monkeypatch):
         actor_gender="F",
         actor_link="/actors/a",
         supporting_actors="[]",
+        session_id="sess-1",
     )
     hm.batch_update_last_visited("history.csv", {"/v/A", "/v/B"}, session_id="sess-x")
     assert hm.check_torrent_in_history("history.csv", "/v/A", "subtitle") is True
@@ -100,10 +97,7 @@ def test_history_manager_pending_writes_use_history_repo_staging(monkeypatch):
         "db_stage_history_write",
         _raw_db_forbidden("db_stage_history_write"),
     )
-    monkeypatch.setattr(session_db, "get_active_session_id", lambda: "sess-pending")
     monkeypatch.setattr(session_db, "get_active_write_mode", lambda: "pending")
-    import javdb.storage.db as _db_pkg
-    monkeypatch.setattr(_db_pkg, "get_active_session_id", lambda: "sess-pending")
 
     hm.save_parsed_movie_to_history(
         "history.csv",
@@ -111,6 +105,7 @@ def test_history_manager_pending_writes_use_history_repo_staging(monkeypatch):
         2,
         "P",
         {"subtitle": "magnet:?xt=urn:btih:p"},
+        session_id="sess-pending",
     )
 
     repo.stage_movie.assert_called_once()
@@ -433,8 +428,6 @@ def test_run_service_main_saves_spider_stats_through_stats_repo(monkeypatch, tmp
     monkeypatch.setattr(db_pkg, "db_get_session_status", lambda *_: ("audit",))
     monkeypatch.setattr(db_session, "_resolve_write_mode", lambda *_: "audit")
     monkeypatch.setattr(db_pkg, "_resolve_write_mode", lambda *_: "audit")
-    monkeypatch.setattr(db_session, "set_active_session_id", lambda *_: None)
-    monkeypatch.setattr(db_pkg, "set_active_session_id", lambda *_: None)
     monkeypatch.setattr(db_session, "set_active_run_identity", lambda *_: None)
     monkeypatch.setattr(db_pkg, "set_active_run_identity", lambda *_: None)
     monkeypatch.setattr(db_session, "set_active_write_mode", lambda *_: None)

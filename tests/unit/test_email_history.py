@@ -33,6 +33,42 @@ def _repo() -> OperationsRepo:
 # ── Tests ──────────────────────────────────────────────────────────────────
 
 
+class TestSendEmailRecordsSession:
+    """ADR-046 P5: ``send_email`` tags the EmailNotificationHistory row with the
+    explicit ``session_id`` param (the process-global is never read). A
+    session-less call (``None``) persists the row untagged."""
+
+    def _drive(self, monkeypatch, session_id):
+        from unittest.mock import MagicMock
+        from javdb.integrations.notify.email import delivery
+
+        # Mock SMTP so no real send happens; ``send_email`` uses it as a CM.
+        fake_smtp = MagicMock()
+        fake_smtp.__enter__.return_value = fake_smtp
+        monkeypatch.setattr(
+            delivery.smtplib, "SMTP", MagicMock(return_value=fake_smtp)
+        )
+
+        ok = delivery.send_email(
+            "Test Subject", "Test body", dry_run=False, session_id=session_id
+        )
+        assert ok is True
+        rows, _ = _repo().list_email_history()
+        assert len(rows) == 1
+        return rows[0]
+
+    def test_explicit_session_tags_row(self, monkeypatch, _isolate_sqlite):
+        sid = "20260604T000000.000000Z-mail-0001"
+        row = self._drive(monkeypatch, sid)
+        assert row["SessionId"] == sid
+        assert row["Status"] == "sent"
+
+    def test_none_session_persists_untagged(self, monkeypatch, _isolate_sqlite):
+        row = self._drive(monkeypatch, None)
+        assert row["SessionId"] is None
+        assert row["Status"] == "sent"
+
+
 class TestEmailHistoryTableExists:
     """The table must be present in a freshly-initialised DB."""
 

@@ -9,7 +9,11 @@ from unittest.mock import patch, MagicMock
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from apps.cli.rclone.manager import main, parse_args as parse_arguments
+from apps.cli.rclone.manager import (
+    main,
+    parse_args as parse_arguments,
+    options_from_args,
+)
 from javdb.integrations.rclone.manager.service import (
     parse_root_path,
     INVENTORY_FIELDNAMES,
@@ -33,22 +37,6 @@ from javdb.spider.services.dedup import (
     save_dedup_csv,
     mark_records_deleted,
 )
-
-
-@pytest.fixture
-def active_dedup_session():
-    """Bind an active session for dedup writes (ADR-046 P2).
-
-    The dedup module functions (``append_dedup_record`` /
-    ``mark_records_deleted``) and the dedup self-heal (``mark_orphan_records``)
-    now resolve the active session at the caller and require one — an untagged
-    write raises. Tests that exercise these against a real DB opt in here; the
-    pipeline always runs them inside a session.
-    """
-    from javdb.storage.db import set_active_session_id
-    set_active_session_id("20260603T000000.000000Z-rclo-0001")
-    yield
-    set_active_session_id(None)
 
 
 # ============================================================================
@@ -118,7 +106,6 @@ def test_validate_dedup_self_heal_routes_through_operations_repo(monkeypatch):
     """
     import javdb.integrations.rclone.manager.service as rm
     from javdb.storage.db import (
-        set_active_session_id,
         db_replace_rclone_inventory,
         db_append_dedup_record,
         get_db,
@@ -126,7 +113,6 @@ def test_validate_dedup_self_heal_routes_through_operations_repo(monkeypatch):
     )
 
     # No active session — the standalone WeeklyDedup CLI never sets one.
-    set_active_session_id(None)
 
     # Seed inventory truth-set (one surviving path) and a pending dedup record
     # whose path is NOT in the inventory (an orphan to be self-healed).
@@ -185,6 +171,60 @@ def test_validate_dedup_self_heal_routes_through_operations_repo(monkeypatch):
     assert row['SessionId'] is None
 
 
+def test_validate_dedup_self_heal_tags_orphan_with_explicit_session(monkeypatch):
+    """ADR-046 P5: when an explicit ``session_id`` is threaded into the dedup
+    self-heal, the orphan row is tagged with it. The standalone path passes
+    ``None`` (covered above)."""
+    import javdb.integrations.rclone.manager.service as rm
+    from javdb.storage.db import (
+        db_replace_rclone_inventory,
+        db_append_dedup_record,
+        get_db,
+        OPERATIONS_DB_PATH,
+    )
+
+    explicit_sid = "20260604T000000.000000Z-rclo-9999"
+
+    db_replace_rclone_inventory(
+        [{
+            'video_code': 'A',
+            'sensor_category': '有码',
+            'subtitle_category': '中字',
+            'folder_path': '2025/Actor/A/有码-中字',
+            'folder_size': 1,
+            'file_count': 1,
+            'scan_datetime': '2026-01-01 00:00:00',
+        }],
+        session_id=None,
+    )
+    db_append_dedup_record(
+        {
+            'VideoCode': 'ORPHAN',
+            'ExistingGdrivePath': '2025/Actor/ORPHAN/有码-中字',
+            'DeletionReason': 'Subtitle upgrade',
+            'IsDeleted': 0,
+        },
+        session_id=None,
+    )
+
+    monkeypatch.setattr(rm, '_write_dedup_orphan_csv', lambda *_, **__: None)
+
+    count, orphans = rm.validate_dedup_records_against_inventory(
+        session_id=explicit_sid,
+    )
+    assert count == 1
+
+    with get_db(OPERATIONS_DB_PATH) as conn:
+        row = conn.execute(
+            "SELECT IsDeleted, SessionId FROM DedupRecords "
+            "WHERE ExistingGdrivePath = ?",
+            ('2025/Actor/ORPHAN/有码-中字',),
+        ).fetchone()
+    assert row is not None
+    assert int(row['IsDeleted']) == 1
+    assert row['SessionId'] == explicit_sid
+
+
 def test_run_validate_inventory_prunes_through_operations_repo(monkeypatch):
     """ADR-032 2a.2: inventory pruning must delete via OperationsRepo."""
     import javdb.integrations.rclone.manager.service as rm
@@ -213,7 +253,8 @@ def test_run_validate_inventory_prunes_through_operations_repo(monkeypatch):
     monkeypatch.setattr(rm, 'export_db_to_csv', lambda *_, **__: 0)
     # The chained dedup self-heal is covered by its own test; stub it out.
     monkeypatch.setattr(
-        rm, 'validate_dedup_records_against_inventory', lambda: (0, [])
+        rm, 'validate_dedup_records_against_inventory',
+        lambda session_id=None: (0, []),
     )
     monkeypatch.setattr(ops_db, 'db_delete_rclone_inventory_paths',
                         _raw_db_forbidden('db_delete_rclone_inventory_paths'))
@@ -239,11 +280,19 @@ from javdb.integrations.rclone.manager.service import run_manager
 def test_run_manager_wraps_service_exit_code(monkeypatch):
     from javdb.integrations.rclone.manager import service
 
-    monkeypatch.setattr(service, "run_manager_from_options", lambda _options: 7)
+    seen = {}
+
+    def _fake(_options, session_id=None):
+        seen["session_id"] = session_id
+        return 7
+
+    monkeypatch.setattr(service, "run_manager_from_options", _fake)
 
     result = run_manager(RcloneManagerOptions(report=True))
 
     assert result == RcloneManagerResult(exit_code=7)
+    # ADR-046 D2: the standalone public entry forwards session_id=None.
+    assert seen["session_id"] is None
 
 
 # ============================================================================
@@ -398,7 +447,7 @@ def test_scan_sqlite_uses_staging_when_no_active_session(
     monkeypatch, tmp_path, storage_mode_db
 ):
     import javdb.integrations.rclone.manager.service as rm
-    from javdb.storage.db import set_active_session_id, db_replace_rclone_inventory, get_db
+    from javdb.storage.db import db_replace_rclone_inventory, get_db
 
     output = tmp_path / "inventory.csv"
     seed = {
@@ -417,7 +466,6 @@ def test_scan_sqlite_uses_staging_when_no_active_session(
         "scan_datetime": "2026-05-05 00:00:00",
     })
 
-    set_active_session_id(None)
     db_replace_rclone_inventory([seed], session_id=None)
 
     def fake_scan(*_args, row_callback=None, **_kwargs):
@@ -465,9 +513,6 @@ def _patch_rclone_repo_mocks(monkeypatch, rm, order, overrides=None):
     class FakeSessionLifecycleRepo:
         def init_storage(self):
             order.append("init_db")
-
-        def get_active_session_id(self):
-            return overrides.get("get_active_session_id", lambda: None)()
 
         def create_report_session(self, **_kwargs):
             return overrides.get(
@@ -711,24 +756,15 @@ def test_scan_failure_does_not_mark_inherited_session_failed(
     monkeypatch.setattr(rm, "check_rclone_installed", lambda: (True, "ok"))
     monkeypatch.setattr(rm, "check_remote_exists", lambda _remote: (True, "ok"))
     monkeypatch.setattr(rm, "scan_inventory", fake_scan)
-    _patch_rclone_repo_mocks(monkeypatch, rm, order, overrides={
-        # Inherited session id: _created_local_staging_session stays False.
-        "get_active_session_id": lambda: "inherited-1",
-    })
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        [
-            "rclone_manager",
-            "--scan",
-            "--root-path",
-            "gdrive:/root",
-            "--output",
-            str(output),
-        ],
-    )
+    _patch_rclone_repo_mocks(monkeypatch, rm, order)
+    # Inherited session id passed explicitly (ADR-046 P5): the ambient probe is
+    # gone, so a non-None session_id arg means _created_local_staging_session
+    # stays False (caller owns the session).
+    options = options_from_args(parse_arguments([
+        "--scan", "--root-path", "gdrive:/root", "--output", str(output),
+    ]))
 
-    assert main() == 1
+    assert rm.run_manager_from_options(options, session_id="inherited-1") == 1
     # No "create_session" because the active session was inherited.
     assert "create_session" not in order
     # Inherited session must NOT be marked failed.
@@ -762,7 +798,7 @@ def test_scan_failure_marks_locally_created_session_failed(
     monkeypatch.setattr(rm, "check_rclone_installed", lambda: (True, "ok"))
     monkeypatch.setattr(rm, "check_remote_exists", lambda _remote: (True, "ok"))
     monkeypatch.setattr(rm, "scan_inventory", fake_scan)
-    # Default mocks: get_active_session_id -> None, so a local session (id=123)
+    # Standalone CLI path (main → session_id=None), so a local session (id=123)
     # is created and _created_local_staging_session becomes True.
     _patch_rclone_repo_mocks(monkeypatch, rm, order)
     monkeypatch.setattr(
@@ -1176,7 +1212,6 @@ class TestLoadInventoryAsFolderStructure:
 # Test dedup CSV filtering (is_deleted skip logic) — migrated from executor
 # ============================================================================
 
-@pytest.mark.usefixtures("active_dedup_session")
 class TestDedupCsvFiltering:
     def _create_dedup_csv(self, tmp_path, records):
         path = str(tmp_path / 'dedup.csv')
@@ -1207,7 +1242,6 @@ class TestDedupCsvFiltering:
 # Test is_deleted column update
 # ============================================================================
 
-@pytest.mark.usefixtures("active_dedup_session")
 class TestIsDeletedUpdate:
     def test_mark_records_deleted_preserves_structure(self, tmp_path):
         path = str(tmp_path / 'dedup.csv')
@@ -1228,7 +1262,6 @@ class TestIsDeletedUpdate:
 # Test execute mode (dry-run)
 # ============================================================================
 
-@pytest.mark.usefixtures("active_dedup_session")
 class TestExecuteMode:
     @patch('javdb.integrations.rclone.manager.service.get_configured_drive_name', return_value='gdrive')
     @patch('javdb.integrations.rclone.helper.subprocess.run')
@@ -1491,7 +1524,6 @@ def _add_dedup_pending(code, path, reason='Subtitle upgrade'):
     }, session_id=None)
 
 
-@pytest.mark.usefixtures("active_dedup_session")
 class TestValidateDedupRecords:
     def test_marks_only_orphan_pendings(self, storage_mode_db, tmp_path, monkeypatch):
         import javdb.integrations.rclone.manager.service as rm
@@ -1557,7 +1589,6 @@ class TestValidateDedupRecords:
         assert ORPHAN_REASON_SUFFIX in text
 
 
-@pytest.mark.usefixtures("active_dedup_session")
 class TestRunValidateInventory:
     def test_prunes_inventory_and_chains_dedup_self_heal(
         self, storage_mode_db, tmp_path, monkeypatch,

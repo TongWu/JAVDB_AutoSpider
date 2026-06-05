@@ -95,15 +95,6 @@ def test_mark_session_failed_routes_through_transition():
     )
 
 
-def test_active_session_id_delegates():
-    repo = SessionLifecycleRepo()
-
-    with patch("javdb.storage.db.get_active_session_id", return_value="sess-1") as mock_fn:
-        assert repo.get_active_session_id() == "sess-1"
-
-    mock_fn.assert_called_once_with()
-
-
 def test_init_storage_delegates():
     repo = SessionLifecycleRepo(db_path="/tmp/reports.db")
 

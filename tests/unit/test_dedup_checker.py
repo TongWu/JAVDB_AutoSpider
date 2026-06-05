@@ -30,25 +30,6 @@ from javdb.spider.detail.runner import _dedup_log_variant_label
 
 
 # ============================================================================
-# Fixtures
-# ============================================================================
-
-@pytest.fixture(autouse=True)
-def _active_dedup_session():
-    """Bind an active session for the dedup writes (ADR-046 P2).
-
-    ``append_dedup_record`` / ``mark_records_deleted`` now resolve the active
-    session at the caller (via ``SessionLifecycleRepo`` → process-global) and
-    require one — an untagged dedup write raises. The pipeline always runs
-    these inside a session; mirror that here.
-    """
-    from javdb.storage.db import set_active_session_id
-    set_active_session_id("20260603T000000.000000Z-dedp-0001")
-    yield
-    set_active_session_id(None)
-
-
-# ============================================================================
 # Helpers
 # ============================================================================
 
@@ -233,6 +214,63 @@ class TestCheckRedownloadDedupUpgrade:
 # ============================================================================
 # Test dedup.csv I/O
 # ============================================================================
+
+class TestDedupExplicitSession:
+    """ADR-046 P5: dedup record writes bind the session via an explicit
+    ``session_id`` param (the process-global is never read)."""
+
+    def test_append_dedup_record_binds_explicit_session(self, monkeypatch):
+        import javdb.spider.services.dedup as dedup
+
+        captured = {}
+
+        class _SpyRepo:
+            def __init__(self, *, session_id=None, **_kw):
+                captured["session_id"] = session_id
+
+            def append_dedup_record(self, _payload):
+                return 1
+
+        monkeypatch.setattr(dedup, "OperationsRepo", _SpyRepo)
+        monkeypatch.setattr(dedup, "_ensure_db", lambda: None)
+        monkeypatch.setattr(dedup, "_load_pending_paths_cache", lambda: set())
+        r = DedupRecord('A-001', 's', 'sub', 'gdrive:/p', 100, 'cat', 'r', 't', 'False', '')
+
+        explicit = "20260604T000000.000000Z-dedp-7777"
+        assert dedup.append_dedup_record('', r, session_id=explicit) is True
+        assert captured["session_id"] == explicit
+
+    def test_mark_records_deleted_binds_explicit_session(self, monkeypatch):
+        import javdb.spider.services.dedup as dedup
+
+        captured = {}
+
+        class _SpyRepo:
+            def __init__(self, *, session_id=None, **_kw):
+                captured["session_id"] = session_id
+
+            def mark_records_deleted(self, _pairs):
+                return 1
+
+        monkeypatch.setattr(dedup, "OperationsRepo", _SpyRepo)
+
+        explicit = "20260604T000000.000000Z-dedp-8888"
+        assert dedup.mark_records_deleted(
+            '', [('gdrive:/p', '2026-01-02 00:00:00')], session_id=explicit
+        ) == 1
+        assert captured["session_id"] == explicit
+
+    def test_append_dedup_record_session_none_is_untagged_and_does_not_raise(self):
+        """No session_id ⇒ DedupRecords.SessionId NULL, never raises
+        (nullable-table Phase-2 contract)."""
+        r = DedupRecord('A-001', 's', 'sub', 'gdrive:/p-untagged', 100, 'cat', 'r', 't', 'False', '')
+
+        assert append_dedup_record('', r, session_id=None) is True
+        rows = db_load_dedup_records()
+        match = [row for row in rows if row.get('ExistingGdrivePath') == 'gdrive:/p-untagged']
+        assert len(match) == 1
+        assert match[0]['SessionId'] is None
+
 
 class TestDedupIO:
     """Tests for dedup record I/O (SQLite-backed)."""
