@@ -16,7 +16,7 @@ import os
 import re
 import sqlite3
 import threading
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from javdb.infra.logging import get_logger
 
@@ -956,6 +956,71 @@ def _moviehistory_actor_columns_physical_order_ok(names: List[str]) -> bool:
     )
 
 
+# Columns the pending-write / session-rollback machinery depends on, applied
+# to pre-existing databases via idempotent ALTERs.  Kept as a module-level
+# constant so two consumers share a single source of truth:
+#   * ``_ensure_rollback_columns`` applies them to local SQLite at init.
+#   * ``find_missing_rollback_columns`` audits a live connection — notably
+#     remote D1, which is migrated out-of-band via ``javdb/migrations/d1/
+#     *.sql`` and can drift when a migration ships in code but is never
+#     executed against D1 (see BFR-017).
+ROLLBACK_COLUMN_SPECS: List[Tuple[str, str, str]] = [
+    ('ReportSessions', 'Status', "TEXT DEFAULT 'in_progress'"),
+    ('ReportSessions', 'CommittedAt', 'TEXT'),
+    ('ReportSessions', 'RunId', 'TEXT'),
+    ('ReportSessions', 'RunAttempt', 'INTEGER'),
+    ('ReportSessions', 'FailureReason', 'TEXT'),
+    ('MovieHistory', 'SessionId', 'TEXT'),
+    ('TorrentHistory', 'SessionId', 'TEXT'),
+    ('PikpakHistory', 'SessionId', 'TEXT'),
+    ('DedupRecords', 'SessionId', 'TEXT'),
+    ('InventoryAlignNoExactMatch', 'SessionId', 'TEXT'),
+    # Ingestion Perfect Rollback (Phase 0): WriteMode column on
+    # ReportSessions, gating the pending dispatch.
+    ('ReportSessions', 'WriteMode', "TEXT DEFAULT 'pending'"),
+]
+
+
+def _column_names(conn, table: str) -> List[str]:
+    """Column names for ``table``, tolerant of the row shapes returned by
+    sqlite3 (tuple, or ``sqlite3.Row`` when a row_factory is set) and the
+    D1 client (``dict``)."""
+    names: List[str] = []
+    for row in conn.execute(f"PRAGMA table_info('{table}')").fetchall():
+        if isinstance(row, dict):
+            names.append(row.get("name"))
+        elif isinstance(row, sqlite3.Row):
+            names.append(row["name"])
+        else:  # plain tuple: (cid, name, type, notnull, dflt_value, pk)
+            names.append(row[1])
+    return names
+
+
+def find_missing_rollback_columns(conn) -> List[Tuple[str, str]]:
+    """Return ``[(table, column)]`` from :data:`ROLLBACK_COLUMN_SPECS` that are
+    absent on ``conn``.
+
+    Only tables that actually exist on the connection are inspected, so a
+    connection that legitimately lacks a table (the reports DB has no
+    ``MovieHistory``, etc.) produces no false positives.  Works against both
+    sqlite3 and D1 connections — both speak ``sqlite_master`` and
+    ``PRAGMA table_info``.
+
+    This is the read-only audit counterpart to the local-SQLite ALTERs in
+    :func:`_ensure_rollback_columns`.  A pre-flight health check uses it to
+    catch D1 schema drift — a ``javdb/migrations/d1/*.sql`` migration merged
+    in code but never executed against remote D1 — before the spider runs,
+    instead of failing at commit time with ``no such column`` (BFR-017).
+    """
+    missing: List[Tuple[str, str]] = []
+    for table, column, _ddl in ROLLBACK_COLUMN_SPECS:
+        if not _has_table(conn, table):
+            continue
+        if column not in _column_names(conn, table):
+            missing.append((table, column))
+    return missing
+
+
 def _ensure_rollback_columns(conn: sqlite3.Connection) -> None:
     """Add Status/SessionId columns and pending tables for rollback (idempotent).
 
@@ -974,22 +1039,7 @@ def _ensure_rollback_columns(conn: sqlite3.Connection) -> None:
     constants in ``_HISTORY_DDL`` / ``_REPORTS_DDL`` / ``_OPERATIONS_DDL``,
     so the ALTER calls below silently no-op.
     """
-    add_column_specs = [
-        ('ReportSessions', 'Status', "TEXT DEFAULT 'in_progress'"),
-        ('ReportSessions', 'CommittedAt', 'TEXT'),
-        ('ReportSessions', 'RunId', 'TEXT'),
-        ('ReportSessions', 'RunAttempt', 'INTEGER'),
-        ('ReportSessions', 'FailureReason', 'TEXT'),
-        ('MovieHistory', 'SessionId', 'TEXT'),
-        ('TorrentHistory', 'SessionId', 'TEXT'),
-        ('PikpakHistory', 'SessionId', 'TEXT'),
-        ('DedupRecords', 'SessionId', 'TEXT'),
-        ('InventoryAlignNoExactMatch', 'SessionId', 'TEXT'),
-        # Ingestion Perfect Rollback (Phase 0): WriteMode column on
-        # ReportSessions, gating the pending dispatch.
-        ('ReportSessions', 'WriteMode', "TEXT DEFAULT 'pending'"),
-    ]
-    for table, column, ddl in add_column_specs:
+    for table, column, ddl in ROLLBACK_COLUMN_SPECS:
         if not _has_table(conn, table):
             continue
         try:
