@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import dataclasses
 import json
 
-from javdb.ops.diagnosis.features import build_incident_features
+from javdb.ops.diagnosis.features import _evidence_kinds, _json_load_list, _tokens, build_incident_features
 from javdb.ops.diagnosis.models import DiagnosisResult, IncidentBundle, OpsIncidentRecord
 
 
@@ -45,3 +46,58 @@ def test_build_incident_features_extracts_categorical_and_text_tokens():
     assert json.loads(features.categorical_features_json)["confidence"] == "medium"
     assert "workflow" in json.loads(features.text_tokens_json)
     assert "rollback" in json.loads(features.unsafe_action_tokens_json)
+
+
+# ---------------------------------------------------------------------------
+# _json_load_list — non-list fallback
+# ---------------------------------------------------------------------------
+
+def test_json_load_list_non_list_returns_empty():
+    assert _json_load_list('{"not": "a list"}') == []
+
+
+def test_json_load_list_empty_string_returns_empty():
+    assert _json_load_list("") == []
+
+
+def test_json_load_list_null_returns_empty():
+    assert _json_load_list("null") == []
+
+
+def test_build_incident_features_non_list_confirmed_findings_does_not_raise():
+    """A stored confirmed_findings_json that is a JSON object (not a list) produces no tokens."""
+    _bundle, base_record = _context()
+    record = dataclasses.replace(base_record, confirmed_findings_json='{"a": 1}')
+    features = build_incident_features(record)
+    # No exception; text_tokens_json is valid JSON (may contain tokens from other fields).
+    assert isinstance(json.loads(features.text_tokens_json), list)
+
+
+# ---------------------------------------------------------------------------
+# _tokens — dedup, stopword removal, 80-cap
+# ---------------------------------------------------------------------------
+
+def test_tokens_dedup():
+    result = _tokens(["alpha alpha beta"])
+    assert result == ["alpha", "beta"]
+
+
+def test_tokens_stopword_removal():
+    result = _tokens(["the alpha and beta"])
+    assert result == ["alpha", "beta"]
+
+
+def test_tokens_80_cap():
+    big_input = " ".join(f"tok{i:03d}" for i in range(100))
+    result = _tokens([big_input])
+    assert len(result) == 80
+
+
+# ---------------------------------------------------------------------------
+# _evidence_kinds — dedup, non-dict filter, missing-kind filter
+# ---------------------------------------------------------------------------
+
+def test_evidence_kinds_dedup_and_filter():
+    raw = '[{"kind":"runbook"},{"kind":"runbook"},"notadict",{"kind":"cli"},{"nokind":1}]'
+    result = _evidence_kinds(raw)
+    assert result == ["runbook", "cli"]
