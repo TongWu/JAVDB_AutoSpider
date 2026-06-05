@@ -76,6 +76,7 @@ from javdb.storage.db import (
     db_load_align_no_exact_match_codes,
     db_load_rclone_inventory,
     db_upsert_align_no_exact_match,
+    SESSION_ID_PATTERN,
 )
 
 
@@ -1147,10 +1148,10 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         '--session-id',
-        type=int,
+        type=str,
         default=None,
         help='Tag every D1 write inside this run with the given ReportSessions.Id '
-             'so a downstream cleanup can roll back precisely. Optional; if omitted '
+             '(TEXT: YYYYMMDDTHHMMSS.ffffffZ-TTTT-SSSS). Optional; if omitted '
              'no SessionId is recorded and the writes are immune to scoped rollback.',
     )
     args = parser.parse_args()
@@ -1162,6 +1163,13 @@ def parse_args() -> argparse.Namespace:
             'Use --no-proxy to disable proxy.',
         )
     setattr(args, 'use_proxy', not args.no_proxy)
+    if args.session_id is not None:
+        args.session_id = args.session_id.strip()
+        if not SESSION_ID_PATTERN.match(args.session_id):
+            parser.error(
+                '--session-id must match the TEXT format '
+                'YYYYMMDDTHHMMSS.ffffffZ-TTTT-SSSS'
+            )
     return args
 
 

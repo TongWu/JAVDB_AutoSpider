@@ -232,6 +232,8 @@ class TestDedupExplicitSession:
                 return 1
 
         monkeypatch.setattr(dedup, "OperationsRepo", _SpyRepo)
+        monkeypatch.setattr(dedup, "_ensure_db", lambda: None)
+        monkeypatch.setattr(dedup, "_load_pending_paths_cache", lambda: set())
         r = DedupRecord('A-001', 's', 'sub', 'gdrive:/p', 100, 'cat', 'r', 't', 'False', '')
 
         explicit = "20260604T000000.000000Z-dedp-7777"

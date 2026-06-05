@@ -27,11 +27,15 @@ def test_session_id_accessors_not_on_package():
         assert name not in getattr(db, "__all__", ()), f"{name} still in __all__"
 
 
-@pytest.mark.parametrize("name", _RETIRED)
-def test_direct_import_of_retired_accessor_raises(name):
-    # A real ``from javdb.storage.db import <name>`` must now raise ImportError.
+def test_direct_import_of_retired_getter_raises():
+    # A real ``from javdb.storage.db import get_active_session_id`` must now raise.
     with pytest.raises(ImportError):
-        exec(f"from javdb.storage.db import {name}", {})
+        from javdb.storage.db import get_active_session_id  # noqa: F401
+
+
+def test_direct_import_of_retired_setter_raises():
+    with pytest.raises(ImportError):
+        from javdb.storage.db import set_active_session_id  # noqa: F401
 
 
 def test_session_id_machinery_gone_from_db_session_source():
