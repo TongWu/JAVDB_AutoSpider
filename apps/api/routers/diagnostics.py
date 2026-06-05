@@ -171,7 +171,28 @@ def get_javdb_session_status(
     )
 
 
-@router.get("/ops-incidents", response_model=OpsIncidentListResponse)
+_ERROR_DETAIL_SCHEMA = {
+    "type": "object",
+    "properties": {"detail": {"type": "string"}},
+    "required": ["detail"],
+}
+
+_400_LIMIT_RESPONSE = {
+    400: {
+        "description": "limit must be a positive integer",
+        "content": {"application/json": {"schema": _ERROR_DETAIL_SCHEMA}},
+    }
+}
+
+_404_FEATURES_RESPONSE = {
+    404: {
+        "description": "Incident features not found",
+        "content": {"application/json": {"schema": _ERROR_DETAIL_SCHEMA}},
+    }
+}
+
+
+@router.get("/ops-incidents", response_model=OpsIncidentListResponse, responses=_400_LIMIT_RESPONSE)
 def list_ops_incidents(
     status: str | None = None,
     run_id: str | None = None,
@@ -217,7 +238,11 @@ def _similar_ops_incident_records(incident_id: str, *, limit: int = 5):
         return rank_similar_incidents(target, candidates, limit=limit)
 
 
-@router.get("/ops-incidents/{incident_id}/similar", response_model=OpsIncidentSimilarityResponse)
+@router.get(
+    "/ops-incidents/{incident_id}/similar",
+    response_model=OpsIncidentSimilarityResponse,
+    responses={**_400_LIMIT_RESPONSE, **_404_FEATURES_RESPONSE},
+)
 def get_similar_ops_incidents(
     incident_id: str,
     limit: int = 5,
