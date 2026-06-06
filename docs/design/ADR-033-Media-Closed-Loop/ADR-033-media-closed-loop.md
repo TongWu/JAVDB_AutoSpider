@@ -2,7 +2,7 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Proposed — umbrella; Phase 1 implemented and locally verified; execution delegated to per-phase IMPs |
+| **Status**  | Accepted — umbrella; all three phases implemented and locally verified (Phase 1 2026-05-30, Phases 2-3 2026-06-06). Remote D1 apply + SQLite mirror refresh remain deployment-environment gates |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
 | **Related** | [ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-024](../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md), [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-028](../ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md) |
@@ -225,7 +225,8 @@ auditable.
   runner with LAN access; the loop's freshness is bounded by its cron cadence.
 - **Join-key ambiguity is permanent** — some media items will land in
   `unresolved`; the system surfaces the count but cannot guarantee 100% mapping.
-- **More D1 surface** — three new tables to migrate, mirror, and reconcile.
+- **More D1 surface** — three new closed-loop tables (plus an `UnresolvedMediaItem`
+  auxiliary table, Phase 3) to migrate, mirror, and reconcile.
 - **`completed` capture couples to the cleanup step** — if cleanup logic changes,
   the completion observer must move with it (documented as a known coupling).
 
@@ -240,12 +241,16 @@ auditable.
 Each phase ships and rolls back independently. Phase 1 is the foundation; Phases
 2 and 3 are "add a collector" and do not alter the service orchestration.
 
-**Planning cadence.** [IMP-ADR033-01](IMP-ADR033-01-acquisition-outcome.md)
-(Phase 1) is implemented and locally verified. **IMP-ADR033-02 and
-IMP-ADR033-03 are intentionally left as roadmap stubs** — their detailed plans
-will be produced in a dedicated `grill-me` + `brainstorming` round after Phase 1,
-so they can incorporate what the Phase 1 reconcile service and the
-`AcquisitionOutcome` shape reveal in practice.
+**Planning cadence.** All three phases are implemented and locally verified
+([IMP-ADR033-01](IMP-ADR033-01-acquisition-outcome.md) Phase 1;
+[IMP-ADR033-02](IMP-ADR033-02-ownership-truth.md) Phase 2;
+[IMP-ADR033-03](IMP-ADR033-03-consumption-signal.md) Phase 3). The Phase 2/3 plans
+were authored on 2026-06-06 from a dedicated `grill-me` round (incorporating what
+the Phase 1 reconcile service and the `AcquisitionOutcome` shape revealed in
+practice) and then implemented. That round sharpened several Phase-2/3 design points
+beyond the original sketch below — see the 2026-06-06 Status Log entry for the
+binding refinements (sibling `--pass` services, heterogeneous `category`, the
+`UnresolvedMediaItem` table, the nas stub, and the dedup fallback).
 
 ### Explicit non-goals (YAGNI)
 
@@ -302,3 +307,30 @@ so they can incorporate what the Phase 1 reconcile service and the
   [ADR-034](../ADR-034-Media-Closed-Loop-Web-Surface/ADR-034-media-closed-loop-web-surface.md).
 - 2026-05-30: IMP-ADR033-01 (Phase 1) implemented and locally verified. Remote
   D1 apply and local SQLite mirror refresh remain deployment-environment gates.
+- 2026-06-06: IMP-ADR033-02 (Phase 2) and IMP-ADR033-03 (Phase 3) plans written
+  after a `grill-me` round. Binding design refinements adopted for the IMPs:
+  (a) the three passes are **sibling entrypoints** (`run` / `run_ownership` /
+  `run_consumption`) in the one `reconcile` module behind a `--pass` selector — not
+  one fat `run()`; (b) `OwnershipLedger.category` is `NOT NULL DEFAULT ''` and
+  **heterogeneous source-native** (gdrive glyph composite, qb English, `''` unknown) —
+  no lossy cross-source vocabulary unification (D11); (c) Phase 2 ships gdrive + qb +
+  pikpak collectors with **nas as an explicit logged stub**; (d) `present` uses a
+  per-source diff-sweep (pikpak monotonic); (e) dedup keeps its
+  `load_rclone_inventory()` interface, internally reading the Ledger's gdrive rows
+  with a **transitional `RcloneInventory` fallback**, and the new multi-source skip
+  counts only persistent sources (gdrive/nas); (f) the D9 `unresolved` bucket is
+  persisted as a dedicated **`UnresolvedMediaItem` table** (so the initiative adds a
+  fourth table); (g) `MEDIA_SERVERS` is a `PROXY_POOL`-style inline list and the
+  media adapters live under `javdb/integrations/media_servers/`; (h) both IMPs are
+  backend-only — the web surface stays entirely in ADR-034.
+- 2026-06-06: IMP-ADR033-02 (Phase 2) and IMP-ADR033-03 (Phase 3) **implemented and
+  locally verified** via subagent-driven development (23 tasks, two-stage spec +
+  quality review per task; a final whole-implementation review confirmed cross-cutting
+  coherence). The reconcile module now exposes three sibling passes (`run` /
+  `run_ownership` / `run_consumption`) behind `--pass {acquisition,ownership,consumption,all}`;
+  four closed-loop tables live in the operations DB with exact D1↔SQLite parity; the
+  read-only-collector → sole-writer-service seam holds repo-wide; dedup reads the
+  Ledger with a transitional fallback (public API byte-unchanged). 263 targeted tests
+  green. Remote D1 apply (`wrangler`) + `sync_d1_to_sqlite --force-overwrite-all` and
+  the Emby/Plex live-endpoint `TODO-VERIFY` confirmations remain deployment-environment
+  gates. Status advanced Proposed → Accepted.

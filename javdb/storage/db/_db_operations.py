@@ -240,6 +240,26 @@ def db_save_dedup_records(rows: List[dict], db_path: Optional[str] = None) -> No
 # ── PikpakHistory ────────────────────────────────────────────────────────
 
 
+def db_load_pikpak_history(
+    db_path: Optional[str] = None,
+) -> List[dict]:
+    """Load all PikpakHistory rows as a list of dicts (read-only).
+
+    Mirrors db_load_dedup_records / db_load_rclone_inventory. Used by
+    PikpakOwnershipCollector in run_ownership (ADR-033 Phase 2).
+
+    Args:
+        db_path: Database path (defaults to OPERATIONS_DB_PATH)
+
+    Returns:
+        List of PikpakHistory row dicts (all columns).
+    """
+    _ensure_imports()
+    with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
+        rows = conn.execute("SELECT * FROM PikpakHistory").fetchall()
+    return [dict(r) for r in rows]
+
+
 def db_append_pikpak_history(
     record: dict,
     db_path: Optional[str] = None,

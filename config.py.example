@@ -223,6 +223,47 @@ RUNNER_REGISTRY_ENABLED = 'false'
 # Must be a positive integer.
 RECONCILE_STALLED_DAYS = 7
 
+# ADR-033 Phase 2 (ownership truth): informational only — the reconcile pass reads the
+# source list from javdb.ops.reconcile.models.OWNERSHIP_SOURCES (a hardcoded constant),
+# NOT from this config entry. Editing this value here has no runtime effect today.
+# Shown here for documentation purposes: gdrive (RcloneInventory projection),
+# qb (AcquisitionOutcome bridge), and pikpak (PikpakHistory success rows) are active
+# collectors. 'nas' is a forward-compat stub that always collects nothing.
+OWNERSHIP_SOURCES = ['gdrive', 'qb', 'pikpak', 'nas']
+
+# Forward-compat placeholder for a future NAS ownership collector. The current NAS
+# collector is a stub that always logs "nas ownership not collected" and returns [].
+# Setting this value has no runtime effect today — the stub does not read it.
+RCLONE_NAS_REMOTE = ''
+
+# ADR-033 media closed-loop (Phase 3): media servers polled for watch signal.
+# A list of dicts, one per server instance. Multiple servers of the same type
+# are first-class (e.g. two Plex). Tokens are inline (config.py is encrypted at
+# rest as config.py.enc) and are masked in all logs.
+#
+#   type      : 'emby' | 'plex'
+#   instance  : a unique connection id; flows into ConsumptionSignal.instance
+#   base_url  : http(s)://host:port (no trailing slash needed)
+#   token     : Emby API key (X-Emby-Token) / Plex token (X-Plex-Token)
+#   libraries : OPTIONAL list of human-readable library NAMES to scan;
+#               omit to scan ALL libraries on that server.
+MEDIA_SERVERS = [
+    # {
+    #     'type': 'emby',
+    #     'instance': 'emby-nas',
+    #     'base_url': 'http://192.168.1.50:8096',
+    #     'token': 'your_emby_api_key',
+    #     'libraries': ['JAV'],
+    # },
+    # {
+    #     'type': 'plex',
+    #     'instance': 'plex-home',
+    #     'base_url': 'http://192.168.1.51:32400',
+    #     'token': 'your_plex_token',
+    #     # 'libraries' omitted -> scan all libraries
+    # },
+]
+
 # Example configurations:
 # PROXY_MODULES = ['spider']  # Default: only spider (including login), not qBittorrent/PikPak
 # PROXY_MODULES = ['all']  # Enable proxy for all modules

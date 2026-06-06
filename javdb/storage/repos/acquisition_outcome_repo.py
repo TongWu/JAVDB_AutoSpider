@@ -97,3 +97,25 @@ class AcquisitionOutcomeRepo:
             list(_ACTIVE_STATES),
         ).fetchall()
         return [_row_to_record(row) for row in rows]
+
+    def list_pending_landing(
+        self, states: tuple[str, ...] = ("queued", "downloading", "completed"),
+    ) -> list[AcquisitionOutcomeRecord]:
+        """Rows whose video_code may still be promoted to in_library.
+
+        Excludes 'failed' (left untouched, D-P2-8) and 'in_library' (already
+        landed). Uses the indexed video_code column downstream."""
+        placeholders = ", ".join(["?"] * len(states))
+        rows = self._conn.execute(
+            f"SELECT {', '.join(_COLUMNS)} FROM AcquisitionOutcome "
+            f"WHERE state IN ({placeholders})",
+            list(states),
+        ).fetchall()
+        return [_row_to_record(row) for row in rows]
+
+    def mark_in_library(self, qb_hash: str, landed_at: str) -> None:
+        self._conn.execute(
+            "UPDATE AcquisitionOutcome SET state = 'in_library', landed_at = ? "
+            "WHERE qb_hash = ?",
+            [landed_at, qb_hash],
+        )

@@ -372,6 +372,15 @@ class OperationsRepo:
 
     # ── PikpakHistory ─────────────────────────────────────────────
 
+    def load_pikpak_history(self) -> List[dict]:
+        """Return all PikpakHistory rows as a list of dicts (read-only).
+
+        Used by PikpakOwnershipCollector in run_ownership (ADR-033 Phase 2).
+        Mirrors load_rclone_inventory / load_dedup_records.
+        """
+        from javdb.storage.db._db_operations import db_load_pikpak_history
+        return db_load_pikpak_history(db_path=self._db_path)
+
     def append_pikpak_history(
         self,
         record: Optional[dict] = None,

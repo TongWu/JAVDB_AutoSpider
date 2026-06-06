@@ -472,6 +472,11 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         ('GH_ACTIONS_REPO', 'GH_ACTIONS_REPO', get_env, '', 'API CONSOLE / BACKEND'),
         ('GH_ACTIONS_TOKEN', 'GH_ACTIONS_TOKEN', get_env, '', 'API CONSOLE / BACKEND'),
         ('COOKIE_SECURE', 'COOKIE_SECURE', get_env_bool, True, 'API CONSOLE / BACKEND'),
+        # ADR-033 Phase 3: media servers for the consumption pass (--pass all).
+        # Supplied as a JSON-encoded secret MEDIA_SERVERS_JSON (list of
+        # {type,instance,base_url,token,libraries?}); tokens are inline because
+        # config.py is encrypted at rest as config.py.enc.
+        ('MEDIA_SERVERS', 'MEDIA_SERVERS_JSON', get_env_json, [], 'MEDIA SERVERS CONFIGURATION'),
     ]
 
 
@@ -563,6 +568,9 @@ def mask_sensitive_values(content: str) -> str:
     masked = re.sub(r"(PROXY_POOL\s*=\s*\[)[^\]]*(\])", r"\1***MASKED***\2", masked)
     # Mask CF bypass port map (may expose internal topology)
     masked = re.sub(r"(CF_BYPASS_PORT_MAP\s*=\s*)\{[^}]*\}", r"\1***MASKED***", masked)
+    # Mask media-server API tokens in MEDIA_SERVERS dicts (single- or double-quoted).
+    masked = re.sub(r"('token'\s*:\s*')[^']*(')", r"\1***MASKED***\2", masked)
+    masked = re.sub(r'("token"\s*:\s*")[^"]*(")', r'\1***MASKED***\2', masked)
     return masked
 
 

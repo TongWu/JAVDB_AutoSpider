@@ -645,6 +645,51 @@ CREATE INDEX IF NOT EXISTS idx_acq_outcome_state ON AcquisitionOutcome(state);
 CREATE INDEX IF NOT EXISTS idx_acq_outcome_video_code ON AcquisitionOutcome(video_code);
 CREATE INDEX IF NOT EXISTS idx_acq_outcome_session ON AcquisitionOutcome(session_id);
 CREATE INDEX IF NOT EXISTS idx_acq_outcome_last_seen ON AcquisitionOutcome(last_seen_at);
+
+CREATE TABLE IF NOT EXISTS OwnershipLedger (
+  video_code  TEXT NOT NULL,
+  source      TEXT NOT NULL CHECK (source IN ('qb','nas','gdrive','pikpak')),
+  category    TEXT NOT NULL DEFAULT '',
+  path        TEXT,
+  size        INTEGER,
+  present     INTEGER NOT NULL DEFAULT 1,
+  observed_at TEXT,
+  PRIMARY KEY (video_code, source, category)
+);
+CREATE INDEX IF NOT EXISTS idx_ownership_ledger_video_code ON OwnershipLedger(video_code);
+CREATE INDEX IF NOT EXISTS idx_ownership_ledger_source ON OwnershipLedger(source);
+CREATE INDEX IF NOT EXISTS idx_ownership_ledger_source_present ON OwnershipLedger(source, present);
+
+CREATE TABLE IF NOT EXISTS ConsumptionSignal (
+  video_code          TEXT NOT NULL,
+  source_type         TEXT NOT NULL,
+  instance            TEXT NOT NULL,
+  library_id          TEXT NOT NULL,
+  library_name        TEXT,
+  watched             INTEGER,
+  progress_pct        INTEGER,
+  play_count          INTEGER,
+  rating              REAL,
+  watched_at          TEXT,
+  resolved_confidence TEXT,
+  observed_at         TEXT,
+  PRIMARY KEY (video_code, instance, library_id)
+);
+CREATE INDEX IF NOT EXISTS idx_consumption_video_code ON ConsumptionSignal(video_code);
+CREATE INDEX IF NOT EXISTS idx_consumption_instance_library ON ConsumptionSignal(instance, library_id);
+
+CREATE TABLE IF NOT EXISTS UnresolvedMediaItem (
+  instance     TEXT NOT NULL,
+  source_type  TEXT,
+  library_id   TEXT NOT NULL,
+  library_name TEXT,
+  item_id      TEXT NOT NULL,
+  raw_title    TEXT,
+  file_path    TEXT,
+  observed_at  TEXT,
+  PRIMARY KEY (instance, library_id, item_id)
+);
+CREATE INDEX IF NOT EXISTS idx_unresolved_instance ON UnresolvedMediaItem(instance);
 """
 
 # Combined DDL for single-DB mode (backward compat, csv_to_sqlite, testing)
