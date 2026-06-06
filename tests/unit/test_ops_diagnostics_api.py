@@ -132,3 +132,89 @@ def test_ops_incident_schema_tolerates_malformed_json_fields():
     assert schema.confirmed_findings == []
     assert schema.likely_causes == []
     assert schema.evidence_refs == []
+
+
+def test_ops_incidents_accepts_type_and_confidence_filters(monkeypatch, admin_client: TestClient):
+    from apps.api.routers import diagnostics
+
+    captured = {}
+
+    def fake_list(**kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr(diagnostics, "_list_ops_incident_records", fake_list)
+
+    response = admin_client.get("/api/diag/ops-incidents?incident_type=d1_drift&confidence=high")
+
+    assert response.status_code == 200
+    assert captured["incident_type"] == "d1_drift"
+    assert captured["confidence"] == "high"
+
+
+def test_ops_incident_analytics_returns_summary(monkeypatch, admin_client: TestClient):
+    from apps.api.routers import diagnostics
+
+    monkeypatch.setattr(diagnostics, "_list_ops_incident_records", lambda **_kwargs: [])
+
+    response = admin_client.get("/api/diag/ops-incidents/analytics")
+
+    assert response.status_code == 200
+    assert response.json()["total"] == 0
+    assert response.json()["by_type"] == {}
+
+
+def test_get_similar_ops_incidents_returns_ranked_items(monkeypatch, admin_client: TestClient):
+    from apps.api.routers import diagnostics
+    from javdb.ops.diagnosis.models import SimilarIncident
+
+    fake_items = [
+        SimilarIncident(
+            incident_id="opsinc_abc",
+            score=0.9,
+            matched_reasons=["same_type", "same_confidence"],
+        ),
+        SimilarIncident(
+            incident_id="opsinc_def",
+            score=0.6,
+            matched_reasons=["same_type"],
+        ),
+    ]
+    monkeypatch.setattr(
+        diagnostics,
+        "_similar_ops_incident_records",
+        lambda _incident_id, **_kwargs: fake_items,
+    )
+
+    response = admin_client.get("/api/diag/ops-incidents/opsinc_target/similar")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["incident_id"] == "opsinc_target"
+    assert len(payload["items"]) == 2
+    assert payload["items"][0]["incident_id"] == "opsinc_abc"
+    assert payload["items"][0]["score"] == pytest.approx(0.9)
+    assert payload["items"][0]["matched_reasons"] == ["same_type", "same_confidence"]
+    assert payload["items"][1]["incident_id"] == "opsinc_def"
+    assert payload["items"][1]["matched_reasons"] == ["same_type"]
+
+
+def test_get_similar_ops_incidents_rejects_non_positive_limit(admin_client: TestClient):
+    response = admin_client.get("/api/diag/ops-incidents/opsinc_test/similar?limit=0")
+    assert response.status_code == 400
+
+
+def test_get_similar_ops_incidents_returns_404_when_no_features(
+    monkeypatch, admin_client: TestClient
+):
+    from apps.api.routers import diagnostics
+
+    monkeypatch.setattr(
+        diagnostics,
+        "_similar_ops_incident_records",
+        lambda _incident_id, **_kwargs: None,
+    )
+
+    response = admin_client.get("/api/diag/ops-incidents/opsinc_missing/similar")
+
+    assert response.status_code == 404

@@ -404,6 +404,37 @@ CREATE INDEX IF NOT EXISTS idx_ops_incidents_session
 CREATE INDEX IF NOT EXISTS idx_ops_incidents_status_type
     ON OpsIncidents(status, incident_type);
 
+-- Derived feature read-model (ADR-026 Phase 2). Mirrors
+-- javdb/migrations/d1/2026_05_27_add_ops_incident_features.sql so a fresh
+-- local init_db() builds it too. Stores compact, explainable similarity
+-- metadata derived from OpsIncidents; never stores full raw logs.
+CREATE TABLE IF NOT EXISTS OpsIncidentFeatures (
+    incident_id TEXT PRIMARY KEY,
+    incident_type TEXT NOT NULL,
+    status TEXT NOT NULL,
+    confidence TEXT NOT NULL,
+    workflow_name TEXT,
+    run_id TEXT,
+    run_attempt INTEGER,
+    session_id TEXT,
+    feature_version TEXT NOT NULL,
+    categorical_features_json TEXT NOT NULL DEFAULT '{}',
+    text_tokens_json TEXT NOT NULL DEFAULT '[]',
+    unsafe_action_tokens_json TEXT NOT NULL DEFAULT '[]',
+    evidence_kinds_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    FOREIGN KEY (incident_id) REFERENCES OpsIncidents(incident_id)
+);
+CREATE INDEX IF NOT EXISTS idx_ops_incident_features_type_status
+    ON OpsIncidentFeatures(incident_type, status);
+CREATE INDEX IF NOT EXISTS idx_ops_incident_features_workflow
+    ON OpsIncidentFeatures(workflow_name);
+CREATE INDEX IF NOT EXISTS idx_ops_incident_features_run
+    ON OpsIncidentFeatures(run_id, run_attempt);
+CREATE INDEX IF NOT EXISTS idx_ops_incident_features_session
+    ON OpsIncidentFeatures(session_id);
+
 -- Event-spine tables (ADR-036 Phase 1). Mirrors
 -- javdb/migrations/d1/2026_05_29_add_pipeline_event.sql so a fresh local
 -- init_db() builds them too (not just the remote D1 migration). Additive,

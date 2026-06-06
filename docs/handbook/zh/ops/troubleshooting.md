@@ -224,3 +224,16 @@ python3 -m apps.cli.ops.diagnose_run \
 ```
 
 该助手只提供建议。它不会 rollback session、重跑 workflow、修改 D1，或删除 qBittorrent 任务。
+
+### Incident 历史与相似事件
+
+diagnostics API 会通过下面的接口暴露已持久化 incident：
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  "<api>/api/diag/ops-incidents?status=open&incident_type=failed_ingestion"
+```
+
+Web UI 会在 **诊断 -> Ops Incidents** 展示同样的只读记录。相似 incident 基于确定性 feature overlap：incident type、confidence、trigger source、text tokens、unsafe action tokens 和 evidence kinds。Phase 2 的 score 是可解释的，不使用 embedding。
+
+这个页面只用于调查。它不能 rollback、rerun、delete、apply drift fix，也不能把 recovery work 标记为 resolved。

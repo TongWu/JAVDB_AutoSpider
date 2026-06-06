@@ -1,6 +1,6 @@
 # IMP-ADR026-02: ADR-026 Phase 2 - Incident History, Similarity, And Analytics
 
-**Status:** Proposed
+**Status:** Completed — delivered and verified on 2026-06-05.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

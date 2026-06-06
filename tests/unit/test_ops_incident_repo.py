@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 
+from javdb.ops.diagnosis.features import build_incident_features
 from javdb.ops.diagnosis.models import (
     DiagnosisResult,
     EvidenceRef,
@@ -228,3 +229,78 @@ def test_read_incident_jsonl_skips_non_object_lines(tmp_path):
     rows = read_incident_jsonl(path)
 
     assert [row["incident_id"] for row in rows] == ["opsinc_valid"]
+
+
+FEATURE_DDL = """
+CREATE TABLE OpsIncidentFeatures (
+  incident_id TEXT PRIMARY KEY,
+  incident_type TEXT NOT NULL,
+  status TEXT NOT NULL,
+  confidence TEXT NOT NULL,
+  workflow_name TEXT,
+  run_id TEXT,
+  run_attempt INTEGER,
+  session_id TEXT,
+  feature_version TEXT NOT NULL,
+  categorical_features_json TEXT NOT NULL,
+  text_tokens_json TEXT NOT NULL,
+  unsafe_action_tokens_json TEXT NOT NULL,
+  evidence_kinds_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+)
+"""
+
+
+def test_repo_upserts_and_reads_features():
+    conn = _conn()
+    conn.execute(FEATURE_DDL)
+    repo = OpsIncidentRepo(conn)
+    record = _record()
+
+    repo.upsert(record)
+    repo.upsert_features(build_incident_features(record))
+    features = repo.get_features(record.incident_id)
+
+    assert features is not None
+    assert features.incident_id == record.incident_id
+    assert features.incident_type == "failed_ingestion"
+
+
+def test_repo_filters_incidents_by_incident_type_and_confidence():
+    conn = _conn()
+    repo = OpsIncidentRepo(conn)
+    first = _record()
+    second = OpsIncidentRecord(
+        **{
+            **first.__dict__,
+            "incident_id": "opsinc_drift",
+            "incident_type": "d1_drift",
+            "confidence": "high",
+        }
+    )
+
+    repo.upsert(first)
+    repo.upsert(second)
+
+    items = repo.list(incident_type="d1_drift", confidence="high", limit=20)
+
+    assert [item.incident_id for item in items] == ["opsinc_drift"]
+
+
+def test_repo_list_honors_large_limit_for_analytics():
+    """Regression: repo.list(limit=500) must return >100 rows.
+
+    Before the fix, list() clamped to min(limit, 100), silently truncating
+    the analytics window to at most 100 incidents.  This test inserts 120
+    distinct rows and asserts all 120 are returned with limit=500.
+    """
+    conn = _conn()
+    repo = OpsIncidentRepo(conn)
+    base = _record()
+    for i in range(120):
+        repo.upsert(OpsIncidentRecord(**{**base.__dict__, "incident_id": f"opsinc_{i}"}))
+
+    items = repo.list(limit=500)
+
+    assert len(items) == 120, f"expected 120 rows, got {len(items)} (repo may still be clamping)"

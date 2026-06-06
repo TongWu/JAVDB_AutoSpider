@@ -94,6 +94,7 @@ EXCLUDED_APPEND_ONLY = [
     (REPORTS, "RunEventSummary", "session_id"),
     (REPORTS, "ParseRunFieldFill", "session_id"),
     (REPORTS, "OpsIncidents", "session_id"),
+    (REPORTS, "OpsIncidentFeatures", "session_id"),
     (OPERATIONS, "AcquisitionOutcome", "session_id"),
     (OPERATIONS, "EmailNotificationHistory", "SessionId"),
 ]
