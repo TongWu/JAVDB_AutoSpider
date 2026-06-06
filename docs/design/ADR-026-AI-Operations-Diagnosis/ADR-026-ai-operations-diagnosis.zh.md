@@ -2,7 +2,7 @@
 
 | 字段        | 值                                                                    |
 | ----------- | --------------------------------------------------------------------- |
-| **状态**    | Accepted - Phase 1 已交付；Phase 2-3 待执行                          |
+| **状态**    | Accepted - Phase 1-2 已交付；Phase 3 待执行                          |
 | **日期**    | 2026-05-27                                                            |
 | **作者**    | Ted                                                                   |
 | **关联**    | [ADR-009](../_archive/ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md) |
@@ -176,7 +176,7 @@ Phase 1 里，assistant 永远不能做这些事：
 | 阶段 | IMP | 交付 | 延后 |
 | --- | --- | --- | --- |
 | Phase 1 | [IMP-ADR026-01](IMP-ADR026-01-ai-ops-diagnosis-readonly.md)（Completed 2026-05-27） | D1 incident schema、deterministic incident bundle collector、detector layer、AI synthesis、CLI/API 只读查询、短 email 摘要、JSONL fallback | 不做自动修复 |
-| Phase 2 | [IMP-ADR026-02](IMP-ADR026-02-ai-ops-diagnosis-history-analytics.md) | UI 历史浏览、确定性相似性检索、以及更丰富的 incident 分析 | 修复审批流 |
+| Phase 2 | [IMP-ADR026-02](IMP-ADR026-02-ai-ops-diagnosis-history-analytics.md)（Completed 2026-06-05） | UI 历史浏览、确定性相似性检索、以及更丰富的 incident 分析 | 修复审批流 |
 | Phase 3 | [IMP-ADR026-03](IMP-ADR026-03-ai-ops-diagnosis-gated-remediation.md) | 带人工确认和显式安全边界的门控式修复建议 | 任何全自动修复 |
 
 ## 参考
@@ -193,3 +193,4 @@ Phase 1 里，assistant 永远不能做这些事：
 
 - 2026-05-27：以 ADR-026 提出。
 - 2026-05-27：Phase 1 已交付并验证；Phase 2-3 仍保持 proposed。
+- 2026-06-05：Phase 2（IMP-ADR026-02）已交付并验证 —— 涵盖 CLI/API/Worker/Web 的 incident 历史、确定性相似性检索和 analytics。Phase 3 仍保持 proposed。

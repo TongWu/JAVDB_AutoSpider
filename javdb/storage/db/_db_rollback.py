@@ -93,6 +93,7 @@ ROLLBACK_PRESERVED_TABLES = frozenset({
     'RunEventSummary',           # ADR-036 projection OF that append-only spine
     'ParseRunFieldFill',         # ADR-035 enrichment, off the Pending->Commit path
     'OpsIncidents',              # ADR-035/026 the failed run's own diagnosis record
+    'OpsIncidentFeatures',       # ADR-026 derived similarity/analytics metadata of a preserved incident
     'AcquisitionOutcome',        # ADR-033 D10: bypasses session/rollback; keyed by
                                  # qb_hash — the torrent really sits in qB and the
                                  # reconcile loop tracks its fate (provenance only)

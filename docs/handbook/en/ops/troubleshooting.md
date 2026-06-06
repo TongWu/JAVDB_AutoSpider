@@ -225,3 +225,16 @@ python3 -m apps.cli.ops.diagnose_run \
 ```
 
 The assistant is advisory only. It does not roll back sessions, rerun workflows, modify D1, or delete qBittorrent tasks.
+
+### Incident History And Similarity
+
+The diagnostics API exposes persisted incidents at:
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  "<api>/api/diag/ops-incidents?status=open&incident_type=failed_ingestion"
+```
+
+The web UI shows the same read-only records under **Diagnostics -> Ops Incidents**. Similar incidents are based on deterministic feature overlap: incident type, confidence, trigger source, text tokens, unsafe action tokens, and evidence kinds. The score is explainable and does not use embeddings in Phase 2.
+
+The page is for investigation only. It cannot roll back, rerun, delete, apply drift fixes, or mark recovery work resolved.

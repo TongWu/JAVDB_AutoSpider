@@ -147,3 +147,29 @@ class OpsIncidentRecord:
         data["persistence_status"] = status
         data["updated_at"] = utc_now_iso()
         return OpsIncidentRecord(**data)
+
+
+@dataclass(frozen=True)
+class OpsIncidentFeatures:
+    incident_id: str
+    incident_type: str
+    status: IncidentStatus
+    confidence: Confidence
+    workflow_name: str | None
+    run_id: str | None
+    run_attempt: int | None
+    session_id: str | None
+    feature_version: str
+    categorical_features_json: str
+    text_tokens_json: str
+    unsafe_action_tokens_json: str
+    evidence_kinds_json: str
+    created_at: str
+    updated_at: str
+
+
+@dataclass(frozen=True)
+class SimilarIncident:
+    incident_id: str
+    score: float
+    matched_reasons: list[str]

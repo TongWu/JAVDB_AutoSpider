@@ -19,10 +19,15 @@ from apps.api.schemas.diagnostics import (
     JavdbSessionRefreshRequest,
     JavdbSessionRefreshResponse,
     JavdbSessionStatus,
+    OpsIncidentAnalyticsResponse,
     OpsIncidentListResponse,
     OpsIncidentSchema,
+    OpsIncidentSimilarityResponse,
+    SimilarIncidentSchema,
 )
 from javdb.infra.config import cfg
+from javdb.ops.diagnosis.analytics import summarize_incidents
+from javdb.ops.diagnosis.similarity import rank_similar_incidents
 from javdb.storage.db import OPERATIONS_DB_PATH, REPORTS_DB_PATH, get_db
 from javdb.storage.repos.ops_incident_repo import OpsIncidentRepo
 from javdb.storage.repos.system_state_repo import SystemStateRepo
@@ -32,6 +37,12 @@ router = APIRouter(prefix="/api/diag", tags=["diagnostics"])
 logger = logging.getLogger(__name__)
 
 _KEY_LAST_REFRESH = "last_javdb_refresh"
+
+# Analytics and similarity use a wider candidate window than the public list
+# endpoint (which caps at 100) so that aggregations reflect the full incident
+# history rather than being silently truncated.
+_ANALYTICS_WINDOW = 500
+_SIMILARITY_CANDIDATE_LIMIT = 500
 
 
 def _get_last_refresh_time() -> str | None:
@@ -73,6 +84,8 @@ def _list_ops_incident_records(
     status: str | None = None,
     run_id: str | None = None,
     session_id: str | None = None,
+    incident_type: str | None = None,
+    confidence: str | None = None,
     limit: int = 50,
 ):
     with get_db(REPORTS_DB_PATH) as conn:
@@ -80,6 +93,8 @@ def _list_ops_incident_records(
             status=status,
             run_id=run_id,
             session_id=session_id,
+            incident_type=incident_type,
+            confidence=confidence,
             limit=limit,
         )
 
@@ -156,11 +171,34 @@ def get_javdb_session_status(
     )
 
 
-@router.get("/ops-incidents", response_model=OpsIncidentListResponse)
+_ERROR_DETAIL_SCHEMA = {
+    "type": "object",
+    "properties": {"detail": {"type": "string"}},
+    "required": ["detail"],
+}
+
+_400_LIMIT_RESPONSE = {
+    400: {
+        "description": "limit must be a positive integer",
+        "content": {"application/json": {"schema": _ERROR_DETAIL_SCHEMA}},
+    }
+}
+
+_404_FEATURES_RESPONSE = {
+    404: {
+        "description": "Incident features not found",
+        "content": {"application/json": {"schema": _ERROR_DETAIL_SCHEMA}},
+    }
+}
+
+
+@router.get("/ops-incidents", response_model=OpsIncidentListResponse, responses=_400_LIMIT_RESPONSE)
 def list_ops_incidents(
     status: str | None = None,
     run_id: str | None = None,
     session_id: str | None = None,
+    incident_type: str | None = None,
+    confidence: str | None = None,
     limit: int = 50,
     _user: Dict[str, Any] = Depends(_require_auth),
 ) -> OpsIncidentListResponse:
@@ -172,10 +210,60 @@ def list_ops_incidents(
         status=status,
         run_id=run_id,
         session_id=session_id,
+        incident_type=incident_type,
+        confidence=confidence,
         limit=min(limit, 100),
     )
     return OpsIncidentListResponse(
         items=[_ops_record_to_schema(item) for item in items]
+    )
+
+
+@router.get("/ops-incidents/analytics", response_model=OpsIncidentAnalyticsResponse)
+def get_ops_incident_analytics(
+    _user: Dict[str, Any] = Depends(_require_auth),
+) -> OpsIncidentAnalyticsResponse:
+    """Return aggregated analytics over persisted operations incidents."""
+    records = _list_ops_incident_records(limit=_ANALYTICS_WINDOW)
+    return OpsIncidentAnalyticsResponse(**summarize_incidents(records))
+
+
+def _similar_ops_incident_records(incident_id: str, *, limit: int = 5):
+    with get_db(REPORTS_DB_PATH) as conn:
+        repo = OpsIncidentRepo(conn)
+        target = repo.get_features(incident_id)
+        if target is None:
+            return None
+        candidates = repo.list_features(limit=_SIMILARITY_CANDIDATE_LIMIT)
+        return rank_similar_incidents(target, candidates, limit=limit)
+
+
+@router.get(
+    "/ops-incidents/{incident_id}/similar",
+    response_model=OpsIncidentSimilarityResponse,
+    responses={**_400_LIMIT_RESPONSE, **_404_FEATURES_RESPONSE},
+)
+def get_similar_ops_incidents(
+    incident_id: str,
+    limit: int = 5,
+    _user: Dict[str, Any] = Depends(_require_auth),
+) -> OpsIncidentSimilarityResponse:
+    """Return incidents most similar to the given incident, ranked by feature overlap."""
+    if limit <= 0:
+        raise HTTPException(status_code=400, detail="limit must be a positive integer")
+    items = _similar_ops_incident_records(incident_id, limit=min(limit, 20))
+    if items is None:
+        raise HTTPException(status_code=404, detail="Incident features not found")
+    return OpsIncidentSimilarityResponse(
+        incident_id=incident_id,
+        items=[
+            SimilarIncidentSchema(
+                incident_id=item.incident_id,
+                score=item.score,
+                matched_reasons=item.matched_reasons,
+            )
+            for item in items
+        ],
     )
 
 
@@ -286,6 +374,8 @@ async def refresh_javdb_session_diag(
 __all__ = [
     "get_javdb_session_status",
     "get_ops_incident",
+    "get_ops_incident_analytics",
+    "get_similar_ops_incidents",
     "list_ops_incidents",
     "refresh_javdb_session_diag",
     "router",
