@@ -43,7 +43,7 @@ apps/mcp/
 | --- | --- | --- |
 | `list_runs` / `get_run` | `task_service` / jobs | 最近 run、状态 |
 | `list_sessions` / `get_session` | sessions service | 会话状态 / 生命周期 |
-| `search_history` | `explore_service` / history | "我有没有 X?" |
+| `search_history` | `HistoryRepo` / history | "我有没有 X?" |
 | `get_run_timeline` / `query_events` | `PipelineEvent`（ADR-036） | "这次 run 发生了什么?" |
 | `list_incidents` / `get_incident` | `OpsIncidents`（ADR-026） | 运维事件 |
 | `diagnose_run` | ADR-026 诊断（只读） | "为什么失败?" |

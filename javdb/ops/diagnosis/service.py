@@ -22,6 +22,19 @@ def _persist_incident_features(bundle: IncidentBundle, record: OpsIncidentRecord
         OpsIncidentRepo(conn).upsert_features(features)
 
 
+def run_diagnosis(
+    bundle: IncidentBundle,
+    *,
+    synthesizer: Synthesizer | None = None,
+) -> OpsIncidentRecord:
+    """Read-only diagnosis: run the detector + synthesis and build the incident
+    record WITHOUT persisting it. Shared by the persisting ``diagnose_incident``
+    and read-only callers (e.g. the ADR-038 MCP surface)."""
+    detector_result = detect_incident(bundle)
+    result = (synthesizer or synthesize_with_configured_ai)(bundle, detector_result)
+    return OpsIncidentRecord.from_bundle_and_result(bundle, result)
+
+
 def diagnose_incident(
     bundle: IncidentBundle,
     *,
@@ -29,9 +42,7 @@ def diagnose_incident(
     repo: object | None = None,
     jsonl_path: str | Path | None = None,
 ) -> OpsIncidentRecord:
-    detector_result = detect_incident(bundle)
-    result = (synthesizer or synthesize_with_configured_ai)(bundle, detector_result)
-    record = OpsIncidentRecord.from_bundle_and_result(bundle, result)
+    record = run_diagnosis(bundle, synthesizer=synthesizer)
     persisted = persist_incident(record, repo=repo, jsonl_path=jsonl_path)
     if persisted.persistence_status == "d1_written":
         _persist_incident_features(bundle, persisted, repo)

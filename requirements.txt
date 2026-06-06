@@ -28,3 +28,8 @@ flake8>=6.0.0
 # .github/workflows/*.yml when validating the resolve_write_mode step.
 PyYAML>=6.0
 PyNaCl>=1.5.0
+
+# ADR-038: Agentic operator MCP surface (FastMCP server).
+# Floor >=1.23.0 covers GHSA-9h52-p55h-vw2f (DNS-rebinding) and
+# GHSA-j975-95f5-7wqh (Streamable HTTP DoS); installed: 1.27.2.
+mcp>=1.23.0

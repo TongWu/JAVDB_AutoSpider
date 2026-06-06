@@ -75,7 +75,7 @@ a later phase.
 | --- | --- | --- |
 | `list_runs` / `get_run` | `task_service` / jobs | recent runs, status |
 | `list_sessions` / `get_session` | sessions service | session state / lifecycle |
-| `search_history` | `explore_service` / history | "do I have X?" |
+| `search_history` | `HistoryRepo` / history | "do I have X?" |
 | `get_run_timeline` / `query_events` | `PipelineEvent` (ADR-036) | "what happened in this run?" |
 | `list_incidents` / `get_incident` | `OpsIncidents` (ADR-026) | operational incidents |
 | `diagnose_run` | ADR-026 diagnosis (read-only) | "why did it fail?" |
