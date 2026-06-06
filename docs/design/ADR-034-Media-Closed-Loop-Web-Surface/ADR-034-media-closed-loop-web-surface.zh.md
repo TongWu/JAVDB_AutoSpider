@@ -65,13 +65,13 @@ web 平台是**一个 Vue 前端背后两套后端**（ADR-017）:一套 TypeScr
 
 | 阶段 | IMP | 交付内容 | 推迟内容 |
 | --- | --- | --- | --- |
-| FE Phase 1 — Acquisition | IMP-ADR034-01（占位） | Library 页骨架（3 tab,2 禁用）;Acquisition 视图（漏斗 + KPI + 近期表,只读）;`GET /api/library/acquisition/{summary,recent,trend}` 于**两套**后端;`closed_loop` 能力 flag + 导航门控;en/zh 字符串 | Ownership/Consumption 视图;任何写操作 |
+| FE Phase 1 — Acquisition | [IMP-ADR034-01](IMP-ADR034-01-acquisition-web-surface.md) | Library 页骨架（3 tab,2 禁用）;Acquisition 视图（漏斗 + KPI + 近期表,只读）;`GET /api/library/acquisition/{summary,recent,trend}` 于**两套**后端;`closed_loop` 能力 flag + 导航门控;en/zh 字符串 | Ownership/Consumption 视图;任何写操作 |
 | FE Phase 2 — Ownership | IMP-ADR034-02（占位） | 基于 `OwnershipLedger` 的 Ownership 视图 | — |
 | FE Phase 3 — Consumption | IMP-ADR034-03（占位） | 基于 `ConsumptionSignal` 的 `(instance, library)` 粒度 Consumption 视图 | — |
 
 FE Phase 1 只依赖 ADR-033 Phase 1（`AcquisitionOutcome`）。Phase 2/3 依赖 ADR-033 Phase 2/3,待其落地后再细化。
 
-**规划节奏。** 暂未写任何 FE IMP。**IMP-ADR034-01 刻意推迟**,直到 ADR-033 Phase 1（`AcquisitionOutcome` + 只读端点的数据）落地;它的详细计划——以及 IMP-ADR034-02/03——将在对应后端阶段交付后,用一轮 `grill-me` + `brainstorming` 产出,使 FE 计划反映真实端点形状而非纸面契约。
+**规划节奏。** [IMP-ADR034-01](IMP-ADR034-01-acquisition-web-surface.md) 已写（2026-06-06）,基于已落地的 ADR-033 Phase 1 `AcquisitionOutcome` 表与只读数据。**IMP-ADR034-02/03 仍刻意推迟**,直到 ADR-033 Phase 2/3（`OwnershipLedger` / `ConsumptionSignal`）落地;其详细计划将在对应后端阶段交付后,用一轮 `grill-me` + `brainstorming` 产出,使各 FE 计划反映真实端点形状而非纸面契约。
 
 ### 明确的非目标 (YAGNI)
 
@@ -100,3 +100,5 @@ FE Phase 1 只依赖 ADR-033 Phase 1（`AcquisitionOutcome`）。Phase 2/3 依�
 - 2026-05-29: Proposed（ADR-033 的 web 对应面;FE Phase 1 已定界,IMP 待出）。
 - 2026-05-29: IMP-ADR034-01 推迟到 ADR-033 Phase 1 落地后;FE IMP 待后端落地后的
   一轮 `grill-me` + `brainstorming` 细化。
+- 2026-06-06: IMP-ADR034-01（FE Phase 1）计划已写,基于已落地的 ADR-033 Phase 1
+  `AcquisitionOutcome` 表与只读数据。IMP-ADR034-02/03 仍推迟至各自后端阶段。
