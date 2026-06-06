@@ -1,4 +1,4 @@
-"""History-related SQLite helpers used by `utils.infra.db`."""
+"""History-related SQLite helpers used by `javdb.storage.db`."""
 
 from __future__ import annotations
 

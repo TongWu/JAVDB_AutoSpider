@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Standalone migration: align split SQLite DBs with current schema (v9).
 
-The same schema steps run automatically on every ``utils.infra.db.init_db()`` when
-any database file's ``SchemaVersion`` is below ``utils.infra.db.SCHEMA_VERSION``.
+The same schema steps run automatically on every ``javdb.storage.db.init_db()`` when
+any database file's ``SchemaVersion`` is below ``javdb.storage.db.SCHEMA_VERSION``.
 
 **MovieHistory actor columns (history.db):**
 

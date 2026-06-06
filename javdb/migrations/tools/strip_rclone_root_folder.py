@@ -30,7 +30,7 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 # time, which made ``parse_args`` unsafe to import from another script (it
 # would silently change that script's CWD). The chdir is now performed only
 # inside :func:`main` after argparse has run. ``sys.path`` insertion is kept
-# at import time because the ``from packages.python...`` imports below need
+# at import time because the ``from javdb...`` imports below need
 # the repo root to be importable as soon as this module loads.
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
