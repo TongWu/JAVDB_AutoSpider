@@ -25,7 +25,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 # NB: previously this module also called ``os.chdir(REPO_ROOT)`` at import
 # time, which made ``parse_args`` unsafe to import from another script (it
 # would silently change that script's CWD). The chdir is now performed only

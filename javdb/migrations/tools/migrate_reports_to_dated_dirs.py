@@ -382,7 +382,10 @@ Migration Details:
 
 
 def main():
-    os.chdir(Path(__file__).resolve().parents[4])
+    # This file lives at javdb/migrations/tools/migrate_reports_to_dated_dirs.py,
+    # so the repo root is three levels up (parents[3]). parents[4] would land on
+    # the repo's parent dir and the migration's relative paths would resolve there.
+    os.chdir(Path(__file__).resolve().parents[3])
     
     args = parse_arguments()
     
