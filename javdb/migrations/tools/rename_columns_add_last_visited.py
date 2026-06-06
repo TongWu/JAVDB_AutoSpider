@@ -14,7 +14,7 @@ import os
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -24,7 +24,7 @@ setup_logging()
 logger = get_logger(__name__)
 
 HISTORY_FILE = os.path.join(
-    Path(__file__).resolve().parents[4],
+    Path(__file__).resolve().parents[3],
     'reports', 'parsed_movies_history.csv',
 )
 

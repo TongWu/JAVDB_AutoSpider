@@ -1,7 +1,9 @@
 """Canonical fetch-page CLI entrypoint.
 
-Aliases :mod:`javdb.infra.fetch_page` so tests can patch module-level
-attributes via this import path.
+Thin adapter that delegates to :mod:`javdb.infra.fetch_page`. Importing this
+module yields a real module exposing ``main`` (not a ``sys.modules`` self-alias),
+so ``python -m apps.cli.ops.fetch_page`` and any ``import apps.cli.ops.fetch_page``
+behave conventionally.
 """
 
 from __future__ import annotations
@@ -13,10 +15,9 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-import importlib
+from javdb.infra.fetch_page import main
 
-_module = importlib.import_module("javdb.infra.fetch_page")
-sys.modules[__name__] = _module
+__all__ = ["main"]
 
 if __name__ == "__main__":
-    _module.main()
+    raise SystemExit(main())
