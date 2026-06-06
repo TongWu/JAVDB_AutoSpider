@@ -71,8 +71,17 @@ second route.
 **D4. Dispatch fans out with failure isolation.** `notify.send(message)` iterates
 the active plugins, calls each `.send()`, and collects `NotifyResult`s; one
 backend's failure (e.g. Telegram down) does not block the others (e.g. email).
-Existing callers (the pipeline's email summary) route through `notify.send` and
-keep working.
+Existing callers (the pipeline's email summary) are *designed to* route through
+`notify.send`.
+
+> **Phase 1 status (plumbing-only):** Phase 1 ships the dispatcher itself —
+> `notify.dispatch.send` is import-reachable and registers the built-in plugins —
+> but does **not** yet rewire the existing pipeline email caller (the rich
+> `run_email_notification` report path) onto it. Until that wiring lands, setting
+> `NOTIFY_BACKENDS=['telegram']` registers the backend but the pipeline still
+> notifies via the unchanged direct email path. Rewiring the existing caller is a
+> follow-up (tracked for Phase 2), kept separate so the heavy report path stays
+> untouched in Phase 1 (D3).
 
 **D5. Module shape.**
 

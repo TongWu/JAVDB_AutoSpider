@@ -104,6 +104,35 @@ summary of new torrents found.
 | `EMAIL_FROM` | `str` | `''` | Sender address shown in notification emails. |
 | `EMAIL_TO` | `str` | `''` | Recipient address for notification emails. |
 
+### Notification Backends (ADR-039)
+
+By default, run notifications are sent by email only. The pluggable notify layer
+lets you fan out the same notification to additional backends with per-backend
+failure isolation -- one backend failing does not block the others.
+
+| Variable | Type | Default | Description |
+|---|---|---|---|
+| `NOTIFY_BACKENDS` | `list[str]` \| `str` | `['email']` | Active notify backends, tried in order. Defaults to email only, so existing setups are unchanged. Accepts a list (`['email', 'telegram']`) or a CSV string (`'email, telegram'`). Unknown or unconfigured backends are skipped and reported in the returned results (`NotifyResult(ok=False)`). |
+| `TELEGRAM_BOT_TOKEN` | `str` | `''` | Telegram bot token from @BotFather. Required when `'telegram'` is active. |
+| `TELEGRAM_CHAT_ID` | `str` | `''` | Target chat or channel id the bot posts to. Required when `'telegram'` is active. |
+
+**Enabling Telegram:** create a bot via @BotFather to get a token, obtain your
+chat id (message the bot, then read `https://api.telegram.org/bot<token>/getUpdates`),
+set both values, and add `'telegram'` to `NOTIFY_BACKENDS`:
+
+```python
+NOTIFY_BACKENDS = ['email', 'telegram']
+TELEGRAM_BOT_TOKEN = '123456:ABC-DEF...'
+TELEGRAM_CHAT_ID = '987654321'
+```
+
+> **Phase 1 status (plumbing only):** ADR-039 Phase 1 ships the notify plugin
+> layer and the `notify.dispatch.send` fan-out, but does **not** yet route the
+> existing pipeline email notification through it. Until a later phase wires the
+> pipeline caller onto `notify.dispatch.send`, setting `NOTIFY_BACKENDS` (e.g.
+> adding `'telegram'`) registers the backend but does **not** redirect current
+> pipeline notifications — they still go out via the unchanged direct email path.
+
 ---
 
 ## 4. Proxy Configuration

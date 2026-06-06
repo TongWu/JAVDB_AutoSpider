@@ -67,6 +67,18 @@ EMAIL_FROM = 'your_email@gmail.com'
 EMAIL_TO = 'your_email@gmail.com'
 
 # =============================================================================
+# NOTIFICATION BACKENDS (ADR-039)
+# =============================================================================
+
+# Active notify backends, tried in order; defaults to email only so existing
+# setups are unchanged. Accepts a list or a CSV string, e.g. ['email', 'telegram'].
+NOTIFY_BACKENDS = ['email']
+
+# Telegram backend -- only used when 'telegram' is in NOTIFY_BACKENDS.
+TELEGRAM_BOT_TOKEN = ''   # from @BotFather
+TELEGRAM_CHAT_ID = ''     # target chat/channel id
+
+# =============================================================================
 # PROXY CONFIGURATION
 # =============================================================================
 
