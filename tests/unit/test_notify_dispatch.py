@@ -79,3 +79,34 @@ def test_send_isolates_is_configured_error(monkeypatch):
     assert results["bad"].ok is False
     assert "config boom" in (results["bad"].detail or "")
     assert results["telegram"].ok is True       # still delivered
+
+
+def test_send_exclude_skips_named_backend(monkeypatch):
+    # ADR-039 D4: a caller that already handled 'email' by another route passes
+    # exclude={'email'} so it is not iterated/double-notified; other backends run.
+    monkeypatch.setattr(dispatch, "cfg", lambda name, default: ["email", "telegram"])
+    monkeypatch.setattr(dispatch, "REGISTRY",
+                        _registry(_Plugin("email"), _Plugin("telegram")))
+    results = dispatch.send(NotifyMessage(subject="s", body="b"), exclude={"email"})
+    plugins = {r.plugin for r in results}
+    assert plugins == {"telegram"}              # email excluded entirely
+    assert results[0].ok is True
+
+
+def test_active_names_sanitizes_invalid_list_items(monkeypatch):
+    # Fail-safe: a list with non-string / empty / unhashable items (config typo)
+    # is sanitized to clean backend names so send()'s `name in excluded` hashing
+    # and the REGISTRY lookup never see a non-string/unhashable name.
+    monkeypatch.setattr(dispatch, "cfg",
+                        lambda name, default: ["email", {}, "", 123, " telegram "])
+    assert dispatch.active_names() == ["email", "telegram"]
+
+
+def test_send_tolerates_invalid_iterable_items(monkeypatch):
+    # A typo'd NOTIFY_BACKENDS with an unhashable element must not crash the
+    # fan-out (regression for the exclude membership test hashing the name).
+    monkeypatch.setattr(dispatch, "cfg", lambda name, default: ["telegram", {}])
+    monkeypatch.setattr(dispatch, "REGISTRY", _registry(_Plugin("telegram")))
+    results = dispatch.send(NotifyMessage(subject="s", body="b"), exclude={"email"})
+    assert [r.plugin for r in results] == ["telegram"]
+    assert results[0].ok is True

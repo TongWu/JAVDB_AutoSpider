@@ -320,6 +320,12 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         ('SMTP_PASSWORD', 'SMTP_PASSWORD', get_env, '', 'SMTP CONFIGURATION'),
         ('EMAIL_FROM', 'EMAIL_FROM', get_env, '', 'SMTP CONFIGURATION'),
         ('EMAIL_TO', 'EMAIL_TO', get_env, '', 'SMTP CONFIGURATION'),
+        # Notification backends (ADR-039 pluggable notify platform). Defaults to
+        # email-only so existing deployments are unchanged; add 'telegram' to
+        # NOTIFY_BACKENDS_JSON and set the TELEGRAM_* values to enable Telegram.
+        ('NOTIFY_BACKENDS', 'NOTIFY_BACKENDS_JSON', get_env_json, ['email'], 'NOTIFICATION BACKENDS'),
+        ('TELEGRAM_BOT_TOKEN', 'TELEGRAM_BOT_TOKEN', get_env, '', 'NOTIFICATION BACKENDS'),
+        ('TELEGRAM_CHAT_ID', 'TELEGRAM_CHAT_ID', get_env, '', 'NOTIFICATION BACKENDS'),
         # Proxy Configuration
         ('PROXY_MODE', 'PROXY_MODE', get_env, 'pool', 'PROXY CONFIGURATION'),
         ('PROXY_POOL', 'PROXY_POOL_JSON', get_env_json, [], 'PROXY CONFIGURATION'),
@@ -544,6 +550,10 @@ def mask_sensitive_values(content: str) -> str:
     # Mask generic API keys such as OPS_DIAGNOSIS_API_KEY.
     masked = re.sub(r"([A-Z0-9_]*API_KEY\s*=\s*')[^']*(')", r"\1***MASKED***\2", masked)
     masked = re.sub(r'([A-Z0-9_]*API_KEY\s*=\s*")[^"]*(")', r"\1***MASKED***\2", masked)
+    # Mask service tokens such as TELEGRAM_BOT_TOKEN. The leading '_' keeps this
+    # from matching a bare ``TOKEN = 'ghp_...'`` (handled by the ghp_ rule below).
+    masked = re.sub(r"([A-Z0-9_]*_TOKEN\s*=\s*')[^']*(')", r"\1***MASKED***\2", masked)
+    masked = re.sub(r'([A-Z0-9_]*_TOKEN\s*=\s*")[^"]*(")', r"\1***MASKED***\2", masked)
     # Mask GitHub tokens
     masked = re.sub(r"(ghp_)[a-zA-Z0-9]+", r"\1***MASKED***", masked)
     # Mask cookies - use \s* instead of .* to avoid greedy matching

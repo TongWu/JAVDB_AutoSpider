@@ -4,6 +4,8 @@
 
 **Related:** [ADR-039](ADR-039-pluggable-integration-platform.md) (umbrella) — this is **Phase 1** of three.
 
+**Status:** Implemented & wired — 2026-06-06. The registry, `NotifyPlugin` contract, email/telegram built-ins, and `notify.dispatch` shipped, and the pipeline notification step (`apps.cli.notify.email`) now fans a run summary out to the secondary backends. The wiring design (rich email stays on its own path; a generic `summary` is fanned out to non-email backends; `dispatch.send` gained an `exclude` arg; `run_email_notification` gained a `deliver` flag + `summary` result field) is recorded in [ADR-039](ADR-039-pluggable-integration-platform.md) **D4 follow-up**. The per-step checklist below is retained as the original execution plan of record.
+
 **Goal:** A `(category, name)` plugin registry + a `NotifyPlugin` contract, proven on the `notify` category: the existing email wrapped as a built-in plugin, a new Telegram plugin, `NOTIFY_BACKENDS` config selection (default `['email']`, backward-compatible), and a `notify.send()` fan-out with failure isolation.
 
 **Architecture:** `javdb/integrations/plugins/registry.py` holds a `PluginRegistry` (with a reserved `discover_entry_points` seam for Phase 2). `EmailNotifyPlugin` wraps the existing `email/delivery.py` `send_email(subject, body, ...)` primitive (NOT the rich `run_email_notification` report path, which is untouched). `TelegramNotifyPlugin` calls the Telegram Bot API. `notify/dispatch.py` resolves active plugins from `NOTIFY_BACKENDS` and fans out.

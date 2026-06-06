@@ -95,8 +95,59 @@ from javdb.integrations.notify.email.delivery import (
 logger = get_logger(__name__)
 
 
+def _build_notify_summary(
+    *,
+    has_critical_errors: bool,
+    pipeline_errors,
+    spider_stats,
+    uploader_stats,
+    pikpak_stats,
+    show_spider: bool,
+    show_uploader: bool,
+    show_pikpak: bool,
+) -> str:
+    """Compact plaintext digest for secondary notify backends (ADR-039 D4).
+
+    Only includes lines for components that actually ran this session. The run
+    verdict is carried by the message subject, so this body is the headline
+    stats (plus a short error list on failure). Returns ``""`` when there is
+    nothing to add — the caller falls back to the subject as the body.
+    """
+    lines: list[str] = []
+    if has_critical_errors and pipeline_errors:
+        lines.append("Critical errors:")
+        for err in list(pipeline_errors)[:5]:
+            lines.append(f"  • {err}")
+    if show_spider and spider_stats:
+        overall = spider_stats.get("overall", {})
+        lines.append(
+            "Spider: {processed} processed, {failed} failed (of {discovered} discovered)".format(
+                processed=overall.get("successfully_processed", 0),
+                failed=overall.get("failed", 0),
+                discovered=overall.get("total_discovered", 0),
+            )
+        )
+    if show_uploader and uploader_stats:
+        lines.append(
+            "Uploader: {success}/{total} added".format(
+                success=uploader_stats.get("success", 0),
+                total=uploader_stats.get("total", 0),
+            )
+        )
+    if show_pikpak and pikpak_stats:
+        lines.append(
+            "PikPak: {added} added, {failed} failed".format(
+                added=pikpak_stats.get("added_to_pikpak", 0),
+                failed=pikpak_stats.get("failed", 0),
+            )
+        )
+    return "\n".join(lines)
+
+
 def run_email_notification(
     options: EmailNotificationOptions,
+    *,
+    deliver: bool = True,
 ) -> EmailNotificationResult:
     """Run the end-to-end email notification flow for *options*.
 
@@ -105,6 +156,14 @@ def run_email_notification(
     temporary attachments, commits the pipeline log, and returns an
     :class:`EmailNotificationResult` whose ``exit_code`` is 2 on SMTP failure
     outside dry-run, else 0.
+
+    ``deliver`` (ADR-039 D4) controls only the SMTP send. The caller passes
+    ``deliver=False`` when ``email`` is not an active ``NOTIFY_BACKENDS`` entry
+    (e.g. a Telegram-only operator): the run analysis still produces the verdict
+    subject + the ``summary`` digest so the dispatcher can fan it out to the
+    secondary backends, but no email is sent and no SMTP-failure exit code is
+    raised. Everything else (log analysis, attachment prep, pipeline-log commit)
+    is unchanged.
     """
     logger.info("=" * 60)
     logger.info("EMAIL NOTIFICATION SCRIPT")
@@ -547,10 +606,19 @@ Check attached logs for details.
 
     # Send email (ADR-046 P5: thread the session explicitly — standalone /
     # ad-hoc callers pass None and the history row persists untagged).
-    email_sent = send_email(
-        subject, body, attachments, options.dry_run,
-        session_id=options.session_id,
-    )
+    # ADR-039 D4: skip the SMTP send when 'email' is not an active backend; the
+    # rest of the flow still runs so secondary backends get the summary.
+    if deliver:
+        email_sent = send_email(
+            subject, body, attachments, options.dry_run,
+            session_id=options.session_id,
+        )
+    else:
+        email_sent = False
+        logger.info(
+            "Email delivery suppressed — 'email' is not in NOTIFY_BACKENDS; "
+            "summary prepared for secondary notify backends only."
+        )
 
     # Clean up temporary txt files
     for txt_path in txt_attachments:
@@ -603,7 +671,7 @@ Check attached logs for details.
     # ``server.send_message()``, False on any caught exception. In
     # ``--dry-run`` we deliberately skip SMTP, so the success-path
     # boolean is forced True there and this branch never fires.
-    if not options.dry_run and not email_sent:
+    if deliver and not options.dry_run and not email_sent:
         logger.error(
             "Email send FAILED for subject=%r; exiting non-zero so the "
             "CI job surfaces the failure instead of marking the pipeline "
@@ -611,8 +679,25 @@ Check attached logs for details.
             subject,
         )
 
+    # ADR-039 D4: build a compact digest for secondary notify backends. The
+    # verdict already rides in ``subject``; this adds the headline stats so a
+    # Telegram / Discord ping is useful on its own.
+    summary = _build_notify_summary(
+        has_critical_errors=has_critical_errors,
+        pipeline_errors=pipeline_errors,
+        spider_stats=final_spider_stats,
+        uploader_stats=final_uploader_stats,
+        pikpak_stats=final_pikpak_stats,
+        show_spider=spider_log_exists,
+        show_uploader=uploader_log_exists,
+        show_pikpak=pikpak_log_exists,
+    )
+
     return EmailNotificationResult(
         email_sent=email_sent,
         dry_run=options.dry_run,
         subject=subject,
+        has_critical_errors=has_critical_errors,
+        summary=summary,
+        deliver=deliver,
     )

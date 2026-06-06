@@ -28,7 +28,7 @@ GitHub Actions 部署提供：
 
 进入 **Settings > Secrets and variables > Actions > Secrets**（或将其范围限定到 `Production` 环境）。
 
-`config_generator` CLI（`python3 -m apps.cli.config_generator --github-actions`）从以 `VAR_` 为前缀的环境变量中读取这些值，并在每次工作流运行开始时写入 `config.py`。下面列出的每个 Secret 对应工作流 YAML 中的一个 `VAR_*` 环境变量。
+`config_generator` CLI（`python3 -m apps.cli.ops.config_generator --github-actions`）从以 `VAR_` 为前缀的环境变量中读取这些值，并在每次工作流运行开始时写入 `config.py`。下面列出的每个 Secret 对应工作流 YAML 中的一个 `VAR_*` 环境变量。
 
 ### 必需 Secrets
 
@@ -89,6 +89,15 @@ GitHub Actions 部署提供：
 |---|---|
 | `RCLONE_CONFIG_BASE64` | Base64 编码的 `rclone.conf` 内容（用于 Google Drive 库存和去重） |
 
+### 可选 Secrets（Telegram 通知，ADR-039）
+
+仅当 `NOTIFY_BACKENDS_JSON` 包含 `"telegram"` 时需要。
+
+| Secret | 用途 |
+|---|---|
+| `TELEGRAM_BOT_TOKEN` | 来自 [@BotFather](https://t.me/BotFather) 的 bot token，例如 `123456:ABC-DEF...` |
+| `TELEGRAM_CHAT_ID` | 目标 chat/channel id，例如 `-1001234567890` |
+
 ## 步骤 4 —— 配置仓库 Variables
 
 进入 **Settings > Secrets and variables > Actions > Variables**。
@@ -101,6 +110,7 @@ GitHub Actions 部署提供：
 |---|---|---|
 | `GIT_REPO_URL` | -- | 仓库 HTTPS URL（例如 `https://github.com/you/JAVDB_AutoSpider.git`） |
 | `GIT_BRANCH` | `main` | git push 的分支 |
+| `NOTIFY_BACKENDS_JSON` | `["email"]` | active 通知后端的 JSON 数组（ADR-039）。加 `"telegram"` 可收到 Telegram 运行摘要;设为 `["telegram"]` 则禁用邮件报告。telegram active 时需配套 `TELEGRAM_*` secrets。 |
 | `PROXY_MODE` | `pool` | `pool`、`single` 或 `None` |
 | `PROXY_MODULES_JSON` | `["spider"]` | 使用 proxy 的模块 JSON 数组：`spider`、`qbittorrent`、`pikpak`、`all` |
 | `DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST_JSON` | `["western_studio_date"]` | 排除每日抓取的 video-code family 的 JSON 数组，默认 `["western_studio_date"]`。设为 `[]` 可停止排除 western studio/date family。 |
@@ -194,7 +204,7 @@ GitHub Actions 部署提供：
 在 CI 中没有持久化的 `config.py` 文件。每个工作流的 **setup 任务**会运行：
 
 ```bash
-python3 -m apps.cli.config_generator --github-actions
+python3 -m apps.cli.ops.config_generator --github-actions
 ```
 
 该脚本读取所有 `VAR_*` 环境变量（由上述 Secrets 和 Variables 填充）并写入完整的 `config.py`。然后使用 `ARTIFACT_KEY` 加密该文件，并作为加密产物在任务之间传递。

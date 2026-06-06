@@ -106,15 +106,16 @@ summary of new torrents found.
 
 ### Notification Backends (ADR-039)
 
-By default, run notifications are sent by email only. The pluggable notify layer
-lets you fan out the same notification to additional backends with per-backend
-failure isolation -- one backend failing does not block the others.
+Pipeline run notifications fan out to one or more pluggable backends selected by
+`NOTIFY_BACKENDS`, with per-backend failure isolation — one backend failing does
+not block the others. The `email` backend sends the full HTML report (above); any
+other active backend (e.g. `telegram`) receives a condensed run summary.
 
 | Variable | Type | Default | Description |
 |---|---|---|---|
-| `NOTIFY_BACKENDS` | `list[str]` \| `str` | `['email']` | Active notify backends, tried in order. Defaults to email only, so existing setups are unchanged. Accepts a list (`['email', 'telegram']`) or a CSV string (`'email, telegram'`). Unknown or unconfigured backends are skipped and reported in the returned results (`NotifyResult(ok=False)`). |
-| `TELEGRAM_BOT_TOKEN` | `str` | `''` | Telegram bot token from @BotFather. Required when `'telegram'` is active. |
-| `TELEGRAM_CHAT_ID` | `str` | `''` | Target chat or channel id the bot posts to. Required when `'telegram'` is active. |
+| `NOTIFY_BACKENDS` | `list[str]` \| `str` | `['email']` | Active notify backends, tried in order. Defaults to email only, so existing setups are unchanged. Accepts a list (`['email', 'telegram']`) or a CSV string (`'email, telegram'`). Set `['telegram']` to disable the email report entirely. Unknown or unconfigured backends are skipped and reported in the returned results (`NotifyResult(ok=False)`). |
+| `TELEGRAM_BOT_TOKEN` | `str` | `''` | Telegram bot token from [@BotFather](https://t.me/BotFather). Required when `'telegram'` is active. |
+| `TELEGRAM_CHAT_ID` | `str` | `''` | Target chat or channel id the bot posts to (e.g. `-1001234567890`). Required when `'telegram'` is active. |
 
 **Enabling Telegram:** create a bot via @BotFather to get a token, obtain your
 chat id (message the bot, then read `https://api.telegram.org/bot<token>/getUpdates`),
@@ -126,12 +127,12 @@ TELEGRAM_BOT_TOKEN = '123456:ABC-DEF...'
 TELEGRAM_CHAT_ID = '987654321'
 ```
 
-> **Phase 1 status (plumbing only):** ADR-039 Phase 1 ships the notify plugin
-> layer and the `notify.dispatch.send` fan-out, but does **not** yet route the
-> existing pipeline email notification through it. Until a later phase wires the
-> pipeline caller onto `notify.dispatch.send`, setting `NOTIFY_BACKENDS` (e.g.
-> adding `'telegram'`) registers the backend but does **not** redirect current
-> pipeline notifications — they still go out via the unchanged direct email path.
+The pipeline notification step (`apps.cli.notify.email`) routes through this
+fan-out: the `email` backend keeps its full HTML report, while secondary backends
+(e.g. Telegram) receive the run verdict plus the condensed summary. When `email`
+is not in `NOTIFY_BACKENDS`, the report is still computed for the summary but the
+SMTP send is suppressed, and the exit code reflects the secondary fan-out rather
+than email delivery.
 
 ---
 

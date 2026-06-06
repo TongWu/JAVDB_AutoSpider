@@ -351,6 +351,43 @@ class TestGetConfigMap:
         assert entries['TORRENT_QUALITY_CATEGORIES'][4] == 'TORRENT QUALITY EVIDENCE'
 
 
+class TestNotifyBackends:
+    """ADR-039: NOTIFY_BACKENDS / TELEGRAM_* must reach the generated config.py.
+
+    cfg() only reads the generated config.py (never env directly), so without
+    these entries the pluggable notify backends are dead in the GH Actions path.
+    """
+
+    def test_config_map_contains_notify_backend_entries(self):
+        config_map = get_config_map()
+        by_name = {item[0]: item for item in config_map}
+        assert by_name['NOTIFY_BACKENDS'][1] == 'NOTIFY_BACKENDS_JSON'
+        assert by_name['NOTIFY_BACKENDS'][3] == ['email']
+        assert by_name['NOTIFY_BACKENDS'][4] == 'NOTIFICATION BACKENDS'
+        assert by_name['TELEGRAM_BOT_TOKEN'][1] == 'TELEGRAM_BOT_TOKEN'
+        assert by_name['TELEGRAM_BOT_TOKEN'][3] == ''
+        assert by_name['TELEGRAM_CHAT_ID'][1] == 'TELEGRAM_CHAT_ID'
+
+    def test_generated_config_defaults_to_email_only(self):
+        with patch.dict(os.environ, {}, clear=True):
+            content = generate_config_content()
+        assert 'NOTIFY_BACKENDS = ["email"]' in content
+        assert "TELEGRAM_BOT_TOKEN = ''" in content
+        assert "TELEGRAM_CHAT_ID = ''" in content
+
+    def test_generated_config_honours_env_overrides(self):
+        env = {
+            'VAR_NOTIFY_BACKENDS_JSON': '["email", "telegram"]',
+            'VAR_TELEGRAM_BOT_TOKEN': '123:ABC',
+            'VAR_TELEGRAM_CHAT_ID': '-100123',
+        }
+        with patch.dict(os.environ, env, clear=True):
+            content = generate_config_content()
+        assert 'NOTIFY_BACKENDS = ["email", "telegram"]' in content
+        assert "TELEGRAM_BOT_TOKEN = '123:ABC'" in content
+        assert "TELEGRAM_CHAT_ID = '-100123'" in content
+
+
 class TestGenerateConfigContent:
     """Tests for generate_config_content function."""
     
@@ -500,6 +537,14 @@ class TestMaskSensitiveValues:
         assert "ops-secret" not in masked
         assert "OPS_DIAGNOSIS_API_KEY = '***MASKED***'" in masked
         assert "OPS_DIAGNOSIS_MODEL = 'fallback'" in masked
+
+    def test_masks_telegram_bot_token(self):
+        """Should mask TELEGRAM_BOT_TOKEN (ADR-039) but leave the chat id."""
+        content = "TELEGRAM_BOT_TOKEN = '123456:ABCDEF'\nTELEGRAM_CHAT_ID = '-100999'"
+        masked = mask_sensitive_values(content)
+        assert "123456:ABCDEF" not in masked
+        assert "TELEGRAM_BOT_TOKEN = '***MASKED***'" in masked
+        assert "TELEGRAM_CHAT_ID = '-100999'" in masked
 
 
 class TestWriteConfig:
