@@ -206,3 +206,298 @@ def _build_qb_client():
         cfg("QB_PASSWORD", ""),
         False,
     )
+
+
+# --- ADR-033 Phase 2: Ownership truth ---------------------------------------
+
+from javdb.ops.reconcile.collectors import (  # noqa: E402
+    GdriveOwnershipCollector,
+    NasOwnershipCollector,
+    PikpakOwnershipCollector,
+    QbOwnershipCollector,
+)
+from javdb.ops.reconcile.models import (  # noqa: E402
+    OWNERSHIP_SOURCES,
+    PERSISTENT_OWNERSHIP_SOURCES,
+    OwnershipLedgerRecord,
+    OwnershipOptions,
+    OwnershipResult,
+)
+from javdb.ops.reconcile.persistence import open_ledger_repo  # noqa: E402
+
+# Sources whose snapshots drive a present=0 sweep of absent rows. pikpak is
+# monotonic (append-only history); nas is a stub that returns []. Both are
+# excluded so an empty/partial snapshot never wipes durable rows (D-P2-5).
+_SWEPT_OWNERSHIP_SOURCES = frozenset({"gdrive", "qb"})
+
+
+@contextlib.contextmanager
+def _ledger_ctx(repo):
+    if repo is not None:
+        yield repo
+    else:
+        with open_ledger_repo() as opened:
+            yield opened
+
+
+@contextlib.contextmanager
+def _outcome_ctx(repo):
+    if repo is not None:
+        yield repo
+    else:
+        with open_outcome_repo() as opened:
+            yield opened
+
+
+def _load_gdrive_inventory():
+    from javdb.storage.repos.operations_repo import OperationsRepo
+    from javdb.spider.services.dedup import _normalise_code, RcloneEntry
+
+    raw = OperationsRepo().load_rclone_inventory()
+    inventory: dict = {}
+    for code, entries in raw.items():
+        ncode = _normalise_code(code)
+        inventory.setdefault(ncode, []).extend(
+            RcloneEntry(
+                video_code=_normalise_code(e.get("VideoCode", e.get("video_code", ncode))),
+                sensor_category=e.get("SensorCategory", e.get("sensor_category", "")),
+                subtitle_category=e.get("SubtitleCategory", e.get("subtitle_category", "")),
+                folder_path=e.get("FolderPath", e.get("folder_path", "")),
+                folder_size=int(e.get("FolderSize", e.get("folder_size", 0)) or 0),
+                file_count=int(e.get("FileCount", e.get("file_count", 0)) or 0),
+                scan_datetime=e.get("DateTimeScanned", e.get("scan_datetime", "")),
+            )
+            for e in entries
+        )
+    return inventory
+
+
+def _collect_source(source, *, rclone_inventory, qb_outcomes, pikpak_rows):
+    if source == "gdrive":
+        return GdriveOwnershipCollector().collect(rclone_inventory)
+    if source == "qb":
+        return QbOwnershipCollector().collect(qb_outcomes)
+    if source == "pikpak":
+        return PikpakOwnershipCollector().collect(pikpak_rows)
+    if source == "nas":
+        return NasOwnershipCollector().collect()
+    return []
+
+
+def run_ownership(
+    options: OwnershipOptions,
+    *,
+    repo=None,
+    outcome_repo=None,
+    rclone_inventory=None,
+    qb_outcomes=None,
+    pikpak_rows=None,
+) -> OwnershipResult:
+    """Reconcile OwnershipLedger against all sources. Sole writer of the Ledger."""
+    result = OwnershipResult()
+    sources = [s for s in options.sources if s in OWNERSHIP_SOURCES]
+    if not sources:
+        result.errors.append("no valid ownership sources requested")
+        return result
+
+    now = utc_now_iso()
+    # Lazily load real source data only when a source is requested and no
+    # injection was provided (mirrors Phase-1 run()'s lazy qB client build).
+    if rclone_inventory is None and "gdrive" in sources:
+        rclone_inventory = _load_gdrive_inventory()
+    if qb_outcomes is None and "qb" in sources:
+        # qb snapshot = outcomes still in the active acquisition pipeline
+        # (queued/downloading/completed). Once a video reaches in_library or
+        # failed it leaves this snapshot; its qb Ledger row is then swept to
+        # present=0 (the qB→archive handoff, D-P2-5).
+        with _outcome_ctx(outcome_repo) as o:
+            qb_outcomes = [vars(r) for r in o.list_pending_landing()]
+    if pikpak_rows is None and "pikpak" in sources:
+        from javdb.storage.repos.operations_repo import OperationsRepo
+        pikpak_rows = OperationsRepo().load_pikpak_history()
+
+    with _ledger_ctx(repo) as r:
+        for source in sources:
+            try:
+                observations = _collect_source(
+                    source,
+                    rclone_inventory=rclone_inventory or {},
+                    qb_outcomes=qb_outcomes or [],
+                    pikpak_rows=pikpak_rows or [],
+                )
+            except Exception as exc:
+                logger.warning("run_ownership: collect failed for %s", source, exc_info=True)
+                result.errors.append(str(exc))
+                continue
+            result.observed += len(observations)
+            present_keys = set()
+            for obs in observations:
+                present_keys.add((obs.video_code, obs.category))
+                if options.dry_run:
+                    continue
+                try:
+                    r.upsert(OwnershipLedgerRecord(
+                        video_code=obs.video_code, source=obs.source, category=obs.category,
+                        path=obs.path, size=obs.size, present=1, observed_at=now,
+                    ))
+                    result.upserted += 1
+                except Exception as exc:
+                    logger.warning("run_ownership: upsert failed", exc_info=True)
+                    result.errors.append(str(exc))
+            if not options.dry_run and source in _SWEPT_OWNERSHIP_SOURCES:
+                try:
+                    result.swept_absent += r.mark_absent(source, present_keys)
+                except Exception as exc:
+                    logger.warning("run_ownership: sweep failed for %s", source, exc_info=True)
+                    result.errors.append(str(exc))
+
+        # Final step: derive in_library from the now-current persistent sources.
+        if options.derive_in_library and not options.dry_run:
+            result.marked_in_library += _derive_in_library(r, outcome_repo, now)
+
+    return result
+
+
+def _derive_in_library(ledger_repo, outcome_repo, now: str) -> int:
+    """Promote AcquisitionOutcome rows to in_library when their video_code has a
+    present gdrive/nas Ledger entry (D-P2-8). 'failed' rows are left untouched
+    (list_pending_landing excludes them).
+
+    Both sides are NFKC+upper normalized before comparison: Ledger gdrive codes
+    are stored normalized, but AcquisitionOutcome.video_code is stored verbatim
+    from the uploader (e.g. 'n0656', full-width), so a raw compare would never
+    match and the row would never land (Codex review on PR #179)."""
+    from javdb.spider.services.dedup import _normalise_code
+    owned = {
+        _normalise_code(c)
+        for c in ledger_repo.list_present_video_codes(PERSISTENT_OWNERSHIP_SOURCES)
+    }
+    if not owned:
+        return 0
+    promoted = 0
+    with _outcome_ctx(outcome_repo) as o:
+        for rec in o.list_pending_landing():
+            if rec.video_code and _normalise_code(rec.video_code) in owned:
+                o.mark_in_library(rec.qb_hash, landed_at=now)
+                promoted += 1
+    return promoted
+
+
+# --- ADR-033 Phase 3: Consumption signal ------------------------------------
+
+from javdb.ops.reconcile.code_resolver import resolve_video_code  # noqa: E402
+from javdb.ops.reconcile.collectors import MediaServerCollector  # noqa: E402
+from javdb.ops.reconcile.models import (  # noqa: E402
+    ConsumptionOptions,
+    ConsumptionResult,
+    ConsumptionSignalRecord,
+    UnresolvedMediaItemRecord,
+)
+from javdb.ops.reconcile.persistence import (  # noqa: E402
+    open_consumption_repo,
+    open_unresolved_repo,
+)
+
+_CONFIDENCE_COUNTER = {
+    "high": "resolved_high",
+    "medium": "resolved_medium",
+    "low": "resolved_low",
+}
+
+
+@contextlib.contextmanager
+def _consumption_repo_ctx(repo):
+    if repo is not None:
+        yield repo
+    else:
+        with open_consumption_repo() as opened:
+            yield opened
+
+
+@contextlib.contextmanager
+def _unresolved_repo_ctx(repo):
+    if repo is not None:
+        yield repo
+    else:
+        with open_unresolved_repo() as opened:
+            yield opened
+
+
+def run_consumption(
+    options: ConsumptionOptions,
+    *,
+    repo=None,
+    unresolved_repo=None,
+    adapters=None,
+) -> ConsumptionResult:
+    """Pull watch signal from media servers and UPSERT ConsumptionSignal.
+
+    Sole writer of ConsumptionSignal + UnresolvedMediaItem. Per-instance
+    fail-open (ADR-033 D-P3-6): a dead instance logs a masked warning, records
+    an error, and is skipped — the pass continues. Prior signal rows for an
+    unobserved instance are left untouched."""
+    result = ConsumptionResult()
+    servers = list(options.servers)
+    if not servers:
+        logger.info("run_consumption: no MEDIA_SERVERS configured; nothing to do")
+        return result
+
+    now = utc_now_iso()
+    with _consumption_repo_ctx(repo) as signal_repo, \
+            _unresolved_repo_ctx(unresolved_repo) as unresolved:
+        for cfg in servers:
+            try:
+                adapter = (adapters or {}).get(cfg.instance)
+                if adapter is None:
+                    from javdb.integrations.media_servers import build_adapter
+                    adapter = build_adapter(cfg)
+                items = MediaServerCollector(adapter).collect(options.since)
+            except Exception as exc:
+                logger.warning(
+                    "run_consumption: instance %s failed (skipping)",
+                    cfg.instance,
+                    exc_info=True,
+                )
+                result.errors.append(f"{cfg.instance}: {exc}")
+                continue
+
+            result.instances_observed += 1
+            result.items_observed += len(items)
+            for item in items:
+                video_code, confidence = resolve_video_code(item)
+                if video_code is None:
+                    result.marked_unresolved += 1
+                    if not options.dry_run:
+                        unresolved.upsert(UnresolvedMediaItemRecord(
+                            instance=item.instance,
+                            source_type=item.source_type,
+                            library_id=item.library_id,
+                            library_name=item.library_name,
+                            item_id=item.item_id,
+                            raw_title=item.title,
+                            file_path=item.file_path,
+                            observed_at=now,
+                        ))
+                    continue
+
+                counter = _CONFIDENCE_COUNTER.get(confidence)
+                if counter:
+                    setattr(result, counter, getattr(result, counter) + 1)
+                if options.dry_run:
+                    continue
+                signal_repo.upsert(ConsumptionSignalRecord(
+                    video_code=video_code,
+                    source_type=item.source_type,
+                    instance=item.instance,
+                    library_id=item.library_id,
+                    library_name=item.library_name,
+                    watched=item.watched,
+                    progress_pct=item.progress_pct,
+                    play_count=item.play_count,
+                    rating=item.rating,
+                    watched_at=item.watched_at,
+                    resolved_confidence=confidence,
+                    observed_at=now,
+                ))
+                result.signals_updated += 1
+    return result

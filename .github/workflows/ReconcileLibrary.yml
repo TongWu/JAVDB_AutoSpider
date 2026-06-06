@@ -1,9 +1,17 @@
 name: Reconcile Library
 
-# ADR-033 Phase 1: reconcile AcquisitionOutcome rows against live qB state.
-# The cron runs hourly because qB download state changes independently of the
-# ingestion workflows. The default runner is self-hosted so the job can reach
-# the operator's qBittorrent Web UI; manual dispatch may override it for tests.
+# ADR-033 Phase 1+2+3: `--pass all` runs all three closed-loop reconcile passes
+# (acquisition + ownership + consumption).
+# The acquisition pass reconciles AcquisitionOutcome rows against live qB state.
+# The ownership pass collects from gdrive (RcloneInventory), qb (AcquisitionOutcome
+# bridge), pikpak (PikpakHistory success rows), and nas (a forward-compat stub that
+# is currently always a no-op, regardless of RCLONE_NAS_REMOTE).
+# The consumption pass collects watch/rating signal from the media servers in
+# MEDIA_SERVERS (Emby/Plex); with none configured it is a no-op.
+# The cron runs hourly because qB download state changes
+# independently of the ingestion workflows. The default runner is self-hosted so the
+# job can reach the operator's qBittorrent Web UI; manual dispatch may override it
+# for tests.
 
 permissions:
   contents: read
@@ -66,13 +74,19 @@ jobs:
 
       - name: Generate config.py from GitHub Variables and Secrets
         env:
-          # qBittorrent is the only Phase-1 collector.
+          # qBittorrent: used by both acquisition and ownership passes.
           VAR_QB_URL: ${{ secrets.QB_URL }}
           VAR_QB_USERNAME: ${{ secrets.QB_USERNAME }}
           VAR_QB_PASSWORD: ${{ secrets.QB_PASSWORD }}
           VAR_TORRENT_CATEGORY: ${{ vars.TORRENT_CATEGORY }}
           VAR_TORRENT_CATEGORY_ADHOC: ${{ vars.TORRENT_CATEGORY_ADHOC }}
-          # D1 / Cloudflare - AcquisitionOutcome lives in the operations DB.
+          # Rclone: ownership pass collects from gdrive via RcloneInventory
+          # (already populated by WeeklyDedup). RCLONE_NAS_REMOTE is intentionally
+          # unset here; the nas collector is a forward-compat stub that logs and
+          # yields nothing until the operator configures RCLONE_NAS_REMOTE.
+          VAR_RCLONE_CONFIG_BASE64: ${{ secrets.RCLONE_CONFIG_BASE64 }}
+          VAR_RCLONE_FOLDER_PATH: ${{ vars.RCLONE_FOLDER_PATH }}
+          # D1 / Cloudflare - AcquisitionOutcome and OwnershipLedger live in operations DB.
           VAR_STORAGE_BACKEND: d1
           VAR_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           VAR_CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -81,14 +95,18 @@ jobs:
           VAR_D1_OPERATIONS_DB_ID: ${{ secrets.D1_OPERATIONS_DB_ID }}
           VAR_REPORTS_DIR: ${{ vars.REPORTS_DIR || 'reports' }}
           VAR_LOG_LEVEL: ${{ vars.LOG_LEVEL || 'INFO' }}
+          # ADR-033 Phase 3: media servers for the consumption pass (--pass all).
+          # JSON list of {type,instance,base_url,token,libraries?}; tokens inline.
+          VAR_MEDIA_SERVERS_JSON: ${{ secrets.MEDIA_SERVERS_JSON }}
         run: python3 -m apps.cli.ops.config_generator --github-actions
 
-      - name: Run acquisition-outcome reconciliation
+      - name: Run all closed-loop reconcile passes (acquisition + ownership + consumption)
         run: |
           set -e
           set -o pipefail
 
           CMD=(python3 -m apps.cli.ops.reconcile
+               --pass all
                --stalled-after-days "$INPUT_STALLED_AFTER_DAYS"
                --json)
 

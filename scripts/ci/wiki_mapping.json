@@ -52,6 +52,11 @@
       "category": "Self-Hoster Guides"
     },
     {
+      "source": "docs/handbook/en/self-hoster/media-servers.md",
+      "wiki_page": "Media-Servers-Setup",
+      "category": "Self-Hoster Guides"
+    },
+    {
       "source": "docs/handbook/en/developer/cli-reference.md",
       "wiki_page": "CLI-Reference",
       "category": "Developer Guides"

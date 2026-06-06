@@ -5,6 +5,7 @@ GDrive entries to detect upgrade opportunities (e.g. subtitle or sensor
 priority upgrades).  Storage backend is controlled by ``STORAGE_MODE``.
 """
 
+import contextlib
 import csv
 import os
 import tempfile
@@ -139,42 +140,130 @@ _get_wuma_priority = get_uncensored_priority
 # Inventory loading
 # ---------------------------------------------------------------------------
 
+@contextlib.contextmanager
+def _open_ledger_for_dedup():
+    """Yield an OwnershipLedgerRepo, closing the DB connection on exit.
+
+    A context manager (callers use ``with``) so the operations-DB connection is
+    released after each dedup read instead of leaking — important because
+    should_skip_from_ownership may be called per-movie in a scrape loop
+    (CodeRabbit review on PR #179). Extracted as a module-level function so
+    tests can monkeypatch it."""
+    from javdb.ops.reconcile.persistence import open_ledger_repo
+    with open_ledger_repo() as repo:
+        yield repo
+
+
+def _ledger_has_gdrive_rows(repo) -> bool:
+    """Return True if the Ledger contains any gdrive rows (present or absent)."""
+    return bool(repo.list_by_source("gdrive"))
+
+
+def _split_glyph_category(category: str) -> tuple:
+    """Split a gdrive Ledger composite '<sensor>|<subtitle>' (D-P2-1) back into
+    (sensor_category, subtitle_category). Empty/malformed -> ('', '')."""
+    sensor, sep, subtitle = (category or "").partition("|")
+    return (sensor, subtitle) if sep else ("", "")
+
+
+def _ledger_to_inventory(rows) -> Dict[str, List[RcloneEntry]]:
+    """Synthesize a RcloneEntry inventory dict from OwnershipLedger rows."""
+    inventory: Dict[str, List[RcloneEntry]] = {}
+    for rec in rows:
+        if rec.present != 1:
+            continue
+        code = _normalise_code(rec.video_code)
+        sensor, subtitle = _split_glyph_category(rec.category)
+        inventory.setdefault(code, []).append(RcloneEntry(
+            video_code=code, sensor_category=sensor, subtitle_category=subtitle,
+            folder_path=rec.path or "", folder_size=int(rec.size or 0),
+            file_count=0, scan_datetime=rec.observed_at or "",
+        ))
+    return inventory
+
+
+def _legacy_load_rclone_inventory(csv_path: str) -> Dict[str, List[RcloneEntry]]:
+    """Legacy load path: read from RcloneInventory (OperationsRepo) table."""
+    from javdb.storage.db import current_backend
+    raw = OperationsRepo().load_rclone_inventory()
+    inventory: Dict[str, List[RcloneEntry]] = {}
+    for code, entries in raw.items():
+        normalised_code = _normalise_code(code)
+        inventory.setdefault(normalised_code, []).extend(
+            RcloneEntry(
+                video_code=_normalise_code(
+                    e.get('VideoCode', e.get('video_code', normalised_code))
+                ),
+                sensor_category=e.get('SensorCategory', e.get('sensor_category', '')),
+                subtitle_category=e.get('SubtitleCategory', e.get('subtitle_category', '')),
+                folder_path=e.get('FolderPath', e.get('folder_path', '')),
+                folder_size=int(e.get('FolderSize', e.get('folder_size', 0)) or 0),
+                file_count=int(e.get('FileCount', e.get('file_count', 0)) or 0),
+                scan_datetime=e.get('DateTimeScanned', e.get('scan_datetime', '')),
+            )
+            for e in entries
+        )
+    backend = current_backend()
+    if inventory:
+        logger.info(f"Loaded rclone inventory: {len(inventory)} unique codes from {backend} backend")
+    else:
+        logger.info(f"Rclone inventory is empty in {backend} backend - dedup skipped")
+    return inventory
+
+
 def load_rclone_inventory(csv_path: str) -> Dict[str, List[RcloneEntry]]:
     """Load rclone inventory and return dict keyed by video_code.
 
     A single video_code may map to multiple entries (multiple GDrive copies).
     Returns an empty dict when the data source is empty.
+
+    Preferred path (D-P2-6): reads OwnershipLedger rows where source='gdrive'
+    and synthesizes RcloneEntry objects by splitting the glyph composite
+    category ('<sensor>|<subtitle>') back into sensor_category/subtitle_category.
+
+    Transitional fallback (D-P2-9): if the Ledger has zero gdrive rows AND
+    RcloneInventory is non-empty, falls back to the legacy OperationsRepo path.
+    Remove this fallback once the Ledger is proven populated in production.
     """
     if use_sqlite():
         _ensure_db()
-    if use_sqlite():
-        from javdb.storage.db import current_backend
-        raw = OperationsRepo().load_rclone_inventory()
-        inventory: Dict[str, List[RcloneEntry]] = {}
-        for code, entries in raw.items():
-            normalised_code = _normalise_code(code)
-            inventory.setdefault(normalised_code, []).extend(
-                RcloneEntry(
-                    video_code=_normalise_code(
-                        e.get('VideoCode', e.get('video_code', normalised_code))
-                    ),
-                    sensor_category=e.get('SensorCategory', e.get('sensor_category', '')),
-                    subtitle_category=e.get('SubtitleCategory', e.get('subtitle_category', '')),
-                    folder_path=e.get('FolderPath', e.get('folder_path', '')),
-                    folder_size=int(e.get('FolderSize', e.get('folder_size', 0)) or 0),
-                    file_count=int(e.get('FileCount', e.get('file_count', 0)) or 0),
-                    scan_datetime=e.get('DateTimeScanned', e.get('scan_datetime', '')),
+        with _open_ledger_for_dedup() as repo:
+            if _ledger_has_gdrive_rows(repo):
+                gdrive_rows = repo.list_by_source("gdrive")
+                inventory = _ledger_to_inventory(gdrive_rows)
+                if inventory:
+                    logger.info(
+                        "Loaded rclone inventory: %d unique codes from OwnershipLedger (gdrive)",
+                        len(inventory),
+                    )
+                else:
+                    logger.info("Rclone inventory is empty in OwnershipLedger (gdrive) - dedup skipped")
+                return inventory
+            # D-P2-9 transitional fallback: Ledger unpopulated, try legacy table.
+            legacy = _legacy_load_rclone_inventory(csv_path)
+            if legacy:
+                logger.warning(
+                    "OwnershipLedger has no gdrive rows — falling back to legacy "
+                    "RcloneInventory table (%d codes). Populate the Ledger to remove this fallback.",
+                    len(legacy),
                 )
-                for e in entries
-            )
-        backend = current_backend()
-        if inventory:
-            logger.info(f"Loaded rclone inventory: {len(inventory)} unique codes from {backend} backend")
-        else:
-            logger.info(f"Rclone inventory is empty in {backend} backend - dedup skipped")
-        return inventory
+            else:
+                logger.info("OwnershipLedger has no gdrive rows and RcloneInventory is empty - dedup skipped")
+            return legacy
 
     return _csv_load_rclone_inventory(csv_path)
+
+
+def should_skip_from_ownership(video_code: str) -> bool:
+    """Skip a video_code already owned in a *persistent* source (gdrive/nas).
+
+    Unlike should_skip_from_rclone (gdrive only), this consults the multi-source
+    Ledger but deliberately ignores qb/pikpak (in-transit / mirror) so a
+    downloading qB torrent never suppresses upgrade detection (D-P2-7)."""
+    from javdb.ops.reconcile.models import PERSISTENT_OWNERSHIP_SOURCES
+    with _open_ledger_for_dedup() as repo:
+        owned = repo.list_present_video_codes(PERSISTENT_OWNERSHIP_SOURCES)
+    return _normalise_code(video_code) in owned
 
 
 def _csv_load_rclone_inventory(csv_path: str) -> Dict[str, List[RcloneEntry]]:

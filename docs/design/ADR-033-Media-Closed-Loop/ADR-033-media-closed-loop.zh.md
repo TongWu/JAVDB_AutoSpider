@@ -2,7 +2,7 @@
 
 | 字段       | 值                                                                    |
 | ---------- | --------------------------------------------------------------------- |
-| **状态**   | Proposed — 伞型;Phase 1 已实现并完成本地验证;执行下放给各期 IMP       |
+| **状态**   | Accepted — 伞型;三期均已实现并完成本地验证(Phase 1 于 2026-05-30,Phase 2-3 于 2026-06-06)。远端 D1 apply 与 SQLite mirror refresh 仍属部署环境验证门 |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
 | **关联**   | [ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-024](../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md), [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-028](../ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md) |
@@ -123,7 +123,7 @@ queued ──→ downloading ──→ completed ──→ in_library
 
 - **多一个需要运维的周期作业** —— `ReconcileLibrary.yml` 需要有 LAN 访问的 self-hosted runner;闭环的新鲜度受其 cron 节奏约束。
 - **join-key 歧义是永久的** —— 部分媒体条目会落入 `unresolved`;系统暴露其计数,但无法保证 100% 映射。
-- **更多 D1 面** —— 三张新表要迁移、镜像、对账。
+- **更多 D1 面** —— 三张新闭环表(外加 Phase 3 的 `UnresolvedMediaItem` 辅助表)要迁移、镜像、对账。
 - **`completed` 捕获耦合到清理步骤** —— 若清理逻辑变更,完成观察点须随之迁移(作为已知耦合记录在案)。
 
 ## 实施路线图 (Implementation Roadmap)
@@ -136,7 +136,7 @@ queued ──→ downloading ──→ completed ──→ in_library
 
 每期独立可上线、可回滚。Phase 1 是地基;Phase 2/3 是"加一个收集器",不改动 service 编排。
 
-**规划节奏。** [IMP-ADR033-01](IMP-ADR033-01-acquisition-outcome.md)（Phase 1）已实现并完成本地验证。**IMP-ADR033-02 与 IMP-ADR033-03 刻意先作为路线图占位**——它们的详细计划将在 Phase 1 之后,用一轮专门的 `grill-me` + `brainstorming` 产出,以纳入 Phase 1 reconcile service 与 `AcquisitionOutcome` 形态在实践中暴露的东西。
+**规划节奏。** 三期均已实现并完成本地验证（[IMP-ADR033-01](IMP-ADR033-01-acquisition-outcome.md) Phase 1；[IMP-ADR033-02](IMP-ADR033-02-ownership-truth.md) Phase 2；[IMP-ADR033-03](IMP-ADR033-03-consumption-signal.md) Phase 3）。Phase 2/3 计划已于 2026-06-06 经一轮专门的 `grill-me` 成文（纳入了 Phase 1 reconcile service 与 `AcquisitionOutcome` 形态在实践中暴露的东西），随后实现。该轮 grill 在下方原始草图之外锐化了若干 Phase 2/3 设计点——具体的约束性细化见 2026-06-06 状态日志条目(兄弟 `--pass` service、异构 `category`、`UnresolvedMediaItem` 表、nas 占位、dedup 回退)。
 
 ### 明确的非目标 (YAGNI)
 
@@ -179,3 +179,23 @@ queued ──→ downloading ──→ completed ──→ in_library
   [ADR-034](../ADR-034-Media-Closed-Loop-Web-Surface/ADR-034-media-closed-loop-web-surface.md)。
 - 2026-05-30: IMP-ADR033-01（Phase 1）已实现并完成本地验证。远端 D1 apply 与本地
   SQLite mirror refresh 仍属于部署环境验证门。
+- 2026-06-06: IMP-ADR033-02（Phase 2）与 IMP-ADR033-03（Phase 3）计划经一轮 `grill-me`
+  成文。为 IMP 采纳的约束性设计细化:(a) 三个 pass 是同一 `reconcile` 模块内的
+  **兄弟入口**(`run` / `run_ownership` / `run_consumption`),由 `--pass` 选择器驱动
+  ——而非一个臃肿的 `run()`;(b) `OwnershipLedger.category` 为 `NOT NULL DEFAULT ''`
+  且**源生异构**(gdrive 用 glyph 组合、qb 用英文、未知用 `''`)——不做有损的跨源词表
+  统一(D11);(c) Phase 2 落地 gdrive + qb + pikpak 收集器,**nas 为显式 log 占位**;
+  (d) `present` 用每源 diff-sweep(pikpak 单调);(e) dedup 保留 `load_rclone_inventory()`
+  接口,内部改读 Ledger 的 gdrive 行并带**过渡性 `RcloneInventory` 回退**,新增的多源
+  skip 只计持久源(gdrive/nas);(f) D9 的 `unresolved` 桶持久化为专门的
+  **`UnresolvedMediaItem` 表**(故本倡议新增第四张表);(g) `MEDIA_SERVERS` 为
+  `PROXY_POOL` 风格内联 list,媒体 adapter 置于 `javdb/integrations/media_servers/`;
+  (h) 两份 IMP 仅后端——web 面完全留在 ADR-034。
+- 2026-06-06: IMP-ADR033-02（Phase 2）与 IMP-ADR033-03（Phase 3）经 subagent 驱动开发
+  **已实现并完成本地验证**(23 个任务,每个任务两阶段 spec + 质量复审;最终一次整体实现
+  复审确认了跨切面一致性)。reconcile 模块现暴露三个兄弟 pass(`run` / `run_ownership` /
+  `run_consumption`),由 `--pass {acquisition,ownership,consumption,all}` 驱动;四张闭环表
+  位于 operations DB 且 D1↔SQLite 完全一致;只读 collector → 唯一写者 service 的 seam
+  全仓成立;dedup 改读 Ledger 并带过渡性回退(公共 API 字节不变)。263 个针对性测试通过。
+  远端 D1 apply(`wrangler`)+ `sync_d1_to_sqlite --force-overwrite-all` 以及 Emby/Plex
+  实时端点 `TODO-VERIFY` 确认仍属部署环境验证门。状态由 Proposed 推进至 Accepted。

@@ -1,6 +1,7 @@
 """
 Pytest configuration and fixtures for JAVDB AutoSpider tests.
 """
+import logging
 import os
 from pathlib import Path
 import sqlite3
@@ -191,6 +192,34 @@ def _reset_global_sleep_coordinator():
             mgr._coord_failures,
             mgr._degraded,
         ) = saved
+
+
+@pytest.fixture(autouse=True)
+def _drop_dead_root_log_handlers() -> None:
+    """Drop root-logger handlers leaked from a prior test's closed capture stream.
+
+    ``javdb.infra.logging.setup_logging`` (called by entry points such as
+    ``apps.cli.ops.reconcile.main``) installs a console ``StreamHandler`` on the
+    ROOT logger bound to the ``sys.stderr`` active at call time. Under pytest that
+    stream is the per-test capture buffer; the handler outlives the test (the
+    ``_our_handler_present`` early-return means later calls don't rebuild it), so
+    once pytest closes that buffer a later test's root-level log write raises
+    ``ValueError: I/O operation on closed file``. Python's logging then prints a
+    ``--- Logging error ---`` block to the real stderr, breaking assertions like
+    ``assert captured.err == ""`` in an order-dependent way.
+
+    Before each test, remove any handler whose underlying stream is *already
+    closed*. This touches only dead leaked handlers — never a live handler and
+    never pytest's ``caplog`` handler (whose stream is open during the test) — so
+    it does not interfere with ``caplog``-based assertions.
+    """
+    root = logging.getLogger()
+    for handler in root.handlers[:]:
+        stream = getattr(handler, "stream", None)
+        if stream is not None and getattr(stream, "closed", False):
+            root.removeHandler(handler)
+    # Setup-only fixture (no teardown): cleanup runs before each test, then return.
+    return
 
 
 @pytest.fixture

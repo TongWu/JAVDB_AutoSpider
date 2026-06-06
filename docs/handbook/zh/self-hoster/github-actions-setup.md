@@ -291,7 +291,7 @@ openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
 | 工作流 | 触发方式 | 用途 |
 |---|---|---|
 | `QBFileFilter.yml` | 定时（每日抓取后 2 小时） | 过滤最近添加种子中的小文件 |
-| `ReconcileLibrary.yml` | 每小时定时 / 手动触发 | 使用实时 qB 状态对 ADR-033 采集结果做对账 |
+| `ReconcileLibrary.yml` | 每小时定时 / 手动触发 | 运行 ADR-033 闭环轮次：采集结果对账（实时 qB 状态）+ 所有权账本（gdrive/qb/pikpak/nas）+ 消费信号（媒体服务器） |
 | `WeeklyDedup.yml` | 每周定时 | Rclone 去重 |
 | `RollbackD1.yml` | 手动触发 | 手动会话回滚 |
 | `StaleSessionCleanup.yml` | 每日定时 | 自动清理超过 48 小时的卡住会话 |
@@ -303,11 +303,36 @@ openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
 
 ### ReconcileLibrary 工作流
 
-`ReconcileLibrary.yml` 是 ADR-033 Phase 1 的对账轮次。它每小时运行一次，并调用：
+`ReconcileLibrary.yml` 运行 ADR-033 Phase 1+2+3 对账轮次。它每小时运行一次，并调用：
 
 ```bash
-STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --json
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --pass all --json
 ```
+
+`--pass all` 按顺序运行全部三个轮次：
+
+1. **采集轮次（acquisition pass）** — 读取实时 qBittorrent 状态，将
+   `AcquisitionOutcome` 行从 `queued` / `downloading` 推进到 `downloading`、
+   `completed`、`stalled` 或 `failed`。
+2. **所有权轮次（ownership pass）** — 从四个来源收集所有权观测结果并 upsert
+   到 `OwnershipLedger`：
+   - `gdrive` — 投影现有 `RcloneInventory` 表（无需额外 rclone 调用；由
+     `WeeklyDedup.yml` 填充）。
+   - `qb` — 将已完成的 `AcquisitionOutcome` 行桥接为所有权证据。
+   - `pikpak` — 读取 `PikpakHistory` success 行。
+   - `nas` — 前向兼容 stub，当前无论如何配置都始终只记录日志、不产生观测结果。
+     `config.py` 中的 `RCLONE_NAS_REMOTE` 是为未来 NAS 采集功能预留的占位符；
+     今天设置该值不会产生任何效果。将 `nas` 保留在来源列表中不会有副作用。
+
+   收集完成后，ownership pass 执行 **present sweep**：对每个来源，将前次快照
+   存在但本次快照缺失的行的 `present` 标志置为 `0`（审计保留式，从不删行）。
+   最后，对于 `video_code` 已出现在持久 Ledger 来源（`gdrive` 或 `nas`）的
+   `AcquisitionOutcome` 行，将其推进到 `in_library`。
+3. **消费轮次（consumption pass）** — 轮询 `MEDIA_SERVERS` 中的每个媒体服务器
+   （通过 `MEDIA_SERVERS_JSON` secret 提供，详见
+   [媒体服务器设置](media-servers.md)），通过 join-key 置信度阶梯将条目标题解析
+   为 `video_code`，写入 `ConsumptionSignal` 和 `UnresolvedMediaItem` 行。若
+   `MEDIA_SERVERS_JSON` 未设置，此轮次为 no-op。
 
 该工作流默认使用 `self-hosted` runner，因为 qBittorrent 通常只在操作者内网可达。如果 qB 可从公网访问或已被测试替身替代，也可以通过手动触发的 `runner` 输入改用 `ubuntu-latest`。
 生成的 `config.py` 会从仓库 Variables 读取 `TORRENT_CATEGORY` 和
@@ -320,6 +345,26 @@ STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --json
 | `runner` | `self-hosted` | 任务使用的 runner 标签。访问本地 qB 时使用 `self-hosted`。 |
 | `stalled_after_days` | `7` | 正整数。活跃 outcome 超过该天数未被观测到会变为 `stalled`；超过 2 倍窗口会变为 `failed`。 |
 | `dry_run` | `false` | 只计算状态迁移并输出 JSON，不写入数据行。 |
+
+### 媒体服务器 secret {#media-servers-secret}
+
+消费轮次通过运行时生成的 `config.py` 读取 `MEDIA_SERVERS`（由加密的 `config.py.enc`
+与仓库 secrets 合并生成）。要在 `ReconcileLibrary.yml` 中启用消费轮次，需添加
+`MEDIA_SERVERS_JSON` 仓库 secret：
+
+1. 进入 **Settings → Secrets and variables → Actions → New repository secret**。
+2. 名称：`MEDIA_SERVERS_JSON`。
+3. 值：将 `MEDIA_SERVERS` 列表序列化为 JSON，例如：
+
+   ```json
+   [{"type":"emby","instance":"emby-nas","base_url":"http://192.168.1.50:8096","token":"your_emby_api_key","libraries":["JAV"]}]
+   ```
+
+4. 保存。`config_generator` 会读取 `VAR_MEDIA_SERVERS_JSON` 并将其注入生成的
+   `config.py` 中，格式为 `MEDIA_SERVERS = <value>`。
+
+若 secret 不存在或为空，`MEDIA_SERVERS` 默认为 `[]`，消费轮次为 no-op。字段说明及
+凭据获取步骤参见 [媒体服务器设置](media-servers.md)。
 
 ## 故障排查
 

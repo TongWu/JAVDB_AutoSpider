@@ -634,45 +634,79 @@ python3 -m apps.cli.ops.diagnose_run \
 
 **Module:** `apps.cli.ops.reconcile`
 
-Reconciles ADR-033 `AcquisitionOutcome` rows against live source state. Phase 1
-uses qBittorrent as the only collector and updates active outcomes from
-`queued` / `downloading` to `downloading`, `completed`, `stalled`, or `failed`.
-Run it with `STORAGE_BACKEND=d1` in production because `AcquisitionOutcome` is
+Runs the ADR-033 media closed-loop reconcile passes (Phase 1+2+3). By default it
+runs all three passes in sequence (`--pass all`):
+
+- **acquisition pass** — reads qBittorrent state and updates `AcquisitionOutcome`
+  rows from `queued` / `downloading` to `downloading`, `completed`, `stalled`, or
+  `failed`.
+- **ownership pass** — collects ownership observations from four sources
+  (`gdrive` via `RcloneInventory`, `qb` via `AcquisitionOutcome` bridge, `pikpak`
+  via `PikpakHistory` success rows, `nas` a forward-compat stub that is currently
+  always a no-op regardless of `RCLONE_NAS_REMOTE`), upserts them into
+  `OwnershipLedger`, runs a present sweep to flip
+  absent rows to `present=0`, and advances matching `AcquisitionOutcome` rows
+  from `completed` to `in_library`.
+- **consumption pass** — polls each media server configured in `MEDIA_SERVERS`
+  (see [Media Servers Setup](../self-hoster/media-servers.md)), resolves each
+  item's title to a `video_code` via the high/medium/low confidence join-key
+  ladder, and writes `ConsumptionSignal` rows (resolved items) and
+  `UnresolvedMediaItem` rows (items whose `video_code` could not be resolved).
+  If `MEDIA_SERVERS` is empty, this pass is a no-op. If `MEDIA_SERVERS` is
+  malformed, the pass exits with code `1`.
+
+When `--pass all` outputs JSON with `--json`, the payload is wrapped:
+`{"acquisition": {...}, "ownership": {...}, "consumption": {...}}`.
+
+Run with `STORAGE_BACKEND=d1` in production because `AcquisitionOutcome`,
+`OwnershipLedger`, `ConsumptionSignal`, and `UnresolvedMediaItem` are all
 D1-canonical in the operations database.
 
 ### Arguments
 
 | Argument | Description | Default |
 |----------|-------------|---------|
-| `--source` | Source to reconcile. Repeatable. Phase 1 only accepts `qb`. | `qb` |
-| `--category` | qB category to scan. Repeatable. | `TORRENT_CATEGORY`, `TORRENT_CATEGORY_ADHOC` |
+| `--pass` | Which reconcile pass to run: `acquisition`, `ownership`, `consumption`, or `all` (all three in sequence). | `all` |
+| `--source` | Source to reconcile (acquisition pass). Repeatable. Accepts `qb`. | `qb` |
+| `--category` | qB category to scan (acquisition pass). Repeatable. | `TORRENT_CATEGORY`, `TORRENT_CATEGORY_ADHOC` |
 | `--stalled-after-days` | Positive integer. Active outcomes unseen for this many days become `stalled`; after 2x this window they become `failed`. | `RECONCILE_STALLED_DAYS` or `7` |
 | `--dry-run` | Compute transitions but write nothing. | `False` |
-| `--json` | Print a JSON result payload. | `False` |
+| `--json` | Print a JSON result payload. Under `--pass all` the payload is `{"acquisition": {...}, "ownership": {...}, "consumption": {...}}`. | `False` |
 | `--log-level` | Logging level. Choices: `DEBUG`, `INFO`, `WARNING`, `ERROR`. | `INFO` |
 
-Exit code `0` means the reconcile pass completed without source or write errors.
-Exit code `2` means the pass completed with recorded errors, and `1` means an
+Exit code `0` means all requested passes completed without source or write errors.
+Exit code `2` means a pass completed with recorded errors, and `1` means an
 unexpected CLI failure occurred.
 
-When `--category` is supplied, the run is treated as a partial scan: observed
-hashes can still advance to `downloading` / `completed`, but outcomes absent
-from that subset are not marked `stalled` or `failed`.
+When `--category` is supplied (acquisition pass), the run is treated as a partial
+scan: observed hashes can still advance to `downloading` / `completed`, but
+outcomes absent from that subset are not marked `stalled` or `failed`.
 
 ### Examples
 
 ```bash
-# Production cron path: reconcile D1 using qB observations and print JSON
-STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --json
+# Production cron path: run all three passes against D1 and print JSON
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --pass all --json
 
-# Preview stalled/failed transitions with a wider threshold
+# Run only the acquisition pass
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --pass acquisition --json
+
+# Run only the ownership pass
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --pass ownership --json
+
+# Run only the consumption pass (requires MEDIA_SERVERS in config.py)
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --pass consumption --json
+
+# Preview stalled/failed transitions with a wider threshold (acquisition only)
 STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile \
+  --pass acquisition \
   --stalled-after-days 14 \
   --dry-run \
   --json
 
-# Reconcile only one qB category; absent-state inference is disabled
+# Reconcile only one qB category (acquisition pass); absent-state inference disabled
 STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile \
+  --pass acquisition \
   --category "Daily Ingestion"
 ```
 

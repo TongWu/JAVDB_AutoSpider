@@ -291,7 +291,7 @@ openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
 | Workflow | Trigger | Purpose |
 |---|---|---|
 | `QBFileFilter.yml` | Cron (2h after daily ingestion) | Filter small files from recently added torrents |
-| `ReconcileLibrary.yml` | Hourly cron / manual dispatch | Reconcile ADR-033 acquisition outcomes against live qB state |
+| `ReconcileLibrary.yml` | Hourly cron / manual dispatch | Run ADR-033 closed-loop passes: acquisition outcomes against live qB state + ownership ledger (gdrive/qb/pikpak/nas) + consumption signal from media servers |
 | `WeeklyDedup.yml` | Weekly cron | Rclone deduplication |
 | `RollbackD1.yml` | Manual dispatch | Manual session rollback |
 | `StaleSessionCleanup.yml` | Daily cron | Auto-cleanup sessions stuck > 48h |
@@ -303,12 +303,40 @@ openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
 
 ### ReconcileLibrary Workflow
 
-`ReconcileLibrary.yml` is the ADR-033 Phase 1 reconciliation pass. It runs every
-hour and invokes:
+`ReconcileLibrary.yml` runs the ADR-033 Phase 1+2+3 reconciliation passes. It
+runs every hour and invokes:
 
 ```bash
-STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --json
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --pass all --json
 ```
+
+`--pass all` runs all three passes in sequence:
+
+1. **Acquisition pass** — reads live qBittorrent state and updates
+   `AcquisitionOutcome` rows (`queued` / `downloading` → `downloading`,
+   `completed`, `stalled`, or `failed`).
+2. **Ownership pass** — collects ownership observations from four sources and
+   upserts them into `OwnershipLedger`:
+   - `gdrive` — projects the existing `RcloneInventory` table (no extra rclone
+     call required; populated by `WeeklyDedup.yml`).
+   - `qb` — bridges completed `AcquisitionOutcome` rows as ownership evidence.
+   - `pikpak` — reads `PikpakHistory` success rows.
+   - `nas` — a forward-compat stub that currently always logs and yields nothing,
+     regardless of any configuration. `RCLONE_NAS_REMOTE` in `config.py` is a
+     placeholder for when NAS collection is implemented; setting it has no effect
+     today. Leaving `nas` in the source list is harmless.
+
+   After collecting, the ownership pass runs a **present sweep**: for each
+   source, rows present in a previous snapshot but absent from the current one
+   have their `present` flag set to `0` (audit-preserving; rows are never
+   deleted). Finally, `AcquisitionOutcome` rows whose `video_code` now appears in
+   a persistent (`gdrive` or `nas`) Ledger source are advanced to `in_library`.
+3. **Consumption pass** — polls each media server in `MEDIA_SERVERS` (supplied
+   via the `MEDIA_SERVERS_JSON` secret; see
+   [Media Servers Setup](media-servers.md)), resolves item titles to
+   `video_code` values via the join-key confidence ladder, and writes
+   `ConsumptionSignal` and `UnresolvedMediaItem` rows. If `MEDIA_SERVERS_JSON`
+   is not set, this pass is a no-op.
 
 The workflow defaults to the `self-hosted` runner because qBittorrent is often
 reachable only from the operator's network. It still exposes a manual `runner`
@@ -324,6 +352,28 @@ Manual dispatch inputs:
 | `runner` | `self-hosted` | Runner label for the job. Use `self-hosted` for local qB access. |
 | `stalled_after_days` | `7` | Positive integer. Active outcomes unseen for this many days become `stalled`; after 2x this window they become `failed`. |
 | `dry_run` | `false` | Compute transitions and print JSON without writing rows. |
+
+### Media Servers secret {#media-servers-secret}
+
+The consumption pass reads `MEDIA_SERVERS` from `config.py`, which is generated
+at runtime from the encrypted `config.py.enc` plus repository secrets. To enable
+the consumption pass in `ReconcileLibrary.yml`, add the `MEDIA_SERVERS_JSON`
+repository secret:
+
+1. Go to **Settings → Secrets and variables → Actions → New repository secret**.
+2. Name: `MEDIA_SERVERS_JSON`.
+3. Value: the `MEDIA_SERVERS` list serialized as JSON, for example:
+
+   ```json
+   [{"type":"emby","instance":"emby-nas","base_url":"http://192.168.1.50:8096","token":"your_emby_api_key","libraries":["JAV"]}]
+   ```
+
+4. Save. The `config_generator` reads `VAR_MEDIA_SERVERS_JSON` and injects it as
+   `MEDIA_SERVERS = <value>` in the generated `config.py`.
+
+If the secret is absent or empty, `MEDIA_SERVERS` defaults to `[]` and the
+consumption pass is a no-op. See [Media Servers Setup](media-servers.md) for
+the full field reference and credential setup instructions.
 
 ## Troubleshooting
 

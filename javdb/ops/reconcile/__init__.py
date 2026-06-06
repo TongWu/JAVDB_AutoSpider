@@ -1,27 +1,53 @@
-"""Media closed-loop reconciliation (ADR-033 Phase 1)."""
+"""Media closed-loop reconciliation (ADR-033 Phase 1 + Phase 2 + Phase 3)."""
 
 from .models import (
     ACQUISITION_STATES,
+    OWNERSHIP_SOURCES,
+    PERSISTENT_OWNERSHIP_SOURCES,
+    RESOLVED_CONFIDENCES,
     TERMINAL_STATES,
     AcquisitionOutcomeRecord,
     AcquisitionState,
+    ConsumptionOptions,
+    ConsumptionResult,
+    ConsumptionSignalRecord,
+    MediaItem,
     Observation,
+    OwnershipLedgerRecord,
+    OwnershipObservation,
+    OwnershipOptions,
+    OwnershipResult,
     ReconcileOptions,
     ReconcileResult,
+    UnresolvedMediaItemRecord,
     utc_now_iso,
 )
-from .service import apply_cleanup_completed, record_queued, run
+from .service import apply_cleanup_completed, record_queued, run, run_consumption, run_ownership  # noqa: F401
 
 __all__ = [
     "ACQUISITION_STATES",
+    "OWNERSHIP_SOURCES",
+    "PERSISTENT_OWNERSHIP_SOURCES",
+    "RESOLVED_CONFIDENCES",
     "TERMINAL_STATES",
     "AcquisitionOutcomeRecord",
     "AcquisitionState",
+    "ConsumptionOptions",
+    "ConsumptionResult",
+    "ConsumptionSignalRecord",
+    "MediaItem",
     "Observation",
+    "OwnershipLedgerRecord",
+    "OwnershipObservation",
+    "OwnershipOptions",
+    "OwnershipResult",
     "ReconcileOptions",
     "ReconcileResult",
+    "UnresolvedMediaItemRecord",
     "apply_cleanup_completed",
     "record_queued",
     "run",
+    "run_consumption",
+    "run_ownership",
     "utc_now_iso",
 ]

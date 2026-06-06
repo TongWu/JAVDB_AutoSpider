@@ -627,43 +627,72 @@ python3 -m apps.cli.ops.diagnose_run \
 
 **模块：** `apps.cli.ops.reconcile`
 
-将 ADR-033 的 `AcquisitionOutcome` 行与实时来源状态对账。Phase 1 只使用
-qBittorrent collector，并把活跃 outcome 从 `queued` / `downloading` 推进到
-`downloading`、`completed`、`stalled` 或 `failed`。生产环境应使用
-`STORAGE_BACKEND=d1`，因为 `AcquisitionOutcome` 是 operations 数据库中的
-D1 canonical 表。
+运行 ADR-033 媒体闭环对账轮次（Phase 1+2+3）。默认运行全部三个轮次（`--pass all`）：
+
+- **acquisition pass（采集轮次）** — 读取 qBittorrent 实时状态，将活跃
+  `AcquisitionOutcome` 从 `queued` / `downloading` 推进到 `downloading`、
+  `completed`、`stalled` 或 `failed`。
+- **ownership pass（所有权轮次）** — 从四个来源收集所有权观测结果
+  （`gdrive` 通过 `RcloneInventory` 投影、`qb` 通过 `AcquisitionOutcome`
+  bridge、`pikpak` 通过 `PikpakHistory` success 行、`nas` 为前向兼容 stub，当前
+  无论是否配置 `RCLONE_NAS_REMOTE` 都始终 no-op），upsert 到 `OwnershipLedger`，执行
+  present sweep 将缺失行的 `present` 置 `0`，并将符合条件的
+  `AcquisitionOutcome` 从 `completed` 推进到 `in_library`。
+- **consumption pass（消费轮次）** — 轮询 `MEDIA_SERVERS` 中配置的每个媒体服务器
+  实例（详见 [媒体服务器设置](../self-hoster/media-servers.md)），通过高/中/低
+  置信度 join-key 阶梯将每个条目的标题解析为 `video_code`，将已解析条目写入
+  `ConsumptionSignal`，将无法解析的条目写入 `UnresolvedMediaItem`。若
+  `MEDIA_SERVERS` 为空，此轮次为 no-op；若 `MEDIA_SERVERS` 格式有误，退出码为 `1`。
+
+使用 `--pass all` 并加 `--json` 时，输出 payload 格式为：
+`{"acquisition": {...}, "ownership": {...}, "consumption": {...}}`。
+
+生产环境应使用 `STORAGE_BACKEND=d1`，因为 `AcquisitionOutcome`、`OwnershipLedger`、
+`ConsumptionSignal` 和 `UnresolvedMediaItem` 均是 operations 数据库中的 D1 canonical 表。
 
 ### 参数
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `--source` | 要对账的来源，可重复传入。Phase 1 只接受 `qb`。 | `qb` |
-| `--category` | 要扫描的 qB 分类，可重复传入。 | `TORRENT_CATEGORY`、`TORRENT_CATEGORY_ADHOC` |
+| `--pass` | 要运行的对账轮次：`acquisition`、`ownership`、`consumption` 或 `all`（全部三个轮次顺序执行）。 | `all` |
+| `--source` | 要对账的来源（acquisition pass），可重复传入。接受 `qb`。 | `qb` |
+| `--category` | 要扫描的 qB 分类（acquisition pass），可重复传入。 | `TORRENT_CATEGORY`、`TORRENT_CATEGORY_ADHOC` |
 | `--stalled-after-days` | 正整数。活跃 outcome 超过该天数未被观测到会变为 `stalled`；超过 2 倍窗口会变为 `failed`。 | `RECONCILE_STALLED_DAYS` 或 `7` |
 | `--dry-run` | 只计算状态迁移，不写入数据库。 | `False` |
-| `--json` | 输出 JSON result payload。 | `False` |
+| `--json` | 输出 JSON result payload。`--pass all` 时格式为 `{"acquisition": {...}, "ownership": {...}, "consumption": {...}}`。 | `False` |
 | `--log-level` | 日志级别。可选：`DEBUG`、`INFO`、`WARNING`、`ERROR`。 | `INFO` |
 
-退出码 `0` 表示对账完成且没有来源或写入错误。退出码 `2` 表示对账完成但记录了错误，`1` 表示 CLI 发生意外失败。
+退出码 `0` 表示所有请求的轮次均完成且没有来源或写入错误。退出码 `2` 表示对账完成但记录了错误，`1` 表示 CLI 发生意外失败。
 
-传入 `--category` 时，本次运行会被视为部分扫描：已观测到的 hash 仍可推进到
-`downloading` / `completed`，但不会把该子集里缺失的 outcome 标记为
-`stalled` 或 `failed`。
+传入 `--category` 时（acquisition pass），本次运行会被视为部分扫描：已观测到的
+hash 仍可推进到 `downloading` / `completed`，但不会把该子集里缺失的 outcome
+标记为 `stalled` 或 `failed`。
 
 ### 示例
 
 ```bash
-# 生产 cron 路径：使用 qB 观测结果对 D1 做对账，并输出 JSON
-STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --json
+# 生产 cron 路径：运行三个轮次，对 D1 做对账，并输出 JSON
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --pass all --json
 
-# 使用更宽的阈值预览 stalled/failed 状态迁移
+# 只运行 acquisition pass
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --pass acquisition --json
+
+# 只运行 ownership pass
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --pass ownership --json
+
+# 只运行 consumption pass（需在 config.py 中配置 MEDIA_SERVERS）
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --pass consumption --json
+
+# 使用更宽阈值预览 stalled/failed 状态迁移（仅 acquisition pass）
 STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile \
+  --pass acquisition \
   --stalled-after-days 14 \
   --dry-run \
   --json
 
-# 只对一个 qB 分类做对账；此时禁用缺失状态推断
+# 只对一个 qB 分类做对账（acquisition pass）；此时禁用缺失状态推断
 STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile \
+  --pass acquisition \
   --category "Daily Ingestion"
 ```
 
