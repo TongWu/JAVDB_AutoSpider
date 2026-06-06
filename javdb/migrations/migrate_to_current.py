@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Upgrade all SQLite DBs to the current schema (split layout + MovieHistory v9).
 
-Delegates schema bumps to ``utils.infra.db.init_db`` via ``run_schema_migration`` from
+Delegates schema bumps to ``javdb.storage.db.init_db`` via ``run_schema_migration`` from
 ``migrate_v7_to_v8`` (which also handles version alignment across history /
 reports / operations).
 

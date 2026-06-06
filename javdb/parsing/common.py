@@ -151,7 +151,7 @@ def extract_all_movie_links(parent_tag: Tag) -> list:
 
 
 # ---------------------------------------------------------------------------
-# Video-code extraction (ported from utils/parser.py)
+# Video-code extraction (ported from the legacy parser module)
 # ---------------------------------------------------------------------------
 
 WESTERN_STUDIO_DATE_RE = re.compile(

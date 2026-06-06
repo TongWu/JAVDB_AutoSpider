@@ -330,7 +330,7 @@ class WorkerContext:
     """Execution context passed to *process_fn* inside each worker thread.
 
     Provides fetch methods backed by the worker's per-proxy
-    :class:`~utils.infra.request_handler.RequestHandler`, with automatic CF bypass
+    :class:`~javdb.infra.request.RequestHandler`, with automatic CF bypass
     fallback and login-page detection.
     """
 

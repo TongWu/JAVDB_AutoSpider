@@ -2,7 +2,7 @@
 History Manager for JavDB Spider
 
 Storage backend is controlled by ``STORAGE_MODE`` in config:
-  - ``db``  – SQLite only (via utils.infra.db)
+  - ``db``  – SQLite only (via javdb.storage.db)
   - ``csv`` – CSV only (or Rust CSV override when available)
   - ``duo`` – SQLite first, then CSV
 
