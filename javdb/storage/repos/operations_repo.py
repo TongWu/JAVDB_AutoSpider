@@ -1,4 +1,4 @@
-"""Operations DB helpers extracted from `utils.infra.db`.
+"""Operations DB helpers extracted from `javdb.storage.db`.
 
 Includes the X3-rollback "staging-then-swap" replace-inventory pattern:
 each run writes to its own ``RcloneInventoryStaging_<session_id>`` table
