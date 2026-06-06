@@ -536,3 +536,37 @@ table exists; the same pattern carries `get_acquisition_outcomes` (ADR-033) and 
 **Install dependency:** Task 1 requires `pip install mcp>=1.2.0`; the FastMCP API
 (`mcp.server.fastmcp.FastMCP`, `mcp.run()`, `list_tools()`) should be confirmed against
 the installed version (Task 1 Step 2 / Task 5 Step 4 note the adjust-points).
+
+---
+
+## Implementation Notes (Phase 1 — landed 2026-06-06)
+
+Recorded during execution so the IMP stays a living record of what actually shipped:
+
+- **`search_history` backing is `HistoryRepo.search_movies`, not `explore_service`.** The
+  ADR-038 D3 taxonomy originally attributed `search_history` to `explore_service`, but that
+  service performs *live JavDB* fetches (async, network, login/proxy) — wrong for a read-only,
+  offline-testable "do I have X?" tool. The implementation calls the sync, local
+  `HistoryRepo().search_movies(q=, limit=)` over `MovieHistory`, matching how the API's
+  `/movies` router already reads history. The ADR D3 row (both `.md` and `.zh.md`) was
+  corrected to `HistoryRepo` accordingly.
+- **`query_events` lights up live, not degraded.** ADR-036's `PipelineEvent` table already
+  exists, so `query_events` returns `{"available": true, "events": [...]}` rather than the
+  graceful `available: false` fallback the draft assumed. Both branches are tested (live path
+  with an inserted event; defensive path by dropping the table), plus a guard that a genuine
+  schema error is not mislabeled as "table not built".
+- **Operator-facing tools degrade, never crash.** `diagnose_run`, `list_runs`, and
+  `search_history` wrap their call in a broad `except` that returns a structured
+  `{"error", "detail"}` rather than throwing at the agent. Return-shape convention:
+  `{"available": false, "reason": ...}` = capability absent in this deployment;
+  `{"error": ..., "detail": ...}` = capability present but the call failed. Documented in
+  `docs/handbook/en/developer/mcp-server.md`.
+- **Follow-up (not Phase 1): harmonize `search_history` output to the API contract.** The tool
+  currently returns raw `MovieHistory` column names (`VideoCode`, `PerfectMatchIndicator` as
+  0/1 int, …), whereas the API's `/movies` router shapes the same rows into snake_case, typed
+  `MovieSearchItem` (`video_code`, `perfect_match: bool`, … and `total → total_estimate`). An
+  agent consuming both surfaces sees two vocabularies. Harmonize by extracting the row→item
+  shaping into the service layer (shared by API + MCP) so both adapters return the same shape.
+- **`get_run` deferred.** The ADR taxonomy lists `list_runs` / `get_run`; Phase 1 wired only
+  `list_runs` (+ `search_history`). `get_run` follows the same thin-adapter pattern and is a
+  trivial future addition.

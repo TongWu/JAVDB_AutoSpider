@@ -82,6 +82,11 @@
       "category": "Developer Guides"
     },
     {
+      "source": "docs/handbook/en/developer/mcp-server.md",
+      "wiki_page": "MCP-Server",
+      "category": "Developer Guides"
+    },
+    {
       "source": "docs/handbook/en/ops/d1-rollback.md",
       "wiki_page": "D1-Rollback",
       "category": "Operations"
