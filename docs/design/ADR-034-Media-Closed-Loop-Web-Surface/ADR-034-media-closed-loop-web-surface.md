@@ -121,18 +121,20 @@ single-repo change.
 
 | Phase | IMP | Ships | Deferred |
 | --- | --- | --- | --- |
-| FE Phase 1 — Acquisition | IMP-ADR034-01 (stub) | Library page shell (3 tabs, 2 disabled); Acquisition view (funnel + KPI + recent table, read-only); `GET /api/library/acquisition/{summary,recent,trend}` in **both** backends; `closed_loop` capability flag + nav gating; en/zh strings | Ownership/Consumption views; any mutations |
+| FE Phase 1 — Acquisition | [IMP-ADR034-01](IMP-ADR034-01-acquisition-web-surface.md) | Library page shell (3 tabs, 2 disabled); Acquisition view (funnel + KPI + recent table, read-only); `GET /api/library/acquisition/{summary,recent,trend}` in **both** backends; `closed_loop` capability flag + nav gating; en/zh strings | Ownership/Consumption views; any mutations |
 | FE Phase 2 — Ownership | IMP-ADR034-02 (stub) | Ownership view over `OwnershipLedger` | — |
 | FE Phase 3 — Consumption | IMP-ADR034-03 (stub) | Consumption view at `(instance, library)` granularity over `ConsumptionSignal` | — |
 
 FE Phase 1 depends only on ADR-033 Phase 1 (`AcquisitionOutcome`). Phases 2/3
 depend on ADR-033 Phases 2/3 and are detailed once those land.
 
-**Planning cadence.** No FE IMP is written yet. **IMP-ADR034-01 is intentionally
-deferred** until ADR-033 Phase 1 (`AcquisitionOutcome` + the read endpoints' data)
-lands; its detailed plan — and IMP-ADR034-02/03 — will be produced in a `grill-me`
-+ `brainstorming` round after the corresponding backend phase ships, so the FE
-plan reflects the real endpoint shapes rather than a paper contract.
+**Planning cadence.** [IMP-ADR034-01](IMP-ADR034-01-acquisition-web-surface.md)
+is written (2026-06-06), grounded in the landed ADR-033 Phase 1
+`AcquisitionOutcome` table + read data. **IMP-ADR034-02/03 remain intentionally
+deferred** until ADR-033 Phases 2/3 (`OwnershipLedger` / `ConsumptionSignal`)
+land; their detailed plans will be produced in a `grill-me` + `brainstorming`
+round after the corresponding backend phase ships, so each FE plan reflects the
+real endpoint shapes rather than a paper contract.
 
 ### Explicit non-goals (YAGNI)
 
@@ -169,3 +171,6 @@ plan reflects the real endpoint shapes rather than a paper contract.
 - 2026-05-29: Proposed (web counterpart to ADR-033; FE Phase 1 scoped, IMP pending).
 - 2026-05-29: IMP-ADR034-01 deferred until ADR-033 Phase 1 lands; FE IMPs to be
   detailed via a post-backend `grill-me` + `brainstorming` round.
+- 2026-06-06: IMP-ADR034-01 (FE Phase 1) plan written, grounded in the landed
+  ADR-033 Phase 1 `AcquisitionOutcome` table + read data. IMP-ADR034-02/03 remain
+  deferred to their backend phases.
