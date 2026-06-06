@@ -230,13 +230,25 @@ from javdb.integrations.notify.plugin import NotifyMessage
 
 def test_send_delegates_to_send_email(monkeypatch):
     calls = {}
-    monkeypatch.setattr(email_plugin, "send_email",
-                        lambda subject, body, **kw: calls.update(subject=subject, body=body))
+
+    def _ok(subject, body, **kw):
+        calls.update(subject=subject, body=body)
+        return True   # send_email returns True on success
+
+    monkeypatch.setattr(email_plugin, "send_email", _ok)
     plugin = email_plugin.EmailNotifyPlugin()
     result = plugin.send(NotifyMessage(subject="Run failed", body="details"))
     assert calls == {"subject": "Run failed", "body": "details"}
     assert result.plugin == "email"
     assert result.ok is True
+
+
+def test_send_reports_failure_when_send_email_returns_false(monkeypatch):
+    # send_email swallows SMTP errors and returns False (delivery.py) — the
+    # plugin must surface that as ok=False, not treat "no exception" as success.
+    monkeypatch.setattr(email_plugin, "send_email", lambda *a, **k: False)
+    result = email_plugin.EmailNotifyPlugin().send(NotifyMessage(subject="s", body="b"))
+    assert result.ok is False
 
 
 def test_send_reports_failure_on_exception(monkeypatch):
@@ -278,20 +290,32 @@ class EmailNotifyPlugin:
         return bool(user) and "your_email" not in user
 
     def send(self, message: NotifyMessage) -> NotifyResult:
+        # send_email returns True/False — it swallows SMTP errors and returns
+        # False (see delivery.py), raising only on unexpected errors. Honor both
+        # so a failed delivery is reported as ok=False, not masked as success.
         try:
-            send_email(message.subject, message.body)
-            return NotifyResult(plugin=self.name, ok=True)
+            sent = send_email(message.subject, message.body)
         except Exception as exc:
             return NotifyResult(plugin=self.name, ok=False, detail=str(exc))
+        if not sent:
+            return NotifyResult(plugin=self.name, ok=False, detail="send_email returned False")
+        return NotifyResult(plugin=self.name, ok=True)
 
 
 REGISTRY.register("notify", EmailNotifyPlugin())
 ```
 
+> **Correction (post-review):** the original snippet only caught exceptions, but
+> `send_email` (`notify/email/delivery.py`) catches SMTP failures internally and
+> **returns `False`** (raising only on unexpected errors). Treating "no exception"
+> as success would report `ok=True` on a genuinely-failed send and defeat the
+> dispatch failure isolation (Task 5). The `send()` above honors the boolean
+> return; `is_configured` is unchanged.
+
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `pytest tests/unit/test_email_notify_plugin.py -v`
-Expected: PASS (2 passed)
+Expected: PASS (3 passed)
 
 - [ ] **Step 5: Commit**
 
@@ -346,7 +370,39 @@ def test_send_posts_to_bot_api(monkeypatch):
     assert captured["json"]["chat_id"] == "CHAT"
     assert "Sub" in captured["json"]["text"] and "Body" in captured["json"]["text"]
     assert result.ok is True
+
+
+def test_send_reports_failure_on_non_200(monkeypatch):
+    monkeypatch.setattr(tg, "cfg", lambda name, default: {"TELEGRAM_BOT_TOKEN": "T",
+                                                          "TELEGRAM_CHAT_ID": "C"}.get(name, default))
+
+    class _Resp:
+        status_code = 400
+
+    monkeypatch.setattr(tg.requests, "post", lambda url, **kw: _Resp())
+    result = tg.TelegramNotifyPlugin().send(NotifyMessage(subject="s", body="b"))
+    assert result.ok is False
+    assert result.detail == "status 400"
+
+
+def test_send_reports_failure_on_exception(monkeypatch):
+    monkeypatch.setattr(tg, "cfg", lambda name, default: {"TELEGRAM_BOT_TOKEN": "T",
+                                                          "TELEGRAM_CHAT_ID": "C"}.get(name, default))
+
+    def _boom(url, **kw):
+        raise RuntimeError("conn refused")
+
+    monkeypatch.setattr(tg.requests, "post", _boom)
+    result = tg.TelegramNotifyPlugin().send(NotifyMessage(subject="s", body="b"))
+    assert result.ok is False
+    assert "conn refused" in (result.detail or "")
 ```
+
+> **Coverage note (post-review):** the non-200 and exception branches of `send()`
+> are the reason it returns a typed `NotifyResult` rather than a bare bool, so they
+> are pinned by `test_send_reports_failure_on_non_200` and
+> `test_send_reports_failure_on_exception` — symmetric with the email plugin's
+> failure tests (Task 3).
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -372,6 +428,9 @@ from javdb.infra.config import cfg
 from javdb.integrations.notify.plugin import NotifyMessage, NotifyResult
 from javdb.integrations.plugins.registry import REGISTRY
 
+# Telegram sendMessage rejects messages longer than 4096 chars with a 400.
+_TELEGRAM_MAX_CHARS = 4096
+
 
 class TelegramNotifyPlugin:
     name = "telegram"
@@ -382,11 +441,14 @@ class TelegramNotifyPlugin:
     def send(self, message: NotifyMessage) -> NotifyResult:
         token = cfg("TELEGRAM_BOT_TOKEN", "")
         chat_id = cfg("TELEGRAM_CHAT_ID", "")
-        text = f"*{message.subject}*\n{message.body}"
+        # Plain text (no parse_mode) + truncate to Telegram's 4096-char limit.
+        text = f"{message.subject}\n{message.body}"
+        if len(text) > _TELEGRAM_MAX_CHARS:
+            text = text[:_TELEGRAM_MAX_CHARS - 1] + "…"
         try:
             resp = requests.post(
                 f"https://api.telegram.org/bot{token}/sendMessage",
-                json={"chat_id": chat_id, "text": text, "parse_mode": "Markdown"},
+                json={"chat_id": chat_id, "text": text},
                 timeout=15,
             )
             ok = resp.status_code == 200
@@ -402,7 +464,14 @@ REGISTRY.register("notify", TelegramNotifyPlugin())
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `pytest tests/unit/test_telegram_notify_plugin.py -v`
-Expected: PASS (3 passed)
+Expected: PASS (7 passed)
+
+> **PR #176 review (post-merge hardening):** the snippet above sends **plain text**
+> (no `parse_mode=Markdown`) and truncates to `_TELEGRAM_MAX_CHARS = 4096` (a
+> module-level constant). The original `parse_mode=Markdown` + `*{subject}*` would
+> 400 on arbitrary content (error text / URLs / filenames with `_`/`*`/`[`), and an
+> over-4096-char report would be rejected outright. Two tests pin this:
+> `test_send_uses_plain_text_without_markdown`, `test_send_truncates_to_telegram_limit`.
 
 - [ ] **Step 5: Commit**
 
@@ -473,7 +542,25 @@ def test_send_skips_unconfigured(monkeypatch):
     results = dispatch.send(NotifyMessage(subject="s", body="b"))
     assert results[0].ok is False
     assert "not configured" in (results[0].detail or "")
+
+
+def test_active_names_ignores_non_iterable(monkeypatch):
+    monkeypatch.setattr(dispatch, "cfg", lambda name, default: 123)
+    assert dispatch.active_names() == ["email"]
+
+
+def test_send_reports_not_registered(monkeypatch):
+    monkeypatch.setattr(dispatch, "cfg", lambda name, default: ["ghost"])
+    monkeypatch.setattr(dispatch, "REGISTRY", _registry())
+    results = dispatch.send(NotifyMessage(subject="s", body="b"))
+    assert results[0].ok is False
+    assert "not registered" in (results[0].detail or "")
 ```
+
+> **Robustness note (post-review):** `active_names()` now degrades a non-iterable
+> `NOTIFY_BACKENDS` (e.g. an int) to the `["email"]` default instead of raising, and
+> the "not registered" + non-iterable branches are pinned by
+> `test_send_reports_not_registered` / `test_active_names_ignores_non_iterable`.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -503,8 +590,13 @@ def active_names() -> list[str]:
     val = cfg("NOTIFY_BACKENDS", ["email"])
     if isinstance(val, str):
         names = [v.strip() for v in val.split(",") if v.strip()]
-    else:
+    elif isinstance(val, (list, tuple)):
         names = list(val) if val else []
+    else:
+        # A non-iterable / unexpected config value (e.g. an int) must degrade to
+        # the default rather than crash dispatch — notify is itself the channel
+        # that reports failures, so it must never raise on a config typo.
+        names = []
     return names or ["email"]
 
 
@@ -515,12 +607,12 @@ def send(message: NotifyMessage) -> list[NotifyResult]:
         if plugin is None:
             results.append(NotifyResult(plugin=name, ok=False, detail="not registered"))
             continue
-        if not plugin.is_configured():
-            results.append(NotifyResult(plugin=name, ok=False, detail="not configured"))
-            continue
         try:
+            if not plugin.is_configured():
+                results.append(NotifyResult(plugin=name, ok=False, detail="not configured"))
+                continue
             results.append(plugin.send(message))
-        except Exception as exc:  # failure isolation
+        except Exception as exc:  # failure isolation (incl. is_configured errors)
             results.append(NotifyResult(plugin=name, ok=False, detail=f"error: {exc}"))
     return results
 ```
@@ -528,7 +620,13 @@ def send(message: NotifyMessage) -> list[NotifyResult]:
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `pytest tests/unit/test_notify_dispatch.py -v`
-Expected: PASS (4 passed)
+Expected: PASS (7 passed)
+
+> **PR #176 review (post-merge hardening):** `plugin.is_configured()` is called
+> **inside** the per-plugin `try`, so a plugin whose `is_configured()` raises is
+> isolated as a failed result instead of aborting the whole fan-out (the original
+> placed the config check outside the `try`, violating per-backend failure
+> isolation). Pinned by `test_send_isolates_is_configured_error`.
 
 - [ ] **Step 5: Commit**
 
@@ -608,6 +706,8 @@ plugin wraps the unchanged `send_email`; the rich `run_email_notification` repor
 is untouched. Task 6 Step 5 verifies the default routes to email only.
 
 **Seam confirmations:** `send_email(subject, body, ...)` and `cfg(name, default)` are
-confirmed (grounding). If `_config.SMTP_USER` is not the placeholder-detection point in
-this build, adjust `EmailNotifyPlugin.is_configured` (Task 3) — its test pins the behaviour
-via monkeypatching `send_email`, not the config.
+confirmed (grounding). `send_email` returns `True`/`False` (swallows SMTP failures and
+returns `False`, raises only on unexpected errors), so `EmailNotifyPlugin.send` checks the
+return value AND catches exceptions (Task 3 "Correction" note). If `_config.SMTP_USER` is
+not the placeholder-detection point in this build, adjust `EmailNotifyPlugin.is_configured`
+(Task 3) — its test pins the behaviour via monkeypatching `send_email`, not the config.

@@ -36,7 +36,9 @@ class NotifyPlugin(Protocol):
 
 **D3. 现有 email 包装成内置插件——不重写。** `EmailNotifyPlugin` 是对现有 `notify/email/service.py` 的薄 `name='email'` adapter（其内部不动）。新增 `TelegramNotifyPlugin`（`name='telegram'`）调 Telegram Bot API。每个插件读自己的 config（email → `SMTP_*`;telegram → `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID`）。`NOTIFY_BACKENDS` 选 active 列表,且**默认 `['email']`**,所以现有行为保持不变;加 `'telegram'` 即启用第二路。
 
-**D4. 分发扇出 + 失败隔离。** `notify.send(message)` 遍历 active 插件,逐个调 `.send()`,收集 `NotifyResult`;某后端失败（如 Telegram 宕）不阻断其它（如 email）。现有调用方（管道邮件摘要）经 `notify.send` 路由,照常工作。
+**D4. 分发扇出 + 失败隔离。** `notify.send(message)` 遍历 active 插件,逐个调 `.send()`,收集 `NotifyResult`;某后端失败（如 Telegram 宕）不阻断其它（如 email）。现有调用方（管道邮件摘要）*设计上*经 `notify.send` 路由。
+
+> **Phase 1 状态（仅 plumbing）：** Phase 1 交付分发器本身——`notify.dispatch.send` 可被 import 触达并注册内建插件——但**尚未**将现有管道邮件调用方（重型 `run_email_notification` 报告路径）改接到它上面。在该改接落地前,设置 `NOTIFY_BACKENDS=['telegram']` 只会注册后端,管道仍走未改动的直连邮件路径。改接现有调用方属于后续工作(计划在 Phase 2),刻意分离以保证 Phase 1 不触碰重型报告路径(D3)。
 
 **D5. 模块形态。**
 

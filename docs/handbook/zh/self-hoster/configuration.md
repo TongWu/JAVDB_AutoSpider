@@ -98,6 +98,26 @@ Web API 和 Docker 的环境变量在[第 16 节](#16-环境变量)中介绍。
 | `EMAIL_FROM` | `str` | `''` | 通知邮件中显示的发件人地址。 |
 | `EMAIL_TO` | `str` | `''` | 通知邮件的收件人地址。 |
 
+### 通知后端（Notification Backends — ADR-039）
+
+默认情况下，运行通知仅通过邮件发送。可插拔通知层允许将同一条通知扇出到多个后端，并提供按后端的故障隔离——某个后端失败不会阻塞其他后端。
+
+| 变量 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `NOTIFY_BACKENDS` | `list[str]` \| `str` | `['email']` | 启用的通知后端，按顺序尝试。默认仅 email，因此现有配置行为不变。接受列表（`['email', 'telegram']`）或逗号分隔字符串（`'email, telegram'`）。未注册或未配置的后端会被跳过并在返回结果中标记为失败。 |
+| `TELEGRAM_BOT_TOKEN` | `str` | `''` | 来自 @BotFather 的 Telegram bot token。当启用 `'telegram'` 时必填。 |
+| `TELEGRAM_CHAT_ID` | `str` | `''` | bot 发送消息的目标 chat 或 channel id。当启用 `'telegram'` 时必填。 |
+
+**启用 Telegram：** 通过 @BotFather 创建 bot 获取 token，获取你的 chat id（给 bot 发条消息，然后读取 `https://api.telegram.org/bot<token>/getUpdates`），设置上述两个值，并将 `'telegram'` 加入 `NOTIFY_BACKENDS`：
+
+```python
+NOTIFY_BACKENDS = ['email', 'telegram']
+TELEGRAM_BOT_TOKEN = '123456:ABC-DEF...'
+TELEGRAM_CHAT_ID = '987654321'
+```
+
+> **Phase 1 状态（仅 plumbing）：** ADR-039 Phase 1 交付了通知插件层与 `notify.dispatch.send` 扇出能力，但**尚未**将现有 pipeline 邮件通知改接到它上面。在后续阶段把 pipeline 调用方接到 `notify.dispatch.send` 之前，设置 `NOTIFY_BACKENDS`（例如加入 `'telegram'`）只会注册后端，**不会**改变现有 pipeline 通知——它们仍通过未改动的直连邮件路径发出。
+
 ---
 
 ## 4. Proxy 配置
