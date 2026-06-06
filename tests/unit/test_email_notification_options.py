@@ -54,3 +54,13 @@ def test_email_result_exit_code_for_dry_run():
     result = EmailNotificationResult(email_sent=False, dry_run=True, subject="subject")
 
     assert result.exit_code == 0
+
+
+def test_email_result_exit_code_zero_when_not_delivering():
+    # ADR-039 D4: deliver=False (email not an active NOTIFY_BACKENDS entry) — a
+    # skipped send is expected, not a failure, so the CLI must not exit 2.
+    result = EmailNotificationResult(
+        email_sent=False, dry_run=False, subject="subject", deliver=False,
+    )
+
+    assert result.exit_code == 0

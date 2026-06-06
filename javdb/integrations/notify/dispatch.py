@@ -18,18 +18,30 @@ def active_names() -> list[str]:
     if isinstance(val, str):
         names = [v.strip() for v in val.split(",") if v.strip()]
     elif isinstance(val, (list, tuple)):
-        names = list(val) if val else []
+        # Keep only non-empty strings: a stray non-string / unhashable element
+        # (e.g. a typo'd ['email', {}]) would otherwise reach send()'s
+        # `name in excluded` / REGISTRY lookup and raise TypeError, breaking the
+        # fan-out — notify is the channel that reports failures, so it must
+        # never raise on a config typo.
+        names = [v.strip() for v in val if isinstance(v, str) and v.strip()]
     else:
         # A non-iterable / unexpected config value (e.g. an int) must degrade to
-        # the default rather than crash dispatch — notify is itself the channel
-        # that reports failures, so it must never raise on a config typo.
+        # the default rather than crash dispatch — same fail-safe rationale.
         names = []
     return names or ["email"]
 
 
-def send(message: NotifyMessage) -> list[NotifyResult]:
+def send(message: NotifyMessage, exclude: set[str] | None = None) -> list[NotifyResult]:
+    # ``exclude`` (ADR-039 D4) lets a caller skip backends it has already handled
+    # by another route — e.g. the pipeline CLI delivers the rich HTML report to
+    # ``email`` directly, then fans the plaintext summary out to the *other*
+    # active backends via ``send(message, exclude={'email'})`` so email is never
+    # double-notified.
+    excluded = exclude or set()
     results: list[NotifyResult] = []
     for name in active_names():
+        if name in excluded:
+            continue
         plugin = REGISTRY.get("notify", name)
         if plugin is None:
             results.append(NotifyResult(plugin=name, ok=False, detail="not registered"))

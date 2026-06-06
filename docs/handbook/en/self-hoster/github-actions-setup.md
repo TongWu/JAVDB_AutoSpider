@@ -28,7 +28,7 @@ Both the `DailyIngestion` and `AdHocIngestion` workflows reference `environment:
 
 Go to **Settings > Secrets and variables > Actions > Secrets** (or scope them to the `Production` environment).
 
-The `config_generator` CLI (`python3 -m apps.cli.config_generator --github-actions`) reads these from environment variables prefixed with `VAR_` and writes a `config.py` at the start of each workflow run. Every secret listed below maps to a `VAR_*` env var in the workflow YAML.
+The `config_generator` CLI (`python3 -m apps.cli.ops.config_generator --github-actions`) reads these from environment variables prefixed with `VAR_` and writes a `config.py` at the start of each workflow run. Every secret listed below maps to a `VAR_*` env var in the workflow YAML.
 
 ### Required Secrets
 
@@ -89,6 +89,15 @@ When set, the ad-hoc workflow uses a separate qBittorrent instance. PikPak bridg
 |---|---|
 | `RCLONE_CONFIG_BASE64` | Base64-encoded `rclone.conf` content (for Google Drive inventory and dedup) |
 
+### Optional Secrets (Telegram Notifications, ADR-039)
+
+Only needed when `NOTIFY_BACKENDS_JSON` includes `"telegram"`.
+
+| Secret | Purpose |
+|---|---|
+| `TELEGRAM_BOT_TOKEN` | Bot token from [@BotFather](https://t.me/BotFather), e.g. `123456:ABC-DEF...` |
+| `TELEGRAM_CHAT_ID` | Target chat/channel id, e.g. `-1001234567890` |
+
 ## Step 4 -- Configure Repository Variables
 
 Go to **Settings > Secrets and variables > Actions > Variables**.
@@ -101,6 +110,7 @@ These are non-sensitive values. The `config_generator` reads them via `VAR_*` en
 |---|---|---|
 | `GIT_REPO_URL` | -- | Repository HTTPS URL (e.g. `https://github.com/you/JAVDB_AutoSpider.git`) |
 | `GIT_BRANCH` | `main` | Branch for git push |
+| `NOTIFY_BACKENDS_JSON` | `["email"]` | JSON array of active notify backends (ADR-039). Add `"telegram"` for a Telegram run summary, or set `["telegram"]` to disable the email report. Requires the `TELEGRAM_*` secrets when telegram is active. |
 | `PROXY_MODE` | `pool` | `pool`, `single`, or `None` |
 | `PROXY_MODULES_JSON` | `["spider"]` | JSON array of modules that use proxy: `spider`, `qbittorrent`, `pikpak`, `all` |
 | `DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST_JSON` | `["western_studio_date"]` | JSON array of video-code families excluded from daily ingestion, default `["western_studio_date"]`. Set to `[]` to stop excluding the western studio/date family. |
@@ -194,7 +204,7 @@ These are non-sensitive values. The `config_generator` reads them via `VAR_*` en
 In CI, there is no persistent `config.py` file. Instead, the **setup job** in each workflow runs:
 
 ```bash
-python3 -m apps.cli.config_generator --github-actions
+python3 -m apps.cli.ops.config_generator --github-actions
 ```
 
 This script reads every `VAR_*` environment variable (populated from Secrets and Variables above) and writes a complete `config.py`. The file is then encrypted with `ARTIFACT_KEY` and passed between jobs as an encrypted artifact.

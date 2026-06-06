@@ -100,13 +100,13 @@ Web API 和 Docker 的环境变量在[第 16 节](#16-环境变量)中介绍。
 
 ### 通知后端（Notification Backends — ADR-039）
 
-默认情况下，运行通知仅通过邮件发送。可插拔通知层允许将同一条通知扇出到多个后端，并提供按后端的故障隔离——某个后端失败不会阻塞其他后端。
+管道运行通知会扇出到一个或多个由 `NOTIFY_BACKENDS` 选择的可插拔后端，并提供按后端的故障隔离——某个后端失败不会阻塞其他后端。`email` 后端发送完整的 HTML 报告（见上）；任何其它 active 后端（如 `telegram`）收到一份精简的运行摘要。
 
 | 变量 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
-| `NOTIFY_BACKENDS` | `list[str]` \| `str` | `['email']` | 启用的通知后端，按顺序尝试。默认仅 email，因此现有配置行为不变。接受列表（`['email', 'telegram']`）或逗号分隔字符串（`'email, telegram'`）。未注册或未配置的后端会被跳过并在返回结果中标记为失败。 |
-| `TELEGRAM_BOT_TOKEN` | `str` | `''` | 来自 @BotFather 的 Telegram bot token。当启用 `'telegram'` 时必填。 |
-| `TELEGRAM_CHAT_ID` | `str` | `''` | bot 发送消息的目标 chat 或 channel id。当启用 `'telegram'` 时必填。 |
+| `NOTIFY_BACKENDS` | `list[str]` \| `str` | `['email']` | 启用的通知后端，按顺序尝试。默认仅 email，因此现有配置行为不变。接受列表（`['email', 'telegram']`）或逗号分隔字符串（`'email, telegram'`）。设为 `['telegram']` 可完全禁用邮件报告。未注册或未配置的后端会被跳过并在返回结果中标记为失败（`NotifyResult(ok=False)`）。 |
+| `TELEGRAM_BOT_TOKEN` | `str` | `''` | 来自 [@BotFather](https://t.me/BotFather) 的 Telegram bot token。当启用 `'telegram'` 时必填。 |
+| `TELEGRAM_CHAT_ID` | `str` | `''` | bot 发送消息的目标 chat 或 channel id（如 `-1001234567890`）。当启用 `'telegram'` 时必填。 |
 
 **启用 Telegram：** 通过 @BotFather 创建 bot 获取 token，获取你的 chat id（给 bot 发条消息，然后读取 `https://api.telegram.org/bot<token>/getUpdates`），设置上述两个值，并将 `'telegram'` 加入 `NOTIFY_BACKENDS`：
 
@@ -116,7 +116,7 @@ TELEGRAM_BOT_TOKEN = '123456:ABC-DEF...'
 TELEGRAM_CHAT_ID = '987654321'
 ```
 
-> **Phase 1 状态（仅 plumbing）：** ADR-039 Phase 1 交付了通知插件层与 `notify.dispatch.send` 扇出能力，但**尚未**将现有 pipeline 邮件通知改接到它上面。在后续阶段把 pipeline 调用方接到 `notify.dispatch.send` 之前，设置 `NOTIFY_BACKENDS`（例如加入 `'telegram'`）只会注册后端，**不会**改变现有 pipeline 通知——它们仍通过未改动的直连邮件路径发出。
+管道通知步骤（`apps.cli.notify.email`）经由该扇出路由：`email` 后端保留完整的 HTML 报告，二级后端（如 Telegram）收到运行结论加精简摘要。当 `email` 不在 `NOTIFY_BACKENDS` 中时，仍会计算报告用于生成摘要，但抑制 SMTP 发送，且退出码反映二级扇出而非邮件投递。
 
 ---
 

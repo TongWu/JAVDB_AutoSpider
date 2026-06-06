@@ -233,6 +233,11 @@ jobs:
           VAR_SMTP_USER: ${{ secrets.SMTP_USER }}
           VAR_EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
           VAR_EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          # Notification backends (ADR-039). Bot token / chat id are secrets;
+          # NOTIFY_BACKENDS is a non-sensitive JSON variable (default ['email']).
+          VAR_TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          VAR_TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          VAR_NOTIFY_BACKENDS_JSON: ${{ vars.NOTIFY_BACKENDS_JSON }}
           VAR_PROXY_MODE: ${{ vars.PROXY_MODE }}
           VAR_PROXY_POOL_MAX_FAILURES: ${{ vars.PROXY_POOL_MAX_FAILURES || 3 }}
           VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}

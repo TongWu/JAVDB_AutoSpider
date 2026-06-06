@@ -71,17 +71,26 @@ second route.
 **D4. Dispatch fans out with failure isolation.** `notify.send(message)` iterates
 the active plugins, calls each `.send()`, and collects `NotifyResult`s; one
 backend's failure (e.g. Telegram down) does not block the others (e.g. email).
-Existing callers (the pipeline's email summary) are *designed to* route through
-`notify.send`.
+`send(message, exclude=…)` lets a caller skip a backend it has already handled by
+another route.
 
-> **Phase 1 status (plumbing-only):** Phase 1 ships the dispatcher itself —
-> `notify.dispatch.send` is import-reachable and registers the built-in plugins —
-> but does **not** yet rewire the existing pipeline email caller (the rich
-> `run_email_notification` report path) onto it. Until that wiring lands, setting
-> `NOTIFY_BACKENDS=['telegram']` registers the backend but the pipeline still
-> notifies via the unchanged direct email path. Rewiring the existing caller is a
-> follow-up (tracked for Phase 2), kept separate so the heavy report path stays
-> untouched in Phase 1 (D3).
+**D4 follow-up — pipeline wiring (IMP-ADR039-01).** The rich pipeline email
+report (`run_email_notification`: log analysis, stats, attachments) is *not*
+expressible as a generic `NotifyMessage(subject, body)`, so it stays on its own
+path. The pipeline notification step (`apps.cli.notify.email`, run by the
+pipeline service subprocess and the GitHub Actions workflows) therefore:
+
+1. runs the **rich report for the `email` backend** (unchanged — no regression),
+   and additionally produces a compact plaintext `summary` of the run;
+2. fans that `summary` out as a generic `NotifyMessage` to **every other active
+   backend** via `notify.send(message, exclude={'email'})`, with per-backend
+   failure isolation, so `email` is never double-notified; and
+3. when `email` is **not** in `NOTIFY_BACKENDS`, computes the report for the
+   summary but suppresses delivery (`run_email_notification(..., deliver=False)`),
+   so a telegram-only operator is not emailed.
+
+This honours D3 (the email internals are untouched) while making the second
+backend actually receive run notifications.
 
 **D5. Module shape.**
 
@@ -177,3 +186,7 @@ Phase 1 stands alone and is backward-compatible. Phases 2/3 widen the platform.
 ## Status Log
 
 - 2026-05-29: Proposed (umbrella; three phases scoped, IMPs pending).
+- 2026-06-06: Phase 1 (IMP-ADR039-01) implemented **and wired** — the registry,
+  `NotifyPlugin` contract, email/telegram built-ins, and `notify.dispatch` ship,
+  and the pipeline notification step now fans a run summary out to the secondary
+  backends. D4 updated with the wiring follow-up note.
