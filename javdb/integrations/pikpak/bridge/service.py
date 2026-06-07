@@ -139,9 +139,9 @@ def initialize_proxy_helper(proxy_override):
                 PROXY_POOL,
                 max_failures=PROXY_POOL_MAX_FAILURES
             )
-            logger.info(f"Proxy pool initialized successfully")
+            logger.info("Proxy pool initialized successfully")
         elif PROXY_MODE == 'single':
-            logger.info(f"Initializing single proxy mode (using first proxy from pool)...")
+            logger.info("Initializing single proxy mode (using first proxy from pool)...")
             global_proxy_pool = create_proxy_pool_from_config(
                 [PROXY_POOL[0]],
                 max_failures=PROXY_POOL_MAX_FAILURES
@@ -495,7 +495,7 @@ def _pikpak_bridge_impl(days, dry_run, batch_mode=True, use_proxy=None, from_pip
             if PROXY_MODE == 'pool':
                 logger.info(f"PROXY POOL MODE for PikPak bridge: {stats['total_proxies']} proxies with automatic failover")
             elif PROXY_MODE == 'single':
-                logger.info(f"SINGLE PROXY MODE for PikPak bridge: Using main proxy only")
+                logger.info("SINGLE PROXY MODE for PikPak bridge: Using main proxy only")
                 if stats['total_proxies'] > 0 and stats['proxies']:
                     main_proxy_name = stats['proxies'][0]['name']
                     logger.info(f"Main proxy: {main_proxy_name}")

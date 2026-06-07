@@ -44,7 +44,7 @@ def _parse_categories(raw_categories: str | None) -> list[str] | None:
         return None
     categories = json.loads(raw_categories)
     if not isinstance(categories, list):
-        raise argparse.ArgumentTypeError("--categories must be a JSON array")
+        raise ValueError("--categories must be a JSON array")
     return [str(category) for category in categories if category]
 
 
@@ -63,7 +63,7 @@ def options_from_args(args: argparse.Namespace) -> QbFileFilterOptions:
 def main(argv: list[str] | None = None) -> int:
     try:
         options = options_from_args(parse_args(argv))
-    except (json.JSONDecodeError, argparse.ArgumentTypeError) as exc:
+    except (json.JSONDecodeError, ValueError) as exc:
         raise SystemExit(str(exc)) from exc
     return run_file_filter_cli(options).exit_code
 

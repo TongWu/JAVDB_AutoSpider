@@ -84,7 +84,12 @@ def mask_sensitive_info(text):
     # Mask email passwords in SMTP URLs
     def mask_email_password(match):
         username, password, domain = match.groups()
-        if 'github.com' in domain:
+        # Host-based comparison: ``'github.com' in domain`` is a substring match
+        # that ``github.com.evil.com`` would also satisfy (CodeQL
+        # py/incomplete-url-substring-sanitization). Strip any ``:port`` and
+        # compare the host exactly, or as a true ``*.github.com`` subdomain.
+        host = domain.split(':', 1)[0].lower()
+        if host == 'github.com' or host.endswith('.github.com'):
             return match.group(0)
         return f"{username}:***MASKED***@{domain}"
     
