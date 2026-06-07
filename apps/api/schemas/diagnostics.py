@@ -96,6 +96,26 @@ class OpsIncidentAnalyticsResponse(BaseModel):
     open_high_confidence: int
 
 
+class ParseFieldHealthItem(BaseModel):
+    """Latest committed parse health for one contract field (ADR-035 Phase 3)."""
+
+    page_type: str
+    field: str
+    severity: str
+    fill_rate: float
+    sample_count: int
+    observed_at: Optional[str] = None
+    baseline: Optional[float] = None
+    threshold: Optional[float] = None
+    status: str
+
+
+class ParseFieldHealthResponse(BaseModel):
+    """List response for per-field parse health."""
+
+    items: list[ParseFieldHealthItem]
+
+
 __all__ = [
     "EvidenceRefSchema",
     "JavdbSessionRefreshRequest",
@@ -105,5 +125,7 @@ __all__ = [
     "OpsIncidentListResponse",
     "OpsIncidentSchema",
     "OpsIncidentSimilarityResponse",
+    "ParseFieldHealthItem",
+    "ParseFieldHealthResponse",
     "SimilarIncidentSchema",
 ]

@@ -855,6 +855,24 @@ python3 -m apps.cli.ops.sentinel \
   --json
 ```
 
+### 金丝雀模式（Phase 2）
+
+对固定页面执行独立的两次 run 之间抓取+解析（`SiteContractSentinel.yml`）。
+在 `config.py` 中配置 `SENTINEL_CANARY_INDEX_URL` 和 `SENTINEL_CANARY_ANCHORS`。
+
+```bash
+# Phase 1：评估某个 run 的字段填充率（门控）
+python3 -m apps.cli.ops.sentinel --session-id <id>
+
+# Phase 2：对固定页面执行独立金丝雀探测
+python3 -m apps.cli.ops.sentinel --canary
+
+# 以 JSON 格式输出当前锚点解析值（将结果填入 SENTINEL_CANARY_ANCHORS）
+python3 -m apps.cli.ops.sentinel --capture-anchors --url <detail-url> [--url ...]
+```
+
+金丝雀模式适用的 flag：`--run-id`、`--attempt`、`--json`、`--log-level`。退出码：`0` 表示干净;`4` 表示检测到关键漂移(已记录为 `site_drift` incident);`3` 表示金丝雀无法完成(未抓取/解析到任何页面,或检测到漂移但 incident 写入失败——此时该 run 会失败,从而避免漂移被静默丢失);`1` 表示内部错误。
+
 ---
 
 ## Config Generator CLI

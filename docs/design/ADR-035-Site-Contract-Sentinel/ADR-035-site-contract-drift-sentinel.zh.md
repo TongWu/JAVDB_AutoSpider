@@ -2,7 +2,7 @@
 
 | 字段       | 值                                                                    |
 | ---------- | --------------------------------------------------------------------- |
-| **状态**   | Proposed — 伞型;执行下放给各期 IMP                                    |
+| **状态**   | Accepted — 三期均已实现(待 PR/合并);TS 镜像跟进项尚未完成(见状态日志) |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
 | **关联**   | [ADR-026](../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md), [ADR-020](../_archive/ADR-020-Parser-Interface-Consolidation/ADR-020-parser-interface-consolidation.md), [ADR-019](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md), [ADR-011](../_archive/ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) |
@@ -141,3 +141,33 @@ Phase 1 以**零新增抓取**交付头号价值（抓住漂移 + 保护 DB）�
   [IMP-ADR035-03](IMP-ADR035-03-surface.md)(漂移面:`incident_type` 过滤、
   `parse-field-health` 端点、`site_drift_sentinel` 能力开关、OpenAPI + TS 镜像
   跟进)。两者均已写好、可执行;实现尚未开始,故伞型 ADR 维持 Proposed。
+- 2026-06-07: **第二、三期已实现。**
+  - **第二期**([IMP-ADR035-02](IMP-ADR035-02-independent-canary.md))—— `probes.py`
+    (`GoldenAnchor`、`check_golden_anchors`、`run_probes`)、`service.run_canary`
+    (复用第一期 `evaluate()` 核心 + 已提交基线;对 `ParseRunFieldFill` **只读**;
+    唯一事件写入方,`trigger_source="canary"`)、`apps.cli.ops.sentinel --canary` /
+    `--capture-anchors`、`SENTINEL_CANARY_*` 配置项 + `config_generator` 映射,以及
+    `.github/workflows/SiteContractSentinel.yml`(每 6 小时 cron)。无新增 D1 schema。
+  - **第三期**([IMP-ADR035-03](IMP-ADR035-03-surface.md))—— `incident_type`
+    过滤在更早的改动中已存在(仅补回归测试);`ParseRunFieldFillRepo.latest_committed_fills()`、
+    纯函数 `ops.sentinel.health.compute_field_health`、`GET /api/diag/parse-field-health`、
+    `Features.site_drift_sentinel`(默认 true),以及重新生成的
+    `docs/api/openapi.json`。只读接口;无新增 D1 schema。
+  - **实现偏差(as-built):** 存在一处潜在的导入循环(存储 repo →
+    `ops.sentinel`(经 `__init__`)→ `service` → `persistence` → 存储 repo),
+    通过把 `persistence.open_fill_repo` 的 repo 导入改为惰性导入修复,使存储层
+    不受导入顺序影响,可独立导入。
+  - **跨仓库待办(双后端规则 —— 不在本 monorepo 内):**
+    需在 `javdb-autospider-web/server/` 中镜像第三期接口:
+    1. `GET /api/diag/ops-incidents` —— 增加 `incident_type` 查询参数 →
+       `WHERE incident_type = ?`(与
+       `javdb/storage/repos/ops_incident_repo.py::list` 同一条件)。
+    2. `GET /api/diag/parse-field-health` —— 新路由;移植 `latest_committed_fills()`
+       (按 `(page_type, field)` 取 `MAX(observed_at)` 的相关子查询,WHERE
+       `committed=1`)+ `compute_field_health` 状态逻辑(PARSE_CONTRACT 镜像)→
+       完全一致的 JSON 形状。
+    3. `capabilities.features.site_drift_sentinel` —— 新增布尔字段(默认 true);
+       为 false 时前端隐藏漂移面板。
+    契约接缝:`docs/api/openapi.json`(已重新生成)—— 必须严格对齐。
+  - 三期均已在本仓库落地,仅剩上述 TS 镜像待办,故伞型 ADR 升级为 **Accepted**
+    (待本分支 PR/合并)。

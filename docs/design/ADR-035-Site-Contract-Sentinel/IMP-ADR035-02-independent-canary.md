@@ -1013,7 +1013,7 @@ git commit -m "ci(sentinel): add SiteContractSentinel canary workflow (ADR-035 P
 
 **Files:**
 - Modify: `config.py.example`
-- Modify: `apps/cli/ops/config_generator.py`
+- Modify: `javdb/infra/config_generator.py` (the real generator — NOT the `apps/cli/ops/config_generator.py` thin adapter; see Step 2)
 - Modify: `CONTEXT.md`
 - Modify: `docs/handbook/en/developer/cli-reference.md` (+ `docs/handbook/zh/developer/cli-reference.md`)
 
@@ -1034,16 +1034,30 @@ SENTINEL_CANARY_ANCHORS = [
 
 - [ ] **Step 2: Map the canary vars in `config_generator`** — so CI's `VAR_SENTINEL_CANARY_*` reach `config.py`.
 
+> **As-built (2026-06-06): edit `javdb/infra/config_generator.py`, NOT
+> `apps/cli/ops/config_generator.py`.** The latter is a 23-line thin adapter that
+> just `from javdb.infra.config_generator import main`. The real mapping lives in
+> `javdb/infra/config_generator.py::get_config_map()`, which returns a list of
+> `(config_key, env_var_name, getter_fn, default, section)` tuples — it writes
+> **only keys it knows**, with **no** generic `VAR_*` pass-through, so both canary
+> keys MUST be added explicitly or CI's values are silently dropped.
+
 Inspect how the generator maps `VAR_*` → config and add the two canary keys following the existing idiom:
 
-Run: `grep -n "SENTINEL\|PROXY_MODE\|def \|VAR_" apps/cli/ops/config_generator.py | head -40`
+Run: `grep -n "get_config_map\|PROXY_MODE\|get_env_json\|get_env\b" javdb/infra/config_generator.py | head -40`
 
-Add `SENTINEL_CANARY_INDEX_URL` (plain string from `VAR_SENTINEL_CANARY_INDEX_URL`) and `SENTINEL_CANARY_ANCHORS` (JSON-decoded from `VAR_SENTINEL_CANARY_ANCHORS_JSON`, like the existing `*_JSON` proxy vars) in the same place the generator writes other optional settings. If `config_generator` writes only keys it knows, both must be added or the CI `VAR_SENTINEL_CANARY_*` values are silently dropped.
+Add two tuples to the `get_config_map()` list following the existing idiom (note `get_env`/`get_env_json` already try the `VAR_` prefix first, so pass the bare key name):
 
-> If the generator already passes through unknown `VAR_*` keys generically, this
-> step is a no-op — verify by grepping for a pass-through loop. Either way, the
-> canary works without these (they are optional overrides); this step only wires
-> the CI override path.
+```python
+('SENTINEL_CANARY_INDEX_URL', 'SENTINEL_CANARY_INDEX_URL', get_env, 'https://javdb.com/', 'ADR-035 SITE-CONTRACT SENTINEL'),
+('SENTINEL_CANARY_ANCHORS', 'SENTINEL_CANARY_ANCHORS_JSON', get_env_json, [], 'ADR-035 SITE-CONTRACT SENTINEL'),
+```
+
+`SENTINEL_CANARY_INDEX_URL` is a plain string (from `VAR_SENTINEL_CANARY_INDEX_URL`);
+`SENTINEL_CANARY_ANCHORS` is JSON-decoded (from `VAR_SENTINEL_CANARY_ANCHORS_JSON`,
+like the existing `*_JSON` proxy vars). Place them near the other ADR-035 / proxy
+optional settings. The canary still works without these (they are optional
+overrides); this step only wires the CI override path.
 
 - [ ] **Step 3: Promote *Canary probe* in `CONTEXT.md`** — find the ADR-035 "Canary probe" domain term (added by Phase 1, marked Phase-2) and drop the "(Phase-2)" qualifier, leaving the definition:
 
@@ -1080,7 +1094,7 @@ Expected: prints nothing — the canary probe and the detector never write; only
 - [ ] **Step 7: Commit**
 
 ```bash
-git add config.py.example apps/cli/ops/config_generator.py CONTEXT.md docs/handbook
+git add config.py.example javdb/infra/config_generator.py CONTEXT.md docs/handbook
 git commit -m "docs(sentinel): canary config knobs + CLI reference + CONTEXT (ADR-035 Phase 2)"
 ```
 

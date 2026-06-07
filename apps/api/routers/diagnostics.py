@@ -23,13 +23,17 @@ from apps.api.schemas.diagnostics import (
     OpsIncidentListResponse,
     OpsIncidentSchema,
     OpsIncidentSimilarityResponse,
+    ParseFieldHealthItem,
+    ParseFieldHealthResponse,
     SimilarIncidentSchema,
 )
 from javdb.infra.config import cfg
 from javdb.ops.diagnosis.analytics import summarize_incidents
 from javdb.ops.diagnosis.similarity import rank_similar_incidents
+from javdb.ops.sentinel.health import compute_field_health
 from javdb.storage.db import OPERATIONS_DB_PATH, REPORTS_DB_PATH, get_db
 from javdb.storage.repos.ops_incident_repo import OpsIncidentRepo
+from javdb.storage.repos.parse_run_field_fill_repo import ParseRunFieldFillRepo
 from javdb.storage.repos.system_state_repo import SystemStateRepo
 
 router = APIRouter(prefix="/api/diag", tags=["diagnostics"])
@@ -151,6 +155,45 @@ def _ops_record_to_schema(record) -> OpsIncidentSchema:
     )
 
 
+def _field_health_to_schema(h) -> ParseFieldHealthItem:
+    return ParseFieldHealthItem(
+        page_type=h.page_type,
+        field=h.field,
+        severity=h.severity,
+        fill_rate=h.fill_rate,
+        sample_count=h.sample_count,
+        observed_at=h.observed_at,
+        baseline=h.baseline,
+        threshold=h.threshold,
+        status=h.status,
+    )
+
+
+def _field_health_items(repo, min_sample: int, window: int) -> list[ParseFieldHealthItem]:
+    rows = repo.latest_committed_fills()
+    # Exclude each displayed row from its own baseline (via `before=observed_at`) so
+    # the status mirrors the gate detector's pure-historical baseline — the run being
+    # judged is not part of the history it is compared against. Without this, a lone
+    # committed run reads as `ok` instead of `no_baseline`, and a short history lets
+    # the current outlier drag down its own threshold and mask `soft_drift`.
+    latest_at = {(pt, f): observed_at for (pt, f, _rate, _n, observed_at) in rows}
+    health = compute_field_health(
+        rows, min_sample=min_sample,
+        baseline_fn=lambda pt, f: repo.baseline(
+            pt, f, window=window, before=latest_at.get((pt, f))),
+    )
+    return [_field_health_to_schema(h) for h in health]
+
+
+def _compute_parse_field_health(*, repo=None) -> list[ParseFieldHealthItem]:
+    min_sample = int(cfg("SENTINEL_MIN_SAMPLE", 30))
+    window = int(cfg("SENTINEL_BASELINE_WINDOW", 14))
+    if repo is not None:
+        return _field_health_items(repo, min_sample, window)
+    with get_db(REPORTS_DB_PATH) as conn:
+        return _field_health_items(ParseRunFieldFillRepo(conn), min_sample, window)
+
+
 @router.get("/javdb-session", response_model=JavdbSessionStatus)
 def get_javdb_session_status(
     _user: Dict[str, Any] = Depends(_require_auth),
@@ -226,6 +269,14 @@ def get_ops_incident_analytics(
     """Return aggregated analytics over persisted operations incidents."""
     records = _list_ops_incident_records(limit=_ANALYTICS_WINDOW)
     return OpsIncidentAnalyticsResponse(**summarize_incidents(records))
+
+
+@router.get("/parse-field-health", response_model=ParseFieldHealthResponse)
+def get_parse_field_health(
+    _user: Dict[str, Any] = Depends(_require_auth),
+) -> ParseFieldHealthResponse:
+    """Latest committed per-field parse health (ADR-035 site-contract sentinel)."""
+    return ParseFieldHealthResponse(items=_compute_parse_field_health())
 
 
 def _similar_ops_incident_records(incident_id: str, *, limit: int = 5):
@@ -375,6 +426,7 @@ __all__ = [
     "get_javdb_session_status",
     "get_ops_incident",
     "get_ops_incident_analytics",
+    "get_parse_field_health",
     "get_similar_ops_incidents",
     "list_ops_incidents",
     "refresh_javdb_session_diag",

@@ -877,6 +877,24 @@ python3 -m apps.cli.ops.sentinel \
   --json
 ```
 
+### Canary Mode (Phase 2)
+
+Independent between-run fetch+parse over pinned pages (`SiteContractSentinel.yml`).
+Configure `SENTINEL_CANARY_INDEX_URL` and `SENTINEL_CANARY_ANCHORS` in `config.py`.
+
+```bash
+# Phase 1: evaluate a run's fills (gate)
+python3 -m apps.cli.ops.sentinel --session-id <id>
+
+# Phase 2: independent canary over pinned pages
+python3 -m apps.cli.ops.sentinel --canary
+
+# Print current parsed anchor values as JSON (use output to populate SENTINEL_CANARY_ANCHORS)
+python3 -m apps.cli.ops.sentinel --capture-anchors --url <detail-url> [--url ...]
+```
+
+Flags applicable to canary mode: `--run-id`, `--attempt`, `--json`, `--log-level`. Exit codes: `0` = clean; `4` = critical drift (recorded as a `site_drift` incident); `3` = the canary could not complete (it fetched/parsed nothing, or it detected drift but failed to persist the incident — the run fails so drift is never silently lost); `1` = internal error.
+
 ---
 
 ## Config Generator CLI
