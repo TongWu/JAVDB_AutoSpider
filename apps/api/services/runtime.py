@@ -198,6 +198,50 @@ if os.getenv("TEST_MODE") == "1":
     app.include_router(test_mode_router)
 
 
+# Shared {"detail": "<string>"} error body, matching FastAPI's HTTPException
+# serialization. Used to backfill the 401/403 responses on JWT-guarded
+# operations so OpenAPI consumers (Swagger UI, SDK generators) see the auth
+# failure contract, not just the security requirement.
+_DETAIL_STRING_RESPONSE = {
+    "content": {
+        "application/json": {
+            "schema": {
+                "type": "object",
+                "required": ["detail"],
+                "properties": {"detail": {"type": "string"}},
+            }
+        }
+    }
+}
+_AUTH_FAILURE_RESPONSES = {
+    "401": {"description": "Unauthorized", **_DETAIL_STRING_RESPONSE},
+    "403": {"description": "Forbidden", **_DETAIL_STRING_RESPONSE},
+}
+_BEARER_REQUIREMENT = [{"BearerAuth": []}]
+
+
+def _backfill_auth_failure_responses(schema: dict) -> None:
+    """Add 401/403 response defs to every BearerAuth-guarded operation.
+
+    The shared ``_require_auth`` dependency emits ``security: [{"BearerAuth":
+    []}]`` (see apps/api/infra/auth.py) but FastAPI does not auto-document the
+    401/403 bodies those guards return at runtime. Backfilling here — the one
+    place that already post-processes the schema — keeps the contract accurate
+    for all current and future guarded routes without annotating each route by
+    hand. ``setdefault`` makes this idempotent: routes that already declare a
+    401/403 (e.g. the quality router) keep their own definition untouched.
+    """
+    for methods in schema.get("paths", {}).values():
+        for op in methods.values():
+            if not isinstance(op, dict):
+                continue
+            if op.get("security") != _BEARER_REQUIREMENT:
+                continue
+            responses = op.setdefault("responses", {})
+            for status, definition in _AUTH_FAILURE_RESPONSES.items():
+                responses.setdefault(status, definition)
+
+
 def _custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
@@ -215,6 +259,7 @@ def _custom_openapi():
         "scheme": "bearer",
         "bearerFormat": "JWT",
     }
+    _backfill_auth_failure_responses(schema)
     app.openapi_schema = schema
     return app.openapi_schema
 
