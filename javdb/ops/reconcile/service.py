@@ -330,21 +330,45 @@ def run_ownership(
                 result.errors.append(str(exc))
                 continue
             result.observed += len(observations)
-            present_keys = set()
+            if options.dry_run:
+                continue
+
+            # Delta: load existing rows for this source and only write changes.
+            existing = {
+                (rec.video_code, rec.category): rec
+                for rec in r.list_by_source(source)
+            }
+            changed: list[OwnershipLedgerRecord] = []
+            unchanged_keys: list[tuple[str, str, str]] = []
+            present_keys: set[tuple[str, str]] = set()
             for obs in observations:
                 present_keys.add((obs.video_code, obs.category))
-                if options.dry_run:
+                new_rec = OwnershipLedgerRecord(
+                    video_code=obs.video_code, source=obs.source, category=obs.category,
+                    path=obs.path, size=obs.size, present=1, observed_at=now,
+                )
+                old = existing.get((obs.video_code, obs.category))
+                if old is not None and old.present == 1 and old.path == obs.path and old.size == obs.size:
+                    unchanged_keys.append((obs.video_code, source, obs.category))
                     continue
+                changed.append(new_rec)
+
+            if changed:
                 try:
-                    r.upsert(OwnershipLedgerRecord(
-                        video_code=obs.video_code, source=obs.source, category=obs.category,
-                        path=obs.path, size=obs.size, present=1, observed_at=now,
-                    ))
-                    result.upserted += 1
+                    result.upserted += r.upsert_batch(changed)
                 except Exception as exc:
-                    logger.warning("run_ownership: upsert failed", exc_info=True)
+                    logger.warning("run_ownership: batch upsert failed for %s", source, exc_info=True)
                     result.errors.append(str(exc))
-            if not options.dry_run and source in _SWEPT_OWNERSHIP_SOURCES:
+
+            # Refresh observed_at for unchanged rows (ADR-033 D10 freshness).
+            if unchanged_keys:
+                try:
+                    r.touch_observed_at_batch(unchanged_keys, now)
+                except Exception as exc:
+                    logger.warning("run_ownership: touch_observed_at failed for %s", source, exc_info=True)
+                    result.errors.append(str(exc))
+
+            if source in _SWEPT_OWNERSHIP_SOURCES:
                 try:
                     result.swept_absent += r.mark_absent(source, present_keys)
                 except Exception as exc:
@@ -374,13 +398,15 @@ def _derive_in_library(ledger_repo, outcome_repo, now: str) -> int:
     }
     if not owned:
         return 0
-    promoted = 0
     with _outcome_ctx(outcome_repo) as o:
-        for rec in o.list_pending_landing():
-            if rec.video_code and _normalise_code(rec.video_code) in owned:
-                o.mark_in_library(rec.qb_hash, landed_at=now)
-                promoted += 1
-    return promoted
+        to_promote = [
+            rec.qb_hash
+            for rec in o.list_pending_landing()
+            if rec.video_code and _normalise_code(rec.video_code) in owned
+        ]
+        if to_promote:
+            return o.mark_in_library_batch(to_promote, landed_at=now)
+    return 0
 
 
 # --- ADR-033 Phase 3: Consumption signal ------------------------------------

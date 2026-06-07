@@ -74,3 +74,31 @@ def test_upsert_reactivates_swept_row(repo):
     assert reactivated.present == 1                           # row is live again
     assert reactivated.observed_at == "t2"                   # observed_at refreshed by upsert
     assert repo._conn.execute("SELECT COUNT(*) FROM OwnershipLedger").fetchone()[0] == 1  # no duplicate row
+
+
+def test_upsert_batch_writes_multiple_rows(repo):
+    records = [
+        OwnershipLedgerRecord("A-1", "gdrive", "c1", path="/a", size=10, observed_at="t1"),
+        OwnershipLedgerRecord("B-2", "gdrive", "c2", path="/b", size=20, observed_at="t1"),
+        OwnershipLedgerRecord("C-3", "gdrive", "c3", path="/c", size=30, observed_at="t1"),
+    ]
+    count = repo.upsert_batch(records)
+    assert count == 3
+    assert repo.get("A-1", "gdrive", "c1").path == "/a"
+    assert repo.get("B-2", "gdrive", "c2").path == "/b"
+    assert repo.get("C-3", "gdrive", "c3").path == "/c"
+
+
+def test_upsert_batch_updates_existing_rows(repo):
+    repo.upsert(OwnershipLedgerRecord("A-1", "gdrive", "c1", path="/old", size=10, observed_at="t1"))
+    count = repo.upsert_batch([
+        OwnershipLedgerRecord("A-1", "gdrive", "c1", path="/new", size=99, observed_at="t2"),
+    ])
+    assert count == 1
+    got = repo.get("A-1", "gdrive", "c1")
+    assert got.path == "/new"
+    assert got.size == 99
+
+
+def test_upsert_batch_empty_is_noop(repo):
+    assert repo.upsert_batch([]) == 0

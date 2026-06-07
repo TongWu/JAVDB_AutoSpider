@@ -119,3 +119,15 @@ class AcquisitionOutcomeRepo:
             "WHERE qb_hash = ?",
             [landed_at, qb_hash],
         )
+
+    def mark_in_library_batch(self, qb_hashes: list[str], landed_at: str) -> int:
+        """Batch-promote rows to in_library. Returns count updated."""
+        if not qb_hashes:
+            return 0
+        params = [[landed_at, h] for h in qb_hashes]
+        self._conn.executemany(
+            "UPDATE AcquisitionOutcome SET state = 'in_library', landed_at = ? "
+            "WHERE qb_hash = ?",
+            params,
+        )
+        return len(params)
