@@ -44,6 +44,7 @@ from apps.api.routers.auth import login, logout, refresh_token, router as auth_r
 from apps.api.routers.capabilities import router as capabilities_router
 from apps.api.routers.onboarding import router as onboarding_router
 from apps.api.routers.history import router as history_router
+from apps.api.routers.library import router as library_router
 from apps.api.routers.sessions import router as sessions_router
 from apps.api.routers.diagnostics import router as diagnostics_router
 from apps.api.routers.gh_actions import router as gh_actions_router
@@ -180,6 +181,7 @@ for router in (
     onboarding_router,
     sessions_router,
     history_router,
+    library_router,
     operations_router,
     diagnostics_router,
     gh_actions_router,
@@ -294,6 +296,7 @@ __all__ = [
     "global_exception_handler",
     "health_check",
     "history_router",
+    "library_router",
     "list_tasks",
     "login",
     "logout",

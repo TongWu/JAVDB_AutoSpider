@@ -74,3 +74,16 @@ STATS_TREND_QUERY_CASES = [
     ("stats_trend_query", "pikpak", {"metric": "pikpak", "cutoff": "2026-01-01"}),
     ("stats_trend_query", "dedup", {"metric": "dedup", "cutoff": "2026-01-01"}),
 ]
+
+LIBRARY_SUMMARY_QUERY_CASES = [
+    ("library_summary_query", "all", {}),
+]
+
+LIBRARY_RECENT_QUERY_CASES = [
+    ("library_recent_query", "no_state", {"state": None, "limit": 50, "offset": 0}),
+    ("library_recent_query", "with_state", {"state": "completed", "limit": 20, "offset": 40}),
+]
+
+LIBRARY_TREND_QUERY_CASES = [
+    ("library_trend_query", "default", {"cutoff": "2026-01-01"}),
+]

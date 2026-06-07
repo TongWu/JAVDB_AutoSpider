@@ -621,8 +621,55 @@
         "metric": "dedup"
       },
       "sql": "SELECT DATE(DateTimeDetected), COALESCE(SUM(ExistingFolderSize), 0) FROM DedupRecords WHERE IsDeleted=1 AND DateTimeDetected >= ? GROUP BY DATE(DateTimeDetected) ORDER BY DATE(DateTimeDetected)"
+    },
+    {
+      "bindings": [],
+      "builder": "library_summary_query",
+      "name": "all",
+      "params": {},
+      "sql": "SELECT COALESCE(SUM(CASE WHEN state='queued' THEN 1 ELSE 0 END), 0) AS queued, COALESCE(SUM(CASE WHEN state='downloading' THEN 1 ELSE 0 END), 0) AS downloading, COALESCE(SUM(CASE WHEN state='completed' THEN 1 ELSE 0 END), 0) AS completed, COALESCE(SUM(CASE WHEN state='stalled' THEN 1 ELSE 0 END), 0) AS stalled, COALESCE(SUM(CASE WHEN state='failed' THEN 1 ELSE 0 END), 0) AS failed, COUNT(*) AS total FROM AcquisitionOutcome"
+    },
+    {
+      "bindings": [
+        50,
+        0
+      ],
+      "builder": "library_recent_query",
+      "name": "no_state",
+      "params": {
+        "limit": 50,
+        "offset": 0,
+        "state": null
+      },
+      "sql": "SELECT qb_hash, video_code, href, category, state, queued_at, completed_at, last_seen_at FROM AcquisitionOutcome ORDER BY queued_at DESC LIMIT ? OFFSET ?"
+    },
+    {
+      "bindings": [
+        "completed",
+        20,
+        40
+      ],
+      "builder": "library_recent_query",
+      "name": "with_state",
+      "params": {
+        "limit": 20,
+        "offset": 40,
+        "state": "completed"
+      },
+      "sql": "SELECT qb_hash, video_code, href, category, state, queued_at, completed_at, last_seen_at FROM AcquisitionOutcome WHERE state = ? ORDER BY queued_at DESC LIMIT ? OFFSET ?"
+    },
+    {
+      "bindings": [
+        "2026-01-01"
+      ],
+      "builder": "library_trend_query",
+      "name": "default",
+      "params": {
+        "cutoff": "2026-01-01"
+      },
+      "sql": "SELECT substr(last_seen_at, 1, 10) AS d, COALESCE(SUM(CASE WHEN state='completed' THEN 1 ELSE 0 END), 0) AS completed, COALESCE(SUM(CASE WHEN state='stalled' THEN 1 ELSE 0 END), 0) AS stalled, COALESCE(SUM(CASE WHEN state='failed' THEN 1 ELSE 0 END), 0) AS failed FROM AcquisitionOutcome WHERE state IN ('completed','stalled','failed') AND last_seen_at >= ? GROUP BY d ORDER BY d"
     }
   ],
   "normalization": "collapse-whitespace-runs-to-single-space-and-trim",
-  "version": "439006fcad451495"
+  "version": "f8321a37c19636e6"
 }

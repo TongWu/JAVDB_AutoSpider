@@ -4,7 +4,7 @@
 
 **Related:** [ADR-034](ADR-034-media-closed-loop-web-surface.md) (web surface) — this is **FE Phase 1** of three. Backend dependency [ADR-033 Phase 1](../ADR-033-Media-Closed-Loop/IMP-ADR033-01-acquisition-outcome.md) (`AcquisitionOutcome` table + `record_queued`/cleanup completion push) is **implemented and locally verified**, so the endpoint shapes below are grounded in the real table, not a paper contract.
 
-**Status:** Not started (planned 2026-06-06).
+**Status:** Implemented and locally verified (2026-06-07). All 12 tasks landed across two repos: CICD (Python contract source of truth) on branch `claude/adr034-fe1` — schemas, pure SQL builders, three read-only endpoints, `closed_loop` capability flag, builders pinned to the query-contract golden, regenerated `openapi.json` + `query-builders.golden.json`; Web (`javdb-autospider-web`) on branch `claude/brave-knuth-8831a7` — vendored artifacts, TS Worker routes + byte-for-byte builder mirror at golden parity, `closed_loop` flag at parity, typed API client, en/zh/**ja** i18n, `/library` route, capability-gated nav, Library page + Acquisition view, component test. Local verification gates passed: CICD `75` targeted ADR-034 tests + `git diff --check`; Web lint + `typecheck` + `typecheck:server` + `136` unit (incl. `i18n-parity`) + `302` server tests; the two query-builder goldens are byte-identical (no drift). Remote D1 apply and live deployment remain environment-bound. Delivered as two paired, cross-linked PRs.
 
 **Goal:** Make the ADR-033 acquisition-outcome data visible — add a top-level **Library** page (Acquisition tab) to the Vue console, served by three read-only `GET /api/library/acquisition/{summary,recent,trend}` endpoints implemented at full parity in **both** the Python FastAPI backend and the TypeScript Cloudflare Worker, gated by a new `closed_loop` capability flag.
 
@@ -1177,7 +1177,9 @@ git commit -m "feat(server): expose closed_loop capability flag at parity (ADR-0
 
 **Files (in `<WEB>`):**
 - Create: `src/api/library.ts`
-- Modify: `src/i18n/locales/en.json`, `src/i18n/locales/zh-CN.json`
+- Modify: `src/i18n/locales/en.json`, `src/i18n/locales/zh-CN.json`, **`src/i18n/locales/ja.json`**
+
+> **Locale parity:** the Web repo ships a **third locale** (`ja.json`) enforced by `tests/unit/i18n-parity.spec.ts`. Every new key added to `en.json` must also be added to **both** `zh-CN.json` and `ja.json` (same key tree) or the parity test fails. Steps 2–3 below show en/zh; mirror the identical keys into `ja.json` with Japanese translations in the same change.
 
 - [ ] **Step 1: Add the typed API client**
 
@@ -1757,12 +1759,12 @@ Open two PRs and cross-link them in each description:
 
 ## Definition of Done
 
-- [ ] Three `GET /api/library/acquisition/{summary,recent,trend}` endpoints serve identical shapes from **both** backends; the query-contract golden conformance test is green on both sides.
-- [ ] `GET /api/capabilities` returns `features.closed_loop` (bool) in both backends; the Library nav entry is hidden when it is false.
-- [ ] The Library page renders the Acquisition tab (funnel + 5 KPI cards + recent table with a state filter + trend chart); Ownership/Consumption are disabled placeholders.
-- [ ] All new strings exist in both `en.json` and `zh-CN.json`.
-- [ ] `docs/api/openapi.json` and `docs/api/contract/query-builders.golden.json` regenerated and committed; the Web repo vendored both.
-- [ ] No mutations were added (ADR-034 Non-Goals respected).
+- [x] Three `GET /api/library/acquisition/{summary,recent,trend}` endpoints serve identical shapes from **both** backends; the query-contract golden conformance test is green on both sides.
+- [x] `GET /api/capabilities` returns `features.closed_loop` (bool) in both backends; the Library nav entry is hidden when it is false.
+- [x] The Library page renders the Acquisition tab (funnel + 5 KPI cards + recent table with a state filter + trend chart); Ownership/Consumption are disabled placeholders.
+- [x] All new strings exist in `en.json`, `zh-CN.json`, **and `ja.json`** (this repo carries a third locale enforced by `tests/unit/i18n-parity.spec.ts`; the original plan named only en/zh — corrected here).
+- [x] `docs/api/openapi.json` and `docs/api/contract/query-builders.golden.json` regenerated and committed; the Web repo vendored both (byte-identical).
+- [x] No mutations were added (ADR-034 Non-Goals respected).
 
 ## Out of scope (deferred — do not implement here)
 

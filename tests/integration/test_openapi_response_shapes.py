@@ -32,6 +32,9 @@ def test_each_fe_consumed_endpoint_has_typed_200_response(admin_client):
         ("/api/explore/index-status", "post"),
         ("/api/explore/download-magnet", "post"),
         ("/api/explore/search-by-video-code", "post"),
+        ("/api/library/acquisition/summary", "get"),
+        ("/api/library/acquisition/recent", "get"),
+        ("/api/library/acquisition/trend", "get"),
     ]
     for path, method in must_be_typed:
         assert path in paths, f"missing path {path}"
