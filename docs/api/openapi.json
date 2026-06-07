@@ -1,6 +1,153 @@
 {
   "components": {
     "schemas": {
+      "AcquisitionRecentItem": {
+        "description": "One AcquisitionOutcome row for GET /api/library/acquisition/recent.",
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "href": {
+            "title": "Href",
+            "type": "string"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
+          "qb_hash": {
+            "title": "Qb Hash",
+            "type": "string"
+          },
+          "queued_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Queued At"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "video_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Code"
+          }
+        },
+        "required": [
+          "qb_hash",
+          "href",
+          "state"
+        ],
+        "title": "AcquisitionRecentItem",
+        "type": "object"
+      },
+      "AcquisitionSummary": {
+        "description": "Funnel/KPI counts for GET /api/library/acquisition/summary.",
+        "properties": {
+          "completed": {
+            "title": "Completed",
+            "type": "integer"
+          },
+          "downloading": {
+            "title": "Downloading",
+            "type": "integer"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "queued": {
+            "title": "Queued",
+            "type": "integer"
+          },
+          "stalled": {
+            "title": "Stalled",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "queued",
+          "downloading",
+          "completed",
+          "stalled",
+          "failed",
+          "total"
+        ],
+        "title": "AcquisitionSummary",
+        "type": "object"
+      },
+      "AcquisitionTrendPoint": {
+        "description": "One day in GET /api/library/acquisition/trend (ADR-027 trend shape).",
+        "properties": {
+          "completed": {
+            "title": "Completed",
+            "type": "integer"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "stalled": {
+            "title": "Stalled",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "date",
+          "completed",
+          "stalled",
+          "failed"
+        ],
+        "title": "AcquisitionTrendPoint",
+        "type": "object"
+      },
       "AdhocTaskPayload": {
         "properties": {
           "date_filter": {
@@ -1120,6 +1267,10 @@
       },
       "Features": {
         "properties": {
+          "closed_loop": {
+            "title": "Closed Loop",
+            "type": "boolean"
+          },
           "javdb_login": {
             "title": "Javdb Login",
             "type": "boolean"
@@ -1156,6 +1307,7 @@
           "proxy_pool",
           "javdb_login",
           "proxy_preview",
+          "closed_loop",
           "site_drift_sentinel"
         ],
         "title": "Features",
@@ -7276,6 +7428,165 @@
           }
         ],
         "summary": "Api Get Spider Job Status"
+      }
+    },
+    "/api/library/acquisition/recent": {
+      "get": {
+        "operationId": "acquisition_recent_api_library_acquisition_recent_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AcquisitionRecentItem"
+                  },
+                  "title": "Response Acquisition Recent Api Library Acquisition Recent Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Acquisition Recent",
+        "tags": [
+          "library"
+        ]
+      }
+    },
+    "/api/library/acquisition/summary": {
+      "get": {
+        "operationId": "acquisition_summary_api_library_acquisition_summary_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcquisitionSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Acquisition Summary",
+        "tags": [
+          "library"
+        ]
+      }
+    },
+    "/api/library/acquisition/trend": {
+      "get": {
+        "operationId": "acquisition_trend_api_library_acquisition_trend_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "period",
+            "required": false,
+            "schema": {
+              "default": "30d",
+              "title": "Period",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AcquisitionTrendPoint"
+                  },
+                  "title": "Response Acquisition Trend Api Library Acquisition Trend Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Acquisition Trend",
+        "tags": [
+          "library"
+        ]
       }
     },
     "/api/login/refresh": {

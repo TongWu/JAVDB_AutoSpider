@@ -39,6 +39,17 @@ def _bool_env(name: str, default: bool = False) -> bool:
     return val.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _closed_loop_enabled() -> bool:
+    """True when the ADR-033 AcquisitionOutcome table is queryable (capability honesty)."""
+    try:
+        from javdb.storage.db import OPERATIONS_DB_PATH, get_db
+        with get_db(OPERATIONS_DB_PATH) as conn:
+            conn.execute("SELECT 1 FROM AcquisitionOutcome LIMIT 1").fetchone()
+        return True
+    except Exception:
+        return False
+
+
 def build_capabilities() -> CapabilitiesResponse:
     ingestion_mode = cast(
         "Literal['local', 'github', 'dual']",
@@ -72,6 +83,7 @@ def build_capabilities() -> CapabilitiesResponse:
             proxy_pool=_bool_env("PROXY_MODE_POOL", default=True),
             javdb_login=bool(os.getenv("JAVDB_USERNAME")),
             proxy_preview=True,
+            closed_loop=_closed_loop_enabled(),
             # ADR-035: site-contract drift sentinel ships with the system; the
             # frontend hides the drift panel only when explicitly disabled.
             site_drift_sentinel=_bool_env("FEATURE_SITE_DRIFT_SENTINEL", default=True),

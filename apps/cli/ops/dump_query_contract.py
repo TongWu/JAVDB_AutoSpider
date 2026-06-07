@@ -11,6 +11,9 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from apps.cli.ops.query_contract_cases import (  # noqa: E402
+    LIBRARY_RECENT_QUERY_CASES,
+    LIBRARY_SUMMARY_QUERY_CASES,
+    LIBRARY_TREND_QUERY_CASES,
     MOVIE_COUNT_CASES,
     MOVIE_FILTER_CASES,
     SESSION_QUERY_CASES,
@@ -18,6 +21,11 @@ from apps.cli.ops.query_contract_cases import (  # noqa: E402
     TORRENT_COUNT_CASES,
     TORRENT_FILTER_CASES,
     normalize_sql,
+)
+from apps.api.routers.library_query_builders import (  # noqa: E402
+    build_acquisition_recent_query,
+    build_acquisition_summary_query,
+    build_acquisition_trend_query,
 )
 from apps.api.routers.stats_query_builders import build_stats_trend_query  # noqa: E402
 from javdb.storage.repos.history_repo import (  # noqa: E402
@@ -54,6 +62,9 @@ _BUILDERS = {
     "torrent_count": build_torrent_count,
     "session_query": _build_session_query,
     "stats_trend_query": _build_stats_trend_query_for_contract,
+    "library_summary_query": build_acquisition_summary_query,
+    "library_recent_query": build_acquisition_recent_query,
+    "library_trend_query": build_acquisition_trend_query,
 }
 
 
@@ -75,6 +86,9 @@ def main() -> int:
         *TORRENT_COUNT_CASES,
         *SESSION_QUERY_CASES,
         *STATS_TREND_QUERY_CASES,
+        *LIBRARY_SUMMARY_QUERY_CASES,
+        *LIBRARY_RECENT_QUERY_CASES,
+        *LIBRARY_TREND_QUERY_CASES,
     ):
         sql, bindings, resolved = _run_case(builder_id, kwargs)
         cases.append(

@@ -9,7 +9,7 @@ def test_capabilities_returns_locked_shape(admin_client):
     assert "token_configured" in body["gh_actions"]
     assert body["storage_backend"] in {"sqlite", "d1", "dual"}
     assert isinstance(body["features"], dict)
-    for key in ("pikpak", "rclone", "smtp", "proxy_pool", "javdb_login", "proxy_preview"):
+    for key in ("pikpak", "rclone", "smtp", "proxy_pool", "javdb_login", "proxy_preview", "closed_loop"):
         assert key in body["features"]
         assert isinstance(body["features"][key], bool)
     assert body["deployment"] in {"colocated", "split", "unknown"}
