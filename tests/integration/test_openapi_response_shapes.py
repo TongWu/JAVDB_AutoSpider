@@ -127,6 +127,41 @@ def test_security_requirement_is_clean_across_all_operations(admin_client):
                 )
 
 
+def test_bearer_guarded_operations_document_401_403(admin_client):
+    # Every JWT-guarded operation returns 401 (missing/invalid token) or 403
+    # (wrong role / CSRF) at runtime, so the contract must document both bodies.
+    # _custom_openapi backfills them centrally from the BearerAuth requirement;
+    # this guards that backfill against regression and against new guarded
+    # routes shipping without the auth-failure contract. The body shape is the
+    # {"detail": "<string>"} that FastAPI's HTTPException serializes to.
+    schema = admin_client.get("/openapi.json").json()
+    detail_schema = {
+        "type": "object",
+        "required": ["detail"],
+        "properties": {"detail": {"type": "string"}},
+    }
+    secured = 0
+    for path, methods in schema["paths"].items():
+        for method, op in methods.items():
+            if not isinstance(op, dict) or op.get("security") != _BEARER_REQUIREMENT:
+                continue
+            secured += 1
+            responses = op["responses"]
+            for status, description in (("401", "Unauthorized"), ("403", "Forbidden")):
+                assert status in responses, (
+                    f"{method.upper()} {path} missing {status} response"
+                )
+                body = responses[status]
+                assert body["description"] == description, (
+                    f"{method.upper()} {path} {status} description {body['description']!r}"
+                )
+                assert (
+                    body["content"]["application/json"]["schema"] == detail_schema
+                ), f"{method.upper()} {path} {status} body shape drifted"
+    # Sanity: the suite would silently pass if no route were guarded.
+    assert secured > 0
+
+
 def _security_index(schema: dict) -> dict[tuple[str, str], list | None]:
     # Map every (path, method) operation -> its declared `security` (or None).
     # Skip the optional TEST_MODE-only router (prefix /api/test): it is never
