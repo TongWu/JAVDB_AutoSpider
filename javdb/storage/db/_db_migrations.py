@@ -153,9 +153,78 @@ CREATE INDEX IF NOT EXISTS idx_pthw_run ON PendingTorrentHistoryWrites(RunId, Ru
 CREATE INDEX IF NOT EXISTS idx_pthw_href ON PendingTorrentHistoryWrites(Href);
 CREATE INDEX IF NOT EXISTS idx_pthw_session_state
     ON PendingTorrentHistoryWrites(SessionId, ApplyState);
+
+-- User-preference data foundation (ADR-022).  These three tables sit
+-- OUTSIDE the Pending→Commit session flow — writes are direct UPSERTs.
+-- They land on D1 first (javdb/migrations/d1/2026_05_27_*.sql); the local
+-- DDL below mirrors those migrations verbatim so the rollback round-trip
+-- (and the D1↔local schema-parity test) stays satisfied.
+CREATE TABLE IF NOT EXISTS MovieMetadata (
+    href              TEXT PRIMARY KEY,
+    title             TEXT,
+    video_code        TEXT,
+    release_date      TEXT,
+    duration_minutes  INTEGER,
+    rate              REAL,
+    comment_count     INTEGER,
+    review_count      INTEGER,
+    want_count        INTEGER,
+    watched_count     INTEGER,
+    maker             TEXT,
+    publisher         TEXT,
+    series            TEXT,
+    directors         TEXT,
+    categories        TEXT,
+    poster_url        TEXT,
+    fanart_urls       TEXT,
+    trailer_url       TEXT,
+    created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_movie_metadata_video_code
+    ON MovieMetadata(video_code);
+
+CREATE TABLE IF NOT EXISTS MovieRatings (
+    href        TEXT PRIMARY KEY,
+    video_code  TEXT NOT NULL,
+    rating      INTEGER CHECK (rating IS NULL OR (rating >= 1 AND rating <= 5)),
+    tags        TEXT NOT NULL DEFAULT '[]',
+    notes       TEXT,
+    rated_at    TEXT,
+    updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE TABLE IF NOT EXISTS ContentPreferences (
+    content_type  TEXT NOT NULL
+        CHECK (content_type IN ('actor','category','maker','director')),
+    content_id    TEXT NOT NULL,
+    content_name  TEXT NOT NULL,
+    hearted       INTEGER NOT NULL DEFAULT 0 CHECK (hearted IN (0, 1)),
+    weight        REAL NOT NULL DEFAULT 1.0,
+    updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (content_type, content_id)
+);
+CREATE INDEX IF NOT EXISTS idx_content_prefs_hearted
+    ON ContentPreferences(content_type, hearted);
 """
 
 _REPORTS_DDL = _SCHEMA_VERSION_DDL + """
+-- Dynamic content-filter rules (ADR-040 Phase 1).  Rules live in the
+-- reports DB and are applied after detail parse; no rows means no
+-- behavior change.
+-- dimension: actor | tag | gender
+-- mode: exclude | include | require_lead | exclude_all_male
+-- value: actor name/href | tag | gender value
+CREATE TABLE IF NOT EXISTS ContentFilterRule (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    dimension  TEXT NOT NULL,
+    mode       TEXT NOT NULL,
+    value      TEXT,
+    enabled    INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_content_filter_enabled ON ContentFilterRule(enabled, dimension);
+
 -- ReportSessions.Id is a TEXT PRIMARY KEY supplied explicitly by the
 -- application via :func:`_generate_session_id`.  TEXT (rather than INTEGER)
 -- so the id round-trips losslessly through Cloudflare D1's JSON layer,
@@ -299,6 +368,91 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_uploaderstats_session
     ON UploaderStats(SessionId);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_pikpakstats_session
     ON PikpakStats(SessionId);
+
+CREATE TABLE IF NOT EXISTS OpsIncidents (
+    incident_id TEXT PRIMARY KEY,
+    trigger_source TEXT NOT NULL,
+    run_id TEXT,
+    run_attempt INTEGER,
+    session_id TEXT,
+    incident_type TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open'
+        CHECK (status IN ('open', 'acknowledged', 'resolved', 'dismissed')),
+    persistence_status TEXT NOT NULL DEFAULT 'd1_written',
+    model_version TEXT NOT NULL,
+    detector_version TEXT NOT NULL,
+    bundle_schema_version TEXT NOT NULL,
+    confidence TEXT NOT NULL DEFAULT 'low'
+        CHECK (confidence IN ('low', 'medium', 'high')),
+    confirmed_findings_json TEXT NOT NULL DEFAULT '[]',
+    likely_causes_json TEXT NOT NULL DEFAULT '[]',
+    unknowns_json TEXT NOT NULL DEFAULT '[]',
+    recommended_next_actions_json TEXT NOT NULL DEFAULT '[]',
+    unsafe_actions_json TEXT NOT NULL DEFAULT '[]',
+    evidence_refs_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    resolved_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_ops_incidents_created
+    ON OpsIncidents(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ops_incidents_run
+    ON OpsIncidents(run_id, run_attempt);
+CREATE INDEX IF NOT EXISTS idx_ops_incidents_session
+    ON OpsIncidents(session_id);
+CREATE INDEX IF NOT EXISTS idx_ops_incidents_status_type
+    ON OpsIncidents(status, incident_type);
+
+-- Event-spine tables (ADR-036 Phase 1). Mirrors
+-- javdb/migrations/d1/2026_05_29_add_pipeline_event.sql so a fresh local
+-- init_db() builds them too (not just the remote D1 migration). Additive,
+-- append-only; does NOT touch the authoritative pending->commit path.
+CREATE TABLE IF NOT EXISTS PipelineEvent (
+    seq          INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id   TEXT NOT NULL,
+    run_id       TEXT,
+    run_attempt  INTEGER,
+    event_type   TEXT NOT NULL,
+    entity_type  TEXT NOT NULL,
+    entity_id    TEXT,
+    payload      TEXT,
+    created_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_pipeline_event_session
+    ON PipelineEvent(session_id, seq);
+CREATE INDEX IF NOT EXISTS idx_pipeline_event_type
+    ON PipelineEvent(event_type, seq);
+
+CREATE TABLE IF NOT EXISTS EventConsumerCursor (
+    consumer   TEXT PRIMARY KEY,
+    last_seq   INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS RunEventSummary (
+    session_id  TEXT NOT NULL,
+    event_type  TEXT NOT NULL,
+    count       INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (session_id, event_type)
+);
+
+-- Site-Contract Drift Sentinel (ADR-035 Phase 1). Mirrors
+-- javdb/migrations/d1/2026_05_29_add_parse_run_field_fill.sql so a fresh local
+-- init_db() builds it too (not just the remote D1 migration). Enrichment, off
+-- the Pending->Commit path.
+CREATE TABLE IF NOT EXISTS ParseRunFieldFill (
+    session_id    TEXT NOT NULL,
+    page_type     TEXT NOT NULL,
+    field         TEXT NOT NULL,
+    fill_rate     REAL NOT NULL,
+    sample_count  INTEGER NOT NULL,
+    committed     INTEGER NOT NULL DEFAULT 0,
+    observed_at   TEXT,
+    PRIMARY KEY (session_id, page_type, field)
+);
+CREATE INDEX IF NOT EXISTS idx_prff_field_committed
+    ON ParseRunFieldFill(page_type, field, committed, observed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_prff_session ON ParseRunFieldFill(session_id);
 """
 
 _OPERATIONS_DDL = _SCHEMA_VERSION_DDL + """
@@ -378,6 +532,24 @@ CREATE TABLE IF NOT EXISTS EmailNotificationHistory (
 );
 CREATE INDEX IF NOT EXISTS idx_email_history_session ON EmailNotificationHistory(SessionId);
 CREATE INDEX IF NOT EXISTS idx_email_history_status ON EmailNotificationHistory(Status);
+
+CREATE TABLE IF NOT EXISTS AcquisitionOutcome (
+    qb_hash       TEXT PRIMARY KEY NOT NULL,
+    href          TEXT NOT NULL DEFAULT '',
+    video_code    TEXT,
+    category      TEXT,
+    state         TEXT NOT NULL DEFAULT 'queued'
+        CHECK (state IN ('queued','downloading','completed','in_library','stalled','failed')),
+    queued_at     TEXT,
+    completed_at  TEXT,
+    landed_at     TEXT,
+    last_seen_at  TEXT,
+    session_id    TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_acq_outcome_state ON AcquisitionOutcome(state);
+CREATE INDEX IF NOT EXISTS idx_acq_outcome_video_code ON AcquisitionOutcome(video_code);
+CREATE INDEX IF NOT EXISTS idx_acq_outcome_session ON AcquisitionOutcome(session_id);
+CREATE INDEX IF NOT EXISTS idx_acq_outcome_last_seen ON AcquisitionOutcome(last_seen_at);
 """
 
 # Combined DDL for single-DB mode (backward compat, csv_to_sqlite, testing)
@@ -1401,11 +1573,12 @@ def _migrate_single_to_split():
         (HISTORY_DB_PATH, _HISTORY_DDL, ['MovieHistory', 'TorrentHistory']),
         (REPORTS_DB_PATH, _REPORTS_DDL, [
             'ReportSessions', 'ReportMovies', 'ReportTorrents',
-            'SpiderStats', 'UploaderStats', 'PikpakStats',
+            'SpiderStats', 'UploaderStats', 'PikpakStats', 'OpsIncidents',
         ]),
         (OPERATIONS_DB_PATH, _OPERATIONS_DDL, [
             'RcloneInventory', 'DedupRecords', 'PikpakHistory',
             'InventoryAlignNoExactMatch', 'EmailNotificationHistory',
+            'AcquisitionOutcome',
         ]),
     ]
 

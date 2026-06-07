@@ -18,11 +18,8 @@ from fastapi import HTTPException
 from fastapi.responses import HTMLResponse
 
 from apps.api.infra.security import _resolve_public_target_or_422
-from apps.api.parsers import detect_page_type, parse_detail_page, parse_index_page
+from javdb.parsing import detect_page_type, parse_detail_page, parse_index_page
 from apps.api.services import config_service, context
-from javdb.spider.parser import (
-    result_to_dict,
-)
 from javdb.proxy.pool import create_proxy_pool_from_config
 from javdb.integrations.qb.client import (
     LOGIN_REJECTED,
@@ -36,10 +33,7 @@ from javdb.infra.request import (
 
 EXPLORE_DETAIL_CACHE: Dict[str, tuple[int, bool]] = {}
 _DOWNLOADED_MAP_CACHE: Dict[str, tuple[float, Dict[str, bool]]] = {}
-
-
-def _result_to_dict(result: Any) -> Dict[str, Any]:
-    return result_to_dict(result)
+_MAX_DOWNLOADED_MAP_CACHE_SIZE = 8
 
 
 def _runtime_proxy_pool(config_data: Dict[str, Any]):
@@ -430,6 +424,9 @@ def _downloaded_map_by_href(cfg: Dict[str, Any]) -> Dict[str, bool]:
     except Exception:
         return {}
     _DOWNLOADED_MAP_CACHE[cache_key] = (now, downloaded)
+    if len(_DOWNLOADED_MAP_CACHE) > _MAX_DOWNLOADED_MAP_CACHE_SIZE:
+        oldest_key = min(_DOWNLOADED_MAP_CACHE, key=lambda k: _DOWNLOADED_MAP_CACHE[k][0])
+        _DOWNLOADED_MAP_CACHE.pop(oldest_key, None)
     return downloaded
 
 
@@ -648,7 +645,7 @@ def _has_uncensored_magnet(
             use_proxy=use_proxy,
             use_cookie=use_cookie,
         )
-        detail = _result_to_dict(parse_detail_page(html))
+        detail = parse_detail_page(html).to_dict()
         magnets = detail.get("magnets", [])
         if isinstance(magnets, list):
             for magnet in magnets:
@@ -736,9 +733,9 @@ async def resolve_payload(payload: Any, username: str) -> Dict[str, Any]:
         "page_type": page_type,
     }
     if page_type == "detail":
-        body["detail"] = _result_to_dict(parse_detail_page(html))
+        body["detail"] = parse_detail_page(html).to_dict()
     else:
-        body["index"] = _result_to_dict(parse_index_page(html, payload.page_num))
+        body["index"] = parse_index_page(html, payload.page_num).to_dict()
     context.audit_logger.info(
         "explore_resolve username=%s page_type=%s",
         username,
@@ -761,7 +758,7 @@ async def one_click_payload(payload: Any, username: str) -> Dict[str, Any]:
         use_proxy=payload.use_proxy,
         use_cookie=payload.use_cookie,
     )
-    detail = _result_to_dict(parse_detail_page(html))
+    detail = parse_detail_page(html).to_dict()
     magnets = detail.get("magnets", [])
     best = _pick_best_magnet(magnets if isinstance(magnets, list) else [])
     if not best:

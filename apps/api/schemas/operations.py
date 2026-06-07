@@ -64,6 +64,7 @@ class PikPakQueueItem(BaseModel):
 class PikPakQueueResponse(BaseModel):
     items: List[PikPakQueueItem]
     total: int
+    next_cursor: Optional[str] = None
 
 
 class PikPakTransferRequest(BaseModel):

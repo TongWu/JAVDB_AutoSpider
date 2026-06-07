@@ -105,6 +105,9 @@ GitHub Actions 部署提供：
 | `PROXY_MODULES_JSON` | `["spider"]` | 使用 proxy 的模块 JSON 数组：`spider`、`qbittorrent`、`pikpak`、`all` |
 | `LOG_LEVEL` | `INFO` | `DEBUG`、`INFO`、`WARNING`、`ERROR` |
 | `STORAGE_BACKEND` | `sqlite` | `sqlite`、`d1` 或 `dual` |
+| `D1_RECOVERY_OUTBOX_ENABLED` | `false` | 启用 ADR-010 recovery outbox，处理安全 D1 写入失败。可识别的真值包括 `1`、`true`、`yes`、`on`。 |
+| `D1_BATCHING_ENABLED` | `false` | 启用 ADR-010 safe-path D1 micro-batching。可识别的真值包括 `1`、`true`、`yes`、`on`。 |
+| `D1_STARTUP_REPLAY_ENABLED` | `false` | 在首次 D1/Dual 操作前启用 ADR-010 startup replay。可识别的真值包括 `1`、`true`、`yes`、`on`。 |
 
 ### 爬虫调优 Variables
 
@@ -274,6 +277,7 @@ openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
 | 工作流 | 触发方式 | 用途 |
 |---|---|---|
 | `QBFileFilter.yml` | 定时（每日抓取后 2 小时） | 过滤最近添加种子中的小文件 |
+| `ReconcileLibrary.yml` | 每小时定时 / 手动触发 | 使用实时 qB 状态对 ADR-033 采集结果做对账 |
 | `WeeklyDedup.yml` | 每周定时 | Rclone 去重 |
 | `RollbackD1.yml` | 手动触发 | 手动会话回滚 |
 | `StaleSessionCleanup.yml` | 每日定时 | 自动清理超过 48 小时的卡住会话 |
@@ -282,6 +286,26 @@ openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
 | `TestIngestion.yml` | Push / PR / 手动触发 | 烟雾测试完整摄取路径；清理阶段执行回滚 |
 | `build-rust-extension.yml` | 推送/PR 时 | 为 CI 构建 Rust wheel |
 | `unit-tests.yml` | 推送/PR 时 | 基于影响的测试选择 |
+
+### ReconcileLibrary 工作流
+
+`ReconcileLibrary.yml` 是 ADR-033 Phase 1 的对账轮次。它每小时运行一次，并调用：
+
+```bash
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --json
+```
+
+该工作流默认使用 `self-hosted` runner，因为 qBittorrent 通常只在操作者内网可达。如果 qB 可从公网访问或已被测试替身替代，也可以通过手动触发的 `runner` 输入改用 `ubuntu-latest`。
+生成的 `config.py` 会从仓库 Variables 读取 `TORRENT_CATEGORY` 和
+`TORRENT_CATEGORY_ADHOC`，因此默认扫描会跟随上传器使用的同一组 qB 分类。
+
+手动触发输入：
+
+| 输入 | 默认值 | 用途 |
+|---|---|---|
+| `runner` | `self-hosted` | 任务使用的 runner 标签。访问本地 qB 时使用 `self-hosted`。 |
+| `stalled_after_days` | `7` | 正整数。活跃 outcome 超过该天数未被观测到会变为 `stalled`；超过 2 倍窗口会变为 `failed`。 |
+| `dry_run` | `false` | 只计算状态迁移并输出 JSON，不写入数据行。 |
 
 ## 故障排查
 

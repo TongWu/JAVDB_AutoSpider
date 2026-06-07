@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from javdb.storage.rollback.session_helpers import (
+from javdb.storage.sessions.lifecycle_helpers import (
     append_jsonl_record,
     attach_run_identity,
     fanout_movie_claim,
@@ -39,11 +39,9 @@ from javdb.storage.rollback.session_helpers import (
     write_github_output,
 )
 import javdb.storage.db as _db_pkg
-from javdb.storage.db import (
-    get_db,
-    db_pending_session_stats,
-    db_rollback_session,
-)
+from javdb.storage.db import get_db
+from javdb.storage.db._db_reports import db_pending_session_stats
+from javdb.storage.db._db_rollback import db_rollback_session
 from javdb.infra.logging import get_logger
 
 
@@ -96,7 +94,7 @@ class RollbackResult:
     summary: Dict[str, Any] = field(default_factory=dict)
 
 
-# ── Pipeline helpers (moved from apps.cli.db.rollback) ──────────────────
+# ── Pipeline helpers (moved from the rollback CLI) ──────────────────────
 
 
 def _resolve_target_sessions(

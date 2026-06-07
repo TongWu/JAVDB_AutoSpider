@@ -10,7 +10,8 @@ from javdb.infra.logging import get_logger
 from javdb.spider.fetch.backend import FetchBackend, FetchRuntimeState
 from javdb.spider.fetch.fallback import fetch_detail_page_with_fallback
 from javdb.spider.fetch.fetch_engine import EngineResult, EngineTask
-from javdb.spider.runtime.sleep import movie_sleep_mgr
+from javdb.spider.runtime.sleep import ensure_sleep_runtime, movie_sleep_mgr
+from javdb.parsing.magnet_categorize import categorize
 
 logger = get_logger(__name__)
 
@@ -22,11 +23,13 @@ class SequentialFetchBackend(FetchBackend):
         self,
         session,
         *,
+        runtime=None,
         use_proxy: bool,
         use_cf_bypass: bool,
         use_cookie: bool,
         is_adhoc_mode: bool,
     ):
+        self._runtime = runtime
         self._session = session
         self._use_cookie = use_cookie
         self._is_adhoc_mode = is_adhoc_mode
@@ -42,6 +45,11 @@ class SequentialFetchBackend(FetchBackend):
     @property
     def worker_count(self) -> int:
         return 1
+
+    def _sleep_manager(self):
+        if self._runtime is not None:
+            return ensure_sleep_runtime(self._runtime).movie_sleep_mgr
+        return movie_sleep_mgr
 
     def start(self) -> None:
         self._started = True
@@ -71,7 +79,7 @@ class SequentialFetchBackend(FetchBackend):
                 return
 
             if self._pending_movie_sleep:
-                movie_sleep_mgr.sleep()
+                self._sleep_manager().sleep()
                 self._pending_movie_sleep = False
 
             yield self._process_task(task)
@@ -96,6 +104,7 @@ class SequentialFetchBackend(FetchBackend):
             actor_link,
             supporting_actors,
             parse_success,
+            movie_detail,
             effective_use_proxy,
             effective_use_cf_bypass,
         ) = fetch_detail_page_with_fallback(
@@ -106,6 +115,7 @@ class SequentialFetchBackend(FetchBackend):
             use_cf_bypass=self._runtime_state.use_cf_bypass,
             entry_index=task.entry_index,
             is_adhoc_mode=self._is_adhoc_mode,
+            runtime=self._runtime,
         )
 
         if parse_success:
@@ -117,11 +127,12 @@ class SequentialFetchBackend(FetchBackend):
                 task=task,
                 success=True,
                 data={
-                    "magnets": magnets,
+                    "magnet_links": categorize(magnets, task.entry_index),
                     "actor_info": actor_info or "",
                     "actor_gender": actor_gender or "",
                     "actor_link": actor_link or "",
                     "supporting": supporting_actors or "",
+                    "movie_detail": movie_detail,
                 },
                 used_cf=effective_use_cf_bypass,
                 worker_name="sequential",
@@ -150,7 +161,7 @@ class SequentialFetchBackend(FetchBackend):
             return
 
         if runtime_state_changed:
-            movie_sleep_mgr.sleep()
+            self._sleep_manager().sleep()
             self._pending_movie_sleep = False
             return
 

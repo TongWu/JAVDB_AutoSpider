@@ -1,5 +1,5 @@
 """
-Tests for api.models data classes.
+Tests for javdb.parsing.models data classes.
 """
 import os
 import sys
@@ -9,7 +9,7 @@ sys.path.insert(0, project_root)
 
 from dataclasses import asdict
 
-from apps.api.models import (
+from javdb.parsing.models import (
     ActorCredit,
     MovieLink,
     MagnetInfo,
@@ -20,6 +20,9 @@ from apps.api.models import (
     NO_ACTOR_LISTING_ACTOR_NAME,
     NO_ACTOR_LISTING_ACTOR_GENDER,
     TopPageResult,
+    TagOption,
+    TagCategory,
+    TagPageResult,
 )
 
 

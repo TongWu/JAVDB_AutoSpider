@@ -1,10 +1,12 @@
 """Spider runtime orchestration service."""
 
+from contextvars import ContextVar
+from dataclasses import dataclass
 import os
 import sys
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 import requests
 from datetime import datetime
@@ -15,6 +17,7 @@ from javdb.infra.logging import (
 )
 from javdb.storage.history_manager import load_parsed_movies_history, validate_history_file
 from javdb.storage.repos.stats_repo import StatsRepo
+from javdb.pipeline.events import emit as _emit_event  # ADR-036 event spine
 from javdb.infra.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
 from javdb.spider.filename_helper import generate_output_csv_name
 from javdb.infra.paths import ensure_dated_dir
@@ -37,6 +40,7 @@ from javdb.spider.runtime.config import (
     RCLONE_INVENTORY_CSV, DEDUP_CSV, DEDUP_DIR,
     ENABLE_REDOWNLOAD, REDOWNLOAD_SIZE_THRESHOLD,
 )
+from javdb.spider.runtime.context import SpiderRuntime
 from javdb.spider.services.dedup import (
     load_rclone_inventory,
     should_skip_from_rclone,
@@ -44,19 +48,122 @@ from javdb.spider.services.dedup import (
     append_dedup_record,
 )
 from javdb.spider.app.cli import parse_arguments, OUTPUT_CSV
-from javdb.spider.runtime.sleep import movie_sleep_mgr
+from javdb.spider.app.options import SpiderRunOptions, spider_options_from_args
+from javdb.spider.runtime.sleep import ensure_sleep_runtime, movie_sleep_mgr
 from javdb.spider.fetch.index import fetch_all_index_pages
 from javdb.spider.detail.parallel_mode import build_parallel_detail_backend
-from javdb.spider.detail.runner import process_detail_entries
+from javdb.spider.detail.runner import load_content_filter_rules, process_detail_entries
 from javdb.spider.detail.sequential_mode import build_sequential_detail_backend
 from javdb.spider.runtime.report import generate_summary_report
 from javdb.spider.fetch.fallback import AdhocLoginFailedError
+from javdb.spider.app.result import (
+    SpiderRunResult,
+    SpiderRunStats,
+    utc_now_iso,
+    write_spider_result_atomic,
+)
 
 logger = get_logger(__name__)
+_load_content_filter_rules = load_content_filter_rules
+
+
+@dataclass
+class _SpiderResultContext:
+    result_json: str | None = None
+    started_at: str | None = None
+    csv_path: str | None = None
+    session_id: str | None = None
+    dedup_csv_path: str | None = None
+    mode: str = "daily"
+    url: str | None = None
+    phase: str = "all"
+    page_range: str | None = None
+
+
+_result_context: ContextVar[_SpiderResultContext] = ContextVar(
+    "spider_result_context",
+)
+
+
+def _derive_phase1_history(history_data: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Return the history view used by phase 1 pre-skip checks."""
+    return {
+        href: record
+        for href, record in history_data.items()
+        if str(record.get("phase", "")) != "2"
+    }
+
+
+def _get_result_context() -> _SpiderResultContext | None:
+    try:
+        return _result_context.get()
+    except LookupError:
+        return None
+
+
+def _fetch_index_for_runtime(*, runtime: SpiderRuntime, **kwargs: Any) -> dict[str, Any]:
+    return fetch_all_index_pages(runtime=runtime, **kwargs)
+
+
+def _page_range(start_page: int, end_page: int, parse_all: bool) -> str:
+    return f"{start_page}-*" if parse_all else f"{start_page}-{end_page}"
+
+
+def _failure_exit_code(exc: BaseException) -> int | None:
+    if not isinstance(exc, SystemExit):
+        return 1
+    if exc.code is None:
+        return None
+    if isinstance(exc.code, int):
+        return exc.code if exc.code != 0 else None
+    return 1
+
+
+def _failure_reason(exc: BaseException, exit_code: int) -> str:
+    if isinstance(exc, SystemExit):
+        return f"exit code {exit_code}"
+    return str(exc)[:1000]
+
+
+def _write_result_sidecar(result: SpiderRunResult, result_json: str | None) -> None:
+    if result_json:
+        write_spider_result_atomic(result_json, result)
+
+
+def _cancel_requested(options: SpiderRunOptions) -> bool:
+    cancel_event = options.cancel_event
+    return cancel_event is not None and cancel_event.is_set()
+
+
+def _write_failure_result_sidecar(exc: BaseException) -> None:
+    exit_code = _failure_exit_code(exc)
+    if exit_code is None:
+        return
+    ctx = _get_result_context()
+    if ctx is None:
+        return
+    _write_result_sidecar(
+        SpiderRunResult(
+            csv_path=str(ctx.csv_path) if ctx.csv_path else None,
+            session_id=str(ctx.session_id) if ctx.session_id else None,
+            dedup_csv_path=str(ctx.dedup_csv_path) if ctx.dedup_csv_path else None,
+            stats=None,
+            mode="adhoc" if ctx.mode == "adhoc" else "daily",
+            url=ctx.url,
+            phase=str(ctx.phase),
+            page_range=ctx.page_range,
+            started_at=ctx.started_at,
+            finished_at=utc_now_iso(),
+            exit_code=exit_code,
+            failure_reason=_failure_reason(exc, exit_code),
+        ),
+        ctx.result_json,
+    )
 
 
 def create_detail_backend(
     *,
+    runtime=None,
     use_parallel: bool,
     use_cookie: bool,
     is_adhoc_mode: bool,
@@ -68,6 +175,7 @@ def create_detail_backend(
 
     if use_parallel:
         return build_parallel_detail_backend(
+            runtime=runtime,
             use_cookie=use_cookie,
             use_proxy=use_proxy,
             use_cf_bypass=use_cf_bypass,
@@ -75,6 +183,7 @@ def create_detail_backend(
 
     return build_sequential_detail_backend(
         session,
+        runtime=runtime,
         use_cookie=use_cookie,
         is_adhoc_mode=is_adhoc_mode,
         use_proxy=use_proxy,
@@ -82,37 +191,70 @@ def create_detail_backend(
     )
 
 
-def _main():
-    args = parse_arguments()
+def _sleep_manager(runtime=None):
+    runtime = runtime or state.get_active_runtime()
+    if runtime is not None:
+        return ensure_sleep_runtime(runtime).movie_sleep_mgr
+    return movie_sleep_mgr
 
-    start_page = args.start_page
-    end_page = args.end_page
-    phase_mode = args.phase
-    custom_url = args.url
-    dry_run = args.dry_run
-    ignore_history = args.ignore_history
-    use_history = args.use_history
-    parse_all = args.all
-    ignore_release_date = args.ignore_release_date
-    proxy_override = resolve_proxy_override(args.use_proxy, args.no_proxy)
+
+def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
+    result_context = _get_result_context()
+    if result_context is None:
+        result_context = _SpiderResultContext()
+    started_at = utc_now_iso()
+
+    start_page = options.start_page
+    end_page = options.end_page
+    phase_mode = options.phase
+    custom_url = options.url
+    dry_run = options.dry_run
+    ignore_history = options.ignore_history
+    use_history = options.use_history
+    parse_all = options.parse_all
+    ignore_release_date = options.ignore_release_date
+    proxy_override = resolve_proxy_override(options.use_proxy, options.no_proxy)
     use_proxy = should_proxy_module('spider', proxy_override, PROXY_MODULES, proxy_mode=PROXY_MODE)
     use_cf_bypass = False
-    always_bypass_time = args.always_bypass_time
-    max_movies_phase1 = args.max_movies_phase1
-    max_movies_phase2 = args.max_movies_phase2
-    sequential = args.sequential
-    enable_dedup = args.enable_dedup
-    rclone_filter = not args.no_rclone_filter
-    enable_redownload = args.enable_redownload or ENABLE_REDOWNLOAD
-    redownload_threshold = args.redownload_threshold if args.redownload_threshold is not None else REDOWNLOAD_SIZE_THRESHOLD
+    always_bypass_time = options.always_bypass_time
+    max_movies_phase1 = options.max_movies_phase1
+    max_movies_phase2 = options.max_movies_phase2
+    sequential = options.sequential
+    enable_dedup = options.enable_dedup
+    rclone_filter = not options.no_rclone_filter
+    enable_redownload = (
+        options.enable_redownload
+        if options.enable_redownload is not None
+        else ENABLE_REDOWNLOAD
+    )
+    redownload_threshold = options.redownload_threshold if options.redownload_threshold is not None else REDOWNLOAD_SIZE_THRESHOLD
+    page_range = _page_range(start_page, end_page, parse_all)
+    result_json = options.result_json
+    actual_mode = "adhoc" if custom_url else "daily"
+
+    if _cancel_requested(options):
+        logger.info("Spider run cancelled before startup")
+        sys.exit(124)
+
+    result_context.result_json = result_json
+    result_context.started_at = started_at
+    result_context.mode = actual_mode
+    result_context.url = custom_url
+    result_context.phase = str(phase_mode)
+    result_context.page_range = page_range
 
     if always_bypass_time is not None and always_bypass_time < 0:
         logger.error("--always-bypass-time must be >= 0")
         sys.exit(2)
 
-    state.always_bypass_time = always_bypass_time
+    runtime = state.get_active_runtime()
+    if runtime is not None:
+        runtime.proxy.always_bypass_time = always_bypass_time
+        state.sync_legacy_globals_from_runtime(runtime)
+    else:
+        state.set_legacy_always_bypass_time(always_bypass_time)
 
-    if args.disable_all_filters:
+    if options.disable_all_filters:
         ignore_history = True
         use_history = False
         ignore_release_date = True
@@ -122,10 +264,10 @@ def _main():
     state.initialize_request_handler()
 
     # Determine output directory and filename
-    if args.url:
+    if options.url:
         output_dated_dir = state.ensure_report_dated_dir(AD_HOC_DIR)
-        if args.output_file:
-            output_csv = args.output_file
+        if options.output_file:
+            output_csv = options.output_file
         else:
             output_csv = generate_output_csv_name(custom_url, use_proxy=use_proxy)
         csv_path = os.path.join(output_dated_dir, output_csv)
@@ -133,13 +275,14 @@ def _main():
         use_history_for_saving = True
     else:
         output_dated_dir = state.ensure_report_dated_dir(DAILY_REPORT_DIR)
-        output_csv = args.output_file if args.output_file else OUTPUT_CSV
+        output_csv = options.output_file if options.output_file else OUTPUT_CSV
         csv_path = os.path.join(output_dated_dir, output_csv)
-        use_history_for_loading = not args.disable_all_filters
+        use_history_for_loading = not options.disable_all_filters
         use_history_for_saving = True
+    result_context.csv_path = str(csv_path) if csv_path else None
 
     log_section(logger, "START · JavDB spider", emoji='▶')
-    if args.disable_all_filters:
+    if options.disable_all_filters:
         logger.warning("ALL FILTERS DISABLED: history, rclone inventory, release date filters all bypassed")
     logger.info(f"Arguments: start_page={start_page}, end_page={end_page}, phase={phase_mode}")
     if custom_url:
@@ -176,8 +319,14 @@ def _main():
         logger.info("CF Bypass: Globally disabled via CF_BYPASS_ENABLED=False in config.py")
 
     if use_proxy:
-        if state.global_proxy_pool is not None:
-            stats = state.global_proxy_pool.get_statistics()
+        runtime = state.get_active_runtime()
+        proxy_pool = (
+            runtime.services.proxy_pool
+            if runtime is not None
+            else state.get_legacy_proxy_pool()
+        )
+        if proxy_pool is not None:
+            stats = proxy_pool.get_statistics()
             if PROXY_MODE == 'pool':
                 logger.info(f"PROXY POOL MODE: {stats['total_proxies']} proxies configured with automatic failover")
             elif PROXY_MODE == 'single':
@@ -225,8 +374,8 @@ def _main():
             parsed_movies_history_phase1 = {}
             parsed_movies_history_phase2 = {}
         else:
-            parsed_movies_history_phase1 = load_parsed_movies_history(history_file, phase=1)
             parsed_movies_history_phase2 = load_parsed_movies_history(history_file, phase=None)
+            parsed_movies_history_phase1 = _derive_phase1_history(parsed_movies_history_phase2)
     else:
         if use_history_for_saving and not os.path.exists(history_file):
             with open(history_file, 'w', encoding='utf-8-sig', newline='') as f:
@@ -241,6 +390,7 @@ def _main():
         dedup_csv_path = os.path.join(dedup_dated_dir, dedup_filename)
     else:
         dedup_csv_path = os.path.join(REPORTS_DIR, DEDUP_CSV)
+    result_context.dedup_csv_path = str(dedup_csv_path) if enable_dedup and dedup_csv_path else None
     rclone_inventory = {}
     if os.path.exists(rclone_inventory_path):
         rclone_inventory = load_rclone_inventory(rclone_inventory_path)
@@ -289,27 +439,35 @@ def _main():
     # Fetch all index pages
     # ======================================================================
     try:
-        idx_result = fetch_all_index_pages(
+        idx_result = _fetch_index_for_runtime(
+            runtime=state.get_active_runtime(),
             session=session, start_page=start_page, end_page=end_page,
             parse_all=parse_all, phase_mode=phase_mode, custom_url=custom_url,
             ignore_release_date=ignore_release_date, use_proxy=use_proxy,
             use_cf_bypass=use_cf_bypass, max_consecutive_empty=max_consecutive_empty,
             output_csv=output_csv, output_dated_dir=output_dated_dir,
-            csv_path=csv_path, user_specified_output=bool(args.output_file),
+            csv_path=csv_path, user_specified_output=bool(options.output_file),
             parsed_movies_history_phase1=parsed_movies_history_phase1,
             parsed_movies_history_phase2=parsed_movies_history_phase2,
             use_parallel=use_parallel,
+            cancel_event=options.cancel_event,
         )
     except AdhocLoginFailedError as e:
         logger.error(f"ADHOC SPIDER FAILED: Login failed during index page fetch — {e}")
         logger.error("Aborting spider run. Please check your session cookie or login credentials.")
         sys.exit(1)
+
+    if _cancel_requested(options):
+        logger.info("Spider run cancelled after index fetch")
+        sys.exit(124)
+
     all_index_results_phase1 = idx_result['all_index_results_phase1']
     all_index_results_phase2 = idx_result['all_index_results_phase2']
     any_proxy_banned = idx_result['any_proxy_banned']
     use_proxy = idx_result['use_proxy']
     use_cf_bypass = idx_result['use_cf_bypass']
     csv_path = idx_result['csv_path']
+    result_context.csv_path = str(csv_path) if csv_path else None
 
     # Create a report session in DB-backed storage (when enabled)
     _session_id = None
@@ -325,8 +483,9 @@ def _main():
             from javdb.storage.db import (
                 init_db,
                 verify_d1_schema_versions,
-                db_create_report_session,
-                db_find_in_progress_session_ids_for_run_csv,
+            )
+            from javdb.storage.repos.session_lifecycle_repo import (
+                SessionLifecycleRepo,
             )
             from javdb.spider.url_helper import detect_url_type, extract_url_identifier
             init_db(force=True)
@@ -374,7 +533,7 @@ def _main():
             #     index intentionally excludes.
             csv_basename = os.path.basename(csv_path) if csv_path else ''
             if run_id and csv_basename:
-                dup_ids = db_find_in_progress_session_ids_for_run_csv(
+                dup_ids = SessionLifecycleRepo().find_in_progress_session_ids_for_run_csv(
                     run_id, run_attempt, csv_basename,
                 )
                 if dup_ids:
@@ -403,7 +562,7 @@ def _main():
                 requested_write_mode,
                 os.environ.get('JAVDB_HISTORY_WRITE_MODE', ''),
             )
-            _session_id = db_create_report_session(
+            _session_id = SessionLifecycleRepo().create_report_session(
                 report_type=report_type,
                 report_date=report_date,
                 csv_filename=os.path.basename(csv_path),
@@ -415,6 +574,7 @@ def _main():
                 run_attempt=run_attempt,
                 write_mode=requested_write_mode,
             )
+            result_context.session_id = str(_session_id) if _session_id else None
             set_active_session(_session_id)
             # Tag every history / dedup / align write that follows in this
             # process with this session id so a downstream rollback can
@@ -422,12 +582,25 @@ def _main():
             effective_write_mode = requested_write_mode
             try:
                 from javdb.storage.db import (
-                    db_get_session_status as _db_get_session_status,
                     set_active_run_identity as _set_active_run_identity,
                     set_active_session_id as _set_active_session_id,
                     set_active_write_mode as _set_active_write_mode,
                 )
+                from javdb.storage.db._db_reports import (
+                    db_get_session_status as _db_get_session_status,
+                )
                 _set_active_session_id(_session_id)
+                # ADR-035: the index fetch above filled the field-health
+                # accumulator BEFORE this session existed (the CSV name, and
+                # thus the session, can only be resolved from the fetch
+                # result). Persist it now that the active session id is set so
+                # the commit gate can read this run's fills. Best-effort:
+                # field_health.persist_run swallows its own errors.
+                from javdb.ops.sentinel import field_health as _sentinel_fh
+                _sentinel_fh.persist_run()
+                _emit_event("RunStarted", session_id=str(_session_id),
+                            entity_type="session", entity_id=str(_session_id),
+                            run_id=run_id, run_attempt=run_attempt)  # ADR-036
                 _set_active_run_identity(run_id, run_attempt)
                 # Read back the row so the in-process WriteMode mirrors
                 # whatever actually landed (defends against a downgrade
@@ -475,6 +648,8 @@ def _main():
     # ======================================================================
     # Process Phase 1 entries
     # ======================================================================
+    content_filter_rules = _load_content_filter_rules()
+
     if phase_mode in ['1', 'all']:
         original_count_phase1 = len(all_index_results_phase1)
         if max_movies_phase1 is not None and max_movies_phase1 > 0 and original_count_phase1 > max_movies_phase1:
@@ -492,6 +667,7 @@ def _main():
         total_entries_phase1 = len(all_index_results_phase1)
 
         p1_backend = create_detail_backend(
+            runtime=state.get_active_runtime(),
             use_parallel=use_parallel,
             use_cookie=custom_url is not None,
             is_adhoc_mode=custom_url is not None,
@@ -500,6 +676,7 @@ def _main():
             use_cf_bypass=use_cf_bypass,
         )
         p1_result = process_detail_entries(
+            runtime=state.get_active_runtime(),
             backend=p1_backend,
             entries=all_index_results_phase1,
             phase=1,
@@ -518,6 +695,8 @@ def _main():
             redownload_threshold=redownload_threshold,
             include_recent_release_filters=use_parallel,
             log_duplicate_skips=not use_parallel,
+            cancel_event=options.cancel_event,
+            content_filter_rules=content_filter_rules,
         )
         use_proxy = p1_result['use_proxy']
         use_cf_bypass = p1_result['use_cf_bypass']
@@ -529,13 +708,17 @@ def _main():
         failed_movies_list.extend(p1_result.get('failed_movies', []))
         no_new_torrents_count += p1_result['no_new_torrents']
 
+        if _cancel_requested(options):
+            logger.info("Spider run cancelled after Phase 1")
+            sys.exit(124)
+
     # ======================================================================
     # Process Phase 2 entries
     # ======================================================================
     if phase_mode in ['2', 'all']:
         if phase_mode == 'all':
             if total_entries_phase1 > 0:
-                t = movie_sleep_mgr.sleep()
+                t = _sleep_manager(runtime).sleep()
                 logger.info("Phase transition cooldown: %.1fs before Phase 2", t)
             else:
                 logger.info("Phase 1 had no entries to process, skipping phase transition cooldown")
@@ -557,6 +740,7 @@ def _main():
         log_section(logger, phase2_title, emoji='🎬')
 
         p2_backend = create_detail_backend(
+            runtime=state.get_active_runtime(),
             use_parallel=use_parallel,
             use_cookie=custom_url is not None,
             is_adhoc_mode=custom_url is not None,
@@ -565,6 +749,7 @@ def _main():
             use_cf_bypass=use_cf_bypass,
         )
         p2_result = process_detail_entries(
+            runtime=state.get_active_runtime(),
             backend=p2_backend,
             entries=all_index_results_phase2,
             phase=2,
@@ -583,6 +768,8 @@ def _main():
             redownload_threshold=redownload_threshold,
             include_recent_release_filters=use_parallel,
             log_duplicate_skips=not use_parallel,
+            cancel_event=options.cancel_event,
+            content_filter_rules=content_filter_rules,
         )
         use_proxy = p2_result['use_proxy']
         use_cf_bypass = p2_result['use_cf_bypass']
@@ -594,10 +781,15 @@ def _main():
         failed_movies_list.extend(p2_result.get('failed_movies', []))
         no_new_torrents_count += p2_result['no_new_torrents']
 
+        if _cancel_requested(options):
+            logger.info("Spider run cancelled after Phase 2")
+            sys.exit(124)
+
     if not dry_run:
         logger.info(f"CSV file written incrementally to: {csv_path}")
 
     generate_summary_report(
+        runtime=state.get_active_runtime(),
         phase_mode=phase_mode, parse_all=parse_all,
         start_page=start_page, end_page=end_page,
         max_consecutive_empty=max_consecutive_empty,
@@ -671,7 +863,30 @@ def _main():
         except Exception:
             logger.debug("Coordinator committed-status flush skipped", exc_info=True)
 
-    from_pipeline = args.from_pipeline if hasattr(args, 'from_pipeline') else False
+    total_discovered = len(rows) + skipped_history_count + no_new_torrents_count + failed_count
+    result = SpiderRunResult(
+        csv_path=str(csv_path) if csv_path else None,
+        session_id=str(_session_id) if _session_id else None,
+        dedup_csv_path=str(dedup_csv_path) if enable_dedup and dedup_csv_path else None,
+        stats=SpiderRunStats(
+            pages=page_range,
+            found=int(total_discovered),
+            parsed=int(len(rows)),
+            skipped=int(skipped_history_count),
+            failed=int(failed_count),
+            no_new=int(no_new_torrents_count),
+        ),
+        mode=actual_mode,
+        url=options.url,
+        phase=str(phase_mode),
+        page_range=page_range,
+        started_at=started_at,
+        finished_at=utc_now_iso(),
+        exit_code=0,
+        failure_reason=None,
+    )
+
+    from_pipeline = options.from_pipeline
 
     if not dry_run and has_git_credentials(GIT_USERNAME, GIT_PASSWORD):
         logger.info("Committing spider results...")
@@ -690,15 +905,46 @@ def _main():
     elif not dry_run:
         logger.info("Skipping git commit - no credentials provided (commit will be handled by workflow)")
 
+    return result
 
-def main():
+
+def _run_spider_impl(options: SpiderRunOptions) -> SpiderRunResult:
+    """Execute the Spider run using the in-process options boundary."""
+    return _run_spider_main_body(options)
+
+
+def run_spider(options: SpiderRunOptions) -> SpiderRunResult:
+    runtime = state.get_active_runtime()
+    owns_runtime = runtime is None
+    if owns_runtime:
+        runtime = SpiderRuntime()
+        state.bind_active_runtime(runtime)
+    # When SpiderRunService already bound a runtime, owns_runtime is false:
+    # run_spider uses it without closing or clearing the external owner.
+
+    result_context = _SpiderResultContext(
+        result_json=options.result_json,
+        mode="adhoc" if options.url else "daily",
+        url=options.url,
+        phase=str(options.phase),
+        page_range=(
+            _page_range(options.start_page, options.end_page, options.parse_all)
+            if options.start_page is not None and options.end_page is not None
+            else None
+        ),
+    )
+    token = _result_context.set(result_context)
     try:
-        return _main()
+        result = _run_spider_impl(options)
+        if options.result_json and not _cancel_requested(options):
+            write_spider_result_atomic(options.result_json, result)
+        return result
     except BaseException as exc:
-        # Phase-1 ADR-008 — surface a `failed` session state to the Coordinator
-        # before re-raising so the dashboard's Sessions panel + alert
-        # webhook fires even when the spider crashes mid-run. SystemExit(0)
-        # is treated as success — only non-zero exits transition to failed.
+        try:
+            if not _cancel_requested(options):
+                _write_failure_result_sidecar(exc)
+        except Exception:
+            logger.debug("Spider result sidecar failure write skipped", exc_info=True)
         try:
             from javdb.spider.runtime import state as _runtime_state
             from javdb.storage.db import (
@@ -725,23 +971,56 @@ def main():
             from javdb.storage.db import (
                 set_active_session_id as _set_active_session_id,
                 set_active_run_identity as _set_active_run_identity,
+                set_active_write_mode as _set_active_write_mode,
             )
             _set_active_session_id(None)
             _set_active_run_identity(None, None)
+            _set_active_write_mode(None)
         except Exception as _e:
             logger.warning(
                 f"Could not clear db audit session context on exit: {_e}"
             )
+        _result_context.reset(token)
+        if owns_runtime:
+            try:
+                runtime.close()
+            finally:
+                state.clear_active_runtime(runtime)
+
+
+def main():
+    options = spider_options_from_args(parse_arguments())
+    result = run_spider(options)
+    if result.exit_code != 0:
+        raise SystemExit(result.exit_code)
+    return None
+
+
+def _main():
+    """Compatibility wrapper for internal tests and legacy imports."""
+    return main()
 
 
 class SpiderRunService:
     """Application-service wrapper for the spider runtime."""
 
     def run(self):
-        return main()
+        from javdb.spider.runtime import state as runtime_state
+
+        runtime = SpiderRuntime()
+        # SpiderRunService owns this runtime; run_spider detects the active
+        # binding and leaves close/clear responsibility to this finally block.
+        runtime_state.bind_active_runtime(runtime)
+        try:
+            return main()
+        finally:
+            try:
+                runtime.close()
+            finally:
+                runtime_state.clear_active_runtime(runtime)
 
 
-__all__ = ["SpiderRunService", "create_detail_backend", "main"]
+__all__ = ["SpiderRunService", "create_detail_backend", "main", "run_spider"]
 
 
 if __name__ == "__main__":

@@ -38,7 +38,7 @@ from apps.api.infra.security import (
     _sanitize_output_filename,
     _validate_target_url,
 )
-from apps.api.parsers import RUST_PARSERS_AVAILABLE
+from javdb.parsing import RUST_PARSERS_AVAILABLE
 from apps.api.routers.auth import login, logout, refresh_token, router as auth_router
 from apps.api.routers.capabilities import router as capabilities_router
 from apps.api.routers.onboarding import router as onboarding_router
@@ -51,6 +51,7 @@ from apps.api.routers.migrations import router as migrations_router
 from apps.api.routers.operations import router as operations_router
 from apps.api.routers.stats import router as stats_router
 from apps.api.routers.system_state import router as system_state_router
+from apps.api.routers.preferences import router as preferences_router
 from apps.api.routers.config import (
     get_config,
     get_config_meta,
@@ -183,6 +184,7 @@ for router in (
     migrations_router,
     logs_router,
     stats_router,
+    preferences_router,
 ):
     app.include_router(router)
 

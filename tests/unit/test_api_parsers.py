@@ -9,15 +9,15 @@ sys.path.insert(0, project_root)
 
 import pytest
 
-from apps.api.parsers.index_parser import (
+from javdb.parsing.fallback.index_parser import (
     parse_index_page,
     parse_category_page,
     parse_top_page,
     find_exact_video_code_match,
     derive_letter_suffix_fallback_video_code,
 )
-from apps.api.parsers.detail_parser import parse_detail_page
-from apps.api.parsers.common import (
+from javdb.parsing.fallback.detail_parser import parse_detail_page
+from javdb.parsing.common import (
     extract_rate_and_comments,
     extract_video_code,
     detect_page_type,
@@ -99,6 +99,13 @@ class TestExtractVideoCode:
         soup = BeautifulSoup(html, 'html.parser')
         a = soup.find('a')
         assert extract_video_code(a) == ''
+
+    @pytest.mark.parametrize('invalid_tag', [None, 'not-a-tag'])
+    def test_invalid_tag_returns_empty_string(self, invalid_tag, caplog):
+        with caplog.at_level('DEBUG', logger='javdb.parsing.common'):
+            assert extract_video_code(invalid_tag) == ''
+
+        assert 'No valid <a> tag provided' in caplog.text
 
 
 class TestDetectPageType:
@@ -310,6 +317,70 @@ class TestParseDetailPageInline:
         assert detail.actors[0].href == '/actors/xyz'
         assert detail.actors[0].gender == 'female'
 
+    def test_actor_extraction_accepts_simplified_chinese_label(self):
+        html = '''
+        <html><body>
+        <div class="video-meta-panel">
+          <div class="panel-block">
+            <strong>演员:</strong>
+            &nbsp;<span class="value">
+                <a href="/actors/xyz">Sample Actor</a>
+                <strong class="symbol female">♀</strong>
+            </span>
+          </div>
+        </div>
+        <div id="magnets-content">
+            <div class="item columns is-desktop">
+                <div class="magnet-name">
+                    <a href="magnet:?xt=urn:btih:actorlabeltest">
+                        <span class="name">ABC-123.torrent</span>
+                        <span class="meta">1GB, 1個文件</span>
+                    </a>
+                </div>
+                <span class="time">2024-01-01</span>
+            </div>
+        </div>
+        </body></html>
+        '''
+        detail = parse_detail_page(html)
+        assert detail.parse_success is True
+        assert len(detail.actors) == 1
+        assert detail.actors[0].name == 'Sample Actor'
+        assert detail.actors[0].href == '/actors/xyz'
+        assert detail.actors[0].gender == 'female'
+
+    def test_no_actor_placeholder_accepts_simplified_chinese_label(self):
+        from javdb.parsing.models import NO_ACTOR_LISTING_ACTOR_NAME
+
+        html = '''
+        <html><body>
+        <div class="video-meta-panel">
+          <div class="panel-block">
+            <strong>演员:</strong>
+            &nbsp;<span class="value">
+                N/A
+            </span>
+          </div>
+        </div>
+        <div id="magnets-content">
+            <div class="item columns is-desktop">
+                <div class="magnet-name">
+                    <a href="magnet:?xt=urn:btih:simplifiedplaceholder">
+                        <span class="name">ABC-123.torrent</span>
+                        <span class="meta">1GB, 1個文件</span>
+                    </a>
+                </div>
+                <span class="time">2024-01-01</span>
+            </div>
+        </div>
+        </body></html>
+        '''
+        detail = parse_detail_page(html)
+        assert detail.parse_success is True
+        assert detail.actors == []
+        assert detail.no_actor_listing is True
+        assert detail.get_first_actor_name() == NO_ACTOR_LISTING_ACTOR_NAME
+
     def test_magnet_fields(self, sample_detail_html):
         detail = parse_detail_page(sample_detail_html)
         first = detail.magnets[0]
@@ -326,7 +397,7 @@ class TestParseDetailPageInline:
         assert detail.magnets == []
 
     def test_actors_panel_na_placeholder(self):
-        from apps.api.models import NO_ACTOR_LISTING_ACTOR_NAME, NO_ACTOR_LISTING_ACTOR_GENDER
+        from javdb.parsing.models import NO_ACTOR_LISTING_ACTOR_NAME, NO_ACTOR_LISTING_ACTOR_GENDER
 
         html = '''
         <html><body>

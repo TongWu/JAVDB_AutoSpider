@@ -90,7 +90,7 @@ class TestMovieHistoryExplicitId:
     """Verify that each INSERT path writes an explicit (large) Id."""
 
     def _read_movie_id(self, href: str) -> int:
-        from apps.api.parsers.common import movie_href_lookup_values
+        from javdb.parsing.common import movie_href_lookup_values
         path_href, abs_href = movie_href_lookup_values(href, "https://javdb.com")
         variants = [v for v in (path_href, abs_href, href) if v]
         ph = ",".join("?" for _ in variants)

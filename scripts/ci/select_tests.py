@@ -61,12 +61,38 @@ FORCE_FULL_GLOBS = (
     "tests/**/conftest.py",
 )
 
+# Contract guards that must run on every selective build, regardless of impact
+# analysis — their whole purpose is to catch drift the selector would otherwise
+# skip. The ADR-018 query-builder golden is the motivating case: a SQL-only edit
+# to a covered builder (history/sessions filter builders) is classified
+# "string-literal-only" and pruned from impact analysis (see
+# `is_docstring_only_change`) — which is exactly the drift the golden guards. So
+# it cannot rely on impact selection and is force-selected here. (Cheap: a
+# sub-second, DB-free string comparison.) In full-python runs it runs anyway.
+ALWAYS_RUN_TESTS = (
+    "tests/unit/test_query_contract_golden.py",
+)
+
 RUST_ADAPTER_GLOBS = (
     # Phase-1 (ADR-007) distributed the rust_adapter shims into their
     # consumer modules under javdb/spider/, so any change to the Rust
     # crate itself is the canonical trigger now.
     f"{RUST_ROOT}/**",
 )
+PARSER_PARITY_RUST_WHEEL_GLOBS = (
+    "apps/api/parsers/**",
+    "javdb/parsing/**",
+)
+# ADR-041: these unit tests exercise the Rust-Required proxy pool / ban manager
+# and import ``javdb.rust_core`` unconditionally. Whenever any of them is
+# selected, the Rust wheel MUST be built or collection fails with ImportError
+# in a no-wheel CI environment. The build is cached on the Rust src hash, so
+# triggering it on a pure-Python change is a cheap cache hit.
+RUST_REQUIRED_TEST_FILES = frozenset({
+    "tests/unit/test_proxy_pool.py",
+    "tests/unit/test_proxy_ban_manager.py",
+    "tests/unit/test_sleep_with_coordinator.py",
+})
 FALLBACK_TESTS = (
     "tests/unit/test_rust_adapters_fallback.py",
     "tests/unit/test_dedup_checker_rust_adapter.py",
@@ -97,6 +123,8 @@ IMPACT_RULES = (
         "parser-domain",
         (
             "apps/api/parsers/**",
+            "javdb/parsing/**",
+            "javdb/pipeline/index_selection.py",
             "javdb/spider/contracts.py",
             "javdb/spider/filename_helper.py",
             "javdb/spider/magnet_extractor.py",
@@ -114,6 +142,7 @@ IMPACT_RULES = (
             "tests/unit/test_magnet_extractor.py",
             "tests/unit/test_parser.py",
             "tests/unit/test_video_code_search.py",
+            "tests/unit/test_fallback_shape.py",
             "tests/integration/test_spider_gateway.py",
         ),
     ),
@@ -667,6 +696,15 @@ def select_for_changed_files(
                 selected_tests.update(tests)
                 reason.append(f"{rule.name} impact rule added {len(tests)} test file(s)")
 
+    # Force-select contract guards (ADR-018): they must run even when impact
+    # analysis would skip them (e.g. a SQL-only builder edit pruned as a
+    # string-literal-only change). Only matters in selective mode — a
+    # run_full_python build clears selected_targets and runs everything anyway.
+    for path in ALWAYS_RUN_TESTS:
+        if path not in selected_tests and (repo_root / path).exists():
+            selected_tests.add(path)
+            reason.append(f"{path} always runs (contract guard)")
+
     run_rust = any(is_rust_source_change(path) for path in changed)
     rust_full = any(
         path in {
@@ -706,7 +744,15 @@ def select_for_changed_files(
         run_full_python = True
         reason.append(f"unknown Python source path(s): {', '.join(unknown_python_sources)}")
 
-    build_rust_wheel = run_rust or run_full_python or any(matches_any(path, RUST_ADAPTER_GLOBS) for path in changed)
+    build_rust_wheel = (
+        run_rust
+        or run_full_python
+        or any(matches_any(path, RUST_ADAPTER_GLOBS) for path in changed)
+        or any(matches_any(path, PARSER_PARITY_RUST_WHEEL_GLOBS) for path in changed)
+        # ADR-041: if a Rust-Required proxy test is selected (by any rule), the
+        # wheel must be built or the test module fails to import in CI.
+        or bool(selected_tests & RUST_REQUIRED_TEST_FILES)
+    )
     selected_targets = sorted(path for path in selected_tests if (repo_root / path).exists())
 
     if run_full_python:

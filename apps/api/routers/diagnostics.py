@@ -5,20 +5,26 @@ POST /api/diag/javdb-session/refresh — refresh javdb session (headless or cook
 """
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import ValidationError
 
 from apps.api.infra.auth import _require_auth, require_role
 from apps.api.schemas.diagnostics import (
+    EvidenceRefSchema,
     JavdbSessionRefreshRequest,
     JavdbSessionRefreshResponse,
     JavdbSessionStatus,
+    OpsIncidentListResponse,
+    OpsIncidentSchema,
 )
 from javdb.infra.config import cfg
-from javdb.storage.db import OPERATIONS_DB_PATH, get_db
+from javdb.storage.db import OPERATIONS_DB_PATH, REPORTS_DB_PATH, get_db
+from javdb.storage.repos.ops_incident_repo import OpsIncidentRepo
 from javdb.storage.repos.system_state_repo import SystemStateRepo
 
 router = APIRouter(prefix="/api/diag", tags=["diagnostics"])
@@ -62,6 +68,74 @@ def _cookie_preview(cookie: str) -> str:
     return cookie[:8] + ("..." if len(cookie) > 8 else "")
 
 
+def _list_ops_incident_records(
+    *,
+    status: str | None = None,
+    run_id: str | None = None,
+    session_id: str | None = None,
+    limit: int = 50,
+):
+    with get_db(REPORTS_DB_PATH) as conn:
+        return OpsIncidentRepo(conn).list(
+            status=status,
+            run_id=run_id,
+            session_id=session_id,
+            limit=limit,
+        )
+
+
+def _get_ops_incident_record(incident_id: str):
+    with get_db(REPORTS_DB_PATH) as conn:
+        return OpsIncidentRepo(conn).get(incident_id)
+
+
+def _json_list_field(raw: str | None) -> list:
+    if not raw:
+        return []
+    try:
+        value = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        return []
+    return value if isinstance(value, list) else []
+
+
+def _evidence_refs_field(raw: str | None) -> list[EvidenceRefSchema]:
+    refs: list[EvidenceRefSchema] = []
+    for item in _json_list_field(raw):
+        if not isinstance(item, dict):
+            continue
+        try:
+            refs.append(EvidenceRefSchema(**item))
+        except (TypeError, ValidationError):
+            continue
+    return refs
+
+
+def _ops_record_to_schema(record) -> OpsIncidentSchema:
+    return OpsIncidentSchema(
+        incident_id=record.incident_id,
+        trigger_source=record.trigger_source,
+        run_id=record.run_id,
+        run_attempt=record.run_attempt,
+        session_id=record.session_id,
+        incident_type=record.incident_type,
+        status=record.status,
+        persistence_status=record.persistence_status,
+        model_version=record.model_version,
+        detector_version=record.detector_version,
+        confidence=record.confidence,
+        confirmed_findings=_json_list_field(record.confirmed_findings_json),
+        likely_causes=_json_list_field(record.likely_causes_json),
+        unknowns=_json_list_field(record.unknowns_json),
+        recommended_next_actions=_json_list_field(record.recommended_next_actions_json),
+        unsafe_actions=_json_list_field(record.unsafe_actions_json),
+        evidence_refs=_evidence_refs_field(record.evidence_refs_json),
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+        resolved_at=record.resolved_at,
+    )
+
+
 @router.get("/javdb-session", response_model=JavdbSessionStatus)
 def get_javdb_session_status(
     _user: Dict[str, Any] = Depends(_require_auth),
@@ -70,15 +144,51 @@ def get_javdb_session_status(
     cookie = cfg("JAVDB_SESSION_COOKIE", "") or ""
     last_refresh = _get_last_refresh_time()
 
+    is_admin = _user.get("role") == "admin"
     return JavdbSessionStatus(
         cookie_present=bool(cookie),
-        cookie_value_preview=_cookie_preview(cookie) if cookie else None,
+        cookie_value_preview=_cookie_preview(cookie) if cookie and is_admin else None,
         last_refresh_time=last_refresh,
         estimated_expiry=None,  # cannot derive real expiry from the cookie string
         # A recent refresh is only meaningful if a cookie is actually present;
         # avoid the contradictory (is_likely_valid=True, cookie_present=False) pair.
         is_likely_valid=bool(cookie) and _is_refresh_recent(last_refresh),
     )
+
+
+@router.get("/ops-incidents", response_model=OpsIncidentListResponse)
+def list_ops_incidents(
+    status: str | None = None,
+    run_id: str | None = None,
+    session_id: str | None = None,
+    limit: int = 50,
+    _user: Dict[str, Any] = Depends(_require_auth),
+) -> OpsIncidentListResponse:
+    """Return persisted read-only operations diagnosis incidents."""
+    if limit <= 0:
+        raise HTTPException(status_code=400, detail="limit must be a positive integer")
+
+    items = _list_ops_incident_records(
+        status=status,
+        run_id=run_id,
+        session_id=session_id,
+        limit=min(limit, 100),
+    )
+    return OpsIncidentListResponse(
+        items=[_ops_record_to_schema(item) for item in items]
+    )
+
+
+@router.get("/ops-incidents/{incident_id}", response_model=OpsIncidentSchema)
+def get_ops_incident(
+    incident_id: str,
+    _user: Dict[str, Any] = Depends(_require_auth),
+) -> OpsIncidentSchema:
+    """Return one persisted read-only operations diagnosis incident."""
+    record = _get_ops_incident_record(incident_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    return _ops_record_to_schema(record)
 
 
 @router.post("/javdb-session/refresh", response_model=JavdbSessionRefreshResponse)
@@ -175,6 +285,8 @@ async def refresh_javdb_session_diag(
 
 __all__ = [
     "get_javdb_session_status",
+    "get_ops_incident",
+    "list_ops_incidents",
     "refresh_javdb_session_diag",
     "router",
 ]

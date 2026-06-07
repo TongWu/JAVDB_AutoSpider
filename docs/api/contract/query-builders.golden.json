@@ -1,0 +1,377 @@
+{
+  "cases": [
+    {
+      "bindings": [],
+      "builder": "movie_filters",
+      "name": "empty",
+      "params": {},
+      "sql": ""
+    },
+    {
+      "bindings": [
+        42
+      ],
+      "builder": "movie_filters",
+      "name": "cursor_only",
+      "params": {
+        "cursor_id": 42
+      },
+      "sql": "WHERE m.Id > ?"
+    },
+    {
+      "bindings": [
+        "%ABC-123%",
+        "%ABC-123%",
+        "%ABC-123%"
+      ],
+      "builder": "movie_filters",
+      "name": "q_only",
+      "params": {
+        "q": "ABC-123"
+      },
+      "sql": "WHERE (m.VideoCode LIKE ? OR m.ActorName LIKE ? OR m.SupportingActors LIKE ?)"
+    },
+    {
+      "bindings": [
+        "%ABC%",
+        "%ABC%",
+        "%ABC%",
+        1
+      ],
+      "builder": "movie_filters",
+      "name": "q_and_perfect_match",
+      "params": {
+        "perfect_match": true,
+        "q": "ABC"
+      },
+      "sql": "WHERE (m.VideoCode LIKE ? OR m.ActorName LIKE ? OR m.SupportingActors LIKE ?) AND m.PerfectMatchIndicator = ?"
+    },
+    {
+      "bindings": [
+        0
+      ],
+      "builder": "movie_filters",
+      "name": "perfect_match_false",
+      "params": {
+        "perfect_match": false
+      },
+      "sql": "WHERE m.PerfectMatchIndicator = ?"
+    },
+    {
+      "bindings": [
+        "Jane"
+      ],
+      "builder": "movie_filters",
+      "name": "actor_only",
+      "params": {
+        "actor": "Jane"
+      },
+      "sql": "WHERE m.ActorName = ?"
+    },
+    {
+      "bindings": [
+        1
+      ],
+      "builder": "movie_filters",
+      "name": "hi_res_true",
+      "params": {
+        "hi_res": true
+      },
+      "sql": "WHERE m.HiResIndicator = ?"
+    },
+    {
+      "bindings": [
+        0
+      ],
+      "builder": "movie_filters",
+      "name": "hi_res_false",
+      "params": {
+        "hi_res": false
+      },
+      "sql": "WHERE m.HiResIndicator = ?"
+    },
+    {
+      "bindings": [
+        "S1"
+      ],
+      "builder": "movie_filters",
+      "name": "session_only",
+      "params": {
+        "session_id": "S1"
+      },
+      "sql": "WHERE m.SessionId = ?"
+    },
+    {
+      "bindings": [
+        "Jane",
+        1,
+        "S1"
+      ],
+      "builder": "movie_filters",
+      "name": "actor_hires_session",
+      "params": {
+        "actor": "Jane",
+        "hi_res": true,
+        "session_id": "S1"
+      },
+      "sql": "WHERE m.ActorName = ? AND m.HiResIndicator = ? AND m.SessionId = ?"
+    },
+    {
+      "bindings": [
+        42,
+        "2026-01-01 00:00:00",
+        "2026-02-01 23:59:59"
+      ],
+      "builder": "movie_filters",
+      "name": "date_range_cursor",
+      "params": {
+        "cursor_id": 42,
+        "date_from": "2026-01-01",
+        "date_to": "2026-02-01"
+      },
+      "sql": "WHERE m.Id > ? AND m.DateTimeCreated >= ? AND m.DateTimeCreated <= ?"
+    },
+    {
+      "bindings": [],
+      "builder": "torrent_filters",
+      "name": "empty",
+      "params": {},
+      "sql": ""
+    },
+    {
+      "bindings": [
+        7
+      ],
+      "builder": "torrent_filters",
+      "name": "cursor_only",
+      "params": {
+        "cursor_id": 7
+      },
+      "sql": "WHERE t.Id > ?"
+    },
+    {
+      "bindings": [
+        "%ABC-123%"
+      ],
+      "builder": "torrent_filters",
+      "name": "q_only",
+      "params": {
+        "q": "ABC-123"
+      },
+      "sql": "WHERE m.VideoCode LIKE ?"
+    },
+    {
+      "bindings": [
+        1
+      ],
+      "builder": "torrent_filters",
+      "name": "resolution_only",
+      "params": {
+        "resolution_type": 1
+      },
+      "sql": "WHERE t.ResolutionType = ?"
+    },
+    {
+      "bindings": [
+        1
+      ],
+      "builder": "torrent_filters",
+      "name": "has_subtitle_true",
+      "params": {
+        "has_subtitle": true
+      },
+      "sql": "WHERE t.SubtitleIndicator = ?"
+    },
+    {
+      "bindings": [
+        0
+      ],
+      "builder": "torrent_filters",
+      "name": "has_subtitle_false",
+      "params": {
+        "has_subtitle": false
+      },
+      "sql": "WHERE t.SubtitleIndicator = ?"
+    },
+    {
+      "bindings": [],
+      "builder": "torrent_filters",
+      "name": "uncensored_true",
+      "params": {
+        "uncensored": true
+      },
+      "sql": "WHERE t.CensorIndicator = 0"
+    },
+    {
+      "bindings": [],
+      "builder": "torrent_filters",
+      "name": "uncensored_false",
+      "params": {
+        "uncensored": false
+      },
+      "sql": "WHERE t.CensorIndicator != 0"
+    },
+    {
+      "bindings": [
+        "S1"
+      ],
+      "builder": "torrent_filters",
+      "name": "session_only",
+      "params": {
+        "session_id": "S1"
+      },
+      "sql": "WHERE t.SessionId = ?"
+    },
+    {
+      "bindings": [
+        1,
+        1
+      ],
+      "builder": "torrent_filters",
+      "name": "resolution_subtitle_uncensored",
+      "params": {
+        "has_subtitle": true,
+        "resolution_type": 1,
+        "uncensored": false
+      },
+      "sql": "WHERE t.ResolutionType = ? AND t.SubtitleIndicator = ? AND t.CensorIndicator != 0"
+    },
+    {
+      "bindings": [
+        7,
+        "2026-01-01 00:00:00",
+        "2026-02-01 23:59:59"
+      ],
+      "builder": "torrent_filters",
+      "name": "date_range_cursor",
+      "params": {
+        "cursor_id": 7,
+        "date_from": "2026-01-01",
+        "date_to": "2026-02-01"
+      },
+      "sql": "WHERE t.Id > ? AND t.DateTimeCreated >= ? AND t.DateTimeCreated <= ?"
+    },
+    {
+      "bindings": [
+        51
+      ],
+      "builder": "session_query",
+      "name": "default",
+      "params": {
+        "cursor": null,
+        "limit": 50,
+        "state": null
+      },
+      "sql": "SELECT Id, Status, WriteMode, RunId, RunAttempt, DateTimeCreated, ReportType, ReportDate, FailureReason FROM ReportSessions ORDER BY Id DESC LIMIT ?"
+    },
+    {
+      "bindings": [
+        "committed",
+        51
+      ],
+      "builder": "session_query",
+      "name": "state_only",
+      "params": {
+        "cursor": null,
+        "limit": 50,
+        "state": "committed"
+      },
+      "sql": "SELECT Id, Status, WriteMode, RunId, RunAttempt, DateTimeCreated, ReportType, ReportDate, FailureReason FROM ReportSessions WHERE Status = ? ORDER BY Id DESC LIMIT ?"
+    },
+    {
+      "bindings": [
+        "failed",
+        "99999",
+        21
+      ],
+      "builder": "session_query",
+      "name": "state_and_cursor",
+      "params": {
+        "cursor": "eyJzaWQiOiAiOTk5OTkifQ==",
+        "limit": 20,
+        "state": "failed"
+      },
+      "sql": "SELECT Id, Status, WriteMode, RunId, RunAttempt, DateTimeCreated, ReportType, ReportDate, FailureReason FROM ReportSessions WHERE Status = ? AND Id < ? ORDER BY Id DESC LIMIT ?"
+    },
+    {
+      "bindings": [
+        "reports",
+        "2026-01-01"
+      ],
+      "builder": "stats_trend_query",
+      "name": "success_rate",
+      "params": {
+        "cutoff": "2026-01-01",
+        "metric": "success_rate"
+      },
+      "sql": "SELECT DATE(DateTimeCreated), CAST(SUM(CASE WHEN Status='committed' THEN 1 ELSE 0 END) AS REAL) / COUNT(*) FROM ReportSessions WHERE DateTimeCreated >= ? GROUP BY DATE(DateTimeCreated) ORDER BY DATE(DateTimeCreated)"
+    },
+    {
+      "bindings": [
+        "reports",
+        "2026-01-01"
+      ],
+      "builder": "stats_trend_query",
+      "name": "movies",
+      "params": {
+        "cutoff": "2026-01-01",
+        "metric": "movies"
+      },
+      "sql": "SELECT DATE(rs.DateTimeCreated) AS d, COUNT(rm.Id) FROM ReportSessions rs LEFT JOIN ReportMovies rm ON rm.SessionId = rs.Id WHERE rs.DateTimeCreated >= ? GROUP BY d ORDER BY d"
+    },
+    {
+      "bindings": [
+        "reports",
+        "2026-01-01"
+      ],
+      "builder": "stats_trend_query",
+      "name": "torrents",
+      "params": {
+        "cutoff": "2026-01-01",
+        "metric": "torrents"
+      },
+      "sql": "SELECT DATE(rs.DateTimeCreated) AS d, COUNT(rt.Id) FROM ReportSessions rs LEFT JOIN ReportMovies rm ON rm.SessionId = rs.Id LEFT JOIN ReportTorrents rt ON rt.ReportMovieId = rm.Id WHERE rs.DateTimeCreated >= ? GROUP BY d ORDER BY d"
+    },
+    {
+      "bindings": [
+        "history",
+        "2026-01-01"
+      ],
+      "builder": "stats_trend_query",
+      "name": "history_growth",
+      "params": {
+        "cutoff": "2026-01-01",
+        "metric": "history_growth"
+      },
+      "sql": "SELECT DATE(DateTimeCreated), COUNT(*) FROM MovieHistory WHERE DateTimeCreated >= ? GROUP BY DATE(DateTimeCreated) ORDER BY DATE(DateTimeCreated)"
+    },
+    {
+      "bindings": [
+        "operations",
+        "2026-01-01"
+      ],
+      "builder": "stats_trend_query",
+      "name": "pikpak",
+      "params": {
+        "cutoff": "2026-01-01",
+        "metric": "pikpak"
+      },
+      "sql": "SELECT DATE(DateTimeUploadedToPikpak), COUNT(*) FROM PikpakHistory WHERE DateTimeUploadedToPikpak >= ? GROUP BY DATE(DateTimeUploadedToPikpak) ORDER BY DATE(DateTimeUploadedToPikpak)"
+    },
+    {
+      "bindings": [
+        "operations",
+        "2026-01-01"
+      ],
+      "builder": "stats_trend_query",
+      "name": "dedup",
+      "params": {
+        "cutoff": "2026-01-01",
+        "metric": "dedup"
+      },
+      "sql": "SELECT DATE(DateTimeDetected), COALESCE(SUM(ExistingFolderSize), 0) FROM DedupRecords WHERE IsDeleted=1 AND DateTimeDetected >= ? GROUP BY DATE(DateTimeDetected) ORDER BY DATE(DateTimeDetected)"
+    }
+  ],
+  "normalization": "collapse-whitespace-runs-to-single-space-and-trim",
+  "version": "85fef51b76f3decc"
+}

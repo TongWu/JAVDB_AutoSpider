@@ -32,7 +32,7 @@ if str(REPO_ROOT) not in sys.path:
 from javdb.infra.logging import setup_logging, get_logger
 from javdb.storage.sqlite_datetime import normalize_storage_datetime
 from javdb.storage.db import generate_session_id
-from apps.api.parsers.common import javdb_absolute_url
+from javdb.parsing.common import javdb_absolute_url
 from javdb.infra.config import cfg
 
 setup_logging()

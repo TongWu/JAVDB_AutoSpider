@@ -17,6 +17,7 @@ class LogSearchResponse(BaseModel):
     results: list[LogSearchItem]
     total_matched: int
     truncated: bool
+    scanned_files: int
 
 
 __all__ = [

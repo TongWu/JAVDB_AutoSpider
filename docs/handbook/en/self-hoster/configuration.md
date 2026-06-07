@@ -7,7 +7,7 @@ The primary configuration file is **`config.py`**. Copy `config.py.example` to
 never committed.
 
 Environment variables for the Web API and Docker are covered in
-[Section 14](#14-environment-variables).
+[Section 16](#16-environment-variables).
 
 ---
 
@@ -20,13 +20,15 @@ Environment variables for the Web API and Docker are covered in
 5. [CloudFlare Bypass](#5-cloudflare-bypass)
 6. [Spider Configuration](#6-spider-configuration)
 7. [JavDB Login](#7-javdb-login)
-8. [Logging](#8-logging)
-9. [Parsing / Re-download](#9-parsing--re-download)
-10. [File Paths / Database Paths](#10-file-paths--database-paths)
-11. [PikPak](#11-pikpak)
-12. [Rclone / Dedup](#12-rclone--dedup)
-13. [qBittorrent File Filter](#13-qbittorrent-file-filter)
-14. [Environment Variables](#14-environment-variables)
+8. [AI Operations Diagnosis](#8-ai-operations-diagnosis)
+9. [Logging](#9-logging)
+10. [Parsing / Re-download](#10-parsing--re-download)
+11. [File Paths / Database Paths](#11-file-paths--database-paths)
+12. [PikPak](#12-pikpak)
+13. [Rclone / Dedup](#13-rclone--dedup)
+14. [qBittorrent File Filter](#14-qbittorrent-file-filter)
+15. [Media Closed Loop](#15-media-closed-loop)
+16. [Environment Variables](#16-environment-variables)
 
 ---
 
@@ -257,7 +259,35 @@ adaptively from the sleep manager.
 
 ---
 
-## 8. Logging
+## 8. AI Operations Diagnosis
+
+ADR-026 adds a read-only operations diagnosis assistant for failed ingestion
+runs and D1 incidents. Phase 1 never executes rollback, rerun, drift apply,
+qB cleanup, or recovery mutation; it only collects evidence, classifies it, and
+persists an `OpsIncidents` record or JSONL fallback.
+
+| Variable | Type | Default | Description |
+|---|---|---|---|
+| `OPS_DIAGNOSIS_AI_ENABLED` | `bool` | `False` | Enable the optional AI synthesis adapter. When disabled, the deterministic detector fallback still produces diagnoses. |
+| `OPS_DIAGNOSIS_API_URL` | `str` | `''` | OpenAI-compatible chat completions endpoint for optional diagnosis synthesis. Leave empty to use deterministic fallback only. |
+| `OPS_DIAGNOSIS_API_KEY` | `str` | `''` | API key for the optional diagnosis synthesis endpoint. Keep empty unless `OPS_DIAGNOSIS_AI_ENABLED` is enabled. |
+| `OPS_DIAGNOSIS_MODEL` | `str` | `'deterministic-fallback-v1'` | Model identifier recorded in diagnosis output. The default documents that no remote model is used. |
+| `OPS_DIAGNOSIS_MAX_LOG_SNIPPETS` | `int` | `20` | Maximum matching log lines collected into the compact evidence bundle. Invalid values fall back to `20`. |
+
+### Site-Contract Drift Sentinel (ADR-035)
+
+The drift sentinel records per-field parse fill-rates during the daily index
+parse and gates the session commit when a critical field collapses (it reuses
+the `OpsIncidents` surface above). Two `config.py` knobs tune it:
+
+| Variable | Type | Default | Description |
+|---|---|---|---|
+| `SENTINEL_MIN_SAMPLE` | `int` | `30` | Skip drift evaluation when a run parsed fewer than this many items (avoids flapping on tiny runs). |
+| `SENTINEL_BASELINE_WINDOW` | `int` | `14` | Soft-field baseline = median fill-rate over this many most-recent committed runs (self-calibrating; learns only from clean runs). |
+
+---
+
+## 9. Logging
 
 | Variable | Type | Default | Description |
 |---|---|---|---|
@@ -268,13 +298,13 @@ adaptively from the sleep manager.
 | `EMAIL_NOTIFICATION_LOG_FILE` | `str` | `'logs/email_notification.log'` | Log file path for email notifications. |
 
 Additional logging behavior is controlled by environment variables (see
-[Section 14](#14-environment-variables)):
+[Section 16](#16-environment-variables)):
 `LOG_STYLE` (`compact` | `plain` | `verbose`) and
 `LOG_GITHUB_GROUPS` (`on` | `off` | `auto`).
 
 ---
 
-## 9. Parsing / Re-download
+## 10. Parsing / Re-download
 
 Controls which movies are included in reports and whether re-download (re-acquiring a higher-quality release of an already-downloaded movie, known as `洗版` in CN) logic is active.
 
@@ -287,7 +317,7 @@ Controls which movies are included in reports and whether re-download (re-acquir
 
 ---
 
-## 10. File Paths / Database Paths
+## 11. File Paths / Database Paths
 
 All paths are relative to the repository root unless an absolute path is given.
 
@@ -317,7 +347,7 @@ The system uses three separate SQLite databases for concurrency and isolation.
 
 ---
 
-## 11. PikPak
+## 12. PikPak
 
 Configuration for the PikPak cloud download bridge. The bridge reads magnet
 links from qBittorrent and submits them as offline downloads to PikPak.
@@ -332,7 +362,7 @@ links from qBittorrent and submits them as offline downloads to PikPak.
 
 ---
 
-## 12. Rclone / Dedup
+## 13. Rclone / Dedup
 
 Settings for Google Drive inventory scanning and duplicate file cleanup.
 
@@ -353,10 +383,11 @@ Settings for Google Drive inventory scanning and duplicate file cleanup.
 
 ---
 
-## 13. qBittorrent File Filter
+## 14. qBittorrent File Filter
 
 The file filter sets small files (NFO, samples, screenshots, etc.) to "do not
-download" priority inside torrents.
+download" priority inside torrents. For newly added torrents, it waits up to
+90 seconds for qBittorrent metadata before filtering.
 
 | Variable | Type | Default | Description |
 |---|---|---|---|
@@ -365,11 +396,23 @@ download" priority inside torrents.
 
 ---
 
-## 14. Environment Variables
+## 15. Media Closed Loop
+
+ADR-033 Phase 1 records acquisition outcomes and reconciles them against live
+qBittorrent state. The CLI flag `--stalled-after-days` overrides the configured
+default for a single reconcile run.
+
+| Variable | Type | Default | Description |
+|---|---|---|---|
+| `RECONCILE_STALLED_DAYS` | `int` | `7` | Positive integer. Active `queued` / `downloading` outcomes that have not been observed in qB for this many days become `stalled`; after 2x this window they become `failed`. Tune it to the slowest expected qB download in your environment. |
+
+---
+
+## 16. Environment Variables
 
 These variables are set in `.env` files rather than `config.py`.
 
-### 14.1 Root `.env` (Docker / cron entrypoint)
+### 16.1 Root `.env` (Docker / cron entrypoint)
 
 Defined in `.env.example` at the repository root. **Bare-metal uvicorn does
 not auto-load this file** — `apps/api/services/context.py` deliberately omits
@@ -433,7 +476,7 @@ All cron expressions use the standard five-field format:
 | `MAX_LOG_SIZE` | `str` | *(none)* | Maximum log file size before rotation, e.g. `100M`. |
 | `MAX_LOG_FILES` | `int` | *(none)* | Maximum number of rotated log files to keep. |
 
-### 14.2 Shell / CI Environment Variables
+### 16.2 Shell / CI Environment Variables
 
 These are set in the shell or in GitHub Actions workflow files and are read at
 runtime by various modules.
@@ -443,12 +486,19 @@ runtime by various modules.
 | `STORAGE_BACKEND` | `str` | `'sqlite'` | Storage backend. `'sqlite'` -- local SQLite files. `'d1'` -- Cloudflare D1 (GitHub Actions). `'dual'` -- write to both, read from D1. |
 | `WRITE_MODE` | `str` | `'pending'` | Write mode for session management. Only `'pending'` is supported; legacy `'audit'` requests fall back to pending. |
 | `STRICT_DUAL_WRITE` | `str` | `''` | When set to `'1'`, fail the run if a D1 write fails in dual mode. |
+| `COMMIT_SESSION_BULK` | `str` | enabled | Pending session commits use the bulk path by default. Set `'0'`, `'false'`, `'no'`, `'off'`, or an empty value to fall back to the per-href path. |
+| `D1_RECOVERY_OUTBOX_ENABLED` | `str` | `''` | ADR-010 Phase 2 gate. Set `'1'` to allow safe D1 write failures to queue in `reports/D1/d1_recovery_outbox.jsonl`; D1 mode still fails the write, and dual mode blocks commit until the ordering key drains. |
+| `D1_BATCHING_ENABLED` | `str` | `''` | Set `'1'` to enable ADR-010 Phase 3 safe-path micro-batching for explicitly batch-safe operations. Ordinary SQL remains synchronous. |
+| `D1_FLUSH_INTERVAL_MS` | `int` | `250` | Maximum safe-batch wait window when D1 batching is enabled. |
+| `D1_STARTUP_REPLAY_ENABLED` | `str` | `''` | ADR-010 Phase 4 gate. Set `'1'` to drain non-dead-lettered recovery work when a process first opens a D1 or Dual connection. |
+| `D1_STARTUP_REPLAY_MAX_ORDERING_KEYS` | `int` | `25` | Maximum ordering keys drained during automatic startup replay. |
+| `D1_STARTUP_REPLAY_MAX_EVENTS_PER_KEY` | `int` | `100` | Maximum events replayed per ordering key during automatic startup replay. |
 | `LOG_LEVEL` | `str` | `'INFO'` | Overrides the `LOG_LEVEL` in `config.py` when set as an environment variable. |
 | `LOG_STYLE` | `str` | `'compact'` | Log output format. `'compact'` -- concise single-line. `'plain'` -- standard format. `'verbose'` -- full 4-field format. |
 | `LOG_GITHUB_GROUPS` | `str` | `'auto'` | GitHub Actions log grouping. `'on'` -- always emit `::group::` markers. `'off'` -- never. `'auto'` -- detect CI environment. |
 | `VAR_MOVIE_SLEEP` | `str` | *(none)* | Override adaptive sleep range as `"min,max"` in seconds, e.g. `"0,0"` for CI. |
 
-### 14.3 Docker-Specific `.env` (`docker/.env.example`)
+### 16.3 Docker-Specific `.env` (`docker/.env.example`)
 
 The `docker/.env.example` file provides a simplified cron configuration format
 for the Docker container. It uses the same variables described in

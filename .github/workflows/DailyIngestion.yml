@@ -113,6 +113,9 @@ jobs:
       paused: ${{ steps.pause_gate.outputs.paused }}
     env:
       TZ: Asia/Singapore
+      D1_RECOVERY_OUTBOX_ENABLED: ${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}
+      D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
+      D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
 
     steps:
       - name: Capture workflow run start (UTC ISO)
@@ -359,6 +362,9 @@ jobs:
       health_check_outcome: ${{ steps.health_check.outcome }}
     env:
       TZ: Asia/Singapore
+      D1_RECOVERY_OUTBOX_ENABLED: ${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}
+      D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
+      D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
       # ── Storage backend selection (sqlite | d1 | dual) ──
       # Set GitHub Variable STORAGE_BACKEND=dual to mirror writes to D1 and
       # serve reads from D1 while still committing reports/*.db to git LFS.
@@ -429,6 +435,9 @@ jobs:
         run: |
           set -o pipefail
           SPIDER_CMD=(python3 -m apps.cli.spider)
+          SPIDER_RESULT_JSON="$RUNNER_TEMP/spider-result.json"
+          rm -f "$SPIDER_RESULT_JSON"
+          SPIDER_CMD+=(--result-json "$SPIDER_RESULT_JSON")
           if [ "$INPUT_DISABLE_ALL_FILTERS" = "true" ]; then
             SPIDER_CMD+=(--disable-all-filters)
             echo "⚠️ ALL FILTERS DISABLED: history, rclone inventory, release date filters are all bypassed"
@@ -458,43 +467,59 @@ jobs:
               SPIDER_CMD+=(--always-bypass-time "$ALWAYS_BYPASS_TIME")
             fi
           fi
-          # Capture output AND exit code so we can always extract the CSV filename
-          # (even when spider exits non-zero, e.g. proxy ban sys.exit(2))
-          SPIDER_OUTPUT=$("${SPIDER_CMD[@]}" | tee /dev/stderr) && SPIDER_EXIT=0 || SPIDER_EXIT=$?
-          
-          # Always extract CSV filename and session_id before potentially re-raising the error
-          CSV_FILENAME=$(echo "$SPIDER_OUTPUT" | grep "^SPIDER_OUTPUT_CSV=" | cut -d'=' -f2 | tail -1 || true)
+
+          # Stream logs in real time while preserving the spider exit code.
+          set +e
+          "${SPIDER_CMD[@]}" 2>&1 | tee "$RUNNER_TEMP/spider.log"
+          SPIDER_EXIT=${PIPESTATUS[0]}
+          set -e
+
+          RESULT_OUTPUTS="$RUNNER_TEMP/spider-result.outputs"
+          : > "$RESULT_OUTPUTS"
+          set +e
+          python3 -m apps.cli.ops.run_result_outputs \
+            --result-json "$SPIDER_RESULT_JSON" \
+            --github-output "$GITHUB_OUTPUT" | tee "$RESULT_OUTPUTS"
+          RESULT_HELPER_EXIT=${PIPESTATUS[0]}
+          set -e
+
+          CSV_FILENAME=""
+          SESSION_ID=""
+          DEDUP_CSV_PATH=""
+          STAT_PAGES=""
+          STAT_FOUND=""
+          STAT_PARSED=""
+          STAT_SKIPPED=""
+          STAT_FAILED=""
+          STAT_NO_NEW=""
+          while IFS='=' read -r key value; do
+            case "$key" in
+              csv_filename) CSV_FILENAME="$value" ;;
+              session_id) SESSION_ID="$value" ;;
+              dedup_csv_path) DEDUP_CSV_PATH="$value" ;;
+              stat_pages) STAT_PAGES="$value" ;;
+              stat_found) STAT_FOUND="$value" ;;
+              stat_parsed) STAT_PARSED="$value" ;;
+              stat_skipped) STAT_SKIPPED="$value" ;;
+              stat_failed) STAT_FAILED="$value" ;;
+              stat_no_new) STAT_NO_NEW="$value" ;;
+            esac
+          done < "$RESULT_OUTPUTS"
+
           if [ -n "$CSV_FILENAME" ]; then
-            echo "csv_filename=$CSV_FILENAME" >> $GITHUB_OUTPUT
             echo "Captured CSV filename: $CSV_FILENAME"
           else
-            echo "Warning: Could not capture CSV filename from spider output"
+            echo "Warning: Could not capture CSV filename from spider result JSON"
           fi
-          
-          SESSION_ID=$(echo "$SPIDER_OUTPUT" | grep "^SPIDER_SESSION_ID=" | cut -d'=' -f2 | tail -1 || true)
           if [ -n "$SESSION_ID" ]; then
-            if echo "$SESSION_ID" | grep -qE '^[a-zA-Z0-9._-]+$'; then
-              echo "session_id=$SESSION_ID" >> $GITHUB_OUTPUT
-              echo "Captured session ID: $SESSION_ID"
-            else
-              echo "::warning::Ignoring invalid SESSION_ID format"
-            fi
+            echo "Captured session ID: $SESSION_ID"
           fi
-          
-          DEDUP_CSV_PATH=$(echo "$SPIDER_OUTPUT" | grep "^SPIDER_DEDUP_CSV=" | cut -d'=' -f2 | tail -1 || true)
           if [ -n "$DEDUP_CSV_PATH" ]; then
-            echo "dedup_csv_path=$DEDUP_CSV_PATH" >> $GITHUB_OUTPUT
             echo "Captured dedup CSV path: $DEDUP_CSV_PATH"
           fi
-          
+
           # Markdown summary so the GitHub Actions UI surfaces the run's
           # key metrics without having to expand the spider log block.
-          # All SPIDER_STAT_* lines are emitted by report.py.
-          STAT_PAGES=$(echo "$SPIDER_OUTPUT" | grep '^SPIDER_STAT_PAGES=' | cut -d'=' -f2 | tail -1 || true)
-          STAT_FOUND=$(echo "$SPIDER_OUTPUT" | grep '^SPIDER_STAT_FOUND=' | cut -d'=' -f2 | tail -1 || true)
-          STAT_PARSED=$(echo "$SPIDER_OUTPUT" | grep '^SPIDER_STAT_PARSED=' | cut -d'=' -f2 | tail -1 || true)
-          STAT_SKIPPED=$(echo "$SPIDER_OUTPUT" | grep '^SPIDER_STAT_SKIPPED=' | cut -d'=' -f2 | tail -1 || true)
-          STAT_FAILED=$(echo "$SPIDER_OUTPUT" | grep '^SPIDER_STAT_FAILED=' | cut -d'=' -f2 | tail -1 || true)
           if [ -n "$STAT_PAGES$STAT_FOUND$STAT_PARSED$STAT_SKIPPED$STAT_FAILED" ]; then
             {
               echo "## Spider run summary"
@@ -513,6 +538,11 @@ jobs:
                 echo "| session_id | \`$SESSION_ID\` |"
               fi
             } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          if [ $RESULT_HELPER_EXIT -ne 0 ] && [ $SPIDER_EXIT -eq 0 ]; then
+            echo "Result output helper exited with code $RESULT_HELPER_EXIT"
+            exit $RESULT_HELPER_EXIT
           fi
 
           # Re-raise spider exit code so the step is correctly marked as failed
@@ -693,6 +723,7 @@ jobs:
         env:
           ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
           REPORTS_DIR: ${{ vars.REPORTS_DIR || 'reports' }}
+          DEDUP_CSV_PATH: ${{ steps.spider.outputs.dedup_csv_path }}
         run: |
           # Guard: fail workflow if ARTIFACT_KEY is not configured (prevent unencrypted artifacts)
           if [ -z "$ARTIFACT_KEY" ]; then
@@ -716,28 +747,46 @@ jobs:
             echo "Including CSV: $CSV_PATH"
           fi
           
-          # Add history files and database if they exist
-          for HIST_FILE in "$REPORTS_DIR/parsed_movies_history.csv" "$REPORTS_DIR/pikpak_bridge_history.csv" "$REPORTS_DIR/rclone_inventory.csv" "$REPORTS_DIR/history.db" "$REPORTS_DIR/reports.db" "$REPORTS_DIR/operations.db"; do
+          # Add history files and database if they exist. In D1 mode the
+          # SQLite mirrors and legacy parsed history CSV are rebuildable
+          # outputs, so keep them out of the encrypted report bundle.
+          HISTORY_FILES=(
+            "$REPORTS_DIR/pikpak_bridge_history.csv"
+            "$REPORTS_DIR/rclone_inventory.csv"
+          )
+          if [ "$STORAGE_BACKEND" != "d1" ]; then
+            HISTORY_FILES+=(
+              "$REPORTS_DIR/parsed_movies_history.csv"
+              "$REPORTS_DIR/history.db"
+              "$REPORTS_DIR/reports.db"
+              "$REPORTS_DIR/operations.db"
+            )
+          fi
+          for HIST_FILE in "${HISTORY_FILES[@]}"; do
             if [ -f "$HIST_FILE" ]; then
               FILES_TO_ARCHIVE="$FILES_TO_ARCHIVE $HIST_FILE"
               echo "Including: $HIST_FILE"
             fi
           done
-          # D1 drift audit logs are archived with the report bundle so the
+          # D1 operational files are archived with the report bundle so the
           # success-only commit-results job can stage the generated files after
           # its fresh checkout.
-          for DRIFT_FILE in "$REPORTS_DIR/D1/d1_drift.jsonl" "$REPORTS_DIR/D1/d1_drift.processed.jsonl"; do
-            if [ -f "$DRIFT_FILE" ]; then
-              FILES_TO_ARCHIVE="$FILES_TO_ARCHIVE $DRIFT_FILE"
-              echo "Including: $DRIFT_FILE"
+          for D1_STATE_FILE in \
+            "$REPORTS_DIR/D1/d1_drift.jsonl" \
+            "$REPORTS_DIR/D1/d1_drift.processed.jsonl" \
+            "$REPORTS_DIR/D1/d1_recovery_outbox.jsonl" \
+            "$REPORTS_DIR/D1/d1_recovery_outbox.processed.jsonl" \
+            "$REPORTS_DIR/D1/d1_port_summary.json"
+          do
+            if [ -f "$D1_STATE_FILE" ]; then
+              FILES_TO_ARCHIVE="$FILES_TO_ARCHIVE $D1_STATE_FILE"
+              echo "Including: $D1_STATE_FILE"
             fi
           done
-          # Add dedup reports (reports/Dedup/YYYY/MM/*.csv)
-          if [ -d "$REPORTS_DIR/Dedup" ]; then
-            while IFS= read -r f; do
-              FILES_TO_ARCHIVE="$FILES_TO_ARCHIVE $f"
-              echo "Including: $f"
-            done < <(find "$REPORTS_DIR/Dedup" -name "*.csv" -type f 2>/dev/null || true)
+          # Add only the current run's dedup report, when one was produced.
+          if [ -n "$DEDUP_CSV_PATH" ] && [ -f "$DEDUP_CSV_PATH" ]; then
+            FILES_TO_ARCHIVE="$FILES_TO_ARCHIVE $DEDUP_CSV_PATH"
+            echo "Including: $DEDUP_CSV_PATH"
           fi
           
           if [ -n "$FILES_TO_ARCHIVE" ]; then
@@ -775,6 +824,9 @@ jobs:
     if: ${{ always() && needs.setup.outputs.paused != 'true' && (needs.run-pipeline.result == 'failure' || needs.run-pipeline.result == 'cancelled') }}
     env:
       TZ: Asia/Singapore
+      D1_RECOVERY_OUTBOX_ENABLED: ${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}
+      D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
+      D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
       STORAGE_BACKEND: ${{ vars.STORAGE_BACKEND || 'sqlite' }}
       # Phase 3 — must match the run-pipeline value so the rollback CLI's
       # WriteMode dispatcher sees the same resolved mode.  The CLI itself
@@ -875,6 +927,9 @@ jobs:
     if: ${{ always() && needs.setup.outputs.paused != 'true' }}
     env:
       TZ: Asia/Singapore
+      D1_RECOVERY_OUTBOX_ENABLED: ${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}
+      D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
+      D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
       # Email subject/body date ≈ workflow start (first job UTC timestamp), not send time
       PIPELINE_WORKFLOW_RUN_STARTED_AT: ${{ needs.setup.outputs.pipeline_workflow_run_started_at }}
       GH_TOKEN: ${{ github.token }}
@@ -994,7 +1049,7 @@ jobs:
           echo "HEALTH_CHECK_STATUS=$HEALTH_STATUS" >> logs/job_status.txt
           echo "PIPELINE_STATUS=$PIPELINE_STATUS" >> logs/job_status.txt
           
-          if [[ "$SETUP_STATUS" == "failure" ]] || [[ "$HEALTH_STATUS" == "failure" ]] || [[ "$PIPELINE_STATUS" == "failure" ]]; then
+          if [[ "$SETUP_STATUS" == "failure" ]] || [[ "$HEALTH_STATUS" == "failure" ]] || [[ "$PIPELINE_STATUS" == "failure" ]] || [[ "$PIPELINE_STATUS" == "cancelled" ]]; then
             echo "has_failure=true" >> $GITHUB_OUTPUT
             echo "Pipeline had failures"
           else
@@ -1018,9 +1073,45 @@ jobs:
           python3 -m apps.cli.db.pending_health \
             --window-hours 24 || true
 
+      - name: Diagnose failed run (ADR-026)
+        id: ops_diagnosis
+        if: ${{ steps.status.outputs.has_failure == 'true' }}
+        env:
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          SESSION_ID: ${{ needs.run-pipeline.outputs.session_id }}
+          WORKFLOW_RESULT: ${{ needs.run-pipeline.result }}
+        run: |
+          set +e
+          mkdir -p reports/ops
+          CMD_ARGS=(
+            python3 -m apps.cli.ops.diagnose_run
+            --trigger-source workflow_failure
+            --run-id "$RUN_ID"
+            --attempt "$RUN_ATTEMPT"
+            --workflow-name DailyIngestion
+            --workflow-result "$WORKFLOW_RESULT"
+            --json
+            --log logs/pipeline.log
+            --log logs/spider.log
+          )
+          if [ -n "$SESSION_ID" ]; then
+            CMD_ARGS+=(--session-id "$SESSION_ID")
+          fi
+          "${CMD_ARGS[@]}" > reports/ops/latest_ops_diagnosis.json
+          DIAG_EXIT=$?
+          DIAG_JSON=reports/ops/latest_ops_diagnosis.json
+          if [ $DIAG_EXIT -le 1 ] && [ -s "$DIAG_JSON" ] && python3 -m json.tool "$DIAG_JSON" >/dev/null; then
+            echo "json_path=$DIAG_JSON" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::ADR-026 diagnosis did not produce valid JSON (exit=$DIAG_EXIT, path=$DIAG_JSON)"
+          fi
+          exit 0
+
       - name: Run Email Notification
         env:
           PIPELINE_HAS_FAILURE: ${{ steps.status.outputs.has_failure }}
+          OPS_DIAGNOSIS_JSON: ${{ steps.ops_diagnosis.outputs.json_path }}
         run: |
           set -e  # Exit on error
           set -o pipefail  # Exit on error in pipeline
@@ -1137,6 +1228,9 @@ jobs:
       pull-requests: write
     env:
       TZ: Asia/Singapore
+      D1_RECOVERY_OUTBOX_ENABLED: ${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}
+      D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
+      D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
       GH_TOKEN: ${{ github.token }}
       # MR-2 (multi-runtime): surfaced so the commit step can skip the
       # reports/*.db git add when STORAGE_BACKEND=d1. In d1-only mode the
@@ -1242,10 +1336,17 @@ jobs:
             echo "Spider or Uploader failed/cancelled - skipping history files commit"
             find "$DAILY_REPORT_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
           fi
-          # D1 drift logs are staged unconditionally — they record D1/SQLite
-          # divergence and must survive failed runs to preserve the audit trail.
-          git add "$REPORTS_DIR/D1/d1_drift.jsonl" 2>/dev/null || true
-          git add "$REPORTS_DIR/D1/d1_drift.processed.jsonl" 2>/dev/null || true
+          # D1 state logs are staged unconditionally — they record D1/SQLite
+          # divergence and recovery state and must survive failed runs.
+          for D1_STATE_FILE in \
+            "$REPORTS_DIR/D1/d1_drift.jsonl" \
+            "$REPORTS_DIR/D1/d1_drift.processed.jsonl" \
+            "$REPORTS_DIR/D1/d1_recovery_outbox.jsonl" \
+            "$REPORTS_DIR/D1/d1_recovery_outbox.processed.jsonl" \
+            "$REPORTS_DIR/D1/d1_port_summary.json"
+          do
+            git add "$D1_STATE_FILE" 2>/dev/null || true
+          done
           find "$AD_HOC_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
           
           # Check if there are any changes to commit

@@ -7,16 +7,16 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException
 
-from apps.api.parsers import parse_index_page
-from apps.api.parsers.index_parser import (
+from javdb.parsing import parse_index_page
+from javdb.parsing.search_exact import (
     derive_letter_suffix_fallback_video_code,
+    find_exact_entry_first_search_page,
     find_exact_video_code_match,
 )
-from apps.api.parsers.search_exact import find_exact_entry_first_search_page
 from apps.api.services import config_service, context
 from apps.api.services.explore_service import _fetch_javdb_html
 from javdb.spider.url_helper import build_search_url
-from javdb.spider.parser import (
+from javdb.spider.html_validators import (
     is_login_page,
 )
 

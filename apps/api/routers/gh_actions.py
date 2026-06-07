@@ -255,7 +255,7 @@ def list_runs(
 @router.post(
     "/runs",
     response_model=DispatchResponse,
-    dependencies=[Depends(_require_gh_monitor)],
+    dependencies=[Depends(_require_gh_admin)],
 )
 def dispatch_run(
     body: DispatchRequest,

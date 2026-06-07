@@ -54,7 +54,7 @@ def log_phase_summary(phase_name: str, phase_rows: list) -> None:
 
 
 def generate_summary_report(
-    *, phase_mode, parse_all, start_page, end_page, max_consecutive_empty,
+    *, runtime=None, phase_mode, parse_all, start_page, end_page, max_consecutive_empty,
     phase1_rows, phase2_rows, rows,
     use_history_for_loading, ignore_history,
     skipped_history_count, failed_count, no_new_torrents_count,
@@ -110,28 +110,45 @@ def generate_summary_report(
         print(f"SPIDER_STAT_FAILED={failed_count}")
         print(f"SPIDER_STAT_NO_NEW={no_new_torrents_count}")
 
+    runtime = runtime or state.get_active_runtime()
     if ignore_history:
         logger.info("History reading was disabled (--ignore-history); results still saved to history")
-    logger.debug("Current parsed links in memory: %d", len(state.parsed_links))
+    parsed_links = (
+        runtime.detail.parsed_links
+        if runtime is not None
+        else state.get_legacy_parsed_links()
+    )
+    logger.debug("Current parsed links in memory: %d", len(parsed_links))
 
-    if use_proxy and PROXY_MODE in ('pool', 'single') and state.global_proxy_pool is not None:
+    proxy_pool = (
+        runtime.services.proxy_pool
+        if runtime is not None
+        else state.get_legacy_proxy_pool()
+    )
+
+    if use_proxy and PROXY_MODE in ('pool', 'single') and proxy_pool is not None:
         # ``log_statistics`` itself emits a one-line INFO summary;
         # per-proxy detail rows are at DEBUG so a healthy run prints a
         # single proxy-pool row.  Operators who want forensic detail
         # flip ``LOG_LEVEL=DEBUG`` and get every proxy on its own line.
-        state.global_proxy_pool.log_statistics(level=logging.INFO)
+        proxy_pool.log_statistics(level=logging.INFO)
 
-        ban_summary = state.global_proxy_pool.get_ban_summary(include_ip=False)
+        ban_summary = proxy_pool.get_ban_summary(include_ip=False)
         if ban_summary and ban_summary.strip() and 'No proxies' not in ban_summary:
             log_section(logger, "PROXY BAN STATUS", emoji='🛡')
             logger.info(ban_summary)
 
-    if state.proxy_ban_html_files:
+    proxy_ban_html_files = (
+        runtime.proxy.proxy_ban_html_files
+        if runtime is not None
+        else state.get_legacy_proxy_ban_html_files()
+    )
+    if proxy_ban_html_files:
         log_section(logger, "PROXY BAN HTML FILES", emoji='🛡')
-        logger.info("Saved %d proxy ban HTML file(s) for debugging:", len(state.proxy_ban_html_files))
-        for html_file in state.proxy_ban_html_files:
+        logger.info("Saved %d proxy ban HTML file(s) for debugging:", len(proxy_ban_html_files))
+        for html_file in proxy_ban_html_files:
             logger.info("  - %s", html_file)
-        print(f"PROXY_BAN_HTML_FILES={','.join(state.proxy_ban_html_files)}")
+        print(f"PROXY_BAN_HTML_FILES={','.join(proxy_ban_html_files)}")
 
     proxies_were_banned = False
     if phase_mode in ['1', 'all']:

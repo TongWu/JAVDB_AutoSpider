@@ -74,15 +74,25 @@ def test_commit_session_explicit_id_survives_window_lookup_failure(monkeypatch):
 
     monkeypatch.setattr(commit_session, "init_db", lambda: None)
     monkeypatch.setattr(commit_session, "close_db", lambda: close_calls.append(True))
+
+    # Window lookup now routes through SessionLifecycleRepo (ADR-032 Phase
+    # 2a). Stub the Repo so find_in_progress_sessions raises, exercising the
+    # explicit-id survival path.
+    class _RaisingRepo:
+        def find_in_progress_sessions(self, **_kwargs):
+            raise RuntimeError("lookup failed")
+
     monkeypatch.setattr(
         commit_session,
-        "db_find_in_progress_sessions",
-        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("lookup failed")),
+        "SessionLifecycleRepo",
+        lambda *a, **k: _RaisingRepo(),
     )
+    # Session status flips now route through SessionLifecycle.transition
+    # (ADR-019); commit_session imports it as a module-level `transition`.
     monkeypatch.setattr(
         commit_session,
-        "db_mark_session_committed",
-        lambda sid: marked.append(sid) or 1,
+        "transition",
+        lambda sid, to, **_kwargs: marked.append(sid) or 1,
     )
 
     rc = commit_session.main([

@@ -6,6 +6,7 @@ POST /api/migrations/{migration_id}/run — preview (and eventually run) a migra
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any, Dict
 
@@ -22,6 +23,20 @@ from apps.api.schemas.migrations import (
 router = APIRouter(prefix="/api/migrations", tags=["migrations"])
 
 _MIGRATIONS_DIR = Path("javdb/migrations/d1")
+_SAFE_MIGRATION_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_\-\.]*$")
+
+_ERR_INVALID_ID = {
+    "error": {
+        "code": "migrations.invalid_id",
+        "message": "Invalid migration ID",
+    }
+}
+
+
+def _validate_migration_id(migration_id: str) -> None:
+    """Reject migration IDs containing path separators or traversal sequences."""
+    if not _SAFE_MIGRATION_ID.match(migration_id):
+        raise HTTPException(status_code=400, detail=_ERR_INVALID_ID)
 
 
 def _get_applied_migrations() -> dict[str, str]:
@@ -74,21 +89,8 @@ def run_migration(
     _user: Dict[str, Any] = Depends(require_role("admin")),
 ) -> RunMigrationResponse:
     """Preview or run a migration."""
+    _validate_migration_id(migration_id)
     migration_file = _MIGRATIONS_DIR / f"{migration_id}.sql"
-
-    # Prevent path traversal before existence check
-    try:
-        migration_file.resolve().relative_to(_MIGRATIONS_DIR.resolve())
-    except ValueError:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "error": {
-                    "code": "migrations.invalid_id",
-                    "message": "Invalid migration ID",
-                }
-            },
-        )
 
     if not migration_file.exists():
         raise HTTPException(

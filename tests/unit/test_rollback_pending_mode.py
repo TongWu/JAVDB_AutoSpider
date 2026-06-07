@@ -26,6 +26,7 @@ Covers the core pending-mode categories:
 
 from __future__ import annotations
 
+import json
 import os
 from typing import Dict, List, Tuple
 
@@ -120,7 +121,7 @@ def _href_variants(href: str) -> List[str]:
     every row.  Tests query by both variants to stay agnostic to whichever
     form the production code chose to persist.
     """
-    from apps.api.parsers.common import movie_href_lookup_values
+    from javdb.parsing.common import movie_href_lookup_values
     base = "https://javdb.com"
     path_href, abs_href = movie_href_lookup_values(href, base)
     variants = [v for v in (path_href, abs_href, href) if v]
@@ -684,7 +685,11 @@ class TestCommitSessionCLIDrainsPending:
             "--no-claim-commit",
             "--log-level", "WARNING",
         ])
-        assert rc == 0, capsys.readouterr().err
+        captured = capsys.readouterr()
+        assert rc == 0, captured.err
+        summary = json.loads(captured.out)
+        assert sid in summary["committed"]
+        assert sid not in summary["already_committed_or_missing"]
 
         state = db_get_session_status(sid)
         assert state == ("pending", "committed")
@@ -757,7 +762,7 @@ class TestBatchUpdatesRouteToPending:
                     "DateTimeVisited": "2026-05-09 12:00:00",
                 },
             )
-            n = db_batch_update_last_visited(["/v/BAT-001"])
+            n = db_batch_update_last_visited(["/v/BAT-001"], session_id=sid)
             assert n == 1
         finally:
             self._teardown()
@@ -812,7 +817,7 @@ class TestBatchUpdatesRouteToPending:
         try:
             n = db_batch_update_movie_actors([
                 ("/v/ACT-001", "Act Actor", "female", "/actors/act", None),
-            ])
+            ], session_id=sid)
             assert n == 1
         finally:
             self._teardown()

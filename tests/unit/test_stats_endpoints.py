@@ -502,7 +502,7 @@ class TestStatsTrend:
         assert data["metric"] == "dedup"
         assert len(data["data_points"]) > 0
 
-    def test_trend_duration_returns_empty(self, admin_client, tmp_path, monkeypatch):
+    def test_trend_duration_returns_501(self, admin_client, tmp_path, monkeypatch):
         import apps.api.routers.stats as stats_module
 
         db_map = _build_populated_db_map()
@@ -511,10 +511,7 @@ class TestStatsTrend:
 
         resp = admin_client.get("/api/stats/trend", params={"metric": "duration", "period": "7d"})
 
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["metric"] == "duration"
-        assert data["data_points"] == []
+        assert resp.status_code == 501
 
     def test_trend_proxy_bans(self, admin_client, tmp_path, monkeypatch):
         import apps.api.routers.stats as stats_module

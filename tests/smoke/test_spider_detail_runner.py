@@ -13,6 +13,7 @@ sys.path.insert(0, project_root)
 
 import javdb.spider.runtime.state as state
 from javdb.pipeline.models import SpiderIngestionPlan
+from javdb.spider.services.content_filter import Rule
 from javdb.spider.detail.runner import (
     DetailPersistOutcome,
     persist_parsed_detail_result,
@@ -286,7 +287,7 @@ def test_process_detail_entries_handles_backend_results(monkeypatch):
                 task=self.tasks[0],
                 success=True,
                 data={
-                    'magnets': ['magnet-1'],
+                    'magnet_links': {'subtitle': 'magnet-1'},
                     'actor_info': 'Actor',
                     'actor_gender': '',
                     'actor_link': '',
@@ -309,10 +310,6 @@ def test_process_detail_entries_handles_backend_results(monkeypatch):
         make_entry('DEF-456', href='/v/def456'),
     ]
 
-    monkeypatch.setattr(
-        'javdb.spider.detail.runner.extract_magnets',
-        lambda magnets, _idx: {'subtitle': magnets[0]},
-    )
     monkeypatch.setattr(
         'javdb.spider.detail.runner.persist_parsed_detail_result',
         lambda **kwargs: DetailPersistOutcome(
@@ -384,7 +381,7 @@ def test_process_detail_entries_acknowledges_runtime_state_changes(monkeypatch):
                 task=self.tasks[0],
                 success=True,
                 data={
-                    'magnets': ['magnet-1'],
+                    'magnet_links': {'subtitle': 'magnet-1'},
                     'actor_info': 'Actor',
                     'actor_gender': '',
                     'actor_link': '',
@@ -397,7 +394,7 @@ def test_process_detail_entries_acknowledges_runtime_state_changes(monkeypatch):
                 task=self.tasks[1],
                 success=True,
                 data={
-                    'magnets': ['magnet-2'],
+                    'magnet_links': {'subtitle': 'magnet-2'},
                     'actor_info': 'Actor',
                     'actor_gender': '',
                     'actor_link': '',
@@ -416,10 +413,6 @@ def test_process_detail_entries_acknowledges_runtime_state_changes(monkeypatch):
         ]
     )
 
-    monkeypatch.setattr(
-        'javdb.spider.detail.runner.extract_magnets',
-        lambda magnets, _idx: {'subtitle': magnets[0]},
-    )
     monkeypatch.setattr(
         'javdb.spider.detail.runner.persist_parsed_detail_result',
         lambda **_kwargs: next(outcomes),
@@ -443,6 +436,306 @@ def test_process_detail_entries_acknowledges_runtime_state_changes(monkeypatch):
     )
 
     assert backend.ack_calls == [('reported', True), ('skipped', False)]
+
+
+def test_process_detail_entries_empty_content_filter_preserves_success_path(monkeypatch):
+    from javdb.spider.fetch.backend import FetchRuntimeState
+    from javdb.spider.fetch.fetch_engine import EngineResult
+
+    class FakeBackend:
+        def __init__(self):
+            self.tasks = []
+            self.ack_calls = []
+
+        @property
+        def worker_count(self):
+            return 1
+
+        def start(self):
+            return None
+
+        def submit_task(self, task):
+            self.tasks.append(task)
+
+        def mark_done(self):
+            return None
+
+        def runtime_state(self):
+            return FetchRuntimeState(use_proxy=False, use_cf_bypass=False)
+
+        def results(self):
+            for task in self.tasks:
+                yield EngineResult(
+                    task=task,
+                    success=True,
+                    data={
+                        'magnet_links': {'subtitle': 'magnet-1'},
+                        'actor_info': 'Actor',
+                        'actor_gender': '',
+                        'actor_link': '',
+                        'supporting': '',
+                    },
+                    _ack_callback=lambda status, changed: self.ack_calls.append((status, changed)),
+                )
+
+        def shutdown(self, *, timeout=10):
+            return []
+
+    import javdb.spider.detail.runner as dc
+
+    load_calls = []
+    persist_calls = []
+    monkeypatch.setattr(dc, '_load_content_filter_rules', lambda: load_calls.append(True) or [])
+    monkeypatch.setattr(
+        dc,
+        'persist_parsed_detail_result',
+        lambda **kwargs: persist_calls.append(kwargs) or DetailPersistOutcome(
+            status='reported',
+            row={'href': kwargs['entry']['href']},
+            visited_href=kwargs['entry']['href'],
+        ),
+    )
+
+    backend = FakeBackend()
+    result = process_detail_entries(
+        backend=backend,
+        entries=[
+            make_entry('ABC-123', href='/v/abc123'),
+            make_entry('DEF-456', href='/v/def456'),
+        ],
+        phase=1,
+        history_data={},
+        history_file='history.csv',
+        csv_path='report.csv',
+        fieldnames=['href'],
+        dry_run=True,
+        use_history_for_saving=False,
+        is_adhoc_mode=False,
+    )
+
+    assert len(load_calls) == 1
+    assert [call['entry']['href'] for call in persist_calls] == ['/v/abc123', '/v/def456']
+    assert result['rows'] == [{'href': '/v/abc123'}, {'href': '/v/def456'}]
+    assert backend.ack_calls == [('reported', False), ('reported', False)]
+
+
+def test_process_detail_entries_content_filter_rule_load_exception_fails_open(monkeypatch):
+    from javdb.spider.fetch.backend import FetchRuntimeState
+    from javdb.spider.fetch.fetch_engine import EngineResult
+
+    class FakeBackend:
+        def __init__(self):
+            self.tasks = []
+            self.ack_calls = []
+
+        @property
+        def worker_count(self):
+            return 1
+
+        def start(self):
+            return None
+
+        def submit_task(self, task):
+            self.tasks.append(task)
+
+        def mark_done(self):
+            return None
+
+        def runtime_state(self):
+            return FetchRuntimeState(use_proxy=False, use_cf_bypass=False)
+
+        def results(self):
+            for task in self.tasks:
+                yield EngineResult(
+                    task=task,
+                    success=True,
+                    data={
+                        'magnet_links': {'subtitle': 'magnet-1'},
+                        'actor_info': 'Actor',
+                        'actor_gender': '',
+                        'actor_link': '',
+                        'supporting': '',
+                    },
+                    _ack_callback=lambda status, changed: self.ack_calls.append((status, changed)),
+                )
+
+        def shutdown(self, *, timeout=10):
+            return []
+
+    import javdb.spider.detail.runner as dc
+
+    persist_calls = []
+    monkeypatch.setattr(
+        dc,
+        '_load_content_filter_rules',
+        lambda: (_ for _ in ()).throw(RuntimeError('rules unavailable')),
+    )
+    monkeypatch.setattr(
+        dc,
+        'persist_parsed_detail_result',
+        lambda **kwargs: persist_calls.append(kwargs) or DetailPersistOutcome(
+            status='reported',
+            row={'href': kwargs['entry']['href']},
+            visited_href=kwargs['entry']['href'],
+        ),
+    )
+
+    backend = FakeBackend()
+    result = process_detail_entries(
+        backend=backend,
+        entries=[
+            make_entry('ABC-123', href='/v/abc123'),
+            make_entry('DEF-456', href='/v/def456'),
+        ],
+        phase=1,
+        history_data={},
+        history_file='history.csv',
+        csv_path='report.csv',
+        fieldnames=['href'],
+        dry_run=True,
+        use_history_for_saving=False,
+        is_adhoc_mode=False,
+    )
+
+    assert [call['entry']['href'] for call in persist_calls] == ['/v/abc123', '/v/def456']
+    assert result['rows'] == [{'href': '/v/abc123'}, {'href': '/v/def456'}]
+    assert backend.ack_calls == [('reported', False), ('reported', False)]
+
+
+def test_process_detail_entries_content_filter_skips_sequential_style_payload(monkeypatch):
+    from javdb.spider.fetch.backend import FetchRuntimeState
+    from javdb.spider.fetch.fetch_engine import EngineResult
+    from javdb.proxy.coordinator.work_distributor_client import (
+        EnqueueResult,
+        PullResult,
+        WorkItem,
+    )
+
+    class FakeBackend:
+        def __init__(self, movie_detail):
+            self.tasks = []
+            self.ack_calls = []
+            self.movie_detail = movie_detail
+
+        @property
+        def worker_count(self):
+            return 1
+
+        def start(self):
+            return None
+
+        def submit_task(self, task):
+            self.tasks.append(task)
+
+        def mark_done(self):
+            return None
+
+        def runtime_state(self):
+            return FetchRuntimeState(use_proxy=False, use_cf_bypass=False)
+
+        def results(self):
+            yield EngineResult(
+                task=self.tasks[0],
+                success=True,
+                data={
+                    'magnet_links': {'subtitle': 'magnet-1'},
+                    'actor_info': 'Actor',
+                    'actor_gender': 'male',
+                    'actor_link': '/actors/blocked',
+                    'supporting': '',
+                    'movie_detail': self.movie_detail,
+                },
+                _ack_callback=lambda status, changed: self.ack_calls.append((status, changed)),
+            )
+
+        def shutdown(self, *, timeout=10):
+            return []
+
+    class FakeWorkDistributor:
+        def __init__(self):
+            self.release_calls = []
+            self.complete_calls = []
+            self._pulled = False
+
+        def enqueue(self, keys):
+            return EnqueueResult(
+                enqueued=list(keys),
+                duplicates=[],
+                queue_size=len(keys),
+                server_time_ms=1,
+            )
+
+        def pull(self, holder_id, *, max_items, visibility_timeout_ms):
+            if self._pulled:
+                return PullResult(items=[], queue_size=0, server_time_ms=1)
+            self._pulled = True
+            return PullResult(
+                items=[
+                    WorkItem(
+                        key='/v/abc123',
+                        payload=None,
+                        enqueued_at_ms=1,
+                        attempt_count=1,
+                    )
+                ],
+                queue_size=0,
+                server_time_ms=1,
+            )
+
+        def release(self, holder_id, keys):
+            self.release_calls.append((holder_id, keys))
+
+        def complete(self, holder_id, keys):
+            self.complete_calls.append((holder_id, keys))
+
+    import javdb.spider.detail.runner as dc
+
+    fake_claim_client = _FakeClaimClient()
+    fake_work_client = FakeWorkDistributor()
+    movie_detail = SimpleNamespace(
+        actors=[SimpleNamespace(name='Blocked Actor', href='/actors/blocked', gender='male')],
+        tags=[],
+    )
+    monkeypatch.setattr(state, 'global_movie_claim_client', fake_claim_client)
+    monkeypatch.setattr(state, 'global_work_distributor_client', fake_work_client)
+    monkeypatch.setattr(state, 'runtime_holder_id', 'runner-test')
+    monkeypatch.setattr(dc, 'current_shard_date', lambda: '2026-05-30')
+    monkeypatch.setattr(
+        dc,
+        '_load_content_filter_rules',
+        lambda: [Rule(1, 'actor', 'exclude', '/actors/blocked', True)],
+    )
+    monkeypatch.setattr(
+        dc,
+        'persist_parsed_detail_result',
+        lambda **_kwargs: pytest.fail('persist should not be called for filtered content'),
+    )
+
+    backend = FakeBackend(movie_detail)
+    result = process_detail_entries(
+        backend=backend,
+        entries=[make_entry('ABC-123', href='/v/abc123')],
+        phase=1,
+        history_data={},
+        history_file='history.csv',
+        csv_path='report.csv',
+        fieldnames=['href'],
+        dry_run=True,
+        use_history_for_saving=False,
+        is_adhoc_mode=False,
+    )
+
+    assert result['rows'] == []
+    assert backend.ack_calls == [('content_filtered', False)]
+    assert fake_claim_client.release_calls == [{
+        'href': '/v/abc123',
+        'holder': 'runner-test',
+        'date': '2026-05-30',
+    }]
+    assert fake_claim_client.stage_calls == []
+    assert fake_claim_client.complete_calls == []
+    assert fake_work_client.release_calls == []
+    assert fake_work_client.complete_calls == [('runner-test', ['/v/abc123'])]
 
 
 # ---------------------------------------------------------------------------

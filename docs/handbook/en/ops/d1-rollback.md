@@ -21,6 +21,7 @@ This document is the operator's reference for rolling back partial Cloudflare D1
 ## Table of Contents
 
 - [TL;DR](#tldr)
+- [D1 Recovery Outbox](#d1-recovery-outbox)
 - [Strategy summary (Pending only)](#strategy-summary-pending-only)
   - [Why audit tables for history? *(legacy — kept for context, see Appendix A)*](#why-audit-tables-for-history-legacy--kept-for-context-see-appendix-a)
   - [SessionId generation (2026-05-08+)](#sessionid-generation-2026-05-08)
@@ -62,7 +63,53 @@ This document is the operator's reference for rolling back partial Cloudflare D1
 - **Stale-session cron:** [`StaleSessionCleanup.yml`](../../../../.github/workflows/StaleSessionCleanup.yml) runs daily at 02:00 UTC and unwinds any session stuck `in_progress` for more than 48h, tagging them `FailureReason='stale_timeout'`. The same job now also calls `apps.cli.sweep_movie_claim_stages` to clean up Phase-1 orphaned `staged_complete{}` entries on the MovieClaim Durable Object (cutoff 48h, server-floored to ≥ 1h).
 - **MovieClaim cross-session rollback safety (Phase 1):** detail-page completions are now staged per-session on the MovieClaim DO before they enter the permanent `completed_committed[]` list. `apps.cli.commit_session` promotes the stage on success; `apps.cli.rollback` calls `rollback_staged_movies` (with up to 3 retries) before completing the DB rollback. A failed peer session no longer blocks an ad-hoc retry on the same href in another session — only `completed_committed[]` does. See [`docs/handbook/zh/self-hoster/proxy-coordinator.md` §15.2](../../zh/self-hoster/proxy-coordinator.md) for the protocol and `JAVDB_AutoSpider.wiki/Cross-Runner-State.md` §2.3 for the runtime semantics.
 
+For a structured advisory before deciding whether rollback is safe, run the ADR-026 diagnosis assistant:
+
+```bash
+python3 -m apps.cli.ops.diagnose_run --run-id <run_id> --attempt <attempt> --session-id <session_id> --workflow-result failure --json
+```
+
+The assistant is read-only and does not replace the rollback safety matrix.
+
 ---
+
+## D1 Recovery Outbox
+
+ADR-010 adds `reports/D1/d1_recovery_outbox.jsonl` for safe, recoverable D1 write failures. In `STORAGE_BACKEND=d1`, queued outbox work is diagnostic only: the write still fails. In `STORAGE_BACKEND=dual`, safe operations may queue for recovery, but the related session cannot be committed until its `history:SESSION_ID` ordering key drains. If the outbox entry itself cannot be written durably, the write or commit still fails. Dead-lettered work also blocks its ordering key.
+
+Inspect pending work:
+
+```bash
+python3 -m apps.cli.db.d1_recovery inspect
+```
+
+Replay one ordering key:
+
+```bash
+python3 -m apps.cli.db.d1_recovery replay --ordering-key 'history:SESSION_ID'
+```
+
+Replay every non-dead-lettered key:
+
+```bash
+python3 -m apps.cli.db.d1_recovery replay --all
+```
+
+Compact replayed work:
+
+```bash
+python3 -m apps.cli.db.d1_recovery compact
+```
+
+### Startup Replay
+
+`D1_STARTUP_REPLAY_ENABLED=1` drains non-dead-lettered recovery work when the process first opens a D1 or Dual connection. Automatic startup replay is bounded by [`D1_STARTUP_REPLAY_MAX_ORDERING_KEYS=25`](../../../../javdb/storage/db/_db_connection.py#L108) and [`D1_STARTUP_REPLAY_MAX_EVENTS_PER_KEY=100`](../../../../javdb/storage/db/_db_connection.py#L109) in `javdb/storage/db/_db_connection.py` (`_STARTUP_REPLAY_MAX_ORDERING_KEYS_DEFAULT` / `_STARTUP_REPLAY_MAX_EVENTS_PER_KEY_DEFAULT`). The same behavior can be run manually:
+
+```bash
+python3 -m apps.cli.db.d1_recovery startup-drain
+```
+
+Startup replay is opt-in and bounded by the recovery outbox state. If replay sends an event to `dead_lettered`, leave the workflow stopped, inspect the ordering key, and repair or abandon that event before retrying the session commit.
 
 ## Strategy summary (Pending only)
 

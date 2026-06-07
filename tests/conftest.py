@@ -2,11 +2,17 @@
 Pytest configuration and fixtures for JAVDB AutoSpider tests.
 """
 import os
+from pathlib import Path
+import sqlite3
 import sys
 
 # Add project root to path for imports
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
+_PROJECT_ROOT = Path(project_root)
+_ACQUISITION_OUTCOME_MIGRATION = (
+    _PROJECT_ROOT / "javdb" / "migrations" / "d1" / "2026_05_29_add_acquisition_outcome.sql"
+)
 
 # Mock pikpakapi before any other imports to avoid Python 3.9 compatibility issues
 # The pikpakapi library uses `from types import NoneType` which is only available in Python 3.10+
@@ -33,6 +39,33 @@ import javdb.storage.db._db_rollback as _db_rollback_mod
 import javdb.storage.db._db_stats as _db_stats_mod
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _disable_git_side_effects():
+    """Prevent the test suite from mutating the real repo's git state.
+
+    ``javdb.infra.git_helper.git_commit_and_push`` writes ``git config
+    user.name/email`` (local) and creates commits/pushes. Tests that exercise it
+    — directly, or by spawning pipeline CLI subprocesses that auto-commit
+    logs/reports — would otherwise overwrite the developer's local git identity
+    (to the ``config.py`` placeholder) and leave stray ``Auto-commit`` commits on
+    the working branch.
+
+    Setting the env var in ``os.environ`` (not via monkeypatch) ensures it is
+    inherited by subprocesses spawned during tests (``subprocess.Popen`` in
+    ``javdb/pipeline/step_runner.py`` passes no ``env=``, so it inherits the
+    parent environment). Tests that genuinely exercise ``git_commit_and_push``
+    (with mocked ``subprocess.run``) opt out by deleting the var — see
+    ``tests/unit/test_git_helper.py``.
+    """
+    prior = os.environ.get("JAVDB_DISABLE_GIT_SIDE_EFFECTS")
+    os.environ["JAVDB_DISABLE_GIT_SIDE_EFFECTS"] = "1"
+    yield
+    if prior is None:
+        os.environ.pop("JAVDB_DISABLE_GIT_SIDE_EFFECTS", None)
+    else:
+        os.environ["JAVDB_DISABLE_GIT_SIDE_EFFECTS"] = prior
+
+
 @pytest.fixture(autouse=True)
 def _isolate_sqlite(tmp_path):
     """Give every test a fresh, empty SQLite database.
@@ -50,6 +83,10 @@ def _isolate_sqlite(tmp_path):
     orig_history = _db_conn_mod.HISTORY_DB_PATH
     orig_reports = _db_conn_mod.REPORTS_DB_PATH
     orig_operations = _db_conn_mod.OPERATIONS_DB_PATH
+    orig_migrations_db_path = _db_migrations_mod.DB_PATH
+    orig_migrations_history = _db_migrations_mod.HISTORY_DB_PATH
+    orig_migrations_reports = _db_migrations_mod.REPORTS_DB_PATH
+    orig_migrations_operations = _db_migrations_mod.OPERATIONS_DB_PATH
     orig_override = _cfg_mod._storage_mode_override
     orig_storage_backend = os.environ.get("STORAGE_BACKEND")
 
@@ -65,6 +102,10 @@ def _isolate_sqlite(tmp_path):
     _db_conn_mod.HISTORY_DB_PATH = test_db
     _db_conn_mod.REPORTS_DB_PATH = test_db
     _db_conn_mod.OPERATIONS_DB_PATH = test_db
+    _db_migrations_mod.DB_PATH = test_db
+    _db_migrations_mod.HISTORY_DB_PATH = test_db
+    _db_migrations_mod.REPORTS_DB_PATH = test_db
+    _db_migrations_mod.OPERATIONS_DB_PATH = test_db
 
     # Also patch package-level re-exports so callers using
     # ``from javdb.storage.db import HISTORY_DB_PATH`` see the test path.
@@ -98,6 +139,10 @@ def _isolate_sqlite(tmp_path):
     _db_conn_mod.HISTORY_DB_PATH = orig_conn_history
     _db_conn_mod.REPORTS_DB_PATH = orig_conn_reports
     _db_conn_mod.OPERATIONS_DB_PATH = orig_conn_operations
+    _db_migrations_mod.DB_PATH = orig_migrations_db_path
+    _db_migrations_mod.HISTORY_DB_PATH = orig_migrations_history
+    _db_migrations_mod.REPORTS_DB_PATH = orig_migrations_reports
+    _db_migrations_mod.OPERATIONS_DB_PATH = orig_migrations_operations
     _db_pkg.DB_PATH = orig_db_path
     _db_pkg.HISTORY_DB_PATH = orig_conn_history
     _db_pkg.REPORTS_DB_PATH = orig_conn_reports
@@ -131,6 +176,26 @@ def storage_mode_duo(monkeypatch):
     monkeypatch.setattr(_cfg_mod, 'storage_mode', lambda: 'duo')
     monkeypatch.setattr(_cfg_mod, 'use_sqlite', lambda: True)
     monkeypatch.setattr(_cfg_mod, 'use_csv', lambda: True)
+
+
+@pytest.fixture
+def acquisition_outcome_conn():
+    """Create an in-memory AcquisitionOutcome schema from the D1 migration."""
+    conn = sqlite3.connect(":memory:")
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.executescript(_ACQUISITION_OUTCOME_MIGRATION.read_text(encoding="utf-8"))
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+@pytest.fixture
+def acquisition_outcome_repo(acquisition_outcome_conn):
+    """Return an AcquisitionOutcomeRepo backed by the canonical test schema."""
+    from javdb.storage.repos.acquisition_outcome_repo import AcquisitionOutcomeRepo
+
+    return AcquisitionOutcomeRepo(acquisition_outcome_conn)
 
 
 @pytest.fixture

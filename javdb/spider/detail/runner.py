@@ -3,25 +3,26 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from threading import Event
 from typing import List, Optional, Set, Tuple
 from urllib.parse import urljoin
 
 from javdb.infra.logging import get_logger
 from javdb.infra.config import use_sqlite
-from javdb.storage.db import get_active_session_id
+from javdb.storage.db import get_active_session_id, get_db, REPORTS_DB_PATH
 from javdb.storage.history_manager import (
     save_parsed_movie_to_history,
     batch_update_last_visited,
 )
+from javdb.storage.repos.content_filter_repo import ContentFilterRepo
 from javdb.storage.repos.history_repo import HistoryRepo
+from javdb.storage.repos.metadata_repo import MetadataRepo
 from javdb.infra.csv_writer import write_csv
 from javdb.proxy.coordinator.movie_claim_client import (
     DEFAULT_CLAIM_TTL_MS,
     MovieClaimUnavailable,
     current_shard_date,
 )
-from javdb.spider.magnet_extractor import extract_magnets
-
 import javdb.spider.runtime.state as state
 from javdb.pipeline.models import ParsedMovie
 from javdb.pipeline.planner import build_spider_ingestion_plan
@@ -30,7 +31,9 @@ from javdb.pipeline.policies import (
     should_skip_recent_today_release,
     should_skip_recent_yesterday_release,
 )
+from javdb.spider.services.content_filter import Rule, evaluate
 from javdb.spider.services.dedup import (
+    DedupRecord,
     should_skip_from_rclone,
     append_dedup_record,
 )
@@ -41,12 +44,86 @@ from javdb.spider.runtime.config import BASE_URL
 logger = get_logger(__name__)
 
 
+def _dedup_record_field(record: object, *names: str) -> str:
+    for name in names:
+        if isinstance(record, dict) and name in record:
+            return str(record.get(name) or "")
+        value = getattr(record, name, None)
+        if value is not None:
+            return str(value)
+    return ""
+
+
+def _dedup_log_variant_label(record: DedupRecord | object) -> str:
+    """Return a compact variant label for DEDUP operator logs."""
+    sensor = _dedup_record_field(
+        record, "existing_sensor", "ExistingSensor",
+    ).strip()
+    subtitle = _dedup_record_field(
+        record, "existing_subtitle", "ExistingSubtitle",
+    ).strip()
+    if sensor and subtitle:
+        return f"{sensor}-{subtitle}"
+    return sensor or subtitle or "unknown"
+
+
+def _load_content_filter_rules() -> list[Rule]:
+    with get_db(REPORTS_DB_PATH) as conn:
+        return ContentFilterRepo(conn).load_rules()
+
+
+def load_content_filter_rules() -> list[Rule]:
+    """Load content filter rules for public callers."""
+    try:
+        return _load_content_filter_rules()
+    except Exception:
+        logger.info(
+            "Content filter rules unavailable; continuing without filtering",
+            exc_info=True,
+        )
+        return []
+
+
+def _resolve_runtime(runtime=None):
+    return runtime or state.get_active_runtime()
+
+
+def _detail_state(runtime=None):
+    runtime = _resolve_runtime(runtime)
+    if runtime is not None:
+        return runtime.detail
+    return state.get_legacy_detail_context()
+
+
+def _movie_claim_client(runtime=None):
+    runtime = _resolve_runtime(runtime)
+    if runtime is None:
+        return state.get_legacy_movie_claim_client()
+    return runtime.movie_claim.client_public
+
+
+def _work_distributor_client(runtime=None):
+    runtime = _resolve_runtime(runtime)
+    if runtime is None:
+        return state.get_legacy_work_distributor_client()
+    return runtime.services.work_distributor_client
+
+
+def _holder_id(runtime=None) -> str:
+    runtime = _resolve_runtime(runtime)
+    if runtime is not None:
+        return runtime.runner_registry.holder_id
+    return state.get_legacy_runtime_holder_id()
+
+
 def _claim_detail_candidates(
     candidates: List["DetailEntryCandidate"],
+    *,
+    runtime=None,
 ) -> Tuple[List["DetailEntryCandidate"], int, int, Optional[str], Set[str]]:
     """Acquire MovieClaim leases for *candidates* before submitting fetches.
 
-    P1-B integration point: when ``state.global_movie_claim_client`` is
+    P1-B integration point: when the runtime movie-claim client is
     configured, every candidate is run through ``claim_movie`` so peer
     runners observe one of the three exhaustive outcomes from
     :class:`ClaimResult`:
@@ -58,7 +135,7 @@ def _claim_detail_candidates(
     2. ``acquired=False, already_completed=True`` → another runner has
        already finished the href in this shard.  Drop locally, count as
        skipped (so the phase report stays accurate) and add to
-       :data:`state.parsed_links` to short-circuit subsequent same-run
+       the runtime parsed-links set to short-circuit subsequent same-run
        calls.
     3. ``acquired=False, already_completed=False`` → another runner is
        *currently* working on it.  Drop locally and skip (the back-off is
@@ -80,12 +157,14 @@ def _claim_detail_candidates(
         hrefs that returned ``acquired=True``.  The same ``shard_date``
         MUST be passed back to ``complete``/``release`` for symmetric ops.
     """
-    client = state.global_movie_claim_client
+    runtime = _resolve_runtime(runtime)
+    detail_ctx = _detail_state(runtime)
+    client = _movie_claim_client(runtime)
     if client is None or not candidates:
         return list(candidates), 0, 0, None, set()
 
     shard_date = current_shard_date()
-    holder = state.runtime_holder_id
+    holder = _holder_id(runtime)
     # Phase-1 — thread the active ReportSessions.Id through every claim
     # call so the DO can scope ``staged_complete`` skips to the same
     # session.  Falls back to an empty string when the session context
@@ -135,7 +214,7 @@ def _claim_detail_candidates(
                 shard_date,
             )
             skipped_completed += 1
-            state.parsed_links.add(candidate.href)
+            detail_ctx.parsed_links.add(candidate.href)
             continue
         # acquired=False, already_completed=False → live contention
         logger.info(
@@ -150,13 +229,18 @@ def _claim_detail_candidates(
     return kept, skipped_completed, skipped_contention, shard_date, leased
 
 
-def _release_movie_claim(href: str, shard_date: Optional[str]) -> None:
+def _release_movie_claim(
+    href: str,
+    shard_date: Optional[str],
+    *,
+    runtime=None,
+) -> None:
     """Best-effort release of a MovieClaim lease.  Never raises."""
-    client = state.global_movie_claim_client
+    client = _movie_claim_client(runtime)
     if client is None or shard_date is None or not href:
         return
     try:
-        client.release(href, state.runtime_holder_id, date=shard_date)
+        client.release(href, _holder_id(runtime), date=shard_date)
     except MovieClaimUnavailable:
         logger.debug("MovieClaim release unavailable for %s — ignoring", href)
     except Exception:  # noqa: BLE001
@@ -167,6 +251,8 @@ def _stage_complete_movie_claim(
     href: str,
     shard_date: Optional[str],
     session_id: str,
+    *,
+    runtime=None,
 ) -> bool:
     """Best-effort Phase-1 stage of a successful detail fetch.
 
@@ -196,7 +282,7 @@ def _stage_complete_movie_claim(
     path commits the href immediately; rollback safety only applies in
     the new staged path.
     """
-    client = state.global_movie_claim_client
+    client = _movie_claim_client(runtime)
     if client is None or shard_date is None or not href:
         return False
     if not session_id:
@@ -206,7 +292,7 @@ def _stage_complete_movie_claim(
         # need it.
         try:
             result = client.complete(
-                href, state.runtime_holder_id, date=shard_date,
+                href, _holder_id(runtime), date=shard_date,
             )
         except MovieClaimUnavailable:
             logger.debug(
@@ -225,7 +311,7 @@ def _stage_complete_movie_claim(
     try:
         result = client.stage_complete(
             href,
-            state.runtime_holder_id,
+            _holder_id(runtime),
             session_id,
             date=shard_date,
         )
@@ -274,6 +360,7 @@ def _report_movie_claim_failure(
     shard_date: Optional[str],
     *,
     error_kind: str = "",
+    runtime=None,
 ) -> bool:
     """Best-effort P2-A failure report for a MovieClaim lease.
 
@@ -288,13 +375,13 @@ def _report_movie_claim_failure(
     the DO already released the lease); ``False`` when the caller
     should fall back to a plain ``release`` call.  Never raises.
     """
-    client = state.global_movie_claim_client
+    client = _movie_claim_client(runtime)
     if client is None or shard_date is None or not href:
         return False
     try:
         client.report_failure(
             href,
-            state.runtime_holder_id,
+            _holder_id(runtime),
             error_kind=error_kind or "",
             date=shard_date,
         )
@@ -337,6 +424,7 @@ class DetailPersistOutcome:
 
 def process_detail_entries(
     *,
+    runtime=None,
     backend: FetchBackend,
     entries: List[dict],
     phase: int,
@@ -355,13 +443,21 @@ def process_detail_entries(
     redownload_threshold: float = 0.30,
     include_recent_release_filters: bool = False,
     log_duplicate_skips: bool = False,
+    cancel_event: Event | None = None,
+    content_filter_rules: Optional[list[Rule]] = None,
 ) -> dict:
     """Run the shared detail pipeline against a concrete fetch backend."""
+    runtime = _resolve_runtime(runtime)
+    holder_id = _holder_id(runtime)
 
     total_entries = len(entries)
+    if cancel_event is not None and cancel_event.is_set():
+        logger.info("Phase %d detail processing cancelled before dispatch", phase)
+        raise SystemExit(124)
 
     prepared_entries, skipped_history = prepare_detail_entries(
         entries,
+        runtime=runtime,
         history_data=history_data,
         is_adhoc_mode=is_adhoc_mode,
         rclone_inventory=rclone_inventory,
@@ -371,6 +467,8 @@ def process_detail_entries(
         include_recent_release_filters=include_recent_release_filters,
         log_duplicate_skips=log_duplicate_skips,
     )
+    if content_filter_rules is None:
+        content_filter_rules = load_content_filter_rules()
 
     # P1-B: filter through the cross-runner MovieClaim mutex.  Returns the
     # candidates this runner won the lease on; peer-completed and
@@ -383,7 +481,7 @@ def process_detail_entries(
         skipped_contention,
         shard_date,
         leased_hrefs,
-    ) = _claim_detail_candidates(prepared_entries)
+    ) = _claim_detail_candidates(prepared_entries, runtime=runtime)
     # Phase-1 — capture the active ReportSessions.Id once at the top so
     # every ``stage_complete`` call below carries the same session
     # affinity.  Empty string when no DB session is active (dry-runs,
@@ -418,7 +516,7 @@ def process_detail_entries(
     #
     # When the queue is disabled (default), the existing local-loop
     # dispatch path runs unchanged — zero behavioural drift.
-    work_client = state.global_work_distributor_client
+    work_client = _work_distributor_client(runtime)
     queue_held_hrefs: Set[str] = set()
     # Gate the entire producer + consumer path on `prepared_entries`:
     # an empty survivor list means there's nothing to enqueue AND we
@@ -446,12 +544,15 @@ def process_detail_entries(
     if work_client is not None:
         # Consumer path: pull from queue and dispatch only the items
         # this runner is allowed to process (each item carries a
-        # visibility lease tied to ``state.runtime_holder_id``).
+        # visibility lease tied to the runtime holder id).
         prepared_by_href = {c.href: c for c in prepared_entries}
-        holder_id = state.runtime_holder_id
         pull_batch_size = max(10, min(50, len(prepared_entries) or 10))
         try:
             while True:
+                if cancel_event is not None and cancel_event.is_set():
+                    logger.info("Phase %d detail queue pull cancelled", phase)
+                    raise SystemExit(124)
+
                 pull = work_client.pull(
                     holder_id,
                     max_items=pull_batch_size,
@@ -496,6 +597,10 @@ def process_detail_entries(
     # Local-dispatch path (default; also the fallback after a queue
     # outage). Skips candidates already dispatched via the queue.
     for candidate in prepared_entries:
+        if cancel_event is not None and cancel_event.is_set():
+            logger.info("Phase %d detail dispatch cancelled", phase)
+            raise SystemExit(124)
+
         if candidate.href in queue_held_hrefs:
             continue
         detail_url = urljoin(BASE_URL, candidate.href)
@@ -546,6 +651,10 @@ def process_detail_entries(
 
     try:
         for result in backend.results():
+            if cancel_event is not None and cancel_event.is_set():
+                logger.info("Phase %d detail result collection cancelled", phase)
+                raise SystemExit(124)
+
             entry = result.task.meta['entry']
             href = entry['href']
             page_num = entry['page']
@@ -578,9 +687,9 @@ def process_detail_entries(
                 if href in held_claims:
                     error_kind = _classify_fetch_error_kind(result.error)
                     if not _report_movie_claim_failure(
-                        href, shard_date, error_kind=error_kind
+                        href, shard_date, error_kind=error_kind, runtime=runtime,
                     ):
-                        _release_movie_claim(href, shard_date)
+                        _release_movie_claim(href, shard_date, runtime=runtime)
                     held_claims.discard(href)
                 # W5.2 — failed task → release queue lease so a peer
                 # (or this runner on retry) can re-pull. We deliberately
@@ -588,7 +697,7 @@ def process_detail_entries(
                 # treats released items as still-pending.
                 if href in queue_held_hrefs and work_client is not None:
                     try:
-                        work_client.release(state.runtime_holder_id, [href])
+                        work_client.release(holder_id, [href])
                     except Exception:  # noqa: BLE001 — fail-open
                         logger.debug(
                             "WorkDistributor release(%s) failed", href,
@@ -609,7 +718,39 @@ def process_detail_entries(
             logger.info(f"[{idx_str}] {worker_tag}Parsed {entry.get('video_code', '')}{cf_tag}")
 
             data = result.data or {}
-            magnet_links = extract_magnets(data['magnets'], idx_str)
+            movie_detail = data.get('movie_detail')
+            if content_filter_rules and movie_detail is not None:
+                decision = evaluate(movie_detail, content_filter_rules)
+                if not decision.keep:
+                    logger.info(
+                        "[%s] %s filtered by content rules: %s",
+                        idx_str,
+                        entry.get('video_code', '?'),
+                        '; '.join(decision.reasons) or 'no reasons',
+                    )
+                    if href in held_claims:
+                        _release_movie_claim(href, shard_date, runtime=runtime)
+                        held_claims.discard(href)
+                    if href in queue_held_hrefs and work_client is not None:
+                        try:
+                            work_client.complete(holder_id, [href])
+                        except Exception:  # noqa: BLE001 — fail-open
+                            logger.debug(
+                                "WorkDistributor complete(%s) failed", href,
+                                exc_info=True,
+                            )
+                        queue_held_hrefs.discard(href)
+                    current_runtime_state = backend.runtime_state()
+                    result.acknowledge(
+                        'content_filtered',
+                        runtime_state_changed=(
+                            current_runtime_state != previous_runtime_state
+                        ),
+                    )
+                    previous_runtime_state = current_runtime_state
+                    continue
+
+            magnet_links = data['magnet_links']
             outcome = persist_parsed_detail_result(
                 entry=entry,
                 phase=phase,
@@ -632,6 +773,7 @@ def process_detail_entries(
                 actor_link=data['actor_link'],
                 supporting_actors=data['supporting'],
                 magnet_links=magnet_links,
+                movie_detail=movie_detail,
             )
             skipped_history += outcome.skipped_history
             no_new_torrents += outcome.no_new_torrents
@@ -662,9 +804,9 @@ def process_detail_entries(
             # ``release`` so the slot frees up promptly.
             if href in held_claims:
                 if not _stage_complete_movie_claim(
-                    href, shard_date, _session_id_str,
+                    href, shard_date, _session_id_str, runtime=runtime,
                 ):
-                    _release_movie_claim(href, shard_date)
+                    _release_movie_claim(href, shard_date, runtime=runtime)
                 held_claims.discard(href)
 
             # W5.2 — successful task → mark the queue item complete so
@@ -673,7 +815,7 @@ def process_detail_entries(
             # timeout (30 min, set at pull time) is the safety net.
             if href in queue_held_hrefs and work_client is not None:
                 try:
-                    work_client.complete(state.runtime_holder_id, [href])
+                    work_client.complete(holder_id, [href])
                 except Exception:  # noqa: BLE001 — fail-open
                     logger.debug(
                         "WorkDistributor complete(%s) failed", href,
@@ -697,14 +839,14 @@ def process_detail_entries(
         # alarm will eventually mop up either way, but a prompt release
         # tightens the recovery window from minutes to milliseconds.
         for stuck_href in list(held_claims):
-            _release_movie_claim(stuck_href, shard_date)
+            _release_movie_claim(stuck_href, shard_date, runtime=runtime)
         held_claims.clear()
         # W5.2 — same recovery for queue leases. Releasing all at once
         # in a single API call keeps shutdown latency bounded.
         if queue_held_hrefs and work_client is not None:
             try:
                 work_client.release(
-                    state.runtime_holder_id, list(queue_held_hrefs),
+                    holder_id, list(queue_held_hrefs),
                 )
             except Exception:  # noqa: BLE001 — fail-open on shutdown
                 logger.debug(
@@ -742,6 +884,7 @@ def process_detail_entries(
 def prepare_detail_entries(
     entries: List[dict],
     *,
+    runtime=None,
     history_data: dict,
     is_adhoc_mode: bool,
     rclone_inventory: Optional[dict] = None,
@@ -752,6 +895,8 @@ def prepare_detail_entries(
     log_duplicate_skips: bool = False,
 ) -> tuple[List[DetailEntryCandidate], int]:
     """Filter raw entries into detail-page candidates for fetching."""
+    runtime = _resolve_runtime(runtime)
+    detail_ctx = _detail_state(runtime)
 
     total_entries = len(entries)
     prepared: List[DetailEntryCandidate] = []
@@ -762,7 +907,7 @@ def prepare_detail_entries(
         href = entry['href']
         page_num = entry['page']
 
-        if href in state.parsed_links or href in local_parsed_links:
+        if href in detail_ctx.parsed_links or href in local_parsed_links:
             if log_duplicate_skips:
                 logger.info(
                     f"[{i}/{total_entries}] [Page {page_num}] "
@@ -860,7 +1005,7 @@ def prepare_detail_entries(
             )
         )
 
-    state.parsed_links.update(local_parsed_links)
+    detail_ctx.parsed_links.update(local_parsed_links)
     return prepared, skipped_history
 
 
@@ -887,6 +1032,7 @@ def persist_parsed_detail_result(
     actor_link: str = '',
     supporting_actors: str = '',
     magnet_links: Optional[dict] = None,
+    movie_detail: Optional[object] = None,
 ) -> DetailPersistOutcome:
     """Build ingestion plan, write outputs, and return outcome metadata."""
 
@@ -952,9 +1098,10 @@ def persist_parsed_detail_result(
         if not dry_run and dedup_csv_path:
             append_dedup_record(dedup_csv_path, rec)
         if entry_index:
+            variant = _dedup_log_variant_label(rec)
             logger.info(
-                f"[{entry_index}] {worker_tag}DEDUP: {rec.video_code} - "
-                f"{rec.deletion_reason}"
+                f"[{entry_index}] {worker_tag}DEDUP: {rec.video_code} "
+                f"[{variant}] - {rec.deletion_reason}"
             )
 
     row = plan.report_row
@@ -986,6 +1133,16 @@ def persist_parsed_detail_result(
                 actor_link=actor_link,
                 supporting_actors=supporting_actors,
             )
+        # ADR-022: persist rich metadata outside the session flow
+        if movie_detail is not None and not dry_run:
+            try:
+                MetadataRepo().upsert(href, movie_detail)
+            except Exception:
+                logger.debug(
+                    "MovieMetadata upsert failed for %s — will retry on next scrape",
+                    href,
+                    exc_info=True,
+                )
         return outcome
 
     outcome.status = 'not_included'

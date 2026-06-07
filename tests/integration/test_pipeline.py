@@ -12,9 +12,9 @@ from zoneinfo import ZoneInfo
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-# Import functions from email_notification script
-import apps.cli.notify.email as email_notification
-from apps.cli.notify.email import (
+# Import functions from the notify email package, by responsibility (ADR-015 Phase 6).
+import javdb.integrations.notify.email.log_analysis as email_notification
+from javdb.integrations.notify.email.log_analysis import (
     analyze_spider_log,
     analyze_uploader_log,
     analyze_pikpak_log,
@@ -23,9 +23,11 @@ from apps.cli.notify.email import (
     extract_spider_statistics,
     extract_uploader_statistics,
     extract_pikpak_statistics,
+    _extract_last_dedup_executor_run,
+)
+from javdb.integrations.notify.email.report_builder import (
     format_email_report,
     get_report_display_datetime,
-    _extract_last_dedup_executor_run,
 )
 
 # Import mask_sensitive_info from git_helper (it's now the canonical location)
@@ -315,6 +317,21 @@ class TestExtractSpiderStatistics:
         assert stats['overall']['skipped_history'] == 4
         assert stats['overall']['no_new_torrents'] == 1
         assert stats['overall']['failed'] == 2
+
+    def test_statistics_extraction_derives_overall_from_phase_completion(self, temp_dir):
+        """Derive overall stats when spider log has phase summaries but no legacy overall lines."""
+        log_path = os.path.join(temp_dir, 'spider.log')
+        with open(log_path, 'w') as f:
+            f.write("Phase 1 completed: 33 movies discovered, 12 processed, 21 skipped (history), 0 no new torrents, 0 failed\n")
+            f.write("Phase 2 completed: 40 movies discovered, 17 processed, 22 skipped (history), 1 no new torrents, 0 failed\n")
+
+        stats = extract_spider_statistics(log_path)
+
+        assert stats['overall']['total_discovered'] == 73
+        assert stats['overall']['successfully_processed'] == 29
+        assert stats['overall']['skipped_history'] == 43
+        assert stats['overall']['no_new_torrents'] == 1
+        assert stats['overall']['failed'] == 0
     
     def test_statistics_extraction_old_format(self, temp_dir):
         """Test extracting statistics from spider log (old format for backwards compatibility)."""
@@ -592,7 +609,7 @@ class TestExtractDedupStatistics:
 
     def test_extract_dedup_statistics_filters_items_to_executor_window(self, temp_dir, monkeypatch):
         import javdb.infra.config as config_helper
-        import apps.cli.notify.email as email_notification
+        import javdb.integrations.notify.email.log_analysis as email_notification
 
         monkeypatch.setattr(config_helper, 'use_sqlite', lambda: False)
 

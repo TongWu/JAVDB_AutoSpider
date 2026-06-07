@@ -31,6 +31,12 @@ def parse_arguments():
                         help='Enable history filter for ad-hoc mode (by default, ad-hoc mode ignores history for reading)')
     parser.add_argument('--url', type=str,
                         help='Custom URL to scrape (add ?page=x for pages)')
+    parser.add_argument(
+        '--result-json',
+        type=str,
+        default=None,
+        help='Write a versioned SpiderRunResult JSON sidecar to this path.',
+    )
     parser.add_argument('--phase', choices=['1', '2', 'all'], default='all',
                         help='Which phase to run: 1 (subtitle+today), 2 (today only), all (default)')
     parser.add_argument('--ignore-release-date', action='store_true',
@@ -56,7 +62,7 @@ def parse_arguments():
                         help='Disable all filters (history, rclone inventory, release date) — process every entry from index')
     parser.add_argument('--enable-dedup', action='store_true',
                         help='Enable rclone dedup detection (compare against rclone_inventory.csv)')
-    parser.add_argument('--enable-redownload', action='store_true',
+    parser.add_argument('--enable-redownload', action='store_true', default=None,
                         help='Enable torrent re-download when a same-category torrent is significantly larger')
     parser.add_argument('--redownload-threshold', type=float, default=None,
                         help='Size increase threshold for re-download (default: 0.30 = 30%%)')

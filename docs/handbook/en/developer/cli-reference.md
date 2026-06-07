@@ -20,6 +20,11 @@ python3 -m apps.cli.<command> [options]
 - [Migration CLI](#migration-cli) (`apps.cli.migration`)
 - [Login CLI](#login-cli) (`apps.cli.login`)
 - [Rollback CLI](#rollback-cli) (`apps.cli.rollback`)
+- [Operations Diagnosis CLI](#operations-diagnosis-cli) (`apps.cli.ops.diagnose_run`)
+- [Acquisition Reconcile CLI](#acquisition-reconcile-cli) (`apps.cli.ops.reconcile`)
+- [Content Filter CLI](#content-filter-cli) (`apps.cli.ops.content_filter`)
+- [Event Spine Consumer CLI](#event-spine-consumer-cli) (`apps.cli.ops.events`)
+- [Site-Contract Sentinel CLI](#site-contract-sentinel-cli) (`apps.cli.ops.sentinel`)
 - [Config Generator CLI](#config-generator-cli) (`apps.cli.config_generator`)
 - [Complete Spider Argument Reference](#complete-spider-argument-reference)
 
@@ -286,7 +291,7 @@ python3 -m apps.cli.qb_uploader --mode adhoc --category "Custom Category"
 
 **Module:** `apps.cli.qb_file_filter`
 
-Filters out small files from recently added torrents in qBittorrent. Sets unwanted files (below the size threshold) to "do not download" priority.
+Filters out small files from recently added torrents in qBittorrent. Sets unwanted files (below the size threshold) to "do not download" priority. For newly added torrents, the filter waits up to 90 seconds for qBittorrent metadata before processing so small files can be filtered before they download.
 
 ### Arguments
 
@@ -543,6 +548,252 @@ python3 -m apps.cli.rollback --session-id 42 \
 
 ---
 
+## Operations Diagnosis CLI
+
+**Module:** `apps.cli.ops.diagnose_run`
+
+Collects read-only evidence for a failed workflow run, session, D1 drift check,
+or recovery investigation, then persists an `OpsIncidents` record. The command
+prints a structured summary and is used by `DailyIngestion.yml` and
+`AdHocIngestion.yml` before email notification.
+
+### Arguments
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--run-id` | GitHub Actions run ID to associate with the incident. Required unless `--session-id` is provided. | `None` |
+| `--attempt` | GitHub Actions run attempt. Stored as `run_attempt`. | `None` |
+| `--session-id` | Pipeline session ID in `YYYYMMDDTHHMMSS.ffffffZ-TTTT-SSSS` format. Required unless `--run-id` is provided. | `None` |
+| `--workflow-name` | Workflow name, such as `DailyIngestion`, `AdHocIngestion`, or `TestIngestion`. | `None` |
+| `--workflow-result` | Workflow result. Choices: `success`, `failure`, `cancelled`, `skipped`. | `None` |
+| `--trigger-source` | Diagnosis trigger label, for example `manual_cli` or `workflow_failure`. | `manual_cli` |
+| `--session-status` | Optional session lifecycle status to include as evidence. | `None` |
+| `--drift-verdict` | Optional D1 drift verdict to include as evidence, such as `CLEAN`, `SAFE_TO_APPLY`, or an escalation verdict. | `None` |
+| `--log` | Log file to scan for error snippets. May be repeated. | `[]` |
+| `--json` | Print JSON payload instead of a text summary. | `False` |
+| `--log-level` | Logging level. Choices: `DEBUG`, `INFO`, `WARNING`, `ERROR`. | `INFO` |
+
+Exit code `0` means no known incident type was detected. Exit code `1` means
+a diagnosis was produced for a known incident type. Exit code `2` means the
+required run/session identifier was missing, and `3` means an unexpected
+diagnosis failure occurred.
+
+### Examples
+
+```bash
+# Diagnose a failed workflow run and print JSON for downstream email/API use
+python3 -m apps.cli.ops.diagnose_run \
+  --trigger-source workflow_failure \
+  --run-id 123456789 \
+  --attempt 1 \
+  --session-id 20260527T120000.000000Z-0001-0001 \
+  --workflow-name DailyIngestion \
+  --workflow-result failure \
+  --json \
+  --log logs/pipeline.log \
+  --log logs/spider.log
+
+# Record a clean drift check as evidence without classifying it as D1 drift
+python3 -m apps.cli.ops.diagnose_run \
+  --run-id 123456789 \
+  --drift-verdict CLEAN
+```
+
+---
+
+## Acquisition Reconcile CLI
+
+**Module:** `apps.cli.ops.reconcile`
+
+Reconciles ADR-033 `AcquisitionOutcome` rows against live source state. Phase 1
+uses qBittorrent as the only collector and updates active outcomes from
+`queued` / `downloading` to `downloading`, `completed`, `stalled`, or `failed`.
+Run it with `STORAGE_BACKEND=d1` in production because `AcquisitionOutcome` is
+D1-canonical in the operations database.
+
+### Arguments
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--source` | Source to reconcile. Repeatable. Phase 1 only accepts `qb`. | `qb` |
+| `--category` | qB category to scan. Repeatable. | `TORRENT_CATEGORY`, `TORRENT_CATEGORY_ADHOC` |
+| `--stalled-after-days` | Positive integer. Active outcomes unseen for this many days become `stalled`; after 2x this window they become `failed`. | `RECONCILE_STALLED_DAYS` or `7` |
+| `--dry-run` | Compute transitions but write nothing. | `False` |
+| `--json` | Print a JSON result payload. | `False` |
+| `--log-level` | Logging level. Choices: `DEBUG`, `INFO`, `WARNING`, `ERROR`. | `INFO` |
+
+Exit code `0` means the reconcile pass completed without source or write errors.
+Exit code `2` means the pass completed with recorded errors, and `1` means an
+unexpected CLI failure occurred.
+
+When `--category` is supplied, the run is treated as a partial scan: observed
+hashes can still advance to `downloading` / `completed`, but outcomes absent
+from that subset are not marked `stalled` or `failed`.
+
+### Examples
+
+```bash
+# Production cron path: reconcile D1 using qB observations and print JSON
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --json
+
+# Preview stalled/failed transitions with a wider threshold
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile \
+  --stalled-after-days 14 \
+  --dry-run \
+  --json
+
+# Reconcile only one qB category; absent-state inference is disabled
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile \
+  --category "Daily Ingestion"
+```
+
+---
+
+## Content Filter CLI
+
+**Module:** `apps.cli.ops.content_filter`
+
+Manages ADR-040 content-filter rules in the `ContentFilterRule` table in the
+reports database. The spider loads enabled rules once per run and evaluates
+them after detail parsing, before CSV/report persistence and qBittorrent upload.
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `add` | Add a rule. |
+| `list` | List all rules, including disabled rules. |
+| `remove` | Delete a rule by id. |
+| `enable` | Enable a rule by id, or disable it with `--off`. |
+
+### Supported Rule Shapes
+
+| Dimension | Mode | Value |
+|-----------|------|-------|
+| `actor` | `exclude` | Required: actor name or actor href. |
+| `tag` | `exclude` | Required: tag name. |
+| `tag` | `include` | Required: tag name. At least one include tag must match when include rules exist. |
+| `gender` | `require_lead` | Required: `female` or `male`. |
+| `gender` | `exclude_all_male` | No value; `--value` is rejected. |
+
+### Arguments
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--dimension` | Rule dimension for `add`. Choices: `actor`, `tag`, `gender`. | Required |
+| `--mode` | Rule mode for `add`. Choices: `exclude`, `include`, `require_lead`, `exclude_all_male`. | Required |
+| `--value` | Rule value for `add`: actor name/href, tag name, or lead gender depending on the rule. Required except for `gender exclude_all_male`. | `""` |
+| `--id` | Rule id for `remove` and `enable`. | Required |
+| `--off` | Disable the rule in `enable` instead of enabling it. | `False` |
+| `--log-level` | Logging level. Choices: `DEBUG`, `INFO`, `WARNING`, `ERROR`. | `INFO` |
+
+### Examples
+
+```bash
+# Drop any movie whose actor name or href matches the value
+python3 -m apps.cli.ops.content_filter add \
+  --dimension actor \
+  --mode exclude \
+  --value "/actors/EvkJ"
+
+# Require at least one included tag to be present
+python3 -m apps.cli.ops.content_filter add \
+  --dimension tag \
+  --mode include \
+  --value subtitle
+
+# Require a female lead actor
+python3 -m apps.cli.ops.content_filter add \
+  --dimension gender \
+  --mode require_lead \
+  --value female
+
+# Drop all-male detail pages
+python3 -m apps.cli.ops.content_filter add \
+  --dimension gender \
+  --mode exclude_all_male
+
+# Inspect and manage rules
+python3 -m apps.cli.ops.content_filter list
+python3 -m apps.cli.ops.content_filter enable --id 3 --off
+python3 -m apps.cli.ops.content_filter enable --id 3
+python3 -m apps.cli.ops.content_filter remove --id 3
+```
+
+---
+
+## Event Spine Consumer CLI
+
+**Module:** `apps.cli.ops.events`
+
+Runs the ADR-036 event-spine demonstrator consumer. It reads new `PipelineEvent`
+rows by cursor and projects per-session, per-event-type counts into the
+`RunEventSummary` table (both in the `javdb-reports` DB). This is the Phase 1
+proof of the emit → consume → replay loop; it does not touch the authoritative
+`pending→commit` path.
+
+### Arguments
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--replay` | Reset the consumer cursor and clear the projection, then rebuild it from `seq` 0. | `False` |
+| `--batch` | Number of events to read per `read_since` page. Must be `>= 1`. | `500` |
+| `--log-level` | Logging level. Choices: `DEBUG`, `INFO`, `WARNING`, `ERROR`. | `INFO` |
+
+Exit code is always `0` on a clean run; the number of projected events is logged.
+
+### Examples
+
+```bash
+# Project any new events into RunEventSummary (advances the cursor)
+python3 -m apps.cli.ops.events
+
+# Rebuild the projection from scratch (idempotent — same result)
+python3 -m apps.cli.ops.events --replay
+```
+
+---
+
+## Site-Contract Sentinel CLI
+
+**Module:** `apps.cli.ops.sentinel`
+
+Evaluates a session's persisted parse field-health for site-contract drift
+(ADR-035). It reads the `ParseRunFieldFill` rows recorded during the run and
+scores each field against the declarative parse contract: `critical` fields are
+checked against an absolute minimum fill-rate, `soft` fields against their
+rolling baseline. The command is read-only and exits with code `4` when critical
+drift is detected, so a workflow can gate on it.
+
+### Arguments
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--session-id` | Pipeline session ID in `YYYYMMDDTHHMMSS.ffffffZ-TTTT-SSSS` format whose field-health to evaluate. Required. | — |
+| `--run-id` | GitHub Actions run ID to associate with the evaluation. | `None` |
+| `--attempt` | GitHub Actions run attempt. Stored as `run_attempt`. | `None` |
+| `--json` | Print the verdict as a JSON payload instead of a log summary. | `False` |
+| `--log-level` | Logging level. Choices: `DEBUG`, `INFO`, `WARNING`, `ERROR`. | `INFO` |
+
+Exit code `4` means critical drift was detected for the session; otherwise the
+exit code is `0`.
+
+### Examples
+
+```bash
+# Evaluate a session's field-health and log the verdict
+python3 -m apps.cli.ops.sentinel --session-id 20260527T120000.000000Z-0001-0001
+
+# Print the verdict as JSON for downstream email/API use
+python3 -m apps.cli.ops.sentinel \
+  --session-id 20260527T120000.000000Z-0001-0001 \
+  --run-id 123456789 \
+  --attempt 1 \
+  --json
+```
+
+---
+
 ## Config Generator CLI
 
 **Module:** `apps.cli.config_generator`
@@ -592,6 +843,6 @@ All arguments accepted by `apps.cli.spider`:
 | `--no-rclone-filter` | flag | Disable rclone inventory filter (do not skip entries already in rclone inventory) | `False` | `--no-rclone-filter` |
 | `--disable-all-filters` | flag | Disable all filters (history, rclone inventory, release date) -- process every entry from index | `False` | `--disable-all-filters` |
 | `--enable-dedup` | flag | Enable rclone dedup detection (compare against rclone inventory) | `False` | `--enable-dedup` |
-| `--enable-redownload` | flag | Enable torrent re-download when a same-category torrent is significantly larger | `False` | `--enable-redownload` |
+| `--enable-redownload` | flag | Enable torrent re-download when a same-category torrent is significantly larger | `ENABLE_REDOWNLOAD` config | `--enable-redownload` |
 | `--redownload-threshold` | float | Size increase threshold for re-download (0.30 = 30%) | `0.30` | `--redownload-threshold 0.50` |
 | `--from-pipeline` | flag | Internal: running from pipeline (uses GIT_USERNAME for commits) | `False` | `--from-pipeline` |

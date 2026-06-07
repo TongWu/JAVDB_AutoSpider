@@ -5,7 +5,7 @@
 **决策者**: 架构深化第二轮
 **前置**: [ADR-006](../ADR-006-Pending-Mode-Rollout/ADR-006-pending-mode-default-rollout.md) — 必须先把 Pending Mode 默认推到 100% + 重设计 auto-fallback，本 ADR 才能执行 D10 gate
 **后继关系**: [ADR-001](../ADR-001-Split-Db-Module/ADR-001-split-db-module.md) — 完成其未交付的 Phase 3，并修正其"按读/写拆分"的过细决策
-**相关**: [ADR-011](../../ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) 取代 D4 / PR-6 的 parser helper relocation
+**相关**: [ADR-011](../ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) 取代 D4 / PR-6 的 parser helper relocation
 
 ## 待办 (Outstanding Work)
 
@@ -16,7 +16,7 @@ PR-1（Repo 类）✅ 已交付：`HistoryRepo`、`OperationsRepo`、`StatsRepo`
 - **PR-4** ✅ 已交付（2026-05-22）：删除 Audit Mode 表并移除 audit 写入 / rollback 分支。
 - **PR-5** ✅ 已交付（2026-05-22）：删除 `javdb/storage/db/db.py`；ADR-001 拆出的模块已成为 canonical implementation modules，不再是空壳 facade。
 - **PR-6** ✅ 已交付（2026-05-22）：9 个 shell 模块重命名为 `_db_*.py`；`__init__.py` 再导出 65 个公共符号；254 条导入语句迁移至包级导入。
-- **Parser helper relocation** 仍在 ADR-005 之外，由 [ADR-011](../../ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) 追踪。ADR-005 已无剩余实施工作。
+- **Parser helper relocation** 仍在 ADR-005 之外，由 [ADR-011](../ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) 追踪。ADR-005 已无剩余实施工作。
 
 ## 修订记录 (Amendments)
 
@@ -53,7 +53,7 @@ PR-1（Repo 类）✅ 已交付：`HistoryRepo`、`OperationsRepo`、`StatsRepo`
 
   D6 的"四类"计划变为"三个新写域 Repo 类 + 复用 SessionsRepo"。其余 D 级决策不变。
 
-- **2026-05-20 amendment 3**：**Parser helper relocation 抽出到 ADR-011。** D4 / PR-6 原本只迁移 `apps.api.parsers.common` 的三个 helper，但这与更完整的 parsing boundary 修正重叠。[ADR-011](../../ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) 现在负责把完整 JavDB Parsing Interface 迁到 `javdb.parsing`，包括把这些 helper 放到 `javdb.parsing.common`。ADR-005 只继续负责 Storage/Repo 退役工作。后续 ADR-005 实施如需这些 helper，应在 ADR-011 Phase 1 落地后从 `javdb.parsing.common` import。
+- **2026-05-20 amendment 3**：**Parser helper relocation 抽出到 ADR-011。** D4 / PR-6 原本只迁移 `apps.api.parsers.common` 的三个 helper，但这与更完整的 parsing boundary 修正重叠。[ADR-011](../ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) 现在负责把完整 JavDB Parsing Interface 迁到 `javdb.parsing`，包括把这些 helper 放到 `javdb.parsing.common`。ADR-005 只继续负责 Storage/Repo 退役工作。后续 ADR-005 实施如需这些 helper，应在 ADR-011 Phase 1 落地后从 `javdb.parsing.common` import。
 
 - **2026-05-21 amendment 4**：**ADR-006 sign-off 以 operator-approved 7-day clean bake bypass 完成。** 原计划要求 30 天 bake 至约 2026-06-15；维护者确认当前已连续一周无 pending-mode 问题，并明确要求 bypass 剩余期限继续推进。由此解除 ADR-005 PR-2 起始阻塞。风险处置不变：PR-2 仍不得删除 audit schema / audit code / caller compatibility；PR-4 前仍需重新运行 D10 三项核查。
 
@@ -62,6 +62,8 @@ PR-1（Repo 类）✅ 已交付：`HistoryRepo`、`OperationsRepo`、`StatsRepo`
 - **2026-05-22 amendment 6**：**D10 gate sign-off —— PR-4 已解锁。** BakeCheck.yml 连续 4 天（2026-05-18 至 2026-05-21）报告 D10 三项指标全部通过。Operator 于 2026-05-22 批准推进 PR-4，尽管 workflow audit 选项移除仅 6 天（距 D10 #3 文本要求的 7 天差 1 天），因为功能证据——零 audit session、零孤儿行、连续 6 次 DailyIngestion 成功运行——证明该风险不存在。PR-4（删除 audit 表 + 移除 audit 代码）和 PR-5（删除 `db.py`）现已解锁。
 
 - **2026-05-22 amendment 7**：**PR-4 与 PR-5 已交付。** Audit Mode 已完全退役：audit 表、audit archive/cleanup 工具、audit 写入/rollback 分支均已移除。`javdb/storage/db/db.py` 已删除。原 ADR-001 拆出的模块（`db_history_read.py`、`db_history_write.py`、`db_stats.py` 等）已不再是空壳模块；它们现在承载 low-level implementation，并通过 `javdb/storage/db/__init__.py` 的包级 public API 暴露。
+
+- **2026-05-29 amendment 8**：**amendment-2 的"全局已消除"声明不完整；补完工作记于 [ADR-032](../../ADR-032-Mandatory-Session-Binding/ADR-032-mandatory-session-binding.md)。** amendment-2 断言 D5 目标（消除 `db_session._active` 全局）已由 per-method `session_id` 满足。实际上 `_SESSION_ID_SENTINEL` 全局回退仍存活于 `_db_operations.py`（~10 个函数）与两个 `_db_history_write.py` batch 函数，故部分写入仍无声回退到全局。ADR-032 补完该目标（使 `session_id` 必填）并整合 `db_*` / Repo 双接口。per-method 绑定保留；构造时绑定仍被拒。
 
 ---
 
@@ -166,7 +168,7 @@ class HistoryRepo:
 
 ### D4：URL/解析工具下沉
 
-由 [ADR-011](../../ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) 取代。`apps.api.parsers.common` 中被 `db.py` 使用的 3 个函数（`movie_href_lookup_values`、`javdb_absolute_url`、`absolutize_supporting_actors_json`）现在属于完整 JavDB Parsing Interface 迁移的一部分。它们迁到 `javdb.parsing.common`，而不是 `packages/python/javdb_core/url_utils.py`。
+由 [ADR-011](../ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) 取代。`apps.api.parsers.common` 中被 `db.py` 使用的 3 个函数（`movie_href_lookup_values`、`javdb_absolute_url`、`absolutize_supporting_actors_json`）现在属于完整 JavDB Parsing Interface 迁移的一部分。它们迁到 `javdb.parsing.common`，而不是 `packages/python/javdb_core/url_utils.py`。
 
 分层不变量仍然成立：Storage/Repo 代码不得从 `apps.api` import parser helper。ADR-011 Phase 1 之后，应从 `javdb.parsing.common` import。
 

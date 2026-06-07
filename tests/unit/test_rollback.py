@@ -94,6 +94,30 @@ class TestSessionStatusLifecycle:
             ).fetchone()
         assert row["Status"] == "failed"
 
+    def test_transition_committed_to_failed_blocked_against_real_db(self):
+        """Bug-fix proof (ADR-019): the committed→failed corruption edge is
+        now refused end-to-end against a real ReportSessions row.
+
+        Before SessionLifecycle centralised legality, the loose
+        ``db_mark_session_failed`` SQL ``WHERE`` clause would silently flip a
+        successfully committed session to ``failed``. Routing every status
+        write through :func:`transition` makes that edge raise.
+        """
+        from javdb.storage.sessions.lifecycle import (
+            transition,
+            IllegalTransition,
+        )
+
+        sid = _create_session(status="committed")
+        with pytest.raises(IllegalTransition):
+            transition(sid, "failed")
+        # The committed row is untouched — no silent corruption.
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT Status FROM ReportSessions WHERE Id=?", (sid,)
+            ).fetchone()
+        assert row["Status"] == "committed"
+
 
 # ── In-progress lookup ───────────────────────────────────────────────────
 
@@ -514,13 +538,14 @@ class TestRcloneStagingSwap:
         # the swap actually replaces it.
         db_replace_rclone_inventory(
             [self._entry("OLD-001", "/old/a")],
+            session_id=None,
         )
         with get_db() as conn:
             assert conn.execute(
                 "SELECT COUNT(*) AS n FROM RcloneInventory"
             ).fetchone()["n"] == 1
 
-        staging = db_open_rclone_staging(sid)
+        staging = db_open_rclone_staging(session_id=sid)
         assert staging is not None
         # The staging name suffix sanitizes `.` / `-` from the TEXT
         # snowflake to `_` so it stays a valid SQL identifier.
@@ -557,9 +582,10 @@ class TestRcloneStagingSwap:
                 self._entry("KEEP-001", "2025/actor/KEEP-001"),
                 self._entry("OLD-001", "2026/actor/OLD-001"),
             ],
+            session_id=None,
         )
 
-        staging = db_open_rclone_staging(sid)
+        staging = db_open_rclone_staging(session_id=sid)
         db_append_rclone_staging(
             [
                 self._entry("NEW-001", "2026/actor/NEW-001"),
@@ -588,9 +614,10 @@ class TestRcloneStagingSwap:
         sid = _create_session()
         db_replace_rclone_inventory(
             [self._entry("KEEP-001", "/old/a")],
+            session_id=None,
         )
 
-        staging = db_open_rclone_staging(sid)
+        staging = db_open_rclone_staging(session_id=sid)
         db_append_rclone_staging(
             [self._entry("LOST-001", "/lost/a")],
             session_id=sid,
@@ -609,7 +636,7 @@ class TestRcloneStagingSwap:
 
     def test_rollback_drops_orphan_staging(self):
         sid = _create_session()
-        db_open_rclone_staging(sid)
+        db_open_rclone_staging(session_id=sid)
         # Mid-run crash before swap → rollback should DROP the staging.
         result = db_rollback_session(sid, scope="operations")
         staging_name = (

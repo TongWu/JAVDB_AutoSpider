@@ -277,7 +277,7 @@ class TestRefreshAuthChecks:
 
 class TestUnknownMethod:
     def test_unknown_method_returns_422(self, admin_client):
-        """POST with an unrecognized method → 422 with a descriptive detail."""
+        """POST with an unrecognized method → 422 (Pydantic Literal validation)."""
         with patch("apps.api.routers.diagnostics._set_last_refresh_time"):
             resp = admin_client.post(
                 "/api/diag/javdb-session/refresh",
@@ -285,4 +285,6 @@ class TestUnknownMethod:
             )
 
         assert resp.status_code == 422
-        assert "ssh_tunnel" in resp.json()["detail"]
+        body = resp.json()
+        detail = body["detail"]
+        assert any("ssh_tunnel" in str(e) for e in detail)

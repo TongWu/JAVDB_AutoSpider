@@ -365,7 +365,7 @@ class TestListRuns:
 
 class TestDispatchRun:
     def test_admin_dispatch_returns_dispatched_true(self, admin_client, monkeypatch):
-        monkeypatch.setenv("GH_ACTIONS_TIER", "monitor")
+        monkeypatch.setenv("GH_ACTIONS_TIER", "admin")
         with patch(
             "apps.api.routers.gh_actions._get_gh_client",
             return_value=_patched_client(),
@@ -378,7 +378,7 @@ class TestDispatchRun:
         assert resp.json()["dispatched"] is True
 
     def test_dispatch_with_inputs(self, admin_client, monkeypatch):
-        monkeypatch.setenv("GH_ACTIONS_TIER", "monitor")
+        monkeypatch.setenv("GH_ACTIONS_TIER", "admin")
         with patch(
             "apps.api.routers.gh_actions._get_gh_client",
             return_value=_patched_client(),
@@ -391,7 +391,7 @@ class TestDispatchRun:
         assert resp.json()["dispatched"] is True
 
     def test_readonly_returns_403(self, readonly_client, monkeypatch):
-        monkeypatch.setenv("GH_ACTIONS_TIER", "monitor")
+        monkeypatch.setenv("GH_ACTIONS_TIER", "admin")
         resp = readonly_client.post(
             "/api/gh-actions/runs",
             json={"workflow_id": 1, "ref": "main"},
@@ -399,15 +399,24 @@ class TestDispatchRun:
         assert resp.status_code == 403
 
     def test_anon_returns_401_or_403(self, anon_client, monkeypatch):
-        monkeypatch.setenv("GH_ACTIONS_TIER", "monitor")
+        monkeypatch.setenv("GH_ACTIONS_TIER", "admin")
         resp = anon_client.post(
             "/api/gh-actions/runs",
             json={"workflow_id": 1, "ref": "main"},
         )
         assert resp.status_code in (401, 403)
 
-    def test_gh_api_error_returns_502(self, admin_client, monkeypatch):
+    def test_monitor_tier_blocks_dispatch(self, admin_client, monkeypatch):
+        """Monitor tier is insufficient for mutating dispatch_run."""
         monkeypatch.setenv("GH_ACTIONS_TIER", "monitor")
+        resp = admin_client.post(
+            "/api/gh-actions/runs",
+            json={"workflow_id": 1, "ref": "main"},
+        )
+        assert resp.status_code == 403
+
+    def test_gh_api_error_returns_502(self, admin_client, monkeypatch):
+        monkeypatch.setenv("GH_ACTIONS_TIER", "admin")
 
         def err_handler(req):
             return httpx.Response(422)

@@ -35,6 +35,12 @@ class TestParseArguments:
                             help='Ignore history file')
         parser.add_argument('--url', type=str,
                             help='Custom URL to scrape')
+        parser.add_argument(
+            '--result-json',
+            type=str,
+            default=None,
+            help='Write a versioned SpiderRunResult JSON sidecar to this path.',
+        )
         parser.add_argument('--phase', choices=['1', '2', 'all'], default='all',
                             help='Which phase to run')
         parser.add_argument('--ignore-release-date', action='store_true',
@@ -96,6 +102,41 @@ class TestParseArguments:
         args = parser.parse_args(['--url', 'https://javdb.com/actors/abc'])
         
         assert args.url == 'https://javdb.com/actors/abc'
+
+    def test_result_json_argument(self):
+        """Test --result-json argument."""
+        parser = self.create_parser()
+        args = parser.parse_args(['--result-json', '/tmp/spider-result.json'])
+
+        assert args.result_json == '/tmp/spider-result.json'
+
+    def test_real_parser_accepts_result_json_argument(self, monkeypatch):
+        """Test canonical parser accepts --result-json."""
+        from javdb.spider.app.cli import parse_arguments
+
+        monkeypatch.setattr(
+            sys,
+            'argv',
+            ['spider', '--result-json', '/tmp/spider-result.json'],
+        )
+
+        args = parse_arguments()
+
+        assert args.result_json == '/tmp/spider-result.json'
+
+    def test_real_parser_defaults_enable_redownload_to_none(self, monkeypatch):
+        """Test canonical parser leaves --enable-redownload unspecified by default."""
+        from javdb.spider.app.cli import parse_arguments
+
+        monkeypatch.setattr(
+            sys,
+            'argv',
+            ['spider'],
+        )
+
+        args = parse_arguments()
+
+        assert args.enable_redownload is None
     
     def test_output_file_argument(self):
         """Test --output-file argument."""

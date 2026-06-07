@@ -205,6 +205,12 @@ MOVIE_CLAIM_ENABLED = 'auto'
 # RUNNER_REGISTRY_ENABLED feeds this via config_generator.
 RUNNER_REGISTRY_ENABLED = 'false'
 
+# ADR-033 media closed-loop: active acquisition outcomes (queued/downloading)
+# that have not been seen in qB for this many days are marked 'stalled'
+# (and 'failed' after 2x this window). Tune to your slowest expected download.
+# Must be a positive integer.
+RECONCILE_STALLED_DAYS = 7
+
 # Example configurations:
 # PROXY_MODULES = ['spider']  # Default: only spider (including login), not qBittorrent/PikPak
 # PROXY_MODULES = ['all']  # Enable proxy for all modules
@@ -257,6 +263,19 @@ JAVDB_PASSWORD = ''  # Your JavDB password
 # Compatible with OpenAI API or any OpenAI-compatible API (e.g., api.gpt.ge)
 GPT_API_URL = 'https://api.gpt.ge/v1/chat/completions'  # API endpoint
 GPT_API_KEY = ''  # Your API key (e.g., sk-xxx)
+
+# AI operations diagnosis assistant (ADR-026)
+# Phase 1 remains read-only. When disabled or not configured, the assistant
+# still produces deterministic detector-based diagnoses.
+OPS_DIAGNOSIS_AI_ENABLED = False
+OPS_DIAGNOSIS_API_URL = ''
+OPS_DIAGNOSIS_API_KEY = ''
+OPS_DIAGNOSIS_MODEL = 'deterministic-fallback-v1'
+OPS_DIAGNOSIS_MAX_LOG_SNIPPETS = 20
+
+# ADR-035 site-contract drift sentinel.
+SENTINEL_MIN_SAMPLE = 30      # skip drift evaluation when a run parsed fewer items
+SENTINEL_BASELINE_WINDOW = 14 # soft-field baseline = median over this many committed runs
 
 # JavDB session cookie (can be auto-updated by scripts/login.py)
 # Manual method: Get from browser → Developer Tools → Application → Cookies → _jdb_session
@@ -333,6 +352,16 @@ ENABLE_REDOWNLOAD = False
 # Size increase threshold for re-download.
 # 0.30 means a new torrent must be at least 30% larger to trigger re-download.
 REDOWNLOAD_SIZE_THRESHOLD = 0.30
+
+# ADR-022: Skip qBittorrent upload for movies whose lead actor is explicitly
+# disliked in ContentPreferences (hearted=False). Disabled by default until
+# enough preference data has been collected. ADR-025 replaces the rule with a
+# model-score-based gate.
+PREFERENCE_GATE_ENABLED = False
+
+# ADR-040 content-filter rules are managed dynamically in the reports DB
+# (ContentFilterRule) via `python3 -m apps.cli.ops.content_filter`.
+# No config.py key is required for actor/tag/gender rules.
 
 # =============================================================================
 # FILE PATHS

@@ -47,14 +47,13 @@ os.chdir(REPO_ROOT)
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from apps.api.parsers.common import normalize_javdb_href_path
-from apps.api.parsers.detail_parser import parse_detail_page
-from apps.api.parsers.index_parser import (
+from javdb.parsing import parse_detail_page, parse_index_page
+from javdb.parsing.common import normalize_javdb_href_path
+from javdb.parsing.fallback.index_parser import (
     derive_letter_suffix_fallback_video_code,
     find_exact_video_code_match,
-    parse_index_page,
 )
-from apps.api.parsers.search_exact import find_exact_entry_first_search_page
+from javdb.parsing.search_exact import find_exact_entry_first_search_page
 from javdb.spider.fetch.fallback import get_page_url
 from javdb.spider.fetch.fetch_engine import PER_WORKER_TASK_CAP_ERROR
 from javdb.spider.fetch.session import is_login_page
@@ -78,6 +77,7 @@ from javdb.storage.db import (
     db_load_align_no_exact_match_codes,
     db_load_rclone_inventory,
     db_upsert_align_no_exact_match,
+    get_active_session_id,
 )
 
 
@@ -805,7 +805,11 @@ def run_alignment(args: argparse.Namespace) -> int:
                     message=data.get('message', ''),
                 ))
                 if not args.dry_run:
-                    db_upsert_align_no_exact_match(video_code, reason=data.get('message', ''))
+                    db_upsert_align_no_exact_match(
+                        video_code,
+                        reason=data.get('message', ''),
+                        session_id=get_active_session_id(),
+                    )
                 logger.info("[%s][%s] No exact match for %s", idx_str, worker_label, video_code)
                 _log_per_worker_cap_after_movie_line(result)
                 skipped += 1
@@ -942,7 +946,9 @@ def run_alignment(args: argparse.Namespace) -> int:
                     )
                 )
                 if not args.dry_run:
-                    db_upsert_align_no_exact_match(code)
+                    db_upsert_align_no_exact_match(
+                        code, session_id=get_active_session_id(),
+                    )
                 if not (use_proxy and PROXY_POOL):
                     movie_sleep_mgr.sleep()
                 continue

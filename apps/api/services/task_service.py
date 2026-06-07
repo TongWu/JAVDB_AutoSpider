@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import shlex
@@ -21,6 +22,7 @@ from javdb.proxy.policy import resolve_proxy_override
 
 JOBS: Dict[str, Dict[str, Any]] = {}
 JOB_LOCK = threading.Lock()
+logger = logging.getLogger(__name__)
 
 _JOB_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 _TASK_ALLOWED_FLAGS: dict[str, str] = {
@@ -35,6 +37,7 @@ _TASK_ALLOWED_FLAGS: dict[str, str] = {
     "--output-file": "output_file",
     "--phase": "phase",
     "--pikpak-individual": "flag",
+    "--result-json": "job_result_file",
     "--start-page": "int",
     "--url": "url",
     "--use-history": "flag",
@@ -178,6 +181,56 @@ def _safe_log_path(job_id: str) -> Path:
     return _resolved_path_under_job_log_dir(job_id, ".log")
 
 
+def _validate_job_result_file(value: str) -> None:
+    try:
+        candidate = _resolve_job_result_file(value)
+        candidate.relative_to(context.RESOLVED_JOB_LOG_DIR)
+    except (OSError, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid task command") from None
+    if candidate.suffixes[-2:] != [".result", ".json"]:
+        raise HTTPException(status_code=400, detail="Invalid task command")
+
+
+def _resolve_job_result_file(value: str) -> Path:
+    raw_path = Path(value).expanduser()
+    base_path = raw_path if raw_path.is_absolute() else context.REPO_ROOT / raw_path
+    return base_path.resolve()
+
+
+def _load_result_summary(result_path: str | None) -> Dict[str, Any] | None:
+    if not result_path:
+        return None
+    path = _resolve_job_result_file(result_path)
+    try:
+        path.relative_to(context.RESOLVED_JOB_LOG_DIR)
+    except ValueError:
+        logger.warning("Task result JSON outside job log dir ignored: %s", path)
+        return None
+    if not path.exists():
+        return None
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        logger.warning("Invalid task result JSON ignored: %s", path)
+        return None
+    except UnicodeDecodeError as exc:
+        logger.warning("Unable to decode task result JSON %s: %s", path, exc)
+        return None
+    except OSError as exc:
+        logger.warning("Unable to read task result JSON %s: %s", path, exc)
+        return None
+    if not isinstance(raw, dict):
+        logger.warning("Invalid task result payload ignored: %s", path)
+        return None
+    return {
+        "kind": raw.get("kind"),
+        "schema_version": raw.get("schema_version"),
+        "status": raw.get("status"),
+        "exit_code": raw.get("exit_code"),
+        "failure_reason": raw.get("failure_reason"),
+    }
+
+
 def _validate_task_command(command: list[str]) -> list[str]:
     if not isinstance(command, list) or len(command) < 4:
         raise HTTPException(status_code=400, detail="Invalid task command")
@@ -188,12 +241,17 @@ def _validate_task_command(command: list[str]) -> list[str]:
     if command[3] not in _TASK_ALLOWED_MODULES:
         raise HTTPException(status_code=400, detail="Invalid task command")
 
+    seen_singleton_flags: set[str] = set()
     idx = 4
     while idx < len(command):
         flag = command[idx]
         value_type = _TASK_ALLOWED_FLAGS.get(flag)
         if value_type is None:
             raise HTTPException(status_code=400, detail="Invalid task command")
+        if flag == "--result-json":
+            if flag in seen_singleton_flags:
+                raise HTTPException(status_code=400, detail="Invalid task command")
+            seen_singleton_flags.add(flag)
         if value_type == "flag":
             idx += 1
             continue
@@ -221,6 +279,8 @@ def _validate_task_command(command: list[str]) -> list[str]:
                     status_code=400,
                     detail="Invalid task command",
                 ) from exc
+        elif value_type == "job_result_file":
+            _validate_job_result_file(value)
         elif value_type == "url":
             _validate_target_url(value)
         idx += 2
@@ -263,6 +323,7 @@ def _extract_params_from_command(command: list[str]) -> Dict[str, Any]:
     valued = {
         "--start-page", "--end-page", "--phase", "--url",
         "--output-file", "--max-movies-phase1", "--max-movies-phase2",
+        "--result-json",
     }
     idx = 0
     while idx < len(command):
@@ -304,6 +365,7 @@ def _job_summary(job_id: str, job: Optional[Dict[str, Any]] = None) -> Dict[str,
         kind = str(job.get("kind", _normalize_job_kind(job_id)))
         mode = str(job.get("mode", _extract_task_mode(kind, command)))
         url = str(job.get("url", _extract_url_from_command(command)))
+        result_path = str(job.get("result_path", ""))
         source = "memory"
     else:
         log_path = _safe_log_path(job_id)
@@ -314,6 +376,7 @@ def _job_summary(job_id: str, job: Optional[Dict[str, Any]] = None) -> Dict[str,
         mode = str(meta.get("mode", _extract_task_mode(kind, [])))
         url = str(meta.get("url", ""))
         command = meta.get("command", [])
+        result_path = str(meta.get("result_path", ""))
         created_at = str(meta.get("created_at") or _infer_created_at_from_job_id(job_id))
         status = str(meta.get("status", "completed"))
         completed_at = str(meta.get("completed_at", ""))
@@ -342,6 +405,7 @@ def _job_summary(job_id: str, job: Optional[Dict[str, Any]] = None) -> Dict[str,
         "command": command,
         "params": _extract_params_from_command(command),
         "source": source,
+        "result_path": result_path or None,
     }
 
 
@@ -398,6 +462,15 @@ def _spawn_job(
     command = _validate_task_command(command)
     now = datetime.now(timezone.utc)
     job_id = f"{job_prefix}-{now.strftime('%Y%m%d-%H%M%S')}-{os.urandom(2).hex()}"
+    result_path: Optional[Path] = None
+    if "--result-json" in command:
+        result_path = _resolve_job_result_file(
+            command[command.index("--result-json") + 1],
+        )
+    elif command[3] in {"apps.cli.pipeline", "apps.cli.spider"}:
+        result_path = _resolved_path_under_job_log_dir(job_id, ".result.json")
+        command.extend(["--result-json", str(result_path)])
+        command = _validate_task_command(command)
     log_path = _safe_log_path(job_id)
     with open(log_path, "w", encoding="utf-8") as fp:
         process = subprocess.Popen(
@@ -419,21 +492,23 @@ def _spawn_job(
         "process": process,
         "log_path": str(log_path),
     }
+    if result_path:
+        job["result_path"] = str(result_path)
     if metadata:
         job.update(metadata)
-    _write_job_meta(
-        job_id,
-        {
-            "created_at": job["created_at"],
-            "completed_at": "",
-            "kind": job.get("kind"),
-            "mode": job.get("mode"),
-            "url": job.get("url", ""),
-            "status": "running",
-            "command": command,
-            "command_text": shlex.join(command),
-        },
-    )
+    meta = {
+        "created_at": job["created_at"],
+        "completed_at": "",
+        "kind": job.get("kind"),
+        "mode": job.get("mode"),
+        "url": job.get("url", ""),
+        "status": "running",
+        "command": command,
+        "command_text": shlex.join(command),
+    }
+    if result_path:
+        meta["result_path"] = str(result_path)
+    _write_job_meta(job_id, meta)
     with JOB_LOCK:
         JOBS[job_id] = job
     return {"job_id": job_id, "status": "queued", "created_at": job["created_at"]}
@@ -448,23 +523,23 @@ def _get_job(job_id: str) -> Dict[str, Any]:
     log_path = _safe_log_path(job_id)
     log_content = _read_log_tail(log_path, 200)
     if job and status in {"success", "failed"}:
-        _write_job_meta(
-            job_id,
-            {
-                "created_at": summary["created_at"],
-                "completed_at": summary.get("completed_at", ""),
-                "kind": summary["kind"],
-                "mode": summary["mode"],
-                "url": summary["url"],
-                "status": status,
-                "command": summary["command"],
-                "command_text": (
-                    shlex.join(summary["command"])
-                    if isinstance(summary["command"], list)
-                    else ""
-                ),
-            },
-        )
+        meta = {
+            "created_at": summary["created_at"],
+            "completed_at": summary.get("completed_at", ""),
+            "kind": summary["kind"],
+            "mode": summary["mode"],
+            "url": summary["url"],
+            "status": status,
+            "command": summary["command"],
+            "command_text": (
+                shlex.join(summary["command"])
+                if isinstance(summary["command"], list)
+                else ""
+            ),
+        }
+        if summary.get("result_path"):
+            meta["result_path"] = summary["result_path"]
+        _write_job_meta(job_id, meta)
     return {
         "job_id": summary["job_id"],
         "kind": summary["kind"],
@@ -475,6 +550,8 @@ def _get_job(job_id: str) -> Dict[str, Any]:
         "completed_at": summary.get("completed_at", ""),
         "command": summary["command"],
         "source": summary["source"],
+        "result_path": summary.get("result_path"),
+        "result_summary": _load_result_summary(summary.get("result_path")),
         "log_size": _log_offset(log_path),
         "log": log_content,
     }

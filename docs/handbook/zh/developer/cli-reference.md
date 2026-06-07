@@ -20,6 +20,11 @@ python3 -m apps.cli.<command> [options]
 - [Migration CLI](#migration-cli)（`apps.cli.migration`）
 - [Login CLI](#login-cli)（`apps.cli.login`）
 - [Rollback CLI](#rollback-cli)（`apps.cli.rollback`）
+- [运维诊断 CLI](#运维诊断-cli)（`apps.cli.ops.diagnose_run`）
+- [采集结果对账 CLI](#采集结果对账-cli)（`apps.cli.ops.reconcile`）
+- [内容过滤 CLI](#内容过滤-cli)（`apps.cli.ops.content_filter`）
+- [事件主线消费者 CLI](#事件主线消费者-cli)（`apps.cli.ops.events`）
+- [站点契约哨兵 CLI](#站点契约哨兵-cli)（`apps.cli.ops.sentinel`）
 - [Config Generator CLI](#config-generator-cli)（`apps.cli.config_generator`）
 - [Spider 完整参数参考](#spider-完整参数参考)
 
@@ -286,7 +291,7 @@ python3 -m apps.cli.qb_uploader --mode adhoc --category "Custom Category"
 
 **模块：** `apps.cli.qb_file_filter`
 
-过滤 qBittorrent 中最近添加的种子中的小文件。将低于大小阈值的不需要的文件设置为"不下载"优先级。
+过滤 qBittorrent 中最近添加的种子中的小文件。将低于大小阈值的不需要的文件设置为"不下载"优先级。对于刚添加的种子，过滤器会最多等待 90 秒让 qBittorrent metadata 就绪，以便小文件在开始下载前就被过滤。
 
 ### 参数
 
@@ -543,6 +548,237 @@ python3 -m apps.cli.rollback --session-id 42 \
 
 ---
 
+## 运维诊断 CLI
+
+**模块：** `apps.cli.ops.diagnose_run`
+
+为失败的 workflow run、session、D1 drift 检查或 recovery 排查收集只读证据，并持久化一条 `OpsIncidents` 记录。该命令会输出结构化摘要，`DailyIngestion.yml` 和 `AdHocIngestion.yml` 会在发送邮件通知前调用它。
+
+### 参数
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--run-id` | 关联到 incident 的 GitHub Actions run ID。未提供 `--session-id` 时必填。 | `None` |
+| `--attempt` | GitHub Actions run attempt，存为 `run_attempt`。 | `None` |
+| `--session-id` | Pipeline session ID，格式为 `YYYYMMDDTHHMMSS.ffffffZ-TTTT-SSSS`。未提供 `--run-id` 时必填。 | `None` |
+| `--workflow-name` | Workflow 名称，例如 `DailyIngestion`、`AdHocIngestion` 或 `TestIngestion`。 | `None` |
+| `--workflow-result` | Workflow 结果。可选：`success`、`failure`、`cancelled`、`skipped`。 | `None` |
+| `--trigger-source` | 诊断触发来源标签，例如 `manual_cli` 或 `workflow_failure`。 | `manual_cli` |
+| `--session-status` | 可选 session lifecycle 状态，作为证据写入。 | `None` |
+| `--drift-verdict` | 可选 D1 drift verdict，作为证据写入，例如 `CLEAN`、`SAFE_TO_APPLY` 或升级排查类 verdict。 | `None` |
+| `--log` | 扫描错误片段的日志文件，可重复传入。 | `[]` |
+| `--json` | 输出 JSON payload，而非文本摘要。 | `False` |
+| `--log-level` | 日志级别。可选：`DEBUG`、`INFO`、`WARNING`、`ERROR`。 | `INFO` |
+
+退出码 `0` 表示未检测到已知 incident 类型。退出码 `1` 表示已为已知 incident 类型生成诊断。退出码 `2` 表示缺少必需的 run/session 标识，`3` 表示诊断发生意外失败。
+
+### 示例
+
+```bash
+# 诊断失败 workflow run，并输出 JSON 供后续邮件/API 使用
+python3 -m apps.cli.ops.diagnose_run \
+  --trigger-source workflow_failure \
+  --run-id 123456789 \
+  --attempt 1 \
+  --session-id 20260527T120000.000000Z-0001-0001 \
+  --workflow-name DailyIngestion \
+  --workflow-result failure \
+  --json \
+  --log logs/pipeline.log \
+  --log logs/spider.log
+
+# 将 CLEAN drift 检查作为证据记录，但不把它分类为 D1 drift incident
+python3 -m apps.cli.ops.diagnose_run \
+  --run-id 123456789 \
+  --drift-verdict CLEAN
+```
+
+---
+
+## 采集结果对账 CLI
+
+**模块：** `apps.cli.ops.reconcile`
+
+将 ADR-033 的 `AcquisitionOutcome` 行与实时来源状态对账。Phase 1 只使用
+qBittorrent collector，并把活跃 outcome 从 `queued` / `downloading` 推进到
+`downloading`、`completed`、`stalled` 或 `failed`。生产环境应使用
+`STORAGE_BACKEND=d1`，因为 `AcquisitionOutcome` 是 operations 数据库中的
+D1 canonical 表。
+
+### 参数
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--source` | 要对账的来源，可重复传入。Phase 1 只接受 `qb`。 | `qb` |
+| `--category` | 要扫描的 qB 分类，可重复传入。 | `TORRENT_CATEGORY`、`TORRENT_CATEGORY_ADHOC` |
+| `--stalled-after-days` | 正整数。活跃 outcome 超过该天数未被观测到会变为 `stalled`；超过 2 倍窗口会变为 `failed`。 | `RECONCILE_STALLED_DAYS` 或 `7` |
+| `--dry-run` | 只计算状态迁移，不写入数据库。 | `False` |
+| `--json` | 输出 JSON result payload。 | `False` |
+| `--log-level` | 日志级别。可选：`DEBUG`、`INFO`、`WARNING`、`ERROR`。 | `INFO` |
+
+退出码 `0` 表示对账完成且没有来源或写入错误。退出码 `2` 表示对账完成但记录了错误，`1` 表示 CLI 发生意外失败。
+
+传入 `--category` 时，本次运行会被视为部分扫描：已观测到的 hash 仍可推进到
+`downloading` / `completed`，但不会把该子集里缺失的 outcome 标记为
+`stalled` 或 `failed`。
+
+### 示例
+
+```bash
+# 生产 cron 路径：使用 qB 观测结果对 D1 做对账，并输出 JSON
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --json
+
+# 使用更宽的阈值预览 stalled/failed 状态迁移
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile \
+  --stalled-after-days 14 \
+  --dry-run \
+  --json
+
+# 只对一个 qB 分类做对账；此时禁用缺失状态推断
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile \
+  --category "Daily Ingestion"
+```
+
+---
+
+## 内容过滤 CLI
+
+**模块：** `apps.cli.ops.content_filter`
+
+管理 reports 数据库 `ContentFilterRule` 表中的 ADR-040 内容过滤规则。Spider
+会在每次运行开始时加载一次启用规则，并在详情页解析后、写入 CSV/report 和上传
+qBittorrent 前进行判定。
+
+### 命令
+
+| 命令 | 说明 |
+|------|------|
+| `add` | 新增规则。 |
+| `list` | 列出所有规则，包括已禁用规则。 |
+| `remove` | 按 id 删除规则。 |
+| `enable` | 按 id 启用规则；带 `--off` 时禁用规则。 |
+
+### 支持的规则形状
+
+| 维度 | 模式 | 值 |
+|------|------|----|
+| `actor` | `exclude` | 必填：演员名或演员 href。 |
+| `tag` | `exclude` | 必填：tag 名。 |
+| `tag` | `include` | 必填：tag 名；存在 include 规则时，至少要命中一个 include tag。 |
+| `gender` | `require_lead` | 必填：`female` 或 `male`。 |
+| `gender` | `exclude_all_male` | 不需要值；传入 `--value` 会被拒绝。 |
+
+### 参数
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--dimension` | `add` 使用的规则维度。可选：`actor`、`tag`、`gender`。 | 必填 |
+| `--mode` | `add` 使用的规则模式。可选：`exclude`、`include`、`require_lead`、`exclude_all_male`。 | 必填 |
+| `--value` | `add` 使用的规则值：根据规则可为演员名/href、tag 名或 lead gender。除 `gender exclude_all_male` 外均必填。 | `""` |
+| `--id` | `remove` 和 `enable` 使用的规则 id。 | 必填 |
+| `--off` | 在 `enable` 命令中禁用规则，而不是启用规则。 | `False` |
+| `--log-level` | 日志级别。可选：`DEBUG`、`INFO`、`WARNING`、`ERROR`。 | `INFO` |
+
+### 示例
+
+```bash
+# 丢弃演员名或 href 命中该值的影片
+python3 -m apps.cli.ops.content_filter add \
+  --dimension actor \
+  --mode exclude \
+  --value "/actors/EvkJ"
+
+# 要求至少命中一个 include tag
+python3 -m apps.cli.ops.content_filter add \
+  --dimension tag \
+  --mode include \
+  --value subtitle
+
+# 要求 lead actor 为 female
+python3 -m apps.cli.ops.content_filter add \
+  --dimension gender \
+  --mode require_lead \
+  --value female
+
+# 丢弃全男演员详情页
+python3 -m apps.cli.ops.content_filter add \
+  --dimension gender \
+  --mode exclude_all_male
+
+# 查看和管理规则
+python3 -m apps.cli.ops.content_filter list
+python3 -m apps.cli.ops.content_filter enable --id 3 --off
+python3 -m apps.cli.ops.content_filter enable --id 3
+python3 -m apps.cli.ops.content_filter remove --id 3
+```
+
+---
+
+## 事件主线消费者 CLI
+
+**模块：** `apps.cli.ops.events`
+
+运行 ADR-036 事件主线（event spine）的示范消费者。它按游标读取新的 `PipelineEvent`
+行，并将"每会话、每事件类型"的计数投影到 `RunEventSummary` 表（两者都在
+`javdb-reports` 库中）。这是 Phase 1 对 emit → consume → replay 闭环的验证，
+**不触碰**权威的 `pending→commit` 路径。
+
+### 参数
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--replay` | 重置消费者游标并清空投影，然后从 `seq` 0 重建。 | `False` |
+| `--batch` | 每次 `read_since` 分页读取的事件数。必须 `>= 1`。 | `500` |
+| `--log-level` | 日志级别。可选：`DEBUG`、`INFO`、`WARNING`、`ERROR`。 | `INFO` |
+
+正常运行退出码恒为 `0`；投影的事件数会写入日志。
+
+### 示例
+
+```bash
+# 将新事件投影进 RunEventSummary（推进游标）
+python3 -m apps.cli.ops.events
+
+# 从头重建投影（幂等 —— 结果一致）
+python3 -m apps.cli.ops.events --replay
+```
+
+---
+
+## 站点契约哨兵 CLI
+
+**模块：** `apps.cli.ops.sentinel`
+
+评估某个 session 已持久化的解析 field-health，检测站点契约漂移（ADR-035）。它读取该 run 记录的 `ParseRunFieldFill` 行，并将每个字段对照声明式解析契约打分：`critical` 字段对照绝对最低填充率，`soft` 字段对照其滚动基线。该命令为只读，检测到关键漂移时退出码为 `4`，便于 workflow 据此门控。
+
+### 参数
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--session-id` | 待评估 field-health 的 pipeline session ID，格式为 `YYYYMMDDTHHMMSS.ffffffZ-TTTT-SSSS`。必填。 | — |
+| `--run-id` | 关联到本次评估的 GitHub Actions run ID。 | `None` |
+| `--attempt` | GitHub Actions run attempt，存为 `run_attempt`。 | `None` |
+| `--json` | 输出 JSON payload，而非日志摘要。 | `False` |
+| `--log-level` | 日志级别。可选：`DEBUG`、`INFO`、`WARNING`、`ERROR`。 | `INFO` |
+
+退出码 `4` 表示该 session 检测到关键漂移；否则退出码为 `0`。
+
+### 示例
+
+```bash
+# 评估某个 session 的 field-health 并将 verdict 写入日志
+python3 -m apps.cli.ops.sentinel --session-id 20260527T120000.000000Z-0001-0001
+
+# 输出 JSON verdict 供后续邮件/API 使用
+python3 -m apps.cli.ops.sentinel \
+  --session-id 20260527T120000.000000Z-0001-0001 \
+  --run-id 123456789 \
+  --attempt 1 \
+  --json
+```
+
+---
+
 ## Config Generator CLI
 
 **模块：** `apps.cli.config_generator`
@@ -592,6 +828,6 @@ python3 -m apps.cli.config_generator --github-actions
 | `--no-rclone-filter` | 标志 | 禁用 rclone 库存过滤（不跳过已在 rclone 库存中的条目） | `False` | `--no-rclone-filter` |
 | `--disable-all-filters` | 标志 | 禁用所有过滤器（历史记录、rclone 库存、发布日期）— 处理索引中的每一个条目 | `False` | `--disable-all-filters` |
 | `--enable-dedup` | 标志 | 启用 rclone 去重检测（与 rclone 库存对比） | `False` | `--enable-dedup` |
-| `--enable-redownload` | 标志 | 当同类别种子显著更大时启用重新下载 | `False` | `--enable-redownload` |
+| `--enable-redownload` | 标志 | 当同类别种子显著更大时启用重新下载 | `ENABLE_REDOWNLOAD` 配置值 | `--enable-redownload` |
 | `--redownload-threshold` | 浮点数 | 重新下载的大小增长阈值（0.30 = 30%） | `0.30` | `--redownload-threshold 0.50` |
 | `--from-pipeline` | 标志 | 内部参数：从 pipeline 运行（使用 GIT_USERNAME 进行提交） | `False` | `--from-pipeline` |

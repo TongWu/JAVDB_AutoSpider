@@ -206,3 +206,21 @@ LOG_LEVEL = 'DEBUG'
 - 查看 rollback 日志 artifact（保留 14 天）。
 - 手动 rollback：**Actions > RollbackD1 > Run workflow** 并填入 session ID。
 - 有关完整 SOP 和调度矩阵，请参阅 [d1-rollback.md](d1-rollback.md)。
+
+## AI 运维诊断
+
+ADR-026 新增了一个只读诊断助手，用于失败的 ingestion run 和 D1 运维事件。它会收集紧凑的 evidence bundle，运行确定性 detectors，可选使用 AI 综合层，持久化一条 `OpsIncidents` 记录，并输出结构化摘要。
+
+手动运行：
+
+```bash
+python3 -m apps.cli.ops.diagnose_run \
+  --run-id 123456789 \
+  --attempt 1 \
+  --session-id 20260527T120000.000000Z-abcd-0001 \
+  --workflow-name DailyIngestion \
+  --workflow-result failure \
+  --json
+```
+
+该助手只提供建议。它不会 rollback session、重跑 workflow、修改 D1，或删除 qBittorrent 任务。

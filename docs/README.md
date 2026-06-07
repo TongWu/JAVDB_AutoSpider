@@ -38,6 +38,7 @@ Architecture, API docs, and contribution guides.
 | API Usage Guide | [api-usage-guide.md](handbook/en/developer/api-usage-guide.md) | [api-usage-guide.md](handbook/zh/developer/api-usage-guide.md) |
 | CLI Reference | [cli-reference.md](handbook/en/developer/cli-reference.md) | [cli-reference.md](handbook/zh/developer/cli-reference.md) |
 | History System | [history-system.md](handbook/en/developer/history-system.md) | [history-system.md](handbook/zh/developer/history-system.md) |
+| Pipeline Test Harness | [pipeline-test-harness.md](handbook/en/developer/pipeline-test-harness.md) | [pipeline-test-harness.md](handbook/zh/developer/pipeline-test-harness.md) |
 | Publish to Public | [publish-to-public.md](handbook/en/developer/publish-to-public.md) | [publish-to-public.md](handbook/zh/developer/publish-to-public.md) |
 | Smoke Checklist | [smoke-checklist.md](handbook/en/developer/smoke-checklist.md) | [smoke-checklist.md](handbook/zh/developer/smoke-checklist.md) |
 

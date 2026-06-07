@@ -6,8 +6,11 @@ available the Rust implementations are used for speed; otherwise the
 equivalent pure-Python logic kicks in.
 """
 
+import logging
 import re
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse, quote_plus
+
+logger = logging.getLogger(__name__)
 
 try:
     from javdb.rust_core import (
@@ -22,6 +25,10 @@ try:
     RUST_URL_HELPER_AVAILABLE = True
 except ImportError:
     RUST_URL_HELPER_AVAILABLE = False
+    logger.warning(
+        "Rust core unavailable — pure-Python url_helper fallback is best-effort "
+        "and may diverge from production"
+    )
 
 # ---------------------------------------------------------------------------
 # Pure-Python fallback implementations

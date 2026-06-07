@@ -339,6 +339,91 @@
         "title": "ConfigResponse",
         "type": "object"
       },
+      "ContentPreferenceListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ContentPreferenceResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ContentPreferenceListResponse",
+        "type": "object"
+      },
+      "ContentPreferenceResponse": {
+        "properties": {
+          "content_id": {
+            "title": "Content Id",
+            "type": "string"
+          },
+          "content_name": {
+            "title": "Content Name",
+            "type": "string"
+          },
+          "content_type": {
+            "title": "Content Type",
+            "type": "string"
+          },
+          "hearted": {
+            "title": "Hearted",
+            "type": "boolean"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "weight": {
+            "title": "Weight",
+            "type": "number"
+          }
+        },
+        "required": [
+          "content_type",
+          "content_id",
+          "content_name",
+          "hearted",
+          "weight"
+        ],
+        "title": "ContentPreferenceResponse",
+        "type": "object"
+      },
+      "ContentPreferenceUpsert": {
+        "properties": {
+          "content_name": {
+            "title": "Content Name",
+            "type": "string"
+          },
+          "hearted": {
+            "default": false,
+            "title": "Hearted",
+            "type": "boolean"
+          },
+          "weight": {
+            "default": 1.0,
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Weight",
+            "type": "number"
+          }
+        },
+        "required": [
+          "content_name"
+        ],
+        "title": "ContentPreferenceUpsert",
+        "type": "object"
+      },
       "CrawlIndexPayload": {
         "properties": {
           "crawl_all": {
@@ -742,6 +827,36 @@
           }
         },
         "title": "EmailTestRequest",
+        "type": "object"
+      },
+      "EvidenceRefSchema": {
+        "description": "Evidence reference attached to an operations diagnosis.",
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "ref"
+        ],
+        "title": "EvidenceRefSchema",
         "type": "object"
       },
       "ExploreCookiePayload": {
@@ -1287,6 +1402,10 @@
           },
           "method": {
             "default": "headless",
+            "enum": [
+              "headless",
+              "cookie_paste"
+            ],
             "title": "Method",
             "type": "string"
           }
@@ -1478,6 +1597,29 @@
             ],
             "title": "Mode"
           },
+          "result_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Path"
+          },
+          "result_summary": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Summary"
+          },
           "source": {
             "anyOf": [
               {
@@ -1575,6 +1717,10 @@
             "title": "Results",
             "type": "array"
           },
+          "scanned_files": {
+            "title": "Scanned Files",
+            "type": "integer"
+          },
           "total_matched": {
             "title": "Total Matched",
             "type": "integer"
@@ -1587,7 +1733,8 @@
         "required": [
           "results",
           "total_matched",
-          "truncated"
+          "truncated",
+          "scanned_files"
         ],
         "title": "LogSearchResponse",
         "type": "object"
@@ -1706,6 +1853,379 @@
           "migrations"
         ],
         "title": "MigrationListResponse",
+        "type": "object"
+      },
+      "MovieMetadataResponse": {
+        "properties": {
+          "categories": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Categories"
+          },
+          "comment_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment Count"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "directors": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Directors"
+          },
+          "duration_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Minutes"
+          },
+          "fanart_urls": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fanart Urls"
+          },
+          "href": {
+            "title": "Href",
+            "type": "string"
+          },
+          "maker": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maker"
+          },
+          "poster_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Url"
+          },
+          "publisher": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher"
+          },
+          "rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate"
+          },
+          "release_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Date"
+          },
+          "review_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Count"
+          },
+          "series": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "trailer_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trailer Url"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "video_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Code"
+          },
+          "want_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Want Count"
+          },
+          "watched_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Watched Count"
+          }
+        },
+        "required": [
+          "href"
+        ],
+        "title": "MovieMetadataResponse",
+        "type": "object"
+      },
+      "MovieRatingListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MovieRatingResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "MovieRatingListResponse",
+        "type": "object"
+      },
+      "MovieRatingResponse": {
+        "properties": {
+          "href": {
+            "title": "Href",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "rated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rated At"
+          },
+          "rating": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rating"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "video_code": {
+            "title": "Video Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "href",
+          "video_code"
+        ],
+        "title": "MovieRatingResponse",
+        "type": "object"
+      },
+      "MovieRatingUpsert": {
+        "properties": {
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "rating": {
+            "anyOf": [
+              {
+                "maximum": 5.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rating"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          }
+        },
+        "title": "MovieRatingUpsert",
         "type": "object"
       },
       "MovieSearchItem": {
@@ -1953,6 +2473,174 @@
         "title": "OnboardingTestResponse",
         "type": "object"
       },
+      "OpsIncidentListResponse": {
+        "description": "List response for operations incidents.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OpsIncidentSchema"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "OpsIncidentListResponse",
+        "type": "object"
+      },
+      "OpsIncidentSchema": {
+        "description": "Persisted ADR-026 operations incident summary.",
+        "properties": {
+          "confidence": {
+            "title": "Confidence",
+            "type": "string"
+          },
+          "confirmed_findings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Confirmed Findings",
+            "type": "array"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "detector_version": {
+            "title": "Detector Version",
+            "type": "string"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRefSchema"
+            },
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "incident_id": {
+            "title": "Incident Id",
+            "type": "string"
+          },
+          "incident_type": {
+            "title": "Incident Type",
+            "type": "string"
+          },
+          "likely_causes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Likely Causes",
+            "type": "array"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "persistence_status": {
+            "title": "Persistence Status",
+            "type": "string"
+          },
+          "recommended_next_actions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Recommended Next Actions",
+            "type": "array"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "run_attempt": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Attempt"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "trigger_source": {
+            "title": "Trigger Source",
+            "type": "string"
+          },
+          "unknowns": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unknowns",
+            "type": "array"
+          },
+          "unsafe_actions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unsafe Actions",
+            "type": "array"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "incident_id",
+          "trigger_source",
+          "incident_type",
+          "status",
+          "persistence_status",
+          "model_version",
+          "detector_version",
+          "confidence",
+          "confirmed_findings",
+          "likely_causes",
+          "unknowns",
+          "recommended_next_actions",
+          "unsafe_actions",
+          "evidence_refs",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "OpsIncidentSchema",
+        "type": "object"
+      },
       "PikPakQueueItem": {
         "properties": {
           "category": {
@@ -2046,6 +2734,17 @@
             },
             "title": "Items",
             "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
           },
           "total": {
             "title": "Total",
@@ -4113,6 +4812,141 @@
         ]
       }
     },
+    "/api/diag/ops-incidents": {
+      "get": {
+        "description": "Return persisted read-only operations diagnosis incidents.",
+        "operationId": "list_ops_incidents_api_diag_ops_incidents_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpsIncidentListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Ops Incidents",
+        "tags": [
+          "diagnostics"
+        ]
+      }
+    },
+    "/api/diag/ops-incidents/{incident_id}": {
+      "get": {
+        "description": "Return one persisted read-only operations diagnosis incident.",
+        "operationId": "get_ops_incident_api_diag_ops_incidents__incident_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpsIncidentSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Ops Incident",
+        "tags": [
+          "diagnostics"
+        ]
+      }
+    },
     "/api/explore/download-magnet": {
       "post": {
         "operationId": "explore_download_magnet_api_explore_download_magnet_post",
@@ -5161,6 +5995,8 @@
             "schema": {
               "anyOf": [
                 {
+                  "maximum": 4,
+                  "minimum": 0,
                   "type": "integer"
                 },
                 {
@@ -5334,6 +6170,8 @@
             "schema": {
               "anyOf": [
                 {
+                  "maximum": 4,
+                  "minimum": 0,
                   "type": "integer"
                 },
                 {
@@ -6594,6 +7432,316 @@
           }
         },
         "summary": "Api Parse Url"
+      }
+    },
+    "/api/preferences/": {
+      "get": {
+        "operationId": "list_content_preferences_api_preferences__get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "content_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Content Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hearted_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Hearted Only",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentPreferenceListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Content Preferences",
+        "tags": [
+          "preferences"
+        ]
+      }
+    },
+    "/api/preferences/metadata/{href}": {
+      "get": {
+        "operationId": "get_movie_metadata_api_preferences_metadata__href__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "href",
+            "required": true,
+            "schema": {
+              "title": "Href",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MovieMetadataResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Movie Metadata",
+        "tags": [
+          "preferences"
+        ]
+      }
+    },
+    "/api/preferences/movies/ratings": {
+      "get": {
+        "operationId": "list_movie_ratings_api_preferences_movies_ratings_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MovieRatingListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Movie Ratings",
+        "tags": [
+          "preferences"
+        ]
+      }
+    },
+    "/api/preferences/movies/{href}/rating": {
+      "get": {
+        "operationId": "get_movie_rating_api_preferences_movies__href__rating_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "href",
+            "required": true,
+            "schema": {
+              "title": "Href",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MovieRatingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Movie Rating",
+        "tags": [
+          "preferences"
+        ]
+      },
+      "put": {
+        "operationId": "upsert_movie_rating_api_preferences_movies__href__rating_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "href",
+            "required": true,
+            "schema": {
+              "title": "Href",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MovieRatingUpsert"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MovieRatingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upsert Movie Rating",
+        "tags": [
+          "preferences"
+        ]
+      }
+    },
+    "/api/preferences/{content_type}/{content_id}": {
+      "put": {
+        "operationId": "upsert_content_preference_api_preferences__content_type___content_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "content_type",
+            "required": true,
+            "schema": {
+              "title": "Content Type",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "content_id",
+            "required": true,
+            "schema": {
+              "title": "Content Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContentPreferenceUpsert"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentPreferenceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upsert Content Preference",
+        "tags": [
+          "preferences"
+        ]
       }
     },
     "/api/sessions": {

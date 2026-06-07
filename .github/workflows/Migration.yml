@@ -114,23 +114,48 @@ on:
         required: false
         default: ''
         type: string
-      # ---- Runner ----
-      runner:
-        description: 'Runner type'
+      # ---- Metadata Backfill Options ----
+      backfill_metadata:
+        description: 'Backfill MovieMetadata for MovieHistory rows that lack metadata'
         required: false
-        default: 'self-hosted'
-        type: choice
-        options:
-          - 'ubuntu-latest'
-          - 'self-hosted'
+        type: boolean
+        default: false
+      backfill_metadata_limit:
+        description: 'Metadata backfill: absolute max hrefs (0=all; ignored when limit_per_worker > 0)'
+        required: false
+        type: string
+        default: '0'
+      backfill_metadata_limit_per_worker:
+        description: 'Metadata backfill: max completed tasks per proxy worker (0=use limit or all)'
+        required: false
+        type: string
+        default: '0'
+      backfill_metadata_hrefs:
+        description: 'Metadata backfill: comma-separated movie hrefs to process (blank=all missing)'
+        required: false
+        type: string
+        default: ''
+      backfill_metadata_no_proxy:
+        description: 'Metadata backfill: direct HTTP without proxy (debug)'
+        required: false
+        type: boolean
+        default: false
+      backfill_metadata_shuffle:
+        description: 'Metadata backfill: randomise processing order (random pick behaviour)'
+        required: false
+        type: boolean
+        default: false
+      # Manual dispatch intentionally uses the default self-hosted runner.
+      # GitHub Actions allows at most 25 workflow_dispatch inputs; runner
+      # selection remains available to reusable workflow callers below.
 
   # Allow other workflows (e.g. WeeklyDedup.yml) to invoke this as a reusable workflow.
   # NOTE: The full authoritative input schema (with descriptions and choice
   # definitions) lives under `workflow_dispatch` above. The inputs below mirror
-  # that schema with minimal metadata because workflow_call inputs do not
-  # support `type: choice` and do not render descriptions in the UI. When adding
-  # or changing inputs, update `workflow_dispatch` first and keep this block in
-  # sync.
+  # that schema with minimal metadata, plus reusable-workflow-only controls such
+  # as runner and timeout_minutes. When adding or changing inputs, update
+  # `workflow_dispatch` first and keep this block in sync without exceeding the
+  # workflow_dispatch input cap.
   workflow_call:
     inputs:
       dry_run:
@@ -212,6 +237,30 @@ on:
         required: false
         default: ''
         type: string
+      backfill_metadata:
+        required: false
+        default: false
+        type: boolean
+      backfill_metadata_limit:
+        required: false
+        default: '0'
+        type: string
+      backfill_metadata_limit_per_worker:
+        required: false
+        default: '0'
+        type: string
+      backfill_metadata_hrefs:
+        required: false
+        default: ''
+        type: string
+      backfill_metadata_no_proxy:
+        required: false
+        default: false
+        type: boolean
+      backfill_metadata_shuffle:
+        required: false
+        default: false
+        type: boolean
       # Intentionally typed as string for workflow_call (workflow_call does not
       # support `type: choice`). Callers must pass a valid runner label
       # (e.g. 'self-hosted' or 'ubuntu-latest').
@@ -234,6 +283,9 @@ jobs:
     environment: Production
     env:
       TZ: Asia/Singapore
+      D1_RECOVERY_OUTBOX_ENABLED: ${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}
+      D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
+      D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
       GH_TOKEN: ${{ github.token }}
       INPUT_DRY_RUN: ${{ inputs.dry_run }}
       INPUT_BACKUP: ${{ inputs.backup }}
@@ -253,6 +305,12 @@ jobs:
       INPUT_ALIGN_ENQUEUE_QB: ${{ inputs.align_enqueue_qb }}
       INPUT_ALIGN_EXECUTE_DELETE: ${{ inputs.align_execute_delete }}
       INPUT_ALIGN_QB_CATEGORY: ${{ inputs.align_qb_category }}
+      INPUT_BACKFILL_METADATA: ${{ inputs.backfill_metadata }}
+      INPUT_BACKFILL_METADATA_LIMIT: ${{ inputs.backfill_metadata_limit }}
+      INPUT_BACKFILL_METADATA_LIMIT_PER_WORKER: ${{ inputs.backfill_metadata_limit_per_worker }}
+      INPUT_BACKFILL_METADATA_HREFS: ${{ inputs.backfill_metadata_hrefs }}
+      INPUT_BACKFILL_METADATA_NO_PROXY: ${{ inputs.backfill_metadata_no_proxy }}
+      INPUT_BACKFILL_METADATA_SHUFFLE: ${{ inputs.backfill_metadata_shuffle }}
       INPUT_RUNNER: ${{ inputs.runner || 'self-hosted' }}
       INPUT_CONFIRM_PRODUCTION: ${{ inputs.confirm_production }}
 
@@ -429,6 +487,16 @@ jobs:
           else
             echo "  QB Category:          (default)"
           fi
+          printf 'Backfill Metadata:      %s\n' "$INPUT_BACKFILL_METADATA"
+          printf '  Limit:                %s\n' "${INPUT_BACKFILL_METADATA_LIMIT:-0 (all)}"
+          printf '  Limit per worker:     %s\n' "${INPUT_BACKFILL_METADATA_LIMIT_PER_WORKER:-0 (all)}"
+          if [ -n "$INPUT_BACKFILL_METADATA_HREFS" ]; then
+            printf '  Hrefs:                %s\n' "$INPUT_BACKFILL_METADATA_HREFS"
+          else
+            echo "  Hrefs:                (all missing)"
+          fi
+          printf '  No Proxy:             %s\n' "$INPUT_BACKFILL_METADATA_NO_PROXY"
+          printf '  Shuffle:              %s\n' "$INPUT_BACKFILL_METADATA_SHUFFLE"
           printf 'Runner:                 %s\n' "$INPUT_RUNNER"
           echo "============================================"
 
@@ -515,6 +583,33 @@ jobs:
             fi
           fi
 
+          if [ "$INPUT_BACKFILL_METADATA" = "true" ]; then
+            CMD+=(--backfill-metadata)
+
+            META_LIMIT_PW="$INPUT_BACKFILL_METADATA_LIMIT_PER_WORKER"
+            if [ -n "$META_LIMIT_PW" ] && [ "$META_LIMIT_PW" != "0" ]; then
+              CMD+=(--backfill-metadata-limit-per-worker "$META_LIMIT_PW")
+            fi
+
+            META_LIMIT="$INPUT_BACKFILL_METADATA_LIMIT"
+            if [ -n "$META_LIMIT" ] && [ "$META_LIMIT" != "0" ]; then
+              CMD+=(--backfill-metadata-limit "$META_LIMIT")
+            fi
+
+            META_HREFS="$INPUT_BACKFILL_METADATA_HREFS"
+            if [ -n "$META_HREFS" ]; then
+              CMD+=(--backfill-metadata-hrefs "$META_HREFS")
+            fi
+
+            if [ "$INPUT_BACKFILL_METADATA_NO_PROXY" = "true" ]; then
+              CMD+=(--backfill-metadata-no-proxy)
+            fi
+
+            if [ "$INPUT_BACKFILL_METADATA_SHUFFLE" = "true" ]; then
+              CMD+=(--backfill-metadata-shuffle)
+            fi
+          fi
+
           echo "Executing: ${CMD[*]}"
           "${CMD[@]}"
 
@@ -538,8 +633,15 @@ jobs:
           git add "$REPORTS_DIR/history.db" 2>/dev/null || true
           git add "$REPORTS_DIR/reports.db" 2>/dev/null || true
           git add "$REPORTS_DIR/operations.db" 2>/dev/null || true
-          git add "$REPORTS_DIR/D1/d1_drift.jsonl" 2>/dev/null || true
-          git add "$REPORTS_DIR/D1/d1_drift.processed.jsonl" 2>/dev/null || true
+          for D1_STATE_FILE in \
+            "$REPORTS_DIR/D1/d1_drift.jsonl" \
+            "$REPORTS_DIR/D1/d1_drift.processed.jsonl" \
+            "$REPORTS_DIR/D1/d1_recovery_outbox.jsonl" \
+            "$REPORTS_DIR/D1/d1_recovery_outbox.processed.jsonl" \
+            "$REPORTS_DIR/D1/d1_port_summary.json"
+          do
+            git add "$D1_STATE_FILE" 2>/dev/null || true
+          done
           find "$REPORTS_DIR/Migration" -type f -exec git add {} \; 2>/dev/null || true
 
           if git diff --cached --quiet; then
@@ -628,6 +730,18 @@ jobs:
             else
               echo "  - QB Category: (default)" >> $GITHUB_STEP_SUMMARY
             fi
+          fi
+          printf -- '- **Backfill Metadata**: %s\n' "$(summary_bool "$INPUT_BACKFILL_METADATA")" >> $GITHUB_STEP_SUMMARY
+          if [ "$INPUT_BACKFILL_METADATA" = "true" ]; then
+            printf '  - Limit: %s\n' "${INPUT_BACKFILL_METADATA_LIMIT:-0 (all)}" >> $GITHUB_STEP_SUMMARY
+            printf '  - Limit per worker: %s\n' "${INPUT_BACKFILL_METADATA_LIMIT_PER_WORKER:-0 (all)}" >> $GITHUB_STEP_SUMMARY
+            if [ -n "$INPUT_BACKFILL_METADATA_HREFS" ]; then
+              printf '  - Hrefs: %s\n' "$INPUT_BACKFILL_METADATA_HREFS" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "  - Hrefs: (all missing)" >> $GITHUB_STEP_SUMMARY
+            fi
+            printf '  - No Proxy: %s\n' "$(summary_bool "$INPUT_BACKFILL_METADATA_NO_PROXY")" >> $GITHUB_STEP_SUMMARY
+            printf '  - Shuffle: %s\n' "$(summary_bool "$INPUT_BACKFILL_METADATA_SHUFFLE")" >> $GITHUB_STEP_SUMMARY
           fi
           echo "" >> $GITHUB_STEP_SUMMARY
           printf -- '- **Runner**: %s\n' "$INPUT_RUNNER" >> $GITHUB_STEP_SUMMARY

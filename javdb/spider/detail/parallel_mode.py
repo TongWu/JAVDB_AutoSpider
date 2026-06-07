@@ -4,7 +4,8 @@ from dataclasses import dataclass, field
 from typing import List
 
 from javdb.infra.logging import get_logger
-from javdb.spider.parser import parse_detail
+from javdb.parsing import parse_detail_page
+from javdb.parsing.magnet_categorize import categorize
 
 from javdb.spider.detail.runner import (
     process_detail_entries,
@@ -39,27 +40,27 @@ class DetailTask:
 
 
 def _spider_parse_fn(html: str, task: EngineTask):
-    """Call ``parse_detail`` on raw HTML.
+    """Parse raw detail HTML into the spider's per-entry dict.
 
     Returns a dict with parsed fields on success, ``None`` on failure so the
     engine re-queues the task to another proxy.
     """
-    magnets, actor_info, actor_gender, actor_link, supporting, ok = (
-        parse_detail(html, task.entry_index, skip_sleep=True)
-    )
-    if not ok:
+    detail = parse_detail_page(html)
+    if not detail.parse_success:
         return None
     return {
-        'magnets': magnets,
-        'actor_info': actor_info,
-        'actor_gender': actor_gender or '',
-        'actor_link': actor_link or '',
-        'supporting': supporting or '',
+        'magnet_links': categorize(detail.get_magnets_as_legacy(), task.entry_index),
+        'actor_info': detail.get_first_actor_name(),
+        'actor_gender': detail.get_first_actor_gender() or '',
+        'actor_link': detail.get_first_actor_href() or '',
+        'supporting': detail.get_supporting_actors_json() or '',
+        'movie_detail': detail,
     }
 
 
 def build_parallel_detail_backend(
     *,
+    runtime=None,
     use_cookie: bool,
     use_proxy: bool = True,
     use_cf_bypass: bool = False,
@@ -73,6 +74,7 @@ def build_parallel_detail_backend(
             use_proxy=use_proxy,
             use_cf_bypass=use_cf_bypass,
         ),
+        runtime=runtime,
     )
 
 
@@ -98,6 +100,8 @@ def process_detail_entries_parallel(
     dedup_csv_path: str = '',
     enable_redownload: bool = False,
     redownload_threshold: float = 0.30,
+    *,
+    runtime=None,
 ) -> dict:
     """Process detail entries in parallel using one worker per proxy.
 
@@ -105,9 +109,11 @@ def process_detail_entries_parallel(
         rows, skipped_history, failed, failed_movies, no_new_torrents
     """
     backend = build_parallel_detail_backend(
+        runtime=runtime,
         use_cookie=use_cookie,
     )
     return process_detail_entries(
+        runtime=runtime,
         backend=backend,
         entries=entries,
         phase=phase,

@@ -25,9 +25,9 @@ Design notes:
   flagged in the W4 plan (10x speed-up target).
 * DB benchmarks (3) intentionally use an in-memory SQLite so the
   reported time is bound by Python prep cost rather than disk I/O.
-* Proxy pool benchmarks (5) report both the round-robin and
-  health-weighted paths separately so the random.choices overhead is
-  visible.
+* Proxy benchmark (1) covers the pure-Python ``is_proxy_usable`` predicate;
+  the pool selection paths now live in the Rust core (ADR-041 Rust-Required)
+  and are profiled there, not here.
 """
 
 from __future__ import annotations
@@ -129,12 +129,12 @@ def _bench(
 def bench_parse_detail_python_only(iterations: int) -> Dict[str, float]:
     """Pure-Python BeautifulSoup fallback (NOT the production path).
 
-    Imports directly from the submodule to bypass the Rust dispatcher in
-    ``apps.api.parsers.__init__``. Use this only to measure the cost of
+    Imports directly from the fallback submodule to bypass the Rust dispatcher in
+    ``javdb.parsing``. Use this only to measure the cost of
     the FROZEN Python fallback, e.g. when validating that the Rust path
     actually beats it.
     """
-    from apps.api.parsers.detail_parser import parse_detail_page
+    from javdb.parsing.fallback.detail_parser import parse_detail_page
     html = _load_fixture("detail_page_AVSW-067.html")
     return _bench(
         "parse_detail_python_only", iterations,
@@ -143,8 +143,8 @@ def bench_parse_detail_python_only(iterations: int) -> Dict[str, float]:
 
 
 def bench_parse_detail_canonical(iterations: int) -> Dict[str, float]:
-    """Canonical entry: apps.api.parsers.parse_detail_page (Rust if available)."""
-    from apps.api.parsers import parse_detail_page, RUST_PARSERS_AVAILABLE
+    """Canonical entry: javdb.parsing.parse_detail_page (Rust if available)."""
+    from javdb.parsing import parse_detail_page, RUST_PARSERS_AVAILABLE
     html = _load_fixture("detail_page_AVSW-067.html")
     print(f"  (RUST_PARSERS_AVAILABLE={RUST_PARSERS_AVAILABLE})")
     return _bench(
@@ -154,18 +154,31 @@ def bench_parse_detail_canonical(iterations: int) -> Dict[str, float]:
 
 
 def bench_parse_detail_wrapper(iterations: int) -> Dict[str, float]:
-    """Spider-side wrapper: parse_detail (includes tuple reshape)."""
-    from javdb.spider.parser import parse_detail
+    """Finished-object path: parse_detail_page + categorize the detail's magnets.
+
+    Categorises via the parsing-layer free function `categorize(...)` on
+    ``detail.get_magnets_as_legacy()`` — the canonical interface, uniform across
+    the Rust and Python detail objects — so the benchmark exercises the same
+    finished-object path production callers use.
+    """
+    from javdb.parsing import parse_detail_page
+    from javdb.parsing.magnet_categorize import categorize
     html = _load_fixture("detail_page_AVSW-067.html")
+
+    def _parse_and_categorize():
+        detail = parse_detail_page(html)
+        categorize(detail.get_magnets_as_legacy(), index=1)
+        return detail
+
     return _bench(
         "parse_detail_wrapper", iterations,
-        lambda: parse_detail(html, index=1, skip_sleep=True),
+        _parse_and_categorize,
     )
 
 
 def bench_parse_index_python_only(iterations: int) -> Dict[str, float]:
     """Pure-Python BeautifulSoup fallback (FROZEN, NOT the production path)."""
-    from apps.api.parsers.index_parser import parse_index_page
+    from javdb.parsing.fallback.index_parser import parse_index_page
     html = _load_fixture("JavDB-normal_index-page1.html")
     return _bench(
         "parse_index_python_only", iterations,
@@ -174,15 +187,15 @@ def bench_parse_index_python_only(iterations: int) -> Dict[str, float]:
 
 
 def bench_parse_index_canonical(iterations: int) -> Dict[str, float]:
-    """Canonical entry: apps.api.parsers.parse_index_page (Rust if available).
+    """Canonical entry: javdb.parsing.parse_index_page (Rust if available).
 
-    Important: ``apps.api.parsers/__init__.py`` dispatches to ``javdb_rust_core``
-    when the extension is installed. Importing from the submodule
-    (``apps.api.parsers.index_parser``) bypasses that dispatcher and hits
+    Important: ``javdb.parsing`` dispatches to ``javdb.rust_core``
+    when the extension is installed. Importing from a fallback submodule
+    (``javdb.parsing.fallback.index_parser``) bypasses that dispatcher and hits
     the FROZEN Python fallback — which is what the W4.1 baseline did
     until this correction.
     """
-    from apps.api.parsers import parse_index_page, RUST_PARSERS_AVAILABLE
+    from javdb.parsing import parse_index_page, RUST_PARSERS_AVAILABLE
     html = _load_fixture("JavDB-normal_index-page1.html")
     print(f"  (RUST_PARSERS_AVAILABLE={RUST_PARSERS_AVAILABLE})")
     return _bench(
@@ -273,7 +286,7 @@ def _seed_history(db_path: str, n_movies: int) -> None:
 
 def bench_db_load_history(iterations: int) -> Dict[str, float]:
     """db_load_history with 1000 seeded rows in an in-memory DB."""
-    from javdb.storage.db import db_load_history
+    from javdb.storage.db._db_history_read import db_load_history
     db_path = _setup_in_memory_db()
     try:
         _seed_history(db_path, n_movies=1000)
@@ -318,39 +331,9 @@ def bench_category_to_indicators(iterations: int) -> Dict[str, float]:
 # ---------------------------------------------------------------------------
 
 
-def _build_pool(n_proxies: int = 5):
-    """Build a ProxyPool with ``n_proxies`` fake proxies."""
-    from javdb.proxy.pool import ProxyPool
-    pool = ProxyPool()
-    for i in range(n_proxies):
-        pool.add_proxy(
-            http_url=f"http://10.0.0.{i+1}:8080",
-            https_url=f"http://10.0.0.{i+1}:8080",
-            name=f"P{i+1}",
-        )
-    return pool
-
-
-def bench_get_next_proxy_rr(iterations: int) -> Dict[str, float]:
-    """Round-robin proxy selection (no health provider)."""
-    pool = _build_pool()
-    return _bench(
-        "get_next_proxy_rr", iterations,
-        lambda: pool.get_next_proxy(),
-    )
-
-
-def bench_get_next_proxy_weighted(iterations: int) -> Dict[str, float]:
-    """Health-weighted proxy selection."""
-    pool = _build_pool()
-    # Stable scores so random.choices runs the full weighting math.
-    pool.set_health_provider(lambda name: 0.5 + 0.1 * (hash(name) % 5))
-    return _bench(
-        "get_next_proxy_weighted", iterations,
-        lambda: pool.get_next_proxy(),
-    )
-
-
+# ADR-041: the Python-pool selection benchmarks (get_next_proxy_rr / _weighted)
+# were dropped — the proxy pool is now Rust-Required and has no Python pool to
+# profile. ProxyInfo / is_proxy_usable remain pure-Python and are still profiled.
 def bench_is_proxy_usable(iterations: int) -> Dict[str, float]:
     """is_proxy_usable predicate on a ProxyInfo."""
     from javdb.proxy.pool import ProxyInfo
@@ -387,9 +370,7 @@ BENCHMARKS: List[Tuple[str, Callable[[int], Dict[str, float]], int]] = [
     ("db_load_history",           bench_db_load_history,           20),
     ("compute_indicators",        bench_compute_indicators,        500_000),
     ("category_to_indicators",    bench_category_to_indicators,    500_000),
-    # Proxy pool.
-    ("get_next_proxy_rr",         bench_get_next_proxy_rr,         200_000),
-    ("get_next_proxy_weighted",   bench_get_next_proxy_weighted,   200_000),
+    # Proxy pool (Rust-Required; ADR-041) — only the pure-Python predicate.
     ("is_proxy_usable",           bench_is_proxy_usable,           1_000_000),
 ]
 

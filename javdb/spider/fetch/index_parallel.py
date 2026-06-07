@@ -1,7 +1,7 @@
 """Parallel index-page fetching backed by the shared FetchEngine.
 
 Submits index-page URLs to a ``ParallelFetchBackend``, collects results,
-sorts them by page number, and applies ``parse_index`` exactly as the
+sorts them by page number, and applies canonical index selection exactly as the
 sequential path does — but with one worker per proxy running concurrently.
 
 Two submission strategies:
@@ -16,10 +16,12 @@ Two submission strategies:
 from __future__ import annotations
 
 import os
+from threading import Event
 from typing import Dict, List, Optional
 
 from javdb.infra.logging import get_logger
-from javdb.spider.parser import parse_index
+from javdb.parsing import parse_index_page
+from javdb.pipeline.index_selection import select_index_entries
 from javdb.spider.url_helper import detect_url_type
 from javdb.spider.filename_helper import generate_output_csv_name_from_html
 
@@ -34,6 +36,7 @@ from javdb.spider.fetch.fetch_engine import (
     ParallelFetchBackend,
 )
 from javdb.spider.runtime.config import PROXY_POOL
+from javdb.ops.sentinel import field_health as _sentinel_field_health
 
 logger = get_logger(__name__)
 
@@ -67,6 +70,7 @@ def _index_parse_fn(html: str, task: EngineTask) -> Optional[dict]:
 
 def build_parallel_index_backend(
     *,
+    runtime=None,
     use_cookie: bool,
     use_proxy: bool = True,
     use_cf_bypass: bool = False,
@@ -86,6 +90,7 @@ def build_parallel_index_backend(
             use_proxy=use_proxy,
             use_cf_bypass=use_cf_bypass,
         ),
+        runtime=runtime,
     )
 
 
@@ -95,6 +100,7 @@ def build_parallel_index_backend(
 
 def fetch_all_index_pages_parallel(
     *,
+    runtime=None,
     start_page: int,
     end_page: int,
     parse_all: bool,
@@ -108,6 +114,7 @@ def fetch_all_index_pages_parallel(
     output_dated_dir: str,
     csv_path: str,
     user_specified_output: bool,
+    cancel_event: Event | None = None,
 ) -> dict:
     """Fetch index pages in parallel and return the same dict as the
     sequential ``fetch_all_index_pages``.
@@ -119,6 +126,7 @@ def fetch_all_index_pages_parallel(
     """
 
     backend = build_parallel_index_backend(
+        runtime=runtime,
         use_cookie=custom_url is not None,
         use_proxy=use_proxy,
         use_cf_bypass=use_cf_bypass,
@@ -127,6 +135,9 @@ def fetch_all_index_pages_parallel(
 
     try:
         # -- submit tasks ---------------------------------------------------
+        if cancel_event is not None and cancel_event.is_set():
+            logger.info("Parallel index fetch cancelled before submission")
+            raise SystemExit(124)
 
         if parse_all:
             window_size = max(len(PROXY_POOL) * 2, 4) if PROXY_POOL else 4
@@ -153,6 +164,10 @@ def fetch_all_index_pages_parallel(
         stop_collecting = False
 
         for result in backend.results():
+            if cancel_event is not None and cancel_event.is_set():
+                logger.info("Parallel index fetch cancelled")
+                raise SystemExit(124)
+
             page_num = result.task.meta.get('page_num', 0)
             results_by_page[page_num] = result
 
@@ -224,6 +239,8 @@ def fetch_all_index_pages_parallel(
     sorted_pages = sorted(results_by_page.keys())
     consecutive_empty = 0
 
+    _sentinel_field_health.start_run()  # ADR-035: begin per-run field-health (parallel path)
+
     for page_num in sorted_pages:
         result = results_by_page[page_num]
 
@@ -255,10 +272,16 @@ def fetch_all_index_pages_parallel(
 
         p1_count = 0
         p2_count = 0
+        page_result = parse_index_page(html, page_num)
+        _acc = _sentinel_field_health.current()
+        if _acc is not None and page_result is not None:
+            _acc.observe("index", page_result.movies)  # ADR-035 piggyback
 
         if phase_mode in ['1', 'all']:
-            page_results = parse_index(
-                html, page_num, phase=1,
+            page_results = select_index_entries(
+                page_result,
+                page_num=page_num,
+                phase=1,
                 disable_new_releases_filter=(custom_url is not None or ignore_release_date),
                 is_adhoc_mode=(custom_url is not None),
             )
@@ -267,8 +290,10 @@ def fetch_all_index_pages_parallel(
                 all_index_results_phase1.extend(page_results)
 
         if phase_mode in ['2', 'all']:
-            page_results_p2 = parse_index(
-                html, page_num, phase=2,
+            page_results_p2 = select_index_entries(
+                page_result,
+                page_num=page_num,
+                phase=2,
                 disable_new_releases_filter=(custom_url is not None or ignore_release_date),
                 is_adhoc_mode=(custom_url is not None),
             )
@@ -288,6 +313,10 @@ def fetch_all_index_pages_parallel(
         last_valid_page - start_page + 1 if last_valid_page >= start_page else 0,
     )
 
+    # ADR-035: do NOT persist field-health here — the report session does not
+    # exist yet at index-fetch time (run_service creates it afterwards). The
+    # accumulator stays in the process-global _CURRENT; run_service persists it
+    # once the active session id is set. (Persisting here would no-op.)
     return {
         'all_index_results_phase1': all_index_results_phase1,
         'all_index_results_phase2': all_index_results_phase2,

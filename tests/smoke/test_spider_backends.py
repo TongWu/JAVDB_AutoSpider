@@ -25,17 +25,31 @@ def make_task(index: str) -> EngineTask:
 
 def test_sequential_backend_success_updates_runtime_state_and_payload(monkeypatch):
     import javdb.spider.fetch.sequential_backend as sb
+    from javdb.parsing.magnet_categorize import categorize
+
+    magnets = [
+        {
+            'href': 'magnet:?xt=urn:btih:abc123',
+            'name': 'ABC-123-C.torrent',
+            'tags': ['字幕'],
+            'size': '4.8GB',
+            'timestamp': '2024-01-13',
+            'file_count': 1,
+        }
+    ]
+    movie_detail = object()
 
     monkeypatch.setattr(
         sb,
         'fetch_detail_page_with_fallback',
         lambda *_args, **_kwargs: (
-            ['magnet-1'],
+            magnets,
             'Actor',
             'F',
             '/actors/a1',
             'Support',
             True,
+            movie_detail,
             True,
             True,
         ),
@@ -56,11 +70,12 @@ def test_sequential_backend_success_updates_runtime_state_and_payload(monkeypatc
     assert result.success is True
     assert result.used_cf is True
     assert result.data == {
-        'magnets': ['magnet-1'],
+        'magnet_links': categorize(magnets, '1/1'),
         'actor_info': 'Actor',
         'actor_gender': 'F',
         'actor_link': '/actors/a1',
         'supporting': 'Support',
+        'movie_detail': movie_detail,
     }
     assert backend.runtime_state() == FetchRuntimeState(
         use_proxy=True,
@@ -73,8 +88,8 @@ def test_sequential_backend_failure_triggers_next_movie_sleep(monkeypatch):
 
     responses = iter(
         [
-            ([], '', '', '', '', False, False, False),
-            (['magnet-2'], 'Actor', '', '', '', True, False, False),
+            ([], '', '', '', '', False, None, False, False),
+            ([], 'Actor', '', '', '', True, object(), False, False),
         ]
     )
     sleep_calls: list[str] = []
@@ -117,9 +132,9 @@ def test_sequential_backend_skip_and_cf_fallback_keep_original_pacing(monkeypatc
 
     responses = iter(
         [
-            (['magnet-1'], 'Actor', '', '', '', True, True, True),
-            (['magnet-2'], 'Actor', '', '', '', True, True, True),
-            (['magnet-3'], 'Actor', '', '', '', True, True, True),
+            ([], 'Actor', '', '', '', True, object(), True, True),
+            ([], 'Actor', '', '', '', True, object(), True, True),
+            ([], 'Actor', '', '', '', True, object(), True, True),
         ]
     )
     movie_sleep_calls: list[str] = []

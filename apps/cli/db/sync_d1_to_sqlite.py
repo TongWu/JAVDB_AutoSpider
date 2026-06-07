@@ -282,7 +282,7 @@ def _pre_check_force_overwrite(
     would be permanently destroyed by force-overwrite.
     """
     at_risk: List[Tuple[str, str, int, int]] = []
-    for (logical_name, _key, _default), sqlite_path in zip(targets, sqlite_paths):
+    for (logical_name, _key, _default), sqlite_path in zip(targets, sqlite_paths, strict=True):
         if not os.path.exists(sqlite_path):
             continue
         d1 = D1Connection(
@@ -901,7 +901,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     overall["prune_local_only"] = args.prune_local_only
     overall["allow_local_prune_on_drift"] = args.allow_local_prune_on_drift
     overall["force_overwrite_all"] = args.force_overwrite_all
-    for (logical_name, _key, _default), sqlite_path in zip(targets, sqlite_paths):
+    for (logical_name, _key, _default), sqlite_path in zip(targets, sqlite_paths, strict=True):
         try:
             if args.force_overwrite_all:
                 result = _force_overwrite_one_logical(

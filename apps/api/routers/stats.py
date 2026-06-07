@@ -14,6 +14,11 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from apps.api.infra.auth import _require_auth
+from apps.api.routers.stats_query_builders import (
+    build_stats_trend_query,
+    build_stats_trend_query_with_paths,
+    is_sql_backed_trend_metric,
+)
 from apps.api.schemas.stats import StatsSummary, TrendDataPoint, TrendResponse
 from apps.api.services import context
 from javdb.storage.db._db_connection import (
@@ -97,7 +102,13 @@ def _proxy_bans_by_date(days: int) -> Dict[str, int]:
             continue
 
         created_at = meta.get("created_at", "")
-        if not created_at or created_at < cutoff.isoformat():
+        if not created_at:
+            continue
+        try:
+            created_dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            continue
+        if created_dt < cutoff:
             continue
 
         date_str = created_at[:10]
@@ -211,71 +222,24 @@ def stats_trend(
 
     data_points: List[TrendDataPoint] = []
 
-    if metric == "success_rate":
-        rows = _safe_query_all(
-            REPORTS_DB_PATH,
-            "SELECT DATE(DateTimeCreated), "
-            "CAST(SUM(CASE WHEN Status='committed' THEN 1 ELSE 0 END) AS REAL) / COUNT(*) "
-            "FROM ReportSessions WHERE DateTimeCreated >= ? "
-            "GROUP BY DATE(DateTimeCreated) ORDER BY DATE(DateTimeCreated)",
-            (cutoff,),
+    if metric == "duration":
+        raise HTTPException(
+            status_code=501,
+            detail={"error": {"code": "stats.not_implemented", "message": "duration metric not yet implemented"}},
         )
-        data_points = [TrendDataPoint(date=r[0], value=r[1]) for r in rows]
 
-    elif metric == "duration":
-        pass
-
-    elif metric == "movies":
-        rows = _safe_query_all(
-            REPORTS_DB_PATH,
-            "SELECT DATE(rs.DateTimeCreated) AS d, COUNT(rm.Id) "
-            "FROM ReportSessions rs LEFT JOIN ReportMovies rm ON rm.SessionId = rs.Id "
-            "WHERE rs.DateTimeCreated >= ? "
-            "GROUP BY d ORDER BY d",
-            (cutoff,),
+    elif is_sql_backed_trend_metric(metric):
+        query = build_stats_trend_query_with_paths(
+            metric=metric,
+            cutoff=cutoff,
+            reports_db_path=REPORTS_DB_PATH,
+            history_db_path=HISTORY_DB_PATH,
+            operations_db_path=OPERATIONS_DB_PATH,
         )
-        data_points = [TrendDataPoint(date=r[0], value=r[1]) for r in rows]
-
-    elif metric == "torrents":
         rows = _safe_query_all(
-            REPORTS_DB_PATH,
-            "SELECT DATE(rs.DateTimeCreated) AS d, COUNT(rt.Id) "
-            "FROM ReportSessions rs "
-            "LEFT JOIN ReportMovies rm ON rm.SessionId = rs.Id "
-            "LEFT JOIN ReportTorrents rt ON rt.ReportMovieId = rm.Id "
-            "WHERE rs.DateTimeCreated >= ? "
-            "GROUP BY d ORDER BY d",
-            (cutoff,),
-        )
-        data_points = [TrendDataPoint(date=r[0], value=r[1]) for r in rows]
-
-    elif metric == "history_growth":
-        rows = _safe_query_all(
-            HISTORY_DB_PATH,
-            "SELECT DATE(DateTimeCreated), COUNT(*) "
-            "FROM MovieHistory WHERE DateTimeCreated >= ? "
-            "GROUP BY DATE(DateTimeCreated) ORDER BY DATE(DateTimeCreated)",
-            (cutoff,),
-        )
-        data_points = [TrendDataPoint(date=r[0], value=r[1]) for r in rows]
-
-    elif metric == "pikpak":
-        rows = _safe_query_all(
-            OPERATIONS_DB_PATH,
-            "SELECT DATE(DateTimeUploadedToPikpak), COUNT(*) "
-            "FROM PikpakHistory WHERE DateTimeUploadedToPikpak >= ? "
-            "GROUP BY DATE(DateTimeUploadedToPikpak) ORDER BY DATE(DateTimeUploadedToPikpak)",
-            (cutoff,),
-        )
-        data_points = [TrendDataPoint(date=r[0], value=r[1]) for r in rows]
-
-    elif metric == "dedup":
-        rows = _safe_query_all(
-            OPERATIONS_DB_PATH,
-            "SELECT DATE(DateTimeDetected), COALESCE(SUM(ExistingFolderSize), 0) "
-            "FROM DedupRecords WHERE IsDeleted=1 AND DateTimeDetected >= ? "
-            "GROUP BY DATE(DateTimeDetected) ORDER BY DATE(DateTimeDetected)",
-            (cutoff,),
+            query.db_path,
+            query.sql,
+            query.params,
         )
         data_points = [TrendDataPoint(date=r[0], value=r[1]) for r in rows]
 
@@ -287,5 +251,8 @@ def stats_trend(
 
 
 __all__ = [
+    "build_stats_trend_query",
+    "build_stats_trend_query_with_paths",
+    "is_sql_backed_trend_metric",
     "router",
 ]

@@ -1,10 +1,12 @@
 """Index-page fetching and parsing across all pages."""
 
 import os
+from threading import Event
 from typing import Optional
 
 from javdb.infra.logging import get_logger, log_section
-from javdb.spider.parser import parse_index
+from javdb.parsing import parse_index_page
+from javdb.pipeline.index_selection import select_index_entries
 from javdb.spider.url_helper import detect_url_type
 from javdb.spider.filename_helper import generate_output_csv_name_from_html
 from javdb.pipeline.policies import (
@@ -15,12 +17,22 @@ from javdb.pipeline.policies import (
 
 import javdb.spider.runtime.state as state
 from javdb.spider.fetch.fallback import get_page_url, fetch_index_page_with_fallback
-from javdb.spider.runtime.sleep import movie_sleep_mgr
+from javdb.spider.runtime.sleep import ensure_sleep_runtime, movie_sleep_mgr
+from javdb.ops.sentinel import field_health as _sentinel_field_health
 
 logger = get_logger(__name__)
 
 
+def _sleep_manager(runtime=None):
+    runtime = runtime or state.get_active_runtime()
+    if runtime is not None:
+        return ensure_sleep_runtime(runtime).movie_sleep_mgr
+    return movie_sleep_mgr
+
+
 def fetch_all_index_pages(
+    *,
+    runtime=None,
     session, start_page: int, end_page: int, parse_all: bool,
     phase_mode: str, custom_url: Optional[str], ignore_release_date: bool,
     use_proxy: bool, use_cf_bypass: bool, max_consecutive_empty: int,
@@ -28,6 +40,7 @@ def fetch_all_index_pages(
     user_specified_output: bool,
     parsed_movies_history_phase1: dict, parsed_movies_history_phase2: dict,
     use_parallel: bool = False,
+    cancel_event: Event | None = None,
 ) -> dict:
     """Fetch and parse all index pages, collecting entries for both phases.
 
@@ -55,6 +68,7 @@ def fetch_all_index_pages(
             fetch_all_index_pages_parallel,
         )
         idx_result = fetch_all_index_pages_parallel(
+            runtime=runtime,
             start_page=start_page, end_page=end_page,
             parse_all=parse_all, phase_mode=phase_mode,
             custom_url=custom_url, ignore_release_date=ignore_release_date,
@@ -62,14 +76,17 @@ def fetch_all_index_pages(
             max_consecutive_empty=max_consecutive_empty,
             output_csv=output_csv, output_dated_dir=output_dated_dir,
             csv_path=csv_path, user_specified_output=user_specified_output,
+            cancel_event=cancel_event,
         )
         return _post_process_index_results(
             idx_result, custom_url,
             parsed_movies_history_phase1, parsed_movies_history_phase2,
             num_workers=active_workers,
+            runtime=runtime,
         )
 
     return _fetch_all_index_pages_sequential(
+        runtime=runtime,
         session=session, start_page=start_page, end_page=end_page,
         parse_all=parse_all, phase_mode=phase_mode, custom_url=custom_url,
         ignore_release_date=ignore_release_date, use_proxy=use_proxy,
@@ -80,17 +97,19 @@ def fetch_all_index_pages(
         parsed_movies_history_phase1=parsed_movies_history_phase1,
         parsed_movies_history_phase2=parsed_movies_history_phase2,
         num_workers=active_workers,
+        cancel_event=cancel_event,
     )
 
 
 def _fetch_all_index_pages_sequential(
-    session, start_page: int, end_page: int, parse_all: bool,
+    runtime, session, start_page: int, end_page: int, parse_all: bool,
     phase_mode: str, custom_url: Optional[str], ignore_release_date: bool,
     use_proxy: bool, use_cf_bypass: bool, max_consecutive_empty: int,
     output_csv: str, output_dated_dir: str, csv_path: str,
     user_specified_output: bool,
     parsed_movies_history_phase1: dict, parsed_movies_history_phase2: dict,
     num_workers: int = 1,
+    cancel_event: Event | None = None,
 ) -> dict:
     """Original sequential index fetch logic."""
 
@@ -103,7 +122,13 @@ def _fetch_all_index_pages_sequential(
     consecutive_empty_pages = 0
     csv_name_resolved = False
 
+    _sentinel_field_health.start_run()  # ADR-035: begin per-run field-health
+
     while True:
+        if cancel_event is not None and cancel_event.is_set():
+            logger.info("Index page fetch cancelled")
+            raise SystemExit(124)
+
         page_url = get_page_url(page_num, custom_url=custom_url)
         logger.debug(f"[Page {page_num}] Fetching: {page_url}")
 
@@ -114,6 +139,7 @@ def _fetch_all_index_pages_sequential(
             use_cf_bypass=use_cf_bypass,
             page_num=page_num,
             is_adhoc_mode=custom_url is not None,
+            runtime=runtime,
         )
 
         if has_movie_list and effective_use_cf_bypass != use_cf_bypass:
@@ -149,18 +175,32 @@ def _fetch_all_index_pages_sequential(
         p1_count = 0
         p2_count = 0
 
+        page_result = parse_index_page(index_html, page_num)
+
+        _acc = _sentinel_field_health.current()
+        if _acc is not None and page_result is not None:
+            _acc.observe("index", page_result.movies)  # ADR-035 piggyback
+
         if phase_mode in ['1', 'all']:
-            page_results = parse_index(index_html, page_num, phase=1,
-                                       disable_new_releases_filter=(custom_url is not None or ignore_release_date),
-                                       is_adhoc_mode=(custom_url is not None))
+            page_results = select_index_entries(
+                page_result,
+                page_num=page_num,
+                phase=1,
+                disable_new_releases_filter=(custom_url is not None or ignore_release_date),
+                is_adhoc_mode=(custom_url is not None),
+            )
             p1_count = len(page_results)
             if p1_count > 0:
                 all_index_results_phase1.extend(page_results)
 
         if phase_mode in ['2', 'all']:
-            page_results_p2 = parse_index(index_html, page_num, phase=2,
-                                          disable_new_releases_filter=(custom_url is not None or ignore_release_date),
-                                          is_adhoc_mode=(custom_url is not None))
+            page_results_p2 = select_index_entries(
+                page_result,
+                page_num=page_num,
+                phase=2,
+                disable_new_releases_filter=(custom_url is not None or ignore_release_date),
+                is_adhoc_mode=(custom_url is not None),
+            )
             p2_count = len(page_results_p2)
             if p2_count > 0:
                 all_index_results_phase2.extend(page_results_p2)
@@ -189,10 +229,15 @@ def _fetch_all_index_pages_sequential(
             break
 
         page_num += 1
-        movie_sleep_mgr.sleep()
+        _sleep_manager(runtime).sleep()
 
     logger.info(f"Fetched and parsed {last_valid_page - start_page + 1 if last_valid_page >= start_page else 0} pages")
 
+    # ADR-035: do NOT persist field-health here — the report session does not
+    # exist yet at index-fetch time (run_service creates it afterwards, since
+    # the CSV name can only be resolved from this result). The accumulator stays
+    # in the process-global _CURRENT; run_service persists it once the active
+    # session id is set. (Persisting here would no-op: no active session.)
     return _post_process_index_results(
         {
             'all_index_results_phase1': all_index_results_phase1,
@@ -207,6 +252,7 @@ def _fetch_all_index_pages_sequential(
         parsed_movies_history_phase1,
         parsed_movies_history_phase2,
         num_workers=num_workers,
+        runtime=runtime,
     )
 
 
@@ -217,6 +263,7 @@ def _post_process_index_results(
     parsed_movies_history_phase2: dict,
     *,
     num_workers: int = 1,
+    runtime=None,
 ) -> dict:
     """Estimate processing volume and apply the sleep volume multiplier."""
     all_p1 = idx_result['all_index_results_phase1']
@@ -245,7 +292,7 @@ def _post_process_index_results(
         "Estimated processing volume: N=%d (total=%d, pre-skip=%d)",
         _est_n, len(all_p1) + len(all_p2), _est_skip,
     )
-    movie_sleep_mgr.apply_volume_multiplier(
+    _sleep_manager(runtime).apply_volume_multiplier(
         _est_n, num_workers=max(1, num_workers),
     )
 

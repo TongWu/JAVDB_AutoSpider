@@ -238,6 +238,12 @@ git mv apps/cli/config_generator.py  apps/cli/ops/config_generator.py
 
 After moving, files that previously imported `from apps.cli._session_helpers import X` need to import `from apps.cli.db._session_helpers import X`. Same for any other cross-CLI imports.
 
+**2026-05-27 supersession note:** these historical rewrite instructions were
+superseded by ADR-014 Phase 3. Current helper imports must use
+`javdb.storage.sessions.lifecycle_helpers`; both legacy wrapper paths
+(`apps.cli.db._session_helpers` and `javdb.storage.rollback.session_helpers`)
+were deleted by ADR-014 Phase 3.
+
 ```bash
 grep -rEn "from apps\.cli\._session_helpers" apps/cli/ --include='*.py'
 ```

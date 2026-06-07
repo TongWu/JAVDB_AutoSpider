@@ -46,7 +46,7 @@ if str(REPO_ROOT) not in sys.path:
 
 import requests  # noqa: E402
 
-from apps.api.parsers.common import javdb_absolute_url, absolutize_supporting_actors_json  # noqa: E402
+from javdb.parsing.common import javdb_absolute_url, absolutize_supporting_actors_json  # noqa: E402
 from javdb.infra.config import cfg  # noqa: E402
 from javdb.infra.logging import setup_logging, get_logger  # noqa: E402
 
@@ -463,22 +463,20 @@ def run_actor_backfill(
     # ------------------------------------------------------------------
     if use_proxy and PROXY_POOL:
         from javdb.spider.fetch.fetch_engine import FetchEngine, EngineTask
-        from javdb.spider.parser import parse_detail
+        from javdb.parsing import parse_detail_page
 
         completed_ids: set[int] = set()
         stop_event = threading.Event()
 
         def _backfill_parse(html: str, task: EngineTask):
-            _m, actor_name, actor_gender, actor_link, supporting, ok = (
-                parse_detail(html, task.entry_index, skip_sleep=True)
-            )
-            if not ok:
+            detail = parse_detail_page(html)
+            if not detail.parse_success:
                 return None
             return {
-                'actor_name': actor_name or '',
-                'actor_gender': actor_gender or '',
-                'actor_link': actor_link or '',
-                'supporting': supporting or '',
+                'actor_name': detail.get_first_actor_name() or '',
+                'actor_gender': detail.get_first_actor_gender() or '',
+                'actor_link': detail.get_first_actor_href() or '',
+                'supporting': detail.get_supporting_actors_json() or '',
             }
 
         engine = FetchEngine.simple(
@@ -590,7 +588,17 @@ def run_actor_backfill(
                 use_cf_bypass=use_cf_bypass,
                 entry_index=entry_index, is_adhoc_mode=True,
             )
-            magnets, actor_name, actor_gender, actor_link, supporting_actors, parse_ok, _ep, _ecf = m
+            (
+                magnets,
+                actor_name,
+                actor_gender,
+                actor_link,
+                supporting_actors,
+                parse_ok,
+                _movie_detail,
+                _ep,
+                _ecf,
+            ) = m
 
             an = (actor_name or "").strip()
             ag = (actor_gender or "").strip()

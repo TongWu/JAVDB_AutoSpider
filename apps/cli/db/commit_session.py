@@ -34,7 +34,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set
 
-from apps.cli.db._session_helpers import (
+from javdb.storage.sessions.lifecycle_helpers import (
     append_jsonl_record,
     attach_run_identity,
     fanout_movie_claim,
@@ -44,11 +44,15 @@ from apps.cli.db._session_helpers import (
 )
 from javdb.storage.db import (
     close_db,
-    db_commit_session_history,
-    db_find_in_progress_sessions,
-    db_mark_session_committed,
-    db_pending_session_stats,
     init_db,
+)
+from javdb.storage.repos.history_repo import HistoryRepo
+from javdb.storage.repos.session_lifecycle_repo import SessionLifecycleRepo
+from javdb.storage.sessions.lifecycle import transition
+from javdb.pipeline.events import emit as _emit_event  # ADR-036 event spine
+from javdb.ops.sentinel.service import (  # ADR-035 site-contract gate
+    evaluate_session as _sentinel_evaluate,
+    mark_committed as _sentinel_mark_committed,
 )
 from javdb.infra.logging import (
     get_logger,
@@ -258,7 +262,7 @@ def _emit_pending_verify(
     Returns the record (for callers that want to print it / add it to
     their JSON summary).
     """
-    stats = db_pending_session_stats(session_id)
+    stats = HistoryRepo().pending_session_stats(session_id)
     drain = drain or {}
     pending_applied_count = int(
         drain.get("pending_marked_applied", 0) or 0
@@ -327,14 +331,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     since = normalize_run_started_at(args.run_started_at)
     if since:
         # commit_session has stricter window-scan semantics than the
-        # generic helper in _session_helpers: a DB hiccup with no
+        # shared session helper: a DB hiccup with no
         # explicit ``--session-id`` is a hard error (exit 1) so an
         # operator notices, but with an explicit id we still try to
-        # commit it. Call db_find_in_progress_sessions directly so the
+        # commit it. Call find_in_progress_sessions directly so the
         # helper's "swallow-and-warn" default doesn't downgrade the
         # no-explicit-id error path.
         try:
-            window_sessions = db_find_in_progress_sessions(since=since)
+            window_sessions = SessionLifecycleRepo().find_in_progress_sessions(
+                since=since,
+            )
         except Exception as e:
             if args.session_id is not None:
                 logger.warning(
@@ -379,28 +385,65 @@ def main(argv: Optional[List[str]] = None) -> int:
         pre = read_session_pre_state(sid)
         write_mode = pre.write_mode
         sess_status = pre.status
+        # ADR-035 site-contract gate: refuse to commit on critical parser drift.
+        # Fail-open: a sentinel error must never block the commit pipeline.
+        try:
+            _verdict = _sentinel_evaluate(str(sid))
+        except Exception:
+            logger.warning(
+                "Site-contract sentinel evaluation failed for session %s; "
+                "treating as non-critical (fail-open).", sid, exc_info=True,
+            )
+            _verdict = None
+        if _verdict is not None and _verdict.critical:
+            logger.error(
+                "Site-contract drift gate: critical drift for session %s "
+                "(%d finding(s)); refusing commit (FailureReason=site_drift).",
+                sid, len(_verdict.findings),
+            )
+            failed_commits.append(sid)
+            _emit_event("SessionFailed", session_id=str(sid),
+                        entity_type="session", entity_id=str(sid))  # ADR-036
+            if write_mode == 'pending':
+                _emit_pending_verify(
+                    sid, drain=None, final_status='finalizing', write_mode=write_mode,
+                    commit_attempts=1, commit_duration_ms=None,
+                    shadow_audit=_shadow_audit_enabled(args),
+                )
+            continue
         drain: Optional[Dict[str, Any]] = None
         commit_started_at: Optional[float] = None
         commit_duration_ms: Optional[int] = None
+        drained_pending_session = False
         if write_mode == 'pending' and sess_status != 'committed':
             try:
                 commit_started_at = time.monotonic()
-                drain = db_commit_session_history(sid)
+                drain = HistoryRepo().commit_session(sid)
+                drained_pending_session = True
                 commit_duration_ms = int(
                     (time.monotonic() - commit_started_at) * 1000,
                 )
                 drain['session_id'] = sid
                 pending_drains.append(drain)
-                logger.info(
-                    "Pending session committed: id=%s mode=%s drain=%s",
-                    sid, write_mode, drain,
-                )
+                if drain.get("residual_cleanup"):
+                    logger.info(
+                        "Pending session cleanup (already committed): id=%s "
+                        "residual_deleted=%d",
+                        sid, drain.get("pending_deleted", 0),
+                    )
+                else:
+                    logger.info(
+                        "Pending session committed: id=%s mode=%s drain=%s",
+                        sid, write_mode, drain,
+                    )
             except Exception as e:
                 logger.error(
                     "db_commit_session_history failed for pending session "
                     "%s: %s", sid, e,
                 )
                 failed_commits.append(sid)
+                _emit_event("SessionFailed", session_id=str(sid),
+                            entity_type="session", entity_id=str(sid))  # ADR-036
                 # Phase 2 verify: emit a verify line on failure too so the
                 # email pipeline knows commit attempted but did not finish.
                 if write_mode == 'pending':
@@ -418,10 +461,12 @@ def main(argv: Optional[List[str]] = None) -> int:
                     )
                 continue
         try:
-            n = db_mark_session_committed(sid)
+            n = transition(sid, "committed")
         except Exception as e:
             logger.error("Failed to commit session %s: %s", sid, e)
             failed_commits.append(sid)
+            _emit_event("SessionFailed", session_id=str(sid),
+                        entity_type="session", entity_id=str(sid))  # ADR-036
             if write_mode == 'pending':
                 _emit_pending_verify(
                     sid,
@@ -433,11 +478,22 @@ def main(argv: Optional[List[str]] = None) -> int:
                     shadow_audit=_shadow_audit_enabled(args),
                 )
             continue
-        if n > 0:
+        if n > 0 or drained_pending_session:
             committed.append(sid)
+            _emit_event("SessionCommitted", session_id=str(sid),
+                        entity_type="session", entity_id=str(sid))  # ADR-036
         else:
             # Already committed — that's fine, idempotent.
             skipped.append(sid)
+        # ADR-035: commit went through — this run's fills are now
+        # baseline-eligible.  Best-effort; never fail the commit on this.
+        try:
+            _sentinel_mark_committed(str(sid))
+        except Exception:
+            logger.warning(
+                "Site-contract sentinel mark_committed failed for %s",
+                sid, exc_info=True,
+            )
         if write_mode == 'pending':
             # Phase 2 verify: emit one line per pending session whose
             # commit actually went through (committed or no-op idempotent).

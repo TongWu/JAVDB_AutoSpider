@@ -59,6 +59,58 @@ def test_rust_scraper_change_runs_rust_wheel_fallback_and_parser_tests():
     assert "tests/unit/test_rust_adapters_fallback.py" in result.pytest_targets
 
 
+def test_canonical_parser_change_selects_parser_domain_and_rust_wheel():
+    result = select("javdb/parsing/fallback/detail_parser.py")
+
+    assert result.run_full_python is False
+    assert result.run_selected_python is True
+    assert result.build_rust_wheel is True
+    assert "tests/unit/test_api_parsers.py" in result.pytest_targets
+    assert "tests/unit/test_parser.py" in result.pytest_targets
+    assert "tests/unit/test_video_code_search.py" in result.pytest_targets
+    assert "tests/unit/test_fallback_shape.py" in result.pytest_targets
+    assert any("parser-domain impact rule" in reason for reason in result.reason)
+
+
+def test_proxy_change_builds_rust_wheel_for_rust_required_tests():
+    # ADR-041: the proxy pool is Rust-Required; its tests import javdb.rust_core
+    # unconditionally, so selecting them must trigger the wheel build (else CI
+    # collection fails with ImportError in a no-wheel environment).
+    result = select("javdb/proxy/pool.py")
+
+    assert "tests/unit/test_proxy_pool.py" in result.pytest_targets
+    assert result.build_rust_wheel is True
+
+
+def test_infra_change_selecting_proxy_tests_builds_rust_wheel():
+    # The proxy tests are also selected by infra changes (platform-config rule);
+    # the wheel must still be built whenever those Rust-Required tests run.
+    result = select("javdb/infra/request.py")
+
+    if "tests/unit/test_proxy_pool.py" in result.pytest_targets:
+        assert result.build_rust_wheel is True
+
+
+def test_spider_runtime_change_selecting_sleep_coordinator_builds_rust_wheel():
+    # test_sleep_with_coordinator imports RustProxyBanManager directly, so the
+    # selective push workflow must install the cached Rust wheel whenever a
+    # spider-runtime change selects that test file.
+    result = select("javdb/spider/services/content_filter.py")
+
+    assert "tests/unit/test_sleep_with_coordinator.py" in result.pytest_targets
+    assert result.build_rust_wheel is True
+
+
+def test_index_selection_change_selects_parser_domain_tests():
+    result = select("javdb/pipeline/index_selection.py")
+
+    assert result.run_full_python is False
+    assert result.run_selected_python is True
+    assert "tests/unit/test_parser.py" in result.pytest_targets
+    assert "tests/unit/test_fallback_shape.py" in result.pytest_targets
+    assert any("parser-domain impact rule" in reason for reason in result.reason)
+
+
 def test_cargo_manifest_change_runs_full_rust_tests():
     result = select("javdb/rust_core/Cargo.toml")
 
@@ -87,7 +139,30 @@ def test_changed_test_file_selects_only_that_file():
     result = select("tests/unit/test_parser.py")
 
     assert result.run_full_python is False
-    assert result.pytest_targets == ["tests/unit/test_parser.py"]
+    # The changed test file plus the always-run contract guard (ADR-018), which
+    # is force-selected on every selective build.
+    assert result.pytest_targets == [
+        "tests/unit/test_parser.py",
+        "tests/unit/test_query_contract_golden.py",
+    ]
+
+
+def test_query_contract_golden_always_runs_on_selective_builds():
+    """ADR-018: the query-builder Contract Golden is force-selected on every
+    selective build, even for an unrelated change — because a SQL-only edit to
+    a covered builder is pruned from impact analysis (string-literal-only), so
+    the guard cannot rely on impact selection to run."""
+    # An unrelated source change that selects something specific (not full).
+    result = select("javdb/pipeline/engine.py")
+    assert result.run_full_python is False
+    assert "tests/unit/test_query_contract_golden.py" in result.pytest_targets
+
+    # And when the only change is a covered builder file, the guard is selected.
+    builder = select("javdb/storage/repos/sessions_repo.py")
+    assert (
+        builder.run_full_python is True
+        or "tests/unit/test_query_contract_golden.py" in builder.pytest_targets
+    )
 
 
 def test_large_source_diff_forces_full_python():

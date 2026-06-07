@@ -6,7 +6,7 @@ JavDB scraping runtime: fetches index/detail pages, parses HTML, runs parallel/s
 
 | File | Purpose |
 |---|---|
-| `parser.py` | HTML parser for index and detail pages; emits `MovieEntry` / `TorrentEntry`. Wraps `apps.api.parsers` layer. |
+| `html_validators.py` | HTML validators / generic helpers (`is_login_page`, `is_maintenance_page`, `validate_index_html`, `result_to_dict`) with Rust-first dispatch. |
 | `contracts.py` | Cross-module data contracts: torrent category mapping, sensor priority, indicator tables (mirrored in Rust core). |
 | `url_helper.py` | JavDB URL parsing, type detection, and normalisation (Rust-accelerated with Python fallback). |
 | `filename_helper.py` | Filename derivation for spider output CSVs, with optional HTML-based name resolution. |
@@ -23,6 +23,12 @@ JavDB scraping runtime: fetches index/detail pages, parses HTML, runs parallel/s
 - `services/` — Domain services (`dedup.py`).
 - `auth/` — JavDB login session refresh.
 - `compat/` — Explicit backwards-compatibility helpers (`csv_builder.py`).
+
+## Runtime State Rule
+
+`SpiderRunService` owns one `SpiderRuntime` per run. Runtime state is split into focused objects such as `DetailRunState`, `ProxyRunState`, `LoginRunState`, `RunnerRegistryState`, `MovieClaimRuntimeState`, and `SleepRuntimeState`.
+
+New production code should accept runtime state/services explicitly instead of importing mutable fields from `javdb.spider.runtime.state`. The `state.py` module is a compatibility facade for legacy entrypoints.
 
 ## Depends on
 

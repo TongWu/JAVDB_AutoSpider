@@ -1,7 +1,8 @@
-"""Global mutable state for the spider package.
+"""Legacy compatibility facade for spider runtime state.
 
-Every module that needs to read or *mutate* shared state should
-``import javdb.spider.runtime.state as state`` and access ``state.<var>``.
+New production code should receive ``SpiderRuntime`` or focused runtime-owned
+objects explicitly. Keep legacy module-field reads and writes behind the
+compatibility helpers in this module until the facade is frozen or removed.
 """
 
 import atexit
@@ -13,7 +14,7 @@ import sys
 import threading
 import time
 import uuid
-from typing import Optional, Dict
+from typing import Any, Dict, Optional
 from datetime import datetime
 
 from javdb.infra.logging import get_logger
@@ -46,7 +47,7 @@ from javdb.proxy.coordinator.runner_registry_client import (
     proxy_pool_hash,
     proxy_pool_summary_for_registry,
 )
-from javdb.proxy.pool import ProxyPool, create_proxy_pool_from_config
+from javdb.proxy.pool import create_proxy_pool_from_config
 from javdb.proxy.policy import should_proxy_module
 from javdb.infra.request import RequestHandler, RequestConfig
 from javdb.infra.paths import ensure_dated_dir
@@ -63,12 +64,64 @@ from javdb.spider.runtime.config import (
 )
 
 logger = get_logger(__name__)
+_UNSET = object()
+
+__all__ = (
+    "bind_active_runtime",
+    "clear_active_runtime",
+    "get_active_runtime",
+    "setup_proxy_pool",
+    "initialize_request_handler",
+    "get_page",
+    "should_use_proxy_for_module",
+    "extract_ip_from_proxy_url",
+    "get_cf_bypass_service_url",
+    "is_cf_bypass_failure",
+    "set_active_runner_session",
+    "setup_runner_registry_client",
+    "setup_movie_claim_client",
+    "setup_login_state_client",
+    "setup_proxy_coordinator",
+    "setup_work_distributor_client",
+    "proxy_needs_cf_bypass",
+    "mark_proxy_cf_bypass",
+    "deduct_proxy_login_budget",
+    "ensure_reports_dir",
+    "ensure_report_dated_dir",
+    "save_proxy_ban_html",
+)
+
+# Temporary module data retained for state.py/context.py fallback internals only.
+# New production callers must use SpiderRuntime or the function facade above.
+LEGACY_DATA_FIELDS = (
+    "always_bypass_time",
+    "current_login_state_version",
+    "global_login_state_client",
+    "global_movie_claim_client",
+    "global_proxy_coordinator",
+    "global_proxy_pool",
+    "global_recommend_proxy_policy",
+    "global_request_handler",
+    "global_runner_registry_client",
+    "global_work_distributor_client",
+    "logged_in_proxy_name",
+    "login_attempted",
+    "login_attempts_per_proxy",
+    "login_failures_per_proxy",
+    "login_total_attempts",
+    "login_total_budget",
+    "parsed_links",
+    "proxies_requiring_cf_bypass",
+    "proxy_ban_html_files",
+    "refreshed_session_cookie",
+    "runtime_holder_id",
+)
 
 # ---------------------------------------------------------------------------
 # Mutable globals
 # ---------------------------------------------------------------------------
 
-global_proxy_pool: Optional[ProxyPool] = None
+global_proxy_pool: Optional[Any] = None
 global_request_handler: Optional[RequestHandler] = None
 # Cross-instance proxy coordinator (Cloudflare DO).  Lazily initialised by
 # :func:`setup_proxy_coordinator`; ``None`` means "use local throttling
@@ -229,6 +282,329 @@ from javdb.spider.runtime.proxy_state import (  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
+# Active SpiderRuntime facade (ADR-013 Phase 1)
+#
+# Wires this legacy module to the *active* :class:`SpiderRuntime` for Phase 1
+# mutable handles and Phase 3 service-handle compatibility. Scalars with
+# active direct-assignment writers (e.g. ``always_bypass_time``,
+# ``login_total_attempts``, ``current_login_state_version``) remain
+# module-owned until Phase 3/4.
+# ---------------------------------------------------------------------------
+
+from javdb.spider.runtime.active import (  # noqa: E402
+    bind_active_runtime as _bind_active_runtime,
+    clear_active_runtime as _clear_active_runtime,
+    get_active_runtime,
+)
+from javdb.spider.runtime.context import SpiderRuntime  # noqa: E402
+
+
+def get_legacy_proxy_pool():
+    """Compatibility boundary for legacy proxy-pool reads."""
+    return global_proxy_pool
+
+
+def get_legacy_proxy_coordinator():
+    """Compatibility boundary for legacy proxy-coordinator reads."""
+    return global_proxy_coordinator
+
+
+def get_legacy_login_state_client():
+    """Compatibility boundary for legacy login-state client reads."""
+    return global_login_state_client
+
+
+def get_legacy_movie_claim_client():
+    """Compatibility boundary for legacy movie-claim client reads."""
+    return global_movie_claim_client
+
+
+def get_legacy_work_distributor_client():
+    """Compatibility boundary for legacy work-distributor client reads."""
+    return global_work_distributor_client
+
+
+def get_legacy_runtime_holder_id() -> str:
+    """Compatibility boundary for the legacy runner holder id."""
+    return runtime_holder_id
+
+
+def get_legacy_parsed_links() -> set:
+    """Compatibility boundary for legacy parsed-link reads."""
+    return parsed_links
+
+
+def get_legacy_proxy_ban_html_files() -> list:
+    """Compatibility boundary for legacy proxy-ban HTML file reads."""
+    return proxy_ban_html_files
+
+
+class _LegacyDetailContext:
+    @property
+    def parsed_links(self) -> set:
+        return parsed_links
+
+
+class _LegacyRuntimeServices:
+    @property
+    def proxy_pool(self):
+        return global_proxy_pool
+
+    @property
+    def request_handler(self):
+        return global_request_handler
+
+    @property
+    def login_state_client(self):
+        return global_login_state_client
+
+
+class _LegacyLoginContext:
+    @property
+    def login_attempted(self) -> bool:
+        return login_attempted
+
+    @login_attempted.setter
+    def login_attempted(self, value: bool) -> None:
+        global login_attempted
+        login_attempted = value
+
+    @property
+    def refreshed_session_cookie(self) -> Optional[str]:
+        return refreshed_session_cookie
+
+    @refreshed_session_cookie.setter
+    def refreshed_session_cookie(self, value: Optional[str]) -> None:
+        global refreshed_session_cookie
+        refreshed_session_cookie = value
+
+    @property
+    def logged_in_proxy_name(self) -> Optional[str]:
+        return logged_in_proxy_name
+
+    @logged_in_proxy_name.setter
+    def logged_in_proxy_name(self, value: Optional[str]) -> None:
+        global logged_in_proxy_name
+        logged_in_proxy_name = value
+
+    @property
+    def current_login_state_version(self) -> Optional[int]:
+        return current_login_state_version
+
+    @current_login_state_version.setter
+    def current_login_state_version(self, value: Optional[int]) -> None:
+        global current_login_state_version
+        current_login_state_version = value
+
+    @property
+    def login_attempts_per_proxy(self) -> Dict[str, int]:
+        return login_attempts_per_proxy
+
+    @property
+    def login_failures_per_proxy(self) -> Dict[str, int]:
+        return login_failures_per_proxy
+
+    @property
+    def login_total_attempts(self) -> int:
+        return login_total_attempts
+
+    @login_total_attempts.setter
+    def login_total_attempts(self, value: int) -> None:
+        global login_total_attempts
+        login_total_attempts = value
+
+    @property
+    def login_total_budget(self) -> int:
+        return login_total_budget
+
+    @login_total_budget.setter
+    def login_total_budget(self, value: int) -> None:
+        global login_total_budget
+        login_total_budget = value
+
+
+_legacy_detail_context = _LegacyDetailContext()
+_legacy_runtime_services = _LegacyRuntimeServices()
+_legacy_login_context = _LegacyLoginContext()
+
+
+def get_legacy_detail_context():
+    """Return a focused legacy detail-state adapter."""
+    return _legacy_detail_context
+
+
+def get_legacy_runtime_services():
+    """Return a focused legacy service-handle adapter."""
+    return _legacy_runtime_services
+
+
+def get_legacy_login_context():
+    """Return a focused legacy login-state adapter."""
+    return _legacy_login_context
+
+
+def set_legacy_always_bypass_time(value: Optional[int]) -> None:
+    """Compatibility boundary for legacy CF-bypass duration writes."""
+    global always_bypass_time
+    always_bypass_time = value
+
+
+def get_legacy_cf_bypass_state():
+    """Return legacy CF-bypass duration, lock, and proxy marker map."""
+    return always_bypass_time, _cf_bypass_lock, proxies_requiring_cf_bypass
+
+
+def get_legacy_login_budget() -> tuple[int, int]:
+    """Return legacy ``(total_attempts, total_budget)``."""
+    return login_total_attempts, login_total_budget
+
+
+def set_legacy_login_total_budget(value: int) -> None:
+    """Compatibility boundary for legacy login budget writes."""
+    global login_total_budget
+    login_total_budget = value
+
+
+def get_legacy_login_state() -> tuple[Optional[str], Optional[str], Optional[int]]:
+    """Return legacy ``(proxy_name, cookie, version)`` login state."""
+    return logged_in_proxy_name, refreshed_session_cookie, current_login_state_version
+
+
+def set_legacy_login_state(
+    *,
+    proxy_name=_UNSET,
+    cookie=_UNSET,
+    version=_UNSET,
+) -> None:
+    """Compatibility boundary for legacy login-state writes."""
+    global logged_in_proxy_name, refreshed_session_cookie, current_login_state_version
+    if proxy_name is not _UNSET:
+        logged_in_proxy_name = proxy_name
+    if cookie is not _UNSET:
+        refreshed_session_cookie = cookie
+    if version is not _UNSET:
+        current_login_state_version = version
+
+
+def _deduct_legacy_proxy_login_budget_locked(proxy_name: str) -> int:
+    """Legacy login-budget deduction. Caller must hold ``_login_budget_lock``."""
+    global login_total_budget
+    if proxy_name in _login_budget_deducted_proxies:
+        return 0
+    if login_total_budget <= 0:
+        _login_budget_deducted_proxies.add(proxy_name)
+        return 0
+
+    used = login_attempts_per_proxy.get(proxy_name, 0)
+    remaining = LOGIN_ATTEMPTS_PER_PROXY_LIMIT - used
+    if remaining <= 0:
+        _login_budget_deducted_proxies.add(proxy_name)
+        return 0
+
+    new_budget = max(login_total_attempts, login_total_budget - remaining)
+    actually_deducted = login_total_budget - new_budget
+    login_total_budget = new_budget
+    _login_budget_deducted_proxies.add(proxy_name)
+    return actually_deducted
+
+
+def _sync_legacy_globals_from_runtime(runtime: SpiderRuntime) -> None:
+    global parsed_links, proxy_ban_html_files, runtime_holder_id
+    global _runner_session, _runner_heartbeat_thread, _runner_unregistered
+    global _runner_heartbeat_stop, _last_applied_config_version
+    global _signal_banned_proxies, _signal_lock
+    global _HEARTBEAT_INTERVAL_MULTI_RUNNER_SEC, _HEARTBEAT_INTERVAL_SINGLE_RUNNER_SEC
+    global _RUNNER_HEARTBEAT_INTERVAL_SEC
+    global always_bypass_time, proxies_requiring_cf_bypass, _cf_bypass_lock
+    global global_proxy_pool, global_request_handler, global_proxy_coordinator
+    global global_login_state_client, global_runner_registry_client
+    global global_recommend_proxy_policy, global_work_distributor_client
+    global global_movie_claim_client, _movie_claim_client_pending, _movie_claim_mode
+    global _movie_claim_intended_mode, _movie_claim_last_recommended
+    global _movie_claim_lock, _movie_claim_swept_at_exit
+    parsed_links = runtime.detail.parsed_links
+    proxy_ban_html_files = runtime.proxy.proxy_ban_html_files
+    always_bypass_time = runtime.proxy.always_bypass_time
+    proxies_requiring_cf_bypass = runtime.proxy.proxies_requiring_cf_bypass
+    _cf_bypass_lock = runtime.proxy.cf_bypass_lock
+    runtime_holder_id = runtime.runner_registry.holder_id
+    _runner_session = runtime.runner_registry.session
+    _runner_heartbeat_thread = runtime.runner_registry.heartbeat_thread
+    _runner_heartbeat_stop = runtime.runner_registry.heartbeat_stop
+    _runner_unregistered = runtime.runner_registry.unregistered
+    _last_applied_config_version = runtime.runner_registry.last_applied_config_version
+    _signal_banned_proxies = runtime.runner_registry.signal_banned_proxies
+    _signal_lock = runtime.runner_registry.signal_lock
+    _HEARTBEAT_INTERVAL_MULTI_RUNNER_SEC = (
+        runtime.runner_registry.heartbeat_interval_multi_runner_sec
+    )
+    _HEARTBEAT_INTERVAL_SINGLE_RUNNER_SEC = (
+        runtime.runner_registry.heartbeat_interval_single_runner_sec
+    )
+    _RUNNER_HEARTBEAT_INTERVAL_SEC = (
+        runtime.runner_registry.runner_heartbeat_interval_sec
+    )
+    global_proxy_pool = runtime.services.proxy_pool
+    global_request_handler = runtime.services.request_handler
+    global_proxy_coordinator = runtime.services.proxy_coordinator
+    global_login_state_client = runtime.services.login_state_client
+    global_runner_registry_client = runtime.services.runner_registry_client
+    global_recommend_proxy_policy = runtime.services.recommend_proxy_policy
+    global_work_distributor_client = runtime.services.work_distributor_client
+    runtime.services.movie_claim_client = runtime.movie_claim.client_public
+    global_movie_claim_client = runtime.movie_claim.client_public
+    _movie_claim_client_pending = runtime.movie_claim.client_pending
+    _movie_claim_mode = runtime.movie_claim.mode
+    _movie_claim_intended_mode = runtime.movie_claim.intended_mode
+    _movie_claim_last_recommended = runtime.movie_claim.last_recommended
+    _movie_claim_lock = runtime.movie_claim.lock
+    _movie_claim_swept_at_exit = runtime.movie_claim.swept_at_exit
+
+
+def sync_legacy_globals_from_runtime(runtime: SpiderRuntime) -> None:
+    """Refresh the temporary legacy facade from a runtime-owned state graph."""
+    _sync_legacy_globals_from_runtime(runtime)
+
+
+def bind_active_runtime(runtime: SpiderRuntime) -> SpiderRuntime:
+    """Bind a runtime before any setup_* calls or concurrent spider startup."""
+    bound = _bind_active_runtime(runtime)
+    _sync_legacy_globals_from_runtime(bound)
+    return bound
+
+
+def _clear_runtime_service_globals(runtime: SpiderRuntime) -> None:
+    global global_movie_claim_client
+
+    service_globals = (
+        ("global_proxy_pool", "proxy_pool"),
+        ("global_request_handler", "request_handler"),
+        ("global_proxy_coordinator", "proxy_coordinator"),
+        ("global_login_state_client", "login_state_client"),
+        ("global_runner_registry_client", "runner_registry_client"),
+        ("global_recommend_proxy_policy", "recommend_proxy_policy"),
+        ("global_work_distributor_client", "work_distributor_client"),
+    )
+    for global_name, service_name in service_globals:
+        service_value = getattr(runtime.services, service_name)
+        if service_value is not None and globals()[global_name] is service_value:
+            globals()[global_name] = None
+    if (
+        runtime.movie_claim.client_public is not None
+        and global_movie_claim_client is runtime.movie_claim.client_public
+    ):
+        global_movie_claim_client = None
+
+
+def clear_active_runtime(runtime: SpiderRuntime | None = None) -> None:
+    active = get_active_runtime()
+    _clear_active_runtime(runtime)
+    cleared = active if runtime is None else runtime
+    if active is cleared and cleared is not None:
+        _clear_runtime_service_globals(cleared)
+
+
+# ---------------------------------------------------------------------------
 # Request delegation
 # ---------------------------------------------------------------------------
 
@@ -236,10 +612,15 @@ from javdb.spider.runtime.proxy_state import (  # noqa: E402
 def get_page(url, session=None, use_cookie=False, use_proxy=False,
              module_name='unknown', max_retries=3, use_cf_bypass=False):
     """Fetch a webpage via the global request handler."""
-    if global_request_handler is None:
+    runtime = get_active_runtime()
+    request_handler = (
+        runtime.services.request_handler if runtime is not None
+        else global_request_handler
+    )
+    if request_handler is None:
         logger.error("Request handler not initialized. Call initialize_request_handler() first.")
         return None
-    return global_request_handler.get_page(
+    return request_handler.get_page(
         url=url, session=session, use_cookie=use_cookie,
         use_proxy=use_proxy, module_name=module_name,
         max_retries=max_retries, use_cf_bypass=use_cf_bypass,
@@ -247,8 +628,13 @@ def get_page(url, session=None, use_cookie=False, use_proxy=False,
 
 
 def should_use_proxy_for_module(module_name: str, use_proxy_flag) -> bool:
-    if global_request_handler:
-        return global_request_handler.should_use_proxy_for_module(module_name, use_proxy_flag)
+    runtime = get_active_runtime()
+    request_handler = (
+        runtime.services.request_handler if runtime is not None
+        else global_request_handler
+    )
+    if request_handler:
+        return request_handler.should_use_proxy_for_module(module_name, use_proxy_flag)
     return should_proxy_module(module_name, use_proxy_flag, PROXY_MODULES, proxy_mode=PROXY_MODE)
 
 
@@ -257,8 +643,13 @@ def extract_ip_from_proxy_url(proxy_url: str) -> Optional[str]:
 
 
 def get_cf_bypass_service_url(proxy_ip: Optional[str] = None) -> str:
-    if global_request_handler:
-        return global_request_handler.get_cf_bypass_service_url(proxy_ip)
+    runtime = get_active_runtime()
+    request_handler = (
+        runtime.services.request_handler if runtime is not None
+        else global_request_handler
+    )
+    if request_handler:
+        return request_handler.get_cf_bypass_service_url(proxy_ip)
     if proxy_ip:
         return f"http://{proxy_ip}:{CF_BYPASS_SERVICE_PORT}"
     return f"http://127.0.0.1:{CF_BYPASS_SERVICE_PORT}"
@@ -273,6 +664,15 @@ def is_cf_bypass_failure(html_content: str) -> bool:
 
 
 def setup_proxy_coordinator() -> Optional[ProxyCoordinatorClient]:
+    runtime = get_active_runtime()
+    if runtime is not None:
+        client = runtime.setup_proxy_coordinator()
+        _sync_legacy_globals_from_runtime(runtime)
+        return client
+    return _setup_proxy_coordinator_legacy()
+
+
+def _setup_proxy_coordinator_legacy() -> Optional[ProxyCoordinatorClient]:
     """Initialise the cross-instance proxy coordinator from configuration.
 
     Reads ``PROXY_COORDINATOR_URL`` / ``PROXY_COORDINATOR_TOKEN`` from the
@@ -337,6 +737,15 @@ def setup_proxy_coordinator() -> Optional[ProxyCoordinatorClient]:
 
 
 def setup_login_state_client() -> Optional[LoginStateClient]:
+    runtime = get_active_runtime()
+    if runtime is not None:
+        client = runtime.setup_login_state_client()
+        _sync_legacy_globals_from_runtime(runtime)
+        return client
+    return _setup_login_state_client_legacy()
+
+
+def _setup_login_state_client_legacy() -> Optional[LoginStateClient]:
     """Initialise the cross-instance login-state coordinator.
 
     Sister function of :func:`setup_proxy_coordinator`: reads the **same**
@@ -382,37 +791,14 @@ def setup_login_state_client() -> Optional[LoginStateClient]:
 
 
 def _apply_movie_claim_recommendation(recommended: bool) -> None:
-    """Mount or unmount :data:`global_movie_claim_client` per *recommended*.
+    runtime = get_active_runtime()
+    if runtime is not None:
+        return runtime._apply_movie_claim_recommendation(recommended)
+    return _apply_movie_claim_recommendation_legacy(recommended)
 
-    Called from three places: once at the end of
-    :func:`setup_runner_registry_client` (the first ``register`` response),
-    on every successful heartbeat in :func:`_runner_heartbeat_loop`, and
-    on every successful re-register inside the same loop.  The function
-    is idempotent and edge-triggered: the mount/unmount transition only
-    happens when the public ``global_movie_claim_client`` actually
-    changes, so a steady-state cluster doesn't spam INFO logs.
 
-    Mode semantics (matches the docs in §15.4 of
-    ``docs/PROXY_COORDINATOR_DEPLOY.md``):
-
-    - :data:`MOVIE_CLAIM_MODE_OFF` — never mount; signal is ignored.
-      ``_movie_claim_last_recommended`` is still updated so the
-      heartbeat-interval helper can run uniformly across modes.
-    - :data:`MOVIE_CLAIM_MODE_FORCE_ON` — always mount (idempotently);
-      signal is ignored.  Reproduces the legacy P1-B "operator
-      explicitly enabled it" behaviour.  Mounts ``_movie_claim_client_pending``
-      onto the global if the global is still ``None`` (defensive: keeps
-      the function safe even if a future caller blanks the global).
-    - :data:`MOVIE_CLAIM_MODE_AUTO` — drive the global purely from the
-      recommendation: ``True`` mounts pending → global, ``False``
-      unmounts global (keeps pending alive so the next ``True`` is a
-      cheap pointer copy, no new HTTP session).
-
-    Thread safety: held under :data:`_movie_claim_lock` so a concurrent
-    heartbeat tick + atexit unregister cannot toggle the global out
-    from under each other.  Callers must NEVER hold the lock across
-    network I/O.
-    """
+def _apply_movie_claim_recommendation_legacy(recommended: bool) -> None:
+    """Mount or unmount :data:`global_movie_claim_client` per *recommended*."""
     global global_movie_claim_client, _movie_claim_last_recommended
 
     with _movie_claim_lock:
@@ -420,15 +806,9 @@ def _apply_movie_claim_recommendation(recommended: bool) -> None:
         mode = _movie_claim_mode
 
         if mode == MOVIE_CLAIM_MODE_OFF:
-            # Signal ignored; never mount.  Update the cached flag so
-            # the heartbeat interval helper still has a value to read,
-            # even though it will only honour 60 s for non-auto modes.
             return
 
         if mode == MOVIE_CLAIM_MODE_FORCE_ON:
-            # Force-on: idempotently mount pending → global if the
-            # global got blanked for any reason.  Do NOT log on the
-            # steady-state path (already-mounted is the common case).
             if (
                 global_movie_claim_client is None
                 and _movie_claim_client_pending is not None
@@ -440,8 +820,6 @@ def _apply_movie_claim_recommendation(recommended: bool) -> None:
                 )
             return
 
-        # Auto mode: drive the global from the registry signal,
-        # edge-triggered so steady state stays log-quiet.
         if recommended:
             if (
                 global_movie_claim_client is None
@@ -453,9 +831,6 @@ def _apply_movie_claim_recommendation(recommended: bool) -> None:
                 )
         else:
             if global_movie_claim_client is not None:
-                # Keep ``_movie_claim_client_pending`` alive (do NOT
-                # close it) so a subsequent recommended=True can mount
-                # the same client without rebuilding the session.
                 global_movie_claim_client = None
                 logger.info(
                     "movie-claim auto: unmounted (active_runners < threshold)",
@@ -463,6 +838,13 @@ def _apply_movie_claim_recommendation(recommended: bool) -> None:
 
 
 def setup_movie_claim_client() -> Optional[MovieClaimClient]:
+    runtime = get_active_runtime()
+    if runtime is not None:
+        return runtime.setup_movie_claim_client()
+    return setup_movie_claim_client_legacy()
+
+
+def setup_movie_claim_client_legacy() -> Optional[MovieClaimClient]:
     """Initialise the cross-instance movie-detail claim coordinator (P1-B).
 
     Companion of :func:`setup_proxy_coordinator` /
@@ -630,6 +1012,13 @@ def setup_movie_claim_client() -> Optional[MovieClaimClient]:
 
 
 def enforce_movie_claim_for_d1() -> None:
+    runtime = get_active_runtime()
+    if runtime is not None:
+        return runtime.enforce_movie_claim_for_d1()
+    return enforce_movie_claim_for_d1_legacy()
+
+
+def enforce_movie_claim_for_d1_legacy() -> None:
     """MR-4 (multi-runtime): fail closed when d1-only mode wants movie
     claim coordination but the Worker is unreachable.
 
@@ -731,6 +1120,13 @@ def _resolve_proxy_pool_json() -> str:
 
 
 def _next_heartbeat_interval() -> float:
+    runtime = get_active_runtime()
+    if runtime is not None:
+        return runtime._next_heartbeat_interval()
+    return _next_heartbeat_interval_legacy()
+
+
+def _next_heartbeat_interval_legacy() -> float:
     """Pick the next ``_runner_heartbeat_stop.wait`` duration.
 
     The auto-toggle wants two cadences:
@@ -789,7 +1185,7 @@ def _update_sleep_runner_count(count: int) -> None:
 _last_applied_config_version: int = -1
 
 
-def _apply_config_snapshot(snap: ConfigSnapshot) -> None:
+def _apply_config_snapshot_legacy(snap: ConfigSnapshot) -> None:
     """Apply an operator-pushed config snapshot from the heartbeat.
 
     Only keys the Python client actually consumes locally are honoured;
@@ -861,6 +1257,13 @@ def _apply_config_snapshot(snap: ConfigSnapshot) -> None:
     )
 
 
+def _apply_config_snapshot(snap: ConfigSnapshot) -> None:
+    runtime = get_active_runtime()
+    if runtime is not None:
+        return runtime._apply_config_snapshot(snap)
+    return _apply_config_snapshot_legacy(snap)
+
+
 # ---------------------------------------------------------------------------
 # W6.A.2 — W5.4 active signals state
 # ---------------------------------------------------------------------------
@@ -875,7 +1278,7 @@ _signal_banned_proxies: set = set()
 _signal_lock = threading.Lock()
 
 
-def _apply_active_signals(signals: list) -> None:
+def _apply_active_signals_legacy(signals: list) -> None:
     """Reconcile the runtime state against the W5.4 ``active_signals`` set.
 
     Signals are STATE, not events: every heartbeat delivers the full
@@ -980,7 +1383,14 @@ def _apply_active_signals(signals: list) -> None:
                     )
 
 
-def _maybe_honour_pipeline_pause(
+def _apply_active_signals(signals: list) -> None:
+    runtime = get_active_runtime()
+    if runtime is not None:
+        return runtime._apply_active_signals(signals)
+    return _apply_active_signals_legacy(signals)
+
+
+def _maybe_honour_pipeline_pause_legacy(
     *,
     pipeline_paused_until_ms: int,
     reason: Optional[str],
@@ -1021,7 +1431,24 @@ def _maybe_honour_pipeline_pause(
     sys.exit(0)
 
 
-def set_active_runner_session(
+def _maybe_honour_pipeline_pause(
+    *,
+    pipeline_paused_until_ms: int,
+    reason: Optional[str],
+) -> None:
+    runtime = get_active_runtime()
+    if runtime is not None:
+        return runtime._maybe_honour_pipeline_pause(
+            pipeline_paused_until_ms=pipeline_paused_until_ms,
+            reason=reason,
+        )
+    return _maybe_honour_pipeline_pause_legacy(
+        pipeline_paused_until_ms=pipeline_paused_until_ms,
+        reason=reason,
+    )
+
+
+def _set_active_runner_session_legacy(
     *,
     session_id: str,
     status: str,
@@ -1064,7 +1491,36 @@ def set_active_runner_session(
         )
 
 
-def _runner_heartbeat_loop(client: RunnerRegistryClient, holder_id: str) -> None:
+def set_active_runner_session(
+    *,
+    session_id: str,
+    status: str,
+    write_mode: Optional[str] = None,
+    report_type: Optional[str] = None,
+    failure_reason: Optional[str] = None,
+    flush_immediately: bool = False,
+) -> None:
+    runtime = get_active_runtime()
+    if runtime is not None:
+        return runtime.set_active_runner_session(
+            session_id=session_id,
+            status=status,
+            write_mode=write_mode,
+            report_type=report_type,
+            failure_reason=failure_reason,
+            flush_immediately=flush_immediately,
+        )
+    return _set_active_runner_session_legacy(
+        session_id=session_id,
+        status=status,
+        write_mode=write_mode,
+        report_type=report_type,
+        failure_reason=failure_reason,
+        flush_immediately=flush_immediately,
+    )
+
+
+def _runner_heartbeat_loop_legacy(client: RunnerRegistryClient, holder_id: str) -> None:
     """Background thread: ping ``/heartbeat`` until stopped.
 
     Cadence is dynamic via :func:`_next_heartbeat_interval` so that auto
@@ -1142,7 +1598,14 @@ def _runner_heartbeat_loop(client: RunnerRegistryClient, holder_id: str) -> None
         _apply_active_signals(result.active_signals)
 
 
-def _unregister_runner_at_exit() -> None:
+def _runner_heartbeat_loop(client: RunnerRegistryClient, holder_id: str) -> None:
+    runtime = get_active_runtime()
+    if runtime is not None:
+        return runtime._runner_heartbeat_loop(client, holder_id)
+    return _runner_heartbeat_loop_legacy(client, holder_id)
+
+
+def _unregister_runner_at_exit_legacy() -> None:
     """Best-effort cleanup of this runner's registry entry.
 
     Registered via :func:`atexit.register` from :func:`setup_runner_registry_client`.
@@ -1188,6 +1651,13 @@ def _unregister_runner_at_exit() -> None:
         _runner_heartbeat_thread = None
 
 
+def _unregister_runner_at_exit() -> None:
+    runtime = get_active_runtime()
+    if runtime is not None:
+        return runtime._unregister_runner_at_exit()
+    return _unregister_runner_at_exit_legacy()
+
+
 # MR-5 (multi-runtime): opportunistic orphan-stage sweep on clean exit.
 #
 # The StaleSessionCleanup cron sweeps once a day; a stage orphaned by a
@@ -1203,6 +1673,13 @@ _movie_claim_swept_at_exit: bool = False
 
 
 def _movie_claim_sweep_shard_dates() -> list:
+    runtime = get_active_runtime()
+    if runtime is not None:
+        return runtime._movie_claim_sweep_shard_dates()
+    return _movie_claim_sweep_shard_dates_legacy()
+
+
+def _movie_claim_sweep_shard_dates_legacy() -> list:
     """Today + yesterday in the ops timezone (Asia/Singapore, UTC+8).
 
     Two days covers a session that staged just before midnight and a
@@ -1220,6 +1697,13 @@ def _movie_claim_sweep_shard_dates() -> list:
 
 
 def _sweep_movie_claim_stages_at_exit() -> None:
+    runtime = get_active_runtime()
+    if runtime is not None:
+        return runtime._sweep_movie_claim_stages_at_exit()
+    return _sweep_movie_claim_stages_at_exit_legacy()
+
+
+def _sweep_movie_claim_stages_at_exit_legacy() -> None:
     """Best-effort opportunistic sweep of orphaned MovieClaim stages.
 
     Registered via :func:`atexit.register` from
@@ -1291,7 +1775,7 @@ def _warn_on_proxy_pool_drift(
         )
 
 
-def setup_runner_registry_client() -> Optional[RunnerRegistryClient]:
+def _setup_runner_registry_client_legacy() -> Optional[RunnerRegistryClient]:
     """Initialise the singleton runner-registry client (P2-E).
 
     Companion of :func:`setup_proxy_coordinator` /
@@ -1315,7 +1799,7 @@ def setup_runner_registry_client() -> Optional[RunnerRegistryClient]:
 
     Cached in :data:`global_runner_registry_client`.  Idempotent.
     """
-    global global_runner_registry_client, _runner_heartbeat_thread
+    global global_runner_registry_client, _runner_heartbeat_thread, _runner_unregistered
 
     if global_runner_registry_client is not None:
         return global_runner_registry_client
@@ -1416,6 +1900,7 @@ def setup_runner_registry_client() -> Optional[RunnerRegistryClient]:
         return None
 
     global_runner_registry_client = client
+    _runner_unregistered = False
     _runner_heartbeat_stop.clear()
     if _runner_heartbeat_thread is None or not _runner_heartbeat_thread.is_alive():
         _runner_heartbeat_thread = threading.Thread(
@@ -1429,7 +1914,25 @@ def setup_runner_registry_client() -> Optional[RunnerRegistryClient]:
     return client
 
 
+def setup_runner_registry_client() -> Optional[RunnerRegistryClient]:
+    runtime = get_active_runtime()
+    if runtime is not None:
+        client = runtime.setup_runner_registry_client()
+        _sync_legacy_globals_from_runtime(runtime)
+        return client
+    return _setup_runner_registry_client_legacy()
+
+
 def setup_work_distributor_client():
+    runtime = get_active_runtime()
+    if runtime is not None:
+        client = runtime.setup_work_distributor_client()
+        _sync_legacy_globals_from_runtime(runtime)
+        return client
+    return _setup_work_distributor_client_legacy()
+
+
+def _setup_work_distributor_client_legacy():
     """W6.C (W5.2) — initialise the opt-in work-distribution queue client.
 
     Companion of the other DO setup functions; gated by
@@ -1467,6 +1970,15 @@ def setup_work_distributor_client():
 
 
 def initialize_request_handler():
+    runtime = get_active_runtime()
+    if runtime is not None:
+        runtime.initialize_request_handler()
+        _sync_legacy_globals_from_runtime(runtime)
+        return None
+    return _initialize_request_handler_legacy()
+
+
+def _initialize_request_handler_legacy():
     """Create the global RequestHandler from configuration."""
     global global_request_handler
     from javdb.spider.runtime.sleep import (
@@ -1524,6 +2036,15 @@ def initialize_request_handler():
 
 
 def setup_proxy_pool(use_proxy) -> None:
+    runtime = get_active_runtime()
+    if runtime is not None:
+        runtime.setup_proxy_pool(use_proxy)
+        _sync_legacy_globals_from_runtime(runtime)
+        return None
+    return _setup_proxy_pool_legacy(use_proxy)
+
+
+def _setup_proxy_pool_legacy(use_proxy) -> None:
     """Initialize the global proxy pool from configuration.
 
     Also lazily initialises all four cross-instance coordinators

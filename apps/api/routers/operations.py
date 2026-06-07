@@ -81,6 +81,9 @@ def list_qb_torrents(
             )
             raw = qb.get_torrents(torrent_filter="all")
         except Exception as exc:
+            msg = str(exc).lower()
+            if "login" in msg or "auth" in msg:
+                raise HTTPException(status_code=401, detail=_ERR_QB_AUTH) from exc
             raise HTTPException(status_code=502, detail=_ERR_QB_UNREACHABLE) from exc
     finally:
         if qb is not None:
@@ -156,7 +159,7 @@ def get_pikpak_queue(
     """Return PikPak transfer queue from PikpakHistory."""
     repo = OperationsRepo()
     try:
-        rows, _next_cursor = repo.list_pikpak_history(limit=limit, cursor=cursor)
+        rows, next_cursor = repo.list_pikpak_history(limit=limit, cursor=cursor)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail={"error": {"code": "ops.pikpak.invalid_cursor", "message": str(exc)}}) from exc
 
@@ -172,7 +175,7 @@ def get_pikpak_queue(
         )
         for r in rows
     ]
-    return PikPakQueueResponse(items=items, total=len(items))
+    return PikPakQueueResponse(items=items, total=len(items), next_cursor=next_cursor)
 
 
 @router.post("/pikpak/transfer", response_model=PikPakTransferResponse)

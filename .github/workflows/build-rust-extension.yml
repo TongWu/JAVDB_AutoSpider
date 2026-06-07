@@ -65,15 +65,10 @@ jobs:
           path: /tmp/rust-wheel/*.whl
           retention-days: 7
 
-      # Drift detection: assert the freshly-built Rust parsers produce
-      # the same output as the FROZEN Python fallbacks under
-      # apps/api/parsers/ on real HTML fixtures. Known drifts are tracked
-      # via xfail markers in tests/parity/test_parser_parity.py — flip them
-      # to expected-pass when the underlying Rust gap is closed.
-      - name: Install Python deps for parity tests
-        run: pip install -r requirements.txt
-      - name: Run Rust/Python parser parity tests
-        run: pytest tests/parity/ -v
+      # Rust/Python value-parity drift detection retired by ADR-041: the
+      # pure-Python parsers under javdb/parsing/fallback/ are now best-effort
+      # (shape-contracted, not byte-equal to Rust). Shape is covered by
+      # tests/unit/test_fallback_shape.py in the unit suite.
 
   # =============================================================================
   # ARM build (self-hosted)

@@ -105,6 +105,9 @@ These are non-sensitive values. The `config_generator` reads them via `VAR_*` en
 | `PROXY_MODULES_JSON` | `["spider"]` | JSON array of modules that use proxy: `spider`, `qbittorrent`, `pikpak`, `all` |
 | `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 | `STORAGE_BACKEND` | `sqlite` | `sqlite`, `d1`, or `dual` |
+| `D1_RECOVERY_OUTBOX_ENABLED` | `false` | Enable ADR-010 recovery outbox handling for safe D1 write failures. Accepted truthy values include `1`, `true`, `yes`, and `on`. |
+| `D1_BATCHING_ENABLED` | `false` | Enable ADR-010 safe-path D1 micro-batching. Accepted truthy values include `1`, `true`, `yes`, and `on`. |
+| `D1_STARTUP_REPLAY_ENABLED` | `false` | Enable ADR-010 startup replay before the first D1/Dual operation. Accepted truthy values include `1`, `true`, `yes`, and `on`. |
 
 ### Spider Tuning Variables
 
@@ -274,6 +277,7 @@ openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
 | Workflow | Trigger | Purpose |
 |---|---|---|
 | `QBFileFilter.yml` | Cron (2h after daily ingestion) | Filter small files from recently added torrents |
+| `ReconcileLibrary.yml` | Hourly cron / manual dispatch | Reconcile ADR-033 acquisition outcomes against live qB state |
 | `WeeklyDedup.yml` | Weekly cron | Rclone deduplication |
 | `RollbackD1.yml` | Manual dispatch | Manual session rollback |
 | `StaleSessionCleanup.yml` | Daily cron | Auto-cleanup sessions stuck > 48h |
@@ -282,6 +286,30 @@ openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
 | `TestIngestion.yml` | Push / PR / manual dispatch | Smoke-test the full ingestion path; rollback runs on cleanup |
 | `build-rust-extension.yml` | On push/PR | Build Rust wheel for CI |
 | `unit-tests.yml` | On push/PR | Impact-based test selection |
+
+### ReconcileLibrary Workflow
+
+`ReconcileLibrary.yml` is the ADR-033 Phase 1 reconciliation pass. It runs every
+hour and invokes:
+
+```bash
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --json
+```
+
+The workflow defaults to the `self-hosted` runner because qBittorrent is often
+reachable only from the operator's network. It still exposes a manual `runner`
+input for test runs on `ubuntu-latest` when qB is publicly reachable or mocked.
+The generated `config.py` reads `TORRENT_CATEGORY` and `TORRENT_CATEGORY_ADHOC`
+from repository variables, so the default scan follows the same qB categories
+used by the uploader.
+
+Manual dispatch inputs:
+
+| Input | Default | Purpose |
+|---|---|---|
+| `runner` | `self-hosted` | Runner label for the job. Use `self-hosted` for local qB access. |
+| `stalled_after_days` | `7` | Positive integer. Active outcomes unseen for this many days become `stalled`; after 2x this window they become `failed`. |
+| `dry_run` | `false` | Compute transitions and print JSON without writing rows. |
 
 ## Troubleshooting
 

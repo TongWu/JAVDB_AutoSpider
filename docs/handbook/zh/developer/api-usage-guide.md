@@ -43,12 +43,14 @@ pip install -r requirements.txt
 
 所有解析函数接收 **HTML 字符串**，返回 **结构化 dataclass 对象**。解析器不做任何业务过滤（不区分 phase1/phase2，不过滤字幕/日期标签），返回页面上的所有原始数据。
 
+解析函数和 dataclass 位于 `javdb.parsing` 和 `javdb.parsing.models`，请从这里导入。
+
 ### 1.1 解析首页/索引页
 
 解析任何包含影片列表的页面（首页、分类页、排行榜页通用）。
 
 ```python
-from apps.api.parsers import parse_index_page
+from javdb.parsing import parse_index_page
 
 # 读取 HTML 内容
 with open('page.html', 'r', encoding='utf-8') as f:
@@ -108,7 +110,7 @@ data = result.to_dict()
 从影片详情页提取完整元数据。
 
 ```python
-from apps.api.parsers import parse_detail_page
+from javdb.parsing import parse_detail_page
 
 with open('detail.html', 'r', encoding='utf-8') as f:
     html = f.read()
@@ -197,7 +199,7 @@ magnets_list = detail.get_magnets_as_legacy()     # List[dict] 格式
 解析片商、發行商、系列、导演、番号前缀、演员等分类页，额外提取分类信息。
 
 ```python
-from apps.api.parsers import parse_category_page
+from javdb.parsing import parse_category_page
 
 result = parse_category_page(html, page_num=1)
 
@@ -224,7 +226,7 @@ for movie in result.movies:
 解析 Top250、每日/每周/每月排行榜等页面。
 
 ```python
-from apps.api.parsers import parse_top_page
+from javdb.parsing import parse_top_page
 
 result = parse_top_page(html, page_num=1)
 
@@ -249,7 +251,7 @@ for movie in result.movies:
 解析 `/tags` 页面，提取完整的标签筛选面板（所有分类、所有标签选项、ID ↔ 名称映射）以及影片列表。
 
 ```python
-from apps.api.parsers import parse_tag_page
+from javdb.parsing import parse_tag_page
 
 result = parse_tag_page(html, page_num=1)
 
@@ -344,7 +346,7 @@ for sel in cat7.get_selected():
 不确定 HTML 是什么类型的页面？让解析器自动检测。
 
 ```python
-from apps.api.parsers import detect_page_type
+from javdb.parsing import detect_page_type
 
 page_type = detect_page_type(html)
 # 返回: 'index', 'detail', 'top250', 'top_movies', 'makers',

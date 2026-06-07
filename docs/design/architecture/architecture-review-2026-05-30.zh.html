@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>架构审查 — JAVDB AutoSpider（Rust/Go 重构候选）</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+    </script>
+    <style>
+      .seam { stroke-dasharray: 4 4; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .deep { background: linear-gradient(135deg, #0f172a, #1e293b); }
+      .ghost { background: repeating-linear-gradient(135deg, #f1f5f9, #f1f5f9 8px, #e2e8f0 8px, #e2e8f0 16px); }
+      .strike { position: relative; }
+      .strike::after { content: ""; position: absolute; inset: 0; border-top: 2px solid #dc2626; transform: rotate(-6deg); transform-origin: center; }
+    </style>
+  </head>
+  <body class="bg-stone-50 text-slate-900 font-sans antialiased">
+    <main class="max-w-5xl mx-auto px-6 py-12 space-y-14">
+
+      <!-- 页眉 -->
+      <header class="space-y-5">
+        <p class="text-xs uppercase tracking-[0.2em] text-slate-500">架构审查 · 用 Rust/Go 的视角看深化机会</p>
+        <h1 class="text-4xl font-serif font-semibold leading-tight">JAVDB AutoSpider —— 哪些部分该用 Rust/Go 重构</h1>
+        <p class="text-sm text-slate-500">2026-05-30 · 分支 <span class="mono">claude/gifted-goldstine-6974af</span></p>
+
+        <div class="rounded-lg border border-slate-200 bg-white p-5 text-sm leading-relaxed">
+          <p class="mb-3"><span class="font-semibold">一句话结论:</span>项目已经下了很大的 Rust 注 —— 但这次迁移只做了<span class="font-semibold">一半</span>。最高价值的动作不是开<em>新的</em>重写,而是<em>收尾、合并</em>那些已经变浅、重复、或幽灵化的 Rust 接缝(seam)。</p>
+          <div class="grid sm:grid-cols-3 gap-3 mt-4">
+            <div class="rounded border border-slate-200 p-3">
+              <div class="text-2xl font-semibold text-rose-600">~2,826</div>
+              <div class="text-xs text-slate-500 mt-1">行 Python 在一个 parity 测试守护的接缝后<span class="font-medium">重实现</span>了 Rust</div>
+            </div>
+            <div class="rounded border border-slate-200 p-3">
+              <div class="text-2xl font-semibold text-amber-600">1</div>
+              <div class="text-xs text-slate-500 mt-1">个幽灵 Rust 适配器(adapter)(HTTP requester)—— 已导出、从未被调用</div>
+            </div>
+            <div class="rounded border border-slate-200 p-3">
+              <div class="text-2xl font-semibold text-slate-700">0</div>
+              <div class="text-xs text-slate-500 mt-1">处由 GIL 构成瓶颈 —— 热循环是 I/O 密集</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 图例 -->
+        <div class="flex flex-wrap gap-4 text-xs text-slate-500 pt-2">
+          <span class="inline-flex items-center gap-2"><span class="inline-block w-4 h-4 border-2 border-slate-700 bg-white"></span> 模块(module)</span>
+          <span class="inline-flex items-center gap-2"><svg width="28" height="8"><line x1="0" y1="4" x2="28" y2="4" stroke="#475569" stroke-width="2" class="seam"/></svg> 接缝(seam)</span>
+          <span class="inline-flex items-center gap-2"><svg width="28" height="8"><line x1="0" y1="4" x2="28" y2="4" stroke="#dc2626" stroke-width="2"/></svg> 泄漏 / 漂移风险</span>
+          <span class="inline-flex items-center gap-2"><span class="inline-block w-4 h-4 deep"></span> 深模块(deep module)</span>
+          <span class="inline-flex items-center gap-2"><span class="inline-block w-4 h-4 ghost border border-slate-300"></span> 死代码 / 幽灵</span>
+        </div>
+      </header>
+
+      <!-- ================= 候选项 ================= -->
+      <section id="candidates" class="space-y-12">
+
+        <!-- ===== 卡片 1 ===== -->
+        <article id="c1" class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="px-6 pt-6 pb-4 border-b border-slate-100">
+            <div class="flex flex-wrap items-center gap-2 mb-3">
+              <span class="text-xs font-semibold uppercase tracking-wider px-2 py-1 rounded bg-emerald-100 text-emerald-800">强烈推荐</span>
+              <span class="text-xs px-2 py-1 rounded bg-slate-100 text-slate-600 mono">进程内 · PyO3</span>
+              <span class="text-xs px-2 py-1 rounded bg-rose-50 text-rose-700">可删除 ~2,826 行</span>
+            </div>
+            <h2 class="text-2xl font-serif font-semibold">1 · 折叠 Rust↔Python 的 parity 影子实现</h2>
+            <p class="text-sm text-slate-500 mt-1">接缝(seam)后面顶着两份可能并无差异的完整实现。押定 Rust,删掉 Python 双胞胎。</p>
+          </div>
+
+          <div class="px-6 py-5">
+            <p class="text-xs uppercase tracking-wider text-slate-400 mb-2">涉及文件</p>
+            <ul class="mono text-sm text-slate-700 space-y-0.5 mb-6">
+              <li>javdb/parsing/fallback/{index,detail,tag}_parser.py <span class="text-slate-400">— 1,070</span></li>
+              <li>javdb/proxy/pool.py + ban_manager.py <span class="text-slate-400">— 942</span></li>
+              <li>javdb/spider/url_helper.py · parsing/magnet_categorize.py · infra/masking.py <span class="text-slate-400">— 814</span></li>
+              <li>由 tests/parity/ + tests/unit/test_magnet_parity.py 守护</li>
+            </ul>
+
+            <!-- before/after:质量图,接缝顶着两份实现 -->
+            <div class="grid md:grid-cols-2 gap-4 mb-6">
+              <div class="rounded-lg border border-slate-200 p-4">
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">现状 —— 浅接缝、双份实现</p>
+                <div class="space-y-2" style="min-height:300px">
+                  <div class="text-center text-[11px] uppercase tracking-wider text-slate-500">接口(interface)</div>
+                  <div class="h-8 rounded border-2 border-slate-700 bg-white flex items-center justify-center mono text-xs">parse_index_page() · ProxyPool · extract_magnets()</div>
+                  <div class="flex items-center justify-center text-slate-400 text-lg leading-none">⇣</div>
+                  <div class="grid grid-cols-2 gap-2">
+                    <div class="deep text-white rounded p-3 text-center">
+                      <div class="text-[10px] uppercase tracking-wider text-slate-300">Rust 实现</div>
+                      <div class="text-xs mt-1">scraper / proxy / magnet</div>
+                      <div class="text-[10px] text-slate-400 mt-2">快路径</div>
+                    </div>
+                    <div class="ghost rounded p-3 text-center border border-slate-300">
+                      <div class="text-[10px] uppercase tracking-wider text-slate-500">Python 影子</div>
+                      <div class="text-xs mt-1 text-slate-700">fallback 重实现</div>
+                      <div class="text-[10px] text-slate-500 mt-2">~2,826 行</div>
+                    </div>
+                  </div>
+                  <div class="flex items-center justify-center">
+                    <svg width="220" height="26"><line x1="40" y1="13" x2="180" y2="13" stroke="#dc2626" stroke-width="2" class="seam"/><text x="110" y="9" text-anchor="middle" font-size="9" fill="#dc2626">parity 测试强行让两份保持同步</text></svg>
+                  </div>
+                </div>
+              </div>
+
+              <div class="rounded-lg border border-emerald-200 bg-emerald-50/30 p-4">
+                <p class="text-xs uppercase tracking-wider text-emerald-600 mb-3">改造后 —— 接缝后只剩一份实现</p>
+                <div class="space-y-2" style="min-height:300px">
+                  <div class="text-center text-[11px] uppercase tracking-wider text-slate-500">接口(不变)</div>
+                  <div class="h-8 rounded border-2 border-slate-700 bg-white flex items-center justify-center mono text-xs">parse_index_page() · ProxyPool · extract_magnets()</div>
+                  <div class="flex items-center justify-center text-slate-400 text-lg leading-none">⇣</div>
+                  <div class="deep text-white rounded p-6 text-center">
+                    <div class="text-[10px] uppercase tracking-wider text-slate-300">Rust 实现 —— 唯一适配器</div>
+                    <div class="text-sm mt-2">预编译 wheel = 硬依赖</div>
+                  </div>
+                  <div class="text-center text-xs text-slate-400 mt-2">Python 影子 + parity 测试退役</div>
+                  <div class="ghost border border-slate-300 rounded p-2 text-center strike">
+                    <span class="text-[11px] text-slate-500 mono">删除 ~2,826 行</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-x-8 gap-y-3 text-sm">
+              <div>
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-1">问题</p>
+                <p class="text-slate-700">两个适配器只有在"行为跨接缝有差异"时才构成真正的接缝 —— 而这里两份被要求<em>完全一致</em>,靠 parity 测试强制保证。这个接缝顶着的是重复的局部性(locality),不是变化。</p>
+              </div>
+              <div>
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-1">方案</p>
+                <p class="text-slate-700">把 Rust wheel 设为硬依赖(CI 已在构建它)。删除 Python 重实现;把 import fallback 收成一个清晰的"需要 Rust core"报错。</p>
+              </div>
+              <div class="md:col-span-2">
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-1">收益</p>
+                <ul class="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-slate-700 list-disc list-inside">
+                  <li>局部性(locality):每个行为只有一处</li>
+                  <li>删除 ~2,826 行 + parity 测试套件</li>
+                  <li>反向删除测试(deletion test):删掉 Python,复杂度<em>不会</em>重现</li>
+                  <li>整类漂移消失(不再有跨语言同步)</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="mt-5 rounded-md bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-900">
+              <span class="font-semibold">需要权衡的取舍:</span>Python 影子换来纯 Python 可移植性(无需 Rust 工具链即可运行)。如果该 fallback 对某个部署目标确实是承重的,这条就从"强烈推荐"降为"值得探索" —— 这正是 grilling 的第一个问题。
+            </div>
+          </div>
+        </article>
+
+        <!-- ===== 卡片 2 ===== -->
+        <article id="c2" class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="px-6 pt-6 pb-4 border-b border-slate-100">
+            <div class="flex flex-wrap items-center gap-2 mb-3">
+              <span class="text-xs font-semibold uppercase tracking-wider px-2 py-1 rounded bg-amber-100 text-amber-800">值得探索</span>
+              <span class="text-xs px-2 py-1 rounded bg-slate-100 text-slate-600 mono">进程内 · PyO3</span>
+              <span class="text-xs px-2 py-1 rounded bg-amber-50 text-amber-700">幽灵适配器</span>
+            </div>
+            <h2 class="text-2xl font-serif font-semibold">2 · 处理幽灵 HTTP requester</h2>
+            <p class="text-sm text-slate-500 mt-1">一个 Rust 抓取适配器被导出却从未调用;真实抓取是一段 1,655 行的 Python 级联。</p>
+          </div>
+
+          <div class="px-6 py-5">
+            <p class="text-xs uppercase tracking-wider text-slate-400 mb-2">涉及文件</p>
+            <ul class="mono text-sm text-slate-700 space-y-0.5 mb-6">
+              <li>javdb/infra/request.py <span class="text-slate-400">— 1,655(在用的 Python 级联)</span></li>
+              <li>javdb/spider/fetch/fetch_engine.py <span class="text-slate-400">— 1,924(worker 线程)</span></li>
+              <li>javdb/rust_core/src/requester/handler.rs <span class="text-slate-400">— 841(死适配器)</span></li>
+            </ul>
+
+            <div class="grid md:grid-cols-2 gap-4 mb-6">
+              <div class="rounded-lg border border-slate-200 p-4">
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-2">现状 —— 一个在用、一个幽灵</p>
+                <pre class="mermaid" style="min-height:280px">
+flowchart TB
+  S[Spider fetch_engine] --> P[request.py<br/>Python 级联]
+  P --> R1[requests]
+  P --> R2[curl_cffi<br/>TLS 伪装]
+  P --> R3[CF-bypass 服务]
+  RC[RequestConfig] -.seam.-> RH[RustRequestHandler<br/>已导出 · 从未调用]
+  RH -.-> X[reqwest]
+  classDef dead fill:#f1f5f9,stroke:#94a3b8,stroke-dasharray:4 4,color:#64748b;
+  classDef live fill:#0f172a,color:#fff,stroke:#0f172a;
+  class RH,X dead
+  class P live
+                </pre>
+              </div>
+              <div class="rounded-lg border border-emerald-200 bg-emerald-50/30 p-4">
+                <p class="text-xs uppercase tracking-wider text-emerald-600 mb-2">改造后 —— 二选一,但要诚实</p>
+                <pre class="mermaid" style="min-height:280px">
+flowchart TB
+  subgraph A["方案 A — 接上 Rust,退役 Python 级联"]
+    S1[Spider] --> RH1[RustRequestHandler<br/>唯一抓取适配器]
+  end
+  subgraph B["方案 B — 删掉幽灵"]
+    S2[Spider] --> P2[request.py<br/>Python = 规范实现]
+    note[移除死的 Rust requester]
+  end
+  classDef live fill:#0f172a,color:#fff,stroke:#0f172a;
+  class RH1,P2 live
+                </pre>
+              </div>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-x-8 gap-y-3 text-sm">
+              <div>
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-1">问题</p>
+                <p class="text-slate-700">requester 接缝有一个在用适配器(Python)和一个死适配器(Rust,只在一个状态标志里露面)。幽灵适配器提供零杠杆(leverage),却看起来像一个其实不存在的选项。</p>
+              </div>
+              <div>
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-1">方案</p>
+                <p class="text-slate-700">要么把 <span class="mono">RustRequestHandler</span> 接成真实抓取路径、退役 Python 级联;要么删掉死适配器、让 Python 成为规范实现。不要两者都留。</p>
+              </div>
+              <div class="md:col-span-2">
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-1">收益</p>
+                <ul class="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-slate-700 list-disc list-inside">
+                  <li>干掉一个幽灵接缝</li>
+                  <li>一份抓取实现,一处可测</li>
+                  <li>方案 B 成本低、今天就能删死代码</li>
+                  <li>方案 A 把 TLS / CF-bypass 逻辑集中到 Rust</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="mt-5 rounded-md bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-900">
+              <span class="font-semibold">为何只给"值得探索":</span>这条路径是 <em>I/O 密集</em>(见卡片 4)—— Rust 在这里不提速。收益是局部性,不是吞吐。而且 <span class="mono">curl_cffi</span> 的 JA3/TLS 伪装是绕 Cloudflare 的承重技巧;<span class="mono">reqwest</span> 不易复刻它。<span class="font-semibold">方案 B(删幽灵)是安全的即时动作;</span>方案 A 是一个真正的研究型项目。
+            </div>
+          </div>
+        </article>
+
+        <!-- ===== 卡片 3 ===== -->
+        <article id="c3" class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="px-6 pt-6 pb-4 border-b border-slate-100">
+            <div class="flex flex-wrap items-center gap-2 mb-3">
+              <span class="text-xs font-semibold uppercase tracking-wider px-2 py-1 rounded bg-slate-200 text-slate-700">推测性</span>
+              <span class="text-xs px-2 py-1 rounded bg-slate-100 text-slate-600 mono">常驻服务 · Go</span>
+              <span class="text-xs px-2 py-1 rounded bg-amber-100 text-amber-800">⚠ 与 ADR-017 冲突</span>
+            </div>
+            <h2 class="text-2xl font-serif font-semibold">3 · FastAPI 后端 → Go</h2>
+            <p class="text-sm text-slate-500 mt-1">它是唯一的常驻服务 —— 但换语言并不能修复它真正的深度问题。</p>
+          </div>
+
+          <div class="px-6 py-5">
+            <p class="text-xs uppercase tracking-wider text-slate-400 mb-2">涉及文件</p>
+            <ul class="mono text-sm text-slate-700 space-y-0.5 mb-6">
+              <li>apps/api/ <span class="text-slate-400">— ~6,500 行,15 个 router,uvicorn Docker 服务</span></li>
+              <li>javdb-autospider-web/server/ <span class="text-slate-400">— TS Worker 镜像(独立仓库)</span></li>
+            </ul>
+
+            <div class="grid md:grid-cols-2 gap-4 mb-6">
+              <div class="rounded-lg border border-slate-200 p-4">
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">现状 —— 两个适配器顶着同一个重合面</p>
+                <div class="relative" style="min-height:280px">
+                  <div class="absolute left-1/2 -translate-x-1/2 top-0 w-40 text-center rounded border-2 border-slate-700 bg-white p-2 text-xs mono">Vue SPA<br/><span class="text-slate-400">(前端)</span></div>
+                  <div class="absolute left-2 top-24 w-40 rounded border-2 border-slate-700 bg-white p-2 text-xs mono">Python API<br/><span class="text-slate-400">apps/api · subprocess 执行</span></div>
+                  <div class="absolute right-2 top-24 w-40 rounded border-2 border-slate-700 bg-white p-2 text-xs mono">TS Worker<br/><span class="text-slate-400">D1 + GH 派发</span></div>
+                  <div class="absolute left-1/2 -translate-x-1/2 bottom-2 w-56 text-center rounded border-2 border-rose-400 bg-rose-50 p-2 text-[11px]">重合面(Backend Overlap)<br/><span class="text-slate-500">D1 查询 · 鉴权(JWT) · 响应格式</span></div>
+                  <svg class="absolute inset-0 w-full h-full" style="z-index:-1">
+                    <line x1="50%" y1="56" x2="22%" y2="96" stroke="#475569" stroke-width="1.5"/>
+                    <line x1="50%" y1="56" x2="78%" y2="96" stroke="#475569" stroke-width="1.5"/>
+                    <line x1="22%" y1="150" x2="50%" y2="220" stroke="#dc2626" stroke-width="1.5" class="seam"/>
+                    <line x1="78%" y1="150" x2="50%" y2="220" stroke="#dc2626" stroke-width="1.5" class="seam"/>
+                  </svg>
+                  <div class="absolute left-1/2 -translate-x-1/2 top-44 text-[10px] text-rose-600">ADR-017:必须保持同步 ↕</div>
+                </div>
+              </div>
+              <div class="rounded-lg border border-slate-200 p-4">
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">改造后(Go)—— 同一重合面的第三份拷贝</p>
+                <div class="relative" style="min-height:280px">
+                  <div class="absolute left-1/2 -translate-x-1/2 top-0 w-40 text-center rounded border-2 border-slate-700 bg-white p-2 text-xs mono">Vue SPA</div>
+                  <div class="absolute left-1 top-24 w-28 rounded border-2 border-slate-400 bg-white p-2 text-[11px] mono">Go API</div>
+                  <div class="absolute left-1/2 -translate-x-1/2 top-24 w-28 rounded border-2 border-slate-400 bg-white p-2 text-[11px] mono">TS Worker</div>
+                  <div class="absolute right-1 top-24 w-28 rounded border-2 border-slate-300 ghost p-2 text-[11px] mono text-slate-500">Python?</div>
+                  <div class="absolute left-1/2 -translate-x-1/2 bottom-2 w-56 text-center rounded border-2 border-rose-500 bg-rose-50 p-2 text-[11px]">重合面<br/><span class="text-rose-600 font-semibold">现在三向漂移</span></div>
+                  <div class="absolute left-1/2 -translate-x-1/2 top-44 text-[10px] text-rose-600 text-center w-48">换语言 ≠ 深度收益</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-x-8 gap-y-3 text-sm">
+              <div>
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-1">问题</p>
+                <p class="text-slate-700">真正的摩擦不在语言 —— 而在于 D1 查询 + 鉴权 + 响应格式<em>已经</em>在 Python 和 TS 之间手工重复(一个被人手复制的浅接缝)。Go 会给同一份逻辑再加第三处。</p>
+              </div>
+              <div>
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-1">方案</p>
+                <p class="text-slate-700">真要动:先把 <span class="mono">重合面</span> 深化为一份共享契约(扩展 ADR-018 Contract Golden),在换语言<em>之前</em>—— 或者干脆代替换语言。</p>
+              </div>
+            </div>
+
+            <div class="mt-5 rounded-md bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-900">
+              <span class="font-semibold">⚠ 与 ADR-017(双后端同步)冲突 —— 但值得点名,因为</span> ADR-017 靠纪律管理的那份重复,本身就是这里的深度问题。Go 重写会让纪律更难维持,而非更容易。只有当你想直接攻击这份重复时,才重开 ADR-017/ADR-018;否则保持 Python 不动。
+            </div>
+          </div>
+        </article>
+
+        <!-- ===== 卡片 4 ===== -->
+        <article id="c4" class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div class="px-6 pt-6 pb-4 border-b border-slate-100">
+            <div class="flex flex-wrap items-center gap-2 mb-3">
+              <span class="text-xs font-semibold uppercase tracking-wider px-2 py-1 rounded bg-slate-800 text-white">不要重写</span>
+              <span class="text-xs px-2 py-1 rounded bg-slate-100 text-slate-600 mono">跨进程并发</span>
+            </div>
+            <h2 class="text-2xl font-serif font-semibold">4 · 爬虫热循环 —— 看似最该重写、其实不是</h2>
+            <p class="text-sm text-slate-500 mt-1">"用 Go 重写爬虫提并发"是最诱人的动作。但数字说不。</p>
+          </div>
+
+          <div class="px-6 py-5">
+            <p class="text-xs uppercase tracking-wider text-slate-400 mb-3">单次页面抓取,按耗时拆解</p>
+            <!-- 横切面:一次请求的时间线 -->
+            <div class="rounded-lg border border-slate-200 p-4 mb-6" style="min-height:150px">
+              <div class="flex w-full h-16 rounded overflow-hidden border border-slate-300 text-[11px] text-white">
+                <div class="bg-slate-600 flex items-center justify-center" style="width:58%">throttle + sleep <span class="hidden sm:inline">&nbsp;(6–20s,GIL 已释放)</span></div>
+                <div class="bg-sky-700 flex items-center justify-center" style="width:36%">网络 I/O <span class="hidden sm:inline">&nbsp;(GIL 已释放)</span></div>
+                <div class="deep flex items-center justify-center" style="width:6%" title="Rust 解析">解析</div>
+              </div>
+              <div class="flex justify-between text-[10px] text-slate-500 mt-2">
+                <span>← 几乎所有 wall-clock 都是 sleep + 网络(I/O 密集)</span>
+                <span>Rust 解析 ≈ 一条细缝 →</span>
+              </div>
+              <div class="mt-4 text-sm text-slate-700">并发是<span class="font-semibold">跨进程</span>实现的 —— GitHub Actions runner 矩阵,由 Cloudflare <span class="mono">RunnerRegistry</span> / <span class="mono">MovieClaim</span> Durable Object 协调 —— 而不是在单进程内。HTML 解析早已下放到 Rust。GIL 从不限制吞吐。</div>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-x-8 gap-y-3 text-sm">
+              <div>
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-1">为何不</p>
+                <ul class="text-slate-700 list-disc list-inside space-y-1">
+                  <li>I/O 密集:线程早已释放 GIL</li>
+                  <li>CPU 细缝(解析)已经是 Rust</li>
+                  <li>扩展 = 加 runner,不是加线程</li>
+                </ul>
+              </div>
+              <div>
+                <p class="text-xs uppercase tracking-wider text-slate-400 mb-1">应该做</p>
+                <ul class="text-slate-700 list-disc list-inside space-y-1">
+                  <li>加 runner 分片(跨进程)</li>
+                  <li>确保装上 Rust wheel(见卡片 1)</li>
+                  <li>调 coordinator throttle,而非换语言</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </article>
+
+      </section>
+
+      <!-- ================= 首要建议 ================= -->
+      <section id="top-recommendation">
+        <div class="rounded-xl deep text-white p-7 shadow-md">
+          <p class="text-xs uppercase tracking-[0.2em] text-slate-300 mb-3">首要建议</p>
+          <h2 class="text-2xl font-serif font-semibold mb-3">从 <a href="#c1" class="underline decoration-emerald-400 underline-offset-4">卡片 1 —— 折叠 Rust↔Python parity 影子</a> 开始。</h2>
+          <p class="text-sm text-slate-200 leading-relaxed max-w-3xl">
+            它杠杆最高、风险最低,而且直接回答了问题:值得放进 Rust 的部分<em>已经在 Rust 里了</em>。要做的是<span class="font-semibold text-white">把迁移收尾</span> —— 删掉 ~2,826 行 Python 影子,以及把它们强行锁在一起的 parity 测试套件 —— 把一个双份的浅接缝,变成一个单一的深接缝。卡片 2(删幽灵 requester)是自然的下一步。卡片 3 在 ADR-017 后面停泊,卡片 4 是一个刻意的<span class="font-semibold text-white">"不要"</span>。
+          </p>
+          <p class="text-xs text-slate-400 mt-4">决定全局的唯一问题:纯 Python fallback 现在是否还是一个真实的部署目标?grilling 应该从这里开始。</p>
+        </div>
+      </section>
+
+    </main>
+  </body>
+</html>

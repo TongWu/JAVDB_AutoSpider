@@ -127,6 +127,36 @@ class TestEngineSimpleMode:
         assert results[0].data == {'title': 'A'}
         assert results[0].task.meta == {'code': 'A'}
 
+    def test_consecutive_none_returns_soft_ban_worker(self):
+        from javdb.spider.fetch.fetch_engine import FetchEngine
+
+        ban_mgr = _make_ban_manager_stub()
+
+        with patch('javdb.spider.fetch.fetch_engine.RequestHandler', side_effect=_make_handler_stub), \
+                patch('javdb.spider.fetch.fetch_engine.create_proxy_pool_from_config', return_value=MagicMock()), \
+                patch('javdb.spider.fetch.fetch_engine.get_ban_manager', return_value=ban_mgr), \
+                patch('javdb.spider.fetch.fetch_engine.PROXY_POOL', [
+                    {'name': 'proxy-a', 'http': 'http://a:1', 'https': 'http://a:1'},
+                ]), \
+                patch('javdb.spider.fetch.fetch_engine.LOGIN_PROXY_NAME', None):
+            engine = FetchEngine(
+                process_fn=lambda _ctx, _task: None,
+                use_cookie=False,
+                sleep_min=0.01,
+                sleep_max=0.02,
+            )
+            engine.start()
+            _patch_workers(engine, lambda url, _cf: '<html></html>')
+
+            engine.submit('https://javdb.com/v/none-1', entry_index='none-1')
+            engine.submit('https://javdb.com/v/none-2', entry_index='none-2')
+            engine.mark_done()
+            results = list(engine.results())
+            engine.shutdown()
+
+        ban_mgr.add_ban.assert_called_once_with('proxy-a', 'http://a:1')
+        assert any(result.error == 'all_proxies_banned' for result in results)
+
     @_engine_patches
     def test_parse_failure_retries_on_other_proxy(self, *_mocks):
         from javdb.spider.fetch.fetch_engine import FetchEngine, EngineTask
@@ -198,6 +228,85 @@ class TestEngineAdvancedMode:
         assert len(results) == 1
         assert results[0].success is True
         assert results[0].data == {'len': len('<html>ok</html>')}
+
+    def test_engine_worker_uses_runtime_proxy_coordinator(self):
+        import javdb.spider.runtime.state as st
+        from javdb.spider.fetch.fetch_engine import FetchEngine
+        from javdb.spider.runtime.context import SpiderRuntime
+
+        runtime = SpiderRuntime()
+        runtime.services.proxy_coordinator = MagicMock()
+        handlers = []
+
+        class CapturingHandler:
+            def __init__(self, **kwargs):
+                self.config = MagicMock()
+                self.config.javdb_session_cookie = None
+                self.get_page = MagicMock(return_value=None)
+                self._on_cf_event = kwargs["on_cf_event"]
+                handlers.append(self)
+
+        with patch('javdb.spider.fetch.fetch_engine.PROXY_POOL', _PROXY_POOL), \
+                patch('javdb.spider.fetch.fetch_engine.LOGIN_PROXY_NAME', None), \
+                patch('javdb.spider.fetch.fetch_engine.RequestHandler', CapturingHandler), \
+                patch('javdb.spider.fetch.fetch_engine.create_proxy_pool_from_config', return_value=MagicMock()), \
+                patch(
+                    'javdb.spider.fetch.fetch_engine.get_ban_manager',
+                    return_value=_make_ban_manager_stub(),
+                ):
+            st.bind_active_runtime(runtime)
+            try:
+                engine = FetchEngine(
+                    process_fn=lambda ctx, task: {"ok": True},
+                    use_cookie=False,
+                    sleep_min=0.01,
+                    sleep_max=0.02,
+                )
+                engine.start()
+            finally:
+                st.clear_active_runtime(runtime)
+
+            worker = engine._workers[0]
+            engine.shutdown()
+
+        assert worker._sleep_mgr._coordinator is runtime.services.proxy_coordinator
+        handlers[0]._on_cf_event("ignored")
+        runtime.services.proxy_coordinator.report_async.assert_called_with("proxy-a", "cf")
+
+    def test_fetch_fallback_login_uses_active_runtime_proxy_pool(self, monkeypatch):
+        import javdb.spider.fetch.fallback as fallback
+        import javdb.spider.runtime.state as st
+        from javdb.spider.runtime.context import SpiderRuntime
+
+        class RuntimeProxyPool:
+            def get_current_proxy(self):
+                return {"http": "http://runtime:1", "https": "http://runtime:1"}
+
+            def get_current_proxy_name(self):
+                return "runtime-proxy"
+
+        observed = {}
+        runtime = SpiderRuntime()
+        runtime.services.proxy_pool = RuntimeProxyPool()
+        st.global_proxy_pool = None
+
+        def fake_attempt_login_refresh(**kwargs):
+            observed.update(kwargs)
+            return False, None, None
+
+        monkeypatch.setattr(fallback, "attempt_login_refresh", fake_attempt_login_refresh)
+
+        st.bind_active_runtime(runtime)
+        try:
+            fallback._login_refresh_for_spider(True)
+        finally:
+            st.clear_active_runtime(runtime)
+
+        assert observed["explicit_proxy_name"] == "runtime-proxy"
+        assert observed["explicit_proxies"] == {
+            "http": "http://runtime:1",
+            "https": "http://runtime:1",
+        }
 
 
 def _mock_attempt_login(explicit_proxies=None, explicit_proxy_name=None,
