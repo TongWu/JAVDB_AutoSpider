@@ -77,8 +77,8 @@ def test_runner_skips_persist_when_content_filter_drops(monkeypatch) -> None:
     movie_detail = SimpleNamespace(actors=[], tags=[], video_code="ABC-123")
     evaluate_calls = []
 
-    def fake_evaluate(detail, loaded_rules):
-        evaluate_calls.append((detail, loaded_rules))
+    def fake_evaluate(detail, loaded_rules, actor_ages=None):
+        evaluate_calls.append((detail, loaded_rules, actor_ages))
         return FilterDecision(keep=False, reasons=["blocked"])
 
     monkeypatch.setattr(runner, "evaluate", fake_evaluate)
@@ -98,7 +98,7 @@ def test_runner_skips_persist_when_content_filter_drops(monkeypatch) -> None:
         content_filter_rules=rules,
     )
 
-    assert evaluate_calls == [(movie_detail, rules)]
+    assert evaluate_calls == [(movie_detail, rules, None)]
     assert result["rows"] == []
     assert backend.ack_calls == [("content_filtered", False)]
 

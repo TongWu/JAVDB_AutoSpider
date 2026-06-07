@@ -173,3 +173,107 @@ def test_content_filter_cli_rejects_invalid_mode():
     )
     assert r.returncode != 0
     assert "invalid choice" in r.stderr.lower()
+
+
+def test_add_age_rule(monkeypatch):
+    import contextlib
+
+    import apps.cli.ops.content_filter as cli
+
+    captured = {}
+
+    class _Repo:
+        def __init__(self, *a, **k):
+            pass
+
+        def add_rule(self, dimension, mode, value):
+            captured.update(dimension=dimension, mode=mode, value=value)
+            return 7
+
+    @contextlib.contextmanager
+    def _fake_db(_path):
+        yield object()
+
+    monkeypatch.setattr(cli, "ContentFilterRepo", _Repo)
+    monkeypatch.setattr(cli, "get_db", _fake_db)
+    rc = cli.main(["add", "--dimension", "age", "--mode", "min_age", "--value", "18"])
+    assert rc == 0
+    assert captured == {"dimension": "age", "mode": "min_age", "value": "18"}
+
+
+def test_add_age_rule_normalizes_leading_zeros(monkeypatch):
+    import contextlib
+
+    import apps.cli.ops.content_filter as cli
+
+    captured = {}
+
+    class _Repo:
+        def __init__(self, *a, **k):
+            pass
+
+        def add_rule(self, dimension, mode, value):
+            captured.update(dimension=dimension, mode=mode, value=value)
+            return 8
+
+    @contextlib.contextmanager
+    def _fake_db(_path):
+        yield object()
+
+    monkeypatch.setattr(cli, "ContentFilterRepo", _Repo)
+    monkeypatch.setattr(cli, "get_db", _fake_db)
+    rc = cli.main(["add", "--dimension", "age", "--mode", "min_age", "--value", "0018"])
+    assert rc == 0
+    assert captured["value"] == "18"
+
+
+def test_add_age_rule_max_age(monkeypatch):
+    import contextlib
+
+    import apps.cli.ops.content_filter as cli
+
+    captured = {}
+
+    class _Repo:
+        def __init__(self, *a, **k):
+            pass
+
+        def add_rule(self, dimension, mode, value):
+            captured.update(dimension=dimension, mode=mode, value=value)
+            return 9
+
+    @contextlib.contextmanager
+    def _fake_db(_path):
+        yield object()
+
+    monkeypatch.setattr(cli, "ContentFilterRepo", _Repo)
+    monkeypatch.setattr(cli, "get_db", _fake_db)
+    rc = cli.main(["add", "--dimension", "age", "--mode", "max_age", "--value", "40"])
+    assert rc == 0
+    assert captured == {"dimension": "age", "mode": "max_age", "value": "40"}
+
+
+def test_add_age_rule_rejects_non_numeric(monkeypatch):
+    import contextlib
+
+    import apps.cli.ops.content_filter as cli
+
+    add_calls = []
+
+    class _Repo:
+        def __init__(self, *a, **k):
+            pass
+
+        def add_rule(self, dimension, mode, value):
+            add_calls.append((dimension, mode, value))
+            return 10
+
+    @contextlib.contextmanager
+    def _fake_db(_path):
+        yield object()
+
+    monkeypatch.setattr(cli, "ContentFilterRepo", _Repo)
+    monkeypatch.setattr(cli, "get_db", _fake_db)
+    with pytest.raises(SystemExit):
+        cli.main(["add", "--dimension", "age", "--mode", "min_age", "--value", "abc"])
+    assert add_calls == []

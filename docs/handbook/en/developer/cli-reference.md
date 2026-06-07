@@ -738,14 +738,16 @@ them after detail parsing, before CSV/report persistence and qBittorrent upload.
 | `tag` | `include` | Required: tag name. At least one include tag must match when include rules exist. |
 | `gender` | `require_lead` | Required: `female` or `male`. |
 | `gender` | `exclude_all_male` | No value; `--value` is rejected. |
+| `age` | `min_age` | Required: non-negative integer (drop if any known actor is younger). |
+| `age` | `max_age` | Required: non-negative integer (drop if any known actor is older). |
 
 ### Arguments
 
 | Argument | Description | Default |
 |----------|-------------|---------|
-| `--dimension` | Rule dimension for `add`. Choices: `actor`, `tag`, `gender`. | Required |
-| `--mode` | Rule mode for `add`. Choices: `exclude`, `include`, `require_lead`, `exclude_all_male`. | Required |
-| `--value` | Rule value for `add`: actor name/href, tag name, or lead gender depending on the rule. Required except for `gender exclude_all_male`. | `""` |
+| `--dimension` | Rule dimension for `add`. Choices: `actor`, `tag`, `gender`, `age`. | Required |
+| `--mode` | Rule mode for `add`. Choices: `exclude`, `include`, `require_lead`, `exclude_all_male`, `min_age`, `max_age`. | Required |
+| `--value` | Rule value for `add`: actor name/href, tag name, lead gender, or non-negative integer (age modes) depending on the rule. Required except for `gender exclude_all_male`. | `""` |
 | `--id` | Rule id for `remove` and `enable`. | Required |
 | `--off` | Disable the rule in `enable` instead of enabling it. | `False` |
 | `--log-level` | Logging level. Choices: `DEBUG`, `INFO`, `WARNING`, `ERROR`. | `INFO` |
@@ -781,6 +783,26 @@ python3 -m apps.cli.ops.content_filter list
 python3 -m apps.cli.ops.content_filter enable --id 3 --off
 python3 -m apps.cli.ops.content_filter enable --id 3
 python3 -m apps.cli.ops.content_filter remove --id 3
+```
+
+#### Age rules (ADR-040 Phase 2, best-effort)
+
+```bash
+# Drop any movie featuring an actor known to be under 18 at the release date
+python3 -m apps.cli.ops.content_filter add --dimension age --mode min_age --value 18
+
+# Drop any movie featuring an actor known to be over 40
+python3 -m apps.cli.ops.content_filter add --dimension age --mode max_age --value 40
+```
+
+Ages are resolved best-effort from minnano-av by actor name, cached in
+`ActorMetadata`, and computed at the movie's release date. Actors with no resolved
+birthdate have unknown age and never cause a drop.
+
+```bash
+python3 -m apps.cli.ops.actor_age list                       # inspect the cache
+python3 -m apps.cli.ops.actor_age refresh --href /actors/EvkJ --name "<name>"  # force re-lookup
+python3 -m apps.cli.ops.actor_age clear --href /actors/EvkJ   # drop a cached row
 ```
 
 ---

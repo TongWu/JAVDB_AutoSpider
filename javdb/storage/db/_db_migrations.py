@@ -184,6 +184,17 @@ CREATE TABLE IF NOT EXISTS MovieMetadata (
 CREATE INDEX IF NOT EXISTS idx_movie_metadata_video_code
     ON MovieMetadata(video_code);
 
+CREATE TABLE IF NOT EXISTS ActorMetadata (
+    actor_href  TEXT PRIMARY KEY,
+    actor_name  TEXT,
+    birthdate   TEXT,
+    source      TEXT,
+    source_url  TEXT,
+    resolved    INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
 CREATE TABLE IF NOT EXISTS MovieRatings (
     href        TEXT PRIMARY KEY,
     video_code  TEXT NOT NULL,

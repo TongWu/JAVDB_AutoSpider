@@ -2,7 +2,7 @@
 
 | 字段       | 值                                                                    |
 | ---------- | --------------------------------------------------------------------- |
-| **状态**   | Accepted — Phase 1 已实现;后续阶段待完成                               |
+| **状态**   | Accepted — Phase 1-2 已实现;后续阶段待完成                               |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
 | **关联**   | [ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md), [ADR-038](../ADR-038-Agentic-Operator-MCP/ADR-038-agentic-operator-mcp-surface.md) |
@@ -42,7 +42,7 @@ CREATE TABLE ContentFilterRule (
 
 **D4. 优先级:黑名单最高;规则 AND 在一起。** 任一命中的 **exclude** 规则立即 drop。其余 **include/属性** 规则 AND（如 tag-include 集要求至少一个匹配 tag;性别规则要求配置的条件）。内容过滤与现有评分过滤 AND——彼此不削弱。
 
-**D5. Phase 1 维度来自现有解析。** 从 `MovieDetail`（`actors` 带 name/href/**gender**、`tags`）:**演员黑名单**（按 name/href exclude）、**tag include/exclude**、**性别**（如要求女主演、排除全男）。**年龄推迟（Phase 2）**——它需要管道今天不做的演员主页查询。**订阅（越过评分门槛的白名单）推迟（Phase 2）**——它是包含侧的对应物,且改动更大。
+**D5. Phase 1 维度来自现有解析。** 从 `MovieDetail`（`actors` 带 name/href/**gender**、`tags`）:**演员黑名单**（按 name/href exclude）、**tag include/exclude**、**性别**（如要求女主演、排除全男）。**年龄为 Phase 2（IMP-ADR040-02）。** 对原背景说明的更正：javdb 自身的 `/actors/<id>` 页面是影片*列表*页，**不含生日信息**，因此年龄无法来自 javdb 查询。Phase 2 改为**尽力从 minnano-av**（按演员名称匹配）解析生日，缓存于 `ActorMetadata`，并以影片上映日期计算年龄。未能解析到生日的演员年龄为未知，永远不会导致影片被 drop。（xslist 曾作为备选方案权衡，但推迟——它无法匹配 javdb 的日文名。）**订阅（越过评分门槛的白名单）推迟（Phase 3）**——它是包含侧的对应物,且改动更大。
 
 **D6. 确定性、可解释;与偏好模型正交。** 引擎返回 `FilterDecision(keep, reasons)`;drop 原因被surface（stats / `MovieFiltered` 事件 / MCP）。这是一个**硬的、确定性规则**层——区别于 [ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md) / [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md) 的 **ML 偏好分**。两者正交:规则决定*资格*,模型日后决定*排序*。
 
@@ -62,15 +62,17 @@ CREATE TABLE ContentFilterRule (
 
 - **多一道要理解的闸**——运维者要懂 黑名单最高 + AND 优先级。
 - **属性覆盖受解析器限**——仅 性别/tags;年龄需推迟的演员主页拓展。
-- **规则管理面**——Phase 1 经 CLI 管理规则;web/MCP 管理是 Phase 2。
+- **规则管理面**——Phase 1 经 CLI 管理规则;web/MCP 管理是 Phase 4。
 
 ## 实施路线图 (Implementation Roadmap)
 
-| 阶段 | IMP | 交付内容 | 推迟内容 |
-| --- | --- | --- | --- |
-| Phase 1 — 排除 + 属性 | [IMP-ADR040-01](IMP-ADR040-01-content-filter.md) | `ContentFilterRule` 表 + repo;`content_filter` 引擎（演员黑名单、tag include/exclude、性别）;详情后过滤阶段;管理规则的 CLI | 年龄;订阅;web/MCP 管理 |
-| Phase 2 — 订阅 + 年龄 | IMP-ADR040-02（占位） | D1 订阅（越过评分门槛的白名单）;经演员主页拓展的年龄过滤;web/MCP 规则管理 | — |
-| Phase 3 — 组合（可选） | IMP-ADR040-03（占位） | 与 ADR-025 偏好分组合 | — |
+| 阶段 | IMP | 交付内容 |
+| --- | --- | --- |
+| Phase 1 — 排除 + 属性 | IMP-ADR040-01 (done) | 演员/标签/性别规则 |
+| Phase 2 — 年龄过滤 | IMP-ADR040-02 (this plan) | `age` 维度；外部来源拓展（minnano-av；xslist 推迟）；`ActorMetadata` 缓存 |
+| Phase 3 — 订阅 | IMP-ADR040-03 (stub) | 越过评分门槛的白名单（需设计索引闸旁路方案） |
+| Phase 4 — Web/MCP 规则管理 | IMP-ADR040-04 (stub) | 规则的 REST CRUD（web 现可构建；MCP 阻塞于 ADR-038） |
+| Phase 5 — 组合（可选） | IMP-ADR040-05 (stub) | 与 ADR-025 偏好分组合 |
 
 Phase 1 附加且向后兼容（无规则 → 无变化）。Phase 2/3 拓宽包含侧与属性覆盖。
 
@@ -78,7 +80,7 @@ Phase 1 附加且向后兼容（无规则 → 无变化）。Phase 2/3 拓宽包
 
 - **不做流式 / 频繁 cron**——纠偏所在;daily 节奏保留。
 - **Phase 1 不做年龄过滤**——需演员主页拓展（Phase 2）。
-- **Phase 1 不做订阅**——包含/白名单侧是 Phase 2。
+- **Phase 1 不做订阅**——包含/白名单侧是 Phase 3。
 - **不做 ML**——只确定性规则;偏好打分是 ADR-022/025。
 - **不重写 评分/打分人数 过滤**——并联第二道闸（D3）。
 
@@ -88,7 +90,7 @@ Phase 1 附加且向后兼容（无规则 → 无变化）。Phase 2/3 拓宽包
 - **Blacklist（黑名单）**——exclude 模式的内容过滤规则（最高优先级）。
 - **Attribute filter（属性过滤）**——对某个解析属性（gender、tag）的规则。
 - **Filter decision（过滤判定）**——引擎对一部影片的 `keep` + `reasons`。
-- **Subscription（订阅）**——（Phase 2）一个被关注的实体,其新作越过评分门槛。
+- **Subscription（订阅）**——（Phase 3）一个被关注的实体,其新作越过评分门槛。
 
 ## 备选方案 (Alternatives Considered)
 
@@ -107,3 +109,5 @@ Phase 1 附加且向后兼容（无规则 → 无变化）。Phase 2/3 拓宽包
 
 - 2026-05-29: Proposed（从"流式摄取"纠偏为内容过滤;三期已划定,IMP 待出）。
 - 2026-05-30: Phase 1 已通过 [IMP-ADR040-01](IMP-ADR040-01-content-filter.md) 实现;ADR 继续保持 active,用于 Phase 2/3。
+- 2026-06-04: Phase 2 范围更正——javdb 演员页不含生日信息；年龄过滤改用 minnano-av（尽力匹配，按名称），年龄以影片上映日期计算。路线图重新编号（年龄=Phase 2；订阅=Phase 3；web/MCP=Phase 4）。计划见 [IMP-ADR040-02](IMP-ADR040-02-age-filter.md)。
+- 2026-06-07：Phase 2 经 [IMP-ADR040-02](IMP-ADR040-02-age-filter.md) 实现（PR #180）——`age` 维度、minnano-av 富集、`ActorMetadata` 缓存。ADR 对 Phase 3-5 仍然有效。

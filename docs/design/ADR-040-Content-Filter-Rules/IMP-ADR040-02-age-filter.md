@@ -4,7 +4,7 @@
 
 **Related:** [ADR-040](ADR-040-content-filter-rules.md) (umbrella) — this is **Phase 2** of the (now re-numbered) roadmap. Builds directly on [IMP-ADR040-01](IMP-ADR040-01-content-filter.md) (the deterministic content-filter engine).
 
-**Status:** Not started.
+**Status:** Implemented (PR #180 open).
 
 **Goal:** Add an `age` dimension to the content-filter engine that drops a parsed movie when any actor's age (at the movie's release date) is outside an operator-configured bound — resolving each actor's birthdate **best-effort** from **minnano-av** (keyed by actor name), cached in a new `ActorMetadata` D1 table, and applied only when an `age` rule exists.
 
@@ -166,7 +166,16 @@ print("gateway fetch ok:", html is not None, "len:", len(html or ""))
 PY
 ```
 
-- [ ] **Step 3: Record findings & decision gate.** Note the exact search-URL template, the profile-link selector, and the birthdate markup. If they differ from the assumptions above, Task 6's parser + synthetic fixtures must be adjusted to match — **this spike is the source of truth.** If minnano-av is unreachable both directly *and* through the gateway (even with `use_proxy=True`), stop and report — the resolver would be a permanent no-op and needs a proxy/source rethink before continuing.
+- [ ] **Step 3: Record findings & decision gate.**
+
+  **Decision gate: PASS** — minnano-av was reachable directly and through the production gateway (which follows redirects). The shipped parser (`javdb/spider/services/actor_age_sources.py`) was grounded by this spike. Corrected facts, differing from the pre-spike assumptions:
+
+  - **Search URL param is `search_word`** (not `search`): `https://www.minnano-av.com/search_result.php?search_scope=actress&search_word={q}`.
+  - **A single confident match 30x-redirects straight to the profile page** `actress<ID>.html` (the redirect-response IS the profile HTML; minnano's matching is alias-aware). So the fetched URL is the profile directly — no need to parse a results page for it.
+  - **Multiple matches stay on a results list** whose profile links use `actress<ID>.html` hrefs (NOT `actress.php?…`, which is video pagination; NOT `ranking_actress.php`).
+  - **Birthdate markup:** `生年月日 YYYY年MM月DD日`. `BeautifulSoup.get_text()` excludes `<meta>` attributes, so the meta `"生年月日"` label (if any) never false-matches the regex.
+
+  The shipped implementation uses `search_word=`, an `actress\d+\.html` profile-link selector, and a redirect-first `lookup` (read birthdate directly from a single-match redirect; fall back to a strict suffix-stripped exact-name match on a multi-match results list). See Task 6 note below.
 
 > No commit in this task (exploration only). Findings carry into Task 6.
 
@@ -485,6 +494,8 @@ git commit -m "feat(spider): add compute_age helper (ADR-040 Phase 2)"
 **Files:**
 - Create: `javdb/spider/services/actor_age_sources.py`
 - Test: `tests/unit/test_actor_age_sources.py`
+
+> **⚠ Re-grounded by the Task-2 spike.** The code block below reflects the original (pre-spike) assumptions and is **superseded** — the shipped implementation in `javdb/spider/services/actor_age_sources.py` uses `search_word=`, an `actress\d+\.html` profile-link selector, and a redirect-first `lookup` (read the birthdate directly from a single-match redirect; fall back to a strict suffix-stripped exact-name match on a multi-match list). See the shipped file for the authoritative parser.
 
 > Selectors/URLs below reflect the assumptions probed in Task 2. **If Task 2 found
 > different markup, adjust the parser bodies AND the synthetic fixtures in the test
