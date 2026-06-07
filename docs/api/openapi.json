@@ -4994,6 +4994,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Change Password"
       }
     },
@@ -5050,6 +5055,11 @@
             "description": "Successful Response"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Logout"
       }
     },
@@ -5086,6 +5096,11 @@
             "description": "Successful Response"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Get Capabilities",
         "tags": [
           "capabilities"
@@ -5131,6 +5146,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Get Config"
       },
       "put": {
@@ -5169,6 +5189,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Update Config"
       }
     },
@@ -5185,6 +5210,11 @@
             "description": "Successful Response"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Get Config Meta"
       }
     },
@@ -5221,6 +5251,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Api Crawl Index"
       }
     },
@@ -5257,6 +5292,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Api Detect Page Type"
       }
     },
@@ -5276,6 +5316,11 @@
             "description": "Successful Response"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Get Javdb Session Status",
         "tags": [
           "diagnostics"
@@ -5318,6 +5363,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Refresh Javdb Session Diag",
         "tags": [
           "diagnostics"
@@ -5460,6 +5510,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "List Ops Incidents",
         "tags": [
           "diagnostics"
@@ -5482,6 +5537,11 @@
             "description": "Successful Response"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Get Ops Incident Analytics",
         "tags": [
           "diagnostics"
@@ -5525,6 +5585,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Get Ops Incident",
         "tags": [
           "diagnostics"
@@ -5614,6 +5679,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Get Similar Ops Incidents",
         "tags": [
           "diagnostics"
@@ -5636,6 +5706,11 @@
             "description": "Successful Response"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Get Parse Field Health",
         "tags": [
           "diagnostics"
@@ -5677,6 +5752,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Explore Download Magnet"
       }
     },
@@ -5715,6 +5795,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Explore Index Status"
       }
     },
@@ -5753,6 +5838,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Explore One Click"
       }
     },
@@ -5792,6 +5882,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Explore Proxy Page"
       }
     },
@@ -5830,6 +5925,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Explore Resolve"
       }
     },
@@ -5868,6 +5968,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Explore Search By Video Code"
       }
     },
@@ -5906,6 +6011,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Explore Sync Cookie"
       }
     },
@@ -5955,6 +6065,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "List Runs",
         "tags": [
           "gh-actions"
@@ -5995,6 +6110,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Dispatch Run",
         "tags": [
           "gh-actions"
@@ -6038,6 +6158,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Get Run Logs",
         "tags": [
           "gh-actions"
@@ -6060,6 +6185,11 @@
             "description": "Successful Response"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "List Secrets",
         "tags": [
           "gh-actions"
@@ -6100,6 +6230,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Create Secret",
         "tags": [
           "gh-actions"
@@ -6143,6 +6278,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Delete Secret",
         "tags": [
           "gh-actions"
@@ -6165,6 +6305,11 @@
             "description": "Successful Response"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "List Workflows",
         "tags": [
           "gh-actions"
@@ -6208,6 +6353,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Get Workflow Content",
         "tags": [
           "gh-actions"
@@ -6259,6 +6409,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Update Workflow Content",
         "tags": [
           "gh-actions"
@@ -6316,6 +6471,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Run Health Check"
       }
     },
@@ -6486,6 +6646,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Search Movies",
         "tags": [
           "history"
@@ -6657,6 +6822,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Export Movies Csv",
         "tags": [
           "history"
@@ -6832,6 +7002,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Search Torrents",
         "tags": [
           "history"
@@ -7005,6 +7180,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Export Torrents Csv",
         "tags": [
           "history"
@@ -7046,6 +7226,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Api Submit Spider Job"
       }
     },
@@ -7085,6 +7270,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Api Get Spider Job Status"
       }
     },
@@ -7122,6 +7312,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Refresh Javdb Session"
       }
     },
@@ -7223,6 +7418,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Search Logs",
         "tags": [
           "logs"
@@ -7245,6 +7445,11 @@
             "description": "Successful Response"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "List Migrations",
         "tags": [
           "migrations"
@@ -7298,6 +7503,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Run Migration",
         "tags": [
           "migrations"
@@ -7319,6 +7529,11 @@
             "description": "Successful Response"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Mark Complete",
         "tags": [
           "onboarding"
@@ -7362,6 +7577,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Dismiss Hint",
         "tags": [
           "onboarding"
@@ -7383,6 +7603,11 @@
             "description": "Successful Response"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Get Status",
         "tags": [
           "onboarding"
@@ -7424,6 +7649,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Test Component",
         "tags": [
           "onboarding"
@@ -7466,6 +7696,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Cleanup Claim Stages",
         "tags": [
           "operations"
@@ -7508,6 +7743,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Cleanup Stale Sessions",
         "tags": [
           "operations"
@@ -7586,6 +7826,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Email History",
         "tags": [
           "operations"
@@ -7630,6 +7875,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Email Test",
         "tags": [
           "operations"
@@ -7675,6 +7925,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Email Resend",
         "tags": [
           "operations"
@@ -7737,6 +7992,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Get Pikpak Queue",
         "tags": [
           "operations"
@@ -7779,6 +8039,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Pikpak Transfer",
         "tags": [
           "operations"
@@ -7821,6 +8086,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Qb Filter Small",
         "tags": [
           "operations"
@@ -7843,6 +8113,11 @@
             "description": "Successful Response"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "List Qb Torrents",
         "tags": [
           "operations"
@@ -7865,6 +8140,11 @@
             "description": "Successful Response"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Rclone Last",
         "tags": [
           "operations"
@@ -7907,6 +8187,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Rclone Run",
         "tags": [
           "operations"
@@ -7946,6 +8231,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Api Parse Category"
       }
     },
@@ -7982,6 +8272,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Api Parse Detail"
       }
     },
@@ -8018,6 +8313,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Api Parse Index"
       }
     },
@@ -8054,6 +8354,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Api Parse Tags"
       }
     },
@@ -8090,6 +8395,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Api Parse Top"
       }
     },
@@ -8126,6 +8436,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Api Parse Url"
       }
     },
@@ -8182,6 +8497,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "List Content Preferences",
         "tags": [
           "preferences"
@@ -8224,6 +8544,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Get Movie Metadata",
         "tags": [
           "preferences"
@@ -8280,6 +8605,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "List Movie Ratings",
         "tags": [
           "preferences"
@@ -8322,6 +8652,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Get Movie Rating",
         "tags": [
           "preferences"
@@ -8372,6 +8707,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Upsert Movie Rating",
         "tags": [
           "preferences"
@@ -8433,6 +8773,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Upsert Content Preference",
         "tags": [
           "preferences"
@@ -8732,6 +9077,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "List Sessions",
         "tags": [
           "sessions"
@@ -8774,6 +9124,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Get Session Detail",
         "tags": [
           "sessions"
@@ -8826,6 +9181,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Post Commit",
         "tags": [
           "sessions"
@@ -8878,6 +9238,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Post Rollback",
         "tags": [
           "sessions"
@@ -8900,6 +9265,11 @@
             "description": "Successful Response"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Stats Summary",
         "tags": [
           "stats"
@@ -8953,6 +9323,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Stats Trend",
         "tags": [
           "stats"
@@ -8996,6 +9371,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Get State",
         "tags": [
           "system-state"
@@ -9035,6 +9415,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Put State",
         "tags": [
           "system-state"
@@ -9078,6 +9463,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "List Tasks"
       }
     },
@@ -9116,6 +9506,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Trigger Adhoc"
       }
     },
@@ -9154,6 +9549,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Trigger Daily"
       }
     },
@@ -9172,6 +9572,11 @@
             "description": "Successful Response"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Task Stats"
       }
     },
@@ -9211,6 +9616,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Get Task"
       }
     },
@@ -9258,6 +9668,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
         "summary": "Get Task Stream"
       }
     }

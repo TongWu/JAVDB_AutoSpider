@@ -36,7 +36,6 @@ _AUTH_RESPONSES = {
     401: {"description": "Unauthorized", **_DETAIL_STRING_RESPONSE_SCHEMA},
     403: {"description": "Forbidden", **_DETAIL_STRING_RESPONSE_SCHEMA},
 }
-_AUTH_OPENAPI = {"security": [{"BearerAuth": []}]}
 _LimitQuery = Annotated[
     int,
     Query(
@@ -112,7 +111,6 @@ def _evidence_from_row(row: dict[str, Any]) -> TorrentQualityEvidenceSchema:
         **_AUTH_RESPONSES,
         400: {"description": "Bad Request", **_DETAIL_STRING_RESPONSE_SCHEMA},
     },
-    openapi_extra=_AUTH_OPENAPI,
 )
 def list_evaluations(
     limit: _LimitQuery = 50,
@@ -143,7 +141,6 @@ def list_evaluations(
         **_AUTH_RESPONSES,
         404: {"description": "Not Found", **_DETAIL_STRING_RESPONSE_SCHEMA},
     },
-    openapi_extra=_AUTH_OPENAPI,
 )
 def get_evidence(
     info_hash: str,
