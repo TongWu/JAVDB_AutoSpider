@@ -2,10 +2,10 @@
 
 | 字段       | 值                                                                    |
 | ---------- | --------------------------------------------------------------------- |
-| **状态**   | Proposed — 伞型;执行下放给各期 IMP                                    |
+| **状态**   | Completed — 三期已于 2026-06-07 全部交付;伞型,各期 IMP                |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
-| **关联**   | [ADR-012](../_archive/ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md), [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md), [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md) |
+| **关联**   | [ADR-012](../ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md), [ADR-015](../ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-033](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-035](../../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md), [ADR-036](../../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md) |
 
 > 源自 2026-05-29 一次关于全新方向(方向五——确定性仿真测试床)的头脑风暴。
 
@@ -17,7 +17,7 @@
 - 但 **HTTP 是逐测试手搓 mock**（如 `test_spider_backends.py` 里 `responses = iter(...)` + `monkeypatch`）;**没有共享的 record/replay**。
 - **没有可复用的 fake qB**;qB 逐测试 mock。
 
-成本如今叠加:本会话同源的三份 Phase-1 设计（[ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) 闭环、[ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md) 哨兵、[ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md) 事件脊柱）都依赖**管道行为**——qB 状态转换、commit 门控、发出的事件——而当前没有任何测试能端到端驱动它们。
+成本如今叠加:本会话同源的三份 Phase-1 设计（[ADR-033](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) 闭环、[ADR-035](../../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md) 哨兵、[ADR-036](../../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md) 事件脊柱）都依赖**管道行为**——qB 状态转换、commit 门控、发出的事件——而当前没有任何测试能端到端驱动它们。
 
 本 ADR 建一个**确定性、进程内、端到端的管道 harness**,对 fake 跑 spider → uploader → commit,使整条管道（及三个新功能）能在 CI 里零网络、零 live 服务地验证。
 
@@ -39,7 +39,7 @@ tests/harness/
   scenarios/          # cassette（HTML）+ 场景定义
 ```
 
-**D3. `FixtureHTTP` 从 cassette 回放 javdb;record 模式可选且门控。** cassette = 一个目录,把请求 URL → 响应（status/headers/body）映射,在 `request.py` 传输接缝回放。**默认 fixtures 为精选的最小 index/detail HTML**（扩展 `tests/fixtures/parser/`）。一个**可选、env 门控的 record 模式**在 cassette miss 时打真实请求并存档——用于 javdb 改版后刷新 cassette。默认精选最小,因为 javdb 是成人内容、整页大且敏感;录制只是开发期刷新工具,绝不在 CI 跑。（这个"金页"录制与 [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md) 哨兵的 golden-anchor 同源。）
+**D3. `FixtureHTTP` 从 cassette 回放 javdb;record 模式可选且门控。** cassette = 一个目录,把请求 URL → 响应（status/headers/body）映射,在 `request.py` 传输接缝回放。**默认 fixtures 为精选的最小 index/detail HTML**（扩展 `tests/fixtures/parser/`）。一个**可选、env 门控的 record 模式**在 cassette miss 时打真实请求并存档——用于 javdb 改版后刷新 cassette。默认精选最小,因为 javdb 是成人内容、整页大且敏感;录制只是开发期刷新工具,绝不在 CI 跑。（这个"金页"录制与 [ADR-035](../../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md) 哨兵的 golden-anchor 同源。）
 
 **D4. `FakeQB` 为 in-memory、可控状态。** 它在一个 in-memory 种子字典上实现代码实际用到的 `QBittorrentClient` 面（`add_torrent`、`get_torrents_multiple_categories`、`delete_torrents`、`get_existing_hashes`），外加控制方法（`complete(hash)`、`stall(hash)`），让场景能模拟下载完成——正是 ADR-033 / ADR-035 / ADR-036 要断言的。
 
@@ -77,8 +77,8 @@ assert "TorrentQueued" in harness.events()  # 当 ADR-036 已建
 | 阶段 | IMP | 交付内容 | 推迟内容 |
 | --- | --- | --- | --- |
 | Phase 1 — Harness 核心 + 金场景 | [IMP-ADR037-01](IMP-ADR037-01-harness-core.md) | `tests/harness/`（FixtureHTTP 回放、FakeQB、`pipeline_harness` fixture、场景+断言 API）;一个金 daily 场景（index → 详情 → 加种 → commit）断言 history（+ 事件,若 ADR-036 已建） | record 模式;场景库;SMTP/pikpak/rclone 接缝 |
-| Phase 2 — 场景库 + record + 接缝 | [IMP-ADR037-02](IMP-ADR037-02-scenario-library-record-seams.md)（已规划） | record 模式;漂移/完成/失败场景;SMTP/pikpak/rclone fake | — |
-| Phase 3 — 金 run diff（可选） | [IMP-ADR037-03](IMP-ADR037-03-golden-run-diff.md)（已规划） | 录一次真实 run 的输入+输出;CI 回放 + diff | — |
+| Phase 2 — 场景库 + record + 接缝 | [IMP-ADR037-02](IMP-ADR037-02-scenario-library-record-seams.md)（已实现 2026-06-07） | record 模式;漂移/完成/失败场景;SMTP/pikpak/rclone fake | — |
+| Phase 3 — 金 run diff（可选） | [IMP-ADR037-03](IMP-ADR037-03-golden-run-diff.md)（已实现 2026-06-07） | 录一次真实 run 的输入+输出;CI 回放 + diff | — |
 
 Phase 1 独立成立、只加测试支撑代码。Phase 2/3 扩展覆盖。Phase 2/3 的 IMP 已撰写(计划);规划期间的发现见状态日志。
 
@@ -105,14 +105,16 @@ Phase 1 独立成立、只加测试支撑代码。Phase 2/3 扩展覆盖。Phase
 
 ## 参考 (References)
 
-- [ADR-012 — Pipeline Run Structured Boundary](../_archive/ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md)
-- [ADR-015 — Integrations Interface Boundary](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md)
-- [ADR-033 — Media Closed-Loop](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
-- [ADR-035 — Site-Contract Drift Sentinel](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)
-- [ADR-036 — Event-Sourced Pipeline Spine](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md)
+- [ADR-012 — Pipeline Run Structured Boundary](../ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md)
+- [ADR-015 — Integrations Interface Boundary](../ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md)
+- [ADR-033 — Media Closed-Loop](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
+- [ADR-035 — Site-Contract Drift Sentinel](../../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)
+- [ADR-036 — Event-Sourced Pipeline Spine](../../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md)
 
 ## 状态日志 (Status Log)
 
 - 2026-05-29: Proposed(伞型;三期已划定,IMP 待出)。
 - 2026-05-30: Phase 1 已实现（[IMP-ADR037-01](IMP-ADR037-01-harness-core.md)）—— `tests/harness/` 交付 FixtureHTTP + FakeQB + `pipeline_harness` fixture 与一个黄金每日场景（index → 2 个 detail → queued → commit），断言历史落地 2 行 + qB 入队 2 个 hash；14 个测试 <0.4s 全绿。实现与计划的偏差见 IMP 的 "Implementation Reconciliation"（三步 `run_spider`→`run_uploader`→`commit_session`、session 取自 `SpiderRunResult`、`STORAGE_MODE=duo` 以打通 CSV 交接）。Phase 2/3 仍为 stub。
 - 2026-06-04: Phase 2 与 Phase 3 实现计划已撰写([IMP-ADR037-02](IMP-ADR037-02-scenario-library-record-seams.md)、[IMP-ADR037-03](IMP-ADR037-03-golden-run-diff.md))—— 仅为计划,尚未实现。规划期间用一个临时探针端到端验证了场景,并发现 `javdb/ops/reconcile/persistence.py` 与 `javdb/ops/sentinel/persistence.py` 在 import 期绑定 DB 路径常量(`from javdb.storage.db import OPERATIONS_DB_PATH`/`REPORTS_DB_PATH`),`_isolate_sqlite` 的重定向够不到它,导致闭环/哨兵写入落到非测试 DB。IMP-02 在 harness `_install` 中把这些名字 repoint 到临时 DB 以使写入对测试可见;更广的测试隔离修复在本 ADR 之外跟踪。
+- 2026-06-07: Phase 2 已实现（[IMP-ADR037-02](IMP-ADR037-02-scenario-library-record-seams.md)），经 subagent 驱动开发（11 个任务,每个两阶段评审）。在 `tests/harness/` 下交付:磁盘 cassette（`cassette.py`）+ env 门控的 record-on-miss（`FixtureHTTP.record_miss`/`live_fetch`,受 `JAVDB_HARNESS_RECORD` 控制）+ dev-only `record_pages`;`FakeQB.categories()` + `PipelineHarness.reconcile()`;完成→闭环（ADR-033）、漂移→commit 门控（ADR-035）、失败→回滚三个场景;`run_daily(before_commit=...)` + `HarnessResult.commit_error`;`FakeSMTP` + `run_notify` 每日邮件场景（仅 email——ADR-039 的 dispatch/telegram 扇出留待未来场景）;pikpak/rclone neuter 构件;CONTEXT.md 与双语 handbook 已更新。`tests/harness/` 全套:30 passed、1 skipped（dev-only live record）。**实现期间在文档内修正了三处计划↔现实偏差:**(1) 计划中的 `_install` ops-persistence repoint 现为 no-op——[BFR-016](../../BFR-016-Import-Time-DB-Path-Binding/BFR-016-import-time-db-path-binding.md)（在 06-04 计划约 30 分钟后提交）已让 persistence 模块在调用时解析 DB 路径,故 repoint 多余且会抛 `AttributeError`;(2) `db_rollback_session` 对未提交会话会 DELETE 整行 `ReportSessions`,故失败场景断言 `get_state().status is None` 而非 `'failed'`;(3) 真实 `send_email` 带 `session_id` 参数（ADR-046 P5）,故 `FakeSMTP.send_email` 用 `**kwargs` 吸收。
+- 2026-06-07: Phase 3 已实现（[IMP-ADR037-03](IMP-ADR037-03-golden-run-diff.md)）—— 金 run 录/放 diff。`capture_snapshot` 把一次干净 daily run 投影为规范化、剔除非确定性字段的 dict（`movies`/`torrents`/`qb_hashes`/`acquisition`/`events`——无 session id、时间戳、自增 id、事件 seq），落盘为提交进仓库的 `tests/harness/scenarios/golden_runs/daily/snapshot.json`。bless/diff 测试（`JAVDB_HARNESS_BLESS=1` 重新 bless,否则 diff 实时 vs 已提交并在漂移时失败）即回归网——变异探针确认能抓漂移,且 re-bless 字节确定。三期全部交付;`tests/harness/` 34 passed、1 skipped。**Status 由 Proposed → Completed;本 ADR-037 文件夹已归档至 `docs/design/_archive/`。**

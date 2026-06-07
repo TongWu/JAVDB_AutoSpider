@@ -48,12 +48,15 @@ class HistoryView:
 
 
 class HarnessResult:
-    def __init__(self, fake_qb, http, spider_result, uploader_result, commit_result):
+    def __init__(self, fake_qb, http, spider_result, uploader_result, commit_result,
+                 commit_error=None):
         self.qb = fake_qb
         self.http = http
         self.spider_result = spider_result
         self.uploader_result = uploader_result
         self.commit_result = commit_result
+        # Set when the ADR-035 commit gate refused the commit (critical drift).
+        self.commit_error = commit_error
 
 
 class PipelineHarness:
@@ -62,6 +65,7 @@ class PipelineHarness:
         self._tmp_path = tmp_path
         self.http: FixtureHTTP | None = None
         self.qb: FakeQB | None = None
+        self.smtp = None
 
     def _install(self, scenario: PipelineScenario) -> None:
         self.http = FixtureHTTP(scenario.pages)
@@ -111,11 +115,13 @@ class PipelineHarness:
             cancel_event=None,
         )
 
-    def run_daily(self, scenario: PipelineScenario) -> HarnessResult:
+    def run_daily(self, scenario: PipelineScenario, *, before_commit=None) -> HarnessResult:
         from javdb.spider.app.run_service import run_spider
         from javdb.integrations.qb.uploader.options import QbUploaderOptions
         from javdb.integrations.qb.uploader.service import run_uploader
-        from javdb.storage.sessions.commit import CommitRequest, commit_session
+        from javdb.storage.sessions.commit import (
+            CommitRequest, SiteContractDriftError, commit_session,
+        )
 
         self._install(scenario)
 
@@ -131,19 +137,29 @@ class PipelineHarness:
             from_pipeline=True, session_id=session_id,
         ))
 
+        # ADR-037 Phase 2: optional hook to mutate state after staging but before
+        # the commit gate (e.g. seed sentinel drift fills for the drift scenario).
+        if before_commit is not None and session_id:
+            before_commit(session_id)
+
         # 3) Commit — drains pending writes into MovieHistory / TorrentHistory.
         #    Gate on spider AND uploader success, mirroring DailyIngestion.yml's
-        #    "Mark sessions as committed" step (if: ${{ success() }} after the
-        #    spider/uploader). On failure production leaves the session for the
-        #    cleanup-on-failure rollback, so the harness must NOT commit either.
+        #    "Mark sessions as committed" step (if: ${{ success() }}). A critical
+        #    site-contract drift verdict raises SiteContractDriftError before any
+        #    drain; production's CLI commit routes that to a failed session, so the
+        #    harness records it (commit_error) and leaves pending rows un-promoted.
         commit_result = None
+        commit_error = None
         spider_ok = spider_result.exit_code == 0
         uploader_ok = uploader_result.exit_code == 0
         if session_id and spider_ok and uploader_ok:
-            commit_result = commit_session(CommitRequest(session_id=session_id))
+            try:
+                commit_result = commit_session(CommitRequest(session_id=session_id))
+            except SiteContractDriftError as exc:
+                commit_error = exc
 
         return HarnessResult(self.qb, self.http, spider_result, uploader_result,
-                             commit_result)
+                             commit_result, commit_error)
 
     def history(self) -> HistoryView:
         return HistoryView()
@@ -159,7 +175,12 @@ class PipelineHarness:
         from javdb.storage.db import get_db
         try:
             with get_db(_db.REPORTS_DB_PATH) as conn:
-                rows = conn.execute("SELECT event_type FROM PipelineEvent").fetchall()
+                # ORDER BY seq (the AUTOINCREMENT PK) — without it SQLite does not
+                # guarantee insertion order, so a multi-event run could yield a
+                # different sequence and cause spurious golden-snapshot drift.
+                rows = conn.execute(
+                    "SELECT event_type FROM PipelineEvent ORDER BY seq"
+                ).fetchall()
             return [r[0] for r in rows]
         except sqlite3.OperationalError:
             return []  # PipelineEvent table only exists when ADR-036 is built
@@ -177,6 +198,46 @@ class PipelineHarness:
             return [dict(r) for r in rows]
         except sqlite3.OperationalError:
             return []  # AcquisitionOutcome only exists when ADR-033 is built
+
+    def reconcile(self, *, qb_client=None, categories=None,
+                  infer_absent: bool = False):
+        """Run the real ADR-033 closed-loop reconciler in-process.
+
+        Defaults to reconciling against this harness's FakeQB, scoped to the
+        categories the uploader actually used (so it is config-independent).
+        ``infer_absent`` defaults to False for determinism: a torrent absent
+        from the (fake) qB read must not be inferred stalled/failed here."""
+        from javdb.ops.reconcile.models import ReconcileOptions
+        from javdb.ops.reconcile.service import run as reconcile_run
+
+        client = qb_client if qb_client is not None else self.qb
+        cats = tuple(categories) if categories is not None else tuple(client.categories())
+        return reconcile_run(
+            ReconcileOptions(sources=("qb",), categories=cats, infer_absent=infer_absent),
+            qb_client=client,
+        )
+
+    def run_notify(self, csv_path, session_id, *, dry_run: bool = False):
+        """Run the real daily email-notification flow with SMTP faked.
+
+        Patches the notify module's send_email to a FakeSMTP (captured on
+        ``self.smtp``) and returns the EmailNotificationResult. Git side-effects
+        are already neutered by the autouse _disable_git_side_effects fixture."""
+        import javdb.integrations.notify.email.service as notify_service
+        from javdb.integrations.notify.email.options import EmailNotificationOptions
+        from javdb.integrations.notify.email.service import run_email_notification
+        from tests.harness.fake_smtp import FakeSMTP
+
+        self.smtp = FakeSMTP()
+        self._mp.setattr(
+            notify_service, "send_email",
+            lambda subject, body, attachments=None, dry_run=False, **kwargs:
+                self.smtp.send_email(subject, body, attachments, dry_run),
+        )
+        return run_email_notification(EmailNotificationOptions(
+            csv_path=csv_path, mode="daily", dry_run=dry_run,
+            from_pipeline=True, session_id=session_id,
+        ))
 
 
 @pytest.fixture

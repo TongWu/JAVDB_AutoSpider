@@ -4,7 +4,7 @@
 **Date**: 2026-06-04
 **Severity**: High
 **Affected**: `javdb/ops/reconcile/persistence.py`、`javdb/ops/sentinel/persistence.py`、`javdb/ops/diagnosis/persistence.py`、`javdb/spider/detail/runner.py`、`javdb/storage/repos/preference_repo.py`、`javdb/storage/repos/metadata_repo.py`、`javdb/migrations/tools/backfill_movie_metadata.py`、`javdb/migrations/tools/absolutize_javdb_urls_in_history.py`
-**Related**: [BFR-011](../BFR-011-OpsIncident-GetDb-Logical-Name/BFR-011-opsincident-get-db-logical-name.zh.md)(同一 `get_db` 路径混淆家族——逻辑名变体）、[IMP-ADR037-02](../ADR-037-Pipeline-Test-Harness/IMP-ADR037-02-scenario-library-record-seams.md)(其 harness 的 `record_queued` 接缝是*绕过*本 bug 的临时手段;本 BFR 才是根因修复）、`apps/cli/ops/events.py`(正确的「调用期解析」参考写法）
+**Related**: [BFR-011](../BFR-011-OpsIncident-GetDb-Logical-Name/BFR-011-opsincident-get-db-logical-name.zh.md)(同一 `get_db` 路径混淆家族——逻辑名变体）、[IMP-ADR037-02](../_archive/ADR-037-Pipeline-Test-Harness/IMP-ADR037-02-scenario-library-record-seams.md)(其 harness 的 `record_queued` 接缝是*绕过*本 bug 的临时手段;本 BFR 才是根因修复）、`apps/cli/ops/events.py`(正确的「调用期解析」参考写法）
 
 ---
 

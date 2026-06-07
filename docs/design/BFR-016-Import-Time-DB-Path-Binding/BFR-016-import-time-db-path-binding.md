@@ -4,7 +4,7 @@
 **Date**: 2026-06-04
 **Severity**: High
 **Affected**: `javdb/ops/reconcile/persistence.py`, `javdb/ops/sentinel/persistence.py`, `javdb/ops/diagnosis/persistence.py`, `javdb/spider/detail/runner.py`, `javdb/storage/repos/preference_repo.py`, `javdb/storage/repos/metadata_repo.py`, `javdb/migrations/tools/backfill_movie_metadata.py`, `javdb/migrations/tools/absolutize_javdb_urls_in_history.py`
-**Related**: [BFR-011](../BFR-011-OpsIncident-GetDb-Logical-Name/BFR-011-opsincident-get-db-logical-name.md) (same `get_db` path-confusion family — the logical-name variant), [IMP-ADR037-02](../ADR-037-Pipeline-Test-Harness/IMP-ADR037-02-scenario-library-record-seams.md) (whose harness `record_queued` seam works *around* this bug; this BFR is the root-cause fix), `apps/cli/ops/events.py` (the correct call-time-resolution reference pattern)
+**Related**: [BFR-011](../BFR-011-OpsIncident-GetDb-Logical-Name/BFR-011-opsincident-get-db-logical-name.md) (same `get_db` path-confusion family — the logical-name variant), [IMP-ADR037-02](../_archive/ADR-037-Pipeline-Test-Harness/IMP-ADR037-02-scenario-library-record-seams.md) (whose harness `record_queued` seam works *around* this bug; this BFR is the root-cause fix), `apps/cli/ops/events.py` (the correct call-time-resolution reference pattern)
 
 ---
 

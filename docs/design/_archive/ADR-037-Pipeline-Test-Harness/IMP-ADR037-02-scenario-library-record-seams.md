@@ -6,7 +6,7 @@
 
 **Goal:** Grow the in-process `tests/harness/` from one golden scenario into a **scenario library** that drives the pipeline's load-bearing behaviours end to end — closed-loop completion (ADR-033), site-contract drift gating (ADR-035), failure rollback — plus an **env-gated record mode** that refreshes cassettes from live javdb, and **fakes for the remaining side-effecting seams** (SMTP; pikpak/rclone neuter building blocks).
 
-**Architecture:** Everything stays test-support only (ADR-037 D2) — this IMP touches `tests/harness/**`, `CONTEXT.md`, and the handbook; **no production code changes**. New scenarios reuse the existing `golden_daily()` cassette and vary one axis each: completion runs the real reconciler against a `FakeQB` whose torrents are then `complete()`d; drift seeds a critical `ParseRunFieldFill` row through a new `run_daily(before_commit=...)` hook so the real `commit_session` gate fires; failure reuses the IMP-01 `fail_adds=True` path and then drives the production `db_rollback_session`. One piece of harness wiring is load-bearing: `_install` must **repoint the ops persistence modules' import-time DB-path constants** at the test DB (see the ⚠ fact below) — without it the closed-loop and sentinel writes miss the harness-visible DB. Record mode wires the long-reserved `FixtureHTTP.record_miss` flag to a `live_fetch` callback (deterministically testable in CI with an injected fake; real network is dev-only behind `JAVDB_HARNESS_RECORD`).
+**Architecture:** Everything stays test-support only (ADR-037 D2) — this IMP touches `tests/harness/**`, `CONTEXT.md`, and the handbook; **no production code changes**. New scenarios reuse the existing `golden_daily()` cassette and vary one axis each: completion runs the real reconciler against a `FakeQB` whose torrents are then `complete()`d; drift seeds a critical `ParseRunFieldFill` row through a new `run_daily(before_commit=...)` hook so the real `commit_session` gate fires; failure reuses the IMP-01 `fail_adds=True` path and then drives the production `db_rollback_session`. The closed-loop and sentinel writes are visible to the harness's assertions because [BFR-016](../../BFR-016-Import-Time-DB-Path-Binding/BFR-016-import-time-db-path-binding.md) made the ops persistence modules resolve their DB-path constants at call time (the planned `_install` repoint is obsolete — see the ✅ fact below). Record mode wires the long-reserved `FixtureHTTP.record_miss` flag to a `live_fetch` callback (deterministically testable in CI with an injected fake; real network is dev-only behind `JAVDB_HARNESS_RECORD`).
 
 **Tech Stack:** Python 3, `pytest` (`monkeypatch`, `tmp_path`), `sqlite3`, the existing `tests/conftest.py` autouse fixtures (`_isolate_sqlite`, `_disable_git_side_effects`), and the shipped `tests/harness/` package.
 
@@ -19,11 +19,11 @@ These were read directly from the tree; copy them verbatim — do not re-derive.
 - **`init_db` builds every table the scenarios touch** in the single collapsed temp DB that `_isolate_sqlite` creates: `PipelineEvent` (`javdb/storage/db/_db_migrations.py:410`), `ParseRunFieldFill` (`:443`), `AcquisitionOutcome` (`:599`), `OpsIncidents` (`:372`), `MovieHistory`, `TorrentHistory`, `PendingMovieHistoryWrites`, `PendingTorrentHistoryWrites`. So every read/seed below works under the autouse fixture with **no extra schema setup**.
 - **Closed-loop is already wired into the uploader.** `javdb/integrations/qb/uploader/service.py:741` calls `_record_queued_acquisition(torrent, options.session_id)` after each successful add (unconditional — no backend guard), which calls `javdb.ops.reconcile.service.record_queued`. So after `run_daily(golden_daily())` there are **2 `AcquisitionOutcome` rows in state `queued`** (hashes `"a"*40`, `"b"*40`), independent of the pending→commit path.
 - **The reconciler.** `javdb.ops.reconcile.service.run(options: ReconcileOptions, *, repo=None, qb_client=None) -> ReconcileResult`. `ReconcileOptions(sources=("qb",), categories=("JavDB","Ad Hoc"), stalled_after_days=7, dry_run=False, infer_absent=True)`. `ReconcileResult` has `observed, outcomes_updated, marked_downloading, marked_completed, marked_stalled, marked_failed, errors`. It reads qB via `client.get_torrents_multiple_categories(list(categories), torrent_filter="all")` when the client has no `get_torrents` attr (FakeQB does not), filtering by category. `QbCollector.collect` reads `t["hash"]`, `t["progress"]`, `t["state"]`; `completed = progress == 1.0 or state in {"uploading","seeding","stalledUP","pausedUP","queuedUP","forcedUP","checkingUP"}`. **`FakeQB.complete(h)` sets `progress=1.0, state="uploading"`** → collector yields `state="completed"`. `run()` then flips each active `queued` outcome to `completed` (`marked_completed += 1`).
-- **⚠ Stale module-level DB-path imports (verified by probe — REQUIRED FIX).** `javdb/ops/reconcile/persistence.py:7` does `from javdb.storage.db import OPERATIONS_DB_PATH` and `javdb/ops/sentinel/persistence.py:11` does `from javdb.storage.db import REPORTS_DB_PATH` **at module load**, binding the *original* paths. `_isolate_sqlite` monkeypatches the `javdb.storage.db` package attributes later, so those bound names never update — `record_queued`/`reconcile` and the sentinel write/read a **non-test** DB, and the harness's `acquisition_outcomes()` (which resolves the path at call time) sees nothing. **A probe confirmed `acquisition_outcomes()` is `[]` after `run_daily` without a fix, and exactly 2 `queued` rows with it.** The fix is test-only: `_install` repoints `javdb.ops.reconcile.persistence.OPERATIONS_DB_PATH` and `javdb.ops.sentinel.persistence.REPORTS_DB_PATH` at the call-time temp path (Task 4 Step 5). Without it the completion **and** drift scenarios fail. (The underlying stale-import pattern is a broader test-isolation latent bug, flagged separately — out of scope here.)
+- **✅ Import-time DB-path binding — RESOLVED by [BFR-016](../../BFR-016-Import-Time-DB-Path-Binding/BFR-016-import-time-db-path-binding.md); no harness fix needed.** At plan-authoring time `javdb/ops/reconcile/persistence.py` and `javdb/ops/sentinel/persistence.py` bound `OPERATIONS_DB_PATH`/`REPORTS_DB_PATH` **at module load**, so `_isolate_sqlite`'s later repath never reached them — `record_queued`/`reconcile` and the sentinel wrote/read a **non-test** DB and `acquisition_outcomes()` saw nothing. **BFR-016 (committed 2026-06-04, ~30 min after this plan was written) rewrote both modules to resolve the path at *call time*** (`with get_db(_db.OPERATIONS_DB_PATH)` / `_db.REPORTS_DB_PATH`), so the autouse `_isolate_sqlite` monkeypatch now reaches them. **A fresh probe (2026-06-07) confirmed `acquisition_outcomes()` returns exactly 2 `queued` rows after `run_daily(golden_daily())` with NO harness repoint.** Task 4 Step 5's planned repoint is therefore obsolete and is kept as a documented no-op — a `monkeypatch.setattr` on the now-removed module attribute would itself raise `AttributeError`. (The broader test-isolation latent bug this stemmed from is exactly what BFR-016 records.)
 - **The drift gate.** `javdb.storage.sessions.commit.commit_session(CommitRequest(session_id=...))` calls `_gate_site_contract_drift` → `javdb.ops.sentinel.service.evaluate_session(session_id)` (no options → `min_sample = cfg("SENTINEL_MIN_SAMPLE", 30)`). A **critical** verdict raises `javdb.storage.sessions.commit.SiteContractDriftError` **before** any drain, and `evaluate_session` writes an `OpsIncidents` row with `incident_type='site_drift'`. `javdb.ops.sentinel.detectors.evaluate` marks a fill critical when `sample_count >= min_sample` **and** `fill_rate < spec["min_fill"]`; `index.video_code` is `critical, min_fill=0.99` (`javdb/spider/parse_contract.py`). So `FieldFill("index","video_code",0.1,50)` → critical.
 - **Seed fills via the service seam.** `javdb.ops.sentinel.service.persist_run(fills, *, session_id=None, repo=None) -> int`; `FieldFill(page_type, field, fill_rate, sample_count)` from `javdb.ops.sentinel.models`. It opens the reports DB (`open_fill_repo`) → collapsed temp DB.
-- **Rollback.** `db_rollback_session` is re-exported from `javdb.storage.db` (verified importable). For an `in_progress` pending session it transitions `in_progress→failed` then deletes the session's rows from `PendingMovieHistoryWrites`/`PendingTorrentHistoryWrites` (pending column is `SessionId`). Session state: `javdb.storage.sessions.lifecycle.get_state(session_id).status`.
-- **Notify.** `javdb.integrations.notify.email.service.run_email_notification(EmailNotificationOptions) -> EmailNotificationResult`; the SMTP seam is `send_email` **imported into that module's namespace** (`service.py:92`, called `service.py:549`) — patch `javdb.integrations.notify.email.service.send_email`. `EmailNotificationOptions(csv_path, mode="daily", dry_run=False, from_pipeline=False, session_id=None, ...)` from `javdb.integrations.notify.email.options`; result has `.email_sent`, `.subject`, `.exit_code`. Git side-effects are already neutered by the autouse `_disable_git_side_effects` fixture.
+- **Rollback (verified 2026-06-07 during impl).** `db_rollback_session` is re-exported from `javdb.storage.db` (verified importable). For an `in_progress` pending session it transitions `in_progress→failed`, deletes the session's rows from `PendingMovieHistoryWrites`/`PendingTorrentHistoryWrites` (pending column is `SessionId`), **and `_rollback_reports` then DELETEs the `ReportSessions` row itself** (only when not committed — committed sessions are preserved; see `javdb/storage/db/_db_rollback.py:305` and the NOTE at `:537`). So after a full rollback `get_state(session_id).status` is **`None`** (the row is gone), NOT `'failed'` — the `failed` transition is transient. (The original plan asserted `== "failed"`; that was wrong. Test asserts `is None`.) Session state: `javdb.storage.sessions.lifecycle.get_state(session_id).status`.
+- **Notify (verified 2026-06-07; survived the ADR-039 refactor).** `javdb.integrations.notify.email.service.run_email_notification(options, *, deliver: bool = True) -> EmailNotificationResult` (`service.py:147`; `deliver` defaults True = email-active, so omitting it is correct). The SMTP seam is `send_email` **imported into that module's namespace** (`service.py:92`, called `service.py:612`) — patch `javdb.integrations.notify.email.service.send_email`. **⚠ The real `send_email(subject, body, attachments=None, dry_run=False, session_id=None)` takes a 5th `session_id` arg (ADR-046 P5; defined in `delivery.py`), and the call site passes `session_id=options.session_id`** — so the `FakeSMTP.send_email` drop-in MUST absorb the extra kwarg (`**kwargs`, or an explicit `session_id=None`) or the patched call raises `TypeError`. `EmailNotificationOptions(csv_path, mode="daily", dry_run=False, from_pipeline=False, session_id=None, ...)` from `javdb.integrations.notify.email.options`; result has `.email_sent`, `.subject`, `.exit_code`. Git side-effects are already neutered by the autouse `_disable_git_side_effects` fixture.
 - **Event boundary (important — do not over-assert).** `RunStarted` is emitted inside `run_spider` (`javdb/spider/app/run_service.py:601`) so it fires in the harness. **`SessionCommitted`/`SessionFailed` are emitted only by the CLI commit path** (`apps/cli/db/commit_session.py:483/405/...`), **not** by the API `commit_session` the harness calls. So a clean harness run's `events()` is `["RunStarted"]`. Assert that; do **not** assert `SessionCommitted` (it would require driving the CLI, a non-goal here).
 
 ---
@@ -38,7 +38,7 @@ These were read directly from the tree; copy them verbatim — do not re-derive.
 | `tests/harness/fake_qb.py` | Modify | Add `categories()` accessor |
 | `tests/harness/fake_smtp.py` | Create | `FakeSMTP` capture (drop-in for `send_email`) |
 | `tests/harness/fake_external.py` | Create | `neuter_rclone(monkeypatch)` + `assert_pikpak_neutered()` building blocks |
-| `tests/harness/pipeline_harness.py` | Modify | `_install` ops-persistence repoint; `run_daily(before_commit=...)`; `HarnessResult.commit_error`; `reconcile(...)`; `run_notify(...)`; `self.smtp` |
+| `tests/harness/pipeline_harness.py` | Modify | `run_daily(before_commit=...)`; `HarnessResult.commit_error`; `reconcile(...)`; `run_notify(...)`; `self.smtp` (the planned `_install` ops-persistence repoint is obsolete — BFR-016, see the ✅ fact above) |
 | `tests/harness/test_cassette.py` | Create | Cassette round-trip tests |
 | `tests/harness/test_record_mode.py` | Create | Record-on-miss tests (fake `live_fetch`, no network) |
 | `tests/harness/test_scenario_completion.py` | Create | Completion → closed-loop scenario |
@@ -53,7 +53,7 @@ These were read directly from the tree; copy them verbatim — do not re-derive.
 | `docs/handbook/zh/developer/pipeline-test-harness.md` | Modify | Paired zh translation |
 
 **Naming contract (verbatim across tasks):**
-`save_cassette(cassette_dir: str, pages: dict[str,str]) -> None`; `load_cassette(cassette_dir: str) -> dict[str,str]`; `record_enabled() -> bool` (env `JAVDB_HARNESS_RECORD`); `FixtureHTTP(pages, *, record_miss=False, live_fetch=None)` with new attr `recorded: dict`; `record_pages(urls, *, use_proxy=False, use_cookie=False) -> dict`; `FakeQB.categories() -> set`; `FakeSMTP(*, succeed=True)` with `.send_email(subject, body, attachments=None, dry_run=False) -> bool` and `.sent: list[SentEmail]`, `SentEmail(subject, body, attachments=(), dry_run=False)`; `neuter_rclone(monkeypatch) -> None`; `assert_pikpak_neutered() -> None`; `PipelineHarness.run_daily(scenario, *, before_commit=None)`; `HarnessResult(qb, http, spider_result, uploader_result, commit_result, commit_error=None)`; `PipelineHarness.reconcile(*, qb_client=None, categories=None, infer_absent=False) -> ReconcileResult`; `PipelineHarness.run_notify(csv_path, session_id, *, dry_run=False) -> EmailNotificationResult` with `self.smtp: FakeSMTP | None`.
+`save_cassette(cassette_dir: str, pages: dict[str,str]) -> None`; `load_cassette(cassette_dir: str) -> dict[str,str]`; `record_enabled() -> bool` (env `JAVDB_HARNESS_RECORD`); `FixtureHTTP(pages, *, record_miss=False, live_fetch=None)` with new attr `recorded: dict`; `record_pages(urls, *, use_proxy=False, use_cookie=False) -> dict`; `FakeQB.categories() -> set`; `FakeSMTP(*, succeed=True)` with `.send_email(subject, body, attachments=None, dry_run=False, **kwargs) -> bool` (the `**kwargs` absorbs the real `send_email`'s `session_id`) and `.sent: list[SentEmail]`, `SentEmail(subject, body, attachments=(), dry_run=False)`; `neuter_rclone(monkeypatch) -> None`; `assert_pikpak_neutered() -> None`; `PipelineHarness.run_daily(scenario, *, before_commit=None)`; `HarnessResult(qb, http, spider_result, uploader_result, commit_result, commit_error=None)`; `PipelineHarness.reconcile(*, qb_client=None, categories=None, infer_absent=False) -> ReconcileResult`; `PipelineHarness.run_notify(csv_path, session_id, *, dry_run=False) -> EmailNotificationResult` with `self.smtp: FakeSMTP | None`.
 
 > **Phase-3-gated (NOT in this plan):** golden-run record/replay snapshot diffing → [IMP-ADR037-03](IMP-ADR037-03-golden-run-diff.md).
 
@@ -451,26 +451,11 @@ Add this method to the `PipelineHarness` class in `tests/harness/pipeline_harnes
         )
 ```
 
-- [ ] **Step 5: Repoint the ops persistence DB paths in `_install` (REQUIRED)**
+- [ ] **Step 5: (NO-OP) ops-persistence repoint — obsoleted by [BFR-016](../../BFR-016-Import-Time-DB-Path-Binding/BFR-016-import-time-db-path-binding.md)**
 
-`javdb/ops/reconcile/persistence.py` and `javdb/ops/sentinel/persistence.py` bind `OPERATIONS_DB_PATH`/`REPORTS_DB_PATH` at import time, so `_isolate_sqlite`'s repath never reaches them and the closed-loop/sentinel writes miss the test DB (see the ⚠ fact above — a probe confirmed `acquisition_outcomes()` is `[]` without this). Append to the end of `PipelineHarness._install` in `tests/harness/pipeline_harness.py`:
+This step originally appended a repoint of `javdb.ops.reconcile.persistence.OPERATIONS_DB_PATH` / `javdb.ops.sentinel.persistence.REPORTS_DB_PATH` to `_install`, because those modules bound the paths at import time. **BFR-016 has since fixed this in production code** — both modules now resolve the path at call time (`get_db(_db.OPERATIONS_DB_PATH)` / `get_db(_db.REPORTS_DB_PATH)`), so `_isolate_sqlite`'s monkeypatch reaches them and the closed-loop/sentinel writes land in the test DB unaided. A 2026-06-07 probe confirmed `acquisition_outcomes()` returns 2 `queued` rows after `run_daily` with **no** repoint.
 
-```python
-        # ADR-037 Phase 2: the ops persistence modules bind their DB-path
-        # constants at import time (`from javdb.storage.db import
-        # OPERATIONS_DB_PATH` / `REPORTS_DB_PATH`), so the autouse
-        # _isolate_sqlite repath never reaches those bound names and their
-        # writes/reads would miss the collapsed test DB. Repoint them at the
-        # call-time temp path so the ADR-033 reconciler and the ADR-035 sentinel
-        # are visible to the harness's assertions.
-        import javdb.ops.reconcile.persistence as _recon_persistence
-        import javdb.ops.sentinel.persistence as _sentinel_persistence
-        from javdb.storage import db as _db_pkg
-        self._mp.setattr(_recon_persistence, "OPERATIONS_DB_PATH",
-                         _db_pkg.OPERATIONS_DB_PATH)
-        self._mp.setattr(_sentinel_persistence, "REPORTS_DB_PATH",
-                         _db_pkg.REPORTS_DB_PATH)
-```
+**Do not add the repoint.** `monkeypatch.setattr(_recon_persistence, "OPERATIONS_DB_PATH", ...)` would raise `AttributeError` — the module-level name no longer exists after BFR-016. No `_install` change is required for this step; it remains only to preserve task numbering.
 
 - [ ] **Step 6: Run + import-smoke**
 
@@ -479,13 +464,13 @@ Run:
 pytest tests/harness/test_fake_qb.py tests/harness/test_golden_scenario.py -v
 python3 -c "import tests.harness.pipeline_harness; print('import ok')"
 ```
-Expected: tests PASS (the repoint is harmless to the golden run); `import ok`.
+Expected: tests PASS; `import ok`.
 
 - [ ] **Step 7: Commit**
 
 ```bash
 git add tests/harness/fake_qb.py tests/harness/pipeline_harness.py tests/harness/test_fake_qb.py
-git commit -m "test(harness): FakeQB.categories() + reconcile() + ops-persistence repoint (ADR-037)"
+git commit -m "test(harness): FakeQB.categories() + reconcile() (ADR-037)"
 ```
 
 ---
@@ -530,7 +515,7 @@ def test_completion_closes_the_loop(pipeline_harness):
 - [ ] **Step 2: Run + iterate to green**
 
 Run: `pytest tests/harness/test_scenario_completion.py -v`
-Expected (final): PASS — a probe confirmed exactly 2 `queued` rows after `run_daily` and 2 `completed` after `reconcile()`, **given the Task 4 Step 5 repoint**. If `acquisition_outcomes()` is `[]`, the repoint is missing (the uploader's `record_queued` wrote to a non-test DB — re-check Task 4 Step 5). If `marked_completed == 0`, confirm the category match: `result.qb.categories()` must be non-empty and equal to what `reconcile()` passes (it derives `categories` from the FakeQB by default).
+Expected (final): PASS — a probe confirmed exactly 2 `queued` rows after `run_daily` and 2 `completed` after `reconcile()` (BFR-016's call-time path resolution makes this work with **no** harness repoint). If `acquisition_outcomes()` is `[]`, BFR-016 may have regressed — confirm `javdb/ops/reconcile/persistence.py` resolves `_db.OPERATIONS_DB_PATH` at call time (not bound at import). If `marked_completed == 0`, confirm the category match: `result.qb.categories()` must be non-empty and equal to what `reconcile()` passes (it derives `categories` from the FakeQB by default).
 
 - [ ] **Step 3: Commit**
 
@@ -689,7 +674,7 @@ def test_drift_gate_refuses_commit(pipeline_harness):
 - [ ] **Step 2: Run + iterate to green**
 
 Run: `pytest tests/harness/test_scenario_drift.py -v`
-Expected (final): PASS — a probe confirmed `SiteContractDriftError`, `history().count() == 0`, and one `site_drift` incident, **given the Task 4 Step 5 repoint**. If `commit_error` is `None`, the verdict was not critical — confirm `cfg("SENTINEL_MIN_SAMPLE", 30)` is ≤ 50 in the test env (it defaults to 30; if a local `config.py` raises it above 50, bump the seeded `sample_count` to exceed it). If the incident count is 0, the sentinel wrote to a non-test DB — re-check the Task 4 Step 5 repoint (the seed `persist_run` and the gate's `evaluate_session` both route through `javdb.ops.sentinel.persistence`).
+Expected (final): PASS — a probe confirmed `SiteContractDriftError`, `history().count() == 0`, and one `site_drift` incident (BFR-016's call-time resolution covers this with **no** harness repoint). If `commit_error` is `None`, the verdict was not critical — confirm `cfg("SENTINEL_MIN_SAMPLE", 30)` is ≤ 50 in the test env (it defaults to 30; if a local `config.py` raises it above 50, bump the seeded `sample_count` to exceed it). If the incident count is 0, the sentinel wrote to a non-test DB — confirm `javdb/ops/sentinel/persistence.py` resolves `_db.REPORTS_DB_PATH` at call time (BFR-016); the seed `persist_run` and the gate's `evaluate_session` both route through it.
 
 - [ ] **Step 3: Commit**
 
@@ -705,7 +690,7 @@ git commit -m "test(harness): drift -> commit-gate scenario (ADR-037 Phase 2, AD
 **Files:**
 - Test: `tests/harness/test_scenario_failure_rollback.py`
 
-Reuse the IMP-01 `fail_adds=True` path (uploader fails → commit gated off → session left `in_progress` with staged pending rows), then drive the same `db_rollback_session` the cleanup-on-failure job uses and assert the session is `failed` with its pending rows deleted.
+Reuse the IMP-01 `fail_adds=True` path (uploader fails → commit gated off → session left `in_progress` with staged pending rows), then drive the same `db_rollback_session` the cleanup-on-failure job uses and assert the session row is fully removed (rollback DELETEs it — `get_state().status is None`) with its pending rows deleted.
 
 - [ ] **Step 1: Write the scenario test**
 
@@ -713,7 +698,8 @@ Reuse the IMP-01 `fail_adds=True` path (uploader fails → commit gated off → 
 # tests/harness/test_scenario_failure_rollback.py
 """ADR-037 Phase 2: a failed run rolls back its staged pending writes."""
 
-from javdb.storage.db import REPORTS_DB_PATH, db_rollback_session, get_db
+from javdb.storage import db as _db
+from javdb.storage.db import db_rollback_session, get_db
 from javdb.storage.sessions.lifecycle import get_state
 
 from tests.harness.pipeline_harness import FakeQBConfig, PipelineScenario
@@ -721,7 +707,10 @@ from tests.harness.scenarios.golden_daily import golden_daily
 
 
 def _pending_movie_rows(session_id: str) -> int:
-    with get_db(REPORTS_DB_PATH) as conn:
+    # Resolve REPORTS_DB_PATH at call time (via _db) so the read honours the
+    # autouse _isolate_sqlite monkeypatch; a direct import would bind the path
+    # at import time and read the wrong DB.
+    with get_db(_db.REPORTS_DB_PATH) as conn:
         return conn.execute(
             "SELECT COUNT(*) FROM PendingMovieHistoryWrites WHERE SessionId = ?",
             (session_id,),
@@ -744,8 +733,12 @@ def test_failure_rolls_back_pending(pipeline_harness):
     # Drive the production rollback the cleanup-on-failure job uses.
     db_rollback_session(session_id, dry_run=False)
 
-    # Session is failed, its staged rows are gone, history stays empty.
-    assert get_state(session_id).status == "failed"
+    # After a full rollback, _rollback_reports DELETEs the ReportSessions row
+    # (see the NOTE in _db_rollback.py:_rollback_reports — the row is not left
+    # with Status='failed'; it is removed entirely). get_state therefore returns
+    # status=None for a successfully rolled-back session. Pending rows are gone
+    # and nothing was promoted to history.
+    assert get_state(session_id).status is None
     assert _pending_movie_rows(session_id) == 0
     assert pipeline_harness.history().count() == 0
 ```
@@ -753,7 +746,7 @@ def test_failure_rolls_back_pending(pipeline_harness):
 - [ ] **Step 2: Run + iterate to green**
 
 Run: `pytest tests/harness/test_scenario_failure_rollback.py -v`
-Expected (final): PASS. If `_pending_movie_rows` is 0 before rollback, the spider may have produced 0 entries — confirm the golden fixtures still parse 2 movies (`pytest tests/harness/test_golden_scenario.py::test_golden_daily_run_writes_two_movies`). If `get_state(...).status` is not `failed`, confirm the session was `in_progress` (not already `committed`) — a failed uploader must leave `commit_result is None`.
+Expected (final): PASS. If `_pending_movie_rows` is 0 before rollback, the spider may have produced 0 entries — confirm the golden fixtures still parse 2 movies (`pytest tests/harness/test_golden_scenario.py::test_golden_daily_run_writes_two_movies`) and that the read uses call-time `_db.REPORTS_DB_PATH` (a stale direct import reads the wrong DB). If `get_state(...).status` is not `None` after rollback, confirm the rollback ran and the session was `in_progress` not `committed` (`db_rollback_session` DELETEs the `ReportSessions` row only for a non-committed session) — a failed uploader must leave `commit_result is None`.
 
 - [ ] **Step 3: Commit**
 
@@ -828,7 +821,10 @@ class FakeSMTP:
         self._succeed = succeed
         self.sent: list[SentEmail] = []
 
-    def send_email(self, subject, body, attachments=None, dry_run=False) -> bool:
+    def send_email(self, subject, body, attachments=None, dry_run=False, **kwargs) -> bool:
+        # **kwargs absorbs the real send_email's extra args (e.g. session_id,
+        # ADR-046 P5) so the patched seam never raises TypeError. Captured
+        # SentEmail records only the user-facing fields a scenario asserts on.
         self.sent.append(SentEmail(subject, body, tuple(attachments or ()), bool(dry_run)))
         return self._succeed
 ```
@@ -852,7 +848,7 @@ Add `self.smtp = None` to `PipelineHarness.__init__` (alongside `self.http`/`sel
         self.smtp = FakeSMTP()
         self._mp.setattr(
             notify_service, "send_email",
-            lambda subject, body, attachments=None, dry_run=False:
+            lambda subject, body, attachments=None, dry_run=False, **kwargs:
                 self.smtp.send_email(subject, body, attachments, dry_run),
         )
         return run_email_notification(EmailNotificationOptions(
@@ -920,7 +916,9 @@ def test_neuter_rclone_patches_install_probe(monkeypatch):
     from tests.harness.fake_external import neuter_rclone
     neuter_rclone(monkeypatch)
     # The install probe now reports present without an rclone binary on PATH.
-    assert rclone_service.check_rclone_installed() is True
+    # check_rclone_installed() -> Tuple[bool, str]; callers unpack the tuple.
+    ok, _msg = rclone_service.check_rclone_installed()
+    assert ok is True
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -958,7 +956,12 @@ def assert_pikpak_neutered() -> None:
 def neuter_rclone(monkeypatch) -> None:
     """Stub the rclone install probe so the manager runs without a binary."""
     import javdb.integrations.rclone.manager.service as rclone_service
-    monkeypatch.setattr(rclone_service, "check_rclone_installed", lambda: True)
+    # check_rclone_installed() -> Tuple[bool, str] (javdb/integrations/rclone/
+    # helper.py:394); callers unpack ``ok, msg = ...`` (manager/service.py:1223,
+    # :1415). The stub MUST return a 2-tuple, not a bare bool, or the manager
+    # raises "cannot unpack non-iterable bool object".
+    monkeypatch.setattr(rclone_service, "check_rclone_installed",
+                        lambda: (True, "stubbed: harness neuter"))
 ```
 
 - [ ] **Step 4: Run to verify it passes**
@@ -1031,7 +1034,7 @@ git commit -m "docs(adr-037): mark Phase 2 implemented; link IMP-ADR037-02"
 - SMTP / pikpak / rclone fakes → Tasks 9 (FakeSMTP, full), 10 (pikpak/rclone neuter blocks). ✓
 - Docs (CONTEXT.md + handbook) + ADR roadmap update → Task 11. ✓
 
-**Probe-verified before handoff (throwaway test, since removed):** against the live tree, with the Task 4 Step 5 repoint applied: `run_daily(golden_daily())` → `acquisition_outcomes()` = 2 `queued`; `complete()` + the real reconciler → `marked_completed == 2` and 2 `completed`; seeding `FieldFill("index","video_code",0.10,50)` before commit → `commit_session` raised `SiteContractDriftError`, `history().count() == 0`, one `site_drift` `OpsIncidents` row; clean run `events()` = `["RunStarted"]`; MovieHistory codes `ABC-001`/`ABC-002`. **Without the repoint, `acquisition_outcomes()` was `[]`** — which is exactly why Task 4 Step 5 is marked REQUIRED.
+**Probe-verified (throwaway test, since removed):** against the live tree post-[BFR-016](../../BFR-016-Import-Time-DB-Path-Binding/BFR-016-import-time-db-path-binding.md), with **no** harness repoint: `run_daily(golden_daily())` → `acquisition_outcomes()` = 2 `queued`; `complete()` + the real reconciler → `marked_completed == 2` and 2 `completed`; seeding `FieldFill("index","video_code",0.10,50)` before commit → `commit_session` raised `SiteContractDriftError`, `history().count() == 0`, one `site_drift` `OpsIncidents` row; clean run `events()` = `["RunStarted"]`; MovieHistory codes `ABC-001`/`ABC-002`. The original plan-time probe found `acquisition_outcomes()` was `[]` without a repoint; **BFR-016's call-time path resolution made that repoint unnecessary** (re-probed 2026-06-07), so Task 4 Step 5 is now a documented no-op.
 
 **Honest scoping (stated, not skipped silently):**
 - **pikpak/rclone are minimal by design.** They are subprocess steps off the harness's spider→uploader→commit core; building full in-process pikpak/rclone *scenarios* (qB delete + PikPakApi upload + git, or `rclone lsjson` orchestration) adds large surface for little marginal coverage of the *pipeline*. Task 10 delivers the neuter **building blocks** the ADR D5 list names; full scenarios remain available to a future IMP if a concrete need appears (YAGNI).

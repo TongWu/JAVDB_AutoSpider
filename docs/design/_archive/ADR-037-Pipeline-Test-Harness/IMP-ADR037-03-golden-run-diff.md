@@ -16,7 +16,7 @@
 
 - **Stable identity columns** (everything else is timestamps/ids → excluded): `MovieHistory(VideoCode, Href, …, SessionId)` and `TorrentHistory(MagnetUri, …, SessionId)` (`javdb/storage/db/_db_migrations.py`). Both live in the history DB; `get_db()` with no arg defaults to `HISTORY_DB_PATH`, which `_isolate_sqlite` collapses onto the one temp DB.
 - **Harness surface to reuse** (shipped + IMP-02): `pipeline_harness.run_daily(golden_daily()) -> HarnessResult`; `result.qb.all_hashes() -> set`; `pipeline_harness.acquisition_outcomes() -> [{"qb_hash","state"}]`; `pipeline_harness.events() -> [event_type]`. A clean golden run yields (probe-verified): 4 `TorrentHistory` rows of which **2 carry a non-null `MagnetUri`** (the other 2 are NULL-magnet rows the snapshot filters out → `len(torrents) == 2`), 2 `MovieHistory` rows, qB hashes `{"a"*40, "b"*40}`, **2 `queued` acquisition outcomes**, and `events() == ["RunStarted"]` (per IMP-02's confirmed event boundary — the API commit does not emit `SessionCommitted`).
-- **Prerequisite from IMP-02:** the 2 `queued` acquisition outcomes are only harness-visible because IMP-02's `_install` repoints the ops-persistence DB paths (the stale-import fix). IMP-03 depends on IMP-02 being complete; without that repoint `acquisition_outcomes()` is `[]` and the snapshot's `acquisition` key would be empty.
+- **Prerequisite — [BFR-016](../../BFR-016-Import-Time-DB-Path-Binding/BFR-016-import-time-db-path-binding.md):** the 2 `queued` acquisition outcomes are harness-visible because BFR-016 made `javdb/ops/reconcile/persistence.py` resolve `OPERATIONS_DB_PATH` at call time, so the autouse `_isolate_sqlite` repath reaches the uploader's `record_queued` write. (IMP-02's planned `_install` repoint for this is obsolete — see IMP-ADR037-02 Task 4 Step 5.) IMP-03 still depends on IMP-02 for `reconcile()`/`run_notify()`/the scenario library, but the acquisition visibility itself is now guaranteed by BFR-016, not a harness repoint.
 - **Determinism:** the golden fixtures (`tests/harness/scenarios/golden_daily.py`) hard-code video codes `ABC-001`/`ABC-002`, hrefs `/v/AAA111`/`/v/BBB222`, and magnets `btih:aaaa…`/`btih:bbbb…`, so the normalized projection is byte-stable across runs. The autouse `_isolate_sqlite` gives each run a fresh DB, so there is no cross-run contamination.
 
 ---
@@ -338,7 +338,18 @@ git commit -m "test(harness): re-exports + docs for ADR-037 Phase 3 golden-run d
 
 - [ ] **Step 5: Close out ADR-037 (status log + archival)**
 
-In `ADR-037-deterministic-pipeline-test-harness.md` (and `.zh.md`, same commit): change the Phase-3 roadmap row from "IMP-ADR037-03 (stub)" to a link to this file; flip **Status** from "Proposed" to **Completed** (all three phases shipped); append a Status Log line summarising Phase 3 (golden-run snapshot capture + bless/diff regression net). Per CLAUDE.md whole-folder archival: once Status is Completed AND all three IMPs are done, move the entire `docs/design/ADR-037-Pipeline-Test-Harness/` folder into `docs/design/_archive/ADR-037-Pipeline-Test-Harness/` and fix any incoming references (`grep -rn "ADR-037-Pipeline-Test-Harness" docs/ --include=*.md | grep -v _archive` and insert `_archive/` into those paths). Internal ADR↔IMP links are filename-only and need no change.
+In `ADR-037-deterministic-pipeline-test-harness.md` (and `.zh.md`, same commit): change the Phase-3 roadmap row from "IMP-ADR037-03 (stub)" to a link to this file; flip **Status** from "Proposed" to **Completed** (all three phases shipped); append a Status Log line summarising Phase 3 (golden-run snapshot capture + bless/diff regression net). Per CLAUDE.md whole-folder archival: once Status is Completed AND all three IMPs are done, move the entire `docs/design/ADR-037-Pipeline-Test-Harness/` folder into `docs/design/_archive/ADR-037-Pipeline-Test-Harness/`. Internal ADR↔IMP links are filename-only and need no change.
+
+> **⚠ The link-fix is larger than "incoming refs only" (verified 2026-06-07). Do BOTH directions, in `.md` and `.zh.md`:**
+>
+> - **Incoming refs — 4 files, insert `_archive/` into the path:**
+>   `docs/design/BFR-016-Import-Time-DB-Path-Binding/BFR-016-import-time-db-path-binding.md` + `.zh.md` (BFR-016 cross-links ADR-037), and `docs/handbook/{en,zh}/developer/pipeline-test-harness.md`.
+> - **ADR-037's OWN outgoing cross-folder links** (in the ADR `.md`/`.zh.md` AND the IMP-01/02/03 files that move with it):
+>   - to **still-active** ADR-033 / ADR-035 / ADR-036: `](../ADR-0NN-…)` → `](../../ADR-0NN-…)`
+>   - to **already-archived** ADR-012 / ADR-015: `](../_archive/ADR-0NN-…)` → `](../ADR-0NN-…)` (now siblings inside `_archive/`)
+> - **Verify after the move** (both should print nothing):
+>   `grep -rn "ADR-037-Pipeline-Test-Harness" docs --include='*.md' | grep -v _archive`
+>   and re-check ADR-037's own outgoing links resolve: `grep -rn "](\.\./ADR-0\|](\.\./_archive/ADR-0" docs/design/_archive/ADR-037-Pipeline-Test-Harness/`.
 
 ```bash
 git add docs/design
