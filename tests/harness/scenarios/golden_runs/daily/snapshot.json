@@ -1,0 +1,33 @@
+{
+  "acquisition": [
+    {
+      "qb_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "state": "queued"
+    },
+    {
+      "qb_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "state": "queued"
+    }
+  ],
+  "events": [
+    "RunStarted"
+  ],
+  "movies": [
+    {
+      "href": "https://javdb.com/v/AAA111",
+      "video_code": "ABC-001"
+    },
+    {
+      "href": "https://javdb.com/v/BBB222",
+      "video_code": "ABC-002"
+    }
+  ],
+  "qb_hashes": [
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  ],
+  "torrents": [
+    "magnet:?xt=urn:btih:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "magnet:?xt=urn:btih:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  ]
+}

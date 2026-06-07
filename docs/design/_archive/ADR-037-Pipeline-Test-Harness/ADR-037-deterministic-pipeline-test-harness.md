@@ -2,10 +2,10 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Proposed — umbrella; execution delegated to per-phase IMPs            |
+| **Status**  | Completed — all three phases shipped 2026-06-07; umbrella, per-phase IMPs |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-012](../_archive/ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md), [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md), [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md) |
+| **Related** | [ADR-012](../ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md), [ADR-015](../ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-033](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-035](../../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md), [ADR-036](../../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md) |
 
 > Originated from a 2026-05-29 brainstorming session on net-new directions
 > (Direction 5 — a deterministic simulation test-bed).
@@ -26,9 +26,9 @@ real DB". Today's tests paper over this **ad hoc**:
 - There is **no reusable fake qB**; qB is mocked per test.
 
 The cost compounds now: the three Phase-1 designs from this same session
-([ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) closed-loop,
-[ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)
-sentinel, [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md)
+([ADR-033](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) closed-loop,
+[ADR-035](../../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)
+sentinel, [ADR-036](../../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md)
 event spine) all depend on **pipeline behaviour** — qB state transitions, the
 commit gate, emitted events — that no current test can drive end to end.
 
@@ -75,7 +75,7 @@ env-gated record mode** performs the real request on a cassette miss and saves i
 for refreshing cassettes when javdb changes. Curated-minimal is the default because
 javdb is adult content and full pages are large/sensitive; recording is a dev-only
 refresh tool, never run in CI. (This "golden page" capture is the same idea as the
-[ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)
+[ADR-035](../../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)
 sentinel's golden anchors.)
 
 **D4. `FakeQB` is in-memory with controllable state.** It implements the
@@ -135,8 +135,8 @@ seams. Phase 3 (optional) layers golden-run record/replay diffing on top.
 | Phase | IMP | Ships | Deferred |
 | --- | --- | --- | --- |
 | Phase 1 — Harness core + golden scenario | [IMP-ADR037-01](IMP-ADR037-01-harness-core.md) | `tests/harness/` (FixtureHTTP replay, FakeQB, `pipeline_harness` fixture, scenario+assert API); one golden daily scenario (index → details → queued → commit) asserting history (+ events if ADR-036 built) | record mode; scenario library; SMTP/pikpak/rclone seams |
-| Phase 2 — Scenario library + record + seams | [IMP-ADR037-02](IMP-ADR037-02-scenario-library-record-seams.md) (planned) | record mode; drift/completion/failure scenarios; SMTP/pikpak/rclone fakes | — |
-| Phase 3 — Golden-run diff (optional) | [IMP-ADR037-03](IMP-ADR037-03-golden-run-diff.md) (planned) | record a real run's inputs+outputs; replay + diff in CI | — |
+| Phase 2 — Scenario library + record + seams | [IMP-ADR037-02](IMP-ADR037-02-scenario-library-record-seams.md) (implemented 2026-06-07) | record mode; drift/completion/failure scenarios; SMTP/pikpak/rclone fakes | — |
+| Phase 3 — Golden-run diff (optional) | [IMP-ADR037-03](IMP-ADR037-03-golden-run-diff.md) (implemented 2026-06-07) | record a real run's inputs+outputs; replay + diff in CI | — |
 
 Phase 1 stands alone and adds only test-support code. Phases 2/3 grow coverage. Phase 2/3 IMPs are authored (plans); see the Status Log for the planning-time finding the plans encode.
 
@@ -173,14 +173,16 @@ Phase 1 stands alone and adds only test-support code. Phases 2/3 grow coverage. 
 
 ## References
 
-- [ADR-012 — Pipeline Run Structured Boundary](../_archive/ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md)
-- [ADR-015 — Integrations Interface Boundary](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md)
-- [ADR-033 — Media Closed-Loop](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
-- [ADR-035 — Site-Contract Drift Sentinel](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)
-- [ADR-036 — Event-Sourced Pipeline Spine](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md)
+- [ADR-012 — Pipeline Run Structured Boundary](../ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md)
+- [ADR-015 — Integrations Interface Boundary](../ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md)
+- [ADR-033 — Media Closed-Loop](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
+- [ADR-035 — Site-Contract Drift Sentinel](../../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)
+- [ADR-036 — Event-Sourced Pipeline Spine](../../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md)
 
 ## Status Log
 
 - 2026-05-29: Proposed (umbrella; three phases scoped, IMPs pending).
 - 2026-05-30: Phase 1 implemented ([IMP-ADR037-01](IMP-ADR037-01-harness-core.md)) — `tests/harness/` ships FixtureHTTP + FakeQB + the `pipeline_harness` fixture and one golden daily scenario (index → 2 details → queued → commit) asserting history (2 rows) + qB queue (2 hashes); 14 tests green in <0.4s. See the IMP's "Implementation Reconciliation" for where the shipped composition diverged from the plan (3-step `run_spider`→`run_uploader`→`commit_session`, session from `SpiderRunResult`, `STORAGE_MODE=duo` for the CSV handoff). Phases 2/3 remain stubs.
 - 2026-06-04: Phase 2 & 3 implementation plans authored ([IMP-ADR037-02](IMP-ADR037-02-scenario-library-record-seams.md), [IMP-ADR037-03](IMP-ADR037-03-golden-run-diff.md)) — plans only, implementation pending. A throwaway probe during planning verified the scenarios end to end and surfaced a stale module-level DB-path import in `javdb/ops/reconcile/persistence.py` and `javdb/ops/sentinel/persistence.py` (`from javdb.storage.db import OPERATIONS_DB_PATH`/`REPORTS_DB_PATH` binds the path at import, so `_isolate_sqlite`'s repath never reaches it). IMP-02's harness `_install` repoints those names at the temp DB so the closed-loop/sentinel writes are test-visible; the broader test-isolation fix is tracked outside this ADR.
+- 2026-06-07: Phase 2 implemented ([IMP-ADR037-02](IMP-ADR037-02-scenario-library-record-seams.md)) via subagent-driven development (11 tasks, two-stage review each). Shipped under `tests/harness/`: on-disk cassettes (`cassette.py`) + env-gated record-on-miss (`FixtureHTTP.record_miss`/`live_fetch` behind `JAVDB_HARNESS_RECORD`) + dev-only `record_pages`; `FakeQB.categories()` + `PipelineHarness.reconcile()`; the completion→closed-loop (ADR-033), drift→commit-gate (ADR-035) and failure→rollback scenarios; `run_daily(before_commit=...)` + `HarnessResult.commit_error`; `FakeSMTP` + `run_notify` daily-email scenario (email-only — the ADR-039 dispatch/telegram fan-out is left to a future scenario); pikpak/rclone neuter building blocks; CONTEXT.md + bilingual handbook updated. Full `tests/harness/` suite: 30 passed, 1 skipped (dev-only live record). **Three plan↔reality reconciliations were corrected in-doc during impl:** (1) the planned `_install` ops-persistence repoint is now a no-op — [BFR-016](../../BFR-016-Import-Time-DB-Path-Binding/BFR-016-import-time-db-path-binding.md) (committed ~30 min after the 06-04 plan) already made the persistence modules resolve DB paths at call time, so the repoint is unnecessary and would raise `AttributeError`; (2) `db_rollback_session` DELETEs the `ReportSessions` row for a non-committed session, so the failure scenario asserts `get_state().status is None`, not `'failed'`; (3) the real `send_email` takes a `session_id` kwarg (ADR-046 P5), so `FakeSMTP.send_email` absorbs `**kwargs`.
+- 2026-06-07: Phase 3 implemented ([IMP-ADR037-03](IMP-ADR037-03-golden-run-diff.md)) — golden-run record/replay diff. `capture_snapshot` projects a clean daily run into a normalized, nondeterminism-excluded dict (`movies`/`torrents`/`qb_hashes`/`acquisition`/`events` — no session id, timestamps, autoincrement ids, or event seq), persisted as the committed `tests/harness/scenarios/golden_runs/daily/snapshot.json`. The bless/diff test (`JAVDB_HARNESS_BLESS=1` re-blesses, else diffs live-vs-committed and fails on drift) is the regression net — a mutation probe confirmed it catches drift and re-bless is byte-deterministic. All three phases now ship; `tests/harness/` is 34 passed, 1 skipped. **Status advanced Proposed → Completed; this ADR-037 folder archived to `docs/design/_archive/`.**

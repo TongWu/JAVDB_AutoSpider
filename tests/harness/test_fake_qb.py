@@ -32,3 +32,10 @@ def test_delete_removes():
     qb.add_torrent(_MAGNET, category="JavDB")
     qb.delete_torrents(["a" * 40])
     assert qb.all_hashes() == set()
+
+
+def test_categories_reflects_added_torrents():
+    qb = FakeQB()
+    qb.add_torrent("magnet:?xt=urn:btih:" + "a" * 40, category="JavDB")
+    qb.add_torrent("magnet:?xt=urn:btih:" + "b" * 40, category="Ad Hoc")
+    assert qb.categories() == {"JavDB", "Ad Hoc"}

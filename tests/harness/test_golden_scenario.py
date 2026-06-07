@@ -30,3 +30,9 @@ def test_uploader_failure_blocks_commit(pipeline_harness):
     assert result.commit_result is None
     assert pipeline_harness.history().count() == 0
     assert result.qb.all_hashes() == set()
+
+
+def test_clean_run_has_no_commit_error(pipeline_harness):
+    result = pipeline_harness.run_daily(golden_daily())
+    assert result.commit_error is None
+    assert result.commit_result is not None
