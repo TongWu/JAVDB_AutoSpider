@@ -112,3 +112,16 @@ def test_file_filter_main_non_list_categories_exits_1():
         main(["--categories", '"a-string"'])
 
     assert exc_info.value.code != 0
+
+
+def test_file_filter_parse_categories_non_list_raises_value_error():
+    """A non-array --categories raises ValueError (not argparse.ArgumentTypeError).
+
+    ``_parse_categories`` runs in plain post-parse code, not as an argparse
+    ``type=`` callable, so ValueError is the correct contract. (ArgumentTypeError
+    is not a ValueError subclass, so this would fail against the old behaviour.)
+    """
+    from apps.cli.qb.file_filter import _parse_categories
+
+    with pytest.raises(ValueError, match="must be a JSON array"):
+        _parse_categories('"a-string"')

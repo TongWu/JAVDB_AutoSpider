@@ -122,7 +122,7 @@ def send_email(subject, body, attachments=None, dry_run=False,
         if (name := part.get_filename())
     ] or None
 
-    def _record_email_history(status: str, error: str = None) -> None:
+    def _record_email_history(status: str, error: Optional[str] = None) -> None:
         """Defensively write an email history row; never raises."""
         try:
             from javdb.storage.repos.operations_repo import OperationsRepo

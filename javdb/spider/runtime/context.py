@@ -872,6 +872,10 @@ class SpiderRuntime:
                 "falling back to local throttling for this run",
                 url,
             )
+            # Close the discarded client so its requests.Session connection pool
+            # is released — mirrors setup_login_state_client below and the
+            # create_coordinator_from_env factory.
+            client.close()
             self.services.proxy_coordinator = None
             legacy_state._sync_legacy_globals_from_runtime(self)
             return None

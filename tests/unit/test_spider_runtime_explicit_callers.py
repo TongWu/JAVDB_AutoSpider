@@ -455,6 +455,36 @@ def test_runtime_proxy_coordinator_injects_runtime_sleep(monkeypatch):
     assert legacy_mgr._coordinator is legacy_coordinator
 
 
+def test_runtime_proxy_coordinator_closes_client_when_health_check_fails(monkeypatch):
+    """A failed /health must close the discarded client so its requests.Session
+    connection pool is released — mirrors setup_login_state_client and the
+    create_coordinator_from_env factory.
+    """
+    import javdb.spider.runtime.state as state
+
+    runtime = SpiderRuntime()
+    client = MagicMock()
+    client.health_check.return_value = False
+
+    monkeypatch.setattr(
+        "javdb.infra.config.cfg",
+        lambda name, default="": {
+            "PROXY_COORDINATOR_URL": "https://coord.test",
+            "PROXY_COORDINATOR_TOKEN": "t",
+        }.get(name, default),
+    )
+    monkeypatch.setattr(
+        state,
+        "ProxyCoordinatorClient",
+        lambda base_url, token: client,
+    )
+
+    assert runtime.setup_proxy_coordinator() is None
+
+    client.close.assert_called_once()
+    assert runtime.services.proxy_coordinator is None
+
+
 def test_sleep_runtime_copies_existing_coordinator_binding():
     from javdb.spider.runtime import sleep as sleep_module
 

@@ -83,7 +83,11 @@ def list_qb_torrents(
         except Exception as exc:
             msg = str(exc).lower()
             if "login" in msg or "auth" in msg:
-                raise HTTPException(status_code=401, detail=_ERR_QB_AUTH) from exc
+                # Upstream qB rejected our configured credentials — a gateway
+                # failure, not a client-auth problem. Return 502 to match
+                # qb_filter_small (below) so the frontend doesn't mistake it for
+                # the caller's own session expiring.
+                raise HTTPException(status_code=502, detail=_ERR_QB_AUTH) from exc
             raise HTTPException(status_code=502, detail=_ERR_QB_UNREACHABLE) from exc
     finally:
         if qb is not None:
