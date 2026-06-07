@@ -368,6 +368,8 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
             'SPIDER CONFIGURATION',
         ),
         ('BASE_URL', 'BASE_URL', get_env, 'https://javdb.com', 'SPIDER CONFIGURATION'),
+        ('SENTINEL_CANARY_INDEX_URL', 'SENTINEL_CANARY_INDEX_URL', get_env, 'https://javdb.com/', 'ADR-035 SITE-CONTRACT SENTINEL'),
+        ('SENTINEL_CANARY_ANCHORS', 'SENTINEL_CANARY_ANCHORS_JSON', get_env_json, [], 'ADR-035 SITE-CONTRACT SENTINEL'),
         # JavDB Login Configuration
         ('JAVDB_USERNAME', 'JAVDB_USERNAME', get_env, '', 'JAVDB LOGIN CONFIGURATION'),
         ('JAVDB_PASSWORD', 'JAVDB_PASSWORD', get_env, '', 'JAVDB LOGIN CONFIGURATION'),

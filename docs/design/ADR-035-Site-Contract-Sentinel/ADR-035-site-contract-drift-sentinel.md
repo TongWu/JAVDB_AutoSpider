@@ -2,7 +2,7 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Proposed — umbrella; execution delegated to per-phase IMPs            |
+| **Status**  | Accepted — all three phases implemented (pending PR/merge); TS-mirror follow-up open (see Status Log) |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
 | **Related** | [ADR-026](../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md), [ADR-020](../_archive/ADR-020-Parser-Interface-Consolidation/ADR-020-parser-interface-consolidation.md), [ADR-019](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md), [ADR-011](../_archive/ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) |
@@ -215,3 +215,35 @@ fetch**. Phase 2 adds between-run lead time. Phase 3 is optional polish.
   filter, `parse-field-health` endpoint, `site_drift_sentinel` capability flag,
   OpenAPI + TS-mirror follow-up). Both are written and ready to execute;
   implementation is pending, so the umbrella stays Proposed.
+- 2026-06-07: **Phases 2 & 3 implemented.**
+  - **Phase 2** ([IMP-ADR035-02](IMP-ADR035-02-independent-canary.md)) — `probes.py`
+    (`GoldenAnchor`, `check_golden_anchors`, `run_probes`), `service.run_canary`
+    (reuses the Phase-1 `evaluate()` core + committed baseline; **read-only** w.r.t.
+    `ParseRunFieldFill`; sole incident writer, `trigger_source="canary"`),
+    `apps.cli.ops.sentinel --canary` / `--capture-anchors`, the
+    `SENTINEL_CANARY_*` config knobs + `config_generator` mapping, and
+    `.github/workflows/SiteContractSentinel.yml` (6h cron). No new D1 schema.
+  - **Phase 3** ([IMP-ADR035-03](IMP-ADR035-03-surface.md)) — `incident_type`
+    filter was already present from later work (regression test added only);
+    `ParseRunFieldFillRepo.latest_committed_fills()`, pure
+    `ops.sentinel.health.compute_field_health`, `GET /api/diag/parse-field-health`,
+    `Features.site_drift_sentinel` (default true), and a regenerated
+    `docs/api/openapi.json`. Read-only surface; no new D1 schema.
+  - **As-built deviation:** a latent import cycle (the storage repo →
+    `ops.sentinel` via `__init__` → `service` → `persistence` → storage repo) was
+    fixed by making `persistence.open_fill_repo`'s repo import lazy, so the
+    storage layer imports standalone regardless of import order.
+  - **Open cross-repo follow-up (dual-backend rule — not in this monorepo):**
+    mirror the Phase-3 surface in `javdb-autospider-web/server/`:
+    1. `GET /api/diag/ops-incidents` — add the `incident_type` query param →
+       `WHERE incident_type = ?` (same clause as
+       `javdb/storage/repos/ops_incident_repo.py::list`).
+    2. `GET /api/diag/parse-field-health` — new route; port
+       `latest_committed_fills()` (correlated `MAX(observed_at)` per
+       `(page_type, field)` WHERE `committed=1`) + `compute_field_health` status
+       logic (PARSE_CONTRACT mirror) → identical JSON shape.
+    3. `capabilities.features.site_drift_sentinel` — add the boolean (default
+       true); the FE hides the drift panel when false.
+    Contract seam: `docs/api/openapi.json` (regenerated) — match it exactly.
+  - All three phases now ship in this repo; only the TS mirror above remains open,
+    so the umbrella moves to **Accepted** (pending PR/merge of this branch).

@@ -72,6 +72,9 @@ def build_capabilities() -> CapabilitiesResponse:
             proxy_pool=_bool_env("PROXY_MODE_POOL", default=True),
             javdb_login=bool(os.getenv("JAVDB_USERNAME")),
             proxy_preview=True,
+            # ADR-035: site-contract drift sentinel ships with the system; the
+            # frontend hides the drift panel only when explicitly disabled.
+            site_drift_sentinel=_bool_env("FEATURE_SITE_DRIFT_SENTINEL", default=True),
         ),
         deployment=deployment,
         build=Build(

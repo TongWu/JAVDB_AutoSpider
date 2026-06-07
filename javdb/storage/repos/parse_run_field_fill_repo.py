@@ -44,15 +44,26 @@ class ParseRunFieldFillRepo:
         ).fetchall()
         return [FieldFill(r["page_type"], r["field"], r["fill_rate"], r["sample_count"]) for r in rows]
 
-    def baseline(self, page_type: str, field: str, *, window: int) -> Optional[float]:
-        rows = self._conn.execute(
-            """
-            SELECT fill_rate FROM ParseRunFieldFill
-            WHERE page_type = ? AND field = ? AND committed = 1
-            ORDER BY observed_at DESC LIMIT ?
-            """,
-            [page_type, field, window],
-        ).fetchall()
+    def baseline(self, page_type: str, field: str, *, window: int,
+                 before: Optional[str] = None) -> Optional[float]:
+        """Median committed fill-rate over the most recent ``window`` runs.
+
+        ``before`` (an ISO ``observed_at``) restricts to runs strictly earlier than
+        it, excluding the current run from its own baseline — the post-hoc drift
+        surface uses this to reproduce the gate detector's pure-historical baseline
+        (the run being judged is not part of the history). Omit it for the gate /
+        canary paths, where the run under evaluation is not yet a committed row."""
+        sql = (
+            "SELECT fill_rate FROM ParseRunFieldFill "
+            "WHERE page_type = ? AND field = ? AND committed = 1"
+        )
+        params: list = [page_type, field]
+        if before is not None:
+            sql += " AND observed_at < ?"
+            params.append(before)
+        sql += " ORDER BY observed_at DESC LIMIT ?"
+        params.append(window)
+        rows = self._conn.execute(sql, params).fetchall()
         values = [r["fill_rate"] for r in rows]
         if not values:
             return None
@@ -65,3 +76,36 @@ class ParseRunFieldFillRepo:
             "UPDATE ParseRunFieldFill SET committed = 1 WHERE session_id = ?",
             [session_id],
         )
+
+    def latest_committed_fills(self) -> list[tuple[str, str, float, int, str | None]]:
+        """Newest committed fill per (page_type, field): the 'current health'.
+
+        Rows: (page_type, field, fill_rate, sample_count, observed_at). Uncommitted
+        rows and older runs are excluded; exactly one row per field — ties on
+        ``observed_at`` are broken deterministically by ``session_id`` (the higher
+        session_id wins) so the one-row-per-field contract holds even if two
+        committed runs share a timestamp."""
+        rows = self._conn.execute(
+            """
+            SELECT page_type, field, fill_rate, sample_count, observed_at
+            FROM ParseRunFieldFill p
+            WHERE p.committed = 1
+              AND NOT EXISTS (
+                SELECT 1 FROM ParseRunFieldFill q
+                WHERE q.page_type = p.page_type AND q.field = p.field
+                  AND q.committed = 1
+                  AND (
+                    COALESCE(q.observed_at, '') > COALESCE(p.observed_at, '')
+                    OR (
+                      COALESCE(q.observed_at, '') = COALESCE(p.observed_at, '')
+                      AND q.session_id > p.session_id
+                    )
+                  )
+              )
+            ORDER BY page_type, field
+            """
+        ).fetchall()
+        return [
+            (r["page_type"], r["field"], r["fill_rate"], r["sample_count"], r["observed_at"])
+            for r in rows
+        ]

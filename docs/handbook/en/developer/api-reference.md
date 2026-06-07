@@ -36,6 +36,21 @@ These endpoints were added in 2026-05 to support the new web console (`javdb-aut
 - `POST /api/sessions/{session_id}/rollback` — admin-only; body `{dry_run, include_pending, restore_from_audit}`.
 - `POST /api/sessions/{session_id}/commit` — admin-only; body `{force, drop_pending, fanout_claims, emit_metrics}`. `fanout_claims` and `emit_metrics` default to `true` so the HTTP path matches the CLI's full-parity commit (MovieClaim coordinator fanout + `pending_session_verify` JSONL emission); pass `false` to opt into a DB-only commit.
 
+### Diagnostics — site-contract drift (ADR-035)
+
+Read-only surface over the site-contract drift sentinel. Gated by `capabilities.features.site_drift_sentinel` (the frontend hides the drift panel when it is `false`).
+
+- `GET /api/diag/ops-incidents?incident_type=site_drift` — filter persisted ops incidents by type; `incident_type=site_drift` returns drift incidents specifically (also accepts `status`, `run_id`, `session_id`, `confidence`, `limit`).
+- `GET /api/diag/parse-field-health` — latest committed per-field parse health. Response:
+
+  ```json
+  { "items": [ { "page_type": "index", "field": "href", "severity": "critical",
+                 "fill_rate": 0.99, "sample_count": 120, "observed_at": "...",
+                 "baseline": null, "threshold": 0.99, "status": "ok" } ] }
+  ```
+
+  `status ∈ ok | critical_drift | soft_drift | no_baseline | insufficient_sample`.
+
 ### Test mode (E2E only)
 
 - `POST /api/test/reset` — present only when the server is started with `TEST_MODE=1`. Truncates ops/history tables. **Must never be enabled in production.**

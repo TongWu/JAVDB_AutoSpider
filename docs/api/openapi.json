@@ -1140,6 +1140,10 @@
             "title": "Rclone",
             "type": "boolean"
           },
+          "site_drift_sentinel": {
+            "title": "Site Drift Sentinel",
+            "type": "boolean"
+          },
           "smtp": {
             "title": "Smtp",
             "type": "boolean"
@@ -1151,7 +1155,8 @@
           "smtp",
           "proxy_pool",
           "javdb_login",
-          "proxy_preview"
+          "proxy_preview",
+          "site_drift_sentinel"
         ],
         "title": "Features",
         "type": "object"
@@ -2702,6 +2707,95 @@
           "items"
         ],
         "title": "OpsIncidentSimilarityResponse",
+        "type": "object"
+      },
+      "ParseFieldHealthItem": {
+        "description": "Latest committed parse health for one contract field (ADR-035 Phase 3).",
+        "properties": {
+          "baseline": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "fill_rate": {
+            "title": "Fill Rate",
+            "type": "number"
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed At"
+          },
+          "page_type": {
+            "title": "Page Type",
+            "type": "string"
+          },
+          "sample_count": {
+            "title": "Sample Count",
+            "type": "integer"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "threshold": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Threshold"
+          }
+        },
+        "required": [
+          "page_type",
+          "field",
+          "severity",
+          "fill_rate",
+          "sample_count",
+          "status"
+        ],
+        "title": "ParseFieldHealthItem",
+        "type": "object"
+      },
+      "ParseFieldHealthResponse": {
+        "description": "List response for per-field parse health.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ParseFieldHealthItem"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ParseFieldHealthResponse",
         "type": "object"
       },
       "PikPakQueueItem": {
@@ -5521,6 +5615,28 @@
           }
         },
         "summary": "Get Similar Ops Incidents",
+        "tags": [
+          "diagnostics"
+        ]
+      }
+    },
+    "/api/diag/parse-field-health": {
+      "get": {
+        "description": "Latest committed per-field parse health (ADR-035 site-contract sentinel).",
+        "operationId": "get_parse_field_health_api_diag_parse_field_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParseFieldHealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Parse Field Health",
         "tags": [
           "diagnostics"
         ]

@@ -36,6 +36,21 @@
 - `POST /api/sessions/{session_id}/rollback` — 仅 admin;请求体 `{dry_run, include_pending, restore_from_audit}`。
 - `POST /api/sessions/{session_id}/commit` — 仅 admin;请求体 `{force, drop_pending, fanout_claims, emit_metrics}`。`fanout_claims` 与 `emit_metrics` 默认为 `true`,让 HTTP 路径与 CLI 的完整 commit 行为对齐(MovieClaim 协调器 fanout + `pending_session_verify` JSONL 写入);如需仅修改 DB,显式传 `false`。
 
+### 诊断 — 站点契约漂移(ADR-035)
+
+站点契约漂移哨兵的只读接口。受 `capabilities.features.site_drift_sentinel` 控制(为 `false` 时前端隐藏漂移面板)。
+
+- `GET /api/diag/ops-incidents?incident_type=site_drift` — 按类型过滤已持久化的运维事件;`incident_type=site_drift` 专门返回漂移事件(同时接受 `status`、`run_id`、`session_id`、`confidence`、`limit`)。
+- `GET /api/diag/parse-field-health` — 每个契约字段最新一次已提交(committed)的解析健康度。响应:
+
+  ```json
+  { "items": [ { "page_type": "index", "field": "href", "severity": "critical",
+                 "fill_rate": 0.99, "sample_count": 120, "observed_at": "...",
+                 "baseline": null, "threshold": 0.99, "status": "ok" } ] }
+  ```
+
+  `status ∈ ok | critical_drift | soft_drift | no_baseline | insufficient_sample`。
+
 ### 测试模式(仅供 E2E)
 
 - `POST /api/test/reset` — 仅当服务以 `TEST_MODE=1` 启动时存在。会清空 ops/history 表。**绝不可在生产环境启用。**

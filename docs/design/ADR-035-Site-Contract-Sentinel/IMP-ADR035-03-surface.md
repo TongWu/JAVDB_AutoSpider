@@ -50,11 +50,22 @@ Reused verbatim (do not redefine): `fields_for(page_type)` (`javdb/spider/parse_
 ## Task 1: `OpsIncidentRepo.list(incident_type=...)` + endpoint filter
 
 **Files:**
-- Modify: `javdb/storage/repos/ops_incident_repo.py`
-- Modify: `apps/api/routers/diagnostics.py`
-- Test: `tests/unit/test_ops_incident_repo_filter.py`
+- Test: `tests/unit/test_ops_incident_repo_filter.py` (Create)
+- ~~Modify: `javdb/storage/repos/ops_incident_repo.py`~~ — **already implemented**
+- ~~Modify: `apps/api/routers/diagnostics.py`~~ — **already implemented**
 
 This unlocks pulling `site_drift` incidents specifically (for the web panel and ADR-026's AI summariser, D6).
+
+> **As-built (2026-06-06): the code half of this task already shipped.** Verified
+> against the current tree: `OpsIncidentRepo.list()` already accepts
+> `incident_type` (and an extra `confidence` filter from later work) and wires the
+> `WHERE incident_type = ?` clause; `apps/api/routers/diagnostics.py`'s
+> `_list_ops_incident_records` helper and the `GET /api/diag/ops-incidents` route
+> already thread `incident_type` through. The Step 3 / Step 5 find-and-replace
+> blocks **will not match** the current code — do **not** re-apply them. Execute
+> **only Step 1 (write the test), Step 2 (run — it goes green on arrival because
+> the feature pre-exists), and Step 7 (commit the test)**; skip Steps 3–6. The
+> test stands as a regression pin for the already-shipped filter.
 
 - [ ] **Step 1: Write the failing test**
 

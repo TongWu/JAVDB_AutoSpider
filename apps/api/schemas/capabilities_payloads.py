@@ -17,6 +17,7 @@ class Features(BaseModel):
     proxy_pool: bool
     javdb_login: bool
     proxy_preview: bool
+    site_drift_sentinel: bool
 
 
 class Build(BaseModel):
