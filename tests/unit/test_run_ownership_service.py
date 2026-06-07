@@ -123,6 +123,104 @@ def test_run_ownership_observed_counter(ledger, outcomes):
     assert res.observed == 2
 
 
+def test_run_ownership_delta_skips_unchanged_rows(ledger, outcomes):
+    """Steady-state: re-running with the same inventory should upsert 0 rows."""
+    inv = {
+        "A-1": [RcloneEntry("A-1", "无码", "中字", "/g/x", 10, 1, "t")],
+        "B-2": [RcloneEntry("B-2", "有码", "无字", "/g/y", 20, 2, "t")],
+    }
+    # First run — should upsert both
+    res1 = service.run_ownership(
+        OwnershipOptions(sources=("gdrive",)),
+        repo=ledger, outcome_repo=outcomes,
+        rclone_inventory=inv, qb_outcomes=[], pikpak_rows=[],
+    )
+    assert res1.upserted == 2
+
+    # Second run with same data — delta logic skips full upsert
+    res2 = service.run_ownership(
+        OwnershipOptions(sources=("gdrive",)),
+        repo=ledger, outcome_repo=outcomes,
+        rclone_inventory=inv, qb_outcomes=[], pikpak_rows=[],
+    )
+    assert res2.upserted == 0
+    assert res2.observed == 2
+
+
+def test_run_ownership_delta_refreshes_observed_at(ledger, outcomes):
+    """Unchanged rows still get observed_at refreshed (ADR-033 D10 freshness)."""
+    from unittest.mock import patch
+
+    inv = {"A-1": [RcloneEntry("A-1", "无码", "中字", "/g/x", 10, 1, "t")]}
+    # First run — establishes the row
+    with patch("javdb.ops.reconcile.service.utc_now_iso", return_value="2026-01-01T00:00:00Z"):
+        service.run_ownership(
+            OwnershipOptions(sources=("gdrive",)),
+            repo=ledger, outcome_repo=outcomes,
+            rclone_inventory=inv, qb_outcomes=[], pikpak_rows=[],
+        )
+    assert ledger.get("A-1", "gdrive", "无码|中字").observed_at == "2026-01-01T00:00:00Z"
+
+    # Second run with same data but later timestamp — observed_at must refresh
+    with patch("javdb.ops.reconcile.service.utc_now_iso", return_value="2026-01-01T01:00:00Z"):
+        res = service.run_ownership(
+            OwnershipOptions(sources=("gdrive",)),
+            repo=ledger, outcome_repo=outcomes,
+            rclone_inventory=inv, qb_outcomes=[], pikpak_rows=[],
+        )
+    assert res.upserted == 0  # no content change
+    assert ledger.get("A-1", "gdrive", "无码|中字").observed_at == "2026-01-01T01:00:00Z"
+
+
+def test_run_ownership_delta_detects_path_change(ledger, outcomes):
+    """A changed path triggers re-upsert even if video_code+category are the same."""
+    inv1 = {"A-1": [RcloneEntry("A-1", "无码", "中字", "/g/old", 10, 1, "t")]}
+    service.run_ownership(
+        OwnershipOptions(sources=("gdrive",)),
+        repo=ledger, outcome_repo=outcomes,
+        rclone_inventory=inv1, qb_outcomes=[], pikpak_rows=[],
+    )
+    inv2 = {"A-1": [RcloneEntry("A-1", "无码", "中字", "/g/new", 10, 1, "t")]}
+    res = service.run_ownership(
+        OwnershipOptions(sources=("gdrive",)),
+        repo=ledger, outcome_repo=outcomes,
+        rclone_inventory=inv2, qb_outcomes=[], pikpak_rows=[],
+    )
+    assert res.upserted == 1
+    assert ledger.get("A-1", "gdrive", "无码|中字").path == "/g/new"
+
+
+def test_run_ownership_delta_detects_size_change(ledger, outcomes):
+    """A changed size triggers re-upsert."""
+    inv1 = {"A-1": [RcloneEntry("A-1", "无码", "中字", "/g/x", 10, 1, "t")]}
+    service.run_ownership(
+        OwnershipOptions(sources=("gdrive",)),
+        repo=ledger, outcome_repo=outcomes,
+        rclone_inventory=inv1, qb_outcomes=[], pikpak_rows=[],
+    )
+    inv2 = {"A-1": [RcloneEntry("A-1", "无码", "中字", "/g/x", 99, 1, "t")]}
+    res = service.run_ownership(
+        OwnershipOptions(sources=("gdrive",)),
+        repo=ledger, outcome_repo=outcomes,
+        rclone_inventory=inv2, qb_outcomes=[], pikpak_rows=[],
+    )
+    assert res.upserted == 1
+    assert ledger.get("A-1", "gdrive", "无码|中字").size == 99
+
+
+def test_run_ownership_delta_re_upserts_swept_row(ledger, outcomes):
+    """A row previously swept to present=0 must be re-upserted when it reappears."""
+    ledger.upsert(OwnershipLedgerRecord("A-1", "gdrive", "无码|中字", path="/g/x", size=10, present=0, observed_at="t0"))
+    inv = {"A-1": [RcloneEntry("A-1", "无码", "中字", "/g/x", 10, 1, "t")]}
+    res = service.run_ownership(
+        OwnershipOptions(sources=("gdrive",)),
+        repo=ledger, outcome_repo=outcomes,
+        rclone_inventory=inv, qb_outcomes=[], pikpak_rows=[],
+    )
+    assert res.upserted == 1
+    assert ledger.get("A-1", "gdrive", "无码|中字").present == 1
+
+
 def test_load_gdrive_inventory_normalises_fullwidth_codes():
     """_load_gdrive_inventory normalises full-width codes via NFKC+strip+upper.
 
