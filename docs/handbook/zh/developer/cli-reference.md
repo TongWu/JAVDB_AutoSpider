@@ -724,14 +724,16 @@ qBittorrent 前进行判定。
 | `tag` | `include` | 必填：tag 名；存在 include 规则时，至少要命中一个 include tag。 |
 | `gender` | `require_lead` | 必填：`female` 或 `male`。 |
 | `gender` | `exclude_all_male` | 不需要值；传入 `--value` 会被拒绝。 |
+| `age` | `min_age` | 必填：非负整数（若有已知演员年龄更小则丢弃该影片）。 |
+| `age` | `max_age` | 必填：非负整数（若有已知演员年龄更大则丢弃该影片）。 |
 
 ### 参数
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `--dimension` | `add` 使用的规则维度。可选：`actor`、`tag`、`gender`。 | 必填 |
-| `--mode` | `add` 使用的规则模式。可选：`exclude`、`include`、`require_lead`、`exclude_all_male`。 | 必填 |
-| `--value` | `add` 使用的规则值：根据规则可为演员名/href、tag 名或 lead gender。除 `gender exclude_all_male` 外均必填。 | `""` |
+| `--dimension` | `add` 使用的规则维度。可选：`actor`、`tag`、`gender`、`age`。 | 必填 |
+| `--mode` | `add` 使用的规则模式。可选：`exclude`、`include`、`require_lead`、`exclude_all_male`、`min_age`、`max_age`。 | 必填 |
+| `--value` | `add` 使用的规则值：根据规则可为演员名/href、tag 名、lead gender 或非负整数（age 模式）。除 `gender exclude_all_male` 外均必填。 | `""` |
 | `--id` | `remove` 和 `enable` 使用的规则 id。 | 必填 |
 | `--off` | 在 `enable` 命令中禁用规则，而不是启用规则。 | `False` |
 | `--log-level` | 日志级别。可选：`DEBUG`、`INFO`、`WARNING`、`ERROR`。 | `INFO` |
@@ -767,6 +769,25 @@ python3 -m apps.cli.ops.content_filter list
 python3 -m apps.cli.ops.content_filter enable --id 3 --off
 python3 -m apps.cli.ops.content_filter enable --id 3
 python3 -m apps.cli.ops.content_filter remove --id 3
+```
+
+#### 年龄规则（ADR-040 Phase 2，尽力而为）
+
+```bash
+# 丢弃包含发行日期时年龄已知且未满 18 岁演员的影片
+python3 -m apps.cli.ops.content_filter add --dimension age --mode min_age --value 18
+
+# 丢弃包含发行日期时年龄已知且超过 40 岁演员的影片
+python3 -m apps.cli.ops.content_filter add --dimension age --mode max_age --value 40
+```
+
+年龄通过演员名从 minnano-av 尽力而为地解析，缓存在 `ActorMetadata` 中，并按影片发行日期计算。
+未能解析生日的演员年龄未知，不会导致影片被丢弃。
+
+```bash
+python3 -m apps.cli.ops.actor_age list                       # 查看缓存
+python3 -m apps.cli.ops.actor_age refresh --href /actors/EvkJ --name "<name>"  # 强制重新查询
+python3 -m apps.cli.ops.actor_age clear --href /actors/EvkJ   # 删除缓存行
 ```
 
 ---

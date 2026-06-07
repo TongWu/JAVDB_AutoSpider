@@ -479,6 +479,21 @@ def process_detail_entries(
     )
     if content_filter_rules is None:
         content_filter_rules = load_content_filter_rules()
+    actor_age_resolver = None
+    has_enabled_age_rule = any(
+        getattr(r, 'enabled', False) and getattr(r, 'dimension', '') == 'age'
+        for r in (content_filter_rules or [])
+    )
+    if has_enabled_age_rule:
+        try:
+            from javdb.spider.services.actor_age import build_default_resolver
+            actor_age_resolver = build_default_resolver()
+        except Exception:
+            logger.info(
+                "Actor-age resolver unavailable; age rules will be skipped",
+                exc_info=True,
+            )
+            actor_age_resolver = None
 
     # P1-B: filter through the cross-runner MovieClaim mutex.  Returns the
     # candidates this runner won the lease on; peer-completed and
@@ -731,7 +746,17 @@ def process_detail_entries(
             data = result.data or {}
             movie_detail = data.get('movie_detail')
             if content_filter_rules and movie_detail is not None:
-                decision = evaluate(movie_detail, content_filter_rules)
+                actor_ages = None
+                if actor_age_resolver is not None:
+                    try:
+                        actor_ages = actor_age_resolver.ages_for(movie_detail)
+                    except Exception:
+                        logger.debug(
+                            "actor-age resolution failed for %s",
+                            entry.get('video_code', '?'), exc_info=True,
+                        )
+                        actor_ages = None
+                decision = evaluate(movie_detail, content_filter_rules, actor_ages)
                 if not decision.keep:
                     logger.info(
                         "[%s] %s filtered by content rules: %s",

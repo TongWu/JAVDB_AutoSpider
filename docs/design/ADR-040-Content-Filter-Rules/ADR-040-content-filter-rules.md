@@ -2,7 +2,7 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Accepted — Phase 1 implemented; later phases pending                  |
+| **Status**  | Accepted — Phase 1-2 implemented; later phases pending                  |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
 | **Related** | [ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md), [ADR-038](../ADR-038-Agentic-Operator-MCP/ADR-038-agentic-operator-mcp-surface.md) |
@@ -75,9 +75,14 @@ filter — neither weakens the other.
 **D5. Phase 1 dimensions come from the existing parse.** From `MovieDetail`
 (`actors` with name/href/**gender**, `tags`): **actor blacklist** (exclude by
 name/href), **tag include/exclude**, **gender** (e.g. require a female lead,
-exclude all-male). **Age is deferred (Phase 2)** — it needs an actor-profile
-lookup the pipeline does not do today. **Subscriptions (whitelist that bypasses the
-rating threshold) are deferred (Phase 2)** — they are the include counterpart and
+exclude all-male). **Age is Phase 2 (IMP-ADR040-02).** Correction to the original Context aside:
+javdb's own `/actors/<id>` page is a movie *listing* page and carries **no
+birthdate**, so age cannot come from a javdb lookup. Phase 2 instead resolves
+birthdates **best-effort from minnano-av** (matched by actor name), cached in
+`ActorMetadata`, computing age at the movie's release date. Actors with no
+resolved birthdate have unknown age and never cause a drop. (xslist was weighed as
+a fallback but deferred — it cannot match javdb's Japanese names.) **Subscriptions (whitelist that bypasses the
+rating threshold) are deferred (Phase 3)** — they are the include counterpart and
 a larger change.
 
 **D6. Deterministic and explainable; orthogonal to the preference model.** The
@@ -112,15 +117,17 @@ queueing.
 - **Attribute coverage is parser-bound** — gender/tags only; age needs the deferred
   actor-profile enrichment.
 - **Rule-management surface** — Phase 1 manages rules via CLI; web/MCP management is
-  Phase 2.
+  Phase 4.
 
 ## Implementation Roadmap
 
-| Phase | IMP | Ships | Deferred |
-| --- | --- | --- | --- |
-| Phase 1 — Exclude + attribute | [IMP-ADR040-01](IMP-ADR040-01-content-filter.md) | `ContentFilterRule` table + repo; `content_filter` engine (actor blacklist, tag include/exclude, gender); post-detail filter stage; a CLI to manage rules | age; subscriptions; web/MCP management |
-| Phase 2 — Subscriptions + age | IMP-ADR040-02 (stub) | D1 subscriptions (whitelist bypassing the rating threshold); age filter via actor-profile enrichment; web/MCP rule management | — |
-| Phase 3 — Compose (optional) | IMP-ADR040-03 (stub) | combine with the ADR-025 preference score | — |
+| Phase | IMP | Ships |
+| --- | --- | --- |
+| Phase 1 — Exclude + attribute | IMP-ADR040-01 (done) | actor/tag/gender rules |
+| Phase 2 — Age filter | IMP-ADR040-02 (this plan) | `age` dimension; external-source enrichment (minnano-av; xslist deferred); `ActorMetadata` cache |
+| Phase 3 — Subscriptions | IMP-ADR040-03 (stub) | whitelist bypassing the rating threshold (needs an index-gate-bypass design) |
+| Phase 4 — Web/MCP rule mgmt | IMP-ADR040-04 (stub) | REST CRUD over rules (web buildable now; MCP blocked on ADR-038) |
+| Phase 5 — Compose (optional) | IMP-ADR040-05 (stub) | combine with the ADR-025 preference score |
 
 Phase 1 is additive and backward-compatible (no rules → no change). Phases 2/3
 widen the include side and attribute coverage.
@@ -129,7 +136,7 @@ widen the include side and attribute coverage.
 
 - **No streaming / frequent cron** — the pivot; the daily cadence stays.
 - **No age filter in Phase 1** — needs actor-profile enrichment (Phase 2).
-- **No subscriptions in Phase 1** — the include/whitelist side is Phase 2.
+- **No subscriptions in Phase 1** — the include/whitelist side is Phase 3.
 - **No ML** — deterministic rules only; preference scoring is ADR-022/025.
 - **No rewrite of the rating/rater filter** — a parallel second gate (D3).
 
@@ -140,7 +147,7 @@ widen the include side and attribute coverage.
 - **Blacklist** — exclude-mode content filter rules (highest precedence).
 - **Attribute filter** — a rule on a parsed attribute (gender, tag).
 - **Filter decision** — the engine's `keep` + `reasons` for one movie.
-- **Subscription** — (Phase 2) a followed entity whose new releases bypass the
+- **Subscription** — (Phase 3) a followed entity whose new releases bypass the
   rating threshold.
 
 ## Alternatives Considered
@@ -166,3 +173,10 @@ widen the include side and attribute coverage.
   three phases scoped, IMPs pending).
 - 2026-05-30: Phase 1 implemented via [IMP-ADR040-01](IMP-ADR040-01-content-filter.md);
   ADR remains active for Phase 2/3.
+- 2026-06-04: Phase-2 scope corrected — javdb actor pages have no birthdate; age
+  filtering uses minnano-av (best-effort, by name), age computed at release date.
+  Roadmap re-numbered (age=Phase 2; subscriptions=Phase 3; web/MCP=Phase 4).
+  Planned in [IMP-ADR040-02](IMP-ADR040-02-age-filter.md).
+- 2026-06-07: Phase 2 implemented via [IMP-ADR040-02](IMP-ADR040-02-age-filter.md)
+  (PR #180) — `age` dimension, minnano-av enrichment, `ActorMetadata` cache. ADR
+  remains active for Phases 3-5.

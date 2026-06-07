@@ -21,7 +21,7 @@ class FilterDecision:
     reasons: list[str]
 
 
-def evaluate(detail, rules: Iterable[Rule]) -> FilterDecision:
+def evaluate(detail, rules: Iterable[Rule], actor_ages=None) -> FilterDecision:
     """Evaluate parsed movie detail metadata against content-filter rules."""
     enabled_rules = [rule for rule in rules if rule.enabled]
 
@@ -54,6 +54,8 @@ def evaluate(detail, rules: Iterable[Rule]) -> FilterDecision:
         reason = _gender_drop_reason(detail, rule)
         if reason:
             reasons.append(reason)
+
+    reasons.extend(_age_drop_reasons(enabled_rules, actor_ages))
 
     if reasons:
         return FilterDecision(keep=False, reasons=reasons)
@@ -105,3 +107,22 @@ def _clean_value(value: str | None) -> str:
 
 def _normalized_match_value(value: str | None) -> str:
     return _clean_value(value).casefold()
+
+
+def _age_drop_reasons(rules: list[Rule], actor_ages) -> list[str]:
+    ages = [a for a in (actor_ages or {}).values() if isinstance(a, int)]
+    if not ages:
+        return []
+    out: list[str] = []
+    for rule in rules:
+        if rule.dimension != 'age':
+            continue
+        try:
+            bound = int(str(rule.value).strip())
+        except (ValueError, TypeError):
+            continue
+        if rule.mode == 'min_age' and any(a < bound for a in ages):
+            out.append(f'actor younger than minimum age {bound}')
+        elif rule.mode == 'max_age' and any(a > bound for a in ages):
+            out.append(f'actor older than maximum age {bound}')
+    return out

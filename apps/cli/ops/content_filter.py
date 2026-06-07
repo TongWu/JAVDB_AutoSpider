@@ -11,20 +11,24 @@ from javdb.storage.db import get_db
 from javdb.storage.repos.content_filter_repo import ContentFilterRepo
 
 
-DIMENSIONS = ("actor", "tag", "gender")
-MODES = ("exclude", "include", "require_lead", "exclude_all_male")
+DIMENSIONS = ("actor", "tag", "gender", "age")
+MODES = ("exclude", "include", "require_lead", "exclude_all_male", "min_age", "max_age")
 VALID_RULE_MODES = {
     ("actor", "exclude"),
     ("tag", "exclude"),
     ("tag", "include"),
     ("gender", "require_lead"),
     ("gender", "exclude_all_male"),
+    ("age", "min_age"),
+    ("age", "max_age"),
 }
 VALUE_REQUIRED = {
     ("actor", "exclude"),
     ("tag", "exclude"),
     ("tag", "include"),
     ("gender", "require_lead"),
+    ("age", "min_age"),
+    ("age", "max_age"),
 }
 GENDER_VALUES = ("female", "male")
 
@@ -90,6 +94,10 @@ def _validate_add(args: argparse.Namespace, parser: argparse.ArgumentParser) -> 
         if value:
             parser.error("gender exclude_all_male rules do not accept --value")
         args.value = ""
+    elif args.dimension == "age":
+        if not value.isdigit():
+            parser.error("age rules require --value to be a non-negative integer")
+        args.value = str(int(value))
     else:
         args.value = value
 
