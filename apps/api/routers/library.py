@@ -26,6 +26,40 @@ from javdb.ops.reconcile.models import ACQUISITION_STATES
 
 router = APIRouter(prefix="/api/library", tags=["library"])
 
+# Domain-validation 400 envelope. FastAPI wraps HTTPException(detail=...) as
+# {"detail": <detail>}, so the wire body is {"detail": {"error": {code, message}}}
+# — the schema below mirrors that exact shape (ADR-034 FE-1; TS Worker at parity).
+_ERROR_ENVELOPE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "detail": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "object",
+                    "properties": {
+                        "code": {"type": "string"},
+                        "message": {"type": "string"},
+                    },
+                    "required": ["code", "message"],
+                }
+            },
+            "required": ["error"],
+        }
+    },
+    "required": ["detail"],
+}
+
+
+def _domain_400_response(description: str) -> dict:
+    return {
+        400: {
+            "description": description,
+            "content": {"application/json": {"schema": _ERROR_ENVELOPE_SCHEMA}},
+        }
+    }
+
+
 _PERIOD_DAYS = {"7d": 7, "30d": 30, "90d": 90}
 # in_library omitted — Phase-2-gated; its rows still count toward total
 _SUMMARY_KEYS = ("queued", "downloading", "completed", "stalled", "failed", "total")
@@ -46,7 +80,11 @@ def acquisition_summary(_user=Depends(_require_auth)) -> AcquisitionSummary:
     return AcquisitionSummary(**values)
 
 
-@router.get("/acquisition/recent", response_model=list[AcquisitionRecentItem])
+@router.get(
+    "/acquisition/recent",
+    response_model=list[AcquisitionRecentItem],
+    responses=_domain_400_response("Invalid state filter (library.invalid_state)"),
+)
 def acquisition_recent(
     state: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
@@ -65,7 +103,11 @@ def acquisition_recent(
     return [AcquisitionRecentItem(**{c: r[c] for c in _RECENT_COLS}) for r in rows]
 
 
-@router.get("/acquisition/trend", response_model=list[AcquisitionTrendPoint])
+@router.get(
+    "/acquisition/trend",
+    response_model=list[AcquisitionTrendPoint],
+    responses=_domain_400_response("Invalid period (library.invalid_period)"),
+)
 def acquisition_trend(
     period: str = Query(default="30d"),
     _user=Depends(_require_auth),

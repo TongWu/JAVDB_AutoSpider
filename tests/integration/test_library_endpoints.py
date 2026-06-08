@@ -76,6 +76,11 @@ def test_recent_state_filter(admin_client, seeded_outcomes):
 def test_recent_rejects_unknown_state(admin_client, seeded_outcomes):
     r = admin_client.get("/api/library/acquisition/recent", params={"state": "bogus"})
     assert r.status_code == 400
+    # Pin the documented 400 contract: {"detail": {"error": {code, message}}}.
+    # FastAPI wraps HTTPException(detail=...) under a top-level "detail" key.
+    error = r.json()["detail"]["error"]
+    assert error["code"] == "library.invalid_state"
+    assert isinstance(error["message"], str) and error["message"]
 
 
 def test_recent_accepts_in_library_state(admin_client, seeded_outcomes):
@@ -98,6 +103,10 @@ def test_trend_groups_terminal_states_by_day(admin_client, seeded_outcomes):
 def test_trend_rejects_bad_period(admin_client, seeded_outcomes):
     r = admin_client.get("/api/library/acquisition/trend", params={"period": "5h"})
     assert r.status_code == 400
+    # Same documented 400 envelope as recent (library.invalid_period).
+    error = r.json()["detail"]["error"]
+    assert error["code"] == "library.invalid_period"
+    assert isinstance(error["message"], str) and error["message"]
 
 
 def test_endpoints_require_auth(anon_client):
