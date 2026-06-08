@@ -731,6 +731,8 @@ class TestMaskSensitiveInfoAdvanced:
         text = 'URL: https://user:token@gist.github.com/user/id.git'
         masked = mask_sensitive_info(text)
         assert 'gist.github.com' in masked
+        # GitHub (sub)domains intentionally preserve credentials per existing design
+        assert 'token' in masked
 
 
 class TestGitPushBasicAuthNoPlaintextInArgv:
