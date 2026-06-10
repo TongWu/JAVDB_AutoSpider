@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import contextlib
+import json as _json
 import logging
 from datetime import datetime, timezone
+
+from javdb.pipeline.events import emit as _emit_event  # ADR-036 Phase 2
 
 from javdb.integrations.qb.client import extract_hash_from_magnet
 from javdb.ops.reconcile.collectors import QbCollector
@@ -106,6 +109,22 @@ def apply_cleanup_completed(stats: dict, *, repo=None) -> ReconcileResult:
                     exc_info=True,
                 )
                 result.errors.append(str(exc))
+                continue
+            # ADR-036 Phase 2: best-effort TorrentCompleted emit (outside the
+            # mark_state try/except so a broken emit cannot taint result.errors).
+            try:
+                _row = r.get(qb_hash)
+                _session_id = (_row.session_id or "") if _row else ""
+            except Exception:
+                _session_id = ""
+            with contextlib.suppress(Exception):  # emit is best-effort
+                _emit_event(
+                    "TorrentCompleted",
+                    session_id=_session_id,
+                    entity_type="torrent",
+                    entity_id=qb_hash,
+                    payload=_json.dumps({"completed_at": now}),
+                )
     return result
 
 
@@ -188,6 +207,18 @@ def run(options: ReconcileOptions, *, repo=None, qb_client=None) -> ReconcileRes
                 result.outcomes_updated += 1
                 if counter_name is not None:
                     setattr(result, counter_name, getattr(result, counter_name) + 1)
+                if new_state == "completed":
+                    # ADR-036 Phase 2: completions found by the regular reconcile
+                    # pass (not just cleanup) also emit TorrentCompleted, so the
+                    # shadow projection can track them. Best-effort.
+                    with contextlib.suppress(Exception):
+                        _emit_event(
+                            "TorrentCompleted",
+                            session_id=(rec.session_id or ""),
+                            entity_type="torrent",
+                            entity_id=qb_hash,
+                            payload=_json.dumps({"completed_at": now}),
+                        )
             except Exception as exc:
                 logger.warning("run: upsert failed for %s", qb_hash, exc_info=True)
                 result.errors.append(str(exc))

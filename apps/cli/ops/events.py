@@ -1,7 +1,7 @@
-"""Run the event-spine demonstrator consumer (ADR-036 Phase 1).
+"""Run the event-spine consumer (ADR-036).
 
-Reads new PipelineEvent rows by cursor and projects per-session counts into
-RunEventSummary. --replay resets the cursor + projection and rebuilds from seq 0."""
+Reads new PipelineEvent rows by cursor and projects into the selected consumer's
+projection table. --replay resets the cursor + projection and rebuilds from seq 0."""
 
 from __future__ import annotations
 
@@ -10,10 +10,14 @@ import logging
 import sys
 
 from javdb.infra.logging import setup_logging
-from javdb.pipeline.events.consumer import RunEventSummaryConsumer
+from javdb.pipeline.events.consumer import AcquisitionOutcomeShadowConsumer, RunEventSummaryConsumer
 from javdb.storage import db as _db
 from javdb.storage.db import get_db
-from javdb.storage.repos.pipeline_event_repo import PipelineEventRepo, RunEventSummaryRepo
+from javdb.storage.repos.pipeline_event_repo import (
+    AcquisitionOutcomeShadowRepo,
+    PipelineEventRepo,
+    RunEventSummaryRepo,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,12 +34,18 @@ def _positive_int(value: str) -> int:
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="apps.cli.ops.events",
-        description="Project pipeline events into RunEventSummary (ADR-036).",
+        description="Project pipeline events into a consumer projection (ADR-036).",
     )
     p.add_argument("--replay", action="store_true",
                    help="Reset the consumer cursor + projection, then rebuild from seq 0.")
     p.add_argument("--batch", type=_positive_int, default=500,
                    help="Events to read per page (must be >= 1).")
+    p.add_argument(
+        "--consumer",
+        default="run_event_summary",
+        choices=["run_event_summary", "acquisition_outcome_shadow"],
+        help="Which consumer projection to run.",
+    )
     p.add_argument("--log-level", default="INFO", choices=("DEBUG", "INFO", "WARNING", "ERROR"))
     return p
 
@@ -45,11 +55,20 @@ def main(argv: list[str] | None = None) -> int:
     setup_logging(log_level=args.log_level)
     with get_db(_db.REPORTS_DB_PATH) as conn:
         event_repo = PipelineEventRepo(conn)
-        consumer = RunEventSummaryConsumer(RunEventSummaryRepo(conn))
-        if args.replay:
-            event_repo.advance_cursor(consumer.name, 0)
-            RunEventSummaryRepo(conn).reset()
-            logger.info("Replay: cursor + projection reset")
+        if args.consumer == "acquisition_outcome_shadow":
+            shadow_repo = AcquisitionOutcomeShadowRepo(conn)
+            consumer = AcquisitionOutcomeShadowConsumer(shadow_repo)
+            if args.replay:
+                event_repo.advance_cursor(consumer.name, 0)
+                shadow_repo.reset()
+                logger.info("Replay: cursor + shadow projection reset")
+        else:
+            summary_repo = RunEventSummaryRepo(conn)
+            consumer = RunEventSummaryConsumer(summary_repo)
+            if args.replay:
+                event_repo.advance_cursor(consumer.name, 0)
+                summary_repo.reset()
+                logger.info("Replay: cursor + projection reset")
         total = 0
         while True:
             n = consumer.run_once(event_repo=event_repo, batch=args.batch)

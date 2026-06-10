@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json as _json
 from threading import Event
 from typing import List, Optional, Set, Tuple
 from urllib.parse import urljoin
@@ -41,6 +42,7 @@ from javdb.spider.services.dedup import (
 from javdb.spider.fetch.backend import FetchBackend
 from javdb.spider.fetch.fetch_engine import EngineTask
 from javdb.spider.runtime.config import BASE_URL
+from javdb.pipeline.events import emit as _emit_event  # ADR-036 Phase 2
 
 logger = get_logger(__name__)
 
@@ -515,6 +517,20 @@ def process_detail_entries(
     # tests, etc.); ``_stage_complete_movie_claim`` falls back to legacy
     # ``complete_movie`` semantics in that case.
     _session_id_str = str(session_id) if session_id is not None else ""
+    # ADR-036 Phase 2: emit MovieSelected for each candidate entering detail fetch.
+    # Best-effort — never raises; dry-run and no-session paths return None silently.
+    for _candidate in prepared_entries:
+        _emit_event(
+            "MovieSelected",
+            session_id=_session_id_str,
+            entity_type="movie",
+            entity_id=getattr(_candidate, "href", None),
+            payload=_json.dumps({
+                "video_code": (getattr(_candidate, "entry", None) or {}).get("video_code"),
+                "phase": phase,
+                "page_num": getattr(_candidate, "page_num", None),
+            }),
+        )
     skipped_history += skipped_completed
     if skipped_contention:
         logger.info(
@@ -1157,6 +1173,29 @@ def persist_parsed_detail_result(
     if plan.should_include_in_report:
         write_csv([row], csv_path, fieldnames, dry_run, append_mode=True)
         outcome.row = row
+        # ADR-036 Phase 2: emit TorrentSelected for each new magnet link.
+        # Best-effort — any extraction failure falls back to href; _emit_event never raises.
+        if plan.new_magnet_links and session_id:
+            _emit_session_id = str(session_id)
+            for _torrent_href, _magnet in plan.new_magnet_links.items():
+                try:
+                    from javdb.integrations.qb.client import (
+                        extract_hash_from_magnet as _extract_hash,
+                    )
+                    _qb_hash = _extract_hash(_magnet)
+                except Exception:
+                    _qb_hash = None
+                _emit_event(
+                    "TorrentSelected",
+                    session_id=_emit_session_id,
+                    entity_type="torrent",
+                    entity_id=_qb_hash if _qb_hash else _torrent_href,
+                    payload=_json.dumps({
+                        "category": getattr(plan, "category", None),
+                        "href": href,
+                        "video_code": video_code,
+                    }),
+                )
         if (
             use_history_for_saving
             and not dry_run

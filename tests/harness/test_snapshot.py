@@ -10,7 +10,11 @@ def test_capture_snapshot_is_normalized(pipeline_harness):
 
     # Stable, known canonical outputs of the clean daily run.
     assert snap["qb_hashes"] == ["a" * 40, "b" * 40]
-    assert snap["events"] == ["RunStarted"]
+    assert snap["events"] == [
+        "RunStarted",
+        "MovieDiscovered", "MovieDiscovered", "MovieSelected", "MovieSelected",
+        "TorrentSelected", "TorrentSelected", "TorrentQueued", "TorrentQueued",
+    ]
     assert len(snap["movies"]) == 2
     assert len(snap["torrents"]) == 2
     assert sorted(o["state"] for o in snap["acquisition"]) == ["queued", "queued"]

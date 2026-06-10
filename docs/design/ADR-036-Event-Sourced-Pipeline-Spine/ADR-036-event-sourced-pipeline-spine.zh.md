@@ -2,7 +2,7 @@
 
 | 字段       | 值                                                                    |
 | ---------- | --------------------------------------------------------------------- |
-| **状态**   | Proposed — 伞型;Phase 1 已实现并验证;执行下放给各期 IMP               |
+| **状态**   | Proposed — 伞型;Phase 1 & Phase 2 已实现并验证;Phase 2（附加式 emit + 影子消费者）已于 2026-06-10 落地;Phase 3（strangler）可选/推迟;执行下放给各期 IMP |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
 | **关联**   | [ADR-012](../_archive/ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md), [ADR-019](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md), [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md) |
@@ -69,7 +69,7 @@ CREATE TABLE EventConsumerCursor (
 
 **D5. cursor 幂等消费者 + 免费重放。** 消费者读 `seq > last_seq`、幂等投影、推进 cursor。**重放** = 把某消费者 cursor 重置为 0 再跑 → 它的投影从日志重建。这是头号价值（可重放/可审计），且在 cursor 模型下几乎免费。
 
-**D6. 对现有 hook 的 strangler 路径。** Phase 2 把 [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) 的 `AcquisitionOutcome` 与 [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md) 的哨兵改成**消费事件**而非 hook 管道——回头去侵入化它们。让 `pending→commit`/history 成为日志的投影是 Phase 3+,推迟且高谨慎。
+**D6. 对现有 hook 的 strangler 路径——附加优先，切换有门控。** Phase 2 让脊柱*承载*逐实体生命周期事件并以**影子**投影验证消费路径，但**不**拆除现有的直接写 hook。具体：在管道自然点 emit `MovieDiscovered` / `MovieSelected` / `TorrentSelected` / `TorrentQueued` / `TorrentCompleted`（附加式，per D4 best-effort）；加一个消费者，从这些事件重建一个 `AcquisitionOutcome` 形状的投影，用于与 [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) 的权威直接写路径做**交叉验证**（影子投影不被生产决策读取）。[ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md) 哨兵**仅在干净映射到逐实体事件的部分**改为消费事件流；若其逐字段填充率计算不适合，则保留当前的 piggyback hook。**ADR-033 数据关键路径 `AcquisitionOutcome` 的实际切换——它驱动 ADR-024/025 质量/偏好数据时钟——推迟**，直到 in-run 事件在生产中证明可靠（或决定结果的事件按 D4 晋升为 commit 类）。理由：`AcquisitionOutcome` 的当前 hook 是同步直接写；用 *best-effort* in-run emit + 异步投影替换它，在 emit 失败时有静默丢失 acquisition 行的风险，会回归一条刚落地的关键路径。让 `pending→commit` / history 成为日志投影仍属 Phase 3+，推迟且高谨慎。
 
 **D7. 模块形态遵循仓库惯例。** `javdb/pipeline/events/` 含 `models.py`（事件类型）、`store.py`（`emit` + read-since-cursor）、`consumer.py`（基类消费者 + cursor 推进）;`javdb/storage/repos/pipeline_event_repo.py` 是 D1 访问。emit 调用点位于现有管道点。
 
@@ -94,10 +94,10 @@ CREATE TABLE EventConsumerCursor (
 | 阶段 | IMP | 交付内容 | 推迟内容 |
 | --- | --- | --- | --- |
 | Phase 1 — 脊柱 + 示范 | [IMP-ADR036-01](IMP-ADR036-01-event-spine.md) | `PipelineEvent` + `EventConsumerCursor` 表;`events` 模块（`emit`、read-since-cursor、基类消费者）;管道各点 emit;一个示范消费者（`RunEventSummary` per-session 计数）证明 emit→consume→replay | 收编 ADR-033/035;history-as-projection |
-| Phase 2 — 收编消费者 | IMP-ADR036-02（占位） | 把 ADR-033 `AcquisitionOutcome` 与 ADR-035 哨兵改成消费事件 | — |
-| Phase 3 — Strangler（可选） | IMP-ADR036-03（占位） | 让 `pending→commit`/history 成为日志的投影 | — |
+| Phase 2 — 收编消费者 | [IMP-ADR036-02](IMP-ADR036-02-adopt-consumers.md) ✅ | 在管道自然点 emit 5 个逐实体事件（`MovieDiscovered`、`MovieSelected`、`TorrentSelected`、`TorrentQueued`、`TorrentCompleted`，best-effort/附加式）；`AcquisitionOutcomeShadow` 投影表 + `AcquisitionOutcomeShadowRepo` + `AcquisitionOutcomeShadowConsumer`；交叉验证 `compare_shadow_to_authoritative()` + CLI；导入循环修复；哨兵保留在 piggyback（映射不干净，按设计） | 切换 ADR-033 直接写 `AcquisitionOutcome`（以影子在生产中证明可靠为门控条件）；history-as-projection |
+| Phase 3 — Strangler（可选） | IMP-ADR036-03（推迟） | 让 `pending→commit`/history 成为日志的投影 | — |
 
-Phase 1 独立成立、不碰任何权威物。Phase 2 依赖 ADR-033/035 已落地。Phase 3 是可选、高谨慎的权威迁移。
+Phase 1 独立成立、不碰任何权威物。Phase 2 依赖 ADR-033/035 已落地；Phase 2 的 AcquisitionOutcome 切换额外以 in-run 事件在生产中证明可靠为门控条件。Phase 3 是可选、高谨慎的权威迁移。
 
 ### 明确的非目标 (YAGNI)
 
@@ -141,3 +141,5 @@ Phase 1 独立成立、不碰任何权威物。Phase 2 依赖 ADR-033/035 已落
   （`RunStarted` / `SessionCommitted` / `SessionFailed`）已在运行与提交边界接线;
   示范 `apps.cli.ops.events` 消费/回放 CLI;GitHub 全量单元测试无失败。伞型 ADR
   仍为 **Proposed**，等待 Phase 2（收编消费者）与 Phase 3（可选绞杀迁移）。
+- 2026-06-10（范围收窄）：Phase 2 经设计反馈环回顾（负责人决定）收窄为保守附加式分期。WHY：D4 使 in-run 事件（`Discovered`/`Selected`/`Queued`）为 best-effort；用 best-effort emit + 异步投影替换 `AcquisitionOutcome` 的同步直接写 hook，在 emit 失败时有静默丢失 acquisition 行的风险，会回归一条驱动 ADR-024/025 质量/偏好数据时钟的刚落地关键路径。WHAT Phase 2 现在交付：在管道自然点 emit 5 个逐实体事件（`MovieDiscovered`、`MovieSelected`、`TorrentSelected`、`TorrentQueued`、`TorrentCompleted`，附加式）；影子 `AcquisitionOutcome` 投影消费者，用于与 ADR-033 权威直接写交叉验证（不被生产读取）；仅在干净映射处把 ADR-035 哨兵改接事件流。推迟/门控：ADR-033 数据关键路径 `AcquisitionOutcome` 的完整切换推迟，直到 in-run 事件在生产中证明可靠（或决定结果的事件按 D4 晋升为 commit 类）。
+- 2026-06-10（已实现）：Phase 2 已实现并验证（分支 `claude/adr036-p2-event-consumers`；9 个任务，subagent 驱动，每任务含实现者 + 规格/代码审查；~44 个 Phase-2 单元测试通过）。emit 点：`MovieDiscovered`——`javdb/spider/app/run_service.py`（`RunStarted` 之后，循环 `all_index_results_phase1 + all_index_results_phase2`）；`MovieSelected`——`javdb/spider/detail/runner.py` `process_detail_entries`（`prepare_detail_entries` 之后）；`TorrentSelected`——`javdb/spider/detail/runner.py` `persist_parsed_detail_result`（`if plan.should_include_in_report:` 内，每条 magnet 一个）；`TorrentQueued`——`javdb/integrations/qb/uploader/service.py` `run_uploader`（`_record_queued_acquisition` 成功后）；`TorrentCompleted`——`javdb/ops/reconcile/service.py` `apply_cleanup_completed`（`mark_state` 后，`session_id` 从 `AcquisitionOutcome` 行恢复）。所有 emit 均为 best-effort——emit 抛出时管道步骤仍成功。影子投影：新 reports DB 表 `AcquisitionOutcomeShadow`（D1 迁移 `2026_06_10_add_acquisition_outcome_shadow.sql` + SQLite `_REPORTS_DDL` 镜像）、`AcquisitionOutcomeShadowRepo`、`AcquisitionOutcomeShadowConsumer`（消费 `TorrentQueued` + `TorrentCompleted`，跳过无 `entity_id` 的事件）；通过 `--consumer {run_event_summary,acquisition_outcome_shadow}` 标志接入 `apps/cli/ops/events.py`。交叉验证：`compare_shadow_to_authoritative()` 位于 `javdb/ops/reconcile/shadow_validate.py` + CLI `apps/cli/ops/shadow_validate.py`——只读，对比影子与权威 `AcquisitionOutcome`（operations DB），将权威的更细粒度状态粗映射到 `queued`/`completed`，避免 `in_library` 等下游状态误报。哨兵**未**改接事件——确认映射不干净（哨兵在解析时需要原始逐记录 `MovieEntry` 字段访问以计算逐字段填充率；事件载荷无法承载该粒度）；保留在 `javdb/spider/fetch/index.py` / `index_parallel.py` 的 piggyback（符合 D6 修订）。`AcquisitionOutcome` 切换推迟/门控，以影子在生产中证明可靠为条件。同时修复了一个潜在的 storage↔events 导入循环（`pipeline_event_repo` 不再在模块加载时导入 `javdb.pipeline.events`；改用局部 `_utc_now_iso` + 懒加载 `PipelineEventRecord`）。验证：所有 Phase-2 单元测试通过；现有 event-spine + reconcile + pipeline 测试通过；完整单元+集成测试套件无 facade/pipeline 回归（剩余失败为预先存在的环境问题——无凭证 worktree 中的 401 认证错误、本地 Rust wheel `ImportError`）。
