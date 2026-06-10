@@ -8,12 +8,9 @@ Href the commit path produces.
 
 import json
 
-from javdb.storage.db import (
-    db_create_report_session,
-    db_stage_history_write,
-    db_commit_session_history,
-    get_db,
-)
+from javdb.storage.db import get_db
+from javdb.storage.db._db_reports import db_create_report_session
+from javdb.storage.db._db_history_write import db_stage_history_write, db_commit_session_history
 
 
 def test_committed_actor_links_are_absolute():

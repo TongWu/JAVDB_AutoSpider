@@ -20,7 +20,9 @@ import inspect
 
 import pytest
 
-import javdb.storage.db as db
+import javdb.storage.db as db  # infra (get_active_write_mode); facade fns now private
+import javdb.storage.db._db_history_write as _db_history_write
+import javdb.storage.db._db_operations as _db_operations
 
 
 # (name, positional args that satisfy every *other* required parameter)
@@ -43,13 +45,35 @@ _CASES = [
 
 _NAMES = [name for name, _ in _CASES]
 
+# ADR-046 P4 retired the public ``db_*`` facade re-exports; these write helpers
+# now live only in their private ``_db_*`` modules. Resolve each from its home
+# module instead of the package namespace.
+_MODULE_BY_NAME = {
+    "db_replace_rclone_inventory": _db_operations,
+    "db_swap_rclone_inventory": _db_operations,
+    "db_append_pikpak_history": _db_operations,
+    "db_append_dedup_record": _db_operations,
+    "db_mark_records_deleted": _db_operations,
+    "db_mark_orphan_records": _db_operations,
+    "db_open_rclone_staging": _db_operations,
+    "db_append_rclone_staging": _db_operations,
+    "db_merge_rclone_inventory_from_stage": _db_operations,
+    "db_upsert_align_no_exact_match": _db_operations,
+    "db_batch_update_last_visited": _db_history_write,
+    "db_batch_update_movie_actors": _db_history_write,
+}
+
+
+def _resolve_write_fn(name):
+    return getattr(_MODULE_BY_NAME[name], name)
+
 
 @pytest.mark.parametrize("name", _NAMES)
 def test_session_id_is_keyword_only_without_default(name):
     """``session_id`` must be keyword-only with no default — the sentinel
     fallback is gone, so the parameter can never silently resolve to the
     process-global active session id."""
-    fn = getattr(db, name)
+    fn = _resolve_write_fn(name)
     sig = inspect.signature(fn)
     assert "session_id" in sig.parameters, (
         f"{name} must expose a session_id parameter"
@@ -67,7 +91,7 @@ def test_session_id_is_keyword_only_without_default(name):
 def test_omitting_session_id_raises_type_error(name, args):
     """Omitting ``session_id`` raises ``TypeError`` at call binding time —
     no untagged row is ever written."""
-    fn = getattr(db, name)
+    fn = _resolve_write_fn(name)
     with pytest.raises(TypeError) as exc:
         fn(*args)
     assert "session_id" in str(exc.value), (
@@ -97,7 +121,7 @@ def test_explicit_none_session_id_raises_value_error_in_pending_mode(name, args)
     """``session_id=None`` under pending mode raises ``ValueError`` before any
     row is written — a None session must not bypass staging into a live row."""
     assert db.get_active_write_mode() == "pending"
-    fn = getattr(db, name)
+    fn = _resolve_write_fn(name)
     with pytest.raises(ValueError) as exc:
         fn(*args, session_id=None)
     assert "session_id" in str(exc.value), (

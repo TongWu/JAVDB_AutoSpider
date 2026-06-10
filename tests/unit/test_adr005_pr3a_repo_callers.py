@@ -417,15 +417,10 @@ def test_run_service_main_saves_spider_stats_through_stats_repo(monkeypatch, tmp
     monkeypatch.setattr(db_connection, "verify_d1_schema_versions", lambda: None)
     monkeypatch.setattr(db_pkg, "verify_d1_schema_versions", lambda: None)
     monkeypatch.setattr(db_reports, "db_create_report_session", lambda **_: "sess-1")
-    monkeypatch.setattr(db_pkg, "db_create_report_session", lambda **_: "sess-1")
     monkeypatch.setattr(
         db_reports, "db_find_in_progress_session_ids_for_run_csv", lambda *_args, **_kwargs: []
     )
-    monkeypatch.setattr(
-        db_pkg, "db_find_in_progress_session_ids_for_run_csv", lambda *_args, **_kwargs: []
-    )
     monkeypatch.setattr(db_reports, "db_get_session_status", lambda *_: ("audit",))
-    monkeypatch.setattr(db_pkg, "db_get_session_status", lambda *_: ("audit",))
     monkeypatch.setattr(db_session, "_resolve_write_mode", lambda *_: "audit")
     monkeypatch.setattr(db_pkg, "_resolve_write_mode", lambda *_: "audit")
     monkeypatch.setattr(db_session, "set_active_run_identity", lambda *_: None)

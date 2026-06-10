@@ -25,7 +25,7 @@ from javdb.spider.services.dedup import (
     cleanup_deleted_records,
     _raw_csv_read,
 )
-from javdb.storage.db import db_replace_rclone_inventory, db_load_dedup_records
+from javdb.storage.db._db_operations import db_replace_rclone_inventory, db_load_dedup_records
 from javdb.spider.detail.runner import _dedup_log_variant_label
 
 

@@ -2,16 +2,16 @@
 
 | 字段       | 值                                                                    |
 | ---------- | --------------------------------------------------------------------- |
-| **状态**   | Accepted —— Phase 1 已实现 2026-06-02（分支 `adr046-p1-history-write-seam`）；Phases 2–5 待做。见 IMP-ADR046-01 |
+| **状态**   | Completed —— 全部阶段（1–5）已实现并通过验证；Phase 4（私有化 `db_*`）于 2026-06-10 落地。文件夹已归档至 `_archive/`（2026-06-10）。 |
 | **日期**   | 2026-06-02                                                           |
 | **作者**   | Ted                                                                  |
-| **关联**   | [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.zh.md)（前序——拆掉了 `db.py` 巨石、引入 Repo 模式，但把 `db_*` 留作公开）、[ADR-019](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.zh.md)（用 transition 校验器把 session **commit 生命周期**做深）、[ADR-014](../_archive/ADR-014-Storage-Cli-Layering/ADR-014-storage-cli-layering.zh.md)（storage/CLI 分层） |
+| **关联**   | [ADR-005](../ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.zh.md)（前序——拆掉了 `db.py` 巨石、引入 Repo 模式，但把 `db_*` 留作公开）、[ADR-019](../ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.zh.md)（用 transition 校验器把 session **commit 生命周期**做深）、[ADR-014](../ADR-014-Storage-Cli-Layering/ADR-014-storage-cli-layering.zh.md)（storage/CLI 分层） |
 
-> 源自 2026-05-29 架构评审（候选 C ——“让 Repo 变深；退役 `db_*` 函数门面”）：[architecture-review-2026-05-29.zh.html](../architecture/architecture-review-2026-05-29.zh.html)。2026-06-02 的复验确认该候选仍然存活，并将其切分为下文的分阶段计划。
+> 源自 2026-05-29 架构评审（候选 C ——“让 Repo 变深；退役 `db_*` 函数门面”）：[architecture-review-2026-05-29.zh.html](../../architecture/architecture-review-2026-05-29.zh.html)。2026-06-02 的复验确认该候选仍然存活，并将其切分为下文的分阶段计划。
 
 ## 背景
 
-[ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.zh.md) 通过把 4,497 行的 `db.py` 巨石**重分布**到 `_` 前缀的 shell 模块（`javdb/storage/db/_db_history_write.py`、`_db_reports.py`、`_db_rollback.py`、`_db_operations.py` …）来删除它，并引入仓库类（`HistoryRepo`、`OperationsRepo` …）作为带类型的接口。但它**没有**把这些被搬迁的模块级函数改为私有。于是今天的现状是：
+[ADR-005](../ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.zh.md) 通过把 4,497 行的 `db.py` 巨石**重分布**到 `_` 前缀的 shell 模块（`javdb/storage/db/_db_history_write.py`、`_db_reports.py`、`_db_rollback.py`、`_db_operations.py` …）来删除它，并引入仓库类（`HistoryRepo`、`OperationsRepo` …）作为带类型的接口。但它**没有**把这些被搬迁的模块级函数改为私有。于是今天的现状是：
 
 - **约 60 个公开 `db_*` 函数**散落在（约定私有的）`_db_*.py` 模块里，并经 `javdb/storage/db/__init__.py` 重新导出、或被直接 import。
 - **Repo 是浅薄的转发壳。** `HistoryRepo`/`OperationsRepo`/`StatsRepo`/`SessionLifecycleRepo` 大多逐方法转发给 `db_*` 函数；于是**每个写操作都有两条公开入口**（repo 方法 + `db_*` 函数），而且 **~42 处生产调用 + ~40 个测试文件**直接绑定到 `db_*` 层、而非 repo。
@@ -19,7 +19,7 @@
 
 真正引发 bug 的就是这个 session 全局态。`HistoryRepo` 的 `batch_update_last_visited` 和 `batch_update_movie_actors` 在 spider 调用树深处调用 `get_active_session_id()`（`javdb/storage/history_manager.py:228`、`javdb/spider/detail/runner.py:1165`）。如果全局未设置、过期、或与当前工作单元不匹配，写操作会静默落到错误的 session —— 这正是 session/rollback bug 簇背后的失败模式（孤儿 pending 行、归属错乱的 history）。这是**环境态（ambient state）**穿过了一个本该显式的接缝。
 
-[ADR-019](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.zh.md) 已经把其中一半做深了：session 的 **commit 生命周期**现在经过一个 `transition()` 校验器，使非法状态转移无法表达。剩下的泄漏是 **session *身份***，它仍然是环境态。
+[ADR-019](../ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.zh.md) 已经把其中一半做深了：session 的 **commit 生命周期**现在经过一个 `transition()` 校验器，使非法状态转移无法表达。剩下的泄漏是 **session *身份***，它仍然是环境态。
 
 注：commit/rollback 编排（`javdb/storage/sessions/commit.py`、`javdb/storage/rollback/core.py`）虽然直接调用 `db_commit_session_history` / `db_rollback_session`，但**已经传入显式 `session_id`** —— 所以它不属于环境态问题，只属于更宽泛的“两条入口”重复问题。
 
@@ -65,7 +65,7 @@
 | **Phase 1 —— History 写接缝** ✅ *(已实现 2026-06-02)* | IMP-ADR046-01 | `HistoryRepo(*, db_path=None, session_id=None)`；写方法用 `self._session_id`、缺失即抛错；从 `batch_update_last_visited` / `batch_update_movie_actors` 移除 `get_active_session_id()` 回退；迁移 ~6 个 History 写点 + 2 个 CLI 写点；测试（无 session 写即抛错；读仍可无 session 工作） | 下面全部 |
 | Phase 2 —— Operations/Stats 写接缝 | IMP-ADR046-02 | 给 `OperationsRepo` 写绑定 `session_id`（照搬 Phase 1）；`StatsRepo` 已全显式。*（2026-06-03 重界定：删全局移至 Phase 5——它有 ~17 处跨模块读取方。）* | —— |
 | Phase 3 —— 编排改道走 repo | IMP-ADR046-03 | `sessions/commit.py` + `rollback/core.py` 调用 repo，而非直接调 `db_commit_session_history` / `db_rollback_session` | —— |
-| Phase 4 —— 私有化 `db_*` | IMP-ADR046-04 | 从 `__init__.py`/`__all__` 撤销 `db_*` 重导出（有 repo 等价物的门面函数）；先补 7 个缺失 wrapper；迁移剩余调用方 + 测试 | —— |
+| **Phase 4 —— 私有化 `db_*`** ✅ *(已实现 2026-06-10)* | [IMP-ADR046-04](IMP-ADR046-04-privatize-db-facade.md) | 从 `__init__.py`/`__all__` 撤销 `db_*` 重导出（Task 3）；Task 0 repo wrapper 已在 P3 补齐；Task 1 将最后一个生产调用方（`align_inventory_with_moviehistory.py`）改道走 repo；Task 2 迁移 ~40 个测试文件到私有模块导入；2 个动态访问测试已修；repo 成为唯一的公开读写接缝；infra 保持公开 | —— |
 | **Phase 5 —— 删除全局 session 机制** ✅ *(已实现 2026-06-04)* | [IMP-ADR046-05](IMP-ADR046-05-delete-global-session.md) | 迁移 `get_active_session_id()` 剩余 ~17 个读取方（爬虫 runtime、rclone/pikpak/notify、ops/sentinel、align 工具、`SessionLifecycleRepo.get_active_session_id`）+ 3 个 setter 到显式 session；然后从 `_db_session.py` 删除 `_active_session_id_value` / `_SESSION_ID_SENTINEL` / `_resolve_session_id` / `get`+`set_active_session_id` | —— |
 
 ### 明确的非目标（YAGNI）
@@ -90,10 +90,10 @@
 
 ## 参考
 
-- [ADR-005 —— db.py 退役与 Repo 模式](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.zh.md)
-- [ADR-019 —— Session 生命周期权威](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.zh.md)
-- [ADR-014 —— Storage/CLI 分层](../_archive/ADR-014-Storage-Cli-Layering/ADR-014-storage-cli-layering.zh.md)
-- 2026-05-29 架构评审（候选 C）：[architecture-review-2026-05-29.zh.html](../architecture/architecture-review-2026-05-29.zh.html)
+- [ADR-005 —— db.py 退役与 Repo 模式](../ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.zh.md)
+- [ADR-019 —— Session 生命周期权威](../ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.zh.md)
+- [ADR-014 —— Storage/CLI 分层](../ADR-014-Storage-Cli-Layering/ADR-014-storage-cli-layering.zh.md)
+- 2026-05-29 架构评审（候选 C）：[architecture-review-2026-05-29.zh.html](../../architecture/architecture-review-2026-05-29.zh.html)
 
 ## 状态日志
 
@@ -104,3 +104,4 @@
 - 2026-06-03：**Phase 2、3 已实现 + Phase 4 Task 0**，在 `adr046-phase234-imps`（subagent 驱动；每个 phase 都做了 spec + 质量双审）。**P2** —— Operations/Stats 写绑定 session；质量审**抓到一个真实回归**并已修：IMP-02 Task 1.4 的*强制* `_require_session` 对**可空** `SessionId` 表（`DedupRecords` / `PikpakHistory`）是错的——这些表在独立任务（WeeklyDedup、ad-hoc PikPak）里合法地无 session 运行，强制会**崩溃** WeeklyDedup 自愈、**静默丢失** PikPak/dedup 行。改为**非抛错**的 `_resolve_session`（显式 > 绑定 > None）；`_require_session` 从 `OperationsRepo` 移除（History 的 NOT-NULL 守卫保留）。**P3** —— commit/rollback 改道走 `HistoryRepo` / `SessionLifecycleRepo`；`rollback/core.py` 的 `_self` monkeypatch 接缝用"委托 repo 的模块级函数"保住（审：SHIP）。**P4 Task 0** —— 补齐 7 个缺失的 repo wrapper（纯新增；`__init__` 门面未动）。**经决定推迟：** Phase 4 bulk（私有化 `db_*` + 迁移 ~3 生产调用方 + ~36 测试文件）与 Phase 5（删全局）。全量 unit 绿，仅剩一个既有的 stale-`.so` 失败（`test_rust_movie_index_entry::…video_code_family`）。
 - 2026-06-04：**Phase 5 IMP 已写出**（[IMP-ADR046-05](IMP-ADR046-05-delete-global-session.md)）并开始执行——**P5 先于 P4**（IMP-04 称 Phase 4 为依赖 Phase 5 重塑调用方集合的"finale"）。基于逐读取方 call-flow 地图（~11 个生产读/写全局 session-id 的点）。设计决策：**DD-1** 爬虫 detail 路径用**纯参数穿透**（而非把 session 挂到 `SpiderRuntime`——后者依赖环境态 `get_active_runtime()`）；**DD-2** rclone 的"独立 vs 继承"探针改为显式 `session_id=None` 入口参数；**DD-3** email/sentinel/dedup 穿透可选 session 参数（可空表按 Phase-2 的 `_resolve_session` 约定保持非抛错）；**DD-4** 范围**仅 session-id 访问器**——共享锁 `_active_session_id_lock`、run-identity、write-mode、ID 生成器保留；**DD-5** 全局**最后删**（Task 10），保证每次中间提交都绿；**DD-6** `javdb/legacy/` 是死代码（仅回滚用）→ 其死路径读取改为 `session_id=None`。`javdb/infra/csv_writer.py` 自带的 `_active_session_id` 是另一套机制，不在范围内。
 - 2026-06-04：**Phase 5 已实现**，在 `adr046-phase5-delete-global`（subagent 驱动；T1 + Batch 1/2/3 各做 spec+质量双审；T10 删除由主控内联完成）。所有生产读取方/setter 现在都显式穿透 session：detail 路径用**纯参数穿透**（DD-1）；rclone 的"独立 vs 继承"探针改为显式 `session_id=None`（DD-2；已验证无 in-pipeline 调用方依赖继承）；pikpak/email/sentinel/dedup 的可空写保持非抛错（DD-3）；align 用 `args.session_id`；legacy 死路径 → `None`（DD-6）。移除了无用的 `SessionLifecycleRepo.get_active_session_id` wrapper；~13 个测试文件迁移脱离全局；随后从 `_db_session.py` 及其 `__init__` 重导出删除 `get`/`set_active_session_id` + `_active_session_id_value` + `_SESSION_ID_SENTINEL` + `_resolve_session_id`，并加导入缺失回归守卫（`test_adr046_p5_global_session_retired.py`）。共享锁 + run-identity + write-mode + ID 生成器保留（DD-4）。验证：全量 unit **3687 passed**（1 个既有 stale-`.so` 失败）、smoke **175 passed**、integration 收集干净、ruff 干净。两点流程记录：质量审抓到一次 worktree 污染（agent 误用 `git show` 复活了 rename 前的 `db_*.py` 孤儿 + 删了 2 个架构文档——已清理，从未提交）；以及一个 T3 余波（smoke 桩 lambda 需接受新的 `session_id` kwarg——已修）。**Phase 4（私有化 `db_*`）为剩余工作。**
+- 2026-06-10：**Phase 4 已实现**，在分支 `claude/pedantic-hamilton-9d8be3`（subagent 驱动收尾）。`javdb/storage/db/__init__.py` 中的公开 `db_*` 门面重导出已全部移除（按模块分块的 import + `__all__`）。**仓库类（Repo）现在是唯一的公开读写路径**；infra 保持公开：`get_db`、`get_local_sqlite_db`、`close_db`、`current_backend`、`init_db`、`SCHEMA_VERSION`、各 `*_DB_PATH` 常量、`generate_session_id`/`generate_integer_id`、session 状态 setter/getter、迁移辅助函数、`SESSION_ID_PATTERN`、`db_session`。任务细分：Task 0（7 个 repo wrapper）在 Phase 2/3 已补齐；Task 1 将最后一个生产调用方（`javdb/migrations/tools/align_inventory_with_moviehistory.py`）改道走 repo；Task 2 迁移 ~40 个测试文件脱离门面（行为测试/门面函数测试改为私有模块导入）；Task 3 撤销重导出。两个动态访问测试（`test_mandatory_session_id`、`test_adr005_pr3a_repo_callers`）也已迁移。验证：全量 unit+integration 套件显示**零门面访问回归**；仅剩的失败为既有/环境问题（无凭证 worktree 中的 HTTP 401；未构建本地 Rust wheel 引发的 `ImportError: RustProxyBanManager/RustProxyPool`——在 main 上亦失败）。`python -c "import javdb.storage.db as d; assert not [n for n in d.__all__ if n.startswith('db_') and n!='db_session']"` 通过；grep 确认不再有 `from javdb.storage.db import db_*` 调用方。**ADR-046 现已 Completed。全部阶段（1–5）完成，文件夹已归档至 `_archive/`（2026-06-10）。**

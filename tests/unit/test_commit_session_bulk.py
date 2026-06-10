@@ -15,7 +15,9 @@ from typing import Dict, List, Tuple
 
 import pytest
 
-from javdb.storage.db import get_db, db_create_report_session, db_stage_history_write, db_commit_session_history
+from javdb.storage.db import get_db
+from javdb.storage.db._db_reports import db_create_report_session
+from javdb.storage.db._db_history_write import db_stage_history_write, db_commit_session_history
 import javdb.storage.db._db_history_write as _db_hw
 
 

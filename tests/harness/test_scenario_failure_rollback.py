@@ -1,7 +1,8 @@
 """ADR-037 Phase 2: a failed run rolls back its staged pending writes."""
 
 from javdb.storage import db as _db
-from javdb.storage.db import db_rollback_session, get_db
+from javdb.storage.db import get_db
+from javdb.storage.db._db_rollback import db_rollback_session
 from javdb.storage.sessions.lifecycle import get_state
 
 from tests.harness.pipeline_harness import FakeQBConfig, PipelineScenario

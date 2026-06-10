@@ -25,9 +25,8 @@ def test_mark_orphan_records_session_less_persists_null_session():
     # Imported inside the test so the autouse ``_isolate_sqlite`` fixture's
     # temp-DB path patch is in effect (a module-level import would bind the
     # pre-fixture production path and read the wrong DB).
-    from javdb.storage.db import (
-        db_append_dedup_record, get_db, OPERATIONS_DB_PATH,
-    )
+    from javdb.storage.db import get_db, OPERATIONS_DB_PATH
+    from javdb.storage.db._db_operations import db_append_dedup_record
 
     db_append_dedup_record(
         {

@@ -1,5 +1,7 @@
 # IMP-ADR046-04: ADR-046 Phase 4 — Privatize the `db_*` Facade Implementation Plan
 
+> **Status: ✅ Implemented 2026-06-10** (branch `claude/pedantic-hamilton-9d8be3` — facade re-exports dropped; repos are the sole public read/write seam; 0 facade regressions in the full suite).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Related:** [ADR-046](ADR-046-retire-db-facade.md) — **Phase 4 (the finale)**. Depends on Phases 2, 3, and 5 having reduced the live caller set. The boundary is fixed by the grilling decision: **privatize only the read/write *facade* functions that have a repo equivalent; KEEP public the infrastructure** (`get_db`, `get_local_sqlite_db`, `close_db`, `current_backend`, `init_db`, `SCHEMA_VERSION`, the `*_DB_PATH` constants, `generate_session_id`/`generate_integer_id`, the session-state setters/getters, migration helpers).

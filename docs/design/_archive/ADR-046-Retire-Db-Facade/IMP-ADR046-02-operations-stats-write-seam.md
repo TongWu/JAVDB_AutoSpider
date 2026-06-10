@@ -1,5 +1,7 @@
 # IMP-ADR046-02: ADR-046 Phase 2 — Operations/Stats Write Seam (session-bound) Implementation Plan
 
+> **Status: ✅ Implemented 2026-06-03** (Operations/Stats session-bound writes; merged PR #164).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Related:** [ADR-046](ADR-046-retire-db-facade.md) — **Phase 2 (re-scoped)**. Depends on Phase 1 ([IMP-ADR046-01](IMP-ADR046-01-history-write-seam.md)) for the constructor-`session_id` pattern — but Operations uses a **non-raising** `_resolve_session` (explicit > bound > None), **not** Phase 1's raising `_require_session`, because its `SessionId` columns are nullable. **Scope was narrowed (see ADR-046 roadmap amendment):** this phase only binds the session on `OperationsRepo`/`StatsRepo` writes; **deleting the global session machinery moved to a new Phase 5** (the global has ~17 readers across the codebase — too large to be a tail of this phase).

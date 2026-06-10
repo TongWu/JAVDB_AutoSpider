@@ -2142,7 +2142,9 @@ def test_db_stage_history_write_supplies_explicit_seq():
     because production writes go back through AUTOINCREMENT (and that's
     exactly the silent-residual scenario R2 was filed against).
     """
-    from javdb.storage.db import get_db, HISTORY_DB_PATH, db_stage_history_write, db_create_report_session, SESSION_ID_PATTERN
+    from javdb.storage.db import get_db, HISTORY_DB_PATH, SESSION_ID_PATTERN
+    from javdb.storage.db._db_history_write import db_stage_history_write
+    from javdb.storage.db._db_reports import db_create_report_session
 
     # The autouse `_isolate_sqlite` conftest fixture has already pointed
     # HISTORY_DB_PATH at a temp file and run init_db.  Stage one
@@ -2177,7 +2179,9 @@ def test_db_stage_history_write_supplies_explicit_seq():
 
 def test_db_stage_history_write_torrent_supplies_explicit_seq():
     """Same as above for the torrent staging path."""
-    from javdb.storage.db import get_db, HISTORY_DB_PATH, db_stage_history_write, db_create_report_session, SESSION_ID_PATTERN
+    from javdb.storage.db import get_db, HISTORY_DB_PATH, SESSION_ID_PATTERN
+    from javdb.storage.db._db_history_write import db_stage_history_write
+    from javdb.storage.db._db_reports import db_create_report_session
 
     db_create_report_session(
         report_type="DailyReport",

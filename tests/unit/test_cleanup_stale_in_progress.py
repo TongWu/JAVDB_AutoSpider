@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 import apps.cli.db.cleanup_stale_in_progress as cleanup_cli
-from javdb.storage.db import get_db, db_create_report_session
+from javdb.storage.db import get_db
+from javdb.storage.db._db_reports import db_create_report_session
 
 
 def _make_session(
