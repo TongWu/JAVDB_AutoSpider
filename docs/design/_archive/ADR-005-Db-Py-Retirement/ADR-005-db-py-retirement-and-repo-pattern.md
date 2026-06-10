@@ -65,7 +65,7 @@ PR-1 (Repo classes) ✅ shipped: `HistoryRepo`, `OperationsRepo`, `StatsRepo`, `
 
 - **2026-05-29 amendment 8**: **Amendment-2's "global eliminated" claim was incomplete; completion tracked in [ADR-032](../../ADR-032-Mandatory-Session-Binding/ADR-032-mandatory-session-binding.md).** Amendment-2 asserted D5's goal (eliminate the `db_session._active` global) was satisfied by per-method `session_id`. In practice the `_SESSION_ID_SENTINEL` global fallback still survives in `_db_operations.py` (~10 functions) and two `_db_history_write.py` batch functions, so some writes silently fall back to the global. ADR-032 completes the goal (makes `session_id` mandatory) and consolidates the dual `db_*` / Repo interface. Per-method binding is kept; constructor binding stays rejected.
 
-- 2026-06-02: Direction continued by [ADR-046](../../ADR-046-Retire-Db-Facade/ADR-046-retire-db-facade.md) — the Repo becomes the deep storage seam and `db_*` is retired in phases; Phase 1 makes History writes session-bound (no process-global).
+- 2026-06-02: Direction continued by [ADR-046](../ADR-046-Retire-Db-Facade/ADR-046-retire-db-facade.md) — the Repo becomes the deep storage seam and `db_*` is retired in phases; Phase 1 makes History writes session-bound (no process-global).
 
 ---
 

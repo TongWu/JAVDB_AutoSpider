@@ -4,7 +4,8 @@ from datetime import datetime as real_datetime
 from datetime import timezone as real_timezone
 
 import javdb.storage.db._db_reports as db_reports
-from javdb.storage.db import db_create_report_session, get_db
+from javdb.storage.db import get_db
+from javdb.storage.db._db_reports import db_create_report_session
 
 
 def test_create_report_session_defaults_created_at_to_utc(_isolate_sqlite, monkeypatch):

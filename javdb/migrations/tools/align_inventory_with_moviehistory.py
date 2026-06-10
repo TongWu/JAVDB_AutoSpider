@@ -70,14 +70,11 @@ from javdb.pipeline.policies import (
 )
 from javdb.infra.config import cfg
 from javdb.storage.db import (
-    db_load_history,
     init_db,
-    db_delete_align_no_exact_match,
-    db_load_align_no_exact_match_codes,
-    db_load_rclone_inventory,
-    db_upsert_align_no_exact_match,
     SESSION_ID_PATTERN,
 )
+from javdb.storage.repos.history_repo import HistoryRepo
+from javdb.storage.repos.operations_repo import OperationsRepo
 
 
 def _audit_retired_stub(*args, **kwargs):
@@ -242,8 +239,10 @@ class _BatchedHistoryWriter:
         if self._upsert_rows:
             db_upsert_history_batch(self._upsert_rows)
             self._upsert_rows = []
-        for code in self._delete_codes:
-            db_delete_align_no_exact_match(code)
+        if self._delete_codes:
+            ops_repo = OperationsRepo()
+            for code in self._delete_codes:
+                ops_repo.delete_align_no_exact_match(code)
         self._delete_codes = []
         if n_up:
             self.flushed_rows += n_up
@@ -615,13 +614,13 @@ def run_alignment(args: argparse.Namespace) -> int:
         )
         raise SystemExit(1)
     init_db(force=True)
-    history = db_load_history()
-    inventory = db_load_rclone_inventory()
+    history = HistoryRepo().load_history()
+    inventory = OperationsRepo().load_rclone_inventory()
     only_codes = []
     if args.codes:
         only_codes = [c.strip() for c in args.codes.split(',') if c.strip()]
 
-    no_match_codes = db_load_align_no_exact_match_codes()
+    no_match_codes = OperationsRepo().load_align_no_exact_match_codes()
     if no_match_codes:
         logger.info("Skipping %d previously unmatched codes", len(no_match_codes))
     missing_codes = compute_missing_codes(
@@ -804,10 +803,9 @@ def run_alignment(args: argparse.Namespace) -> int:
                     message=data.get('message', ''),
                 ))
                 if not args.dry_run:
-                    db_upsert_align_no_exact_match(
+                    OperationsRepo(session_id=args.session_id).upsert_align_no_exact_match(
                         video_code,
                         reason=data.get('message', ''),
-                        session_id=args.session_id,
                     )
                 logger.info("[%s][%s] No exact match for %s", idx_str, worker_label, video_code)
                 _log_per_worker_cap_after_movie_line(result)
@@ -941,8 +939,8 @@ def run_alignment(args: argparse.Namespace) -> int:
                     )
                 )
                 if not args.dry_run:
-                    db_upsert_align_no_exact_match(
-                        code, session_id=args.session_id,
+                    OperationsRepo(session_id=args.session_id).upsert_align_no_exact_match(
+                        code,
                     )
                 if not (use_proxy and PROXY_POOL):
                     movie_sleep_mgr.sleep()

@@ -1,5 +1,7 @@
 # IMP-ADR046-03: ADR-046 Phase 3 — Route commit/rollback orchestration through repos Implementation Plan
 
+> **Status: ✅ Implemented 2026-06-03** (commit/rollback rerouted through repos; merged PR #164).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Related:** [ADR-046](ADR-046-retire-db-facade.md) — **Phase 3**. The repo methods this routes to ALL already exist (no new repo methods needed): `HistoryRepo.commit_session` / `resume_finalizing_session` / `pending_session_stats`, `SessionLifecycleRepo.rollback_session`.

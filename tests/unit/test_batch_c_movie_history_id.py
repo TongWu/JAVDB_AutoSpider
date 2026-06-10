@@ -24,12 +24,11 @@ sys.path.insert(0, project_root)
 
 from javdb.storage.db import (
     get_db,
-    db_commit_session_history,
-    db_stage_history_write,
-    db_create_report_session,
     generate_integer_id as _generate_integer_id,
     _INT_ID_EPOCH_BASE_MS,
 )
+from javdb.storage.db._db_reports import db_create_report_session
+from javdb.storage.db._db_history_write import db_stage_history_write, db_commit_session_history
 from javdb.storage.dual_connection import (
     APPLICATION_GENERATED_ID_TABLES,
     DualConnection,

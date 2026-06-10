@@ -12,12 +12,9 @@ import pathlib
 import sqlite3
 
 import javdb.storage.db as _dbpkg
-from javdb.storage.db import (
-    db_create_report_session,
-    db_stage_history_write,
-    db_commit_session_history,
-    get_db,
-)
+from javdb.storage.db import get_db
+from javdb.storage.db._db_reports import db_create_report_session
+from javdb.storage.db._db_history_write import db_stage_history_write, db_commit_session_history
 from javdb.storage.repos.metadata_repo import MetadataRepo
 
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]

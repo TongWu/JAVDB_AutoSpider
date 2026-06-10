@@ -241,12 +241,27 @@ def test_run_alignment_skips_empty_auxiliary_reports(monkeypatch, temp_dir):
         def get_supporting_actors_json(self):
             return '[]'
 
-    monkeypatch.setattr(mod, 'db_load_history', lambda: {})
-    monkeypatch.setattr(mod, 'db_load_rclone_inventory', lambda: {
-        'ABC-123': [{'VideoCode': 'ABC-123'}],
-    })
+    class _FakeHistoryRepo:
+        def __init__(self, **_kw):
+            pass
+        def load_history(self, **_kw):
+            return {}
+
+    class _FakeOperationsRepo:
+        def __init__(self, **_kw):
+            pass
+        def load_rclone_inventory(self):
+            return {'ABC-123': [{'VideoCode': 'ABC-123'}]}
+        def load_align_no_exact_match_codes(self):
+            return set()
+        def upsert_align_no_exact_match(self, *args, **kwargs):
+            pass
+        def delete_align_no_exact_match(self, *args, **kwargs):
+            pass
+
+    monkeypatch.setattr(mod, 'HistoryRepo', _FakeHistoryRepo)
+    monkeypatch.setattr(mod, 'OperationsRepo', _FakeOperationsRepo)
     monkeypatch.setattr(mod, 'init_db', lambda *args, **kwargs: None)
-    monkeypatch.setattr(mod, 'db_load_align_no_exact_match_codes', lambda: set())
     monkeypatch.setattr(mod.spider_state, 'setup_proxy_pool', lambda **kwargs: None)
     monkeypatch.setattr(mod.spider_state, 'initialize_request_handler', lambda: None)
     monkeypatch.setattr(mod, 'cfg', lambda key, default=None: temp_dir if key == 'REPORTS_DIR' else default)
@@ -276,6 +291,7 @@ def test_run_alignment_skips_empty_auxiliary_reports(monkeypatch, temp_dir):
 
     args = SimpleNamespace(
         dry_run=True,
+        session_id=None,
         limit=0,
         codes='',
         output_dir=temp_dir,
@@ -346,11 +362,11 @@ def test_compute_missing_codes_skip_and_only_codes_combined():
 
 def test_db_align_no_exact_match_roundtrip(temp_dir):
     import sqlite3
-    from javdb.storage.db import (
+    from javdb.storage.db._db_migrations import _OPERATIONS_DDL
+    from javdb.storage.db._db_operations import (
         db_upsert_align_no_exact_match,
         db_load_align_no_exact_match_codes,
         db_delete_align_no_exact_match,
-        _OPERATIONS_DDL,
     )
 
     db_path = os.path.join(temp_dir, 'ops_test.db')

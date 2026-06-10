@@ -1,5 +1,7 @@
 # IMP-ADR046-05: ADR-046 Phase 5 — Delete the Global Session-ID Machinery Implementation Plan
 
+> **Status: ✅ Implemented 2026-06-04** (global session machinery deleted; merged PR #167).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Related:** [ADR-046](ADR-046-retire-db-facade.md) — **Phase 5**. Builds on Phases 1–3 (repos are session-bound: `HistoryRepo`/`OperationsRepo`/`StatsRepo` resolve session explicitly). **Phase 5 runs BEFORE Phase 4** (the finale): IMP-04 explicitly depends on Phase 5 having reduced the live caller set. This phase removes the *ambient* session-identity global; Phase 4 ([IMP-ADR046-04](IMP-ADR046-04-privatize-db-facade.md)) then privatizes the `db_*` read/write facade.
