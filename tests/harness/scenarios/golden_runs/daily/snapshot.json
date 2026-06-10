@@ -10,7 +10,15 @@
     }
   ],
   "events": [
-    "RunStarted"
+    "RunStarted",
+    "MovieDiscovered",
+    "MovieDiscovered",
+    "MovieSelected",
+    "MovieSelected",
+    "TorrentSelected",
+    "TorrentSelected",
+    "TorrentQueued",
+    "TorrentQueued"
   ],
   "movies": [
     {

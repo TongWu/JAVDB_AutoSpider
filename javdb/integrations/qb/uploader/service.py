@@ -1,3 +1,4 @@
+import json
 import requests
 import logging
 from datetime import datetime
@@ -366,6 +367,7 @@ from javdb.integrations.qb.client import (
     is_torrent_exists,
 )
 from javdb.ops.reconcile.service import record_queued as _record_acquisition_queued
+from javdb.pipeline.events import emit as _emit_event  # ADR-036 Phase 2
 
 
 def _wrap_session_as_client(session, use_proxy=False):
@@ -739,6 +741,19 @@ def run_uploader(options: QbUploaderOptions) -> QbUploaderResult:
                 if new_hash:
                     existing_hashes.add(new_hash)
                 _record_queued_acquisition(torrent, options.session_id)
+                # ADR-036 Phase 2: emit TorrentQueued after successful qB add.
+                # Best-effort — _emit_event never raises; pipeline is unaffected.
+                _emit_event(
+                    "TorrentQueued",
+                    session_id=options.session_id or "",
+                    entity_type="torrent",
+                    entity_id=new_hash,
+                    payload=json.dumps({
+                        "href": torrent.get("href"),
+                        "video_code": torrent.get("video_code"),
+                        "category": torrent.get("type"),
+                    }),
+                )
             else:
                 failed_count += 1
 

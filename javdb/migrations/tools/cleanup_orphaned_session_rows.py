@@ -92,6 +92,7 @@ HISTORY_FLAT = [
 EXCLUDED_APPEND_ONLY = [
     (REPORTS, "PipelineEvent", "session_id"),
     (REPORTS, "RunEventSummary", "session_id"),
+    (REPORTS, "AcquisitionOutcomeShadow", "session_id"),
     (REPORTS, "ParseRunFieldFill", "session_id"),
     (REPORTS, "OpsIncidents", "session_id"),
     (REPORTS, "OpsIncidentFeatures", "session_id"),

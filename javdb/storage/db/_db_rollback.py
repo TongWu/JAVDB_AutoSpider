@@ -91,6 +91,8 @@ ROLLBACK_HISTORY_PENDING_TABLES = {
 ROLLBACK_PRESERVED_TABLES = frozenset({
     'PipelineEvent',             # ADR-036 append-only event spine (SessionFailed)
     'RunEventSummary',           # ADR-036 projection OF that append-only spine
+    'AcquisitionOutcomeShadow',  # ADR-036 P2 shadow projection OF the append-only
+                                 # spine (cross-validation only; rebuilt by replay)
     'ParseRunFieldFill',         # ADR-035 enrichment, off the Pending->Commit path
     'OpsIncidents',              # ADR-035/026 the failed run's own diagnosis record
     'OpsIncidentFeatures',       # ADR-026 derived similarity/analytics metadata of a preserved incident

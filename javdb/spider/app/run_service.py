@@ -2,6 +2,7 @@
 
 from contextvars import ContextVar
 from dataclasses import dataclass
+import json
 import os
 import sys
 
@@ -599,6 +600,25 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
                 _emit_event("RunStarted", session_id=str(_session_id),
                             entity_type="session", entity_id=str(_session_id),
                             run_id=run_id, run_attempt=run_attempt)  # ADR-036
+                # ADR-036 Phase 2: emit MovieDiscovered for every scraped index entry.
+                # Best-effort — _emit_event never raises; the pipeline is unaffected if it fails.
+                for _phase, _idx_list in ((1, all_index_results_phase1), (2, all_index_results_phase2)):
+                    for _entry in _idx_list:
+                        _emit_event(
+                            "MovieDiscovered",
+                            session_id=str(_session_id),
+                            entity_type="movie",
+                            entity_id=_entry.get("href"),
+                            payload=json.dumps({
+                                "video_code": _entry.get("video_code"),
+                                "phase": _phase,
+                                "page": _entry.get("page"),
+                                "rate": _entry.get("rate"),
+                                "comment_number": _entry.get("comment_number"),
+                            }),
+                            run_id=run_id,
+                            run_attempt=run_attempt,
+                        )
                 _set_active_run_identity(run_id, run_attempt)
                 # Read back the row so the in-process WriteMode mirrors
                 # whatever actually landed (defends against a downgrade

@@ -497,6 +497,26 @@ CREATE INDEX IF NOT EXISTS idx_prff_field_committed
     ON ParseRunFieldFill(page_type, field, committed, observed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_prff_session ON ParseRunFieldFill(session_id);
 
+-- AcquisitionOutcomeShadow projection (ADR-036 Phase 2). Mirrors
+-- javdb/migrations/d1/2026_06_10_add_acquisition_outcome_shadow.sql.
+-- Cross-validation only; never read by production decisions.
+CREATE TABLE IF NOT EXISTS AcquisitionOutcomeShadow (
+    qb_hash      TEXT PRIMARY KEY NOT NULL,
+    href         TEXT NOT NULL DEFAULT '',
+    video_code   TEXT,
+    category     TEXT,
+    state        TEXT NOT NULL DEFAULT 'queued'
+        CHECK (state IN ('queued','completed')),
+    queued_at    TEXT,
+    completed_at TEXT,
+    session_id   TEXT,
+    updated_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_acq_shadow_state
+    ON AcquisitionOutcomeShadow(state);
+CREATE INDEX IF NOT EXISTS idx_acq_shadow_session
+    ON AcquisitionOutcomeShadow(session_id);
+
 -- ADR-024 Phase 1: torrent quality evidence + shadow evaluation.
 CREATE TABLE IF NOT EXISTS TorrentQualityEvidence (
     info_hash             TEXT NOT NULL,
