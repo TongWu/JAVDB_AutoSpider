@@ -5,9 +5,25 @@ import pytest
 
 from javdb.ops.reconcile import service
 from javdb.ops.reconcile.media_config import MediaServerConfig
-from javdb.ops.reconcile.models import ConsumptionOptions, MediaItem
+from javdb.ops.reconcile.models import (
+    ConsumptionOptions,
+    MediaItem,
+    UnresolvedMediaItemRecord,
+)
 from javdb.storage.repos.consumption_signal_repo import ConsumptionSignalRepo
 from javdb.storage.repos.unresolved_media_item_repo import UnresolvedMediaItemRepo
+
+
+def _unresolved_count(conn):
+    """Row count behind the consumption-KPI "unresolved" card.
+
+    This is the exact SQL emitted by the read-API builder
+    ``build_consumption_summary_unresolved_count_query``
+    (``SELECT COUNT(*) FROM UnresolvedMediaItem``). That builder ships in the
+    read layer of PR #198, which is not merged into this writer-side branch, so
+    we assert the equivalent literal here — keeping the test decoupled from the
+    unmerged read API while still proving the KPI count drops on resolve."""
+    return conn.execute("SELECT COUNT(*) FROM UnresolvedMediaItem").fetchone()[0]
 
 _SIGNAL_DDL = """
 CREATE TABLE ConsumptionSignal (
@@ -164,3 +180,60 @@ def test_full_replace_overwrites_on_second_run(repos):
         " AND instance='plex-home' AND library_id='3'"
     ).fetchone()[0]
     assert rows == 1
+
+
+def test_resolved_item_deletes_stale_unresolved_row(repos):
+    """A previously-unresolved item that LATER resolves is removed from
+    UnresolvedMediaItem, so the consumption KPI stops over-reporting it as
+    unresolved (Codex review on PR #198). The two tables share no key, so this
+    delete-on-resolve in the writer is the only place the stale row can go."""
+    signal_repo, unresolved_repo = repos
+    cfg = _cfg()
+    pk = dict(instance="plex-home", library_id="3", item_id="1")
+
+    # First observation failed code resolution → a stale unresolved row exists.
+    unresolved_repo.upsert(UnresolvedMediaItemRecord(
+        source_type="plex", library_name="JAV", raw_title="mystery",
+        file_path="/m/mystery.mp4", observed_at="2026-01-01T00:00:00Z", **pk,
+    ))
+    assert unresolved_repo.get("plex-home", "3", "1") is not None
+    assert _unresolved_count(unresolved_repo._conn) == 1
+
+    # Same server-side item now resolves to a code (filename fixed / resolver
+    # improved): same (instance, library_id, item_id), resolvable file_path.
+    item = MediaItem(source_type="plex", library_name="JAV",
+                     file_path="/m/ABC-123/ABC-123.mp4", watched=True, **pk)
+    res = service.run_consumption(
+        ConsumptionOptions(servers=[cfg]),
+        repo=signal_repo, unresolved_repo=unresolved_repo,
+        adapters={cfg.instance: _FakeAdapter(cfg, [item])},
+    )
+
+    # Signal landed AND the stale unresolved row is gone (KPI count drops 1→0).
+    assert signal_repo.get("ABC-123", "plex-home", "3") is not None
+    assert res.signals_updated == 1
+    assert unresolved_repo.get("plex-home", "3", "1") is None
+    assert _unresolved_count(unresolved_repo._conn) == 0
+
+
+def test_dry_run_does_not_delete_unresolved_row(repos):
+    """dry_run resolves codes but writes nothing — the stale unresolved row and
+    its KPI count must survive untouched."""
+    signal_repo, unresolved_repo = repos
+    cfg = _cfg()
+    pk = dict(instance="plex-home", library_id="3", item_id="1")
+    unresolved_repo.upsert(UnresolvedMediaItemRecord(
+        source_type="plex", file_path="/m/mystery.mp4", observed_at="t", **pk,
+    ))
+
+    item = MediaItem(source_type="plex", file_path="/m/ABC-123/ABC-123.mp4",
+                     watched=True, **pk)
+    res = service.run_consumption(
+        ConsumptionOptions(servers=[cfg], dry_run=True),
+        repo=signal_repo, unresolved_repo=unresolved_repo,
+        adapters={cfg.instance: _FakeAdapter(cfg, [item])},
+    )
+
+    assert res.signals_updated == 0
+    assert unresolved_repo.get("plex-home", "3", "1") is not None
+    assert _unresolved_count(unresolved_repo._conn) == 1

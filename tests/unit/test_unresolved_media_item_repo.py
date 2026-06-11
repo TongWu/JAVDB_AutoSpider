@@ -40,3 +40,24 @@ def test_reobservation_is_idempotent(repo):
     got = repo.get("emby-nas", "7", "42")
     assert got.observed_at == "t2"
     assert repo._conn.execute("SELECT COUNT(*) FROM UnresolvedMediaItem").fetchone()[0] == 1
+
+
+def test_delete_removes_row(repo):
+    repo.upsert(UnresolvedMediaItemRecord(
+        instance="emby-nas", library_id="7", item_id="42", observed_at="t",
+    ))
+    assert repo.get("emby-nas", "7", "42") is not None
+    repo.delete("emby-nas", "7", "42")
+    assert repo.get("emby-nas", "7", "42") is None
+    assert repo._conn.execute("SELECT COUNT(*) FROM UnresolvedMediaItem").fetchone()[0] == 0
+
+
+def test_delete_missing_row_is_noop(repo):
+    # Deleting a row that was never inserted must not raise (idempotent).
+    repo.delete("emby-nas", "7", "does-not-exist")
+    # And it must not disturb a sibling row sharing the same instance/library.
+    repo.upsert(UnresolvedMediaItemRecord(
+        instance="emby-nas", library_id="7", item_id="42", observed_at="t",
+    ))
+    repo.delete("emby-nas", "7", "other")
+    assert repo.get("emby-nas", "7", "42") is not None

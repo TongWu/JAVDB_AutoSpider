@@ -48,3 +48,16 @@ class UnresolvedMediaItemRepo:
             [instance, library_id, item_id],
         ).fetchone()
         return None if row is None else _row_to_record(row)
+
+    def delete(self, instance: str, library_id: str, item_id: str) -> None:
+        """Remove the unresolved row for this server-side item, if present.
+
+        Called when a previously-unresolved item later resolves to a video_code
+        (ADR-033 Phase 3): the reconciler clears the stale row so the
+        consumption KPI stops over-reporting it as unresolved. Idempotent —
+        deleting an absent row is a no-op."""
+        self._conn.execute(
+            "DELETE FROM UnresolvedMediaItem "
+            "WHERE instance = ? AND library_id = ? AND item_id = ?",
+            [instance, library_id, item_id],
+        )
