@@ -5,28 +5,29 @@ name: Multi-Platform Build Verification
 # For comprehensive functional testing, see docker-test.yml
 
 on:
-  pull_request:
-    branches:
-      - main
-      - master
-    types: [opened, synchronize, reopened, ready_for_review]
-    paths:
-      - '**.py'
-      - '**.rs'
-      - 'javdb/rust_core/Cargo.toml'
-      - 'javdb/rust_core/Cargo.lock'
-      - 'pytest.ini'
-      - 'docker/**'
-  push:
-    tags:
-      - 'v*.*.*'  # Trigger on version tags
-    paths:
-      - '**.py'
-      - '**.rs'
-      - 'javdb/rust_core/Cargo.toml'
-      - 'javdb/rust_core/Cargo.lock'
-      - 'pytest.ini'
-      - 'docker/**'
+  # Auto-triggers disabled — run manually via workflow_dispatch only.
+  # pull_request:
+  #   branches:
+  #     - main
+  #     - master
+  #   types: [opened, synchronize, reopened, ready_for_review]
+  #   paths:
+  #     - '**.py'
+  #     - '**.rs'
+  #     - 'javdb/rust_core/Cargo.toml'
+  #     - 'javdb/rust_core/Cargo.lock'
+  #     - 'pytest.ini'
+  #     - 'docker/**'
+  # push:
+  #   tags:
+  #     - 'v*.*.*'  # Trigger on version tags
+  #   paths:
+  #     - '**.py'
+  #     - '**.rs'
+  #     - 'javdb/rust_core/Cargo.toml'
+  #     - 'javdb/rust_core/Cargo.lock'
+  #     - 'pytest.ini'
+  #     - 'docker/**'
   workflow_dispatch:  # Allow manual trigger
 
 permissions:
