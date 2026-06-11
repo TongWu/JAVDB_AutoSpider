@@ -2,7 +2,7 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Proposed — web counterpart to ADR-033; phased to mirror it            |
+| **Status**  | Accepted — FE Phases 1, 2 & 3 implemented & verified 2026-06-10; web counterpart to ADR-033            |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
 | **Related** | [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-008](../_archive/ADR-008-Frontend-Rewrite/ADR-008-frontend-rewrite-architecture.md), [ADR-027](../_archive/ADR-027-Stats-Dashboard-Charts/ADR-027-stats-dashboard-charts.md), [ADR-030](../_archive/ADR-030-Web-Feature-Parity/ADR-030-web-feature-parity.md), [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md) |
@@ -122,8 +122,8 @@ single-repo change.
 | Phase | IMP | Ships | Deferred |
 | --- | --- | --- | --- |
 | FE Phase 1 — Acquisition | [IMP-ADR034-01](IMP-ADR034-01-acquisition-web-surface.md) | Library page shell (3 tabs, 2 disabled); Acquisition view (funnel + KPI + recent table, read-only); `GET /api/library/acquisition/{summary,recent,trend}` in **both** backends; `closed_loop` capability flag + nav gating; en/zh strings | Ownership/Consumption views; any mutations |
-| FE Phase 2 — Ownership | IMP-ADR034-02 (stub) | Ownership view over `OwnershipLedger` | — |
-| FE Phase 3 — Consumption | IMP-ADR034-03 (stub) | Consumption view at `(instance, library)` granularity over `ConsumptionSignal` | — |
+| FE Phase 2 — Ownership | [IMP-ADR034-02](IMP-ADR034-02-ownership-web-surface.md) ✅ | Ownership view over `OwnershipLedger` (total + per-source KPIs, static per-source bar, recent table with present/swept) + dual-backend `/api/library/ownership/{summary,recent}` | — |
+| FE Phase 3 — Consumption | [IMP-ADR034-03](IMP-ADR034-03-consumption-web-surface.md) ✅ | Consumption view at `(instance, library)` granularity over `ConsumptionSignal` (+ `UnresolvedMediaItem`) + dual-backend `/api/library/consumption/{summary,recent,trend,unresolved}` | — |
 
 FE Phase 1 depends only on ADR-033 Phase 1 (`AcquisitionOutcome`). Phases 2/3
 depend on ADR-033 Phases 2/3 and are detailed once those land.

@@ -87,3 +87,46 @@ LIBRARY_RECENT_QUERY_CASES = [
 LIBRARY_TREND_QUERY_CASES = [
     ("library_trend_query", "default", {"cutoff": "2026-01-01"}),
 ]
+
+OWNERSHIP_SUMMARY_BY_SOURCE_QUERY_CASES = [
+    ("ownership_summary_by_source_query", "all", {}),
+]
+
+OWNERSHIP_SUMMARY_DISTINCT_QUERY_CASES = [
+    ("ownership_summary_distinct_query", "all", {}),
+]
+
+OWNERSHIP_RECENT_QUERY_CASES = [
+    ("ownership_recent_query", "no_source", {"source": None, "limit": 50, "offset": 0}),
+    ("ownership_recent_query", "with_source", {"source": "qb", "limit": 20, "offset": 10}),
+]
+
+CONSUMPTION_SUMMARY_QUERY_CASES = [
+    ("consumption_summary_query", "all", {}),
+]
+
+CONSUMPTION_SUMMARY_UNRESOLVED_COUNT_QUERY_CASES = [
+    ("consumption_summary_unresolved_count_query", "all", {}),
+]
+
+CONSUMPTION_RECENT_QUERY_CASES = [
+    ("consumption_recent_query", "no_filters",
+     {"instance": None, "watched": None, "limit": 50, "offset": 0}),
+    ("consumption_recent_query", "watched_true",
+     {"instance": None, "watched": True, "limit": 50, "offset": 0}),
+    ("consumption_recent_query", "watched_false",
+     {"instance": None, "watched": False, "limit": 50, "offset": 0}),
+    ("consumption_recent_query", "instance_and_watched",
+     {"instance": "emby-home", "watched": True, "limit": 20, "offset": 10}),
+]
+
+CONSUMPTION_TREND_QUERY_CASES = [
+    ("consumption_trend_query", "default", {"cutoff": "2026-01-01"}),
+]
+
+CONSUMPTION_UNRESOLVED_QUERY_CASES = [
+    ("consumption_unresolved_query", "no_instance",
+     {"instance": None, "limit": 50, "offset": 0}),
+    ("consumption_unresolved_query", "with_instance",
+     {"instance": "emby-home", "limit": 25, "offset": 5}),
+]
