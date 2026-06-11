@@ -9,10 +9,11 @@ permissions:
   contents: read
 
 on:
-  schedule:
-    # Every 6h (00/06/12/18 UTC). The 06:00 run lands well before the 12:00 UTC
-    # DailyIngestion, so drift is flagged with lead time.
-    - cron: '0 */6 * * *'
+  # Scheduled canary disabled — run manually via workflow_dispatch only.
+  # schedule:
+  #   # Every 6h (00/06/12/18 UTC). The 06:00 run lands well before the 12:00 UTC
+  #   # DailyIngestion, so drift is flagged with lead time.
+  #   - cron: '0 */6 * * *'
   workflow_dispatch:
     inputs:
       runner:

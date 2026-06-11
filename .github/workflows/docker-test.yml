@@ -7,29 +7,30 @@ permissions:
 # For multi-platform build verification, see docker-build.yml
 
 on:
-  push:
-    branches:
-      - main
-      - master
-      - develop
-    paths:
-      - '**.py'
-      - '**.rs'
-      - 'javdb/rust_core/Cargo.toml'
-      - 'javdb/rust_core/Cargo.lock'
-      - 'pytest.ini'
-      - 'docker/**'
-  pull_request:
-    branches:
-      - main
-      - master
-    paths:
-      - '**.py'
-      - '**.rs'
-      - 'javdb/rust_core/Cargo.toml'
-      - 'javdb/rust_core/Cargo.lock'
-      - 'pytest.ini'
-      - 'docker/**'
+  # Auto-triggers disabled — run manually via workflow_dispatch only.
+  # push:
+  #   branches:
+  #     - main
+  #     - master
+  #     - develop
+  #   paths:
+  #     - '**.py'
+  #     - '**.rs'
+  #     - 'javdb/rust_core/Cargo.toml'
+  #     - 'javdb/rust_core/Cargo.lock'
+  #     - 'pytest.ini'
+  #     - 'docker/**'
+  # pull_request:
+  #   branches:
+  #     - main
+  #     - master
+  #   paths:
+  #     - '**.py'
+  #     - '**.rs'
+  #     - 'javdb/rust_core/Cargo.toml'
+  #     - 'javdb/rust_core/Cargo.lock'
+  #     - 'pytest.ini'
+  #     - 'docker/**'
   workflow_dispatch:
 
 jobs:

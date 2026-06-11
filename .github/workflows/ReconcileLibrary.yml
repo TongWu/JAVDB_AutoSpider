@@ -17,8 +17,9 @@ permissions:
   contents: read
 
 on:
-  schedule:
-    - cron: '0 * * * *'
+  # Hourly schedule disabled — run manually via workflow_dispatch only.
+  # schedule:
+  #   - cron: '0 * * * *'
   workflow_dispatch:
     inputs:
       runner:
