@@ -2,7 +2,7 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Proposed — umbrella; execution delegated to per-phase IMPs            |
+| **Status**  | Proposed — umbrella; Phases 1 & 2 implemented & verified; Phase 2 (entry-point discovery + downloader category, demonstrator) landed 2026-06-10; Phase 3 (ecosystem) optional/deferred |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
 | **Related** | [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md), [ADR-038](../ADR-038-Agentic-Operator-MCP/ADR-038-agentic-operator-mcp-surface.md), [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) |
@@ -142,8 +142,8 @@ event-consumer / MCP-tool composition.
 | Phase | IMP | Ships | Deferred |
 | --- | --- | --- | --- |
 | Phase 1 — Registry + notify | [IMP-ADR039-01](IMP-ADR039-01-notify-plugins.md) | `plugins/registry`; `NotifyPlugin` contract; `EmailNotifyPlugin` (wraps existing); `TelegramNotifyPlugin` (new); `NOTIFY_BACKENDS` config; `notify.send` fan-out | entry-point discovery; other categories |
-| Phase 2 — Entry points + downloader | IMP-ADR039-02 (stub) | `discover_entry_points` (third-party); `downloader` category (qB + Transmission) | — |
-| Phase 3 — Ecosystem (optional) | IMP-ADR039-03 (stub) | media-server/destination categories; plugins as ADR-036 consumers / ADR-038 tools | — |
+| Phase 2 — Entry points + downloader | [IMP-ADR039-02](IMP-ADR039-02-entry-points-downloader.md) ✅ 2026-06-10 | `discover_entry_points` (third-party); `downloader` category (qB + Transmission); demonstrator CLI | `run_uploader` re-route deferred (deep qB coupling — see D3) |
+| Phase 3 — Ecosystem (optional) | IMP-ADR039-03 (deferred) | media-server/destination categories; plugins as ADR-036 consumers / ADR-038 tools | — |
 
 Phase 1 stands alone and is backward-compatible. Phases 2/3 widen the platform.
 
@@ -165,6 +165,8 @@ Phase 1 stands alone and is backward-compatible. Phases 2/3 widen the platform.
 - **Plugin contract** — the per-category `Protocol` a plugin satisfies.
 - **Built-in plugin** — a plugin shipped in-repo (e.g. `EmailNotifyPlugin`).
 - **Notify backend** — an active notify plugin selected via `NOTIFY_BACKENDS`.
+- **Downloader plugin** — a registered `DownloaderPlugin` backend (e.g. qB, Transmission).
+- **Downloader backend** — the single active downloader selected via `DOWNLOADER_BACKEND` (single-select, mutually exclusive; default `'qb'`).
 
 ## Alternatives Considered
 
@@ -190,3 +192,10 @@ Phase 1 stands alone and is backward-compatible. Phases 2/3 widen the platform.
   `NotifyPlugin` contract, email/telegram built-ins, and `notify.dispatch` ship,
   and the pipeline notification step now fans a run summary out to the secondary
   backends. D4 updated with the wiring follow-up note.
+- 2026-06-10: Phase 2 (IMP-ADR039-02) implemented — `discover_entry_points` wired
+  into both notify and downloader dispatch; `downloader` category ships with
+  `QbDownloaderPlugin` (thin adapter over existing qB client) and
+  `TransmissionDownloaderPlugin` (new Transmission JSON-RPC client); demonstrator
+  CLI `apps.cli.download.add` exercises the full stack end-to-end; ~45 new unit
+  tests green; `run_uploader` re-route deliberately deferred (deep qB coupling).
+  Subagent-driven (8 tasks, implementer + review per task).

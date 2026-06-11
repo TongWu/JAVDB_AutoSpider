@@ -79,6 +79,21 @@ TELEGRAM_BOT_TOKEN = ''   # from @BotFather
 TELEGRAM_CHAT_ID = ''     # target chat/channel id
 
 # =============================================================================
+# DOWNLOADER BACKENDS (ADR-039)
+# =============================================================================
+
+# Active downloader backend — single-select (mutually exclusive).
+# Defaults to 'qb'. Set to 'transmission' to route add-torrent calls to Transmission.
+DOWNLOADER_BACKEND = 'qb'
+
+# Transmission backend -- only used when DOWNLOADER_BACKEND = 'transmission'.
+TRANSMISSION_HOST = '192.168.1.10'       # Transmission daemon host
+TRANSMISSION_PORT = 9091                  # Transmission RPC port (default 9091)
+TRANSMISSION_USERNAME = ''               # leave empty if no auth configured
+TRANSMISSION_PASSWORD = ''
+TRANSMISSION_DOWNLOAD_DIR = '/downloads' # default save directory
+
+# =============================================================================
 # PROXY CONFIGURATION
 # =============================================================================
 

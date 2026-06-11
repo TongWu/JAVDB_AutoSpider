@@ -12,6 +12,10 @@ from javdb.integrations.plugins.registry import REGISTRY
 import javdb.integrations.notify.email.plugin  # noqa: F401,E402
 import javdb.integrations.notify.telegram.plugin  # noqa: F401,E402
 
+# Discover any third-party notify plugins installed as entry points.
+# Returns 0 when no packages with 'javdb.notify_plugins' entry points are installed.
+REGISTRY.discover_entry_points("javdb.notify_plugins")
+
 
 def active_names() -> list[str]:
     val = cfg("NOTIFY_BACKENDS", ["email"])

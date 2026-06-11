@@ -16,5 +16,6 @@ def test_get_unknown_returns_none():
     assert PluginRegistry().get("notify", "nope") is None
 
 
-def test_discover_entry_points_is_noop_in_phase1():
+def test_discover_entry_points_returns_zero_when_no_eps_installed():
+    # No third-party plugins installed in CI → count is 0 (environment contract, not a stub)
     assert PluginRegistry().discover_entry_points("javdb.notify_plugins") == 0
