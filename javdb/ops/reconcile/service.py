@@ -557,4 +557,19 @@ def run_consumption(
                     observed_at=now,
                 ))
                 result.signals_updated += 1
+                # A server-side item that previously FAILED resolution left a row
+                # in UnresolvedMediaItem. Now that it resolves, clear that row or
+                # the consumption KPI keeps over-reporting it as unresolved — the
+                # two tables share no key, so the read side can't filter it out
+                # (Codex review on PR #198). Best-effort: a failed cleanup must
+                # never undo the signal write above; deleting an absent row is a
+                # no-op. Gated by the dry_run guard above (no writes on dry run).
+                try:
+                    unresolved.delete(item.instance, item.library_id, item.item_id)
+                except Exception:
+                    logger.warning(
+                        "run_consumption: failed to clear unresolved row %s/%s/%s",
+                        item.instance, item.library_id, item.item_id,
+                        exc_info=True,
+                    )
     return result
