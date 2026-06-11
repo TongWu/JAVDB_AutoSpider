@@ -134,6 +134,35 @@ is not in `NOTIFY_BACKENDS`, the report is still computed for the summary but th
 SMTP send is suppressed, and the exit code reflects the secondary fan-out rather
 than email delivery.
 
+### Downloader Backend (ADR-039)
+
+Controls which torrent client receives `add-torrent` calls from the demonstrator
+CLI (`apps.cli.download.add`). Single-select — only one backend is active at a
+time. Defaults to `'qb'`, so existing deployments are unchanged.
+
+| Variable | Type | Default | Description |
+|---|---|---|---|
+| `DOWNLOADER_BACKEND` | `str` | `'qb'` | Active downloader backend. `'qb'` routes to qBittorrent (existing client). `'transmission'` routes to Transmission via JSON-RPC. Unknown values are rejected at dispatch time with a `DownloadResult(ok=False)`. |
+| `TRANSMISSION_HOST` | `str` | `'192.168.1.10'` | Transmission daemon host. Only used when `DOWNLOADER_BACKEND = 'transmission'`. |
+| `TRANSMISSION_PORT` | `int` | `9091` | Transmission RPC port (default 9091). |
+| `TRANSMISSION_USERNAME` | `str` | `''` | Transmission RPC username. Leave empty if authentication is disabled. |
+| `TRANSMISSION_PASSWORD` | `str` | `''` | Transmission RPC password. |
+| `TRANSMISSION_DOWNLOAD_DIR` | `str` | `'/downloads'` | Default save directory passed to Transmission on each torrent-add. |
+
+**Switching to Transmission:**
+
+```python
+DOWNLOADER_BACKEND = 'transmission'
+TRANSMISSION_HOST = '192.168.1.10'
+TRANSMISSION_PORT = 9091
+TRANSMISSION_USERNAME = 'admin'
+TRANSMISSION_PASSWORD = 'secret'
+TRANSMISSION_DOWNLOAD_DIR = '/media/downloads'
+```
+
+> **Note:** `DOWNLOADER_BACKEND` controls the demonstrator CLI only. The main
+> pipeline upload path (`apps.cli.qb.uploader`) remains qB-only in Phase 2.
+
 ---
 
 ## 4. Proxy Configuration

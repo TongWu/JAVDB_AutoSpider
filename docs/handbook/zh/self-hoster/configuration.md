@@ -118,6 +118,32 @@ TELEGRAM_CHAT_ID = '987654321'
 
 管道通知步骤（`apps.cli.notify.email`）经由该扇出路由：`email` 后端保留完整的 HTML 报告，二级后端（如 Telegram）收到运行结论加精简摘要。当 `email` 不在 `NOTIFY_BACKENDS` 中时，仍会计算报告用于生成摘要，但抑制 SMTP 发送，且退出码反映二级扇出而非邮件投递。
 
+### 下载器后端（Downloader Backend — ADR-039）
+
+控制示例 CLI（`apps.cli.download.add`）将 add-torrent 调用发往哪个 torrent 客户端。单选互斥——同一时刻只有一个后端处于 active 状态。默认 `'qb'`，现有部署行为不变。
+
+| 变量 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `DOWNLOADER_BACKEND` | `str` | `'qb'` | active 下载器后端。`'qb'` 路由至 qBittorrent（现有 client）。`'transmission'` 经 JSON-RPC 路由至 Transmission。未知值在 dispatch 时即返回 `DownloadResult(ok=False)`。 |
+| `TRANSMISSION_HOST` | `str` | `'192.168.1.10'` | Transmission 守护进程主机。仅在 `DOWNLOADER_BACKEND = 'transmission'` 时使用。 |
+| `TRANSMISSION_PORT` | `int` | `9091` | Transmission RPC 端口（默认 9091）。 |
+| `TRANSMISSION_USERNAME` | `str` | `''` | Transmission RPC 用户名。若未启用认证则留空。 |
+| `TRANSMISSION_PASSWORD` | `str` | `''` | Transmission RPC 密码。 |
+| `TRANSMISSION_DOWNLOAD_DIR` | `str` | `'/downloads'` | 每次 torrent-add 传给 Transmission 的默认保存目录。 |
+
+**切换至 Transmission：**
+
+```python
+DOWNLOADER_BACKEND = 'transmission'
+TRANSMISSION_HOST = '192.168.1.10'
+TRANSMISSION_PORT = 9091
+TRANSMISSION_USERNAME = 'admin'
+TRANSMISSION_PASSWORD = 'secret'
+TRANSMISSION_DOWNLOAD_DIR = '/media/downloads'
+```
+
+> **注意：** `DOWNLOADER_BACKEND` 仅控制示例 CLI。主管道上传路径（`apps.cli.qb.uploader`）在 Phase 2 中仍为 qB 专用。
+
 ---
 
 ## 4. Proxy 配置

@@ -2,7 +2,7 @@
 
 | 字段       | 值                                                                    |
 | ---------- | --------------------------------------------------------------------- |
-| **状态**   | Proposed — 伞型;执行下放给各期 IMP                                    |
+| **状态**   | Proposed — 伞型；Phase 1 & 2 已实现并验证；Phase 2（entry-point 发现 + downloader 类别，示例）已于 2026-06-10 落地；Phase 3（生态）可选/推迟 |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
 | **关联**   | [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md), [ADR-038](../ADR-038-Agentic-Operator-MCP/ADR-038-agentic-operator-mcp-surface.md), [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) |
@@ -81,8 +81,8 @@ javdb/integrations/notify/telegram/plugin.py # TelegramNotifyPlugin（新）
 | 阶段 | IMP | 交付内容 | 推迟内容 |
 | --- | --- | --- | --- |
 | Phase 1 — 注册表 + notify | [IMP-ADR039-01](IMP-ADR039-01-notify-plugins.md) | `plugins/registry`;`NotifyPlugin` 契约;`EmailNotifyPlugin`（包现有）;`TelegramNotifyPlugin`（新）;`NOTIFY_BACKENDS` config;`notify.send` 扇出 | entry-point 发现;其它类别 |
-| Phase 2 — Entry points + downloader | IMP-ADR039-02（占位） | `discover_entry_points`（第三方）;`downloader` 类别（qB + Transmission） | — |
-| Phase 3 — 生态（可选） | IMP-ADR039-03（占位） | media-server/destination 类别;插件作 ADR-036 消费者 / ADR-038 工具 | — |
+| Phase 2 — Entry points + downloader | [IMP-ADR039-02](IMP-ADR039-02-entry-points-downloader.md) ✅ 2026-06-10 | `discover_entry_points`（第三方）;`downloader` 类别（qB + Transmission）;示例 CLI | `run_uploader` 重路由推迟（qB 耦合深——见 D3） |
+| Phase 3 — 生态（可选） | IMP-ADR039-03（已推迟） | media-server/destination 类别;插件作 ADR-036 消费者 / ADR-038 工具 | — |
 
 Phase 1 独立成立且向后兼容。Phase 2/3 拓宽平台。
 
@@ -100,6 +100,8 @@ Phase 1 独立成立且向后兼容。Phase 2/3 拓宽平台。
 - **Plugin contract（插件契约）**——插件满足的每类别 `Protocol`。
 - **Built-in plugin（内置插件）**——仓内自带的插件（如 `EmailNotifyPlugin`）。
 - **Notify backend（通知后端）**——经 `NOTIFY_BACKENDS` 选中的 active notify 插件。
+- **Downloader plugin（下载器插件）**——已注册的 `DownloaderPlugin` 后端（如 qB、Transmission）。
+- **Downloader backend（下载器后端）**——经 `DOWNLOADER_BACKEND` 选中的唯一 active 下载器（单选互斥；默认 `'qb'`）。
 
 ## 备选方案 (Alternatives Considered)
 
@@ -120,3 +122,9 @@ Phase 1 独立成立且向后兼容。Phase 2/3 拓宽平台。
 - 2026-06-06: Phase 1（IMP-ADR039-01）实现**并接线**——注册表、`NotifyPlugin`
   契约、email/telegram 内置插件与 `notify.dispatch` 交付,且管道通知步骤现已把
   运行摘要扇出给次级后端。D4 已补充接线后续说明。
+- 2026-06-10: Phase 2（IMP-ADR039-02）实现——`discover_entry_points` 已接线至
+  notify 与 downloader dispatch；`downloader` 类别交付 `QbDownloaderPlugin`（对
+  现有 qB client 的薄 adapter）与 `TransmissionDownloaderPlugin`（全新
+  Transmission JSON-RPC client）；示例 CLI `apps.cli.download.add` 端到端行使完
+  整下载器类别栈；~45 条新单元测试通过；`run_uploader` 重路由刻意推迟（qB 耦合
+  深）。Subagent 驱动（8 个任务，每任务实现者 + 审查者各一）。
