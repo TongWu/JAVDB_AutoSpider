@@ -668,8 +668,166 @@
         "cutoff": "2026-01-01"
       },
       "sql": "SELECT substr(last_seen_at, 1, 10) AS d, COALESCE(SUM(CASE WHEN state='completed' THEN 1 ELSE 0 END), 0) AS completed, COALESCE(SUM(CASE WHEN state='stalled' THEN 1 ELSE 0 END), 0) AS stalled, COALESCE(SUM(CASE WHEN state='failed' THEN 1 ELSE 0 END), 0) AS failed FROM AcquisitionOutcome WHERE state IN ('completed','stalled','failed') AND last_seen_at >= ? GROUP BY d ORDER BY d"
+    },
+    {
+      "bindings": [],
+      "builder": "ownership_summary_by_source_query",
+      "name": "all",
+      "params": {},
+      "sql": "SELECT source, COUNT(DISTINCT video_code) AS unique_titles, COALESCE(SUM(CASE WHEN present = 1 THEN 1 ELSE 0 END), 0) AS present_rows, COALESCE(SUM(size), 0) AS total_bytes FROM OwnershipLedger WHERE present = 1 GROUP BY source ORDER BY source"
+    },
+    {
+      "bindings": [],
+      "builder": "ownership_summary_distinct_query",
+      "name": "all",
+      "params": {},
+      "sql": "SELECT COUNT(DISTINCT video_code) AS total_owned_titles FROM OwnershipLedger WHERE present = 1"
+    },
+    {
+      "bindings": [
+        50,
+        0
+      ],
+      "builder": "ownership_recent_query",
+      "name": "no_source",
+      "params": {
+        "limit": 50,
+        "offset": 0,
+        "source": null
+      },
+      "sql": "SELECT video_code, source, category, path, size, present, observed_at FROM OwnershipLedger ORDER BY observed_at DESC, video_code, source, category LIMIT ? OFFSET ?"
+    },
+    {
+      "bindings": [
+        "qb",
+        20,
+        10
+      ],
+      "builder": "ownership_recent_query",
+      "name": "with_source",
+      "params": {
+        "limit": 20,
+        "offset": 10,
+        "source": "qb"
+      },
+      "sql": "SELECT video_code, source, category, path, size, present, observed_at FROM OwnershipLedger WHERE source = ? ORDER BY observed_at DESC, video_code, source, category LIMIT ? OFFSET ?"
+    },
+    {
+      "bindings": [],
+      "builder": "consumption_summary_query",
+      "name": "all",
+      "params": {},
+      "sql": "SELECT COUNT(*) AS total_signals, COALESCE(SUM(CASE WHEN watched = 1 THEN 1 ELSE 0 END), 0) AS watched_count, COALESCE(SUM(CASE WHEN watched = 0 THEN 1 ELSE 0 END), 0) AS unwatched_count, AVG(rating) AS avg_rating, COUNT(DISTINCT video_code) AS unique_titles, COUNT(DISTINCT instance) AS instance_count FROM ConsumptionSignal"
+    },
+    {
+      "bindings": [],
+      "builder": "consumption_summary_unresolved_count_query",
+      "name": "all",
+      "params": {},
+      "sql": "SELECT COUNT(*) AS unresolved_count FROM UnresolvedMediaItem"
+    },
+    {
+      "bindings": [
+        50,
+        0
+      ],
+      "builder": "consumption_recent_query",
+      "name": "no_filters",
+      "params": {
+        "instance": null,
+        "limit": 50,
+        "offset": 0,
+        "watched": null
+      },
+      "sql": "SELECT video_code, source_type, instance, library_id, library_name, watched, progress_pct, play_count, rating, watched_at, resolved_confidence, observed_at FROM ConsumptionSignal ORDER BY observed_at DESC, video_code, instance, library_id LIMIT ? OFFSET ?"
+    },
+    {
+      "bindings": [
+        50,
+        0
+      ],
+      "builder": "consumption_recent_query",
+      "name": "watched_true",
+      "params": {
+        "instance": null,
+        "limit": 50,
+        "offset": 0,
+        "watched": true
+      },
+      "sql": "SELECT video_code, source_type, instance, library_id, library_name, watched, progress_pct, play_count, rating, watched_at, resolved_confidence, observed_at FROM ConsumptionSignal WHERE watched = 1 ORDER BY observed_at DESC, video_code, instance, library_id LIMIT ? OFFSET ?"
+    },
+    {
+      "bindings": [
+        50,
+        0
+      ],
+      "builder": "consumption_recent_query",
+      "name": "watched_false",
+      "params": {
+        "instance": null,
+        "limit": 50,
+        "offset": 0,
+        "watched": false
+      },
+      "sql": "SELECT video_code, source_type, instance, library_id, library_name, watched, progress_pct, play_count, rating, watched_at, resolved_confidence, observed_at FROM ConsumptionSignal WHERE watched = 0 ORDER BY observed_at DESC, video_code, instance, library_id LIMIT ? OFFSET ?"
+    },
+    {
+      "bindings": [
+        "emby-home",
+        20,
+        10
+      ],
+      "builder": "consumption_recent_query",
+      "name": "instance_and_watched",
+      "params": {
+        "instance": "emby-home",
+        "limit": 20,
+        "offset": 10,
+        "watched": true
+      },
+      "sql": "SELECT video_code, source_type, instance, library_id, library_name, watched, progress_pct, play_count, rating, watched_at, resolved_confidence, observed_at FROM ConsumptionSignal WHERE instance = ? AND watched = 1 ORDER BY observed_at DESC, video_code, instance, library_id LIMIT ? OFFSET ?"
+    },
+    {
+      "bindings": [
+        "2026-01-01"
+      ],
+      "builder": "consumption_trend_query",
+      "name": "default",
+      "params": {
+        "cutoff": "2026-01-01"
+      },
+      "sql": "SELECT substr(watched_at, 1, 10) AS d, COALESCE(SUM(CASE WHEN watched = 1 THEN 1 ELSE 0 END), 0) AS watched, COUNT(*) AS total_signals FROM ConsumptionSignal WHERE watched_at IS NOT NULL AND watched_at >= ? GROUP BY d ORDER BY d"
+    },
+    {
+      "bindings": [
+        50,
+        0
+      ],
+      "builder": "consumption_unresolved_query",
+      "name": "no_instance",
+      "params": {
+        "instance": null,
+        "limit": 50,
+        "offset": 0
+      },
+      "sql": "SELECT instance, source_type, library_id, library_name, item_id, raw_title, file_path, observed_at FROM UnresolvedMediaItem ORDER BY observed_at DESC, instance, library_id, item_id LIMIT ? OFFSET ?"
+    },
+    {
+      "bindings": [
+        "emby-home",
+        25,
+        5
+      ],
+      "builder": "consumption_unresolved_query",
+      "name": "with_instance",
+      "params": {
+        "instance": "emby-home",
+        "limit": 25,
+        "offset": 5
+      },
+      "sql": "SELECT instance, source_type, library_id, library_name, item_id, raw_title, file_path, observed_at FROM UnresolvedMediaItem WHERE instance = ? ORDER BY observed_at DESC, instance, library_id, item_id LIMIT ? OFFSET ?"
     }
   ],
   "normalization": "collapse-whitespace-runs-to-single-space-and-trim",
-  "version": "f8321a37c19636e6"
+  "version": "fe08ee6c2ccb71b6"
 }

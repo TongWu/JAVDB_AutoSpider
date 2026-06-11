@@ -2,7 +2,7 @@
 
 | 字段       | 值                                                                    |
 | ---------- | --------------------------------------------------------------------- |
-| **状态**   | Proposed — ADR-033 的 web 对应面;分期镜像 ADR-033                     |
+| **状态**   | Accepted — FE Phase 1、2、3 已实现并验证 2026-06-10;ADR-033 的 web 对应面 |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
 | **关联**   | [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-008](../_archive/ADR-008-Frontend-Rewrite/ADR-008-frontend-rewrite-architecture.md), [ADR-027](../_archive/ADR-027-Stats-Dashboard-Charts/ADR-027-stats-dashboard-charts.md), [ADR-030](../_archive/ADR-030-Web-Feature-Parity/ADR-030-web-feature-parity.md), [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md) |
@@ -66,8 +66,8 @@ web 平台是**一个 Vue 前端背后两套后端**（ADR-017）:一套 TypeScr
 | 阶段 | IMP | 交付内容 | 推迟内容 |
 | --- | --- | --- | --- |
 | FE Phase 1 — Acquisition | [IMP-ADR034-01](IMP-ADR034-01-acquisition-web-surface.md) | Library 页骨架（3 tab,2 禁用）;Acquisition 视图（漏斗 + KPI + 近期表,只读）;`GET /api/library/acquisition/{summary,recent,trend}` 于**两套**后端;`closed_loop` 能力 flag + 导航门控;en/zh 字符串 | Ownership/Consumption 视图;任何写操作 |
-| FE Phase 2 — Ownership | IMP-ADR034-02（占位） | 基于 `OwnershipLedger` 的 Ownership 视图 | — |
-| FE Phase 3 — Consumption | IMP-ADR034-03（占位） | 基于 `ConsumptionSignal` 的 `(instance, library)` 粒度 Consumption 视图 | — |
+| FE Phase 2 — Ownership | [IMP-ADR034-02](IMP-ADR034-02-ownership-web-surface.md) ✅ | 基于 `OwnershipLedger` 的 Ownership 视图（总计 + 分源 KPI、静态分源条形、近期表含 present/swept）+ 双后端 `/api/library/ownership/{summary,recent}` | — |
+| FE Phase 3 — Consumption | [IMP-ADR034-03](IMP-ADR034-03-consumption-web-surface.md) ✅ | 基于 `ConsumptionSignal`（+ `UnresolvedMediaItem`）的 `(instance, library)` 粒度 Consumption 视图 + 双后端 `/api/library/consumption/{summary,recent,trend,unresolved}` | — |
 
 FE Phase 1 只依赖 ADR-033 Phase 1（`AcquisitionOutcome`）。Phase 2/3 依赖 ADR-033 Phase 2/3,待其落地后再细化。
 
