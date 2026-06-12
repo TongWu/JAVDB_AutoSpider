@@ -1467,6 +1467,14 @@
             "title": "Javdb Login",
             "type": "boolean"
           },
+          "library_consumption": {
+            "title": "Library Consumption",
+            "type": "boolean"
+          },
+          "library_ownership": {
+            "title": "Library Ownership",
+            "type": "boolean"
+          },
           "pikpak": {
             "title": "Pikpak",
             "type": "boolean"
@@ -1500,6 +1508,8 @@
           "javdb_login",
           "proxy_preview",
           "closed_loop",
+          "library_ownership",
+          "library_consumption",
           "site_drift_sentinel"
         ],
         "title": "Features",

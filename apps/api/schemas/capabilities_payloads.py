@@ -18,6 +18,8 @@ class Features(BaseModel):
     javdb_login: bool
     proxy_preview: bool
     closed_loop: bool
+    library_ownership: bool
+    library_consumption: bool
     site_drift_sentinel: bool
 
 
