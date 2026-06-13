@@ -54,6 +54,7 @@ from apps.api.routers.operations import router as operations_router
 from apps.api.routers.stats import router as stats_router
 from apps.api.routers.system_state import router as system_state_router
 from apps.api.routers.preferences import router as preferences_router
+from apps.api.routers.watchlist import router as watchlist_router
 from apps.api.routers.quality import router as quality_router
 from apps.api.routers.config import (
     get_config,
@@ -189,6 +190,7 @@ for router in (
     logs_router,
     stats_router,
     preferences_router,
+    watchlist_router,
     quality_router,
 ):
     app.include_router(router)
