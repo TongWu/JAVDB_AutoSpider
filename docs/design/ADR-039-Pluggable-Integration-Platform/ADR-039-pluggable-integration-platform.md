@@ -144,6 +144,7 @@ event-consumer / MCP-tool composition.
 | Phase 1 — Registry + notify | [IMP-ADR039-01](IMP-ADR039-01-notify-plugins.md) | `plugins/registry`; `NotifyPlugin` contract; `EmailNotifyPlugin` (wraps existing); `TelegramNotifyPlugin` (new); `NOTIFY_BACKENDS` config; `notify.send` fan-out | entry-point discovery; other categories |
 | Phase 2 — Entry points + downloader | [IMP-ADR039-02](IMP-ADR039-02-entry-points-downloader.md) ✅ 2026-06-10 | `discover_entry_points` (third-party); `downloader` category (qB + Transmission); demonstrator CLI | `run_uploader` re-route deferred (deep qB coupling — see D3) |
 | Phase 3 — Ecosystem (optional) | IMP-ADR039-03 (deferred) | media-server/destination categories; plugins as ADR-036 consumers / ADR-038 tools | — |
+| Phase 4 — Alert delivery + routing | [IMP-ADR039-04](IMP-ADR039-04-alerting-delivery-routing.md) | `WebhookNotifyPlugin`; D1 routing rules (`(level, source) → backends`, default fan-out preserved); digest queue + `flush_digest`; operator API/Worker/Web config + test-send | per-backend templating; incident detection (ADR-026) |
 
 Phase 1 stands alone and is backward-compatible. Phases 2/3 widen the platform.
 
@@ -199,3 +200,4 @@ Phase 1 stands alone and is backward-compatible. Phases 2/3 widen the platform.
   CLI `apps.cli.download.add` exercises the full stack end-to-end; ~45 new unit
   tests green; `run_uploader` re-route deliberately deferred (deep qB coupling).
   Subagent-driven (8 tasks, implementer + review per task).
+- 2026-06-13: Added Phase 4 (IMP-ADR039-04, alert delivery + routing + digest + webhook + web config) to cover the gap where the notify registry can only fan-out to all backends with no routing/digest/webhook/operator control. The NotifyPlugin contract is unchanged; routing/digest sit above `notify.send`. Incident detection stays in ADR-026; the reserved Phase 3 (ecosystem) is untouched.

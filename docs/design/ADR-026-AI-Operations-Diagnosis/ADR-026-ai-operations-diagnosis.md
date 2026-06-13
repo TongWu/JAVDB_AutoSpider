@@ -236,6 +236,7 @@ action is unsafe, the model may not override it.
 | Phase 1 | [IMP-ADR026-01](IMP-ADR026-01-ai-ops-diagnosis-readonly.md) (Completed 2026-05-27) | D1 incident schema, deterministic incident bundle collector, detector layer, AI synthesis, CLI/API read-only lookup, short email summary, JSONL fallback | No automatic remediation |
 | Phase 2 | [IMP-ADR026-02](IMP-ADR026-02-ai-ops-diagnosis-history-analytics.md) (Completed 2026-06-05) | UI history browsing, deterministic similarity search, and richer incident analytics | Remediation approval flow |
 | Phase 3 | [IMP-ADR026-03](IMP-ADR026-03-ai-ops-diagnosis-gated-remediation.md) | Gated remediation suggestions with human confirmation and explicit safety rails | Any fully automatic fix |
+| Phase 4 | [IMP-ADR026-04](IMP-ADR026-04-proactive-incident-alerting.md) | Proactive incident alerting: deterministic alert-trigger evaluation after incident persistence, operator-tunable alert policies (per incident type + confidence threshold), alert-event dedupe/audit; reuses ADR-039 notify dispatch for delivery | Delivery routing/digests (ADR-039); any remediation execution (Phase 3) |
 
 ## References
 
@@ -252,3 +253,4 @@ action is unsafe, the model may not override it.
 - 2026-05-27: Proposed as ADR-026.
 - 2026-05-27: Phase 1 delivered and verified; Phases 2-3 remain proposed.
 - 2026-06-05: Phase 2 (IMP-ADR026-02) delivered and verified — incident history, deterministic similarity, and analytics across CLI/API/Worker/Web. Phase 3 remains proposed.
+- 2026-06-13: Added Phase 4 (IMP-ADR026-04, proactive incident alerting & operator config) to cover the gap where incidents are collected but nothing proactively alerts on detection. Trigger + operator config live here; notification delivery stays in ADR-039; remediation stays in Phase 3.
