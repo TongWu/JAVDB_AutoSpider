@@ -71,6 +71,8 @@ python3 -m apps.cli.ops.diagnose_run --run-id <run_id> --attempt <attempt> --ses
 
 该助手是只读的，不能替代 rollback 安全矩阵。
 
+ADR-026 remediation proposal 可能会指向本 rollback SOP，但它们不能替代安全矩阵。`approved` 状态的 proposal 表示 operator 接受了该建议；这并不意味着 rollback 已经执行，也不意味着 rollback CLI 可以跳过自身的检查。
+
 ---
 
 ## D1 Recovery Outbox

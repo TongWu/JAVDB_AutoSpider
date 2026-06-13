@@ -116,6 +116,36 @@ class ParseFieldHealthResponse(BaseModel):
     items: list[ParseFieldHealthItem]
 
 
+class OpsRemediationProposalSchema(BaseModel):
+    proposal_id: str
+    incident_id: str
+    action_type: str
+    status: str
+    safety_level: str
+    title: str
+    rationale: str
+    command_preview: Optional[str] = None
+    runbook_ref: Optional[str] = None
+    evidence_refs: list[EvidenceRefSchema]
+    required_checks: list[str]
+    blocked_reasons: list[str]
+    proposed_by: str
+    decided_by: Optional[str] = None
+    decision_note: Optional[str] = None
+    created_at: str
+    updated_at: str
+    decided_at: Optional[str] = None
+
+
+class OpsRemediationProposalListResponse(BaseModel):
+    items: list[OpsRemediationProposalSchema]
+
+
+class OpsRemediationDecisionRequest(BaseModel):
+    status: Literal["approved", "rejected"]
+    decision_note: Optional[str] = None
+
+
 __all__ = [
     "EvidenceRefSchema",
     "JavdbSessionRefreshRequest",
@@ -125,6 +155,9 @@ __all__ = [
     "OpsIncidentListResponse",
     "OpsIncidentSchema",
     "OpsIncidentSimilarityResponse",
+    "OpsRemediationDecisionRequest",
+    "OpsRemediationProposalListResponse",
+    "OpsRemediationProposalSchema",
     "ParseFieldHealthItem",
     "ParseFieldHealthResponse",
     "SimilarIncidentSchema",

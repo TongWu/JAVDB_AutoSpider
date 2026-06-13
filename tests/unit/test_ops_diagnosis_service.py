@@ -100,3 +100,58 @@ def test_service_does_not_persist_feature_row_on_jsonl_fallback(tmp_path):
 
     assert record.persistence_status == "d1_failed_jsonl_written"
     assert repo.features == []
+
+
+def test_service_can_generate_remediation_proposals():
+    class ProposalRepo:
+        def __init__(self):
+            self.proposals = []
+
+        def upsert(self, proposal):
+            self.proposals.append(proposal)
+
+    incident_repo = CapturingRepo()
+    proposal_repo = ProposalRepo()
+    bundle = IncidentBundle(
+        trigger_source="manual_cli",
+        workflow_result="failure",
+        session_id="20260527T120000.000000Z-0001-0001",
+    )
+
+    record = diagnose_incident(
+        bundle,
+        repo=incident_repo,
+        remediation_repo=proposal_repo,
+        generate_remediation=True,
+    )
+
+    assert record.incident_type == "failed_ingestion"
+    assert proposal_repo.proposals
+    assert {proposal.action_type for proposal in proposal_repo.proposals}
+
+
+def test_service_swallows_remediation_persistence_failure():
+    """Remediation proposals are non-critical: a failure to persist them must not
+    break the main diagnosis flow (graceful degradation)."""
+
+    class ExplodingProposalRepo:
+        def upsert(self, proposal):
+            raise RuntimeError("boom")
+
+    incident_repo = CapturingRepo()
+    bundle = IncidentBundle(
+        trigger_source="manual_cli",
+        workflow_result="failure",
+        session_id="20260527T120000.000000Z-0001-0001",
+    )
+
+    # Must not raise despite the proposal repo blowing up mid-persist.
+    record = diagnose_incident(
+        bundle,
+        repo=incident_repo,
+        remediation_repo=ExplodingProposalRepo(),
+        generate_remediation=True,
+    )
+
+    assert record.incident_type == "failed_ingestion"
+    assert record.persistence_status == "d1_written"
