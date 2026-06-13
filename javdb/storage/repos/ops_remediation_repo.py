@@ -100,22 +100,31 @@ class OpsRemediationRepo:
         decided_by: str,
         decision_note: str | None,
     ) -> OpsRemediationProposal | None:
+        existing = self.get(proposal_id)
+        if existing is None:
+            return None  # 404 upstream
+        # Decisions are single-transition: a proposal may be decided only while it
+        # is still 'proposed'. Re-deciding would overwrite the actor/note/timestamp
+        # audit trail of the original decision.
+        if existing.status != "proposed":
+            raise ValueError(
+                f"Proposal already decided ({existing.status}); decisions are "
+                f"single-transition: {proposal_id}"
+            )
         # A proposal the safety policy has blocked must never become 'approved' —
         # that would record a contradictory "approved but blocked" decision and
         # could mislead an operator into acting. Rejecting a blocked proposal is
         # always allowed.
-        if status == "approved":
-            existing = self.get(proposal_id)
-            if existing is not None and existing.safety_level == "blocked":
-                raise ValueError(
-                    f"Cannot approve a proposal blocked by the safety policy: {proposal_id}"
-                )
+        if status == "approved" and existing.safety_level == "blocked":
+            raise ValueError(
+                f"Cannot approve a proposal blocked by the safety policy: {proposal_id}"
+            )
         now = utc_now_iso()
         self._conn.execute(
             """
             UPDATE OpsRemediationProposals
             SET status = ?, decided_by = ?, decision_note = ?, decided_at = ?, updated_at = ?
-            WHERE proposal_id = ?
+            WHERE proposal_id = ? AND status = 'proposed'
             """,
             [status, decided_by, decision_note, now, now, proposal_id],
         )

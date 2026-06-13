@@ -138,3 +138,27 @@ def test_repo_rejects_approving_blocked_proposal():
     )
     assert rejected is not None
     assert rejected.status == "rejected"
+
+
+def test_repo_decisions_are_single_transition():
+    """A proposal may be decided only once; re-deciding is refused and the
+    original decision + audit trail is preserved."""
+    repo = OpsRemediationRepo(_conn())
+    proposal = _proposal()
+    repo.upsert(proposal)
+
+    first = repo.record_decision(
+        proposal.proposal_id, status="approved", decided_by="admin", decision_note="ok"
+    )
+    assert first is not None
+    assert first.status == "approved"
+
+    with pytest.raises(ValueError, match="single-transition"):
+        repo.record_decision(
+            proposal.proposal_id, status="rejected", decided_by="admin2", decision_note="oops"
+        )
+
+    still = repo.get(proposal.proposal_id)
+    assert still.status == "approved"
+    assert still.decided_by == "admin"
+    assert still.decision_note == "ok"
