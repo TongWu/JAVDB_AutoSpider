@@ -83,6 +83,7 @@ javdb/integrations/notify/telegram/plugin.py # TelegramNotifyPlugin（新）
 | Phase 1 — 注册表 + notify | [IMP-ADR039-01](IMP-ADR039-01-notify-plugins.md) | `plugins/registry`;`NotifyPlugin` 契约;`EmailNotifyPlugin`（包现有）;`TelegramNotifyPlugin`（新）;`NOTIFY_BACKENDS` config;`notify.send` 扇出 | entry-point 发现;其它类别 |
 | Phase 2 — Entry points + downloader | [IMP-ADR039-02](IMP-ADR039-02-entry-points-downloader.md) ✅ 2026-06-10 | `discover_entry_points`（第三方）;`downloader` 类别（qB + Transmission）;示例 CLI | `run_uploader` 重路由推迟（qB 耦合深——见 D3） |
 | Phase 3 — 生态（可选） | IMP-ADR039-03（已推迟） | media-server/destination 类别;插件作 ADR-036 消费者 / ADR-038 工具 | — |
+| Phase 4 — 告警投递 + 路由 | [IMP-ADR039-04](IMP-ADR039-04-alerting-delivery-routing.md) | `WebhookNotifyPlugin`;D1 路由规则（`(level, source) → backends`，保留默认扇出）；digest 队列 + `flush_digest`；运营者 API/Worker/Web 配置 + test-send | 各后端模板化；incident 检测（ADR-026） |
 
 Phase 1 独立成立且向后兼容。Phase 2/3 拓宽平台。
 
@@ -128,3 +129,4 @@ Phase 1 独立成立且向后兼容。Phase 2/3 拓宽平台。
   Transmission JSON-RPC client）；示例 CLI `apps.cli.download.add` 端到端行使完
   整下载器类别栈；~45 条新单元测试通过；`run_uploader` 重路由刻意推迟（qB 耦合
   深）。Subagent 驱动（8 个任务，每任务实现者 + 审查者各一）。
+- 2026-06-13: 新增 Phase 4（IMP-ADR039-04，告警投递 + 路由 + digest + webhook + web 配置），以补上 notify 注册表只能向所有后端扇出、缺少路由/digest/webhook/运营者控制的空缺。`NotifyPlugin` 契约不变；路由/digest 位于 `notify.send` 之上。Incident 检测仍归 ADR-026；预留的 Phase 3（生态）保持不动。

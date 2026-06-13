@@ -178,6 +178,7 @@ Phase 1 里，assistant 永远不能做这些事：
 | Phase 1 | [IMP-ADR026-01](IMP-ADR026-01-ai-ops-diagnosis-readonly.md)（Completed 2026-05-27） | D1 incident schema、deterministic incident bundle collector、detector layer、AI synthesis、CLI/API 只读查询、短 email 摘要、JSONL fallback | 不做自动修复 |
 | Phase 2 | [IMP-ADR026-02](IMP-ADR026-02-ai-ops-diagnosis-history-analytics.md)（Completed 2026-06-05） | UI 历史浏览、确定性相似性检索、以及更丰富的 incident 分析 | 修复审批流 |
 | Phase 3 | [IMP-ADR026-03](IMP-ADR026-03-ai-ops-diagnosis-gated-remediation.md) | 带人工确认和显式安全边界的门控式修复建议 | 任何全自动修复 |
+| Phase 4 | [IMP-ADR026-04](IMP-ADR026-04-proactive-incident-alerting.md) | 主动 incident 告警：incident 持久化后做确定性的 alert-trigger 评估、operator 可调的 alert policy（按 incident type + confidence 阈值）、alert-event 去重/审计；复用 ADR-039 notify dispatch 投递 | 投递路由/digest（ADR-039）；任何 remediation 执行（Phase 3） |
 
 ## 参考
 
@@ -194,3 +195,4 @@ Phase 1 里，assistant 永远不能做这些事：
 - 2026-05-27：以 ADR-026 提出。
 - 2026-05-27：Phase 1 已交付并验证；Phase 2-3 仍保持 proposed。
 - 2026-06-05：Phase 2（IMP-ADR026-02）已交付并验证 —— 涵盖 CLI/API/Worker/Web 的 incident 历史、确定性相似性检索和 analytics。Phase 3 仍保持 proposed。
+- 2026-06-13：新增 Phase 4（IMP-ADR026-04，主动 incident 告警与 operator 配置），用于覆盖「incident 已收集但检测时没有任何东西主动告警」的缺口。trigger 与 operator 配置归在这里；notification 投递仍留在 ADR-039；remediation 仍留在 Phase 3。
