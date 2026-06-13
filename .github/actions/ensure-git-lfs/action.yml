@@ -1,0 +1,66 @@
+name: 'Ensure git-lfs and pull LFS objects'
+description: >-
+  actions/checkout with `lfs: true` requires a git-lfs binary before
+  checkout even starts, which a repo-local action cannot provide on a
+  fresh self-hosted runner (the repo is not checked out yet). Pattern
+  instead: check out without LFS, then run this action — it bootstraps a
+  pinned git-lfs into ~/.local/bin when the binary is missing
+  (self-hosted Linux, both arches), then runs `git lfs pull` using the
+  credentials persisted by actions/checkout. No-op bootstrap wherever
+  git-lfs already exists (all GitHub-hosted images ship it).
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Bootstrap git-lfs if missing
+      shell: bash
+      run: |
+        set -euo pipefail
+        if command -v git-lfs >/dev/null 2>&1; then
+          echo "✓ git-lfs already installed: $(git-lfs --version)"
+          exit 0
+        fi
+        if [ "${RUNNER_OS:-}" != "Linux" ]; then
+          echo "::error::ensure-git-lfs: git-lfs missing and auto-install only supports Linux"
+          exit 1
+        fi
+        # Pinned release; bump deliberately. Assets follow
+        #   git-lfs-linux-<arch>-v<version>.tar.gz
+        VERSION="3.7.1"
+        case "${RUNNER_ARCH:-}" in
+          X64)   ARCH="amd64" ;;
+          ARM64) ARCH="arm64" ;;
+          *)
+            echo "::error::ensure-git-lfs: unsupported RUNNER_ARCH '${RUNNER_ARCH:-}'"
+            exit 1
+            ;;
+        esac
+        ASSET="git-lfs-linux-${ARCH}-v${VERSION}.tar.gz"
+        BASE="https://github.com/git-lfs/git-lfs/releases/download/v${VERSION}"
+        WORK="$(mktemp -d)"
+        trap 'rm -rf "$WORK"' EXIT
+        echo "Installing git-lfs ${VERSION} (${ARCH}) into ~/.local/bin"
+        curl -fsSL --retry 3 -o "${WORK}/${ASSET}" "${BASE}/${ASSET}"
+        curl -fsSL --retry 3 -o "${WORK}/sha256sums.asc" "${BASE}/sha256sums.asc"
+        EXPECTED="$(awk -v a="$ASSET" '$2 == a || $2 == "*" a {print $1; exit}' "${WORK}/sha256sums.asc")"
+        if [ -z "$EXPECTED" ]; then
+          echo "::error::ensure-git-lfs: ${ASSET} not listed in sha256sums.asc"
+          exit 1
+        fi
+        ACTUAL="$(sha256sum "${WORK}/${ASSET}" | cut -d' ' -f1)"
+        if [ "$EXPECTED" != "$ACTUAL" ]; then
+          echo "::error::ensure-git-lfs: sha256 mismatch for ${ASSET} (expected ${EXPECTED}, got ${ACTUAL})"
+          exit 1
+        fi
+        tar -xzf "${WORK}/${ASSET}" -C "$WORK"
+        mkdir -p "${HOME}/.local/bin"
+        install -m 0755 "${WORK}/git-lfs-${VERSION}/git-lfs" "${HOME}/.local/bin/git-lfs"
+        echo "${HOME}/.local/bin" >> "$GITHUB_PATH"
+        "${HOME}/.local/bin/git-lfs" --version
+
+    - name: Pull LFS objects
+      shell: bash
+      run: |
+        set -euo pipefail
+        export PATH="${HOME}/.local/bin:${PATH}"
+        git lfs pull
