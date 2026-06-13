@@ -147,12 +147,12 @@ exclude_paths:
 
 ```yaml
 build-arm:
-  runs-on: self-hosted  # PUBLIC_RUNNER: ubuntu-24.04-arm
+  runs-on: [self-hosted, ARM64]  # PUBLIC_RUNNER: ubuntu-24.04-arm
 ```
 
 发布时，`publish-to-public.yml` 会将匹配此模式的每一行重写为 `runs-on: <public-runner>`（此处为 `ubuntu-24.04-arm`）。该标记会扫描所有 `.github/workflows/*.yml` 文件，因此无需在 `.publish-config.yml` 中添加额外条目。
 
-限制：仅支持单 token 的 `runs-on` 值（例如 `self-hosted`、`ubuntu-latest`）。数组形式（如 `[self-hosted, linux]`）或表达式形式（如 `${{ matrix.runner }}`）故意不在支持范围内，需要更丰富的标记方案。
+单 token 形式（`runs-on: self-hosted`）和按架构固定的数组形式（`runs-on: [self-hosted, ARM64]`）都受支持——当自托管任务必须锁定某一架构时需要数组形式，因为 fleet 只用默认的 `self-hosted` / `Linux` / `X64` / `ARM64` 标签标记机器。替换 runner（`PUBLIC_RUNNER:` 之后）仍为单 token，GitHub 托管的回退 runner 永远不需要数组。表达式形式（如 `${{ matrix.runner }}`）不带标记，保持原样。
 
 ### 问：如何更改目标分支？
 

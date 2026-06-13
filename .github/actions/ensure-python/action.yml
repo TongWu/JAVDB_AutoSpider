@@ -1,0 +1,92 @@
+name: 'Ensure Python in tool cache'
+description: >-
+  Seed the requested CPython into the self-hosted runner tool cache from
+  python-build-standalone when actions/setup-python cannot provide it.
+  setup-python's download manifest only covers Ubuntu, so on other
+  self-hosted Linux distros (e.g. Debian) it fails with "version ... was
+  not found for this operating system" unless the version already sits in
+  the runner tool cache. No-op on GitHub-hosted runners, on non-Linux,
+  and on tool-cache hit.
+
+inputs:
+  python-version:
+    description: 'major.minor CPython version to ensure (e.g. 3.12)'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Seed runner tool cache
+      shell: bash
+      env:
+        REQUESTED: ${{ inputs.python-version }}
+      run: |
+        set -euo pipefail
+        if [ "${RUNNER_ENVIRONMENT:-}" = "github-hosted" ] || [ "${RUNNER_OS:-}" != "Linux" ]; then
+          exit 0
+        fi
+
+        # Pinned python-build-standalone release. Bump TAG and the version
+        # map together; asset names follow
+        #   cpython-<full>+<tag>-<triple>-install_only.tar.gz
+        TAG="20260610"
+        case "$REQUESTED" in
+          3.11) FULL="3.11.15" ;;
+          3.12) FULL="3.12.13" ;;
+          *)
+            echo "::warning::ensure-python: no python-build-standalone pin for '$REQUESTED'; leaving provisioning to actions/setup-python"
+            exit 0
+            ;;
+        esac
+
+        case "${RUNNER_ARCH:-}" in
+          X64)   ARCH_DIR="x64";   TRIPLE="x86_64-unknown-linux-gnu" ;;
+          ARM64) ARCH_DIR="arm64"; TRIPLE="aarch64-unknown-linux-gnu" ;;
+          *)
+            echo "::error::ensure-python: unsupported RUNNER_ARCH '${RUNNER_ARCH:-}'"
+            exit 1
+            ;;
+        esac
+
+        TOOL_CACHE="${RUNNER_TOOL_CACHE:?RUNNER_TOOL_CACHE is not set}"
+        if compgen -G "${TOOL_CACHE}/Python/${REQUESTED}.*/${ARCH_DIR}.complete" > /dev/null; then
+          echo "✓ Python ${REQUESTED} already in tool cache"
+          exit 0
+        fi
+
+        ASSET="cpython-${FULL}+${TAG}-${TRIPLE}-install_only.tar.gz"
+        URL="https://github.com/astral-sh/python-build-standalone/releases/download/${TAG}/${ASSET}"
+        WORK="$(mktemp -d)"
+        trap 'rm -rf "$WORK"' EXIT
+        echo "Seeding Python ${FULL} (${ARCH_DIR}) into the tool cache from python-build-standalone ${TAG}"
+        curl -fsSL --retry 3 -o "${WORK}/${ASSET}" "$URL"
+        # The release ships one aggregated SHA256SUMS file (no per-asset
+        # .sha256 siblings).
+        curl -fsSL --retry 3 -o "${WORK}/SHA256SUMS" \
+          "https://github.com/astral-sh/python-build-standalone/releases/download/${TAG}/SHA256SUMS"
+        EXPECTED="$(awk -v a="$ASSET" '$2 == a || $2 == "*" a {print $1; exit}' "${WORK}/SHA256SUMS")"
+        if [ -z "$EXPECTED" ]; then
+          echo "::error::ensure-python: ${ASSET} not listed in SHA256SUMS for tag ${TAG}"
+          exit 1
+        fi
+        ACTUAL="$(sha256sum "${WORK}/${ASSET}" | cut -d' ' -f1)"
+        if [ "$EXPECTED" != "$ACTUAL" ]; then
+          echo "::error::ensure-python: sha256 mismatch for ${ASSET} (expected ${EXPECTED}, got ${ACTUAL})"
+          exit 1
+        fi
+        tar -xzf "${WORK}/${ASSET}" -C "$WORK"
+
+        # install_only tarballs extract to ./python; add the plain `python`
+        # symlink so PATH consumers do not depend on `python3` aliasing.
+        ln -sf python3 "${WORK}/python/bin/python"
+
+        # Tool-cache layout expected by actions/setup-python:
+        #   <cache>/Python/<full-version>/<arch>/...  +  <arch>.complete marker
+        DEST="${TOOL_CACHE}/Python/${FULL}/${ARCH_DIR}"
+        mkdir -p "$(dirname "$DEST")"
+        if [ ! -d "$DEST" ]; then
+          mv "${WORK}/python" "$DEST"
+        fi
+        touch "${DEST}.complete"
+        "${DEST}/bin/python" --version
+        echo "✓ Seeded ${DEST}"

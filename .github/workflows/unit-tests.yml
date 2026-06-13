@@ -50,7 +50,7 @@ on:
 
 jobs:
   detect-impact:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted  # PUBLIC_RUNNER: ubuntu-latest
     timeout-minutes: 5
     outputs:
       build_rust_wheel: ${{ steps.select.outputs.build_rust_wheel }}
@@ -72,6 +72,11 @@ jobs:
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       with:
         fetch-depth: 0
+
+    - name: Ensure Python in runner tool cache
+      uses: ./.github/actions/ensure-python
+      with:
+        python-version: '3.11'
 
     - name: Set up Python
       uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
@@ -96,7 +101,7 @@ jobs:
         cat impact.json
 
   rust-check:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted  # PUBLIC_RUNNER: ubuntu-latest
     needs: [detect-impact]
     if: needs.detect-impact.outputs.run_rust == 'true'
     timeout-minutes: 15
@@ -138,7 +143,7 @@ jobs:
         fi
 
   python-selected:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted  # PUBLIC_RUNNER: ubuntu-latest
     needs: [detect-impact]
     if: needs.detect-impact.outputs.run_selected_python == 'true'
     timeout-minutes: 25
@@ -146,8 +151,9 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      with:
-        lfs: true
+
+    - name: Ensure git-lfs and pull LFS objects
+      uses: ./.github/actions/ensure-git-lfs
 
     - name: Set up Python, venv, dependencies, optional Rust extension
       uses: ./.github/actions/setup-python-env
@@ -167,7 +173,7 @@ jobs:
         pytest $PYTEST_TARGETS -v --tb=short
 
   python-full:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted  # PUBLIC_RUNNER: ubuntu-latest
     needs: [detect-impact]
     if: needs.detect-impact.outputs.run_full_python == 'true'
     timeout-minutes: 25
@@ -179,8 +185,9 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      with:
-        lfs: true
+
+    - name: Ensure git-lfs and pull LFS objects
+      uses: ./.github/actions/ensure-git-lfs
 
     - name: Set up Python, venv, dependencies, optional Rust extension
       uses: ./.github/actions/setup-python-env
@@ -204,7 +211,7 @@ jobs:
         token: ${{ secrets.CODECOV_TOKEN }}
 
   fallback-without-rust:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted  # PUBLIC_RUNNER: ubuntu-latest
     needs: [detect-impact]
     if: needs.detect-impact.outputs.run_fallback_tests == 'true'
     timeout-minutes: 15
@@ -231,12 +238,17 @@ jobs:
         pytest tests/unit/test_rust_adapters_fallback.py tests/unit/test_dedup_checker_rust_adapter.py -v --tb=short
 
   lint:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted  # PUBLIC_RUNNER: ubuntu-latest
     timeout-minutes: 15
 
     steps:
     - name: Checkout code
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+    - name: Ensure Python in runner tool cache
+      uses: ./.github/actions/ensure-python
+      with:
+        python-version: '3.11'
 
     - name: Set up Python
       uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
@@ -256,12 +268,17 @@ jobs:
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=150 --statistics --exclude=__pycache__,.git,*.pyc,rust_core
 
   pip-audit:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted  # PUBLIC_RUNNER: ubuntu-latest
     timeout-minutes: 10
 
     steps:
     - name: Checkout code
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+    - name: Ensure Python in runner tool cache
+      uses: ./.github/actions/ensure-python
+      with:
+        python-version: '3.12'
 
     - name: Set up Python
       uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
