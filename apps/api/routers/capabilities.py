@@ -72,6 +72,17 @@ def _library_consumption_enabled() -> bool:
         return False
 
 
+def _watch_intent_enabled() -> bool:
+    """True when the ADR-054 WatchIntent table is queryable (capability honesty)."""
+    try:
+        from javdb.storage.db import HISTORY_DB_PATH, get_db
+        with get_db(HISTORY_DB_PATH) as conn:
+            conn.execute("SELECT 1 FROM WatchIntent LIMIT 1").fetchone()
+        return True
+    except Exception:
+        return False
+
+
 def build_capabilities() -> CapabilitiesResponse:
     ingestion_mode = cast(
         "Literal['local', 'github', 'dual']",
@@ -108,6 +119,7 @@ def build_capabilities() -> CapabilitiesResponse:
             closed_loop=_closed_loop_enabled(),
             library_ownership=_library_ownership_enabled(),
             library_consumption=_library_consumption_enabled(),
+            watch_intent=_watch_intent_enabled(),
             # ADR-035: site-contract drift sentinel ships with the system; the
             # frontend hides the drift panel only when explicitly disabled.
             site_drift_sentinel=_bool_env("FEATURE_SITE_DRIFT_SENTINEL", default=True),

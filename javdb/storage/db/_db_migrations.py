@@ -217,6 +217,16 @@ CREATE TABLE IF NOT EXISTS ContentPreferences (
 );
 CREATE INDEX IF NOT EXISTS idx_content_prefs_hearted
     ON ContentPreferences(content_type, hearted);
+
+CREATE TABLE IF NOT EXISTS WatchIntent (
+    video_code  TEXT PRIMARY KEY,
+    href        TEXT NOT NULL,
+    status      TEXT NOT NULL CHECK (status IN ('want','viewed')),
+    notes       TEXT,
+    status_at   TEXT,
+    updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_watch_intent_status ON WatchIntent(status);
 """
 
 _REPORTS_DDL = _SCHEMA_VERSION_DDL + """

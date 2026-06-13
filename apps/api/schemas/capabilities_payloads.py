@@ -20,6 +20,7 @@ class Features(BaseModel):
     closed_loop: bool
     library_ownership: bool
     library_consumption: bool
+    watch_intent: bool
     site_drift_sentinel: bool
 
 
