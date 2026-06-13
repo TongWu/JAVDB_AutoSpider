@@ -237,3 +237,20 @@ curl -H "Authorization: Bearer <token>" \
 Web UI 会在 **诊断 -> Ops Incidents** 展示同样的只读记录。相似 incident 基于确定性 feature overlap：incident type、confidence、trigger source、text tokens、unsafe action tokens 和 evidence kinds。Phase 2 的 score 是可解释的，不使用 embedding。
 
 这个页面只用于调查。它不能 rollback、rerun、delete、apply drift fix，也不能把 recovery work 标记为 resolved。
+
+### 门控式修复建议
+
+ADR-026 Phase 3 可以给 incident 附加 remediation proposal。proposal 是可审计的建议，不是已经执行的任务。系统可以展示 runbook 链接或 command preview，但 operator 仍必须手动执行底层 rollback、rerun、drift apply、qB inspection 或 recovery 命令。
+
+Proposal 状态：
+
+- `proposed` - 由确定性 policy 生成。
+- `approved` - admin 复核后接受该建议。
+- `rejected` - admin 拒绝该建议。
+- `expired` - 对当前 incident 状态已经不再有效。
+
+Safety level：
+
+- `safe_to_prepare` - 可以安全展示为下一步只读操作。
+- `requires_review` - 使用 command preview 前必须复核 required checks。
+- `blocked` - blocked reasons 解决前不能执行。

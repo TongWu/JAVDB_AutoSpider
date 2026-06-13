@@ -430,7 +430,11 @@ def propose_remediation(record: OpsIncidentRecord) -> list[OpsRemediationProposa
                 safety_level="requires_review",
                 title="Prepare ingestion workflow rerun",
                 rationale="The incident is a failed ingestion. A rerun may be appropriate after checking external side effects.",
-                command_preview=f"gh workflow run DailyIngestion.yml -F run_id={record.run_id or ''}",
+                command_preview=(
+                    f"gh run rerun {record.run_id}"
+                    if record.run_id
+                    else "gh workflow run DailyIngestion.yml"
+                ),
                 runbook_ref="docs/handbook/en/ops/troubleshooting.md",
                 evidence_refs=[_incident_ref(record)],
                 required_checks=[
@@ -442,7 +446,12 @@ def propose_remediation(record: OpsIncidentRecord) -> list[OpsRemediationProposa
             )
         )
 
-        rollback_blocked = _has_unsafe_rollback(record) or record.session_id is None
+        rollback_blocked_reasons: list[str] = []
+        if record.session_id is None:
+            rollback_blocked_reasons.append("Session id is missing.")
+        if _has_unsafe_rollback(record):
+            rollback_blocked_reasons.append("Diagnosis flagged rollback as unsafe.")
+        rollback_blocked = bool(rollback_blocked_reasons)
         proposals.append(
             OpsRemediationProposal.create(
                 incident_id=record.incident_id,
@@ -460,7 +469,7 @@ def propose_remediation(record: OpsIncidentRecord) -> list[OpsRemediationProposa
                     "Confirm session status and write mode.",
                     "Confirm rollback does not conflict with committed history.",
                 ],
-                blocked_reasons=["Session id is missing."] if rollback_blocked else [],
+                blocked_reasons=rollback_blocked_reasons,
                 proposed_by=POLICY_VERSION,
             )
         )
@@ -493,7 +502,7 @@ def propose_remediation(record: OpsIncidentRecord) -> list[OpsRemediationProposa
                 safety_level="requires_review",
                 title="Inspect D1 recovery outbox",
                 rationale="Recovery outbox incidents require ordering-key inspection before any state is marked resolved.",
-                command_preview="python3 -m apps.cli.db.replay_d1_recovery --dry-run",
+                command_preview="python3 -m apps.cli.db.d1_recovery inspect",
                 runbook_ref="docs/handbook/en/ops/d1-rollback.md",
                 evidence_refs=[_incident_ref(record)],
                 required_checks=["Confirm whether dead-lettered work blocks the affected session ordering key."],

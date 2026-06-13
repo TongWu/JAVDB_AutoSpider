@@ -71,6 +71,8 @@ python3 -m apps.cli.ops.diagnose_run --run-id <run_id> --attempt <attempt> --ses
 
 The assistant is read-only and does not replace the rollback safety matrix.
 
+ADR-026 remediation proposals may point to this rollback SOP, but they do not replace the safety matrix. An `approved` proposal means an operator accepted the recommendation; it does not mean rollback has run or that the rollback CLI can skip its own checks.
+
 ---
 
 ## D1 Recovery Outbox

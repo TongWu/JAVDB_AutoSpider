@@ -3063,6 +3063,187 @@
         "title": "OpsIncidentSimilarityResponse",
         "type": "object"
       },
+      "OpsRemediationDecisionRequest": {
+        "properties": {
+          "decision_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Note"
+          },
+          "status": {
+            "enum": [
+              "approved",
+              "rejected"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "OpsRemediationDecisionRequest",
+        "type": "object"
+      },
+      "OpsRemediationProposalListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OpsRemediationProposalSchema"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "OpsRemediationProposalListResponse",
+        "type": "object"
+      },
+      "OpsRemediationProposalSchema": {
+        "properties": {
+          "action_type": {
+            "title": "Action Type",
+            "type": "string"
+          },
+          "blocked_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocked Reasons",
+            "type": "array"
+          },
+          "command_preview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Command Preview"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "decided_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By"
+          },
+          "decision_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Note"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRefSchema"
+            },
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "incident_id": {
+            "title": "Incident Id",
+            "type": "string"
+          },
+          "proposal_id": {
+            "title": "Proposal Id",
+            "type": "string"
+          },
+          "proposed_by": {
+            "title": "Proposed By",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "required_checks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Checks",
+            "type": "array"
+          },
+          "runbook_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runbook Ref"
+          },
+          "safety_level": {
+            "title": "Safety Level",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "proposal_id",
+          "incident_id",
+          "action_type",
+          "status",
+          "safety_level",
+          "title",
+          "rationale",
+          "evidence_refs",
+          "required_checks",
+          "blocked_reasons",
+          "proposed_by",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "OpsRemediationProposalSchema",
+        "type": "object"
+      },
       "OwnershipRecentItem": {
         "description": "One OwnershipLedger row for GET /api/library/ownership/recent.",
         "properties": {
@@ -6610,6 +6791,89 @@
         ]
       }
     },
+    "/api/diag/ops-incidents/{incident_id}/remediation-proposals": {
+      "get": {
+        "operationId": "list_ops_remediation_proposals_api_diag_ops_incidents__incident_id__remediation_proposals_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpsRemediationProposalListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "detail"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "detail"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "List Ops Remediation Proposals",
+        "tags": [
+          "diagnostics"
+        ]
+      }
+    },
     "/api/diag/ops-incidents/{incident_id}/similar": {
       "get": {
         "description": "Return incidents most similar to the given incident, ranked by feature overlap.",
@@ -6798,6 +7062,99 @@
           }
         ],
         "summary": "Get Parse Field Health",
+        "tags": [
+          "diagnostics"
+        ]
+      }
+    },
+    "/api/diag/remediation-proposals/{proposal_id}/decision": {
+      "post": {
+        "operationId": "decide_ops_remediation_proposal_api_diag_remediation_proposals__proposal_id__decision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpsRemediationDecisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpsRemediationProposalSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "detail"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "detail"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Decide Ops Remediation Proposal",
         "tags": [
           "diagnostics"
         ]

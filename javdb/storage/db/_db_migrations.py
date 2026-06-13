@@ -446,6 +446,48 @@ CREATE INDEX IF NOT EXISTS idx_ops_incident_features_run
 CREATE INDEX IF NOT EXISTS idx_ops_incident_features_session
     ON OpsIncidentFeatures(session_id);
 
+-- Gated remediation proposal ledger (ADR-026 Phase 3). Mirrors
+-- javdb/migrations/d1/2026_05_27_add_ops_remediation_proposals.sql so a fresh
+-- local init_db() builds it too. Stores suggestions and human decisions;
+-- never executes rollback, rerun, drift apply, qB cleanup, or recovery mutation.
+CREATE TABLE IF NOT EXISTS OpsRemediationProposals (
+    proposal_id TEXT PRIMARY KEY,
+    incident_id TEXT NOT NULL,
+    action_type TEXT NOT NULL
+        CHECK (action_type IN (
+            'open_runbook',
+            'prepare_rollback_workflow',
+            'prepare_rerun_workflow',
+            'prepare_drift_apply_command',
+            'inspect_qb_side_effects',
+            'inspect_recovery_outbox'
+        )),
+    status TEXT NOT NULL DEFAULT 'proposed'
+        CHECK (status IN ('proposed', 'approved', 'rejected', 'expired')),
+    safety_level TEXT NOT NULL
+        CHECK (safety_level IN ('safe_to_prepare', 'requires_review', 'blocked')),
+    title TEXT NOT NULL,
+    rationale TEXT NOT NULL,
+    command_preview TEXT,
+    runbook_ref TEXT,
+    evidence_refs_json TEXT NOT NULL DEFAULT '[]',
+    required_checks_json TEXT NOT NULL DEFAULT '[]',
+    blocked_reasons_json TEXT NOT NULL DEFAULT '[]',
+    proposed_by TEXT NOT NULL DEFAULT 'adr026-policy-v1',
+    decided_by TEXT,
+    decision_note TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    decided_at TEXT,
+    FOREIGN KEY (incident_id) REFERENCES OpsIncidents(incident_id)
+);
+CREATE INDEX IF NOT EXISTS idx_ops_remediation_incident
+    ON OpsRemediationProposals(incident_id);
+CREATE INDEX IF NOT EXISTS idx_ops_remediation_status
+    ON OpsRemediationProposals(status);
+CREATE INDEX IF NOT EXISTS idx_ops_remediation_action_type
+    ON OpsRemediationProposals(action_type);
+
 -- Event-spine tables (ADR-036 Phase 1). Mirrors
 -- javdb/migrations/d1/2026_05_29_add_pipeline_event.sql so a fresh local
 -- init_db() builds them too (not just the remote D1 migration). Additive,

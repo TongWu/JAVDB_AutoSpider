@@ -23,16 +23,21 @@ from apps.api.schemas.diagnostics import (
     OpsIncidentListResponse,
     OpsIncidentSchema,
     OpsIncidentSimilarityResponse,
+    OpsRemediationDecisionRequest,
+    OpsRemediationProposalListResponse,
+    OpsRemediationProposalSchema,
     ParseFieldHealthItem,
     ParseFieldHealthResponse,
     SimilarIncidentSchema,
 )
 from javdb.infra.config import cfg
 from javdb.ops.diagnosis.analytics import summarize_incidents
+from javdb.ops.diagnosis.models import OpsRemediationProposal
 from javdb.ops.diagnosis.similarity import rank_similar_incidents
 from javdb.ops.sentinel.health import compute_field_health
 from javdb.storage.db import OPERATIONS_DB_PATH, REPORTS_DB_PATH, get_db
 from javdb.storage.repos.ops_incident_repo import OpsIncidentRepo
+from javdb.storage.repos.ops_remediation_repo import OpsRemediationRepo
 from javdb.storage.repos.parse_run_field_fill_repo import ParseRunFieldFillRepo
 from javdb.storage.repos.system_state_repo import SystemStateRepo
 
@@ -194,6 +199,43 @@ def _compute_parse_field_health(*, repo=None) -> list[ParseFieldHealthItem]:
         return _field_health_items(ParseRunFieldFillRepo(conn), min_sample, window)
 
 
+def _proposal_to_schema(proposal: OpsRemediationProposal) -> OpsRemediationProposalSchema:
+    return OpsRemediationProposalSchema(
+        proposal_id=proposal.proposal_id,
+        incident_id=proposal.incident_id,
+        action_type=proposal.action_type,
+        status=proposal.status,
+        safety_level=proposal.safety_level,
+        title=proposal.title,
+        rationale=proposal.rationale,
+        command_preview=proposal.command_preview,
+        runbook_ref=proposal.runbook_ref,
+        evidence_refs=_evidence_refs_field(proposal.evidence_refs_json),
+        required_checks=_json_list_field(proposal.required_checks_json),
+        blocked_reasons=_json_list_field(proposal.blocked_reasons_json),
+        proposed_by=proposal.proposed_by,
+        decided_by=proposal.decided_by,
+        decision_note=proposal.decision_note,
+        created_at=proposal.created_at,
+        updated_at=proposal.updated_at,
+        decided_at=proposal.decided_at,
+    )
+
+
+def _list_remediation_proposals(incident_id: str) -> list[OpsRemediationProposal]:
+    with get_db(REPORTS_DB_PATH) as conn:
+        return OpsRemediationRepo(conn).list_for_incident(incident_id)
+
+
+def _record_remediation_decision(
+    proposal_id: str, *, status: str, decided_by: str, decision_note: str | None
+) -> OpsRemediationProposal | None:
+    with get_db(REPORTS_DB_PATH) as conn:
+        return OpsRemediationRepo(conn).record_decision(
+            proposal_id, status=status, decided_by=decided_by, decision_note=decision_note,
+        )
+
+
 @router.get("/javdb-session", response_model=JavdbSessionStatus)
 def get_javdb_session_status(
     _user: Dict[str, Any] = Depends(_require_auth),
@@ -318,6 +360,45 @@ def get_similar_ops_incidents(
     )
 
 
+@router.get(
+    "/ops-incidents/{incident_id}/remediation-proposals",
+    response_model=OpsRemediationProposalListResponse,
+)
+def list_ops_remediation_proposals(
+    incident_id: str,
+    _user: Dict[str, Any] = Depends(_require_auth),
+) -> OpsRemediationProposalListResponse:
+    return OpsRemediationProposalListResponse(
+        items=[_proposal_to_schema(item) for item in _list_remediation_proposals(incident_id)]
+    )
+
+
+@router.post(
+    "/remediation-proposals/{proposal_id}/decision",
+    response_model=OpsRemediationProposalSchema,
+)
+def decide_ops_remediation_proposal(
+    proposal_id: str,
+    body: OpsRemediationDecisionRequest,
+    current: Dict[str, Any] = Depends(require_role("admin")),
+) -> OpsRemediationProposalSchema:
+    # Records the human decision ONLY — does not call rollback, rerun,
+    # drift-apply, qB, or any recovery mutation code.
+    try:
+        proposal = _record_remediation_decision(
+            proposal_id,
+            status=body.status,
+            decided_by=str(current.get("sub") or "unknown"),
+            decision_note=body.decision_note,
+        )
+    except ValueError as exc:
+        # e.g. attempting to approve a proposal the safety policy has blocked.
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if proposal is None:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    return _proposal_to_schema(proposal)
+
+
 @router.get("/ops-incidents/{incident_id}", response_model=OpsIncidentSchema)
 def get_ops_incident(
     incident_id: str,
@@ -423,12 +504,14 @@ async def refresh_javdb_session_diag(
 
 
 __all__ = [
+    "decide_ops_remediation_proposal",
     "get_javdb_session_status",
     "get_ops_incident",
     "get_ops_incident_analytics",
     "get_parse_field_health",
     "get_similar_ops_incidents",
     "list_ops_incidents",
+    "list_ops_remediation_proposals",
     "refresh_javdb_session_diag",
     "router",
 ]

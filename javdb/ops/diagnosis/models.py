@@ -173,3 +173,79 @@ class SimilarIncident:
     incident_id: str
     score: float
     matched_reasons: list[str]
+
+
+ActionType = Literal[
+    "open_runbook",
+    "prepare_rollback_workflow",
+    "prepare_rerun_workflow",
+    "prepare_drift_apply_command",
+    "inspect_qb_side_effects",
+    "inspect_recovery_outbox",
+]
+ProposalStatus = Literal["proposed", "approved", "rejected", "expired"]
+SafetyLevel = Literal["safe_to_prepare", "requires_review", "blocked"]
+
+
+def build_proposal_id(incident_id: str, action_type: str) -> str:
+    digest = hashlib.sha256(f"{incident_id}|{action_type}".encode("utf-8")).hexdigest()[:24]
+    return f"opsprop_{digest}"
+
+
+@dataclass(frozen=True)
+class OpsRemediationProposal:
+    proposal_id: str
+    incident_id: str
+    action_type: ActionType
+    status: ProposalStatus
+    safety_level: SafetyLevel
+    title: str
+    rationale: str
+    command_preview: str | None
+    runbook_ref: str | None
+    evidence_refs_json: str
+    required_checks_json: str
+    blocked_reasons_json: str
+    proposed_by: str
+    decided_by: str | None
+    decision_note: str | None
+    created_at: str
+    updated_at: str
+    decided_at: str | None = None
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        incident_id: str,
+        action_type: ActionType,
+        safety_level: SafetyLevel,
+        title: str,
+        rationale: str,
+        command_preview: str | None = None,
+        runbook_ref: str | None = None,
+        evidence_refs: list[EvidenceRef] | None = None,
+        required_checks: list[str] | None = None,
+        blocked_reasons: list[str] | None = None,
+        proposed_by: str = "adr026-policy-v1",
+    ) -> "OpsRemediationProposal":
+        now = utc_now_iso()
+        return cls(
+            proposal_id=build_proposal_id(incident_id, action_type),
+            incident_id=incident_id,
+            action_type=action_type,
+            status="proposed",
+            safety_level=safety_level,
+            title=title,
+            rationale=rationale,
+            command_preview=command_preview,
+            runbook_ref=runbook_ref,
+            evidence_refs_json=_json_dumps([asdict(ref) for ref in evidence_refs or []]),
+            required_checks_json=_json_dumps(required_checks or []),
+            blocked_reasons_json=_json_dumps(blocked_reasons or []),
+            proposed_by=proposed_by,
+            decided_by=None,
+            decision_note=None,
+            created_at=now,
+            updated_at=now,
+        )

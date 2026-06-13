@@ -6,7 +6,9 @@ from javdb.ops.diagnosis.models import (
     IncidentBundle,
     OpsIncidentFeatures,
     OpsIncidentRecord,
+    OpsRemediationProposal,
     SimilarIncident,
+    build_proposal_id,
 )
 
 __all__ = [
@@ -15,5 +17,7 @@ __all__ = [
     "IncidentBundle",
     "OpsIncidentFeatures",
     "OpsIncidentRecord",
+    "OpsRemediationProposal",
     "SimilarIncident",
+    "build_proposal_id",
 ]

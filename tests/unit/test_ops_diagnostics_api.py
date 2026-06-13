@@ -218,3 +218,67 @@ def test_get_similar_ops_incidents_returns_404_when_no_features(
     response = admin_client.get("/api/diag/ops-incidents/opsinc_missing/similar")
 
     assert response.status_code == 404
+
+
+def test_ops_remediation_proposals_returns_items(monkeypatch, admin_client: TestClient):
+    from apps.api.routers import diagnostics
+    from javdb.ops.diagnosis.models import OpsRemediationProposal
+
+    proposal = OpsRemediationProposal.create(
+        incident_id="opsinc_test",
+        action_type="open_runbook",
+        safety_level="safe_to_prepare",
+        title="Open runbook",
+        rationale="Review troubleshooting runbook.",
+    )
+    monkeypatch.setattr(diagnostics, "_list_remediation_proposals", lambda _incident_id: [proposal])
+
+    response = admin_client.get("/api/diag/ops-incidents/opsinc_test/remediation-proposals")
+
+    assert response.status_code == 200
+    assert response.json()["items"][0]["action_type"] == "open_runbook"
+
+
+def test_ops_remediation_decision_records_only_decision(monkeypatch, admin_client: TestClient):
+    from apps.api.routers import diagnostics
+    from javdb.ops.diagnosis.models import OpsRemediationProposal
+
+    proposal = OpsRemediationProposal.create(
+        incident_id="opsinc_test",
+        action_type="open_runbook",
+        safety_level="safe_to_prepare",
+        title="Open runbook",
+        rationale="Review troubleshooting runbook.",
+    )
+    decided = OpsRemediationProposal(
+        **{**proposal.__dict__, "status": "approved", "decided_by": "admin", "decision_note": "Reviewed."}
+    )
+    monkeypatch.setattr(diagnostics, "_record_remediation_decision", lambda *_args, **_kwargs: decided)
+
+    response = admin_client.post(
+        f"/api/diag/remediation-proposals/{proposal.proposal_id}/decision",
+        json={"status": "approved", "decision_note": "Reviewed."},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "approved"
+    assert response.json()["decision_note"] == "Reviewed."
+
+
+def test_ops_remediation_decision_rejects_approving_blocked(monkeypatch, admin_client: TestClient):
+    """Approving a safety-blocked proposal returns 409 — the repo guard raises
+    ValueError and the endpoint translates it instead of recording the decision."""
+    from apps.api.routers import diagnostics
+
+    def _raise(*_args, **_kwargs):
+        raise ValueError("Cannot approve a proposal blocked by the safety policy: opsprop_x")
+
+    monkeypatch.setattr(diagnostics, "_record_remediation_decision", _raise)
+
+    response = admin_client.post(
+        "/api/diag/remediation-proposals/opsprop_x/decision",
+        json={"status": "approved"},
+    )
+
+    assert response.status_code == 409
+    assert "blocked" in response.json()["detail"].lower()
