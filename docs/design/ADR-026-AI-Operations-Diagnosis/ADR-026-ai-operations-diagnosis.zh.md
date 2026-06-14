@@ -2,7 +2,7 @@
 
 | 字段        | 值                                                                    |
 | ----------- | --------------------------------------------------------------------- |
-| **状态**    | Accepted - Phase 1-2 已交付；Phase 3 待执行                          |
+| **状态**    | Accepted - Phase 1-3 已交付；Phase 4 待执行                          |
 | **日期**    | 2026-05-27                                                            |
 | **作者**    | Ted                                                                   |
 | **关联**    | [ADR-009](../_archive/ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md) |
@@ -196,3 +196,4 @@ Phase 1 里，assistant 永远不能做这些事：
 - 2026-05-27：Phase 1 已交付并验证；Phase 2-3 仍保持 proposed。
 - 2026-06-05：Phase 2（IMP-ADR026-02）已交付并验证 —— 涵盖 CLI/API/Worker/Web 的 incident 历史、确定性相似性检索和 analytics。Phase 3 仍保持 proposed。
 - 2026-06-13：新增 Phase 4（IMP-ADR026-04，主动 incident 告警与 operator 配置），用于覆盖「incident 已收集但检测时没有任何东西主动告警」的缺口。trigger 与 operator 配置归在这里；notification 投递仍留在 ADR-039；remediation 仍留在 Phase 3。
+- 2026-06-13：Phase 3（IMP-ADR026-03）**已交付并合并** —— 门控式修复建议（确定性非执行 policy + `OpsRemediationProposals` 账本 + 人工 approve/reject，含单次转移与拒批 blocked 守卫），覆盖 CLI/API/Worker/Web。以 Python PR #201 + 单次转移 follow-up #204 + Web PR TongWu/JAVDB_AutoSpider_Web#27 交付。Phase 4（主动告警）仍保持 proposed。
