@@ -129,3 +129,4 @@ Agent F:
 
 - 2026-06-14: Created. Sprint plan + two-agent split recorded; `trigger_run` confirmed deferred (moved out of active scope); ADR-026-P4 confirmed dual-backend & execution-ready.
 - 2026-06-14: Recorded MANDATORY execution method — every IMP is driven via `superpowers:subagent-driven-development` (or `superpowers:executing-plans`), task-by-task with checkbox tracking.
+- 2026-06-14: Sprint 1 (WS1, B+F) and Sprint 2 (B → WS2; F → WS4a) agent prompts drafted and ready to dispatch. Dispatch Sprint 2 after WS1 merges.
