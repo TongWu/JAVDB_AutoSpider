@@ -208,11 +208,11 @@ initiative:
 | Phase | Owner | Child ADR / IMP | Ships | Deferred |
 | --- | --- | --- | --- | --- |
 | WS1 — Watchlist | ADR-054 | [IMP-ADR054-01](IMP-ADR054-01-watchlist.md) | `WatchIntent` D1 table (`want/viewed`, `video_code`+`href`); inline `StatusControl` setter + Library Watchlist tab; dual-backend `/api/watchlist` read+write + upsert-parity test; `watch_intent` capability flag; en/zh | `browsed` auto-signal; `ConsumptionSignal` reconciliation; bulk ops |
-| WS2 — Subscriptions + New-Works | ADR-054 | spec → IMP (TBD); amends ADR-040 | Subscription store (actor first); scheduled scrape (Cron/GHA) reusing AdHoc; New-Works feed; rating-threshold bypass (supersedes ADR-040 P3); one-click → WS1 "want" | tag/series subscriptions; notifications |
-| WS3 — Magnet Aggregation | ADR-054 (+ ADR-039, ADR-024) | spec → IMP (TBD) | cross-source fetch+dedup; `magnet-source` ADR-039 category; quality/subtitle via ADR-024 scoring; Browse/detail surface | negative-cache/backoff tuning; more sources |
-| WS4a — Content filtering | **ADR-040** | ADR-040 next phases | regex + release-date dimensions on `ContentFilterRule`; web rule CRUD; SPA display-side overlay (read-side reuse) | — |
-| WS4b — AI translation | **ADR-039** | new ADR-039 category | `translation`/`enrichment` plugin category; title translation via structured LLM call (ADR-026 pattern) | batch list translation |
-| WS4c — Availability check | **ADR-039** | new ADR-039 category | `availability` plugin category; streaming-source probe + TTL cache | — |
+| WS2 — Subscriptions + New-Works | ADR-054 | [IMP-ADR054-02](IMP-ADR054-02-subscriptions.md) | `ActorSubscription` + `NewWorks` (HISTORY_DB, actor-only); `SubscriptionMonitor.yml` GH-cron scrapes followed actors via the AdHoc path (rating threshold bypassed **by construction** — no new code); New-Works feed reuses WS1 `StatusControl` (one-click → want); `subscriptions` flag; supersedes ADR-040 P3 by amendment | tag/series; notifications; Worker-cron |
+| WS3 — Magnet Aggregation | ADR-054 (+ ADR-039, ADR-024) | [IMP-ADR054-03](IMP-ADR054-03-magnet-aggregation.md) | ADR-039 `indexer` category (JAVBUS + Sukebei); server-side fetch + infohash dedup; **live** ADR-024 scoring (file signals → `probe_unavailable`); `POST /api/explore/aggregate-magnets` (Worker 501); `magnet_aggregation` flag (config-presence); **ephemeral v1** | cache table; BTdig/BTSOW; negative-cache/backoff |
+| WS4a — Content filtering | **ADR-040** | [IMP-ADR040-03](../ADR-040-Content-Filter-Rules/IMP-ADR040-03-content-filter-regex-date.md) (engine) + [IMP-ADR040-04](../ADR-040-Content-Filter-Rules/IMP-ADR040-04-content-filter-web-crud.md) (web CRUD) | `regex_exclude/include` + `release_date before/after` on the existing `ContentFilterRule` triple (**no migration**); dual-backend `/api/content-filter` CRUD + Settings page + read-side Browse overlay (**REPORTS_DB**); `content_filter` flag | — |
+| WS4b — AI translation | **ADR-039** | backlog (deferred 2026-06-14) | `translation` plugin category; first real OpenAI-compatible LLM client; lazy per-title, memoized | the whole sub-item (not in this round) |
+| WS4c — Availability check | **ADR-039** | backlog (deferred 2026-06-14) | `availability` plugin category; TTL cache table; per-source isolation | the whole sub-item (server-side streaming probe carries ban/legal risk) |
 
 Each phase is detailed in a post-decision `brainstorming` + `writing-plans` round
 against the real shapes at the time (cadence per ADR-034).
@@ -298,3 +298,18 @@ against the real shapes at the time (cadence per ADR-034).
   `watch_intent`; inline `StatusControl` setter + Library Watchlist tab;
   read+write in one IMP with a cross-backend upsert-parity test. Detailed in
   [IMP-ADR054-01](IMP-ADR054-01-watchlist.md).
+- 2026-06-14: WS2/WS3/WS4a designs resolved (brainstorming + cross-repo
+  deep-read) and IMPs written — **no implementation this round**. WS2 →
+  [IMP-ADR054-02](IMP-ADR054-02-subscriptions.md) (actor-only; GH-cron
+  `SubscriptionMonitor.yml` reusing the AdHoc path; `ActorSubscription`+`NewWorks`
+  in `HISTORY_DB`; `subscriptions` flag). WS3 →
+  [IMP-ADR054-03](IMP-ADR054-03-magnet-aggregation.md) (JAVBUS+Sukebei `indexer`
+  plugins; ephemeral; `POST /api/explore/aggregate-magnets` with Worker 501;
+  `magnet_aggregation` config-presence flag). WS4a →
+  [IMP-ADR040-03](../ADR-040-Content-Filter-Rules/IMP-ADR040-03-content-filter-regex-date.md)
+  +
+  [IMP-ADR040-04](../ADR-040-Content-Filter-Rules/IMP-ADR040-04-content-filter-web-crud.md)
+  (extend `ContentFilterRule` in `REPORTS_DB`, no migration). **WS4b (AI
+  translation) + WS4c (availability) deferred to backlog** this round. Key
+  finding: WS2's rating-threshold bypass is already free on the AdHoc path (no
+  new code; ADR-040 P3 superseded by amendment at WS2 implementation).
