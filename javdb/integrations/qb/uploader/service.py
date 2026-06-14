@@ -4,7 +4,6 @@ import logging
 from datetime import datetime
 import time
 from pathlib import Path
-from urllib.parse import urlsplit
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 
@@ -146,6 +145,8 @@ from javdb.proxy.pool import create_proxy_pool_from_config
 # Import proxy helper from request handler
 from javdb.infra.request import ProxyHelper, create_proxy_helper_from_config
 from javdb.integrations.qb.config import (
+    activate_qb_base_url,
+    ordered_qb_base_urls,
     qb_allow_insecure_http,
     qb_base_url_candidates,
     masked_qb_base_url,
@@ -174,25 +175,14 @@ QB_VERIFY_TLS = qb_verify_tls()
 def _set_active_qb_base_url(base_url):
     """Persist the qBittorrent endpoint that proved reachable."""
     global QB_BASE_URL, QB_MASKED_URL, QB_ALLOW_INSECURE_HTTP
-    QB_BASE_URL = base_url.rstrip('/')
-    # HTTPS primary may fail (e.g. self-signed); HTTP fallback is still plain HTTP — align flag for masking and later calls.
-    if urlsplit(QB_BASE_URL).scheme == 'http':
-        QB_ALLOW_INSECURE_HTTP = True
-    QB_MASKED_URL = masked_qb_base_url(
-        QB_BASE_URL,
-        allow_insecure_http=QB_ALLOW_INSECURE_HTTP,
+    QB_BASE_URL, QB_MASKED_URL, QB_ALLOW_INSECURE_HTTP = activate_qb_base_url(
+        base_url, QB_ALLOW_INSECURE_HTTP,
     )
 
 
 def _ordered_qb_base_urls():
     """Try the last known-good URL first, then the remaining candidates."""
-    ordered = []
-    if QB_BASE_URL:
-        ordered.append(QB_BASE_URL)
-    for candidate in QB_BASE_URL_CANDIDATES:
-        if candidate not in ordered:
-            ordered.append(candidate)
-    return ordered
+    return ordered_qb_base_urls(QB_BASE_URL_CANDIDATES, QB_BASE_URL)
 
 
 def get_proxies_dict(module_name, use_proxy_flag):

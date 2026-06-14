@@ -14,7 +14,8 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 from javdb.infra.config import cfg
 from javdb.infra.logging import get_logger
 from javdb.spider.contracts import (
-    category_to_indicators as _category_to_indicators,
+    category_to_indicators,
+    indicators_to_category,
 )
 
 logger = get_logger(__name__)
@@ -156,23 +157,8 @@ def _href_lock(href: str) -> threading.Lock:
 _ALLOWED_STATUSES = ("in_progress", "finalizing", "committed", "failed")
 
 
-# ── Category ↔ Indicator helpers ───────────────────────────────────────────
-
-def category_to_indicators(category: str) -> Tuple[int, int]:
-    """Map category name to (SubtitleIndicator, CensorIndicator)."""
-    return _category_to_indicators(category)
-
-
-def indicators_to_category(sub_ind: int, cen_ind: int) -> str:
-    """Map (SubtitleIndicator, CensorIndicator) to category name."""
-    if sub_ind == 1 and cen_ind == 0:
-        return 'hacked_subtitle'
-    elif sub_ind == 0 and cen_ind == 0:
-        return 'hacked_no_subtitle'
-    elif sub_ind == 1 and cen_ind == 1:
-        return 'subtitle'
-    else:
-        return 'no_subtitle'
+# Category ↔ indicator conversion is the single source of truth in
+# javdb.spider.contracts (imported above); do not re-derive it here.
 
 
 # ── Pending mode (recommended) ───────────────────────────────────────────

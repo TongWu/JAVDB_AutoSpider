@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-import logging
 import os
 import re
 import shlex
@@ -18,13 +16,24 @@ from fastapi import HTTPException
 
 from apps.api.infra.security import _sanitize_output_filename, _validate_target_url
 from apps.api.services import config_service, context
+from apps.api.services.job_store import (
+    load_result_summary as _load_result_summary,
+    log_offset as _log_offset,
+    read_job_meta as _read_job_meta,
+    read_log_chunk as _read_log_chunk,
+    read_log_tail as _read_log_tail,
+    resolve_job_result_file as _resolve_job_result_file,
+    resolved_path_under_job_log_dir as _resolved_path_under_job_log_dir,
+    safe_log_path as _safe_log_path,
+    validate_job_id as _validate_job_id,
+    validate_job_result_file as _validate_job_result_file,
+    write_job_meta as _write_job_meta,
+)
 from javdb.proxy.policy import resolve_proxy_override
 
 JOBS: Dict[str, Dict[str, Any]] = {}
 JOB_LOCK = threading.Lock()
-logger = logging.getLogger(__name__)
 
-_JOB_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 _TASK_ALLOWED_FLAGS: dict[str, str] = {
     "--all": "flag",
     "--dry-run": "flag",
@@ -47,32 +56,6 @@ _TASK_ALLOWED_FLAGS: dict[str, str] = {
 _TASK_ALLOWED_MODULES = {"apps.cli.pipeline", "apps.cli.spider"}
 
 
-def _job_meta_path(job_id: str) -> Path:
-    return _resolved_path_under_job_log_dir(job_id, ".meta.json")
-
-
-def _read_job_meta(job_id: str) -> Dict[str, Any]:
-    _validate_job_id(job_id)
-    path = _job_meta_path(job_id)
-    if not path.exists():
-        return {}
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else {}
-    except Exception:
-        return {}
-
-
-def _write_job_meta(job_id: str, payload: Dict[str, Any]) -> None:
-    path = _job_meta_path(job_id)
-    safe_payload = dict(payload)
-    safe_payload["job_id"] = job_id
-    path.write_text(
-        json.dumps(safe_payload, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-
-
 def _extract_url_from_command(command: list[str]) -> str:
     for idx, token in enumerate(command):
         if token == "--url" and idx + 1 < len(command):
@@ -87,39 +70,6 @@ def _extract_task_mode(kind: str, command: list[str]) -> str:
     if "apps.cli.spider" in command_text or "scripts/spider" in command_text:
         return "spider"
     return "pipeline"
-
-
-def _log_offset(path: Path) -> int:
-    try:
-        return path.stat().st_size
-    except OSError:
-        return 0
-
-
-def _read_log_tail(path: Path, max_lines: int = 200) -> str:
-    if not path.exists():
-        return ""
-    lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
-    return "\n".join(lines[-max_lines:])
-
-
-def _read_log_chunk(
-    path: Path,
-    offset: int,
-    max_bytes: int = context.JOB_STREAM_MAX_BYTES,
-) -> tuple[str, int]:
-    if not path.exists():
-        return "", 0
-    size = _log_offset(path)
-    if offset < 0:
-        offset = 0
-    if offset > size:
-        offset = size
-    with open(path, "r", encoding="utf-8", errors="ignore") as fp:
-        fp.seek(offset)
-        chunk = fp.read(max_bytes)
-        next_offset = fp.tell()
-    return chunk, next_offset
 
 
 def _job_status_from_process(job: Dict[str, Any]) -> str:
@@ -142,93 +92,6 @@ def _infer_created_at_from_job_id(job_id: str) -> str:
         return dt.isoformat()
     except ValueError:
         return ""
-
-
-def _validate_job_id(job_id: str) -> None:
-    if not _JOB_ID_RE.match(job_id):
-        raise HTTPException(status_code=422, detail="Invalid job_id")
-    for sep in (os.sep, os.altsep):
-        if sep and sep in job_id:
-            raise HTTPException(status_code=422, detail="Invalid job_id")
-
-
-def _safe_job_log_filename(job_id: str, extension: str) -> str:
-    _validate_job_id(job_id)
-    if not extension.startswith(".") or len(extension) < 2:
-        raise HTTPException(status_code=500, detail="Invalid log filename extension")
-    name = f"{job_id}{extension}"
-    for sep in (os.sep, os.altsep):
-        if sep and sep in name:
-            raise HTTPException(status_code=400, detail="Invalid job_id")
-    if ".." in name or name in {".", ".."}:
-        raise HTTPException(status_code=400, detail="Invalid job_id")
-    if len(Path(name).parts) != 1:
-        raise HTTPException(status_code=400, detail="Invalid job_id")
-    return name
-
-
-def _resolved_path_under_job_log_dir(job_id: str, extension: str) -> Path:
-    filename = _safe_job_log_filename(job_id, extension)
-    candidate = (context.RESOLVED_JOB_LOG_DIR / filename).resolve()
-    try:
-        candidate.relative_to(context.RESOLVED_JOB_LOG_DIR)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid job_id") from None
-    return candidate
-
-
-def _safe_log_path(job_id: str) -> Path:
-    return _resolved_path_under_job_log_dir(job_id, ".log")
-
-
-def _validate_job_result_file(value: str) -> None:
-    try:
-        candidate = _resolve_job_result_file(value)
-        candidate.relative_to(context.RESOLVED_JOB_LOG_DIR)
-    except (OSError, ValueError):
-        raise HTTPException(status_code=400, detail="Invalid task command") from None
-    if candidate.suffixes[-2:] != [".result", ".json"]:
-        raise HTTPException(status_code=400, detail="Invalid task command")
-
-
-def _resolve_job_result_file(value: str) -> Path:
-    raw_path = Path(value).expanduser()
-    base_path = raw_path if raw_path.is_absolute() else context.REPO_ROOT / raw_path
-    return base_path.resolve()
-
-
-def _load_result_summary(result_path: str | None) -> Dict[str, Any] | None:
-    if not result_path:
-        return None
-    path = _resolve_job_result_file(result_path)
-    try:
-        path.relative_to(context.RESOLVED_JOB_LOG_DIR)
-    except ValueError:
-        logger.warning("Task result JSON outside job log dir ignored: %s", path)
-        return None
-    if not path.exists():
-        return None
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        logger.warning("Invalid task result JSON ignored: %s", path)
-        return None
-    except UnicodeDecodeError as exc:
-        logger.warning("Unable to decode task result JSON %s: %s", path, exc)
-        return None
-    except OSError as exc:
-        logger.warning("Unable to read task result JSON %s: %s", path, exc)
-        return None
-    if not isinstance(raw, dict):
-        logger.warning("Invalid task result payload ignored: %s", path)
-        return None
-    return {
-        "kind": raw.get("kind"),
-        "schema_version": raw.get("schema_version"),
-        "status": raw.get("status"),
-        "exit_code": raw.get("exit_code"),
-        "failure_reason": raw.get("failure_reason"),
-    }
 
 
 def _validate_task_command(command: list[str]) -> list[str]:

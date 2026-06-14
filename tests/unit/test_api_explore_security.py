@@ -7,7 +7,7 @@ from fastapi import HTTPException
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from apps.api.services import explore_service  # noqa: E402
+from apps.api.services import explore_service, javdb_fetch_service  # noqa: E402
 
 
 def test_qb_login_session_hides_transport_validation_details():
@@ -28,7 +28,9 @@ def test_validate_javdb_url_requires_https(monkeypatch):
     def fake_resolve(url: str):
         return type("Parsed", (), {"scheme": "http"})(), "javdb.com", "1.2.3.4"
 
-    monkeypatch.setattr(explore_service, "_resolve_public_target_or_422", fake_resolve)
+    # The SSRF guard now lives in javdb_fetch_service; explore_service re-exports
+    # it as _validate_javdb_url_or_422, so patch the resolver at its real home.
+    monkeypatch.setattr(javdb_fetch_service, "_resolve_public_target_or_422", fake_resolve)
 
     with pytest.raises(HTTPException, match="url must use https"):
         explore_service._validate_javdb_url_or_422("http://javdb.com/v/abc123")

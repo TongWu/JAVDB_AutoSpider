@@ -161,10 +161,38 @@ def masked_qb_base_url(
     )
 
 
+def ordered_qb_base_urls(candidates: list[str], current: str | None) -> list[str]:
+    """Order base-url candidates so the last known-good URL is tried first."""
+    ordered: list[str] = []
+    if current:
+        ordered.append(current)
+    for candidate in candidates:
+        if candidate not in ordered:
+            ordered.append(candidate)
+    return ordered
+
+
+def activate_qb_base_url(base_url: str, allow_insecure_http: bool) -> tuple[str, str, bool]:
+    """Normalize a proven-reachable qB base URL and recompute its masked form.
+
+    Returns ``(base_url, masked_url, allow_insecure_http)``. When the resolved
+    URL is plain ``http://`` (e.g. an HTTPS primary that fell back to HTTP, such
+    as a self-signed host), insecure-http is forced on so masking and later
+    calls stay consistent with the endpoint actually in use.
+    """
+    base_url = base_url.rstrip("/")
+    if urlsplit(base_url).scheme == "http":
+        allow_insecure_http = True
+    masked = masked_qb_base_url(base_url, allow_insecure_http=allow_insecure_http)
+    return base_url, masked, allow_insecure_http
+
+
 __all__ = [
     "build_qb_base_url",
     "qb_base_url_candidates",
     "masked_qb_base_url",
+    "ordered_qb_base_urls",
+    "activate_qb_base_url",
     "qb_allow_insecure_http",
     "qb_scheme",
     "qb_verify_tls",
