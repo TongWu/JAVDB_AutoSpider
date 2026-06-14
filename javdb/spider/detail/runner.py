@@ -34,11 +34,9 @@ from javdb.pipeline.policies import (
     should_skip_recent_yesterday_release,
 )
 from javdb.spider.services.content_filter import Rule, evaluate
-from javdb.spider.services.dedup import (
-    DedupRecord,
-    should_skip_from_rclone,
-    append_dedup_record,
-)
+from javdb.spider.services.dedup_query import should_skip_from_rclone
+from javdb.spider.services.dedup_store import append_dedup_record
+from javdb.spider.services.dedup_types import DedupRecord
 from javdb.spider.fetch.backend import FetchBackend
 from javdb.spider.fetch.fetch_engine import EngineTask
 from javdb.spider.runtime.config import BASE_URL

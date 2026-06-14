@@ -18,8 +18,9 @@ def _capturing_repo():
 
 def test_dedup_append_binds_explicit_session(monkeypatch):
     """ADR-046 P5: the explicit ``session_id`` param is bound on the repo ctor."""
-    import javdb.spider.services.dedup as dedup
-    from javdb.spider.services.dedup import DedupRecord, append_dedup_record
+    import javdb.spider.services.dedup_store as dedup
+    from javdb.spider.services.dedup_store import append_dedup_record
+    from javdb.spider.services.dedup_types import DedupRecord
 
     repo_cls, repo = _capturing_repo()
     repo.append_dedup_record.return_value = 1
@@ -39,8 +40,8 @@ def test_dedup_append_binds_explicit_session(monkeypatch):
 
 def test_dedup_mark_records_deleted_binds_explicit_session(monkeypatch):
     """ADR-046 P5: explicit ``session_id`` on the ctor."""
-    import javdb.spider.services.dedup as dedup
-    from javdb.spider.services.dedup import mark_records_deleted
+    import javdb.spider.services.dedup_store as dedup
+    from javdb.spider.services.dedup_store import mark_records_deleted
 
     repo_cls, repo = _capturing_repo()
     repo.mark_records_deleted.return_value = 1

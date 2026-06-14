@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """One-shot migration: strip the configured rclone root folder prefix from
 stored paths so CSV/SQLite only store **relative paths**.
 
@@ -36,7 +37,11 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from javdb.infra.logging import setup_logging, get_logger
-from javdb.integrations.rclone.helper import strip_drive_name, strip_root_folder, get_configured_root_folder
+from javdb.integrations.rclone.path_utils import (
+    get_configured_root_folder,
+    strip_drive_name,
+    strip_root_folder,
+)
 
 setup_logging()
 logger = get_logger(__name__)
@@ -189,4 +194,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

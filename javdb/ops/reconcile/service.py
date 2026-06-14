@@ -307,15 +307,16 @@ def _outcome_ctx(repo):
 
 def _load_gdrive_inventory():
     from javdb.storage.repos.operations_repo import OperationsRepo
-    from javdb.spider.services.dedup import _normalise_code, RcloneEntry
+    from javdb.parsing.common import normalise_code
+    from javdb.spider.services.dedup_types import RcloneEntry
 
     raw = OperationsRepo().load_rclone_inventory()
     inventory: dict = {}
     for code, entries in raw.items():
-        ncode = _normalise_code(code)
+        ncode = normalise_code(code)
         inventory.setdefault(ncode, []).extend(
             RcloneEntry(
-                video_code=_normalise_code(e.get("VideoCode", e.get("video_code", ncode))),
+                video_code=normalise_code(e.get("VideoCode", e.get("video_code", ncode))),
                 sensor_category=e.get("SensorCategory", e.get("sensor_category", "")),
                 subtitle_category=e.get("SubtitleCategory", e.get("subtitle_category", "")),
                 folder_path=e.get("FolderPath", e.get("folder_path", "")),
@@ -447,9 +448,9 @@ def _derive_in_library(ledger_repo, outcome_repo, now: str) -> int:
     are stored normalized, but AcquisitionOutcome.video_code is stored verbatim
     from the uploader (e.g. 'n0656', full-width), so a raw compare would never
     match and the row would never land (Codex review on PR #179)."""
-    from javdb.spider.services.dedup import _normalise_code
+    from javdb.parsing.common import normalise_code
     owned = {
-        _normalise_code(c)
+        normalise_code(c)
         for c in ledger_repo.list_present_video_codes(PERSISTENT_OWNERSHIP_SOURCES)
     }
     if not owned:
@@ -458,7 +459,7 @@ def _derive_in_library(ledger_repo, outcome_repo, now: str) -> int:
         to_promote = [
             rec.qb_hash
             for rec in o.list_pending_landing()
-            if rec.video_code and _normalise_code(rec.video_code) in owned
+            if rec.video_code and normalise_code(rec.video_code) in owned
         ]
         if to_promote:
             return o.mark_in_library_batch(to_promote, landed_at=now)

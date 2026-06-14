@@ -5,12 +5,11 @@ import pytest
 from javdb.ops.reconcile import service
 from javdb.ops.reconcile.models import (
     AcquisitionOutcomeRecord,
-    OwnershipLedgerRecord,
     OwnershipOptions,
 )
 from javdb.storage.repos.acquisition_outcome_repo import AcquisitionOutcomeRepo
 from javdb.storage.repos.ownership_ledger_repo import OwnershipLedgerRepo
-from javdb.spider.services.dedup import RcloneEntry
+from javdb.spider.services.dedup_types import RcloneEntry
 
 _OUTCOME_DDL = """
 CREATE TABLE AcquisitionOutcome (

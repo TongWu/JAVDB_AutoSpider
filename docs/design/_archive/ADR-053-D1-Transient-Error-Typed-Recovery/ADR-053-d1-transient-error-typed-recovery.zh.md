@@ -2,12 +2,12 @@
 
 | 字段       | 值                                                                 |
 | ---------- | ----------------------------------------------------------------- |
-| **状态**   | Proposed —— 执行见 [IMP-ADR053-01](IMP-ADR053-01-d1-transient-error-typed-recovery.md)（单个 PR） |
+| **状态**   | Completed（2026-06-14）——已由 [IMP-ADR053-01](IMP-ADR053-01-d1-transient-error-typed-recovery.md) 实现 |
 | **日期**   | 2026-06-13                                                        |
 | **作者**   | Ted                                                              |
-| **关联**   | [ADR-009](../_archive/ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md)（创建了 `D1TransientError` 分类器——拥有"*哪些*错误算 transient"，非恢复信号接口）、[ADR-042](../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md)（这些信号喂给的恢复/提交边界**策略**——不变）、[ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md)（设置信号的 `d1_port.py` 访问端口） |
+| **关联**   | [ADR-009](../ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md)（创建了 `D1TransientError` 分类器——拥有"*哪些*错误算 transient"，非恢复信号接口）、[ADR-042](../../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md)（这些信号喂给的恢复/提交边界**策略**——不变）、[ADR-010](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.md)（设置信号的 `d1_port.py` 访问端口） |
 
-> 源自 2026-06-13 架构评审（候选 6 ——"把 `D1TransientError` 的恢复属性提升为类型化接口"）：[architecture-review-2026-06-13.html](../architecture/architecture-review-2026-06-13.html)。
+> 源自 2026-06-13 架构评审（候选 6 ——"把 `D1TransientError` 的恢复属性提升为类型化接口"）：[architecture-review-2026-06-13.html](../../architecture/architecture-review-2026-06-13.html)。
 
 ## 背景（Context）
 
@@ -100,11 +100,12 @@ class D1TransientError(D1Error):
 
 ## 参考（References）
 
-- [ADR-009 — D1 Drift Classifier & Diagnose](../_archive/ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md)
-- [ADR-042 — D1 Atomic Commit Boundaries](../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md)
-- [ADR-010 — D1 Access Port](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md)
-- 2026-06-13 架构评审：[architecture-review-2026-06-13.html](../architecture/architecture-review-2026-06-13.html)
+- [ADR-009 — D1 Drift Classifier & Diagnose](../ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md)
+- [ADR-042 — D1 Atomic Commit Boundaries](../../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md)
+- [ADR-010 — D1 Access Port](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.md)
+- 2026-06-13 架构评审：[architecture-review-2026-06-13.html](../../architecture/architecture-review-2026-06-13.html)
 
 ## 状态日志（Status Log）
 
+- 2026-06-14：Completed 于 [IMP-ADR053-01](IMP-ADR053-01-d1-transient-error-typed-recovery.md)。计划中的单一阶段已交付类型化 `D1TransientError` 恢复字段、`D1RecoveryBlockerError`、类型化 raise/read 点、移除字符串兜底与 type ignore、聚焦恢复信号测试，以及 CONTEXT.md 术语。本 ADR 不再有后续 IMP。
 - 2026-06-13：Proposed（源自 2026-06-13 架构评审候选 6）。勘察核实：`D1TransientError` 类体为空；5 个信号在 `d1_port`/`dual_connection` 间 monkey-patch，带 8 处 `# type: ignore`；`d1_recovery_blocker` 设在**裸 `RuntimeError`**（故新建子类）；`_blocks_queued_recovery_flush` 带脆弱的 `str(exc)` 兜底。决定（grilling）：全部 5 个（3 跨模块 + 2 模块内）声明为类型化成员；`D1RecoveryBlockerError(RuntimeError)`；读取改 `isinstance`/属性；**删除**字符串兜底。ADR-009（分类器）与 ADR-042（策略）拥有分类/策略，非信号表示——无碰撞。IMP-ADR053-01 待办。

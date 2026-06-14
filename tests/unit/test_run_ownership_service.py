@@ -8,7 +8,7 @@ from javdb.ops.reconcile.models import OwnershipLedgerRecord, OwnershipOptions
 from javdb.storage.repos.ownership_ledger_repo import OwnershipLedgerRepo
 from javdb.storage.repos.acquisition_outcome_repo import AcquisitionOutcomeRepo
 from javdb.ops.reconcile.models import AcquisitionOutcomeRecord
-from javdb.spider.services.dedup import RcloneEntry
+from javdb.spider.services.dedup_types import RcloneEntry
 
 _LEDGER_DDL = """
 CREATE TABLE OwnershipLedger (
@@ -229,7 +229,7 @@ def test_load_gdrive_inventory_normalises_fullwidth_codes():
     so dedup and in_library join never see duplicate keys.
     """
     from javdb.ops.reconcile.service import _load_gdrive_inventory
-    from javdb.spider.services.dedup import RcloneEntry
+    from javdb.spider.services.dedup_types import RcloneEntry
     from unittest.mock import patch
 
     # Full-width "SSNI" via codepoints so the source stays ASCII (no RUF001/002).

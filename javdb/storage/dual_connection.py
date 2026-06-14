@@ -54,7 +54,6 @@ downstream rows.
 from __future__ import annotations
 
 import collections
-import json
 import os
 import re
 import sqlite3
@@ -64,6 +63,8 @@ from datetime import datetime, timezone
 from typing import Any, Iterable, Optional, Sequence, Tuple
 
 from javdb.infra.logging import get_logger
+from javdb.storage import drift_io
+from javdb.storage.d1_client import D1RecoveryBlockerError, D1TransientError
 
 logger = get_logger(__name__)
 
@@ -193,42 +194,6 @@ def _is_read(sql: str) -> bool:
             if after >= n or not (sql[after].isalnum() or sql[after] == "_"):
                 return True
     return False
-
-
-# ── Drift log file ──────────────────────────────────────────────────────
-# Resolved lazily so tests can monkeypatch the module-level constant.
-_DRIFT_LOG_PATH = os.path.join(
-    os.environ.get("REPORTS_DIR", "reports"), "D1", "d1_drift.jsonl"
-)
-_DRIFT_LOG_LOCK = threading.Lock()
-
-
-def _append_drift_record(record: dict) -> None:
-    """Append a JSON line to the drift log; never raises."""
-    # Defence in depth against polluting the git-tracked production drift
-    # log from a test that forgot to monkeypatch ``_DRIFT_LOG_PATH`` (the
-    # primary isolation is each test pointing this at a tmp path). Under
-    # pytest, refuse when the path still resolves to the tracked
-    # ``reports/D1/d1_drift.jsonl``. The sibling writer
-    # ``lifecycle_helpers.append_jsonl_record`` carries the same guard, so
-    # both drift-log writers are protected symmetrically.
-    if os.environ.get("PYTEST_CURRENT_TEST") and (
-        "reports/D1/d1_drift.jsonl" in _DRIFT_LOG_PATH.replace(os.sep, "/")
-    ):
-        logger.warning(
-            "Refusing to write drift record to production path %s under "
-            "PYTEST_CURRENT_TEST=%s.  Test should monkeypatch _DRIFT_LOG_PATH "
-            "to a tmp path to isolate the drift log.",
-            _DRIFT_LOG_PATH, os.environ.get("PYTEST_CURRENT_TEST"),
-        )
-        return
-    try:
-        os.makedirs(os.path.dirname(_DRIFT_LOG_PATH) or ".", exist_ok=True)
-        with _DRIFT_LOG_LOCK:
-            with open(_DRIFT_LOG_PATH, "a", encoding="utf-8") as f:
-                f.write(json.dumps(record, ensure_ascii=False) + "\n")
-    except Exception as exc:  # noqa: BLE001 — last-resort safeguard
-        logger.error("Failed to append d1 drift record: %s", exc)
 
 
 # Strip string/numeric literals to bucket "same statement" log spam.
@@ -443,12 +408,12 @@ class DualCursor:
                     "sql": _shorten(sql),
                     "ts": datetime.now(timezone.utc).isoformat(),
                 }
-                _append_drift_record(record)
+                drift_io.append_jsonl_record(record)
                 logger.error(
                     "DualConnection: STRICT_DUAL_WRITE aborting transaction — "
                     "guarded INSERT into %s landed on SQLite but D1 cursor is "
                     "missing; details in %s",
-                    table, _DRIFT_LOG_PATH,
+                    table, drift_io.drift_log_path(),
                 )
                 raise DualWriteIdMismatchError(
                     f"{table}: SQLite committed but D1 cursor missing under "
@@ -482,7 +447,7 @@ class DualCursor:
             "sql": _shorten(sql),
             "ts": datetime.now(timezone.utc).isoformat(),
         }
-        _append_drift_record(record)
+        drift_io.append_jsonl_record(record)
         # Do NOT include the raw lastrowid values or SQL text in
         # the user-facing log / exception message: those identify
         # ReportSessions / Pending*HistoryWrites rows (private
@@ -495,7 +460,7 @@ class DualCursor:
             "mismatch on %s; aborting transaction. Caller must "
             "INSERT with explicit Id (see javdb/migrations/d1/"
             "2026_05_08_sessionid_decouple.md); details in %s",
-            table, _DRIFT_LOG_PATH,
+            table, drift_io.drift_log_path(),
         )
         raise DualWriteIdMismatchError(
             f"{table}: SQLite vs D1 lastrowid mismatch; "
@@ -747,7 +712,7 @@ class DualConnection:
                     f"partial_prefix_count={partial_prefix_count}, "
                     f"failed_chunk_size={len(chunk)}, "
                     f"remaining_chunks_skipped={(len(seq_list) - start - len(chunk))}; "
-                    f"drift recorded in {_DRIFT_LOG_PATH}"
+                    f"drift recorded in {drift_io.drift_log_path()}"
                 ) from exc
 
             # D1 chunk succeeded — mirror to SQLite. If SQLite raises
@@ -927,7 +892,7 @@ class DualConnection:
                 f"batch_execute: {len(missing_write_indices)} write "
                 f"statement(s) returned no D1 cursor "
                 f"(total={len(statements)}); drift recorded in "
-                f"{_DRIFT_LOG_PATH}"
+                f"{drift_io.drift_log_path()}"
             )
 
         for idx, ((sql, _params), sqlite_cur, d1_cur) in enumerate(zip(
@@ -1122,17 +1087,15 @@ class DualConnection:
     @staticmethod
     def _requires_durable_recovery(exc: Exception) -> bool:
         return bool(
-            getattr(exc, "d1_recovery_outbox_required", False)
-            and not getattr(exc, "d1_recovery_durable", False)
+            isinstance(exc, D1TransientError)
+            and exc.d1_recovery_outbox_required
+            and not exc.d1_recovery_durable
         )
 
     def _blocks_queued_recovery_flush(self, exc: Exception) -> bool:
         return bool(
             self._d1_queued_pending_writes > 0
-            and (
-                getattr(exc, "d1_recovery_blocker", False)
-                or "unresolved D1 recovery work" in str(exc)
-            )
+            and isinstance(exc, D1RecoveryBlockerError)
         )
 
     @staticmethod
@@ -1204,19 +1167,23 @@ class DualConnection:
         # rows D1 already auto-committed.
         if self._d1_failure_first_extra:
             record["first_failed_extra"] = self._d1_failure_first_extra
-        _append_drift_record(record)
+        drift_io.append_jsonl_record(record)
         if self._d1_failure_count > 0:
             logger.error(
                 "Transaction %s with %d D1 write failure(s) on db=%s; "
                 "drift logged to %s",
                 "committed" if committed else "rolled back",
-                self._d1_failure_count, self._logical_name, _DRIFT_LOG_PATH,
+                self._d1_failure_count,
+                self._logical_name,
+                drift_io.drift_log_path(),
             )
         else:  # rollback_drift only
             logger.error(
                 "Transaction rolled back after %d successful D1 write(s) on "
                 "db=%s; D1 cannot undo them — drift logged to %s",
-                self._d1_uncommitted_writes, self._logical_name, _DRIFT_LOG_PATH,
+                self._d1_uncommitted_writes,
+                self._logical_name,
+                drift_io.drift_log_path(),
             )
         self._reset_failure_state()
 

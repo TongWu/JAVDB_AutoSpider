@@ -1,4 +1,5 @@
 """Tests for the unified rclone_manager script."""
+# ruff: noqa: E402
 
 import os
 import sys
@@ -19,24 +20,21 @@ from javdb.integrations.rclone.manager.service import (
     INVENTORY_FIELDNAMES,
     resolve_rclone_root,
     load_inventory_as_folder_structure,
-    run_report_from_inventory,
     run_execute_from_csv,
     migrate_strip_drive_names,
 )
-from javdb.integrations.rclone.helper import (
-    FolderInfo,
-    rclone_purge,
-    strip_drive_name,
+from javdb.integrations.rclone.types import DedupResult, FolderInfo
+from javdb.integrations.rclone.path_utils import (
     get_configured_drive_name,
     prepend_drive_name,
+    strip_drive_name,
 )
-from javdb.spider.services.dedup import (
-    DedupRecord,
+from javdb.spider.services.dedup_store import (
     append_dedup_record,
     load_dedup_csv,
-    save_dedup_csv,
     mark_records_deleted,
 )
+from javdb.spider.services.dedup_types import DedupRecord
 
 
 # ============================================================================
@@ -285,6 +283,60 @@ def test_run_manager_wraps_service_exit_code(monkeypatch):
     assert result == RcloneManagerResult(exit_code=7)
     # ADR-046 D2: the standalone public entry forwards session_id=None.
     assert seen["session_id"] is None
+
+
+def test_report_fails_when_dedup_record_persistence_fails(monkeypatch):
+    import javdb.integrations.rclone.manager.service as rm
+
+    folder = FolderInfo(
+        full_path="gdrive:/root/2026/Actor/ABC-123/有码-无字",
+        year="2026",
+        actor="Actor",
+        movie_code="ABC-123",
+        sensor_category="有码",
+        subtitle_category="无字",
+        folder_name="有码-无字",
+        size=100,
+        file_count=1,
+    )
+    result = DedupResult(
+        movie_code="ABC-123",
+        year="2026",
+        actor="Actor",
+        folders_to_delete=[(folder, "duplicate")],
+    )
+
+    monkeypatch.setattr(
+        rm,
+        "load_inventory_as_folder_structure",
+        lambda _csv_path: {"2026": {"Actor": [folder]}},
+    )
+    monkeypatch.setattr(
+        rm,
+        "analyze_all_duplicates",
+        lambda *_args, **_kwargs: [result],
+    )
+    monkeypatch.setattr(
+        rm,
+        "generate_csv_report",
+        lambda *_args, **_kwargs: "report.csv",
+    )
+    monkeypatch.setattr(rm, "print_summary", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        rm,
+        "validate_dedup_records_against_inventory",
+        lambda **_kwargs: (0, []),
+    )
+    monkeypatch.setattr(rm, "export_dedup_history", lambda: 0)
+
+    def _raise(_path, _record, *, session_id=None):
+        raise RuntimeError("persist boom")
+
+    import javdb.spider.services.dedup_store as dedup_store
+    monkeypatch.setattr(dedup_store, "append_dedup_record", _raise)
+
+    with pytest.raises(RuntimeError, match="persist boom"):
+        rm.run_report_from_inventory("inventory.csv")
 
 
 # ============================================================================
@@ -1257,7 +1309,7 @@ class TestIsDeletedUpdate:
 
 class TestExecuteMode:
     @patch('javdb.integrations.rclone.manager.service.get_configured_drive_name', return_value='gdrive')
-    @patch('javdb.integrations.rclone.helper.subprocess.run')
+    @patch('javdb.integrations.rclone.dedup.subprocess.run')
     def test_dry_run_does_not_update_csv(self, mock_run, _mock_dn, tmp_path):
         mock_run.return_value = MagicMock(returncode=0)
         path = str(tmp_path / 'dedup.csv')
@@ -1277,7 +1329,7 @@ class TestExecuteMode:
 
     @patch('javdb.integrations.rclone.manager.service.get_configured_drive_name', return_value='gdrive')
     @patch('javdb.integrations.rclone.manager.service.export_dedup_history')
-    @patch('javdb.integrations.rclone.helper.subprocess.run')
+    @patch('javdb.integrations.rclone.dedup.subprocess.run')
     def test_run_execute_live(self, mock_run, mock_export, _mock_dn, tmp_path):
         mock_run.return_value = MagicMock(returncode=0)
         path = str(tmp_path / 'dedup.csv')
@@ -1300,7 +1352,7 @@ class TestExecuteMode:
         assert result == 0
 
     @patch('javdb.integrations.rclone.manager.service.get_configured_drive_name', return_value='')
-    @patch('javdb.integrations.rclone.helper.subprocess.run')
+    @patch('javdb.integrations.rclone.dedup.subprocess.run')
     def test_run_execute_refuses_when_no_drive_name(self, mock_run, _mock_dn, tmp_path):
         """Without a remote prefix and without a configured drive name, the
         executor must refuse rather than letting rclone treat the relative
@@ -1323,7 +1375,7 @@ class TestExecuteMode:
 
     @patch('javdb.integrations.rclone.manager.service.get_configured_drive_name', return_value='')
     @patch('javdb.integrations.rclone.manager.service.export_dedup_history')
-    @patch('javdb.integrations.rclone.helper.subprocess.run')
+    @patch('javdb.integrations.rclone.dedup.subprocess.run')
     def test_run_execute_allows_explicit_remote_prefix_without_drive_name(
         self, mock_run, _mock_export, _mock_dn, tmp_path,
     ):
@@ -1380,11 +1432,11 @@ class TestPrependDriveName:
         assert prepend_drive_name('root/folder:name', 'gdrive') == 'gdrive:root/folder:name'
 
     def test_no_drive_name_given(self):
-        with patch('javdb.integrations.rclone.helper.get_configured_drive_name', return_value='auto'):
+        with patch('javdb.integrations.rclone.path_utils.get_configured_drive_name', return_value='auto'):
             assert prepend_drive_name('path') == 'auto:path'
 
     def test_no_drive_configured(self):
-        with patch('javdb.integrations.rclone.helper.get_configured_drive_name', return_value=''):
+        with patch('javdb.integrations.rclone.path_utils.get_configured_drive_name', return_value=''):
             assert prepend_drive_name('path') == 'path'
 
     def test_empty_path(self):

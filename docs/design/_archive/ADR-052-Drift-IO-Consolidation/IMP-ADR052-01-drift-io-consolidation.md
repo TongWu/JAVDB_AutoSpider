@@ -1,6 +1,6 @@
 # IMP-ADR052-01: Consolidate Drift Helpers + Unify the Drift-Log Writer into `drift_io` — Implementation Plan
 
-> **Status: 🔲 Proposed (2026-06-13).** Single PR; behaviour-preserving relocation (one added WARNING; path resolution moves import-time → call-time). Authored from [ADR-052](ADR-052-drift-io-consolidation.md).
+> **Status: ✅ Completed (2026-06-14).** Single PR; behaviour-preserving relocation (one added WARNING; path resolution moves import-time → call-time). Authored from [ADR-052](ADR-052-drift-io-consolidation.md).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans. Steps use checkbox (`- [ ]`) syntax.
 
@@ -34,8 +34,8 @@
 
 ## Task 0: Baseline & seam enumeration
 
-- [ ] **Step 0.1 — Green baseline:** `pytest tests/unit/test_d1_dual.py tests/unit/test_drift_diagnose.py tests/unit/test_session_helpers.py tests/unit/test_batch_c_movie_history_id.py tests/unit/test_system_state_repo.py -q`.
-- [ ] **Step 0.2 — Enumerate every helper/writer/path reference:**
+- [x] **Step 0.1 — Green baseline:** `pytest tests/unit/test_d1_dual.py tests/unit/test_drift_diagnose.py tests/unit/test_session_helpers.py tests/unit/test_batch_c_movie_history_id.py tests/unit/test_system_state_repo.py -q`.
+- [x] **Step 0.2 — Enumerate every helper/writer/path reference:**
   ```bash
   grep -rn "_values_equal\|_row_to_dict\|_read_jsonl\|_read_drift_log\|append_jsonl_record\|_append_drift_record\|_DRIFT_LOG_PATH\|_DRIFT_LOG_LOCK" javdb apps tests --include="*.py"
   ```
@@ -43,45 +43,45 @@
 
 ## Task 1: Create `drift_io.py` (stdlib-only)
 
-- [ ] **Step 1.1 — Helpers:** `_values_equal` (reconcile's precision docstring), `_row_to_dict` (verbatim), `read_jsonl(path)` warning on malformed (`json.JSONDecodeError` → `logger.warning`, then continue).
-- [ ] **Step 1.2 — `drift_log_path(reports_dir=None) -> str`:** resolve `reports_dir` → `$REPORTS_DIR` → `"reports"`, return `<base>/D1/<filename>`.
-- [ ] **Step 1.3 — `append_jsonl_record(record, *, reports_dir=None, filename="d1_drift.jsonl")`:** resolve via `drift_log_path`; the pytest guard refuses when the resolved path is the tracked `reports/D1/...` under `PYTEST_CURRENT_TEST`; write under a module-level `threading.Lock`; never raise (log at WARNING on failure). Assert **no `javdb` imports** in this module.
+- [x] **Step 1.1 — Helpers:** `_values_equal` (reconcile's precision docstring), `_row_to_dict` (verbatim), `read_jsonl(path)` warning on malformed (`json.JSONDecodeError` → `logger.warning`, then continue).
+- [x] **Step 1.2 — `drift_log_path(reports_dir=None) -> str`:** resolve `reports_dir` → `$REPORTS_DIR` → `"reports"`, return `<base>/D1/<filename>`.
+- [x] **Step 1.3 — `append_jsonl_record(record, *, reports_dir=None, filename="d1_drift.jsonl")`:** resolve via `drift_log_path`; the pytest guard refuses when the resolved path is the tracked `reports/D1/...` under `PYTEST_CURRENT_TEST`; write under a module-level `threading.Lock`; never raise (log at WARNING on failure). Assert **no `javdb` imports** in this module.
 
   **Verification gate:** `python -c "import javdb.storage.drift_io; print('ok')"`; `grep -n "import javdb\|from javdb" javdb/storage/drift_io.py` → empty (stdlib-only).
 
 ## Task 2: Retire the import-time writer in `dual_connection`
 
-- [ ] **Step 2.1 — Delete** `_DRIFT_LOG_PATH`, `_DRIFT_LOG_LOCK`, `_append_drift_record`.
-- [ ] **Step 2.2 — Write sites** (L446, L485, L1207) → `drift_io.append_jsonl_record(record)`.
-- [ ] **Step 2.3 — Log-message refs** (L451, L498, L750, L930, L1213, L1219) → `drift_io.drift_log_path()`.
+- [x] **Step 2.1 — Delete** `_DRIFT_LOG_PATH`, `_DRIFT_LOG_LOCK`, `_append_drift_record`.
+- [x] **Step 2.2 — Write sites** (L446, L485, L1207) → `drift_io.append_jsonl_record(record)`.
+- [x] **Step 2.3 — Log-message refs** (L451, L498, L750, L930, L1213, L1219) → `drift_io.drift_log_path()`.
 
   **Verification gate:** `grep -n "_DRIFT_LOG_PATH\|_append_drift_record" javdb/storage/dual_connection.py` → empty; `python -c "import javdb.storage.dual_connection"` ok.
 
 ## Task 3: Re-point helper callers + the writer callers
 
-- [ ] **Step 3.1 — `drift_diagnose.py`:** delete local helpers; import from `drift_io`; re-point `append_jsonl_record` (L40).
-- [ ] **Step 3.2 — `reconcile_d1_drift.py`:** delete local `_values_equal`/`_row_to_dict`/`_read_drift_log`; import from `drift_io` (use `read_jsonl` for `_read_drift_log`'s call sites).
-- [ ] **Step 3.3 — `pending_health.py`:** delete local `_read_jsonl`; import `read_jsonl`.
-- [ ] **Step 3.4 — `lifecycle_helpers.py`:** remove `append_jsonl_record`. **Step 3.5 — `sessions/commit.py`, `rollback/core.py`, `apps/cli/db/commit_session.py`:** re-point the `append_jsonl_record` import to `drift_io` (coordinate with ADR-050).
+- [x] **Step 3.1 — `drift_diagnose.py`:** delete local helpers; import from `drift_io`; re-point `append_jsonl_record` (L40).
+- [x] **Step 3.2 — `reconcile_d1_drift.py`:** delete local `_values_equal`/`_row_to_dict`/`_read_drift_log`; import from `drift_io` (use `read_jsonl` for `_read_drift_log`'s call sites).
+- [x] **Step 3.3 — `pending_health.py`:** delete local `_read_jsonl`; import `read_jsonl`.
+- [x] **Step 3.4 — `lifecycle_helpers.py`:** remove `append_jsonl_record`. **Step 3.5 — `sessions/commit.py`, `rollback/core.py`, `apps/cli/db/commit_session.py`:** re-point the `append_jsonl_record` import to `drift_io` (coordinate with ADR-050).
 
   **Verification gate:** `grep -rn "def _values_equal\|def _row_to_dict\|def _read_jsonl\|def _read_drift_log\|def append_jsonl_record" javdb apps` → only `drift_io.py`.
 
 ## Task 4: Tests (unified `$REPORTS_DIR` seam) + new coverage + docs
 
-- [ ] **Step 4.1 — The 3 `_DRIFT_LOG_PATH` tests:** replace the monkeypatch with `monkeypatch.setenv("REPORTS_DIR", str(tmp_path))`; assert the drift line lands under `tmp_path/D1/d1_drift.jsonl`.
-- [ ] **Step 4.2 — `test_drift_diagnose.py` / `test_session_helpers.py`:** re-point `append_jsonl_record`/helper targets to `drift_io`.
-- [ ] **Step 4.3 — `test_drift_io.py`:** new coverage per the File Structure row.
-- [ ] **Step 4.4 — CONTEXT.md:** add the two terms.
+- [x] **Step 4.1 — The 3 `_DRIFT_LOG_PATH` tests:** replace the monkeypatch with `monkeypatch.setenv("REPORTS_DIR", str(tmp_path))`; assert the drift line lands under `tmp_path/D1/d1_drift.jsonl`.
+- [x] **Step 4.2 — `test_drift_diagnose.py` / `test_session_helpers.py`:** re-point `append_jsonl_record`/helper targets to `drift_io`.
+- [x] **Step 4.3 — `test_drift_io.py`:** new coverage per the File Structure row.
+- [x] **Step 4.4 — CONTEXT.md:** add the two terms.
 
   **Verification gate:** `pytest tests/unit/test_drift_io.py -q` green; the 3 migrated tests green via `$REPORTS_DIR`.
 
 ## Task 5: Final gates
 
-- [ ] `pytest tests/unit -k "drift or dual or rollback or commit or pending or system_state or batch_c or session_helpers" -q` green.
-- [ ] `grep -rn "_DRIFT_LOG_PATH\|_append_drift_record" javdb apps tests` → empty.
-- [ ] `grep -n "import javdb\|from javdb" javdb/storage/drift_io.py` → empty (stdlib-only).
-- [ ] `ruff check javdb/storage/drift_io.py javdb/storage/dual_connection.py javdb/storage/drift_diagnose.py javdb/migrations/tools/reconcile_d1_drift.py` clean.
-- [ ] `git diff --stat`: `drift_io.py` + `test_drift_io.py` created; 4 helper copies + 2 writers collapsed; 3 tests on one seam.
+- [x] Focused drift/session gate green (`203 passed` in the combined ADR-050/052 gate).
+- [x] `grep -rn "_DRIFT_LOG_PATH\|_append_drift_record" javdb apps tests` → empty.
+- [x] `grep -n "import javdb\|from javdb" javdb/storage/drift_io.py` → empty (stdlib-only).
+- [x] `ruff check javdb/storage/drift_io.py javdb/storage/dual_connection.py javdb/storage/drift_diagnose.py javdb/migrations/tools/reconcile_d1_drift.py` clean.
+- [x] `git diff --stat`: `drift_io.py` + `test_drift_io.py` created; 4 helper copies + 2 writers collapsed; 3 tests on one seam.
 
 ## Rollback
 

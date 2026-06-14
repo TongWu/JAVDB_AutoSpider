@@ -34,6 +34,7 @@ from javdb.storage.sqlite_datetime import normalize_storage_datetime
 from javdb.storage.db import generate_session_id
 from javdb.parsing.common import javdb_absolute_url
 from javdb.infra.config import cfg
+from javdb.spider.services.dedup_types import DEDUP_FIELDNAMES
 
 setup_logging()
 logger = get_logger(__name__)
@@ -262,15 +263,6 @@ def migrate_dedup(csv_path: str, db_path: str, dry_run: bool = False) -> int:
     return count
 
 
-# ── DedupRecord format field names (must match dedup_checker.DEDUP_FIELDNAMES) ─
-_DEDUP_FIELDNAMES = [
-    'video_code', 'existing_sensor', 'existing_subtitle',
-    'existing_gdrive_path', 'existing_folder_size',
-    'new_torrent_category', 'deletion_reason',
-    'detect_datetime', 'is_deleted', 'delete_datetime',
-]
-
-
 def _parse_human_size(size_str: str) -> int:
     """Parse human-readable size like '4.94 GB' to bytes."""
     units = {'PB': 1024**5, 'TB': 1024**4, 'GB': 1024**3, 'MB': 1024**2, 'KB': 1024, 'B': 1}
@@ -442,7 +434,7 @@ def migrate_dedup_all(reports_dir: str, db_path: str, dry_run: bool = False) -> 
                FROM DedupRecords ORDER BY Id"""
         ).fetchall()
     with open(output_csv, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=_DEDUP_FIELDNAMES)
+        writer = csv.DictWriter(f, fieldnames=DEDUP_FIELDNAMES)
         writer.writeheader()
         for r in db_rows:
             d = {

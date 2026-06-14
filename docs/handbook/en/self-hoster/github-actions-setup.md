@@ -236,7 +236,7 @@ To verify:
 | `setup` | Checkout, install dependencies, generate + encrypt config.py |
 | `run-pipeline` | Health check, spider, qBittorrent uploader, file filter, PikPak bridge, rclone dedup, session commit |
 | `cleanup-on-failure` | Rolls back uncommitted D1/pending writes on failure |
-| `email-notification` | Sends result email, runs auto-fallback on critical pending alerts |
+| `email-notification` | Sends result email, runs alert-and-pause on critical pending alerts |
 | `commit-results` | Commits CSV reports and database files back to the repo |
 
 ### AdHocIngestion Workflow

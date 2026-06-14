@@ -3,8 +3,6 @@
 from argparse import Namespace
 from unittest.mock import MagicMock
 
-import pytest
-
 
 def _raw_db_forbidden(name):
     def _raise(*args, **kwargs):
@@ -269,7 +267,8 @@ def test_legacy_parallel_actor_updates_use_history_repo(monkeypatch):
 
 
 def test_dedup_sqlite_paths_use_operations_repo(monkeypatch):
-    import javdb.spider.services.dedup as dedup
+    import javdb.spider.services.dedup_store as dedup
+    from javdb.spider.services.dedup_types import DedupRecord
 
     repo = MagicMock()
     repo.load_rclone_inventory.return_value = {
@@ -314,7 +313,7 @@ def test_dedup_sqlite_paths_use_operations_repo(monkeypatch):
 
     assert dedup.load_dedup_csv("dedup.csv") == []
 
-    record = dedup.DedupRecord(
+    record = DedupRecord(
         video_code="ABC-123",
         existing_sensor="censored",
         existing_subtitle="subtitle",
@@ -438,5 +437,3 @@ def test_run_service_main_saves_spider_stats_through_stats_repo(monkeypatch, tmp
     repo.save_spider_stats.assert_called_once()
     assert repo.save_spider_stats.call_args.args[0] == "sess-1"
     assert repo.save_spider_stats.call_args.args[1]["total_discovered"] == 0
-
-

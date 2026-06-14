@@ -5,7 +5,7 @@ from javdb.ops.reconcile.collectors import (
     PikpakOwnershipCollector,
     QbOwnershipCollector,
 )
-from javdb.spider.services.dedup import RcloneEntry
+from javdb.spider.services.dedup_types import RcloneEntry
 
 
 def _gdrive_inventory():

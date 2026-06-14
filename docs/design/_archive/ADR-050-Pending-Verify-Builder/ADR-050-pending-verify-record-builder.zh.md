@@ -2,12 +2,12 @@
 
 | 字段       | 值                                                                 |
 | ---------- | ----------------------------------------------------------------- |
-| **状态**   | Proposed —— 执行见 [IMP-ADR050-01](IMP-ADR050-01-pending-verify-builder.md)（单个 PR） |
+| **状态**   | Completed（2026-06-14）——已由 [IMP-ADR050-01](IMP-ADR050-01-pending-verify-builder.md) 实现 |
 | **日期**   | 2026-06-13                                                        |
 | **作者**   | Ted                                                              |
-| **关联**   | [ADR-042](../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md)（`pending_session_verify` 是**诊断写入**——永不权威）、[ADR-019](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md)（发出该记录的 commit/fail/rollback 生命周期）、[ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md)（`PipelineEvent` 主线是另一条 codepath——非本 JSONL 旁路）、[ADR-026](../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md)（`log_analysis` 消费该记录做 pending 告警） |
+| **关联**   | [ADR-042](../../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md)（`pending_session_verify` 是**诊断写入**——永不权威）、[ADR-019](../ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md)（发出该记录的 commit/fail/rollback 生命周期）、[ADR-036](../../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md)（`PipelineEvent` 主线是另一条 codepath——非本 JSONL 旁路）、[ADR-026](../../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md)（`log_analysis` 消费该记录做 pending 告警） |
 
-> 源自 2026-06-13 架构评审（候选 3 ——"整合 `pending_session_verify` 构建器"）：[architecture-review-2026-06-13.html](../architecture/architecture-review-2026-06-13.html)。
+> 源自 2026-06-13 架构评审（候选 3 ——"整合 `pending_session_verify` 构建器"）：[architecture-review-2026-06-13.html](../../architecture/architecture-review-2026-06-13.html)。
 
 ## 背景（Context）
 
@@ -85,11 +85,12 @@
 
 ## 参考（References）
 
-- [ADR-042 — D1 Atomic Commit Boundaries](../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md)
-- [ADR-019 — Session Lifecycle Authority](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md)
-- [ADR-026 — AI Operations Diagnosis](../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md)
-- 2026-06-13 架构评审：[architecture-review-2026-06-13.html](../architecture/architecture-review-2026-06-13.html)
+- [ADR-042 — D1 Atomic Commit Boundaries](../../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md)
+- [ADR-019 — Session Lifecycle Authority](../ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md)
+- [ADR-026 — AI Operations Diagnosis](../../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md)
+- 2026-06-13 架构评审：[architecture-review-2026-06-13.html](../../architecture/architecture-review-2026-06-13.html)
 
 ## 状态日志（Status Log）
 
+- 2026-06-14：Completed 于 [IMP-ADR050-01](IMP-ADR050-01-pending-verify-builder.md)。计划中的单一阶段已交付纯 pending-verify builder、共享字段名常量、emitter/parser 重定向、CLI-only 告警决策 wrapper、聚焦测试、workflow 更新，以及 handbook 更新。本 ADR 不再有后续 IMP。
 - 2026-06-13：Proposed（源自 2026-06-13 架构评审候选 3）。决定：`javdb/storage/sessions/pending_verify.py` 中一个纯 `build_pending_verify_record()`；导出字段名常量由生产者与 `log_analysis` 消费者共同绑定；纯构建器（调用方传预取 stats）；`rollback_extras` 作不透明 dict；shadow-audit + `GITHUB_OUTPUT` 留 CLI-only。核实：17 字段核心 schema（候选说 ~13；lib emitter 带 19 字段）；"Simplified version" docstring 漂移属实；诊断写入类别（ADR-042）——无迁移注解。IMP-ADR050-01 待办。

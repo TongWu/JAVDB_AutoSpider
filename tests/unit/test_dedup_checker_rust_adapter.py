@@ -4,7 +4,8 @@ import sys
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from javdb.spider.services.dedup import RcloneEntry, should_skip_from_rclone, check_dedup_upgrade
+from javdb.spider.services.dedup_query import check_dedup_upgrade, should_skip_from_rclone
+from javdb.spider.services.dedup_types import RcloneEntry
 
 
 def test_should_skip_from_rclone_behavior():
@@ -44,4 +45,3 @@ def test_check_dedup_upgrade_generates_subtitle_upgrade():
     )
     assert len(records) == 1
     assert "Subtitle upgrade" in records[0].deletion_reason
-

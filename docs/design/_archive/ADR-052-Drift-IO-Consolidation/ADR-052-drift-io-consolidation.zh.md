@@ -2,12 +2,12 @@
 
 | 字段       | 值                                                                 |
 | ---------- | ----------------------------------------------------------------- |
-| **状态**   | Proposed —— 执行见 [IMP-ADR052-01](IMP-ADR052-01-drift-io-consolidation.md)（单个 PR） |
+| **状态**   | Completed（2026-06-14）——已由 [IMP-ADR052-01](IMP-ADR052-01-drift-io-consolidation.md) 实现 |
 | **日期**   | 2026-06-13                                                        |
 | **作者**   | Ted                                                              |
-| **关联**   | [BFR-016](../BFR-016-Import-Time-DB-Path-Binding/BFR-016-import-time-db-path-binding.md)（import-时路径绑定——本 ADR 为 drift 日志兑现其教训）、[ADR-050](../ADR-050-Pending-Verify-Builder/ADR-050-pending-verify-record-builder.md)（共享 `append_jsonl_record` 调用方——协调导入路径）、[ADR-009](../_archive/ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md)（拥有 drift-诊断**语义**——不动）、[ADR-047](../ADR-047-Dual-Backend-Drift-Reconciliation/ADR-047-dual-backend-drift-reconciliation.md)（拥有 reconcile **逻辑**——不碰这些 helper）、[ADR-042](../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md)（drift 日志是**诊断写入**） |
+| **关联**   | [BFR-016](../../BFR-016-Import-Time-DB-Path-Binding/BFR-016-import-time-db-path-binding.md)（import-时路径绑定——本 ADR 为 drift 日志兑现其教训）、[ADR-050](../ADR-050-Pending-Verify-Builder/ADR-050-pending-verify-record-builder.md)（共享 `append_jsonl_record` 调用方——协调导入路径）、[ADR-009](../ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md)（拥有 drift-诊断**语义**——不动）、[ADR-047](../../ADR-047-Dual-Backend-Drift-Reconciliation/ADR-047-dual-backend-drift-reconciliation.md)（拥有 reconcile **逻辑**——不碰这些 helper）、[ADR-042](../../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md)（drift 日志是**诊断写入**） |
 
-> 源自 2026-06-13 架构评审（候选 5 ——"整合 drift-cell helper 与重复的 drift-log writer"）：[architecture-review-2026-06-13.html](../architecture/architecture-review-2026-06-13.html)。
+> 源自 2026-06-13 架构评审（候选 5 ——"整合 drift-cell helper 与重复的 drift-log writer"）：[architecture-review-2026-06-13.html](../../architecture/architecture-review-2026-06-13.html)。
 
 ## 背景（Context）
 
@@ -28,7 +28,7 @@ drift 检测与 drift 日志分散在四个文件,各自携带一份相同的底
 | pytest 守卫 | `_DRIFT_LOG_PATH` 解析到 tracked 路径时拒写 | 缺 `reports_dir` 与 `$REPORTS_DIR` 时拒写 |
 | 错误日志 | `logger.error` | `logger.warning` |
 
-两个 writer 带着**手动保持同步**的 pytest 守卫,注释互相引用（*"The sibling writer carries the same guard, so both drift-log writers are protected symmetrically"*）—— 一个被分进两文件的 fix-once-fixed-everywhere 缺陷。另外 `_DRIFT_LOG_PATH` 还被 **6 处用户日志串**引用（L451、L498、L750、L930、L1213、L1219）,不只在写入处——故它身兼写入目标*与*消息串,而其 **import-时绑定**正是 [BFR-016](../BFR-016-Import-Time-DB-Path-Binding/BFR-016-import-time-db-path-binding.md) 记录的隐患。测试经**两个不同 seam** 隔离 drift 日志:3 个文件 monkeypatch `_DRIFT_LOG_PATH`;lifecycle 测试 set `$REPORTS_DIR` / 传 `reports_dir=`。
+两个 writer 带着**手动保持同步**的 pytest 守卫,注释互相引用（*"The sibling writer carries the same guard, so both drift-log writers are protected symmetrically"*）—— 一个被分进两文件的 fix-once-fixed-everywhere 缺陷。另外 `_DRIFT_LOG_PATH` 还被 **6 处用户日志串**引用（L451、L498、L750、L930、L1213、L1219）,不只在写入处——故它身兼写入目标*与*消息串,而其 **import-时绑定**正是 [BFR-016](../../BFR-016-Import-Time-DB-Path-Binding/BFR-016-import-time-db-path-binding.md) 记录的隐患。测试经**两个不同 seam** 隔离 drift 日志:3 个文件 monkeypatch `_DRIFT_LOG_PATH`;lifecycle 测试 set `$REPORTS_DIR` / 传 `reports_dir=`。
 
 删除测试:删 helper 副本把 ~30 行集中一处（小赢——极少改）。删两个 writer 之一把锁、守卫、路径解析集中到一个模块,并把两个测试隔离 seam 收为一个——这才是候选名副其实之处。
 
@@ -98,12 +98,13 @@ drift 检测与 drift 日志分散在四个文件,各自携带一份相同的底
 
 ## 参考（References）
 
-- [BFR-016 — Import-Time DB Path Binding](../BFR-016-Import-Time-DB-Path-Binding/BFR-016-import-time-db-path-binding.md)
+- [BFR-016 — Import-Time DB Path Binding](../../BFR-016-Import-Time-DB-Path-Binding/BFR-016-import-time-db-path-binding.md)
 - [ADR-050 — Pending Verify Record Builder](../ADR-050-Pending-Verify-Builder/ADR-050-pending-verify-record-builder.md)
-- [ADR-009 — D1 Drift Classifier & Diagnose](../_archive/ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md)
-- [ADR-047 — Dual-Backend Drift Reconciliation](../ADR-047-Dual-Backend-Drift-Reconciliation/ADR-047-dual-backend-drift-reconciliation.md)
-- 2026-06-13 架构评审：[architecture-review-2026-06-13.html](../architecture/architecture-review-2026-06-13.html)
+- [ADR-009 — D1 Drift Classifier & Diagnose](../ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md)
+- [ADR-047 — Dual-Backend Drift Reconciliation](../../ADR-047-Dual-Backend-Drift-Reconciliation/ADR-047-dual-backend-drift-reconciliation.md)
+- 2026-06-13 架构评审：[architecture-review-2026-06-13.html](../../architecture/architecture-review-2026-06-13.html)
 
 ## 状态日志（Status Log）
 
+- 2026-06-14：Completed 于 [IMP-ADR052-01](IMP-ADR052-01-drift-io-consolidation.md)。计划中的单一阶段已交付 `drift_io.py`、整合 JSONL/helper/writer 路径、退役 import-时 drift-log 绑定、把测试移到 `$REPORTS_DIR` seam，并更新 CONTEXT.md 术语。本 ADR 不再有后续 IMP。
 - 2026-06-13：Proposed（源自 2026-06-13 架构评审候选 5）。勘察核实:`_values_equal`/`_row_to_dict` value 相同;JSONL reader 2 静默/1 warn;两个 writer 在路径绑定（import-时 `_DRIFT_LOG_PATH` vs call-时）、加锁、日志级别上分歧,且守卫手动同步。决定（grilling）:整合 helper + 以 **call-时**绑定统一 writer + 退役 `_DRIFT_LOG_PATH`（对齐 BFR-016）;`read_jsonl` warning;单一 `$REPORTS_DIR` 测试 seam;不留 shim。ADR-047（本地已实现）与 ADR-009（归档）拥有 drift 逻辑/语义,非这些 helper——无碰撞。IMP-ADR052-01 待办。

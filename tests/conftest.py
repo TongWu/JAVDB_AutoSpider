@@ -28,7 +28,7 @@ import pytest
 import tempfile
 import shutil
 import javdb.infra.config as _cfg_mod
-import javdb.spider.services.dedup as _dedup_mod
+import javdb.spider.services.dedup_store as _dedup_store_mod
 import javdb.storage.db as _db_pkg
 import javdb.storage.db._db_connection as _db_conn_mod
 import javdb.storage.db._db_history_read as _db_history_read_mod
@@ -124,9 +124,9 @@ def _isolate_sqlite(tmp_path):
     _db_rollback_mod._get_db = None
     _db_stats_mod._get_db = None
 
-    # Reset dedup_checker module-level state
-    _dedup_mod._db_initialised = False
-    _dedup_mod._pending_paths_cache = None
+    # Reset dedup_store module-level state
+    _dedup_store_mod._db_initialised = False
+    _dedup_store_mod._pending_paths_cache = None
 
     _db_migrations_mod.init_db(test_db)
 

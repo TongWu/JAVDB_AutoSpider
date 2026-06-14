@@ -134,8 +134,17 @@ class D1Error(RuntimeError):
     """Raised when the D1 API returns an error response."""
 
 
+class D1RecoveryBlockerError(RuntimeError):
+    """Raised when queued D1 writes are blocked by unresolved recovery work."""
+
+
 class D1TransientError(D1Error):
     """Recoverable: 5xx, 429, network timeout/connection error, D1_RESET_DO, etc."""
+
+    d1_recovery_outbox_required: bool = False
+    d1_recovery_durable: bool = False
+    is_export_lock: bool = False
+    retry_after: Optional[str] = None
 
 
 class D1PermanentError(D1Error):
@@ -347,7 +356,7 @@ class D1Connection:
         pending = status["pending_groups"].get(ordering_key, [])
         dead_lettered = status["dead_lettered_groups"].get(ordering_key, [])
         if pending or dead_lettered:
-            raise RuntimeError(
+            raise D1RecoveryBlockerError(
                 f"unresolved D1 recovery work for ordering key {ordering_key}; "
                 "drain it before committing the session"
             )

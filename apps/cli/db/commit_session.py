@@ -31,16 +31,21 @@ import argparse
 import json
 import os
 import time
-from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set
 
 from javdb.storage.sessions.lifecycle_helpers import (
-    append_jsonl_record,
     attach_run_identity,
     fanout_movie_claim,
     normalize_run_started_at,
     read_session_pre_state,
     write_github_output,
+)
+from javdb.storage.drift_io import append_jsonl_record
+from javdb.storage.sessions.pending_verify import (
+    F_COMMIT_ATTEMPTS,
+    F_PENDING_APPLIED_COUNT,
+    F_PENDING_RESIDUAL_COUNT,
+    build_pending_verify_record,
 )
 from javdb.storage.db import (
     close_db,
@@ -236,7 +241,7 @@ def _shadow_audit_drift(
     return out
 
 
-def _emit_pending_verify(
+def _append_commit_pending_verify_record(
     session_id: str,
     *,
     drain: Optional[Dict[str, Any]],
@@ -246,65 +251,42 @@ def _emit_pending_verify(
     commit_duration_ms: Optional[int],
     shadow_audit: bool,
 ) -> Dict[str, Any]:
-    """Append a Phase 2 ``pending_session_verify`` line to d1_drift.jsonl.
-
-    The verify line is consumed by:
-
-    * :mod:`javdb.integrations.notify.email` — to
-      render the "Pending Mode Verification" section and decide if the
-      subject prefix needs a ``[PENDING-ALERT]`` / ``[PENDING-ROLLBACK-
-      AUTO]`` annotation.
-    * :mod:`scripts.aggregate_pending_health` — to fold the most recent
-      ``pending_session_verify`` records into a 24h Health Snapshot for
-      the email body.
-
-    The function never raises; metric emission MUST NOT block commit.
-    Returns the record (for callers that want to print it / add it to
-    their JSON summary).
-    """
-    stats = HistoryRepo().pending_session_stats(session_id)
-    drain = drain or {}
-    pending_applied_count = int(
-        drain.get("pending_marked_applied", 0) or 0
+    stats_read_error = False
+    try:
+        stats = HistoryRepo().pending_session_stats(session_id)
+    except Exception:
+        logger.warning(
+            "Failed to read pending stats for session %s; "
+            "emitting pending verify record with stats_read_error=true.",
+            session_id,
+            exc_info=True,
+        )
+        stats = {}
+        stats_read_error = True
+    shadow_audit_result = (
+        _shadow_audit_drift(session_id, drain or {})
+        if shadow_audit and final_status == "committed"
+        else None
     )
-    pending_staged_count = (
-        pending_applied_count
-        + int(stats.get("pending_residual_count", 0) or 0)
+    record = build_pending_verify_record(
+        session_id,
+        source="commit_session",
+        write_mode=write_mode,
+        final_status=final_status,
+        drain=drain,
+        stats=stats,
+        commit_attempts=commit_attempts,
+        commit_duration_ms=commit_duration_ms,
+        shadow_audit_enabled=shadow_audit,
+        shadow_audit_result=shadow_audit_result,
+        stats_read_error=stats_read_error,
     )
-    record: Dict[str, Any] = {
-        "kind": "pending_session_verify",
-        "ts": datetime.now(timezone.utc).isoformat(),
-        "source": "commit_session",
-        "session_id": session_id,
-        "write_mode": write_mode,
-        "final_status": final_status,
-        "pending_staged_count": pending_staged_count,
-        "pending_applied_count": pending_applied_count,
-        "pending_residual_count": int(
-            stats.get("pending_residual_count", 0) or 0,
-        ),
-        "commit_attempts": int(commit_attempts),
-        "commit_duration_ms": commit_duration_ms,
-        "hrefs_processed": int(drain.get("hrefs_processed", 0) or 0),
-        "torrents_upserted": int(drain.get("torrents_upserted", 0) or 0),
-        "torrents_deleted": int(drain.get("torrents_deleted", 0) or 0),
-        "movies_upserted": int(drain.get("movies_upserted", 0) or 0),
-        "worker_stage_rollback_failed": 0,
-        # Phase 2: shadow audit; Phase 3: gated on JAVDB_PENDING_SHADOW_AUDIT.
-        "shadow_audit_enabled": bool(shadow_audit),
-    }
     attach_run_identity(record, session_id)
-    if shadow_audit and final_status == "committed":
-        record.update(_shadow_audit_drift(session_id, drain))
-    else:
-        record["derived_recompute_drift"] = 0
-        record["derived_drift_samples"] = []
-
     append_jsonl_record(record)
     write_github_output(
-        pending_residual_count=record["pending_residual_count"],
-        pending_applied_count=record["pending_applied_count"],
-        commit_attempts=record["commit_attempts"],
+        pending_residual_count=record[F_PENDING_RESIDUAL_COUNT],
+        pending_applied_count=record[F_PENDING_APPLIED_COUNT],
+        commit_attempts=record[F_COMMIT_ATTEMPTS],
     )
     return record
 
@@ -405,9 +387,13 @@ def main(argv: Optional[List[str]] = None) -> int:
             _emit_event("SessionFailed", session_id=str(sid),
                         entity_type="session", entity_id=str(sid))  # ADR-036
             if write_mode == 'pending':
-                _emit_pending_verify(
-                    sid, drain=None, final_status='finalizing', write_mode=write_mode,
-                    commit_attempts=1, commit_duration_ms=None,
+                _append_commit_pending_verify_record(
+                    sid,
+                    final_status='finalizing',
+                    drain=None,
+                    write_mode=write_mode,
+                    commit_attempts=1,
+                    commit_duration_ms=None,
                     shadow_audit=_shadow_audit_enabled(args),
                 )
             continue
@@ -447,7 +433,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 # Phase 2 verify: emit a verify line on failure too so the
                 # email pipeline knows commit attempted but did not finish.
                 if write_mode == 'pending':
-                    _emit_pending_verify(
+                    _append_commit_pending_verify_record(
                         sid,
                         drain=None,
                         final_status='finalizing',
@@ -468,7 +454,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             _emit_event("SessionFailed", session_id=str(sid),
                         entity_type="session", entity_id=str(sid))  # ADR-036
             if write_mode == 'pending':
-                _emit_pending_verify(
+                _append_commit_pending_verify_record(
                     sid,
                     drain=drain,
                     final_status='finalizing',
@@ -497,7 +483,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         if write_mode == 'pending':
             # Phase 2 verify: emit one line per pending session whose
             # commit actually went through (committed or no-op idempotent).
-            _emit_pending_verify(
+            _append_commit_pending_verify_record(
                 sid,
                 drain=drain,
                 final_status='committed',

@@ -8,7 +8,7 @@ sys.path.insert(0, project_root)
 from javdb.pipeline.engine import check_redownload_upgrade
 from javdb.pipeline.models import ParsedMovie
 from javdb.pipeline.planner import build_alignment_upgrade_plan, build_spider_ingestion_plan
-from javdb.spider.services.dedup import RcloneEntry
+from javdb.spider.services.dedup_types import RcloneEntry
 
 
 def test_build_spider_ingestion_plan_skips_when_history_complete():

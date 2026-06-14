@@ -3,8 +3,8 @@
 Resolves a video_code from a media item's file_path / folder_name / title via a
 confidence ladder. Validity of any candidate token is delegated to
 javdb.parsing.common so the resolver never re-invents (or drifts from) the
-canonical video-code shapes. Codes are normalized with the same
-NFKC + strip + upper idiom as the dedup checker (dedup._normalise_code).
+canonical video-code shapes. Codes are normalized with the canonical
+NFKC + strip + upper parser helper.
 
 Confidence ladder (ADR-033 D9):
   high   — code found in the file_path basename
@@ -17,13 +17,13 @@ from __future__ import annotations
 
 import os
 import re
-import unicodedata
 from typing import Optional
 
 from javdb.ops.reconcile.models import MediaItem
 from javdb.parsing.common import (
     _is_plausible_video_code,
     classify_video_code_family,
+    normalise_code,
 )
 
 # A delimited candidate token: letters/digits with -/_/. separators, the shape a
@@ -39,11 +39,6 @@ _TOKEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
 _SUFFIX_RE = re.compile(
     r"-(?:C|U|CD\d+|DISC\d+|PART\d+|\d{3,4}P|2160P|4K|8K|UNCEN(?:SORED)?|LEAK(?:ED)?)$"
 )
-
-
-def _normalise_code(raw: str) -> str:
-    """NFKC + strip + upper — identical to dedup._normalise_code (dedup.py:18-30)."""
-    return unicodedata.normalize("NFKC", raw or "").strip().upper()
 
 
 def _canonical(token: str) -> str:
@@ -68,11 +63,11 @@ def _scan(text: Optional[str]) -> tuple[Optional[str], Optional[str]]:
     'STARS-789 disc1' resolves to STARS-789 (family token, appears first)."""
     if not text:
         return None, None
-    normalized = _normalise_code(text)
+    normalized = normalise_code(text)
     family_hit: Optional[str] = None
     plausible_hit: Optional[str] = None
     for raw_token in _TOKEN_RE.findall(normalized):
-        token = _canonical(_normalise_code(raw_token))
+        token = _canonical(normalise_code(raw_token))
         if classify_video_code_family(token):
             family_hit = family_hit or token
         elif _is_plausible_video_code(token):

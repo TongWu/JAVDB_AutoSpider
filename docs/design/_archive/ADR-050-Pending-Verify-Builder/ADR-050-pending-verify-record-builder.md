@@ -2,12 +2,12 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Proposed — execution in [IMP-ADR050-01](IMP-ADR050-01-pending-verify-builder.md) (single PR) |
+| **Status**  | Completed (2026-06-14) — implemented by [IMP-ADR050-01](IMP-ADR050-01-pending-verify-builder.md) |
 | **Date**    | 2026-06-13                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-042](../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md) (`pending_session_verify` is a **diagnostic write** — never authoritative), [ADR-019](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md) (the lifecycle whose commit/fail/rollback events emit the record), [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md) (the `PipelineEvent` spine is a separate codepath — not this JSONL sidecar), [ADR-026](../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md) (`log_analysis` consumes the record for pending alerts) |
+| **Related** | [ADR-042](../../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md) (`pending_session_verify` is a **diagnostic write** — never authoritative), [ADR-019](../ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md) (the lifecycle whose commit/fail/rollback events emit the record), [ADR-036](../../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md) (the `PipelineEvent` spine is a separate codepath — not this JSONL sidecar), [ADR-026](../../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md) (`log_analysis` consumes the record for pending alerts) |
 
-> Originated from the 2026-06-13 architecture review (Candidate 3 — "consolidate the `pending_session_verify` builder"): [architecture-review-2026-06-13.html](../architecture/architecture-review-2026-06-13.html).
+> Originated from the 2026-06-13 architecture review (Candidate 3 — "consolidate the `pending_session_verify` builder"): [architecture-review-2026-06-13.html](../../architecture/architecture-review-2026-06-13.html).
 
 ## Context
 
@@ -85,11 +85,12 @@ Extract one pure builder + a single exported field-name vocabulary; the three em
 
 ## References
 
-- [ADR-042 — D1 Atomic Commit Boundaries](../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md)
-- [ADR-019 — Session Lifecycle Authority](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md)
-- [ADR-026 — AI Operations Diagnosis](../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md)
-- 2026-06-13 architecture review: [architecture-review-2026-06-13.html](../architecture/architecture-review-2026-06-13.html)
+- [ADR-042 — D1 Atomic Commit Boundaries](../../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md)
+- [ADR-019 — Session Lifecycle Authority](../ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md)
+- [ADR-026 — AI Operations Diagnosis](../../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md)
+- 2026-06-13 architecture review: [architecture-review-2026-06-13.html](../../architecture/architecture-review-2026-06-13.html)
 
 ## Status Log
 
+- 2026-06-14: Completed in [IMP-ADR050-01](IMP-ADR050-01-pending-verify-builder.md). The planned single phase shipped the pure pending-verify builder, shared field-name constants, emitter/parser re-pointing, CLI-only alert-decision wrapper, focused tests, workflow updates, and handbook updates. No follow-up IMP remains for this ADR.
 - 2026-06-13: Proposed (from the 2026-06-13 architecture review, Candidate 3). Decided: one pure `build_pending_verify_record()` in `javdb/storage/sessions/pending_verify.py`; exported field-name constants bound by both producers and the `log_analysis` consumer; pure builder (callers pass pre-fetched stats); `rollback_extras` as an opaque dict; shadow-audit + `GITHUB_OUTPUT` stay CLI-only. Verified: 17-field core schema (candidate said ~13; the lib emitter carries 19 fields); the "Simplified version" docstring drift is real; diagnostic write class (ADR-042) — no migration annotation. IMP-ADR050-01 pending.

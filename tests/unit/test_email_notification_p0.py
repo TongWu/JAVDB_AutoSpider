@@ -21,7 +21,6 @@ import json
 import os
 import sys
 from datetime import datetime, timezone
-from pathlib import Path
 
 # Add project root so the spider imports resolve.
 project_root = os.path.dirname(
@@ -174,6 +173,50 @@ def test_drift_advisory_returns_empty_for_clean_pending_verify(tmp_path):
     assert advisory == "", (
         "Clean pending_session_verify records must not trigger the drift advisory"
     )
+
+
+def test_pending_stats_read_error_is_critical_alert():
+    from javdb.integrations.notify.email.log_analysis import (
+        _evaluate_pending_alerts,
+    )
+
+    alerts, has_critical = _evaluate_pending_alerts(
+        [{"kind": "pending_session_verify", "stats_read_error": True}]
+    )
+
+    assert has_critical is True
+    assert any(alert[0] == "stats_read_error" for alert in alerts)
+
+
+def test_pending_verify_section_renders_stats_read_error():
+    from javdb.integrations.notify.email.report_builder import (
+        _format_pending_verify_section,
+    )
+
+    record = {
+        "session_id": "S-stats",
+        "write_mode": "pending",
+        "final_status": "committed",
+        "source": "commit_session",
+        "pending_staged_count": 0,
+        "pending_applied_count": 0,
+        "pending_residual_count": 0,
+        "commit_attempts": 1,
+        "commit_duration_ms": 10,
+        "hrefs_processed": 1,
+        "movies_upserted": 0,
+        "torrents_upserted": 0,
+        "torrents_deleted": 0,
+        "stats_read_error": True,
+    }
+
+    section = _format_pending_verify_section(
+        [record],
+        [("stats_read_error", 1, 0, "critical", record)],
+    )
+
+    assert "[CRITICAL] stats_read_error" in section
+    assert "stats_read_error=True" in section
 
 
 # ── P0-6: SQLite-local stats readers ─────────────────────────────────────
@@ -353,8 +396,8 @@ def test_drift_advisory_not_prepended_in_d1_only_mode(monkeypatch, tmp_path):
     """STORAGE_BACKEND=d1: no SQLite write path exists, so drift is impossible.
 
     Even if ``d1_drift.jsonl`` carries today's records (operational audit
-    tooling like ``commit_session._emit_pending_verify`` writes to the
-    same file), the email body must NOT prepend the DRIFT ADVISORY banner.
+    tooling like pending verify emitters writes to the same file), the email
+    body must NOT prepend the DRIFT ADVISORY banner.
     """
     import apps.cli.notify.email as cli
     from javdb.integrations.notify.email import service as en

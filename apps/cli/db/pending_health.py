@@ -30,6 +30,22 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
+from javdb.storage.drift_io import read_jsonl
+from javdb.storage.sessions.pending_verify import (
+    F_CLEANUP_PATH_MISMATCH_COUNT,
+    F_COMMIT_ATTEMPTS,
+    F_COMMIT_DURATION_MS,
+    F_DERIVED_RECOMPUTE_DRIFT,
+    F_FINAL_STATUS,
+    F_HREFS_PROCESSED,
+    F_KIND,
+    F_ROLLBACK_MODE,
+    F_STATS_READ_ERROR,
+    F_TS,
+    F_WORKER_STAGE_ROLLBACK_FAILED,
+    KIND_PENDING_SESSION_VERIFY,
+)
+
 
 def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
@@ -62,22 +78,6 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         help="Look-back window in hours (default 24).",
     )
     return p.parse_args(argv)
-
-
-def _read_jsonl(path: str) -> Iterable[dict]:
-    if not os.path.exists(path):
-        return []
-    out: List[dict] = []
-    with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                out.append(json.loads(line))
-            except Exception:
-                continue
-    return out
 
 
 def _parse_ts(raw) -> Optional[datetime]:
@@ -113,11 +113,11 @@ def aggregate(records: Iterable[dict], window_hours: float) -> dict:
     pending_session_records = []
     stale_records = []
     for rec in records:
-        ts = _parse_ts(rec.get("ts"))
+        ts = _parse_ts(rec.get(F_TS))
         if ts is None or ts < window_start:
             continue
-        kind = rec.get("kind")
-        if kind == "pending_session_verify":
+        kind = rec.get(F_KIND)
+        if kind == KIND_PENDING_SESSION_VERIFY:
             pending_session_records.append(rec)
         elif kind == "stale_session_cleanup":
             stale_records.append(rec)
@@ -125,12 +125,12 @@ def aggregate(records: Iterable[dict], window_hours: float) -> dict:
     pending_session_count = len(pending_session_records)
     successful_committed_count = sum(
         1 for r in pending_session_records
-        if r.get("final_status") == "committed"
+        if r.get(F_FINAL_STATUS) == "committed"
     )
     rolled_back_count = sum(
         1 for r in pending_session_records
-        if r.get("rollback_mode") == "rollback_pending"
-        or r.get("final_status") == "failed"
+        if r.get(F_ROLLBACK_MODE) == "rollback_pending"
+        or r.get(F_FINAL_STATUS) == "failed"
     )
 
     # P1: split rolled-back sessions by failure_class so the Phase 3
@@ -143,8 +143,8 @@ def aggregate(records: Iterable[dict], window_hours: float) -> dict:
     failure_class_counts: Dict[str, int] = {}
     for r in pending_session_records:
         if (
-            r.get("rollback_mode") == "rollback_pending"
-            or r.get("final_status") == "failed"
+            r.get(F_ROLLBACK_MODE) == "rollback_pending"
+            or r.get(F_FINAL_STATUS) == "failed"
         ):
             cls = (r.get("failure_class") or "unknown").strip() or "unknown"
             failure_class_counts[cls] = failure_class_counts.get(cls, 0) + 1
@@ -157,9 +157,9 @@ def aggregate(records: Iterable[dict], window_hours: float) -> dict:
         success_rate_percent = None
 
     durations = [
-        int(r.get("commit_duration_ms") or 0)
+        int(r.get(F_COMMIT_DURATION_MS) or 0)
         for r in pending_session_records
-        if r.get("commit_duration_ms")
+        if r.get(F_COMMIT_DURATION_MS)
     ]
     avg_commit_duration_ms = (
         int(sum(durations) / len(durations)) if durations else 0
@@ -169,8 +169,8 @@ def aggregate(records: Iterable[dict], window_hours: float) -> dict:
     # both fields are populated.
     per_movie_durations = []
     for r in pending_session_records:
-        d = r.get("commit_duration_ms")
-        h = r.get("hrefs_processed")
+        d = r.get(F_COMMIT_DURATION_MS)
+        h = r.get(F_HREFS_PROCESSED)
         try:
             d = int(d or 0)
             h = int(h or 0)
@@ -180,19 +180,23 @@ def aggregate(records: Iterable[dict], window_hours: float) -> dict:
             per_movie_durations.append(d / h)
     p95_per_movie_ms = int(_percentile(per_movie_durations, 95))
     total_commit_attempts = sum(
-        int(r.get("commit_attempts") or 0)
+        int(r.get(F_COMMIT_ATTEMPTS) or 0)
         for r in pending_session_records
     )
     total_derived_recompute_drift = sum(
-        int(r.get("derived_recompute_drift") or 0)
+        int(r.get(F_DERIVED_RECOMPUTE_DRIFT) or 0)
         for r in pending_session_records
     )
     total_worker_stage_rollback_failed = sum(
-        int(r.get("worker_stage_rollback_failed") or 0)
+        int(r.get(F_WORKER_STAGE_ROLLBACK_FAILED) or 0)
         for r in pending_session_records
     )
+    total_stats_read_error = sum(
+        1 for r in pending_session_records
+        if r.get(F_STATS_READ_ERROR)
+    )
     total_cleanup_path_mismatch_count = sum(
-        int(r.get("cleanup_path_mismatch_count") or 0)
+        int(r.get(F_CLEANUP_PATH_MISMATCH_COUNT) or 0)
         for r in pending_session_records
     )
     stale_resume_successes = sum(
@@ -220,6 +224,7 @@ def aggregate(records: Iterable[dict], window_hours: float) -> dict:
         "total_worker_stage_rollback_failed": (
             total_worker_stage_rollback_failed
         ),
+        "total_stats_read_error": total_stats_read_error,
         "total_cleanup_path_mismatch_count": (
             total_cleanup_path_mismatch_count
         ),
@@ -239,7 +244,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         reports_dir, "D1", "pending_health_24h.json",
     )
     try:
-        records = list(_read_jsonl(input_path))
+        records = list(read_jsonl(input_path))
     except Exception as exc:  # noqa: BLE001
         print(f"Failed to read {input_path}: {exc}", file=sys.stderr)
         return 1

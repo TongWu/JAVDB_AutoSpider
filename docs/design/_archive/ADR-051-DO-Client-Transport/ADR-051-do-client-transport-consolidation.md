@@ -2,12 +2,12 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Proposed — execution in [IMP-ADR051-01](IMP-ADR051-01-do-client-transport.md) (single PR) |
+| **Status**  | Completed (2026-06-14) — implemented by [IMP-ADR051-01](IMP-ADR051-01-do-client-transport.md) |
 | **Date**    | 2026-06-13                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-023](../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.md) (owns `/recommend_proxy` **scoring**; D19 keeps `/lease` simple/deterministic — this ADR preserves that), [ADR-013](../_archive/ADR-013-Runner-Runtime-State/ADR-013-runner-runtime-state-consolidation.md) (runtime state that calls `report_async`), [ADR-041](../_archive/ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md) (`ProxyPool` is Rust-Required, but the DO-client HTTP layer is pure Python and unaffected) |
+| **Related** | [ADR-023](../../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.md) (owns `/recommend_proxy` **scoring**; D19 keeps `/lease` simple/deterministic — this ADR preserves that), [ADR-013](../ADR-013-Runner-Runtime-State/ADR-013-runner-runtime-state-consolidation.md) (runtime state that calls `report_async`), [ADR-041](../ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md) (`ProxyPool` is Rust-Required, but the DO-client HTTP layer is pure Python and unaffected) |
 
-> Originated from the 2026-06-13 architecture review (Candidate 4 — "route `ProxyCoordinatorClient` through `_do_request`"): [architecture-review-2026-06-13.html](../architecture/architecture-review-2026-06-13.html).
+> Originated from the 2026-06-13 architecture review (Candidate 4 — "route `ProxyCoordinatorClient` through `_do_request`"): [architecture-review-2026-06-13.html](../../architecture/architecture-review-2026-06-13.html).
 
 ## Context
 
@@ -33,7 +33,7 @@ Route the two outliers through the seam, and replace the untyped async queue wit
 
 **D4. The shutdown sentinel becomes a typed `ASYNC_QUEUE_SENTINEL` constant; collapse the dead unpacking.** A module-level `ASYNC_QUEUE_SENTINEL = AsyncReportEvent(...)` makes the queue homogeneous (no `Union`); `_async_report_loop` checks `item is ASYNC_QUEUE_SENTINEL` then accesses named fields. Delete the `len(item) > 2/3/4` compat branches — their push sites are gone.
 
-**D5. No public-API change.** `report_async()`, `lease()`, `report()`, `LeaseResult`, `ReportResult` signatures are unchanged; external call sites and the queue's producer interface are untouched. This honours [ADR-023](../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.md) D19 ("keep `/lease` and the request hot path simple and deterministic") — the external contract is byte-identical; only the internal transport routing and queue type change.
+**D5. No public-API change.** `report_async()`, `lease()`, `report()`, `LeaseResult`, `ReportResult` signatures are unchanged; external call sites and the queue's producer interface are untouched. This honours [ADR-023](../../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.md) D19 ("keep `/lease` and the request hot path simple and deterministic") — the external contract is byte-identical; only the internal transport routing and queue type change.
 
 ## Consequences
 
@@ -79,11 +79,12 @@ Route the two outliers through the seam, and replace the untyped async queue wit
 
 ## References
 
-- [ADR-023 — Proxy Recommendation Policy](../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.md)
-- [ADR-013 — Runner Runtime State](../_archive/ADR-013-Runner-Runtime-State/ADR-013-runner-runtime-state-consolidation.md)
-- [ADR-041 — Rust Core Fallback Policy](../_archive/ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md)
-- 2026-06-13 architecture review: [architecture-review-2026-06-13.html](../architecture/architecture-review-2026-06-13.html)
+- [ADR-023 — Proxy Recommendation Policy](../../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.md)
+- [ADR-013 — Runner Runtime State](../ADR-013-Runner-Runtime-State/ADR-013-runner-runtime-state-consolidation.md)
+- [ADR-041 — Rust Core Fallback Policy](../ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md)
+- 2026-06-13 architecture review: [architecture-review-2026-06-13.html](../../architecture/architecture-review-2026-06-13.html)
 
 ## Status Log
 
+- 2026-06-14: Completed in [IMP-ADR051-01](IMP-ADR051-01-do-client-transport.md). The planned single phase shipped `_do_request` routing for `lease`/`report`, the typed `AsyncReportEvent` queue item and sentinel, deletion of dead tuple-compat code, and focused dict-guard/async-queue regression tests. No follow-up IMP remains for this ADR.
 - 2026-06-13: Proposed (from the 2026-06-13 architecture review, Candidate 4). Decided: route `lease`/`report` through `_do_request` (gaining the `isinstance(dict)` guard); inline post-processing (sibling-consistent); `AsyncReportEvent` frozen dataclass + typed `ASYNC_QUEUE_SENTINEL` module-level in `proxy_coordinator_client.py` (not promoted to base); delete the dead `len(item) > 2/3/4` tuple-compat; no public-API change. Verified: 745 lines exactly; all four sibling clients already route through `_do_request`; the tuple-compat push sites are gone. IMP-ADR051-01 pending.
