@@ -18,9 +18,16 @@ def repo(acquisition_outcome_repo):
 class _FakeQb:
     def __init__(self, torrents):
         self._t = torrents
+        self.deleted = []
 
     def get_torrents_multiple_categories(self, categories, torrent_filter="downloading"):
         return self._t
+
+    def get_torrents(self, category, torrent_filter="downloading"):
+        return self._t
+
+    def delete_torrents(self, hashes, delete_files=True):
+        self.deleted.extend(hashes)
 
 
 class _CategoryQb:
@@ -315,6 +322,35 @@ def test_run_rejects_nonpositive_stalled_threshold_without_transitions(repo):
     assert got.state == "queued"
     assert got.last_seen_at == old_ts
     assert res.errors == ["stalled_after_days must be >= 1"]
+
+
+def test_run_treats_missing_files_as_completed_and_deletes_from_qb(repo):
+    repo.upsert(AcquisitionOutcomeRecord(qb_hash="m1", href="/v/1", state="queued",
+                                         last_seen_at=_old_iso(0)))
+    qb = _FakeQb([{"hash": "m1", "progress": 0.0, "state": "missingFiles"}])
+    res = service.run(ReconcileOptions(), repo=repo, qb_client=qb)
+    assert repo.get("m1").state == "completed"
+    assert res.marked_completed == 1
+    assert res.missing_files_deleted == 1
+    assert "m1" in qb.deleted
+
+
+def test_run_missing_files_does_not_delete_when_dry_run(repo):
+    repo.upsert(AcquisitionOutcomeRecord(qb_hash="m2", href="/v/1", state="queued",
+                                         last_seen_at=_old_iso(0)))
+    qb = _FakeQb([{"hash": "m2", "progress": 0.0, "state": "missingFiles"}])
+    res = service.run(ReconcileOptions(dry_run=True), repo=repo, qb_client=qb)
+    assert repo.get("m2").state == "queued"  # no write in dry_run
+    assert res.missing_files_deleted == 0
+    assert qb.deleted == []
+
+
+def test_run_missing_files_skips_untracked_hashes(repo):
+    # "m3" has missingFiles in qB but no AcquisitionOutcome row — must not be deleted.
+    qb = _FakeQb([{"hash": "m3", "progress": 0.0, "state": "missingFiles"}])
+    res = service.run(ReconcileOptions(), repo=repo, qb_client=qb)
+    assert res.missing_files_deleted == 0
+    assert qb.deleted == []
 
 
 def test_run_counts_marked_only_after_successful_upsert(repo):

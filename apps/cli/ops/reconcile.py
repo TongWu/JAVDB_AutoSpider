@@ -164,6 +164,7 @@ def main(argv: list[str] | None = None) -> int:
                     "Marked completed": acquisition_result.marked_completed,
                     "Marked stalled": acquisition_result.marked_stalled,
                     "Marked failed": acquisition_result.marked_failed,
+                    "Missing files deleted from qB": acquisition_result.missing_files_deleted,
                     "Errors": len(acquisition_result.errors),
                 })
             if ownership_result is not None:
