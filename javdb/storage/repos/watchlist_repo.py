@@ -17,7 +17,7 @@ WATCH_INTENT_UPSERT_SQL = """
     ON CONFLICT(video_code) DO UPDATE SET
         href       = excluded.href,
         status     = excluded.status,
-        notes      = excluded.notes,
+        notes      = COALESCE(excluded.notes, notes),
         status_at  = strftime('%Y-%m-%dT%H:%M:%fZ','now'),
         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
 """

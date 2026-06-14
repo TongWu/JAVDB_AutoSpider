@@ -27,7 +27,10 @@ def client(tmp_path, monkeypatch):
     from apps.api.services.runtime import app
     # Standard FastAPI test seam: override the auth dependency so the smoke test
     # does not need a real JWT (auth itself is covered by the auth router tests).
-    app.dependency_overrides[_require_auth] = lambda: {"username": "test"}
+    app.dependency_overrides[_require_auth] = lambda: {
+        "username": "admin",
+        "role": "admin",
+    }
     # Supply a CSRF cookie + header so the app-level CSRF middleware lets
     # mutation requests (PUT, DELETE) through. The middleware runs before
     # dependency injection, so dependency_overrides alone is insufficient.
@@ -66,3 +69,21 @@ def test_put_then_get_then_delete(client):
     assert deleted.status_code == 200
     assert deleted.json()["deleted"] is True
     assert client.get("/api/watchlist/ABC-001").status_code == 404
+
+
+def test_readonly_cannot_mutate(client):
+    """A readonly (non-admin) account is rejected on PUT/DELETE (admin-only)."""
+    from apps.api.services.runtime import app
+
+    app.dependency_overrides[_require_auth] = lambda: {
+        "username": "readonly",
+        "role": "readonly",
+    }
+    put = client.put(
+        "/api/watchlist/RO-1", json={"href": "/v/ro1", "status": "want"}
+    )
+    assert put.status_code == 403
+    deleted = client.delete("/api/watchlist/RO-1")
+    assert deleted.status_code == 403
+    # Reads stay allowed for a readonly account.
+    assert client.get("/api/watchlist/RO-1").status_code == 404

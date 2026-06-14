@@ -6,7 +6,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from apps.api.infra.auth import _require_auth
+from apps.api.infra.auth import _require_auth, require_role
 from apps.api.schemas.watchlist import (
     WatchIntentListResponse,
     WatchIntentResponse,
@@ -55,7 +55,9 @@ def list_watch_intents(
 def upsert_watch_intent(
     video_code: str,
     body: WatchIntentUpsert,
-    _user=Depends(_require_auth),
+    # Mutations are admin-only: a readonly account must not modify shared
+    # watch-intent data (require_role still enforces auth via _require_auth).
+    _admin=Depends(require_role("admin")),
 ):
     row = WatchIntentRepo().upsert(
         video_code=video_code, href=body.href, status=body.status, notes=body.notes
@@ -72,6 +74,6 @@ def get_watch_intent(video_code: str, _user=Depends(_require_auth)):
 
 
 @router.delete("/{video_code}")
-def delete_watch_intent(video_code: str, _user=Depends(_require_auth)):
+def delete_watch_intent(video_code: str, _admin=Depends(require_role("admin"))):
     deleted = WatchIntentRepo().delete(video_code)
     return {"deleted": deleted}
