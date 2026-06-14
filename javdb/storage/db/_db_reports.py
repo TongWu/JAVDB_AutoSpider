@@ -20,6 +20,7 @@ from typing import Dict, List, Optional, Tuple
 
 from javdb.infra.config import cfg
 from javdb.infra.logging import get_logger
+from javdb.spider.contracts import indicators_to_category
 
 logger = get_logger(__name__)
 
@@ -476,17 +477,6 @@ def db_get_report_rows(
     """
     _ensure_imports()
 
-    def indicators_to_category(sub_ind: int, cen_ind: int) -> str:
-        """Map (SubtitleIndicator, CensorIndicator) to category name."""
-        if sub_ind == 1 and cen_ind == 0:
-            return 'hacked_subtitle'
-        elif sub_ind == 0 and cen_ind == 0:
-            return 'hacked_no_subtitle'
-        elif sub_ind == 1 and cen_ind == 1:
-            return 'subtitle'
-        else:  # sub_ind == 0 and cen_ind == 1
-            return 'no_subtitle'
-
     with _get_db(db_path or _REPORTS_DB_PATH) as conn:
         movies = conn.execute(
             "SELECT * FROM ReportMovies WHERE SessionId = ? ORDER BY Id",
@@ -526,7 +516,7 @@ def db_get_report_rows(
             ).fetchall()
             for t in torrents:
                 t = dict(t)
-                cat = indicators_to_category(t['SubtitleIndicator'], t['CensorIndicator'])
+                cat = indicators_to_category(int(t['SubtitleIndicator']), int(t['CensorIndicator']))
                 flat[cat] = t.get('MagnetUri', '')
                 flat[f'size_{cat}'] = t.get('Size', '')
                 flat[f'file_count_{cat}'] = t.get('FileCount', 0)

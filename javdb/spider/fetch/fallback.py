@@ -248,6 +248,60 @@ def get_page_url(page_num, custom_url=None):
     return _url_helper_get_page_url(page_num, BASE_URL, custom_url)
 
 
+class _ProxyAttempt:
+    """Normalized result of one classify() call inside the per-proxy cascade.
+
+    ``terminal`` stops the cascade and is returned to the caller; ``success``
+    distinguishes a genuine win (which marks CF bypass on the escalation path)
+    from a terminal-but-not-success outcome (e.g. an index valid-empty page);
+    ``payload`` is the caller-specific tuple threaded back unchanged.
+    """
+
+    __slots__ = ("terminal", "success", "payload")
+
+    def __init__(self, terminal, success, payload):
+        self.terminal = terminal
+        self.success = success
+        self.payload = payload
+
+
+def _attempt_proxy_direct_then_cf(proxy_name, *, label, classify, on_banned, runtime=None):
+    """Run the shared per-proxy ``direct -> CF-bypass`` cascade for one proxy.
+
+    Both the index and detail twins drive this identical sequence and differ
+    only in how they fetch/validate a page and how they react to a ban — those
+    two variations are injected as callbacks, keeping this the single home of
+    the recovery policy (when to escalate to CF bypass, when to mark a proxy as
+    needing bypass).
+
+    Args:
+        classify(u_proxy, u_cf, context_msg) -> _ProxyAttempt: fetch + validate/parse.
+        on_banned(exc, proxy_name): caller-specific ban side effect.
+
+    Returns:
+        ``(attempt_or_None, used_cf, proxy_banned)`` — ``attempt`` is the
+        terminal ``_ProxyAttempt`` (or ``None`` when the proxy yielded nothing
+        usable), ``used_cf`` whether the winning/last attempt used CF bypass.
+    """
+    try:
+        if _proxy_needs_cf_bypass(proxy_name, runtime=runtime):
+            attempt = classify(True, True, f"{label}: Proxy={proxy_name} + CF Bypass (marked)")
+            return (attempt if attempt.terminal else None), True, False
+        attempt = classify(True, False, f"{label}: Proxy={proxy_name} Direct")
+        if attempt.terminal:
+            return attempt, False, False
+        _sleep_between_fetches(runtime=runtime)
+        attempt = classify(True, True, f"{label}: Proxy={proxy_name} + CF Bypass")
+        if attempt.terminal:
+            if attempt.success:
+                _mark_proxy_cf_bypass(proxy_name, runtime=runtime)
+            return attempt, True, False
+        return None, False, False
+    except ProxyBannedError as e:
+        on_banned(e, proxy_name)
+        return None, False, True
+
+
 def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy,
                                    use_cf_bypass, page_num, is_adhoc_mode=False,
                                    *, runtime=None):
@@ -339,31 +393,22 @@ def fetch_index_page_with_fallback(page_url, session, use_cookie, use_proxy,
 
     def try_proxy_direct_then_cf(proxy_name):
         """Returns (html, success, is_valid_empty, used_cf, proxy_banned)."""
-        try:
-            needs_cf = _proxy_needs_cf_bypass(proxy_name, runtime=runtime)
-            if needs_cf:
-                html, success, is_valid_empty = try_fetch(
-                    True, True, f"Index: Proxy={proxy_name} + CF Bypass (marked)")
-                if success or is_valid_empty:
-                    return html, success, is_valid_empty, True, False
-                return None, False, False, True, False
-            html, success, is_valid_empty = try_fetch(
-                True, False, f"Index: Proxy={proxy_name} Direct")
-            if success or is_valid_empty:
-                return html, success, is_valid_empty, False, False
-            _sleep_between_fetches(runtime=runtime)
-            html, success, is_valid_empty = try_fetch(
-                True, True, f"Index: Proxy={proxy_name} + CF Bypass")
-            if success or is_valid_empty:
-                if success:
-                    _mark_proxy_cf_bypass(proxy_name, runtime=runtime)
-                return html, success, is_valid_empty, True, False
-            return None, False, False, False, False
-        except ProxyBannedError as e:
-            logger.warning(f"[Page {page_num}] Proxy '{proxy_name}' banned during index fetch: {e.reason}")
+        def classify(u_proxy, u_cf, context_msg):
+            html, success, is_valid_empty = try_fetch(u_proxy, u_cf, context_msg)
+            return _ProxyAttempt(success or is_valid_empty, success,
+                                 (html, success, is_valid_empty))
+
+        def on_banned(e, name):
+            logger.warning(f"[Page {page_num}] Proxy '{name}' banned during index fetch: {e.reason}")
             if e.html:
-                _save_proxy_ban_html(e.html, proxy_name, page_num, runtime=runtime)
-            return None, False, False, False, True
+                _save_proxy_ban_html(e.html, name, page_num, runtime=runtime)
+
+        attempt, used_cf, banned = _attempt_proxy_direct_then_cf(
+            proxy_name, label="Index", classify=classify, on_banned=on_banned, runtime=runtime)
+        if attempt is None:
+            return None, False, False, used_cf, banned
+        html, success, is_valid_empty = attempt.payload
+        return html, success, is_valid_empty, used_cf, banned
 
     # --- Phase 0: Initial Attempt with current proxy ---
     if use_proxy and proxy_pool:
@@ -569,34 +614,19 @@ def fetch_detail_page_with_fallback(detail_url, session, use_cookie, use_proxy,
 
     def try_proxy_direct_then_cf(proxy_name, skip_sleep=True):
         """Returns (magnets, actor_info, ag, al, sup, success, detail, used_cf, proxy_banned)."""
-        try:
-            needs_cf = _proxy_needs_cf_bypass(proxy_name, runtime=runtime)
-            if needs_cf:
-                magnets, actor_info, ag, al, sup, success, movie_detail = try_fetch_and_parse(
-                    True, True,
-                    f"Detail: Proxy={proxy_name} + CF Bypass (marked)",
-                    skip_sleep=skip_sleep)
-                if success:
-                    return magnets, actor_info, ag, al, sup, True, movie_detail, True, False
-                return [], '', '', '', '', False, None, True, False
-            magnets, actor_info, ag, al, sup, success, movie_detail = try_fetch_and_parse(
-                True, False,
-                f"Detail: Proxy={proxy_name} Direct",
-                skip_sleep=skip_sleep)
-            if success:
-                return magnets, actor_info, ag, al, sup, True, movie_detail, False, False
-            _sleep_between_fetches(runtime=runtime)
-            magnets, actor_info, ag, al, sup, success, movie_detail = try_fetch_and_parse(
-                True, True,
-                f"Detail: Proxy={proxy_name} + CF Bypass",
-                skip_sleep=skip_sleep)
-            if success:
-                _mark_proxy_cf_bypass(proxy_name, runtime=runtime)
-                return magnets, actor_info, ag, al, sup, True, movie_detail, True, False
-            return [], '', '', '', '', False, None, False, False
-        except ProxyBannedError as e:
-            logger.warning(f"[{entry_index}] Proxy '{proxy_name}' banned during detail fetch: {e.reason}")
-            return [], '', '', '', '', False, None, False, True
+        def classify(u_proxy, u_cf, context_msg):
+            res = try_fetch_and_parse(u_proxy, u_cf, context_msg, skip_sleep=skip_sleep)
+            return _ProxyAttempt(res[5], res[5], res)
+
+        def on_banned(e, name):
+            logger.warning(f"[{entry_index}] Proxy '{name}' banned during detail fetch: {e.reason}")
+
+        attempt, used_cf, banned = _attempt_proxy_direct_then_cf(
+            proxy_name, label="Detail", classify=classify, on_banned=on_banned, runtime=runtime)
+        if attempt is None:
+            return [], '', '', '', '', False, None, used_cf, banned
+        res = attempt.payload
+        return res[0], res[1], res[2], res[3], res[4], True, res[6], used_cf, banned
 
     # --- Phase 0: Initial Attempt ---
     detail_proxy_was_banned = False
