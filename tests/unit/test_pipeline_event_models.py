@@ -3,9 +3,19 @@ from javdb.pipeline.events.models import EVENT_TYPES, PipelineEventRecord, utc_n
 
 
 def test_event_taxonomy_complete():
-    assert {"RunStarted", "SessionCommitted", "SessionFailed",
-            "MovieDiscovered", "MovieSelected",
-            "TorrentSelected", "TorrentQueued", "TorrentCompleted"} == set(EVENT_TYPES)
+    assert {
+        "RunStarted",
+        "SessionCommitted",
+        "SessionCommitFailed",
+        "SessionFailed",
+        "SessionRolledBack",
+        "SessionRollbackFailed",
+        "MovieDiscovered",
+        "MovieSelected",
+        "TorrentSelected",
+        "TorrentQueued",
+        "TorrentCompleted",
+    } == set(EVENT_TYPES)
 
 
 def test_record_minimal():

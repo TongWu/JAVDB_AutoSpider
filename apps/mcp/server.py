@@ -1,5 +1,5 @@
 # apps/mcp/server.py
-"""FastMCP server exposing the read-only operator surface (ADR-038 Phase 1).
+"""FastMCP server exposing the operator surface (ADR-038 Phase 2).
 
 Run:  python -m apps.mcp.server   (stdio transport)
 """
@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from mcp.server.fastmcp import FastMCP
 
+from apps.mcp.tools.act import tool_commit_session, tool_rollback_session
 from apps.mcp.tools.observe import (
     tool_get_capabilities, tool_get_session,
     tool_list_incidents, tool_get_incident, tool_query_events,
@@ -67,6 +68,41 @@ def list_runs(limit: int = 50) -> dict:
 def search_history(q: str | None = None, limit: int = 50) -> dict:
     """Search local movie history ('do I have X?'). Read-only."""
     return tool_search_history(q=q, limit=limit)
+
+
+@mcp.tool()
+def rollback_session(
+    session_id: str,
+    scope: str = "all",
+    force: bool = False,
+    confirm: bool = False,
+) -> dict:
+    """GATED rollback, dry-run unless confirm=true, with audited execution.
+
+    Committed sessions require force=true.
+    """
+    return tool_rollback_session(
+        session_id,
+        scope=scope,
+        force=force,
+        confirm=confirm,
+    )
+
+
+@mcp.tool()
+def commit_session(
+    session_id: str,
+    force: bool = False,
+    drop_pending: bool = False,
+    confirm: bool = False,
+) -> dict:
+    """GATED commit, dry-run unless confirm=true, with audited execution."""
+    return tool_commit_session(
+        session_id,
+        force=force,
+        drop_pending=drop_pending,
+        confirm=confirm,
+    )
 
 
 def main() -> None:
