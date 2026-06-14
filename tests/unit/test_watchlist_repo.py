@@ -41,6 +41,15 @@ def test_upsert_updates_status_in_place(db_path):
     assert total == 1  # upsert, not a second row
 
 
+def test_upsert_preserves_notes_on_status_only_change(db_path):
+    """A status-only update (notes omitted) must not clobber existing notes."""
+    repo = WatchIntentRepo(db_path=db_path)
+    repo.upsert(video_code="N-1", href="/v/n1", status="want", notes="keep")
+    row = repo.upsert(video_code="N-1", href="/v/n1", status="viewed")
+    assert row["status"] == "viewed"
+    assert row["notes"] == "keep"
+
+
 def test_get_returns_none_when_absent(db_path):
     assert WatchIntentRepo(db_path=db_path).get("NOPE-999") is None
 

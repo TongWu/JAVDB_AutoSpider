@@ -10,7 +10,8 @@ CANONICAL = (
     "VALUES (?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), "
     "strftime('%Y-%m-%dT%H:%M:%fZ','now')) "
     "ON CONFLICT(video_code) DO UPDATE SET "
-    "href = excluded.href, status = excluded.status, notes = excluded.notes, "
+    "href = excluded.href, status = excluded.status, "
+    "notes = COALESCE(excluded.notes, notes), "
     "status_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'), "
     "updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')"
 )
