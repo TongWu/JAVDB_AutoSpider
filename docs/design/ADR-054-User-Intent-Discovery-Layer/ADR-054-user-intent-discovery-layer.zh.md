@@ -161,11 +161,11 @@ reason codes），而非重新解析。Cloudflare 质询在**服务端**处理�
 | 阶段 | 归属 | 子 ADR / IMP | 交付内容 | 推迟内容 |
 | --- | --- | --- | --- | --- |
 | WS1 — Watchlist | ADR-054 | [IMP-ADR054-01](IMP-ADR054-01-watchlist.md) | `WatchIntent` D1 表（`want/viewed`，`video_code`+`href`）；内联 `StatusControl` 设置点 + Library Watchlist tab；双后端 `/api/watchlist` 读+写 + upsert 并行测试；`watch_intent` capability flag；en/zh | `browsed` 自动信号；与 `ConsumptionSignal` 对账；批量操作 |
-| WS2 — Subscriptions + New-Works | ADR-054 | spec → IMP（待定）；修订 ADR-040 | Subscription 存储（先演员）；定时抓取（Cron/GHA）复用 AdHoc；New-Works feed；评分阈值绕过（supersede ADR-040 P3）；一键 → WS1 "want" | tag/series 订阅；通知 |
-| WS3 — Magnet Aggregation | ADR-054（+ ADR-039、ADR-024） | spec → IMP（待定） | 跨源抓取+去重；`magnet-source` ADR-039 类目；画质/字幕走 ADR-024 评分；Browse/详情呈现 | 负缓存/退避调优；更多源 |
-| WS4a — 内容过滤 | **ADR-040** | ADR-040 后续阶段 | `ContentFilterRule` 上的 regex + release-date 维度；web 规则 CRUD；SPA 展示侧叠加（读侧复用） | — |
-| WS4b — AI 翻译 | **ADR-039** | 新 ADR-039 类目 | `translation`/`enrichment` 插件类目；经结构化 LLM 调用做标题翻译（ADR-026 模式） | 批量列表翻译 |
-| WS4c — 可用性检测 | **ADR-039** | 新 ADR-039 类目 | `availability` 插件类目；流媒体源探测 + TTL 缓存 | — |
+| WS2 — Subscriptions + New-Works | ADR-054 | [IMP-ADR054-02](IMP-ADR054-02-subscriptions.md) | `ActorSubscription` + `NewWorks`（HISTORY_DB，仅演员）；`SubscriptionMonitor.yml` GH-cron 经 AdHoc 路径抓关注演员（评分阈值**天然绕过**——无新代码）；New-Works feed 复用 WS1 `StatusControl`（一键 → want）；`subscriptions` flag；以修订 supersede ADR-040 P3 | tag/series；通知；Worker-cron |
+| WS3 — Magnet Aggregation | ADR-054（+ ADR-039、ADR-024） | [IMP-ADR054-03](IMP-ADR054-03-magnet-aggregation.md) | ADR-039 `indexer` 类目（JAVBUS + Sukebei）；服务端抓取 + infohash 去重；**live** 复用 ADR-024 评分（文件信号 → `probe_unavailable`）；`POST /api/explore/aggregate-magnets`（Worker 501）；`magnet_aggregation` flag（配置非空）；**v1 ephemeral** | 缓存表；BTdig/BTSOW；负缓存/退避 |
+| WS4a — 内容过滤 | **ADR-040** | [IMP-ADR040-03](../ADR-040-Content-Filter-Rules/IMP-ADR040-03-content-filter-regex-date.md)（引擎） + [IMP-ADR040-04](../ADR-040-Content-Filter-Rules/IMP-ADR040-04-content-filter-web-crud.md)（web CRUD） | 在既有 `ContentFilterRule` 三元组上加 `regex_exclude/include` + `release_date before/after`（**无迁移**）；双后端 `/api/content-filter` CRUD + Settings 页 + 读侧 Browse 叠加（**REPORTS_DB**）；`content_filter` flag | — |
+| WS4b — AI 翻译 | **ADR-039** | backlog（2026-06-14 延期） | `translation` 插件类目；仓库首个真实 OpenAI 兼容 LLM 客户端；按标题懒加载、memoize | 整个子项（本轮不做） |
+| WS4c — 可用性检测 | **ADR-039** | backlog（2026-06-14 延期） | `availability` 插件类目；TTL 缓存表；每源隔离 | 整个子项（服务端探测流媒体有封禁/合规风险） |
 
 每个阶段在决策后的 `brainstorming` + `writing-plans` 流程中，基于届时真实形状详化（节奏参照 ADR-034）。
 
@@ -231,3 +231,16 @@ reason codes），而非重新解析。Cloudflare 质询在**服务端**处理�
   为键（+`href` 桥接），`untracked` = 无行，无 `user_id`、无编辑锁；capability flag
   `watch_intent`；内联 `StatusControl` 设置点 + Library Watchlist tab；读写在同一个 IMP 交付，
   配跨后端 upsert 并行测试。详见 [IMP-ADR054-01](IMP-ADR054-01-watchlist.md)。
+- 2026-06-14: WS2/WS3/WS4a 设计已定（brainstorming + 跨 repo 精读），IMP 已写出
+  ——**本轮不实现**。WS2 → [IMP-ADR054-02](IMP-ADR054-02-subscriptions.md)（仅演员；
+  GH-cron `SubscriptionMonitor.yml` 复用 AdHoc 路径；`ActorSubscription`+`NewWorks`
+  落 `HISTORY_DB`；`subscriptions` flag）。WS3 →
+  [IMP-ADR054-03](IMP-ADR054-03-magnet-aggregation.md)（JAVBUS+Sukebei `indexer` 插件；
+  ephemeral；`POST /api/explore/aggregate-magnets` + Worker 501；`magnet_aggregation`
+  配置非空 flag）。WS4a →
+  [IMP-ADR040-03](../ADR-040-Content-Filter-Rules/IMP-ADR040-03-content-filter-regex-date.md)
+  +
+  [IMP-ADR040-04](../ADR-040-Content-Filter-Rules/IMP-ADR040-04-content-filter-web-crud.md)
+  （扩展 `REPORTS_DB` 里的 `ContentFilterRule`，无迁移）。**WS4b（AI 翻译）+ WS4c
+  （可用性）本轮延期进 backlog**。关键发现：WS2 的评分阈值绕过在 AdHoc 路径上本就免费
+  （无新代码；ADR-040 P3 在 WS2 实现时以修订 supersede）。
