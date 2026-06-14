@@ -24,53 +24,50 @@ Invalid: ``scan + execute`` without ``report``.
 import os
 import re
 import csv
-import gc
 import tempfile
-from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
-
-_YEAR_RE = re.compile(r"^\d{4}$")
-
-REPO_ROOT = Path(__file__).resolve().parents[4]
 
 from javdb.infra.config import cfg
 from javdb.infra.logging import setup_logging, get_logger
 from javdb.infra.paths import find_latest_report_in_dated_dirs, ensure_dated_dir
 
-from javdb.integrations.rclone.helper import (
-    FolderInfo,
-    DedupResult,
-    check_rclone_installed,
-    check_remote_exists,
-    setup_rclone_config_from_base64,
-    get_year_folders,
-    get_actor_folders,
-    get_movie_folders_with_stats,
-    get_all_movie_folders_for_year,
-    get_folder_stats_batch,
-    filter_folders_by_recent_changes,
-    group_folders_by_movie_code,
+from javdb.integrations.rclone.dedup import (
     analyze_all_duplicates,
-    analyze_duplicates_for_code,
-    rclone_purge,
-    rclone_move,
-    format_size,
     generate_csv_report,
     print_summary,
-    strip_drive_name,
+    rclone_move,
+    rclone_purge,
+)
+from javdb.integrations.rclone.path_utils import (
     get_configured_drive_name,
-    prepend_drive_name,
     get_configured_root_folder,
+    has_remote_prefix,
+    strip_drive_name,
     strip_root_folder,
     to_full_remote_path,
-    has_remote_prefix,
+)
+from javdb.integrations.rclone.scan import (
+    check_rclone_installed,
+    check_remote_exists,
+    filter_folders_by_recent_changes,
+    get_actor_folders,
+    get_all_movie_folders_for_year,
+    get_movie_folders_with_stats,
+    get_year_folders,
+    setup_rclone_config_from_base64,
+)
+from javdb.integrations.rclone.types import (
+    DedupResult,
+    FolderInfo,
     INCREMENTAL_DAYS,
 )
 from javdb.storage.repos.operations_repo import OperationsRepo
 from javdb.storage.repos.session_lifecycle_repo import SessionLifecycleRepo
 from javdb.integrations.rclone.manager.options import RcloneManagerOptions
 from javdb.integrations.rclone.manager.result import RcloneManagerResult
+
+_YEAR_RE = re.compile(r"^\d{4}$")
 
 # Config defaults
 RCLONE_FOLDER_PATH = cfg('RCLONE_FOLDER_PATH', None)
@@ -460,7 +457,8 @@ def _persist_dedup_records(
     to produce a consolidated ``dedup_history.csv`` from the DB.
     """
     try:
-        from javdb.spider.services.dedup import DedupRecord, append_dedup_record
+        from javdb.spider.services.dedup_store import append_dedup_record
+        from javdb.spider.services.dedup_types import DedupRecord
 
         now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         appended = 0
@@ -485,8 +483,9 @@ def _persist_dedup_records(
                 else:
                     skipped += 1
         logger.info(f"Persisted dedup records: {appended} appended, {skipped} duplicates skipped")
-    except Exception as e:
-        logger.warning(f"Could not persist dedup records: {e}")
+    except Exception:
+        logger.exception("Could not persist dedup records")
+        raise
 
 
 # ============================================================================
@@ -825,7 +824,7 @@ def export_dedup_history() -> int:
 
     Mirrors the pattern used by :func:`export_db_to_csv` for inventory.
     """
-    from javdb.spider.services.dedup import export_dedup_db_to_csv
+    from javdb.spider.services.dedup_store import export_dedup_db_to_csv
 
     output_path = os.path.join(REPORTS_DIR, 'dedup_history.csv')
     return export_dedup_db_to_csv(output_path)
@@ -942,7 +941,7 @@ def run_execute_from_csv(
     Returns 0 when at least one purge succeeded (or nothing to do);
     returns 1 only when all attempted purges failed.
     """
-    from javdb.spider.services.dedup import (
+    from javdb.spider.services.dedup_store import (
         load_dedup_csv, mark_records_deleted, cleanup_deleted_records,
     )
 

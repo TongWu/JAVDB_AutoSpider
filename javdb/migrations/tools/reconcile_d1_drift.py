@@ -62,6 +62,11 @@ from javdb.infra.logging import (  # noqa: E402
     log_section,
     setup_logging,
 )
+from javdb.storage.drift_io import (  # noqa: E402
+    _row_to_dict,
+    _values_equal,
+    read_jsonl,
+)
 
 logger = get_logger(__name__)
 
@@ -154,22 +159,6 @@ def _datetime_to_sqlite_text(ts: datetime) -> str:
     return ts.strftime("%Y-%m-%d %H:%M:%S")
 
 
-def _read_drift_log(path: str) -> List[dict]:
-    if not os.path.exists(path):
-        return []
-    records: List[dict] = []
-    with open(path, "r", encoding="utf-8") as fh:
-        for raw in fh:
-            line = raw.strip()
-            if not line:
-                continue
-            try:
-                records.append(json.loads(line))
-            except json.JSONDecodeError as exc:
-                logger.warning("Skipping malformed drift line %r: %s", line[:80], exc)
-    return records
-
-
 def _earliest_since_per_db(records: Iterable[dict]) -> Dict[str, datetime]:
     """Group drift records by ``db`` and return the earliest ``ts`` per db."""
     out: Dict[str, datetime] = {}
@@ -198,17 +187,6 @@ def _open_sqlite_readonly(db_path: str) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA query_only = 1")
     return conn
-
-
-def _row_to_dict(row) -> dict:
-    if row is None:
-        return {}
-    if isinstance(row, dict):
-        return row
-    try:
-        return {k: row[k] for k in row.keys()}
-    except Exception:
-        return dict(row)
 
 
 # SQLite's ``SQLITE_MAX_VARIABLE_NUMBER`` defaults to 999 on pre-3.32 builds
@@ -244,30 +222,6 @@ def _fetch_in_chunks(
         sql = sql_template.format(placeholders=placeholders)
         rows.extend(sqlite_conn.execute(sql, chunk).fetchall())
     return rows
-
-
-def _values_equal(a, b) -> bool:
-    """Row-cell equality with type-loose comparison.
-
-    SQLite returns Python ints / floats / str / None; D1's HTTP API returns
-    JSON-decoded values which may swap int/float. We coerce to ``float`` only
-    when at least one side is genuinely a float, since ``float(big_int)``
-    silently loses precision above 2**53 and would falsely report distinct
-    large integers (e.g. magnet hashes, AUTOINCREMENT IDs near 2**60) as equal.
-    """
-    if a is None and b is None:
-        return True
-    if a is None or b is None:
-        return False
-    # Booleans are ints in Python; treat them as numeric here.
-    if isinstance(a, int) and isinstance(b, int):
-        return a == b
-    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
-        try:
-            return float(a) == float(b)
-        except (TypeError, ValueError):
-            return False
-    return str(a) == str(b)
 
 
 def _rows_match(d1_row: dict, sqlite_row: dict, columns: Sequence[str]) -> bool:
@@ -1024,7 +978,7 @@ def reconcile(
 
     Returns a non-zero exit code on per-table errors so CI can flag failures.
     """
-    drift_records = _read_drift_log(drift_log)
+    drift_records = read_jsonl(drift_log)
     if not drift_records and not all_rows:
         msg = (
             f"No drift records found in {drift_log} and --all-rows not set; "

@@ -23,11 +23,11 @@ from javdb.pipeline.policies import (
     check_redownload_upgrade,
     should_process_movie,
 )
-from javdb.spider.services.dedup import (
-    DedupRecord,
+from javdb.spider.services.dedup_query import (
     check_dedup_upgrade,
     check_redownload_dedup_upgrade,
 )
+from javdb.spider.services.dedup_types import DedupRecord
 
 
 def _combined_magnet_payload(parsed_movie: ParsedMovie) -> Dict[str, Any]:

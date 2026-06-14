@@ -2,12 +2,12 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Proposed — execution in [IMP-ADR053-01](IMP-ADR053-01-d1-transient-error-typed-recovery.md) (single PR) |
+| **Status**  | Completed (2026-06-14) — implemented by [IMP-ADR053-01](IMP-ADR053-01-d1-transient-error-typed-recovery.md) |
 | **Date**    | 2026-06-13                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-009](../_archive/ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md) (created the `D1TransientError` classifier — owns *which* errors are transient, not the recovery-signal interface), [ADR-042](../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md) (the recovery/commit-boundary **policy** these signals feed — unchanged), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md) (`d1_port.py` is the access port that sets the signals) |
+| **Related** | [ADR-009](../ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md) (created the `D1TransientError` classifier — owns *which* errors are transient, not the recovery-signal interface), [ADR-042](../../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md) (the recovery/commit-boundary **policy** these signals feed — unchanged), [ADR-010](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.md) (`d1_port.py` is the access port that sets the signals) |
 
-> Originated from the 2026-06-13 architecture review (Candidate 6 — "promote `D1TransientError`'s recovery attributes to a typed interface"): [architecture-review-2026-06-13.html](../architecture/architecture-review-2026-06-13.html).
+> Originated from the 2026-06-13 architecture review (Candidate 6 — "promote `D1TransientError`'s recovery attributes to a typed interface"): [architecture-review-2026-06-13.html](../../architecture/architecture-review-2026-06-13.html).
 
 ## Context
 
@@ -100,11 +100,12 @@ The signals are determined **after** the error is constructed (in the `except` h
 
 ## References
 
-- [ADR-009 — D1 Drift Classifier & Diagnose](../_archive/ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md)
-- [ADR-042 — D1 Atomic Commit Boundaries](../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md)
-- [ADR-010 — D1 Access Port](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md)
-- 2026-06-13 architecture review: [architecture-review-2026-06-13.html](../architecture/architecture-review-2026-06-13.html)
+- [ADR-009 — D1 Drift Classifier & Diagnose](../ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md)
+- [ADR-042 — D1 Atomic Commit Boundaries](../../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md)
+- [ADR-010 — D1 Access Port](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.md)
+- 2026-06-13 architecture review: [architecture-review-2026-06-13.html](../../architecture/architecture-review-2026-06-13.html)
 
 ## Status Log
 
+- 2026-06-14: Completed in [IMP-ADR053-01](IMP-ADR053-01-d1-transient-error-typed-recovery.md). The planned single phase shipped typed `D1TransientError` recovery fields, `D1RecoveryBlockerError`, typed raise/read sites, removal of string fallback/type ignores, focused recovery-signal tests, and CONTEXT.md terminology. No follow-up IMP remains for this ADR.
 - 2026-06-13: Proposed (from the 2026-06-13 architecture review, Candidate 6). Grounding verified: `D1TransientError` body is empty; 5 signals monkey-patched across `d1_port`/`dual_connection` with 8 `# type: ignore`; `d1_recovery_blocker` is set on a **bare `RuntimeError`** (hence the new subclass); `_blocks_queued_recovery_flush` carries a fragile `str(exc)` fallback. Decided (grilling): declare all 5 (3 cross-module + 2 intra-module) as typed members; `D1RecoveryBlockerError(RuntimeError)`; convert reads to `isinstance`/attribute; **delete** the string fallback. ADR-009 (classifier) and ADR-042 (policy) own classification/policy, not the signal representation — no collision. IMP-ADR053-01 pending.

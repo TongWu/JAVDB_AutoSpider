@@ -1160,42 +1160,7 @@ jobs:
         run: |
           set -e
           set -o pipefail
-          DECISION=$(python3 - <<'PY'
-          import json, os, sys
-          path = os.path.join(os.environ.get("REPORTS_DIR", "reports"),
-                              "D1", "d1_drift.jsonl")
-          if not os.path.exists(path):
-              sys.exit(0)
-          run_id = os.environ.get("GITHUB_RUN_ID", "")
-          attempt = os.environ.get("GITHUB_RUN_ATTEMPT", "")
-          critical_fields = (
-              "pending_residual_count",
-              "derived_recompute_drift",
-              "cleanup_path_mismatch_count",
-          )
-          for line in open(path, "r", encoding="utf-8"):
-              line = line.strip()
-              if not line:
-                  continue
-              try:
-                  rec = json.loads(line)
-              except Exception:
-                  continue
-              if rec.get("kind") != "pending_session_verify":
-                  continue
-              if str(rec.get("run_id") or "") != run_id:
-                  continue
-              if str(rec.get("run_attempt") or "") != attempt:
-                  continue
-              for k in critical_fields:
-                  try:
-                      if int(rec.get(k) or 0) > 0:
-                          print(f"{k}={rec.get(k)} session={rec.get('session_id')}")
-                          sys.exit(0)
-                  except (TypeError, ValueError):
-                      continue
-          PY
-          )
+          DECISION=$(python3 -m apps.cli.db.pending_alert_decision)
           if [ -z "$DECISION" ]; then
             echo "No critical pending-mode alert — pause NOT engaged."
             exit 0

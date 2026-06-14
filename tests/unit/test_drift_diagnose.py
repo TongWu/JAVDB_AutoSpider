@@ -7,7 +7,6 @@ import os
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -235,31 +234,6 @@ class TestParseTs:
 
     def test_invalid_input(self, drift_mod):
         assert drift_mod._parse_ts("not-a-date") is None
-
-
-# ===========================================================================
-# Test: _values_equal
-# ===========================================================================
-
-
-class TestValuesEqual:
-    def test_none_both(self, drift_mod):
-        assert drift_mod._values_equal(None, None) is True
-
-    def test_none_one_side(self, drift_mod):
-        assert drift_mod._values_equal(None, 1) is False
-        assert drift_mod._values_equal(1, None) is False
-
-    def test_int_int(self, drift_mod):
-        assert drift_mod._values_equal(42, 42) is True
-        assert drift_mod._values_equal(42, 43) is False
-
-    def test_int_float(self, drift_mod):
-        assert drift_mod._values_equal(42, 42.0) is True
-
-    def test_string(self, drift_mod):
-        assert drift_mod._values_equal("abc", "abc") is True
-        assert drift_mod._values_equal("abc", "def") is False
 
 
 # ===========================================================================
@@ -1077,28 +1051,6 @@ class TestMainCli:
 
 
 # ===========================================================================
-# Test: _read_jsonl with malformed lines
-# ===========================================================================
-
-
-class TestReadJsonlMalformed:
-    def test_skips_malformed_lines(self, drift_mod, tmp_path):
-        """Valid lines are returned; malformed lines are silently skipped."""
-        log_path = str(tmp_path / "mixed.jsonl")
-        with open(log_path, "w", encoding="utf-8") as f:
-            f.write('{"a": 1}\n')
-            f.write('NOT JSON\n')
-            f.write('{"b": 2}\n')
-            f.write('{bad json\n')
-            f.write('{"c": 3}\n')
-        records = drift_mod._read_jsonl(log_path)
-        assert len(records) == 3
-        assert records[0] == {"a": 1}
-        assert records[1] == {"b": 2}
-        assert records[2] == {"c": 3}
-
-
-# ===========================================================================
 # Test: --apply path (ADR-009 D5 safety rails)
 # ===========================================================================
 
@@ -1352,8 +1304,10 @@ class TestApplyPath:
         monkeypatch.setattr(drift_mod, "make_d1_connection", fake_make_d1)
 
         # Patch append_jsonl_record to avoid file I/O
+        from javdb.storage import drift_io
+
         monkeypatch.setattr(
-            drift_mod, "append_jsonl_record", lambda record, **kw: None,
+            drift_io, "append_jsonl_record", lambda record, **kw: None,
         )
 
         db_path = str(tmp_path / "history.db")
@@ -1413,7 +1367,9 @@ class TestApplyPath:
         def capture_append(record, **kw):
             audit_records.append(record)
 
-        monkeypatch.setattr(drift_mod, "append_jsonl_record", capture_append)
+        from javdb.storage import drift_io
+
+        monkeypatch.setattr(drift_io, "append_jsonl_record", capture_append)
 
         db_path = str(tmp_path / "history.db")
         _make_sqlite_history(db_path, movies=[
@@ -1454,8 +1410,10 @@ class TestApplyPath:
         monkeypatch.setattr(drift_mod, "make_d1_connection", fake_make_d1)
 
         audit_records: list = []
+        from javdb.storage import drift_io
+
         monkeypatch.setattr(
-            drift_mod, "append_jsonl_record",
+            drift_io, "append_jsonl_record",
             lambda record, **kw: audit_records.append(record),
         )
 
@@ -1505,8 +1463,10 @@ class TestApplyPath:
             return d1_history
 
         monkeypatch.setattr(drift_mod, "make_d1_connection", fake_make_d1)
+        from javdb.storage import drift_io
+
         monkeypatch.setattr(
-            drift_mod, "append_jsonl_record", lambda record, **kw: None,
+            drift_io, "append_jsonl_record", lambda record, **kw: None,
         )
 
         db_path = str(tmp_path / "history.db")

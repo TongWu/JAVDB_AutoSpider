@@ -19,13 +19,14 @@ Shared session lifecycle helpers live in `javdb.storage.sessions.lifecycle_helpe
 | `drift_diagnose.py` | ADR-009 pending-write drift diagnose/apply CLI. Read-only by default; `--apply --session-id` deletes only verified safe D1 orphan pending rows. Core logic lives in `javdb.storage.drift_diagnose`. |
 | `d1_recovery.py` | Inspect, replay, startup-drain, and compact the D1 recovery outbox introduced by ADR-010. Use `inspect` for read-only inspection; `replay` / `startup-drain` for recoverable work; `compact` moves replayed/abandoned records to `d1_recovery_outbox.processed.jsonl`. |
 | `pending_health.py` | Phase-3 email pre-step. Aggregates the last 24h of `pending_session_verify` records from `reports/D1/d1_drift.jsonl` into `reports/D1/pending_health_24h.json`. |
+| `pending_alert_decision.py` | Workflow helper that prints the ADR-006 critical pending-alert decision string for the current GitHub run, using the shared pending verify field constants. |
 | `pending_alert.py` | ADR-006 pause-on-alert: injects `pipeline_paused_until: <ISO>` into `.publish-config.yml` when the email pipeline detects a critical pending-mode alert. Idempotent — extends the timer rather than shortening it. |
 
 ## Invoked by
 
 - **`AuditArchive.yml`** — `python3 -m apps.cli.db.audit_archive` (weekly cron).
-- **`DailyIngestion.yml`** — `python3 -m apps.cli.db.pending_health` (pre-email step) and `python3 -m apps.cli.db.pending_alert` (post-email pause on critical alert).
-- **`AdHocIngestion.yml`** — `python3 -m apps.cli.db.pending_health` and `python3 -m apps.cli.db.pending_alert` (same roles as DailyIngestion).
+- **`DailyIngestion.yml`** — `python3 -m apps.cli.db.pending_health` (pre-email step), `python3 -m apps.cli.db.pending_alert_decision` (critical pending-alert decision), and `python3 -m apps.cli.db.pending_alert` (post-email pause on critical alert).
+- **`AdHocIngestion.yml`** — `python3 -m apps.cli.db.pending_health`, `python3 -m apps.cli.db.pending_alert_decision`, and `python3 -m apps.cli.db.pending_alert` (same roles as DailyIngestion).
 - **`StaleSessionCleanup.yml`** — `apps.cli.cleanup_stale_in_progress` and `apps.cli.sweep_movie_claim_stages` (currently still resolved via Phase-1 shims; the canonical modules are `apps.cli.db.cleanup_stale_in_progress` / `apps.cli.db.sweep_claim_stages`).
 - **`RollbackD1.yml`** — `apps.cli.rollback` (manual recovery; canonical module is `apps.cli.db.rollback`).
 - **`DailyIngestion.yml` / `AdHocIngestion.yml` cleanup-on-failure** — `apps.cli.rollback` and `apps.cli.commit_session`.

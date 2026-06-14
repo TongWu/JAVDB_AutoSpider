@@ -513,6 +513,7 @@ in_progress ─(db_begin_finalize)─▶ finalizing ─(db_finish_commit)─▶ 
 - `commit_duration_ms`、`hrefs_processed`、`movies_upserted`、`torrents_upserted`、`torrents_deleted`。
 - `derived_recompute_drift` + `derived_drift_samples`（仅在 `JAVDB_PENDING_SHADOW_AUDIT=1` 时填充——Phase 2 开关，在 Phase 3 中保持门控，以便在记录一个干净周后可以逐步减少比较）。
 - `worker_stage_rollback_failed`、`cleanup_path_mismatch_count`、`staged_claim_orphan_count`。
+- `stats_read_error`（提交 / 回滚校验器无法读取 pending 表统计时为 true；这表示数据不可用，不是确认无残留）。
 
 同一文件还接收 `stale_session_cleanup` 和 `rollback_summary` 记录；下游消费者按 `kind` 过滤。
 
@@ -521,7 +522,7 @@ in_progress ─(db_begin_finalize)─▶ finalizing ─(db_finish_commit)─▶ 
 邮件步骤（[`javdb/integrations/notify/email.py`](../../../../javdb/integrations/notify/email.py)）现在读取 `reports/D1/d1_drift.jsonl`，限制为 `$GITHUB_RUN_ID` / `$GITHUB_RUN_ATTEMPT` 拥有的 `pending_session_verify` 记录，并渲染 **Pending Mode Verification** 正文块，列出每个 pending session 的计数。任何阈值违规会在行内标记（`[CRITICAL]` / `[ALERT]`）并在邮件主题前添加前缀：
 
 - **软告警**（主题 `[PENDING-ALERT] (...)`）— `commit_attempts > Phase3_max`、`worker_stage_rollback_failed > 0`、`staged_claim_orphan_count > 0`、`d1_request_count_audit_baseline_ratio > 1.8`、或 `final_status='finalizing'`。
-- **严重告警**（主题 `[PENDING-PAUSE] (...)`，ADR-006 之前为 `[PENDING-ROLLBACK-AUTO]`）— `pending_residual_count > 0`、`derived_recompute_drift > 0`、或 `cleanup_path_mismatch_count > 0`。同时触发下方的[告警 + 暂停](#告警--暂停publish-configyml-adr-006-pr-d)。
+- **严重告警**（主题 `[PENDING-PAUSE] (...)`，ADR-006 之前为 `[PENDING-ROLLBACK-AUTO]`）— `pending_residual_count > 0`、`derived_recompute_drift > 0`、`cleanup_path_mismatch_count > 0`、或 `stats_read_error=true`。同时触发下方的[告警 + 暂停](#告警--暂停publish-configyml-adr-006-pr-d)。
 
 当 [`apps/cli/db/pending_health.py`](../../../../apps/cli/db/pending_health.py) 生成了 `reports/D1/pending_health_24h.json` 时，**健康快照**块跟随在每 session 表后面。DailyIngestion 和 AdHocIngestion 都在 `Run Email Notification` 之前调用此聚合器，使快照覆盖过去 24 小时的 pending session 以及过期定时任务的 resume 成功/失败。
 
@@ -555,7 +556,7 @@ pipeline_paused_reason: 'DailyIngestion run 12345: pending_residual_count=2 sess
 | 症状 | 查找内容 | 修复方法 |
 |---|---|---|
 | 邮件主题仅有 `[PENDING-ALERT]` | 正文中的 `commit_attempts`、ratio 或 finalizing 标志 | 检查 `reports/D1/d1_drift.jsonl`；通常是暂时性的（Worker 租约超时）。无自动操作。 |
-| 邮件主题为 `[PENDING-PAUSE]`（ADR-006 之前为 `[PENDING-ROLLBACK-AUTO]`） | `pending_residual_count`、`derived_recompute_drift`、`cleanup_path_mismatch_count` | Pipeline 已通过 `.publish-config.yml` 中的 `pipeline_paused_until` 暂停 24 小时。调查 `reports/D1/d1_drift.jsonl` 中的根因，修复后从 `.publish-config.yml` 删除 pause marker（或 `git revert` 自动提交）。让 marker 过期但不修根因只会让下次运行再次触发同一告警。 |
+| 邮件主题为 `[PENDING-PAUSE]`（ADR-006 之前为 `[PENDING-ROLLBACK-AUTO]`） | `pending_residual_count`、`derived_recompute_drift`、`cleanup_path_mismatch_count`、`stats_read_error` | Pipeline 已通过 `.publish-config.yml` 中的 `pipeline_paused_until` 暂停 24 小时。调查 `reports/D1/d1_drift.jsonl` 中的根因，修复后从 `.publish-config.yml` 删除 pause marker（或 `git revert` 自动提交）。让 marker 过期但不修根因只会让下次运行再次触发同一告警。 |
 | `final_status='finalizing'` 连续两个定时任务周期 | StaleSessionCleanup 无法将 session 驱动到 `committed` | `python3 -m apps.cli.commit_session --session-id <id> --shadow-audit --log-level DEBUG`；如果 3 次尝试仍失败，`python3 -m apps.cli.rollback --session-id <id> --no-auto-resume-finalizing --apply` 标记为 `failed`。 |
 | `worker_stage_rollback_failed > 0` | Rollback CLI 无法连接到 MovieClaim coordinator | 检查 coordinator 健康状态；孤立清扫定时任务将在 4 小时内对账。 |
 | 已提交 session 上 `pending_residual_count > 0` | 半应用的 commit，残留 pending-table 行 | 正式表已经正确（`committed` 翻转是事实来源）；残留行只需清除。安全选项按优先级排列：(1) 手动 `DELETE FROM PendingMovieHistoryWrites WHERE SessionId=? AND ApplyState IN ('pending','applied')` 加上 `PendingTorrentHistoryWrites` 上的相同操作，在断言 `SELECT Status FROM ReportSessions WHERE Id=?` 返回 `'committed'` 之后执行——这些表从不参与正式读取，因此 DELETE 是非破坏性的；(2) 一次性 Python：`python3 -c "from javdb.storage.db import db_commit_session_history; print(db_commit_session_history(<id>))"` — 只清理 pending-table 残留，不会重跑正式表 upsert。（`apps.cli.commit_session` 在 session 行已为 `committed` 时跳过清理，因此优先使用直接 helper 路径。） |
@@ -598,7 +599,7 @@ pipeline_paused_reason: 'DailyIngestion run 12345: pending_residual_count=2 sess
 
 - CLI：[`apps/cli/db/rollback.py`](../../../../apps/cli/db/rollback.py)、[`apps/cli/db/commit_session.py`](../../../../apps/cli/db/commit_session.py)、[`apps/cli/db/cleanup_stale_in_progress.py`](../../../../apps/cli/db/cleanup_stale_in_progress.py)
 - 核心辅助函数：[`javdb/storage/db/__init__.py`](../../../../javdb/storage/db/__init__.py)、[`_db_history_write.py`](../../../../javdb/storage/db/_db_history_write.py)、[`_db_rollback.py`](../../../../javdb/storage/db/_db_rollback.py)、[`_db_reports.py`](../../../../javdb/storage/db/_db_reports.py)、[`_db_session.py`](../../../../javdb/storage/db/_db_session.py)
-- Phase 3 脚本：[`apps/cli/db/pending_health.py`](../../../../apps/cli/db/pending_health.py)、[`apps/cli/db/pending_alert.py`](../../../../apps/cli/db/pending_alert.py) *（ADR-006 PR-D 替代了已退役的 `pending_mode_auto_fallback.py`）*
+- Phase 3 脚本：[`apps/cli/db/pending_health.py`](../../../../apps/cli/db/pending_health.py)、[`apps/cli/db/pending_alert_decision.py`](../../../../apps/cli/db/pending_alert_decision.py)、[`apps/cli/db/pending_alert.py`](../../../../apps/cli/db/pending_alert.py) *（ADR-006 PR-D 替代了已退役的 `pending_mode_auto_fallback.py`）*
 - 邮件集成：[`javdb/integrations/notify/email.py`](../../../../javdb/integrations/notify/email.py)（`_format_pending_verify_section`、`_evaluate_pending_alerts`、`_format_health_snapshot_section`）
 - 工作流：[`.github/workflows/DailyIngestion.yml`](../../../../.github/workflows/DailyIngestion.yml)、[`.github/workflows/AdHocIngestion.yml`](../../../../.github/workflows/AdHocIngestion.yml)、[`.github/workflows/RollbackD1.yml`](../../../../.github/workflows/RollbackD1.yml)、[`.github/workflows/StaleSessionCleanup.yml`](../../../../.github/workflows/StaleSessionCleanup.yml)
 - 迁移：[`javdb/migrations/d1/2026_05_04_add_rollback_columns_*.sql`](../../../../javdb/migrations/d1/)、[`javdb/migrations/d1/2026_05_09_add_pending_history_tables.sql`](../../../../javdb/migrations/d1/)

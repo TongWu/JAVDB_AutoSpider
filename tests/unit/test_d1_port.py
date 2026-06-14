@@ -4,7 +4,11 @@ import json
 
 import pytest
 
-from javdb.storage.d1_client import D1PermanentError, D1TransientError
+from javdb.storage.d1_client import (
+    D1PermanentError,
+    D1RecoveryBlockerError,
+    D1TransientError,
+)
 import javdb.storage.d1_port as d1_port_module
 import javdb.storage.d1_client as d1_client_module
 from javdb.storage.d1_port import D1AccessPort, D1PortConfig
@@ -355,10 +359,10 @@ def test_failed_mixed_flush_blocks_remaining_write_behind_outbox(
     with pytest.raises(D1TransientError) as excinfo:
         port.flush(ordering_key="history:s1")
 
-    assert getattr(excinfo.value, "d1_recovery_outbox_required", None) is True
-    assert getattr(excinfo.value, "d1_recovery_durable", None) is False
+    assert excinfo.value.d1_recovery_outbox_required is True
+    assert excinfo.value.d1_recovery_durable is False
 
-    with pytest.raises(RuntimeError, match="unresolved D1 recovery"):
+    with pytest.raises(D1RecoveryBlockerError, match="unresolved D1 recovery"):
         port.flush(ordering_key="history:s1")
 
     assert len(poster.calls) == 1
@@ -425,8 +429,8 @@ def test_interval_flush_failure_outboxes_current_statement(monkeypatch, tmp_path
             policy=_batch_policy("history:s1:seq2"),
         )
 
-    assert getattr(excinfo.value, "d1_recovery_outbox_required", None) is True
-    assert getattr(excinfo.value, "d1_recovery_durable", None) is True
+    assert excinfo.value.d1_recovery_outbox_required is True
+    assert excinfo.value.d1_recovery_durable is True
     assert poster.calls[0]["json"] == {
         "batch": [
             {"sql": "INSERT INTO x VALUES (?)", "params": ["a"]},
@@ -617,8 +621,8 @@ def test_outbox_append_failure_preserves_original_transient_error(
         port.execute("INSERT INTO x VALUES (?)", ["a"], policy=_policy())
 
     assert "HTTP 429" in str(excinfo.value)
-    assert getattr(excinfo.value, "d1_recovery_outbox_required", None) is True
-    assert getattr(excinfo.value, "d1_recovery_durable", None) is False
+    assert excinfo.value.d1_recovery_outbox_required is True
+    assert excinfo.value.d1_recovery_durable is False
     assert port.summary()["outbox_queued"] == 0
 
 
@@ -704,8 +708,8 @@ def test_flush_retry_exhaustion_queues_safe_batch_operation_when_enabled(
     with pytest.raises(D1TransientError) as excinfo:
         port.flush(ordering_key="history:s1")
 
-    assert getattr(excinfo.value, "d1_recovery_outbox_required", None) is True
-    assert getattr(excinfo.value, "d1_recovery_durable", None) is True
+    assert excinfo.value.d1_recovery_outbox_required is True
+    assert excinfo.value.d1_recovery_durable is True
 
     path = d1_port_module.recovery_outbox_path()
     latest = load_latest_events(path)

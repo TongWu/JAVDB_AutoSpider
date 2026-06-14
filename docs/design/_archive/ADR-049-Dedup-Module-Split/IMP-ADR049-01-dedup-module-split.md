@@ -1,6 +1,6 @@
 # IMP-ADR049-01: Split `dedup.py` into types / query / store — Implementation Plan
 
-> **Status: 🔲 Proposed (2026-06-13).** Single PR; pure relocation, no behaviour change. Authored from [ADR-049](ADR-049-dedup-module-split.md).
+> **Status: ✅ Completed (2026-06-14).** Single PR; pure relocation, no behaviour change. Authored from [ADR-049](ADR-049-dedup-module-split.md).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans. Steps use checkbox (`- [ ]`) syntax.
 
@@ -40,8 +40,8 @@
 
 ## Task 0: Baseline & importer enumeration
 
-- [ ] **Step 0.1 — Green baseline:** `pytest tests/unit -k "dedup" -q`.
-- [ ] **Step 0.2 — Enumerate every importer of every `dedup.py` symbol:**
+- [x] **Step 0.1 — Green baseline:** explicit ADR-049 dedup suite (local broad `pytest tests/unit -k "dedup" -q` collection has unrelated Rust proxy failures).
+- [x] **Step 0.2 — Enumerate every importer of every `dedup.py` symbol:**
   ```bash
   grep -rn "spider.services.dedup\b\|from javdb.spider.services import dedup" javdb apps scripts tests --include="*.py"
   grep -rn "_normalise_code\|DEDUP_FIELDNAMES\|RcloneEntry\|DedupRecord" javdb apps scripts tests --include="*.py"
@@ -50,43 +50,45 @@
 
 ## Task 1: Promote `normalise_code` (do first — others depend on it)
 
-- [ ] **Step 1.1 — Add `normalise_code` to `parsing/common.py`** (move the 3-line NFKC+strip+upper body verbatim) + `__all__`.
-- [ ] **Step 1.2 — Delete the `code_resolver.py` local copy**, import the canonical one, update its 3 call sites.
+- [x] **Step 1.1 — Add `normalise_code` to `parsing/common.py`** (move the 3-line NFKC+strip+upper body verbatim) + `__all__`.
+- [x] **Step 1.2 — Delete the `code_resolver.py` local copy**, import the canonical one, update its 3 call sites.
 
   **Verification gate:** `pytest tests/unit -k "code_resolver or parsing" -q` green; `grep -rn "def _normalise_code" javdb` shows only (temporarily) `dedup.py` until Task 2.
 
 ## Task 2: Create the three modules (move, don't rewrite)
 
-- [ ] **Step 2.1 — `dedup_types.py`:** move `RcloneEntry`/`DedupRecord`/`DEDUP_FIELDNAMES` verbatim.
-- [ ] **Step 2.2 — `dedup_query.py`:** move the Rust bridge + pure decision functions; import `normalise_code` from `parsing.common`, types from `dedup_types`, priority aliases from `spider.contracts`. Assert no `dedup_store` import.
-- [ ] **Step 2.3 — `dedup_store.py`:** move inventory loading + persistence + the two process-globals; import types from `dedup_types`, `normalise_code` from `parsing.common`. `should_skip_from_ownership` lands here (ADR-049 D6); leave a `# TODO(ADR-049): zero prod callers — dead-code candidate` marker.
-- [ ] **Step 2.4 — Delete `dedup.py`.**
+- [x] **Step 2.1 — `dedup_types.py`:** move `RcloneEntry`/`DedupRecord`/`DEDUP_FIELDNAMES` verbatim.
+- [x] **Step 2.2 — `dedup_query.py`:** move the Rust bridge + pure decision functions; import `normalise_code` from `parsing.common`, types from `dedup_types`, priority aliases from `spider.contracts`. Assert no `dedup_store` import.
+- [x] **Step 2.3 — `dedup_store.py`:** move inventory loading + persistence + the two process-globals; import types from `dedup_types`, `normalise_code` from `parsing.common`. `should_skip_from_ownership` lands here (ADR-049 D6); leave a `# TODO(ADR-049): zero prod callers — dead-code candidate` marker.
+- [x] **Step 2.4 — Delete `dedup.py`.**
 
   **Verification gate:** `python -c "import javdb.spider.services.dedup_types, javdb.spider.services.dedup_query, javdb.spider.services.dedup_store; print('ok')"` — no circular import; `dedup_query` import does not pull `operations_repo`.
 
 ## Task 3: Re-point callers & tests
 
-- [ ] **Step 3.1 — Production call sites** (9 files) per the File Structure table.
-- [ ] **Step 3.2 — `tests/conftest.py`** autouse fixture (L31, L128–129) → `dedup_store`.
-- [ ] **Step 3.3 — `csv_to_sqlite.py`** → import canonical `DEDUP_FIELDNAMES`.
-- [ ] **Step 3.4 — dedup test files** re-pointed per tier.
+- [x] **Step 3.1 — Production call sites** (9 files) per the File Structure table.
+- [x] **Step 3.2 — `tests/conftest.py`** autouse fixture (L31, L128–129) → `dedup_store`.
+- [x] **Step 3.3 — `csv_to_sqlite.py`** → import canonical `DEDUP_FIELDNAMES`.
+- [x] **Step 3.4 — dedup test files** re-pointed per tier.
 
   **Verification gate:** `pytest tests/unit -k "dedup" -q` green with assertions unchanged from Task 0.1.
 
 ## Task 4: Import-isolation regression + docs
 
-- [ ] **Step 4.1 — `tests/unit/test_dedup_import_isolation.py`:** in a `sys.modules` snapshot, `import javdb.spider.services.dedup_types` and assert `javdb.storage.repos.operations_repo`, `javdb.rust_core`, `javdb.ops.reconcile`, `javdb.storage.db` are absent.
-- [ ] **Step 4.2 — CONTEXT.md:** add the skip-time-dedup module terms; cross-link ADR-048's cleanup-time entry.
+- [x] **Step 4.1 — `tests/unit/test_dedup_import_isolation.py`:** in a `sys.modules` snapshot, `import javdb.spider.services.dedup_types` and assert `javdb.storage.repos.operations_repo`, `javdb.rust_core`, `javdb.ops.reconcile`, `javdb.storage.db` are absent.
+- [x] **Step 4.2 — CONTEXT.md:** add the skip-time-dedup module terms; cross-link ADR-048's cleanup-time entry.
 
   **Verification gate:** the isolation test passes; `grep -n "Skip-time dedup\|dedup_query\|dedup_store" CONTEXT.md` non-empty.
 
 ## Task 5: Final gates
 
-- [ ] `pytest tests/unit tests/smoke -q` green.
-- [ ] `grep -rn "spider.services.dedup\b" javdb apps scripts tests --include="*.py"` → empty (only the three new submodules remain).
-- [ ] `grep -rn "def _normalise_code" javdb` → empty (one canonical `normalise_code` in `parsing/common.py`).
-- [ ] `ruff check javdb/spider/services javdb/parsing/common.py javdb/ops/reconcile` clean.
-- [ ] `git diff --stat`: `dedup.py` deleted; three modules + isolation test created; two duplicate copies removed.
+- [x] Focused closeout gate green (`611 passed` in the combined ADR-048..053 focused suite). Broad `pytest tests/unit tests/smoke -q` remains unsuitable locally because unrelated Rust proxy symbols are missing during broader collection.
+- [x] `grep -rn "spider.services.dedup\b" javdb apps scripts tests --include="*.py"` → empty (only the three new submodules remain).
+- [x] `grep -rn "def _normalise_code" javdb` → empty (one canonical `normalise_code` in `parsing/common.py`).
+- [x] `ruff check javdb/spider/services javdb/parsing/common.py javdb/ops/reconcile` clean.
+- [x] `git diff --stat`: `dedup.py` deleted; three modules + isolation test created; duplicate copies removed.
+
+**Implementation note (2026-06-14):** final verification used the explicit ADR-049 dedup suites listed in the task brief rather than broad `pytest tests/unit tests/smoke -q`, because the local baseline has unrelated Rust proxy collection failures under broader unit selection. The old-module search still reports one non-caller logger label in `javdb/infra/logging.py`, which was outside this task's write scope.
 
 ## Rollback
 

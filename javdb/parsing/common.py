@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import unicodedata
 from typing import Optional, Tuple
 from urllib.parse import urlparse
 
@@ -16,6 +17,18 @@ from bs4.element import Tag
 from javdb.parsing.models import MovieLink
 
 logger = logging.getLogger(__name__)
+
+
+def normalise_code(code: str) -> str:
+    """Normalise a video code key for inventory lookup.
+
+    NFKC folds compatibility codepoints to their canonical ASCII equivalents
+    before the strip + upper-case step, so full-width and ASCII code variants
+    share one key.
+    """
+    if not code:
+        return ''
+    return unicodedata.normalize('NFKC', code).strip().upper()
 
 
 # ---------------------------------------------------------------------------
@@ -222,8 +235,6 @@ def extract_video_code(a_tag: Tag) -> str:
     tokens (e.g. ``Wifey.2026.05.30``). Other values return an empty string.
     Full-width characters are normalized to ASCII via NFKC.
     """
-    import unicodedata
-
     if not a_tag or not isinstance(a_tag, Tag):
         logger.debug("No valid <a> tag provided")
         return ''
@@ -332,6 +343,7 @@ def extract_category_name(soup: BeautifulSoup) -> Tuple[str, str]:
 __all__ = [
     'MovieLink',
     'VIDEO_CODE_FAMILIES',
+    'normalise_code',
     'extract_rate_and_comments',
     'normalize_javdb_href_path',
     'javdb_absolute_url',

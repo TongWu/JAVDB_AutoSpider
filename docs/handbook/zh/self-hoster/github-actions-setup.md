@@ -236,7 +236,7 @@ GitHub Actions 的 cron 在高负载时可能延迟最多 15 分钟。cron 仅�
 | `setup` | 检出代码、安装依赖、生成并加密 config.py |
 | `run-pipeline` | 健康检查、爬虫、qBittorrent 上传、文件过滤、PikPak 桥接、Rclone 去重、会话提交 |
 | `cleanup-on-failure` | 失败时回滚未提交的 D1/pending 写入 |
-| `email-notification` | 发送结果邮件，对关键 pending 警报运行自动回退 |
+| `email-notification` | 发送结果邮件，对关键 pending 警报运行告警并暂停 |
 | `commit-results` | 将 CSV 报告和数据库文件提交回仓库 |
 
 ### AdHocIngestion 工作流

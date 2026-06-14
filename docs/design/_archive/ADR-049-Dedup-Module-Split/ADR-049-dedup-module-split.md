@@ -2,12 +2,12 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Proposed — execution in [IMP-ADR049-01](IMP-ADR049-01-dedup-module-split.md) (single PR) |
+| **Status**  | Completed (2026-06-14) — implemented by [IMP-ADR049-01](IMP-ADR049-01-dedup-module-split.md) |
 | **Date**    | 2026-06-13                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-048](../ADR-048-Rclone-Module-Split/ADR-048-rclone-module-split-and-folder-dedup-rust.md) (**cleanup-time** dedup — sibling; this ADR owns **skip-time** dedup), [ADR-046](../_archive/ADR-046-Retire-Db-Facade/ADR-046-retire-db-facade.md) (Repos are the only public storage entry — `dedup_store` reads/writes via `OperationsRepo`), [ADR-011](../_archive/ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) (the parsing module that becomes `normalise_code`'s home), [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) (ownership ledger reads consumed by `dedup_store`), [ADR-041](../_archive/ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md) (the Rust dedup bridge `dedup_query` wraps stays Best-Effort) |
+| **Related** | [ADR-048](../../ADR-048-Rclone-Module-Split/ADR-048-rclone-module-split-and-folder-dedup-rust.md) (**cleanup-time** dedup — sibling; this ADR owns **skip-time** dedup), [ADR-046](../ADR-046-Retire-Db-Facade/ADR-046-retire-db-facade.md) (Repos are the only public storage entry — `dedup_store` reads/writes via `OperationsRepo`), [ADR-011](../ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) (the parsing module that becomes `normalise_code`'s home), [ADR-033](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) (ownership ledger reads consumed by `dedup_store`), [ADR-041](../ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md) (the Rust dedup bridge `dedup_query` wraps stays Best-Effort) |
 
-> Originated from the 2026-06-13 architecture review (Candidate 2 — "split `dedup.py`"): [architecture-review-2026-06-13.html](../architecture/architecture-review-2026-06-13.html).
+> Originated from the 2026-06-13 architecture review (Candidate 2 — "split `dedup.py`"): [architecture-review-2026-06-13.html](../../architecture/architecture-review-2026-06-13.html).
 
 ## Context
 
@@ -39,7 +39,7 @@ Split `dedup.py` into three modules by tier, promote the normalizer to its true 
 | `dedup_query.py` | Rust dedup bridge wrappers + `RUST_DEDUP_AVAILABLE` + `should_skip_from_rclone`, `is_in_rclone_inventory`, `check_dedup_upgrade`, `check_redownload_dedup_upgrade` | deep — pure decisions over an in-memory inventory; no storage import |
 | `dedup_store.py` | inventory loading (`load_rclone_inventory`, `_ledger_to_inventory`, `_open_ledger_for_dedup`, CSV fallback) + persistence (`append_dedup_record`, `mark_records_deleted`, `cleanup_deleted_records`, `load_dedup_csv`, `save_dedup_csv`, `export_dedup_db_to_csv`) + the two process-globals | deep — the only I/O tier; reads/writes via `OperationsRepo` (ADR-046) |
 
-**D2. `dedup_types` stays in `spider/services/` — it is *not* `spider/contracts.py`.** Same reasoning as [ADR-048](../ADR-048-Rclone-Module-Split/ADR-048-rclone-module-split-and-folder-dedup-rust.md) D2: `DedupRecord` is skip-time-dedup domain data, not a cross-cutting contract like `UNCENSORED_SENSOR_PRIORITY`. Co-locating in `contracts.py` would conflate two layers; moving it to `pipeline/models.py` would create a cycle (`pipeline` already imports from `spider`, `spider` from `pipeline`). A zero-dependency module inside the services package isolates the types and breaks the transitive load.
+**D2. `dedup_types` stays in `spider/services/` — it is *not* `spider/contracts.py`.** Same reasoning as [ADR-048](../../ADR-048-Rclone-Module-Split/ADR-048-rclone-module-split-and-folder-dedup-rust.md) D2: `DedupRecord` is skip-time-dedup domain data, not a cross-cutting contract like `UNCENSORED_SENSOR_PRIORITY`. Co-locating in `contracts.py` would conflate two layers; moving it to `pipeline/models.py` would create a cycle (`pipeline` already imports from `spider`, `spider` from `pipeline`). A zero-dependency module inside the services package isolates the types and breaks the transitive load.
 
 **D3. Promote `_normalise_code` → public `normalise_code` in `parsing/common.py`.** The body is three lines of pure Unicode normalization with no spider/storage dependency; `parsing/common.py` already applies NFKC inline and is already imported by `code_resolver.py`, so promotion adds **no new import edge**. After: `dedup_query`/`dedup_store` import `normalise_code` from `parsing.common`; `code_resolver.py` deletes its verbatim copy; `ops/reconcile/service.py` imports `normalise_code` from `parsing.common` (not the spider private symbol); `migrations/tools/csv_to_sqlite.py` imports the canonical `DEDUP_FIELDNAMES` and deletes its local copy.
 
@@ -77,7 +77,7 @@ Split `dedup.py` into three modules by tier, promote the normalizer to its true 
 ### Explicit non-goals (YAGNI)
 
 - **Not** changing any dedup decision logic or persistence behaviour — pure relocation.
-- **Not** touching `rclone/helper.py` (cleanup-time dedup) — that is [ADR-048](../ADR-048-Rclone-Module-Split/ADR-048-rclone-module-split-and-folder-dedup-rust.md).
+- **Not** touching `rclone/helper.py` (cleanup-time dedup) — that is [ADR-048](../../ADR-048-Rclone-Module-Split/ADR-048-rclone-module-split-and-folder-dedup-rust.md).
 - **Not** deleting `should_skip_from_ownership` — flagged for a separate decision.
 
 ## Domain Language (additions for CONTEXT.md)
@@ -95,11 +95,12 @@ Split `dedup.py` into three modules by tier, promote the normalizer to its true 
 
 ## References
 
-- [ADR-048 — Rclone Module Split](../ADR-048-Rclone-Module-Split/ADR-048-rclone-module-split-and-folder-dedup-rust.md)
-- [ADR-046 — Retire Db Facade](../_archive/ADR-046-Retire-Db-Facade/ADR-046-retire-db-facade.md)
-- [ADR-011 — JavDB Parsing Module](../_archive/ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md)
-- 2026-06-13 architecture review: [architecture-review-2026-06-13.html](../architecture/architecture-review-2026-06-13.html)
+- [ADR-048 — Rclone Module Split](../../ADR-048-Rclone-Module-Split/ADR-048-rclone-module-split-and-folder-dedup-rust.md)
+- [ADR-046 — Retire Db Facade](../ADR-046-Retire-Db-Facade/ADR-046-retire-db-facade.md)
+- [ADR-011 — JavDB Parsing Module](../ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md)
+- 2026-06-13 architecture review: [architecture-review-2026-06-13.html](../../architecture/architecture-review-2026-06-13.html)
 
 ## Status Log
 
+- 2026-06-14: Completed in [IMP-ADR049-01](IMP-ADR049-01-dedup-module-split.md). The planned single phase shipped the three-module split, `normalise_code` promotion, caller/test re-pointing, import-isolation regression coverage, and CONTEXT.md terminology update. No follow-up IMP remains for this ADR; the `should_skip_from_ownership` dead-code decision stays deferred as a separate future decision.
 - 2026-06-13: Proposed (from the 2026-06-13 architecture review, Candidate 2). Decided: 3-module split (`dedup_types`/`dedup_query`/`dedup_store`), no shim; promote `_normalise_code`→`normalise_code` in `parsing/common.py`; `dedup_store` keeps the two process-globals and uses `OperationsRepo`. Verified: 779 lines (candidate said ~778); the `code_resolver` copy + `csv_to_sqlite` field-list copy + `ops`→spider-private import are real. `should_skip_from_ownership` flagged as possible dead code (zero prod callers). IMP-ADR049-01 pending.

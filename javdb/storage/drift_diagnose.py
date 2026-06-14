@@ -29,7 +29,6 @@ D1/SQLite access, classification, safe deletion, and audit writes together.
 
 from __future__ import annotations
 
-import json
 import os
 import sqlite3
 from datetime import datetime, timedelta, timezone
@@ -37,9 +36,17 @@ from typing import Dict, List, Optional
 
 from javdb.infra.logging import get_logger
 from javdb.storage.d1_client import make_d1_connection
-from javdb.storage.sessions.lifecycle_helpers import append_jsonl_record
+from javdb.storage import drift_io
+from javdb.storage.drift_io import _values_equal
 from javdb.storage.repos.history_repo import HistoryRepo
 from javdb.storage.repos.sessions_repo import SessionsRepo
+from javdb.storage.sessions.pending_verify import (
+    F_KIND,
+    F_PENDING_RESIDUAL_COUNT,
+    F_SESSION_ID,
+    F_TS,
+    KIND_PENDING_SESSION_VERIFY,
+)
 
 logger = get_logger(__name__)
 
@@ -85,44 +92,6 @@ def _parse_ts(raw) -> Optional[datetime]:
     return dt.astimezone(timezone.utc)
 
 
-# ── Cell-level comparison ────────────────────────────────────────────────
-
-
-def _values_equal(a, b) -> bool:
-    """Type-loose cell equality (mirrors reconcile_d1_drift._values_equal)."""
-    if a is None and b is None:
-        return True
-    if a is None or b is None:
-        return False
-    if isinstance(a, int) and isinstance(b, int):
-        return a == b
-    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
-        try:
-            return float(a) == float(b)
-        except (TypeError, ValueError):
-            return False
-    return str(a) == str(b)
-
-
-# ── JSONL reader ─────────────────────────────────────────────────────────
-
-
-def _read_jsonl(path: str) -> List[dict]:
-    if not os.path.exists(path):
-        return []
-    records: List[dict] = []
-    with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                records.append(json.loads(line))
-            except Exception:
-                continue
-    return records
-
-
 # ── SQLite helpers ───────────────────────────────────────────────────────
 
 
@@ -133,19 +102,6 @@ def _open_sqlite_readonly(db_path: str) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA query_only = 1")
     return conn
-
-
-def _row_to_dict(row) -> dict:
-    if row is None:
-        return {}
-    if isinstance(row, dict):
-        return row
-    try:
-        return {k: row[k] for k in row.keys()}
-    except Exception:
-        return dict(row)
-
-
 # ── D3: Suspect discovery — verify-metric path ──────────────────────────
 
 
@@ -162,19 +118,19 @@ def discover_suspects_from_verify_log(
     now = datetime.now(tz=timezone.utc)
     window_start = now - timedelta(hours=since_hours)
 
-    records = _read_jsonl(drift_log_path)
+    records = drift_io.read_jsonl(drift_log_path)
     suspects: Dict[str, dict] = {}
 
     for rec in records:
-        if rec.get("kind") != "pending_session_verify":
+        if rec.get(F_KIND) != KIND_PENDING_SESSION_VERIFY:
             continue
-        ts = _parse_ts(rec.get("ts"))
+        ts = _parse_ts(rec.get(F_TS))
         if ts is None or ts < window_start:
             continue
-        residual = int(rec.get("pending_residual_count", 0))
+        residual = int(rec.get(F_PENDING_RESIDUAL_COUNT, 0))
         if residual <= 0:
             continue
-        session_id = rec.get("session_id", "")
+        session_id = rec.get(F_SESSION_ID, "")
         if not session_id:
             continue
         # Keep the highest residual count if multiple records exist
@@ -182,7 +138,7 @@ def discover_suspects_from_verify_log(
         if existing is None or residual > existing["pending_residual_count"]:
             suspects[session_id] = {
                 "pending_residual_count": residual,
-                "ts": rec.get("ts"),
+                "ts": rec.get(F_TS),
             }
 
     return suspects
@@ -767,6 +723,6 @@ def _apply_fix_inner(
         "deleted_torrent_orphans": deleted_torrents,
         "verdict_at_apply": VERDICT_SAFE_TO_APPLY,
     }
-    append_jsonl_record(record)
+    drift_io.append_jsonl_record(record)
 
     return 0

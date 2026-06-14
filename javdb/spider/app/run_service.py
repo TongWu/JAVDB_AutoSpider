@@ -6,7 +6,6 @@ import json
 import os
 import sys
 
-import logging
 from typing import Any, Optional
 
 import requests
@@ -31,23 +30,16 @@ from javdb.proxy.policy import (
 
 import javdb.spider.runtime.state as state
 from javdb.spider.runtime.config import (
-    BASE_URL,
     REPORTS_DIR, DAILY_REPORT_DIR, AD_HOC_DIR, PARSED_MOVIES_CSV,
     CF_BYPASS_ENABLED, CF_BYPASS_SERVICE_PORT,
     PROXY_MODE, PROXY_POOL, PROXY_MODULES,
     PHASE2_MIN_RATE, PHASE2_MIN_COMMENTS,
-    JAVDB_SESSION_COOKIE,
     GIT_USERNAME, GIT_PASSWORD, GIT_REPO_URL, GIT_BRANCH,
     RCLONE_INVENTORY_CSV, DEDUP_CSV, DEDUP_DIR,
     ENABLE_REDOWNLOAD, REDOWNLOAD_SIZE_THRESHOLD,
 )
 from javdb.spider.runtime.context import SpiderRuntime
-from javdb.spider.services.dedup import (
-    load_rclone_inventory,
-    should_skip_from_rclone,
-    check_dedup_upgrade,
-    append_dedup_record,
-)
+from javdb.spider.services.dedup_store import load_rclone_inventory
 from javdb.spider.app.cli import parse_arguments, OUTPUT_CSV
 from javdb.spider.app.options import SpiderRunOptions, spider_options_from_args
 from javdb.spider.runtime.sleep import ensure_sleep_runtime, movie_sleep_mgr
@@ -392,12 +384,11 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
     else:
         dedup_csv_path = os.path.join(REPORTS_DIR, DEDUP_CSV)
     result_context.dedup_csv_path = str(dedup_csv_path) if enable_dedup and dedup_csv_path else None
-    rclone_inventory = {}
-    if os.path.exists(rclone_inventory_path):
-        rclone_inventory = load_rclone_inventory(rclone_inventory_path)
+    rclone_inventory = load_rclone_inventory(rclone_inventory_path)
+    if rclone_inventory:
         logger.info(f"Loaded rclone inventory: {len(rclone_inventory)} unique video codes")
     else:
-        logger.info(f"Rclone inventory not found ({rclone_inventory_path}) – rclone skip/dedup disabled")
+        logger.info("No rclone inventory data available - rclone skip/dedup disabled")
 
     if rclone_filter:
         logger.info("RCLONE FILTER: Enabled - will skip entries already in rclone inventory with 中字")

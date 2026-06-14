@@ -2,29 +2,27 @@
 
 import os
 import sys
-import csv
-import tempfile
 import pytest
 
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from javdb.spider.services.dedup import (
-    RcloneEntry,
-    DedupRecord,
-    DEDUP_FIELDNAMES,
-    load_rclone_inventory,
-    is_in_rclone_inventory,
-    should_skip_from_rclone,
+from javdb.spider.services.dedup_query import (
     check_dedup_upgrade,
     check_redownload_dedup_upgrade,
-    append_dedup_record,
-    load_dedup_csv,
-    save_dedup_csv,
-    mark_records_deleted,
-    cleanup_deleted_records,
-    _raw_csv_read,
+    is_in_rclone_inventory,
+    should_skip_from_rclone,
 )
+from javdb.spider.services.dedup_store import (
+    _raw_csv_read,
+    append_dedup_record,
+    cleanup_deleted_records,
+    load_dedup_csv,
+    load_rclone_inventory,
+    mark_records_deleted,
+    save_dedup_csv,
+)
+from javdb.spider.services.dedup_types import DedupRecord, RcloneEntry
 from javdb.storage.db._db_operations import db_replace_rclone_inventory, db_load_dedup_records
 from javdb.spider.detail.runner import _dedup_log_variant_label
 
@@ -132,6 +130,22 @@ class TestSkipLogic:
         inv = {'ABC-123': [RcloneEntry('ABC-123', '有码', '中字', 'p', 100, 1, 't')]}
         assert should_skip_from_rclone('XYZ-999', inv, enable_dedup=False) is False
 
+    def test_rust_skip_adapter_failure_logs_debug(self, monkeypatch, caplog):
+        import logging
+        import javdb.spider.services.dedup_query as dedup_query
+
+        def _boom(*_args, **_kwargs):
+            raise RuntimeError("rust boom")
+
+        monkeypatch.setattr(dedup_query, "RUST_DEDUP_AVAILABLE", True)
+        monkeypatch.setattr(dedup_query, "_rs_should_skip_from_rclone", _boom)
+
+        with caplog.at_level(logging.DEBUG, logger="javdb.spider.services.dedup_query"):
+            result = dedup_query.rust_should_skip_from_rclone("ABC-123", [], False)
+
+        assert result is None
+        assert any(record.exc_info for record in caplog.records)
+
 
 # ============================================================================
 # Test check_dedup_upgrade
@@ -180,6 +194,22 @@ class TestCheckDedupUpgrade:
         assert len(records) == 1
         assert records[0].existing_gdrive_path == 'p1'
 
+    def test_rust_upgrade_adapter_failure_logs_debug(self, monkeypatch, caplog):
+        import logging
+        import javdb.spider.services.dedup_query as dedup_query
+
+        def _boom(*_args, **_kwargs):
+            raise RuntimeError("rust boom")
+
+        monkeypatch.setattr(dedup_query, "RUST_DEDUP_AVAILABLE", True)
+        monkeypatch.setattr(dedup_query, "_rs_check_dedup_upgrade", _boom)
+
+        with caplog.at_level(logging.DEBUG, logger="javdb.spider.services.dedup_query"):
+            result = dedup_query.rust_check_dedup_upgrade("ABC-123", {}, [])
+
+        assert result == []
+        assert any(record.exc_info for record in caplog.records)
+
 
 class TestCheckRedownloadDedupUpgrade:
     def test_matches_same_family_and_subtitle_state(self):
@@ -220,7 +250,7 @@ class TestDedupExplicitSession:
     ``session_id`` param (the process-global is never read)."""
 
     def test_append_dedup_record_binds_explicit_session(self, monkeypatch):
-        import javdb.spider.services.dedup as dedup
+        import javdb.spider.services.dedup_store as dedup
 
         captured = {}
 
@@ -241,7 +271,7 @@ class TestDedupExplicitSession:
         assert captured["session_id"] == explicit
 
     def test_mark_records_deleted_binds_explicit_session(self, monkeypatch):
-        import javdb.spider.services.dedup as dedup
+        import javdb.spider.services.dedup_store as dedup
 
         captured = {}
 
@@ -489,7 +519,7 @@ class TestExportDedupDbToCsv:
     """Tests for the export_dedup_db_to_csv function."""
 
     def test_export_creates_csv(self, tmp_path):
-        from javdb.spider.services.dedup import export_dedup_db_to_csv
+        from javdb.spider.services.dedup_store import export_dedup_db_to_csv
         r = DedupRecord('EXP-001', 's', 'sub', 'gdrive:/export', 100, 'cat', 'r', 't', 'False', '')
         append_dedup_record('', r)
         output = str(tmp_path / 'dedup_history.csv')
@@ -501,7 +531,7 @@ class TestExportDedupDbToCsv:
         assert rows[0]['video_code'] == 'EXP-001'
 
     def test_export_empty_db(self, tmp_path):
-        from javdb.spider.services.dedup import export_dedup_db_to_csv
+        from javdb.spider.services.dedup_store import export_dedup_db_to_csv
         output = str(tmp_path / 'dedup_history.csv')
         count = export_dedup_db_to_csv(output)
         assert count == 0

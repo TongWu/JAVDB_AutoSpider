@@ -17,6 +17,7 @@ from javdb.storage.d1_client import (  # noqa: E402
     D1Connection,
     D1Cursor,
     D1PermanentError,
+    D1RecoveryBlockerError,
     D1TransientError,
     _split,
 )
@@ -279,12 +280,10 @@ class QueuedThenDurableFlushD1(QueuedThenUndurableFlushD1):
 class QueuedThenBlockedFlushD1(QueuedThenUndurableFlushD1):
     def commit(self):
         self.commits += 1
-        error = RuntimeError(
+        raise D1RecoveryBlockerError(
             "unresolved D1 recovery work for ordering key history:s1; "
             "drain it before flushing queued writes"
         )
-        error.d1_recovery_blocker = True
-        raise error
 
 
 @pytest.fixture
@@ -354,8 +353,8 @@ def test_flush_is_forwarded_to_d1(sqlite_conn):
 
 
 def test_flush_updates_uncommitted_write_count(sqlite_conn, tmp_path, monkeypatch):
-    drift_path = tmp_path / "d1_drift.jsonl"
-    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    drift_path = tmp_path / "D1" / "d1_drift.jsonl"
 
     fake_d1 = FakeD1Connection()
     dual = DualConnection(sqlite_conn, fake_d1)
@@ -382,8 +381,8 @@ def test_strict_commit_raises_when_queued_flush_fails(
     sqlite_conn, monkeypatch, tmp_path,
 ):
     _strict_env(monkeypatch, True)
-    drift_path = tmp_path / "d1_drift.jsonl"
-    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    drift_path = tmp_path / "D1" / "d1_drift.jsonl"
 
     fake_d1 = QueuedThenFailingCommitD1()
     dual = DualConnection(sqlite_conn, fake_d1)
@@ -567,8 +566,8 @@ def test_commit_raises_when_safe_batch_recovery_is_not_durable(
     tmp_path,
 ):
     _strict_env(monkeypatch, False)
-    drift_path = tmp_path / "d1_drift.jsonl"
-    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    drift_path = tmp_path / "D1" / "d1_drift.jsonl"
 
     dual = DualConnection(
         sqlite_conn,
@@ -623,8 +622,8 @@ def test_commit_raises_when_queued_flush_is_blocked_by_unresolved_recovery(
     tmp_path,
 ):
     _strict_env(monkeypatch, False)
-    drift_path = tmp_path / "d1_drift.jsonl"
-    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    drift_path = tmp_path / "D1" / "d1_drift.jsonl"
 
     dual = DualConnection(
         sqlite_conn,
@@ -642,10 +641,38 @@ def test_commit_raises_when_queued_flush_is_blocked_by_unresolved_recovery(
     )
     dual.execute("INSERT INTO t (v) VALUES (?)", ("x",), policy=policy)
 
-    with pytest.raises(RuntimeError, match="unresolved D1 recovery work"):
+    with pytest.raises(D1RecoveryBlockerError, match="unresolved D1 recovery work"):
         dual.commit()
 
     assert drift_path.exists()
+
+
+def test_durable_recovery_signal_requires_typed_d1_transient_error(sqlite_conn):
+    dual = DualConnection(sqlite_conn, FakeD1Connection(), logical_name="history")
+    exc = D1TransientError("simulated recovery-required outage")
+    exc.d1_recovery_outbox_required = True
+    exc.d1_recovery_durable = False
+
+    assert dual._requires_durable_recovery(exc) is True
+    assert dual._requires_durable_recovery(RuntimeError("simulated")) is False
+
+
+def test_queued_flush_blocker_requires_recovery_blocker_error(sqlite_conn):
+    dual = DualConnection(sqlite_conn, FakeD1Connection(), logical_name="history")
+    dual._d1_queued_pending_writes = 1
+
+    assert dual._blocks_queued_recovery_flush(
+        D1RecoveryBlockerError(
+            "unresolved D1 recovery work for ordering key history:s1; "
+            "drain it before flushing queued writes"
+        )
+    ) is True
+    assert dual._blocks_queued_recovery_flush(
+        RuntimeError(
+            "unresolved D1 recovery work for ordering key history:s1; "
+            "drain it before flushing queued writes"
+        )
+    ) is False
 
 
 def test_d1_write_failure_does_not_break_sqlite(sqlite_conn):
@@ -1251,8 +1278,8 @@ def test_batch_execute_empty_returns_no_cursors(monkeypatch, d1_conn, no_sleep):
 
 
 def test_dual_batch_execute_read_failure_falls_back_without_drift(sqlite_conn, tmp_path, monkeypatch):
-    drift_path = tmp_path / "d1_drift.jsonl"
-    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    drift_path = tmp_path / "D1" / "d1_drift.jsonl"
 
     class FailingBatchD1(FakeD1Connection):
         def batch_execute(self, statements):
@@ -1290,10 +1317,7 @@ def test_rclone_inventory_swap_raises_when_dual_batch_d1_write_fails(
     # rollback records don't pollute the git-tracked production
     # ``reports/D1/d1_drift.jsonl`` (the path consumed by
     # ``scripts/aggregate_pending_health.py`` and the email Phase 3 alerts).
-    monkeypatch.setattr(
-        _dual_module, "_DRIFT_LOG_PATH",
-        str(tmp_path / "d1_drift.jsonl"),
-    )
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
     sqlite_conn.execute("DROP TABLE IF EXISTS RcloneInventory")
     sqlite_conn.execute(
         """
@@ -1359,8 +1383,8 @@ def test_rclone_inventory_swap_raises_when_dual_batch_d1_write_fails(
 
 
 def test_drift_log_written_on_commit_with_d1_failures(monkeypatch, sqlite_conn, tmp_path):
-    drift_path = tmp_path / "d1_drift.jsonl"
-    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    drift_path = tmp_path / "D1" / "d1_drift.jsonl"
 
     fake_d1 = FakeD1Connection(fail_on_write=True)
     dual = DualConnection(sqlite_conn, fake_d1, logical_name="history")
@@ -1379,7 +1403,7 @@ def test_drift_log_written_on_commit_with_d1_failures(monkeypatch, sqlite_conn, 
 
 
 def test_repeated_failure_signature_downgrades_to_debug(monkeypatch, sqlite_conn, tmp_path, caplog):
-    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(tmp_path / "d.jsonl"))
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
     fake_d1 = FakeD1Connection(fail_on_write=True)
     dual = DualConnection(sqlite_conn, fake_d1, logical_name="history")
 
@@ -1400,8 +1424,8 @@ def test_repeated_failure_signature_downgrades_to_debug(monkeypatch, sqlite_conn
 
 
 def test_failure_state_reset_after_commit(monkeypatch, sqlite_conn, tmp_path):
-    drift_path = tmp_path / "d1_drift.jsonl"
-    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    drift_path = tmp_path / "D1" / "d1_drift.jsonl"
 
     fake_d1 = FakeD1Connection(fail_on_write=True)
     dual = DualConnection(sqlite_conn, fake_d1, logical_name="history")
@@ -1418,8 +1442,8 @@ def test_failure_state_reset_after_commit(monkeypatch, sqlite_conn, tmp_path):
 
 
 def test_no_drift_log_when_d1_healthy(monkeypatch, sqlite_conn, tmp_path):
-    drift_path = tmp_path / "d1_drift.jsonl"
-    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    drift_path = tmp_path / "D1" / "d1_drift.jsonl"
 
     fake_d1 = FakeD1Connection()
     dual = DualConnection(sqlite_conn, fake_d1, logical_name="history")
@@ -1435,8 +1459,8 @@ def test_rollback_after_successful_d1_writes_logs_drift(monkeypatch, sqlite_conn
     Even with zero D1 failures the transaction still leaves D1 holding
     rows SQLite no longer has, which the reconciler must see.
     """
-    drift_path = tmp_path / "d1_drift.jsonl"
-    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    drift_path = tmp_path / "D1" / "d1_drift.jsonl"
 
     fake_d1 = FakeD1Connection()
     dual = DualConnection(sqlite_conn, fake_d1, logical_name="history")
@@ -1459,8 +1483,8 @@ def test_rollback_after_successful_d1_writes_logs_drift(monkeypatch, sqlite_conn
 
 def test_rollback_with_no_writes_does_not_log_drift(monkeypatch, sqlite_conn, tmp_path):
     """Read-only or empty transactions must not emit drift on rollback."""
-    drift_path = tmp_path / "d1_drift.jsonl"
-    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    drift_path = tmp_path / "D1" / "d1_drift.jsonl"
 
     fake_d1 = FakeD1Connection()
     dual = DualConnection(sqlite_conn, fake_d1, logical_name="history")
@@ -1474,8 +1498,8 @@ def test_rollback_with_no_writes_does_not_log_drift(monkeypatch, sqlite_conn, tm
 def test_rollback_logs_d1_exception_and_continues_cleanup(
     monkeypatch, sqlite_conn, tmp_path
 ):
-    drift_path = tmp_path / "d1_drift.jsonl"
-    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    drift_path = tmp_path / "D1" / "d1_drift.jsonl"
 
     class RaisingD1Connection(FakeD1Connection):
         def rollback(self):
@@ -1490,8 +1514,8 @@ def test_rollback_logs_d1_exception_and_continues_cleanup(
 
 def test_rollback_drift_includes_executemany_count(monkeypatch, sqlite_conn, tmp_path):
     """Successful executemany writes must inflate uncommitted_d1_writes."""
-    drift_path = tmp_path / "d1_drift.jsonl"
-    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    drift_path = tmp_path / "D1" / "d1_drift.jsonl"
 
     fake_d1 = FakeD1Connection()
     dual = DualConnection(sqlite_conn, fake_d1, logical_name="history")
@@ -1508,8 +1532,8 @@ def test_rollback_drift_includes_executemany_count(monkeypatch, sqlite_conn, tmp
 def test_uncommitted_writes_reset_after_commit(monkeypatch, sqlite_conn, tmp_path):
     """Successful commit must zero the counter so a later read-only
     rollback doesn't replay the previous transaction's writes as drift."""
-    drift_path = tmp_path / "d1_drift.jsonl"
-    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    drift_path = tmp_path / "D1" / "d1_drift.jsonl"
 
     fake_d1 = FakeD1Connection()
     dual = DualConnection(sqlite_conn, fake_d1, logical_name="history")
@@ -1831,8 +1855,8 @@ def test_lastrowid_mismatch_on_report_sessions_raises(monkeypatch, tmp_path):
         lastrowid=999, rowcount=1,
     )
 
-    drift_path = tmp_path / "d1_drift.jsonl"
-    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    drift_path = tmp_path / "D1" / "d1_drift.jsonl"
 
     dual = DualConnection(sqlite_conn, fake_d1, logical_name="reports")
 
@@ -2093,8 +2117,8 @@ def test_lastrowid_mismatch_on_pending_movie_history_raises(monkeypatch, tmp_pat
         lastrowid=999, rowcount=1,
     )
 
-    drift_path = tmp_path / "d1_drift.jsonl"
-    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    drift_path = tmp_path / "D1" / "d1_drift.jsonl"
 
     dual = DualConnection(sqlite_conn, fake_d1, logical_name="history")
     with pytest.raises(DualWriteIdMismatchError):
@@ -2117,8 +2141,8 @@ def test_lastrowid_mismatch_on_pending_torrent_history_raises(monkeypatch, tmp_p
         lastrowid=999, rowcount=1,
     )
 
-    drift_path = tmp_path / "d1_drift.jsonl"
-    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    drift_path = tmp_path / "D1" / "d1_drift.jsonl"
 
     dual = DualConnection(sqlite_conn, fake_d1, logical_name="history")
     with pytest.raises(DualWriteIdMismatchError):
@@ -2239,8 +2263,7 @@ def test_strict_mode_commit_raises_when_d1_failure_recorded(
 ):
     """P0-1: commit() must abort under strict mode + D1 failure."""
     _strict_env(monkeypatch, True)
-    drift = tmp_path / "drift.jsonl"
-    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift))
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
 
     fake_d1 = FakeD1Connection(fail_on_write=True)
     dual = DualConnection(sqlite_conn, fake_d1)
@@ -2310,8 +2333,8 @@ def test_executemany_chunked_failure_records_partial_prefix_count(
     _strict_env(monkeypatch, False)
     # Force a tiny BATCH_LIMIT so we get multiple chunks for a small input.
     monkeypatch.setattr(_d1_client_module, "_BATCH_LIMIT", 2)
-    drift = tmp_path / "drift.jsonl"
-    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift))
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    drift = tmp_path / "D1" / "d1_drift.jsonl"
 
     fake_d1 = _ChunkAwareFakeD1(fail_chunk_at_call=2)
     dual = DualConnection(sqlite_conn, fake_d1)
@@ -2347,8 +2370,7 @@ def test_executemany_chunked_failure_strict_mode_raises_for_guarded_table(
     """P0-2 + P0-1: guarded-table chunk failure under strict raises."""
     _strict_env(monkeypatch, True)
     monkeypatch.setattr(_d1_client_module, "_BATCH_LIMIT", 1)
-    drift = tmp_path / "drift.jsonl"
-    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift))
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
 
     sqlite_path = tmp_path / "guarded.db"
     conn = sqlite3.connect(sqlite_path)
@@ -2381,8 +2403,7 @@ def test_batch_execute_missing_d1_cursor_records_drift(
     mirror surfaces to the surrounding transaction.
     """
     _strict_env(monkeypatch, False)
-    drift = tmp_path / "drift.jsonl"
-    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift))
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
 
     fake_d1 = FakeD1Connection()
 

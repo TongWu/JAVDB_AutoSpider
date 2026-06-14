@@ -1,6 +1,6 @@
 # IMP-ADR048-01: Split the rclone Helper & Port the Folder-Dedup Cascade to Rust — Implementation Plan
 
-> **Status: 🔲 Proposed (2026-06-13).** Authored from the [ADR-048](ADR-048-rclone-module-split-and-folder-dedup-rust.md) grilling. Three sequential phases, each shipping as its own PR with a final verification gate. Phase 1 is fully actionable now; Phases 2–3 depend on Phase 1 landing but are specced here to keep the whole initiative reviewable in one document.
+> **Status: ✅ Phase 1 implemented (2026-06-14).** Authored from the [ADR-048](ADR-048-rclone-module-split-and-folder-dedup-rust.md) grilling. Three sequential phases, each shipping as its own PR with a final verification gate. Phase 1 is implemented in this change; Phases 2–3 remain proposed and intentionally out of scope for this PR.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -36,11 +36,11 @@
 
 ### Task 0: Baseline & importer enumeration (before any edit)
 
-- [ ] **Step 0.1 — Green baseline.** Record passing before changes:
+- [x] **Step 0.1 — Green baseline.** Record passing before changes:
   ```bash
   pytest tests/unit/test_rclone_helper.py tests/unit/test_rclone_manager.py -q
   ```
-- [ ] **Step 0.2 — Enumerate every importer of every symbol in `helper.py`.** All must resolve after the split:
+- [x] **Step 0.2 — Enumerate every importer of every symbol in `helper.py`.** All must resolve after the split:
   ```bash
   grep -rn "rclone.helper\|from javdb.integrations.rclone import helper" javdb apps scripts tests --include="*.py"
   ```
@@ -48,35 +48,35 @@
 
 ### Task 1: Create the four modules (move, do not rewrite)
 
-- [ ] **Step 1.1 — `types.py`.** Move the data classes + constants verbatim. Import `UNCENSORED_SENSOR_PRIORITY` from `javdb.spider.contracts`. No logic change.
-- [ ] **Step 1.2 — `path_utils.py`.** Move the 8 path functions verbatim. Only stdlib + `javdb.infra` imports.
-- [ ] **Step 1.3 — `scan.py`.** Move the health/parsing/`FolderCache`/scan functions verbatim. `from javdb.integrations.rclone.types import FolderInfo, …`. Keep the `parse_folder_name` Rust-dispatch try/except exactly as-is (ADR-048 D7 — still Best-Effort).
-- [ ] **Step 1.4 — `dedup.py`.** Move the cascade + deletion + reporting verbatim. `from javdb.integrations.rclone.types import DedupResult, DeletionRecord, FolderInfo, SensorCategory, SubtitleCategory, SIZE_THRESHOLD_RATIO`. Confirm no import of `scan` (the cascade consumes the *output* of scan, not its functions).
-- [ ] **Step 1.5 — Delete `helper.py`.**
+- [x] **Step 1.1 — `types.py`.** Move the data classes + constants verbatim. Import `UNCENSORED_SENSOR_PRIORITY` from `javdb.spider.contracts`. No logic change.
+- [x] **Step 1.2 — `path_utils.py`.** Move the 8 path functions verbatim. Only stdlib + `javdb.infra` imports.
+- [x] **Step 1.3 — `scan.py`.** Move the health/parsing/`FolderCache`/scan functions verbatim. `from javdb.integrations.rclone.types import FolderInfo, …`. Keep the `parse_folder_name` Rust-dispatch try/except exactly as-is (ADR-048 D7 — still Best-Effort).
+- [x] **Step 1.4 — `dedup.py`.** Move the cascade + deletion + reporting verbatim. `from javdb.integrations.rclone.types import DedupResult, DeletionRecord, FolderInfo, SensorCategory, SubtitleCategory, SIZE_THRESHOLD_RATIO`. Confirm no import of `scan` (the cascade consumes the *output* of scan, not its functions).
+- [x] **Step 1.5 — Delete `helper.py`.**
 
   **Verification gate:** `python -c "import javdb.integrations.rclone.types, javdb.integrations.rclone.path_utils, javdb.integrations.rclone.scan, javdb.integrations.rclone.dedup; print('ok')"` — no `ImportError`, no circular-import error.
 
 ### Task 2: Re-point callers & tests
 
-- [ ] **Step 2.1 — `service.py`.** Replace the single 27-symbol `from …helper import (…)` block with four concern-scoped imports from `types`/`path_utils`/`scan`/`dedup`.
-- [ ] **Step 2.2 — `strip_rclone_root_folder.py`.** Import the 3 path symbols from `path_utils`.
-- [ ] **Step 2.3 — `test_rclone_helper.py` / `test_rclone_manager.py`.** Re-point imports; update every `@patch('javdb.integrations.rclone.helper.X')` to the module that now owns `X` (e.g. `subprocess.run` patches target `scan` or `dedup` depending on the function under test; `get_configured_drive_name` → `path_utils`).
-- [ ] **Step 2.4 — `infra/logging.py` label map.** Replace the `helper` key so the four new loggers format identically.
+- [x] **Step 2.1 — `service.py`.** Replace the single 27-symbol `from …helper import (…)` block with four concern-scoped imports from `types`/`path_utils`/`scan`/`dedup`.
+- [x] **Step 2.2 — `strip_rclone_root_folder.py`.** Import the 3 path symbols from `path_utils`.
+- [x] **Step 2.3 — `test_rclone_helper.py` / `test_rclone_manager.py`.** Re-point imports; update every `@patch('javdb.integrations.rclone.helper.X')` to the module that now owns `X` (e.g. `subprocess.run` patches target `scan` or `dedup` depending on the function under test; `get_configured_drive_name` → `path_utils`).
+- [x] **Step 2.4 — `infra/logging.py` label map.** Replace the `helper` key so the four new loggers format identically.
 
   **Verification gate:** `pytest tests/unit/test_rclone_helper.py tests/unit/test_rclone_manager.py -q` green **with assertions unchanged** from the Task 0.1 baseline (only import/patch lines differ). Re-run the Task 0.2 grep → empty for `helper`.
 
 ### Task 3: Docs & domain language
 
-- [ ] **Step 3.1 — CONTEXT.md.** Add **Cleanup-time dedup** vs **Skip-time dedup**, **Rclone scan engine**, **Folder dedup cascade**, **Drive folder layout** to the appropriate section + 术语对照表, verbatim from ADR-048's Domain Language. (Defer the **Rust-Required extension** term to Phase 3.)
+- [x] **Step 3.1 — CONTEXT.md.** Add **Cleanup-time dedup** vs **Skip-time dedup**, **Rclone scan engine**, **Folder dedup cascade**, **Drive folder layout** to the appropriate section + 术语对照表, verbatim from ADR-048's Domain Language. (Defer the **Rust-Required extension** term to Phase 3.)
 
   **Verification gate:** `grep -n "Cleanup-time dedup\|Folder dedup cascade" CONTEXT.md` non-empty.
 
 ### Phase 1 final gate
 
-- [ ] `pytest tests/unit -q -k rclone` green.
-- [ ] `ruff check javdb/integrations/rclone` clean.
-- [ ] `grep -rn "rclone.helper" javdb apps scripts tests --include="*.py"` → empty.
-- [ ] `git diff --stat` shows `helper.py` deleted, four modules created, behaviour-test assertions unchanged.
+- [x] Focused rclone gate: `pytest tests/unit/test_rclone_helper.py tests/unit/test_rclone_manager.py -q` green (`169 passed`). Local broad `pytest tests/unit -q -k rclone` collection is unsuitable while unrelated local `javdb.rust_core` proxy symbols are missing.
+- [x] `ruff check javdb/integrations/rclone` clean.
+- [x] `grep -rn "rclone.helper" javdb apps scripts tests --include="*.py"` → empty.
+- [x] `git diff --stat` shows `helper.py` deleted, four modules created, existing behaviour assertions preserved, and boundary/stats regression tests added.
 
 ---
 

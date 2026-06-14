@@ -35,7 +35,6 @@ implementation here is the ``fromisoformat`` form.
 
 from __future__ import annotations
 
-import json
 import os
 import time
 from dataclasses import dataclass
@@ -303,54 +302,6 @@ def fanout_movie_claim(
     finally:
         client.close()
     return summaries
-
-
-# ── Metric emission ────────────────────────────────────────────────────
-
-
-def append_jsonl_record(
-    record: dict,
-    *,
-    reports_dir: Optional[str] = None,
-    filename: str = "d1_drift.jsonl",
-) -> None:
-    """Append *record* as one JSON line to ``<reports_dir>/D1/<filename>``.
-
-    ``reports_dir`` defaults to ``$REPORTS_DIR`` or ``reports``. The
-    function never raises: metric emission must not block the primary
-    operation. Any failure is logged at WARNING and discarded.
-
-    Under pytest, a call with neither ``reports_dir`` nor ``$REPORTS_DIR``
-    would land in the git-tracked ``reports/D1/<filename>``; that is refused
-    (see the guard below) so a test that forgot to isolate the metric sink
-    cannot pollute the tracked drift log.
-    """
-    base = reports_dir or os.environ.get("REPORTS_DIR")
-    if not base:
-        # Neither an explicit ``reports_dir`` nor ``$REPORTS_DIR`` is set, so
-        # the write would land in the git-tracked ``reports/D1/<filename>``.
-        # Under pytest that means a test forgot to isolate the metric sink;
-        # refuse rather than pollute the tracked file. This mirrors the
-        # last-line guard in ``dual_connection._append_drift_record`` so the
-        # two drift-log writers are protected symmetrically.
-        if os.environ.get("PYTEST_CURRENT_TEST"):
-            logger.warning(
-                "Refusing to append %s to the default reports/ dir under "
-                "PYTEST_CURRENT_TEST=%s; the test must set REPORTS_DIR or pass "
-                "reports_dir= to isolate the metric sink.",
-                filename, os.environ.get("PYTEST_CURRENT_TEST"),
-            )
-            return
-        base = "reports"
-    try:
-        path = os.path.join(base, "D1", filename)
-        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "Failed to append metric record to %s: %s", filename, exc,
-        )
 
 
 def write_github_output(**kvpairs: Any) -> None:

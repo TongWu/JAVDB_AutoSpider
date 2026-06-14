@@ -568,7 +568,7 @@ Check attached logs for details.
     # Gated to dual mode only: in d1-only there is no SQLite-side write
     # path, so SQLite-vs-D1 drift cannot occur by construction. The
     # ``d1_drift.jsonl`` file is still appended by operational tooling
-    # (``commit_session._emit_pending_verify``, sweep / cleanup metrics),
+    # (pending verify records, sweep / cleanup metrics),
     # but those records are audit trails, not drift events — surfacing
     # them as a "DRIFT ADVISORY" in d1-only mode is misleading.
     try:

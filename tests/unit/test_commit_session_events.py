@@ -22,6 +22,7 @@ import pytest
 
 import apps.cli.db.commit_session as cs
 from javdb.ops.sentinel.models import DriftFinding, SentinelVerdict
+from javdb.storage.sessions.pending_verify import F_STATS_READ_ERROR
 
 
 def _emitted_types(recorder):
@@ -38,17 +39,33 @@ def harness(monkeypatch):
     """
     from unittest.mock import MagicMock
 
-    state = SimpleNamespace(transition_raises=False, drain_raises=False)
+    state = SimpleNamespace(
+        transition_raises=False,
+        drain_raises=False,
+        pending_stats_raises=False,
+    )
 
     monkeypatch.setattr(cs, "init_db", lambda *a, **k: None)
     monkeypatch.setattr(cs, "close_db", lambda *a, **k: None)
-    monkeypatch.setattr(cs, "_emit_pending_verify", lambda *a, **k: None)
+    state.records = []
+    monkeypatch.setattr(
+        cs,
+        "append_jsonl_record",
+        lambda record: state.records.append(record),
+    )
+    monkeypatch.setattr(cs, "attach_run_identity", lambda *a, **k: None)
+    monkeypatch.setattr(cs, "write_github_output", lambda *a, **k: None)
     monkeypatch.setattr(
         cs, "read_session_pre_state",
         lambda sid: SimpleNamespace(write_mode="pending", status="in_progress"),
     )
 
     class _Repo:
+        def pending_session_stats(self, sid):
+            if state.pending_stats_raises:
+                raise RuntimeError("stats boom")
+            return {"pending_residual_count": 0}
+
         def commit_session(self, sid):
             if state.drain_raises:
                 raise RuntimeError("drain boom")
@@ -91,6 +108,14 @@ def test_drain_failure_emits_session_failed(harness):
     assert _emitted_types(harness.emit) == ["SessionFailed"]
 
 
+def test_pending_stats_failure_does_not_block_verify_record(harness):
+    harness.pending_stats_raises = True
+    rc = cs.main(["--session-id", "S1", "--no-claim-commit"])
+    assert rc == 0
+    assert _emitted_types(harness.emit) == ["SessionCommitted"]
+    assert harness.records[-1][F_STATS_READ_ERROR] is True
+
+
 # ── ADR-035 site-contract gate — drives the REAL commit path (cs.main) ───────
 # (Unlike tests/unit/test_commit_gate_site_drift.py, which only asserts the
 # sentinel *verdict*, these exercise commit_session's gating control flow.)
@@ -111,6 +136,9 @@ def test_site_drift_gate_blocks_commit_on_critical(harness, monkeypatch):
     drained: list = []
 
     class _NoDrainRepo:
+        def pending_session_stats(self, sid):
+            return {"pending_residual_count": 0}
+
         def commit_session(self, sid):
             drained.append(sid)  # the gate must prevent this from running
             return {"residual_cleanup": False, "pending_deleted": 0}

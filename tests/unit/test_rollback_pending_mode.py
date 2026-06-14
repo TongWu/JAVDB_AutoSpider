@@ -27,7 +27,6 @@ Covers the core pending-mode categories:
 from __future__ import annotations
 
 import json
-import os
 from typing import Dict, List, Tuple
 
 import pytest
@@ -647,8 +646,8 @@ class TestCommitSessionCLIDrainsPending:
     def test_commit_session_promotes_pending_into_live(
         self, capsys, monkeypatch, tmp_path,
     ):
-        # Redirect REPORTS_DIR so the CLI's _emit_pending_verify writes
-        # the test's pending_session_verify record into the tmp dir
+        # Redirect REPORTS_DIR so the CLI's pending verify record is written
+        # into the tmp dir
         # rather than the git-tracked reports/D1/d1_drift.jsonl.
         monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
         from apps.cli.db import commit_session as cs_mod

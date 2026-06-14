@@ -30,4 +30,4 @@ business data from result JSON instead of parsing those stdout markers.
 ## Depends on
 
 - Upstream callers: `apps.cli.pipeline`, `javdb.spider.fetch.index`, `javdb.spider.detail.runner`, `javdb.spider.compat.csv_builder`.
-- Downstream: `javdb.spider.contracts`, `javdb.spider.services.dedup`, `javdb.spider.magnet_extractor`, `javdb.infra.logging`, `javdb.storage`.
+- Downstream: `javdb.spider.contracts`, `javdb.spider.services.dedup_query`, `javdb.spider.services.dedup_store`, `javdb.spider.magnet_extractor`, `javdb.infra.logging`, `javdb.storage`.
