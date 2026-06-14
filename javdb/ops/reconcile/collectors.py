@@ -14,6 +14,8 @@ from javdb.ops.reconcile.models import Observation, OwnershipObservation, utc_no
 logger = logging.getLogger(__name__)
 
 # qB torrent states that mean "finished downloading" even if progress<1 rounding.
+# missingFiles: files were deleted from disk after download completed; treat as
+# completed so the outcome is promoted and the stale qB entry can be removed.
 _QB_COMPLETED_STATES = frozenset(
     {
         "uploading",
@@ -23,6 +25,7 @@ _QB_COMPLETED_STATES = frozenset(
         "queuedUP",
         "forcedUP",
         "checkingUP",
+        "missingFiles",
     }
 )
 

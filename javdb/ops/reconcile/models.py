@@ -75,6 +75,7 @@ class ReconcileResult:
     marked_completed: int = 0
     marked_stalled: int = 0
     marked_failed: int = 0
+    missing_files_deleted: int = 0
     errors: list[str] = field(default_factory=list)
 
 

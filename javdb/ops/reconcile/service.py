@@ -148,14 +148,20 @@ def run(options: ReconcileOptions, *, repo=None, qb_client=None) -> ReconcileRes
         return result
 
     now = utc_now_iso()
+    _client = None  # saved for post-loop missingFiles deletion
+    missing_files_hashes: set = set()
+
     with _repo_ctx(repo) as r:
         active = {rec.qb_hash: rec for rec in r.list_active()}
 
         observations = {}
         if "qb" in options.sources:
             try:
-                client = qb_client or _build_qb_client()
-                torrents = _fetch_qb_torrents(client, options.categories)
+                _client = qb_client or _build_qb_client()
+                torrents = _fetch_qb_torrents(_client, options.categories)
+                for t in torrents:
+                    if t.get("state") == "missingFiles" and t.get("hash"):
+                        missing_files_hashes.add(t["hash"])
                 for obs in QbCollector().collect(torrents):
                     observations[obs.qb_hash] = obs
             except Exception as exc:
@@ -222,6 +228,25 @@ def run(options: ReconcileOptions, *, repo=None, qb_client=None) -> ReconcileRes
             except Exception as exc:
                 logger.warning("run: upsert failed for %s", qb_hash, exc_info=True)
                 result.errors.append(str(exc))
+
+    # Delete missingFiles torrents from qB after all DB writes are committed.
+    # Only act on hashes that were actively tracked (present in AcquisitionOutcome)
+    # and only when this is a real run (not dry_run).
+    if _client is not None and missing_files_hashes and not options.dry_run:
+        for qb_hash in missing_files_hashes:
+            if qb_hash not in active:
+                continue
+            try:
+                _client.delete_torrents([qb_hash], delete_files=True)
+                result.missing_files_deleted += 1
+                logger.info("Deleted missingFiles torrent from qB: %s", qb_hash)
+            except Exception as exc:
+                logger.warning(
+                    "run: failed to delete missingFiles torrent %s from qB: %s",
+                    qb_hash, exc,
+                )
+                result.errors.append(str(exc))
+
     return result
 
 

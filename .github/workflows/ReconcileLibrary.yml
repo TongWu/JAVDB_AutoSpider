@@ -3,33 +3,22 @@ name: Reconcile Library
 # ADR-033 Phase 1+2+3: `--pass all` runs all three closed-loop reconcile passes
 # (acquisition + ownership + consumption).
 # The acquisition pass reconciles AcquisitionOutcome rows against live qB state.
+# Torrents with missingFiles state are treated as completed and deleted from qB.
 # The ownership pass collects from gdrive (RcloneInventory), qb (AcquisitionOutcome
 # bridge), pikpak (PikpakHistory success rows), and nas (a forward-compat stub that
 # is currently always a no-op, regardless of RCLONE_NAS_REMOTE).
 # The consumption pass collects watch/rating signal from the media servers in
 # MEDIA_SERVERS (Emby/Plex); with none configured it is a no-op.
-# The cron runs hourly because qB download state changes
-# independently of the ingestion workflows. The default runner is self-hosted so the
-# job can reach the operator's qBittorrent Web UI; manual dispatch may override it
-# for tests.
+# Runs hourly on self-hosted so the job can reach the operator's qBittorrent Web UI.
 
 permissions:
   contents: read
 
 on:
-  # Hourly schedule disabled — run manually via workflow_dispatch only.
-  # schedule:
-  #   - cron: '0 * * * *'
+  schedule:
+    - cron: '0 * * * *'
   workflow_dispatch:
     inputs:
-      runner:
-        description: 'Runner type. Use self-hosted when qBittorrent is only reachable locally.'
-        required: false
-        default: 'self-hosted'
-        type: choice
-        options:
-          - 'self-hosted'
-          - 'ubuntu-latest'
       stalled_after_days:
         description: 'Positive integer: active outcomes unseen this many days become stalled.'
         required: false
@@ -48,7 +37,7 @@ concurrency:
 jobs:
   reconcile:
     name: Reconcile
-    runs-on: ${{ inputs.runner || 'self-hosted' }}
+    runs-on: self-hosted
     timeout-minutes: 30
     environment: Production
     env:

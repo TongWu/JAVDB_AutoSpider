@@ -313,7 +313,9 @@ STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --pass all --json
 
 1. **采集轮次（acquisition pass）** — 读取实时 qBittorrent 状态，将
    `AcquisitionOutcome` 行从 `queued` / `downloading` 推进到 `downloading`、
-   `completed`、`stalled` 或 `failed`。
+   `completed`、`stalled` 或 `failed`。若某个种子在 qB 中处于 `missingFiles`
+   状态（下载完成后文件被从磁盘删除），则将其视作 `completed`；记录 outcome
+   后，该残留种子会连同其剩余文件一起从 qB 删除。
 2. **所有权轮次（ownership pass）** — 从四个来源收集所有权观测结果并 upsert
    到 `OwnershipLedger`：
    - `gdrive` — 投影现有 `RcloneInventory` 表（无需额外 rclone 调用；由
@@ -334,7 +336,7 @@ STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --pass all --json
    为 `video_code`，写入 `ConsumptionSignal` 和 `UnresolvedMediaItem` 行。若
    `MEDIA_SERVERS_JSON` 未设置，此轮次为 no-op。
 
-该工作流默认使用 `self-hosted` runner，因为 qBittorrent 通常只在操作者内网可达。如果 qB 可从公网访问或已被测试替身替代，也可以通过手动触发的 `runner` 输入改用 `ubuntu-latest`。
+整个工作流始终在 `self-hosted` runner 上运行，因为 qBittorrent 通常只在操作者内网可达。
 生成的 `config.py` 会从仓库 Variables 读取 `TORRENT_CATEGORY` 和
 `TORRENT_CATEGORY_ADHOC`，因此默认扫描会跟随上传器使用的同一组 qB 分类。
 
@@ -342,7 +344,6 @@ STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --pass all --json
 
 | 输入 | 默认值 | 用途 |
 |---|---|---|
-| `runner` | `self-hosted` | 任务使用的 runner 标签。访问本地 qB 时使用 `self-hosted`。 |
 | `stalled_after_days` | `7` | 正整数。活跃 outcome 超过该天数未被观测到会变为 `stalled`；超过 2 倍窗口会变为 `failed`。 |
 | `dry_run` | `false` | 只计算状态迁移并输出 JSON，不写入数据行。 |
 

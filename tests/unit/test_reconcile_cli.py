@@ -175,6 +175,7 @@ def test_main_text_summary_uses_structured_logging_helpers(monkeypatch):
             "Marked completed": 1,
             "Marked stalled": 0,
             "Marked failed": 0,
+            "Missing files deleted from qB": 0,
             "Errors": 1,
         }),
         ("Ownership Summary", {

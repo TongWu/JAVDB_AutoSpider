@@ -314,7 +314,10 @@ STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --pass all --json
 
 1. **Acquisition pass** — reads live qBittorrent state and updates
    `AcquisitionOutcome` rows (`queued` / `downloading` → `downloading`,
-   `completed`, `stalled`, or `failed`).
+   `completed`, `stalled`, or `failed`). A torrent reported in qB's
+   `missingFiles` state (its files were deleted from disk after the download
+   completed) is treated as `completed`; once the outcome is recorded, the
+   stale torrent is deleted from qB along with any remaining files.
 2. **Ownership pass** — collects ownership observations from four sources and
    upserts them into `OwnershipLedger`:
    - `gdrive` — projects the existing `RcloneInventory` table (no extra rclone
@@ -338,9 +341,8 @@ STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --pass all --json
    `ConsumptionSignal` and `UnresolvedMediaItem` rows. If `MEDIA_SERVERS_JSON`
    is not set, this pass is a no-op.
 
-The workflow defaults to the `self-hosted` runner because qBittorrent is often
-reachable only from the operator's network. It still exposes a manual `runner`
-input for test runs on `ubuntu-latest` when qB is publicly reachable or mocked.
+The whole workflow always runs on the `self-hosted` runner because qBittorrent
+is typically reachable only from the operator's network.
 The generated `config.py` reads `TORRENT_CATEGORY` and `TORRENT_CATEGORY_ADHOC`
 from repository variables, so the default scan follows the same qB categories
 used by the uploader.
@@ -349,7 +351,6 @@ Manual dispatch inputs:
 
 | Input | Default | Purpose |
 |---|---|---|
-| `runner` | `self-hosted` | Runner label for the job. Use `self-hosted` for local qB access. |
 | `stalled_after_days` | `7` | Positive integer. Active outcomes unseen for this many days become `stalled`; after 2x this window they become `failed`. |
 | `dry_run` | `false` | Compute transitions and print JSON without writing rows. |
 
