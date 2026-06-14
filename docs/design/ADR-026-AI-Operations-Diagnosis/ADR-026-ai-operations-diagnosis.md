@@ -2,7 +2,7 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Accepted - Phases 1-2 delivered; Phase 3 pending                     |
+| **Status**  | Accepted - Phases 1-3 delivered; Phase 4 pending                     |
 | **Date**    | 2026-05-27                                                            |
 | **Authors** | Ted                                                                   |
 | **Related** | [ADR-009](../_archive/ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md) |
@@ -254,3 +254,4 @@ action is unsafe, the model may not override it.
 - 2026-05-27: Phase 1 delivered and verified; Phases 2-3 remain proposed.
 - 2026-06-05: Phase 2 (IMP-ADR026-02) delivered and verified — incident history, deterministic similarity, and analytics across CLI/API/Worker/Web. Phase 3 remains proposed.
 - 2026-06-13: Added Phase 4 (IMP-ADR026-04, proactive incident alerting & operator config) to cover the gap where incidents are collected but nothing proactively alerts on detection. Trigger + operator config live here; notification delivery stays in ADR-039; remediation stays in Phase 3.
+- 2026-06-13: Phase 3 (IMP-ADR026-03) **delivered and merged** — gated remediation proposals (deterministic non-executing policy + `OpsRemediationProposals` ledger + human approve/reject, single-transition + blocked-approval guards) across CLI/API/Worker/Web. Shipped as Python PR #201 + single-transition follow-up #204 + Web PR TongWu/JAVDB_AutoSpider_Web#27. Phase 4 (proactive alerting) remains proposed.

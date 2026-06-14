@@ -1,6 +1,6 @@
 # IMP-ADR026-03: ADR-026 Phase 3 - Gated Remediation Suggestions
 
-**Status:** Proposed
+**Status:** Completed — delivered & merged 2026-06-13 (Python PR #201 + single-transition follow-up #204; Web PR TongWu/JAVDB_AutoSpider_Web#27). Review-hardened: decision-preserving upsert, blocked-approval guard (HTTP 409), single-transition decisions, graceful-degradation persistence, dual-backend parity.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
