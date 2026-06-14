@@ -2,7 +2,7 @@
 
 | 字段       | 值                                                                    |
 | ---------- | --------------------------------------------------------------------- |
-| **状态**   | Proposed — 伞型;执行下放给各期 IMP                                    |
+| **状态**   | Accepted — Phase 1 / 2 已交付（2026-06-06 / 2026-06-14）；`trigger_run` 与可选的 Phase 3 后续仍待推进 |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
 | **关联**   | [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-026](../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md), [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md), [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md) |
@@ -53,7 +53,7 @@ apps/mcp/
 
 组合 `query_events` + `list_incidents` + `get_acquisition_outcomes`,agent 一轮即可回答跨源运维问题。
 
-**D4. gated 动作推迟到 Phase 2,且现在就把门规定好。** 一个有副作用的 tool（`trigger_run`、`rollback_session`、`commit_session`）必须:(1) 返回"将要做什么"的 **dry-run 预览**;(2) 要求显式 `confirm=true` 二次调用才执行;(3) 复用现有 auth;(4) 每次执行写一条**审计事件**（`PipelineEvent` / `OpsIncident`）。这镜像 ADR-026 的只读 → 受控修复递进。
+**D4. gated 动作推迟到 Phase 2,且现在就把门规定好。** 一个有副作用的 tool（`trigger_run`、`rollback_session`、`commit_session`）必须:(1) 返回"将要做什么"的 **dry-run 预览**;(2) 要求显式 `confirm=true` 二次调用才执行;(3) 复用现有 auth;(4) 在 confirmed call 上**尝试**做 best-effort 的审计事件写入（`PipelineEvent` / `OpsIncident`）。Phase 2 实际交付 `rollback_session` 和 `commit_session`;`trigger_run` 继续推迟,因为现有 Python service 没有可薄适配的实现,它需要新的 GitHub `workflow_dispatch` 代码,外部副作用也最大,而运维者已经可以通过 GitHub UI / TS Worker 路径发起。这里镜像 ADR-026 的只读 → 受控修复递进。
 
 **D5. 安全:只读、脱敏、无 secrets。** Phase 1 工具从不 mutate;敏感值经现有 masking 脱敏;**`config.py`/secrets 绝不暴露成 tool**。本地 stdio 假定 operator 可信;远程传输（后期）在传输层加 auth。
 
@@ -79,7 +79,7 @@ apps/mcp/
 | 阶段 | IMP | 交付内容 | 推迟内容 |
 | --- | --- | --- | --- |
 | Phase 1 — 只读面 | [IMP-ADR038-01](IMP-ADR038-01-readonly-mcp.md) | `apps/mcp/` FastMCP server（stdio）;上表只读工具;复用 ADR-026 的 `diagnose_run` | mutate 动作;远程传输;TS Worker MCP |
-| Phase 2 — gated 动作 | IMP-ADR038-02（占位） | `trigger_run` / `rollback_session` / `commit_session`,藏在 dry-run + confirm + auth + 审计事件后 | — |
+| Phase 2 — gated 动作 | [IMP-ADR038-02](IMP-ADR038-02-gated-actions.md) | `rollback_session` / `commit_session`,藏在 dry-run + confirm + auth + 审计事件后;`trigger_run` 推迟 | `trigger_run` |
 | Phase 3 — 远程 / 双 MCP（可选） | IMP-ADR038-03（占位） | HTTP/SSE 传输;平行 TS Worker MCP | — |
 
 Phase 1 独立成立（只读、附加）。Phase 2 加 gated mutate 面。Phase 3 是可选的远程/serverless 触达。
@@ -96,7 +96,7 @@ Phase 1 独立成立（只读、附加）。Phase 2 加 gated mutate 面。Phase
 
 - **MCP adapter**——`apps/mcp/` 把 service 层暴露成 MCP 工具的面,CLI、API 之外的第三 adapter。
 - **Read-only tool（只读工具）**——只查询的 MCP 工具;Phase 1 的全部。
-- **Gated action（受控动作）**——由 dry-run 预览 + 显式 confirm + auth + 审计事件守护的有副作用 MCP 工具（Phase 2）。
+- **Gated action（受控动作）**——由 dry-run 预览 + 显式 confirm + auth + 审计事件守护的有副作用 MCP 工具（Phase 2 实际交付 `rollback_session` / `commit_session`;`trigger_run` 继续推迟）。
 
 ## 备选方案 (Alternatives Considered)
 
@@ -115,3 +115,5 @@ Phase 1 独立成立（只读、附加）。Phase 2 加 gated mutate 面。Phase
 ## 状态日志 (Status Log)
 
 - 2026-05-29: Proposed(伞型;三期已划定,IMP 待出)。
+- 2026-06-06: Phase 1 已实现（[IMP-ADR038-01](IMP-ADR038-01-readonly-mcp.md)）—— `apps/mcp/` 已作为 stdio FastMCP server 交付，包含 8 个只读运维工具（`get_capabilities`、`get_session`、`list_incidents`、`get_incident`、`query_events`、`diagnose_run`、`list_runs`、`search_history`），并落地了 `available: false` 与 `error` 的 graceful degradation 约定，以及对应的 handbook / `CONTEXT.md` 更新。
+- 2026-06-14: Phase 2 已实现（[IMP-ADR038-02](IMP-ADR038-02-gated-actions.md)）—— `rollback_session` / `commit_session` 已作为默认 dry-run 的受闸动作交付，仅在 `confirm=true` 时执行，并在 confirmed call 上尝试写入 best-effort 审计事件。`trigger_run` 继续推迟，因为当前没有可薄适配的 Python dispatch service，它需要新的 GitHub `workflow_dispatch` 代码，而且外部副作用最高，而 GitHub UI / TS Worker 路径已经覆盖当前 operator 需求。

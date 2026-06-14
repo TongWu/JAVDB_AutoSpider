@@ -2,7 +2,7 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Proposed — umbrella; execution delegated to per-phase IMPs            |
+| **Status**  | Accepted — Phases 1-2 delivered (2026-06-06 / 2026-06-14); `trigger_run` and optional Phase 3 follow-ups pending |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
 | **Related** | [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-026](../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md), [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md), [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md) |
@@ -89,9 +89,13 @@ agent answer multi-source operational questions in one turn.
 **D4. Gated actions are deferred to Phase 2, and their gate is specified now.** A
 mutating tool (`trigger_run`, `rollback_session`, `commit_session`) must:
 (1) return a **dry-run preview** of what it would do; (2) require an explicit
-`confirm=true` second call to execute; (3) reuse the existing auth; (4) write an
-**audit event** (`PipelineEvent` / `OpsIncident`) for every execution. This mirrors
-ADR-026's read-only → gated-remediation progression.
+`confirm=true` second call to execute; (3) reuse the existing auth; (4) attempt a
+best-effort **audit event** (`PipelineEvent` / `OpsIncident`) on confirmed calls. Phase 2
+ships `rollback_session` and `commit_session`; `trigger_run` is deferred because
+there is no existing Python service to thin-adapt, it would require new GitHub
+`workflow_dispatch` code, it has the highest external side effect, and operators
+already have the GitHub UI / TS Worker routes. This mirrors ADR-026's read-only
+→ gated-remediation progression.
 
 **D5. Safety: read-only, masked, no secrets.** Phase 1 tools never mutate; sensitive
 values are masked via the existing masking module; **`config.py`/secrets are never
@@ -128,7 +132,7 @@ is the Python adapter only.
 | Phase | IMP | Ships | Deferred |
 | --- | --- | --- | --- |
 | Phase 1 — Read-only surface | [IMP-ADR038-01](IMP-ADR038-01-readonly-mcp.md) | `apps/mcp/` FastMCP server (stdio); the read-only tools above; `diagnose_run` reusing ADR-026 | Mutating actions; remote transport; TS Worker MCP |
-| Phase 2 — Gated actions | IMP-ADR038-02 (stub) | `trigger_run` / `rollback_session` / `commit_session` behind dry-run + confirm + auth + audit-event | — |
+| Phase 2 — Gated actions | [IMP-ADR038-02](IMP-ADR038-02-gated-actions.md) | `rollback_session` / `commit_session` behind dry-run + confirm + auth + audit-event; `trigger_run` deferred | `trigger_run` |
 | Phase 3 — Remote / dual MCP (optional) | IMP-ADR038-03 (stub) | HTTP/SSE transport; a parallel TS Worker MCP | — |
 
 Phase 1 stands alone (read-only, additive). Phase 2 adds the gated mutating surface.
@@ -148,7 +152,8 @@ Phase 3 is optional remote/serverless reach.
   tools, the third adapter alongside CLI and API.
 - **Read-only tool** — an MCP tool that only queries; the whole of Phase 1.
 - **Gated action** — a mutating MCP tool guarded by dry-run preview + explicit
-  confirm + auth + audit event (Phase 2).
+  confirm + auth + audit event (Phase 2 ships `rollback_session` /
+  `commit_session`; `trigger_run` remains deferred).
 
 ## Alternatives Considered
 
@@ -172,3 +177,5 @@ Phase 3 is optional remote/serverless reach.
 ## Status Log
 
 - 2026-05-29: Proposed (umbrella; three phases scoped, IMPs pending).
+- 2026-06-06: Phase 1 implemented ([IMP-ADR038-01](IMP-ADR038-01-readonly-mcp.md)) — `apps/mcp/` shipped as a stdio FastMCP server with the eight read-only operator tools (`get_capabilities`, `get_session`, `list_incidents`, `get_incident`, `query_events`, `diagnose_run`, `list_runs`, `search_history`), graceful `available: false` vs `error` degradation, and matching handbook/CONTEXT updates.
+- 2026-06-14: Phase 2 implemented ([IMP-ADR038-02](IMP-ADR038-02-gated-actions.md)) — `rollback_session` / `commit_session` shipped as dry-run-by-default gated actions that execute only on `confirm=true` and attempt best-effort audit events on confirmed calls. `trigger_run` remains deferred because there is no existing Python dispatch service to thin-adapt, it would require new GitHub `workflow_dispatch` code, and it carries the highest external side effect while the GitHub UI / TS Worker routes already cover the operator need.

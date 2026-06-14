@@ -7,8 +7,9 @@ from datetime import datetime, timezone
 from typing import Optional
 
 EVENT_TYPES: tuple[str, ...] = (
-    "RunStarted", "SessionCommitted", "SessionFailed",   # session (wired in Phase 1)
-    "MovieDiscovered", "MovieSelected",                   # movie  (Phase 2)
+    "RunStarted", "SessionCommitted", "SessionCommitFailed", "SessionFailed",
+    "SessionRolledBack", "SessionRollbackFailed",         # session
+    "MovieDiscovered", "MovieSelected",                    # movie  (Phase 2)
     "TorrentSelected", "TorrentQueued", "TorrentCompleted",  # torrent (Phase 2)
 )
 
