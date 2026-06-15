@@ -1,6 +1,6 @@
 # ADR-055：双后端契约单一真源（SQL 片段 + 常量 codegen）
 
-**状态 (Status):** Proposed —— 执行 ADR-018 被推迟的 D7（"eliminate"），并把范围扩到 mutation + 共享常量
+**状态 (Status):** Accepted —— Phase 1 已于 2026-06-15 交付；Phase 2/3 后续仍待推进
 **日期 (Date):** 2026-06-15
 **作者 (Author):** Ted
 **关联实现计划 (Related Implementation Plans):** [IMP-ADR055-01](IMP-ADR055-01-registry-generator-watchintent.md)（Phase 1 —— registry + 生成器 + CI + WatchIntent 迁移）
@@ -105,3 +105,5 @@
 ## 状态日志 (Status Log)
 
 - 2026-06-15：Proposed。由 ADR-054 WS1 的 gap B6 brainstorm 而来。已定决策:eliminate(而非 guard);范围 = 所有静态片段(mutation SQL + 静态 select + 常量),动态 builder 留 ADR-018;机制 = Python registry → 经 openapi/`api.gen.ts` 通道 codegen TS;两边 typed bind helper(不手写 bind 顺序)。Phase 1 → [IMP-ADR055-01](IMP-ADR055-01-registry-generator-watchintent.md)。
+- 2026-06-15：Phase 1 已交付（[IMP-ADR055-01](IMP-ADR055-01-registry-generator-watchintent.md)）—— registry + generator + freshness/conformance CI；WatchIntent upsert 已迁移（4 份 → 1 条 registry entry）；手写 CANONICAL parity tests 已移除。
+- 2026-06-15：Closeout 将 ADR 状态推进为 Accepted。Phase 1 已实现并完成本地验证；Phase 2/3 仍是活跃后续，因此 ADR 文件夹不归档。
