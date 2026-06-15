@@ -1,5 +1,7 @@
 # ADR-055 Phase 1 — Contract registry + generator + WatchIntent migration
 
+**Status:** Completed — implemented and verified on 2026-06-15. MAIN branch `adr-055-contract-single-source` delivered the Python registry, generator, committed artifact, freshness guard, Python WatchIntent migration, docs/status closeout, and ADR/CONTEXT vocabulary. WEB branch `adr-055-sql-contract` delivered the vendoring script, generated production module, WatchIntent consumer migration, behavioral conformance smoke, CI freshness check, and manual re-vendor workflow. Fresh closeout verification passed for the targeted MAIN pytest suite, WEB typecheck/server/unit suites, vendored artifact byte-parity (`VENDORED == MAIN`), static SQL/bind-order searches, and `git diff --check` on both reviewed ranges.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Stand up the Python contract registry + TS-codegen pipeline from [ADR-055](ADR-055-dual-backend-contract-single-source.md), then migrate the `WatchIntent` UPSERT (gap B6) end-to-end so the SQL + bind order exist in exactly one hand-authored place and the TS side is generated + CI-locked.
@@ -26,7 +28,7 @@
 - Create: `javdb/storage/contract/types.py`
 - Test: `tests/unit/test_contract_types.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/test_contract_types.py
@@ -59,12 +61,12 @@ def test_order_params_rejects_missing_and_extra():
         order_params(_F, a="aye", b="bee", c="nope")  # extra c
 ```
 
-- [ ] **Step 2: Run it — expect failure**
+- [x] **Step 2: Run it — expect failure**
 
 Run: `PYTHONPATH=/Users/tedwu/JAVDB_AutoSpider_CICD:javdb/rust_core/python /opt/anaconda3/bin/python3 -m pytest tests/unit/test_contract_types.py -q`
 Expected: FAIL — `ModuleNotFoundError: javdb.storage.contract`.
 
-- [ ] **Step 3: Implement `types.py`**
+- [x] **Step 3: Implement `types.py`**
 
 ```python
 # javdb/storage/contract/types.py
@@ -132,12 +134,12 @@ __all__ = ["Param", "SqlFragment", "normalize_sql", "order_params"]
 
 > `__init__.py` is self-contained here (types only). Task 2 extends it to also surface the `fragments` submodule, once `fragments.py` exists.
 
-- [ ] **Step 4: Run it — expect pass**
+- [x] **Step 4: Run it — expect pass**
 
 Run: `PYTHONPATH=/Users/tedwu/JAVDB_AutoSpider_CICD:javdb/rust_core/python /opt/anaconda3/bin/python3 -m pytest tests/unit/test_contract_types.py -q`
 Expected: PASS (3 passed).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add javdb/storage/contract/__init__.py javdb/storage/contract/types.py tests/unit/test_contract_types.py
@@ -152,7 +154,7 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD commit -m "feat(contract): ADR-055 reg
 - Create: `javdb/storage/contract/fragments.py`
 - Test: `tests/unit/test_contract_fragments.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # tests/unit/test_contract_fragments.py
@@ -187,12 +189,12 @@ def test_watch_intent_upsert_shape():
     assert "notes = COALESCE(excluded.notes, notes)" in norm
 ```
 
-- [ ] **Step 2: Run it — expect failure**
+- [x] **Step 2: Run it — expect failure**
 
 Run: `PYTHONPATH=/Users/tedwu/JAVDB_AutoSpider_CICD:javdb/rust_core/python /opt/anaconda3/bin/python3 -m pytest tests/unit/test_contract_fragments.py -q`
 Expected: FAIL — `ModuleNotFoundError`/`AttributeError`.
 
-- [ ] **Step 3: Implement `fragments.py` (SQL copied verbatim from the current `watchlist_repo.py`)**
+- [x] **Step 3: Implement `fragments.py` (SQL copied verbatim from the current `watchlist_repo.py`)**
 
 ```python
 # javdb/storage/contract/fragments.py
@@ -248,12 +250,12 @@ from javdb.storage.contract.types import (
 __all__ = ["Param", "SqlFragment", "normalize_sql", "order_params", "fragments"]
 ```
 
-- [ ] **Step 4: Run it — expect pass**
+- [x] **Step 4: Run it — expect pass**
 
 Run: `PYTHONPATH=/Users/tedwu/JAVDB_AutoSpider_CICD:javdb/rust_core/python /opt/anaconda3/bin/python3 -m pytest tests/unit/test_contract_fragments.py tests/unit/test_contract_types.py -q`
 Expected: PASS (7 passed total).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add javdb/storage/contract/__init__.py javdb/storage/contract/fragments.py tests/unit/test_contract_fragments.py
@@ -268,7 +270,7 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD commit -m "feat(contract): ADR-055 fra
 - Create: `apps/cli/ops/dump_sql_contract.py`
 - Test: `tests/unit/test_dump_sql_contract.py`
 
-- [ ] **Step 1: Write the failing test** (assert the rendered TS shape; no file I/O)
+- [x] **Step 1: Write the failing test** (assert the rendered TS shape; no file I/O)
 
 ```python
 # tests/unit/test_dump_sql_contract.py
@@ -292,12 +294,12 @@ def test_render_emits_const_and_typed_prepare_helper():
     assert "return db.prepare(WATCH_INTENT_UPSERT_SQL).bind(p.videoCode, p.href, p.status, p.notes);" in out
 ```
 
-- [ ] **Step 2: Run it — expect failure**
+- [x] **Step 2: Run it — expect failure**
 
 Run: `PYTHONPATH=/Users/tedwu/JAVDB_AutoSpider_CICD:javdb/rust_core/python /opt/anaconda3/bin/python3 -m pytest tests/unit/test_dump_sql_contract.py -q`
 Expected: FAIL — `ModuleNotFoundError`.
 
-- [ ] **Step 3: Implement the generator**
+- [x] **Step 3: Implement the generator**
 
 ```python
 # apps/cli/ops/dump_sql_contract.py
@@ -375,12 +377,12 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-- [ ] **Step 4: Run it — expect pass**
+- [x] **Step 4: Run it — expect pass**
 
 Run: `PYTHONPATH=/Users/tedwu/JAVDB_AutoSpider_CICD:javdb/rust_core/python /opt/anaconda3/bin/python3 -m pytest tests/unit/test_dump_sql_contract.py -q`
 Expected: PASS (2 passed).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add apps/cli/ops/dump_sql_contract.py tests/unit/test_dump_sql_contract.py
@@ -395,17 +397,17 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD commit -m "feat(contract): ADR-055 dum
 - Create (generated): `docs/api/contract/sql-contract.gen.ts`
 - Test: `tests/unit/test_sql_contract_freshness.py`
 
-- [ ] **Step 1: Generate the artifact**
+- [x] **Step 1: Generate the artifact**
 
 Run: `PYTHONPATH=/Users/tedwu/JAVDB_AutoSpider_CICD:javdb/rust_core/python /opt/anaconda3/bin/python3 -m apps.cli.ops.dump_sql_contract`
 Expected: `wrote …/docs/api/contract/sql-contract.gen.ts`.
 
-- [ ] **Step 2: Eyeball the artifact**
+- [x] **Step 2: Eyeball the artifact**
 
 Run: `cat /Users/tedwu/JAVDB_AutoSpider_CICD/docs/api/contract/sql-contract.gen.ts`
 Expected: header + `export const WATCH_INTENT_UPSERT_SQL = \`INSERT INTO WatchIntent …\`;` + `export function prepareWatchIntentUpsert(db, p) { return db.prepare(WATCH_INTENT_UPSERT_SQL).bind(p.videoCode, p.href, p.status, p.notes); }`.
 
-- [ ] **Step 3: Write the freshness test**
+- [x] **Step 3: Write the freshness test**
 
 ```python
 # tests/unit/test_sql_contract_freshness.py
@@ -423,12 +425,12 @@ def test_committed_artifact_is_fresh():
     )
 ```
 
-- [ ] **Step 4: Run it — expect pass**
+- [x] **Step 4: Run it — expect pass**
 
 Run: `PYTHONPATH=/Users/tedwu/JAVDB_AutoSpider_CICD:javdb/rust_core/python /opt/anaconda3/bin/python3 -m pytest tests/unit/test_sql_contract_freshness.py -q`
 Expected: PASS (1 passed).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add docs/api/contract/sql-contract.gen.ts tests/unit/test_sql_contract_freshness.py
@@ -444,7 +446,7 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD commit -m "feat(contract): ADR-055 emi
 - Delete: `tests/unit/test_watch_intent_upsert_parity.py`
 - Test: `tests/unit/test_watch_intent_upsert_behavior.py` (new behavioral smoke, ADR-055 D8)
 
-- [ ] **Step 1: Add a behavioral smoke test (column→value + notes-COALESCE)**
+- [x] **Step 1: Add a behavioral smoke test (column→value + notes-COALESCE)**
 
 ```python
 # tests/unit/test_watch_intent_upsert_behavior.py
@@ -491,12 +493,12 @@ def test_upsert_preserves_notes_when_omitted(repo):
     assert row["notes"] == "keep me"
 ```
 
-- [ ] **Step 2: Run it — expect pass against the CURRENT code** (proves the smoke is valid before refactor)
+- [x] **Step 2: Run it — expect pass against the CURRENT code** (proves the smoke is valid before refactor)
 
 Run: `PYTHONPATH=/Users/tedwu/JAVDB_AutoSpider_CICD:javdb/rust_core/python /opt/anaconda3/bin/python3 -m pytest tests/unit/test_watch_intent_upsert_behavior.py -q`
 Expected: PASS (2 passed).
 
-- [ ] **Step 3: Migrate `watchlist_repo.py` to the registry**
+- [x] **Step 3: Migrate `watchlist_repo.py` to the registry**
 
 Replace the top-of-file SQL constant block (lines 10-23, `# Byte-mirrored …` through the closing `"""`) with:
 
@@ -529,17 +531,17 @@ with:
             )
 ```
 
-- [ ] **Step 4: Delete the now-redundant parity test**
+- [x] **Step 4: Delete the now-redundant parity test**
 
 Run: `git -C /Users/tedwu/JAVDB_AutoSpider_CICD rm tests/unit/test_watch_intent_upsert_parity.py`
 Rationale: the registry is the single source; cross-repo sync is enforced by the freshness test (Task 4) + web CI (Task 8), not a hand-typed CANONICAL.
 
-- [ ] **Step 5: Run the watchlist Python suite — expect pass**
+- [x] **Step 5: Run the watchlist Python suite — expect pass**
 
 Run: `PYTHONPATH=/Users/tedwu/JAVDB_AutoSpider_CICD:javdb/rust_core/python /opt/anaconda3/bin/python3 -m pytest tests/unit/test_watchlist_repo.py tests/unit/test_watchlist_router.py tests/unit/test_watch_intent_upsert_behavior.py tests/unit/test_contract_fragments.py -p no:cacheprovider -q`
 Expected: PASS (all green; `test_watchlist_repo.py` 6, `test_watchlist_router.py` 4, behavior 2, fragments 4).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add javdb/storage/repos/watchlist_repo.py tests/unit/test_watch_intent_upsert_behavior.py
@@ -557,7 +559,7 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD commit -m "refactor(watchlist): source
 - Create: `scripts/fetch-sql-contract.mjs`
 - Modify: `package.json` (scripts)
 
-- [ ] **Step 1: Create the vendor script (mirrors `scripts/fetch-query-golden.mjs`)**
+- [x] **Step 1: Create the vendor script (mirrors `scripts/fetch-query-golden.mjs`)**
 
 ```javascript
 // JAVDB_AutoSpider_Web/scripts/fetch-sql-contract.mjs
@@ -627,7 +629,7 @@ main().catch((err) => {
 })
 ```
 
-- [ ] **Step 2: Add the npm script**
+- [x] **Step 2: Add the npm script**
 
 In `package.json` `"scripts"`, add next to `"gen:query-golden"`:
 
@@ -635,12 +637,12 @@ In `package.json` `"scripts"`, add next to `"gen:query-golden"`:
     "gen:sql-contract": "node scripts/fetch-sql-contract.mjs",
 ```
 
-- [ ] **Step 3: Vendor the artifact from the local main repo**
+- [x] **Step 3: Vendor the artifact from the local main repo**
 
 Run: `cd /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && SQL_CONTRACT_PATH=/Users/tedwu/JAVDB_AutoSpider_CICD/docs/api/contract/sql-contract.gen.ts npm run gen:sql-contract`
 Expected: `[fetch-sql-contract] wrote …/server/contract/sql-contract.gen.ts`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web add scripts/fetch-sql-contract.mjs package.json server/contract/sql-contract.gen.ts
@@ -656,7 +658,7 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web commit -m "feat(s
 - Delete: `server/__tests__/watch-intent-upsert-parity.test.ts`
 - Test: `server/__tests__/watch-intent-contract.test.ts` (new behavioral conformance)
 
-- [ ] **Step 1: Migrate `watchlist-service.ts` to import the generated module**
+- [x] **Step 1: Migrate `watchlist-service.ts` to import the generated module**
 
 Delete the hand-written const block (lines 13-25, `// Byte-mirrored …` through the closing `` `; ``). Add the import at the top of the file (below the leading `// Watch-intent …` comment, before `export interface WatchIntentRow`):
 
@@ -678,11 +680,11 @@ with:
 
 (The SQL string and bind order now live only in the generated module.)
 
-- [ ] **Step 2: Delete the redundant parity test**
+- [x] **Step 2: Delete the redundant parity test**
 
 Run: `git -C /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web rm server/__tests__/watch-intent-upsert-parity.test.ts`
 
-- [ ] **Step 3: Add a behavioral conformance test (models the `cloudflare:test` D1 harness in `watchlist-routes.test.ts`)**
+- [x] **Step 3: Add a behavioral conformance test (models the `cloudflare:test` D1 harness in `watchlist-routes.test.ts`)**
 
 ```typescript
 // JAVDB_AutoSpider_Web/server/__tests__/watch-intent-contract.test.ts
@@ -744,12 +746,12 @@ describe("ADR-055 generated WatchIntent upsert", () => {
 });
 ```
 
-- [ ] **Step 4: Type-check + run the server suite**
+- [x] **Step 4: Type-check + run the server suite**
 
 Run: `cd /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npm run typecheck && npm run test:server`
 Expected: typecheck clean; all server specs pass, including `watch-intent-contract.test.ts` (2) and the existing `watchlist-routes.test.ts`; the deleted parity spec no longer collected.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web add server/services/watchlist-service.ts server/__tests__/watch-intent-contract.test.ts
@@ -765,7 +767,7 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web commit -m "refact
 - Modify: `.github/workflows/ci.yml` (add a freshness step after the query-golden one)
 - Create: `.github/workflows/revendor-sql-contract.yml`
 
-- [ ] **Step 1: Add the freshness step to `ci.yml`**
+- [x] **Step 1: Add the freshness step to `ci.yml`**
 
 Immediately after the existing `- name: Refresh query Contract Golden from main repo` step, add:
 
@@ -787,7 +789,7 @@ Immediately after the existing `- name: Refresh query Contract Golden from main 
           fi
 ```
 
-- [ ] **Step 2: Create the re-vendor workflow (mirrors `revendor-query-golden.yml`)**
+- [x] **Step 2: Create the re-vendor workflow (mirrors `revendor-query-golden.yml`)**
 
 ```yaml
 # JAVDB_AutoSpider_Web/.github/workflows/revendor-sql-contract.yml
@@ -841,7 +843,7 @@ jobs:
             generated bind helpers still execute correctly. Merge once green.
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web add .github/workflows/ci.yml .github/workflows/revendor-sql-contract.yml
@@ -861,15 +863,15 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web commit -m "ci(ser
 - Modify: `docs/design/ADR-018-Dual-Backend-Query-Contract/ADR-018-dual-backend-query-contract.md` + `.zh.md` (Status Log back-ref to ADR-055 executing D7)
 - Modify: `CONTEXT.md` (add the three ADR-055 domain terms)
 
-- [ ] **Step 1: ADR-055 Status Log** — append to both `.md` and `.zh.md`:
+- [x] **Step 1: ADR-055 Status Log** — append to both `.md` and `.zh.md`:
   `2026-MM-DD: Phase 1 delivered (IMP-ADR055-01) — registry + generator + freshness/conformance CI; WatchIntent upsert migrated (4 copies → 1 registry entry); hand-CANONICAL parity tests removed.`
 
-- [ ] **Step 2: ADR-018 Status Log back-ref** — append to both `.md` and `.zh.md`:
+- [x] **Step 2: ADR-018 Status Log back-ref** — append to both `.md` and `.zh.md`:
   `2026-MM-DD: D7 ("eliminate") executed for the static surface by ADR-055 (extends, does not supersede this guard for dynamic builders).`
 
-- [ ] **Step 3: CONTEXT.md** — add `Contract registry`, `SQL fragment`, `Generated contract module` (copy the wording from ADR-055 "Domain Language").
+- [x] **Step 3: CONTEXT.md** — add `Contract registry`, `SQL fragment`, `Generated contract module` (copy the wording from ADR-055 "Domain Language").
 
-- [ ] **Step 4: Full cross-repo verification**
+- [x] **Step 4: Full cross-repo verification**
 
 Run (MAIN): `PYTHONPATH=/Users/tedwu/JAVDB_AutoSpider_CICD:javdb/rust_core/python /opt/anaconda3/bin/python3 -m pytest tests/unit/test_contract_types.py tests/unit/test_contract_fragments.py tests/unit/test_dump_sql_contract.py tests/unit/test_sql_contract_freshness.py tests/unit/test_watch_intent_upsert_behavior.py tests/unit/test_watchlist_repo.py tests/unit/test_watchlist_router.py -p no:cacheprovider -q`
 Expected: all green.
@@ -881,7 +883,7 @@ Run (freshness parity proof): re-vendor and confirm no diff —
 `cd /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && SQL_CONTRACT_PATH=/Users/tedwu/JAVDB_AutoSpider_CICD/docs/api/contract/sql-contract.gen.ts npm run gen:sql-contract && git -C /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web diff --quiet server/contract/sql-contract.gen.ts && echo "VENDORED == MAIN ✓"`
 Expected: `VENDORED == MAIN ✓`.
 
-- [ ] **Step 5: Commit docs**
+- [x] **Step 5: Commit docs**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add docs/design/ADR-055-Dual-Backend-Contract-Single-Source CONTEXT.md docs/design/ADR-018-Dual-Backend-Query-Contract
@@ -892,9 +894,17 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD commit -m "docs(adr-055): mark Phase 1
 
 ## Done-when (Phase 1 acceptance)
 
-- [ ] `javdb/storage/contract/` is the only hand-authored home of the WatchIntent upsert SQL + bind order.
-- [ ] `docs/api/contract/sql-contract.gen.ts` is generated, committed, and freshness-tested in MAIN.
-- [ ] The web Worker imports `prepareWatchIntentUpsert` from the vendored `server/contract/sql-contract.gen.ts`; no hand-written WatchIntent SQL remains in the web repo.
-- [ ] Both hand-CANONICAL parity tests are deleted; behavioral conformance smokes pass on both sides.
-- [ ] Web CI fails if the vendored module drifts from Python `main`.
-- [ ] All MAIN + WEB suites green; `VENDORED == MAIN ✓`.
+- [x] `javdb/storage/contract/` is the only hand-authored home of the WatchIntent upsert SQL + bind order.
+- [x] `docs/api/contract/sql-contract.gen.ts` is generated, committed, and freshness-tested in MAIN.
+- [x] The web Worker imports `prepareWatchIntentUpsert` from the vendored `server/contract/sql-contract.gen.ts`; no hand-written WatchIntent SQL remains in the web repo.
+- [x] Both hand-CANONICAL parity tests are deleted; behavioral conformance smokes pass on both sides.
+- [x] Web CI fails if the vendored module drifts from Python `main`.
+- [x] All MAIN + WEB suites green; `VENDORED == MAIN ✓`.
+
+## Completion Evidence
+
+- 2026-06-15 MAIN verification: `PYTHONPATH=/Users/tedwu/.codex/worktrees/e11b/JAVDB_AutoSpider_CICD:javdb/rust_core/python /opt/anaconda3/bin/python3 -m pytest tests/unit/test_contract_types.py tests/unit/test_contract_fragments.py tests/unit/test_dump_sql_contract.py tests/unit/test_sql_contract_freshness.py tests/unit/test_watch_intent_upsert_behavior.py tests/unit/test_watchlist_repo.py tests/unit/test_watchlist_router.py -p no:cacheprovider -q` — 24 passed.
+- 2026-06-15 WEB verification: `npm run typecheck && npm run typecheck:server && npm run test:server && npm run test:unit` — server 41 files / 384 tests passed; unit 39 files / 155 tests passed.
+- 2026-06-15 vendored freshness proof: `SQL_CONTRACT_PATH=/Users/tedwu/.codex/worktrees/e11b/JAVDB_AutoSpider_CICD/docs/api/contract/sql-contract.gen.ts npm run gen:sql-contract && git diff --quiet server/contract/sql-contract.gen.ts` — `VENDORED == MAIN`.
+- 2026-06-15 static guard checks: MAIN/Web searches show the remaining WatchIntent SQL string and bind helper only in the registry/generated artifacts/tests; the Web service imports `prepareWatchIntentUpsert`; both obsolete WatchIntent hand-CANONICAL parity tests are deleted.
+- 2026-06-15 diff hygiene: `git diff --check main..HEAD` passed in MAIN; `git -C /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web diff --check main..HEAD` passed in WEB.

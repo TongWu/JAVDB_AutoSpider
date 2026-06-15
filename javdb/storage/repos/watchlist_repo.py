@@ -5,22 +5,12 @@ from __future__ import annotations
 from typing import List, Optional, Tuple
 
 from javdb.storage import db as _db
+from javdb.storage.contract import fragments, order_params
 from javdb.storage.db import get_db
 
-# Byte-mirrored with server/services/watchlist-service.ts (ADR-017 dual-backend
-# parity). Pinned by tests/unit/test_watch_intent_upsert_parity.py.
-WATCH_INTENT_UPSERT_SQL = """
-    INSERT INTO WatchIntent (video_code, href, status, notes, status_at, updated_at)
-    VALUES (?, ?, ?, ?,
-        strftime('%Y-%m-%dT%H:%M:%fZ','now'),
-        strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-    ON CONFLICT(video_code) DO UPDATE SET
-        href       = excluded.href,
-        status     = excluded.status,
-        notes      = COALESCE(excluded.notes, notes),
-        status_at  = strftime('%Y-%m-%dT%H:%M:%fZ','now'),
-        updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
-"""
+# Single source of truth: the ADR-055 contract registry. Re-exported for any
+# back-compat importers; the SQL itself lives only in javdb/storage/contract.
+WATCH_INTENT_UPSERT_SQL = fragments.WATCH_INTENT_UPSERT.sql
 
 
 class WatchIntentRepo:
@@ -36,7 +26,16 @@ class WatchIntentRepo:
     ) -> dict:
         """UPSERT a watch intent. Returns the updated row as a dict."""
         with get_db(self._db_path) as conn:
-            conn.execute(WATCH_INTENT_UPSERT_SQL, (video_code, href, status, notes))
+            conn.execute(
+                fragments.WATCH_INTENT_UPSERT.sql,
+                order_params(
+                    fragments.WATCH_INTENT_UPSERT,
+                    video_code=video_code,
+                    href=href,
+                    status=status,
+                    notes=notes,
+                ),
+            )
             row = conn.execute(
                 "SELECT * FROM WatchIntent WHERE video_code = ?", (video_code,)
             ).fetchone()

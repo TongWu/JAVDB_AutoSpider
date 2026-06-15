@@ -1,6 +1,6 @@
 # ADR-055: Dual-Backend Contract Single-Source (SQL-fragment + constant codegen)
 
-**Status:** Proposed — executes ADR-018's deferred D7 ("eliminate") and widens scope to mutations + shared constants
+**Status:** Accepted — Phase 1 delivered 2026-06-15; Phase 2/3 follow-ups remain
 **Date:** 2026-06-15
 **Author:** Ted
 **Related Implementation Plans:** [IMP-ADR055-01](IMP-ADR055-01-registry-generator-watchintent.md) (Phase 1 — registry + generator + CI + WatchIntent migration)
@@ -105,3 +105,5 @@ Execute ADR-018's deferred D7 as a dedicated mechanism, **widened to all static 
 ## Status Log
 
 - 2026-06-15: Proposed. Brainstormed from ADR-054 WS1 gap B6. Decisions fixed: eliminate (not guard); scope = all static fragments (mutation SQL + static select + constants), dynamic builders stay under ADR-018; mechanism = Python registry → codegen TS via the openapi/`api.gen.ts` path; typed bind helpers both sides (no hand-written bind order). Phase 1 → [IMP-ADR055-01](IMP-ADR055-01-registry-generator-watchintent.md).
+- 2026-06-15: Phase 1 delivered ([IMP-ADR055-01](IMP-ADR055-01-registry-generator-watchintent.md)) — registry + generator + freshness/conformance CI; WatchIntent upsert migrated (4 copies → 1 registry entry); hand-CANONICAL parity tests removed.
+- 2026-06-15: Closeout advanced ADR status to Accepted. Phase 1 is implemented and locally verified; Phase 2/3 remain active follow-ups, so the ADR folder stays unarchived.
