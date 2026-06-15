@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
+from datetime import date
 
 from javdb.infra.logging import setup_logging
 from javdb.storage import db as _db
@@ -11,8 +13,11 @@ from javdb.storage.db import get_db
 from javdb.storage.repos.content_filter_repo import ContentFilterRepo
 
 
-DIMENSIONS = ("actor", "tag", "gender", "age")
-MODES = ("exclude", "include", "require_lead", "exclude_all_male", "min_age", "max_age")
+DIMENSIONS = ("actor", "tag", "gender", "age", "release_date")
+MODES = (
+    "exclude", "include", "require_lead", "exclude_all_male", "min_age", "max_age",
+    "regex_exclude", "regex_include", "before", "after",
+)
 VALID_RULE_MODES = {
     ("actor", "exclude"),
     ("tag", "exclude"),
@@ -21,6 +26,12 @@ VALID_RULE_MODES = {
     ("gender", "exclude_all_male"),
     ("age", "min_age"),
     ("age", "max_age"),
+    ("actor", "regex_exclude"),
+    ("actor", "regex_include"),
+    ("tag", "regex_exclude"),
+    ("tag", "regex_include"),
+    ("release_date", "before"),
+    ("release_date", "after"),
 }
 VALUE_REQUIRED = {
     ("actor", "exclude"),
@@ -29,8 +40,82 @@ VALUE_REQUIRED = {
     ("gender", "require_lead"),
     ("age", "min_age"),
     ("age", "max_age"),
+    ("actor", "regex_exclude"),
+    ("actor", "regex_include"),
+    ("tag", "regex_exclude"),
+    ("tag", "regex_include"),
+    ("release_date", "before"),
+    ("release_date", "after"),
 }
 GENDER_VALUES = ("female", "male")
+
+_MAX_REGEX_LEN = 200
+# Heuristic ReDoS guard: a quantified group whose body contains an unbounded
+# quantifier (the classic catastrophic-backtracking shape, e.g. (a+)+, (a*)*,
+# (.*)+). Not exhaustive, but rejects the common risky patterns at the write
+# boundary, where the ingestion engine's matcher has no execution timeout.
+# Shared by the CLI and the API router (mirrored in the TS Worker).
+_NESTED_QUANTIFIER_RE = re.compile(r"\([^()]*[*+][^()]*\)[*+]")
+
+
+def regex_write_risk(pattern: str) -> str | None:
+    """Return an error message if a regex ``pattern`` is too risky to store, else None."""
+    if len(pattern) > _MAX_REGEX_LEN:
+        return f"regex pattern too long (max {_MAX_REGEX_LEN} characters)"
+    if _NESTED_QUANTIFIER_RE.search(pattern):
+        return (
+            "regex pattern has nested quantifiers (catastrophic-backtracking risk); "
+            "rewrite it without a quantified group inside another quantifier"
+        )
+    return None
+
+
+def validate_rule_value(dimension: str, mode: str, value: str) -> str:
+    """Validate + normalize a content-filter rule value; raise ``ValueError(message)``
+    on bad input, return the normalized value otherwise.
+
+    Single Python source of truth shared by the CLI (``_validate_add``) and the API
+    router (``apps/api/routers/content_filter.py``) so the web CRUD enforces the
+    same gender/age/release_date/value-required/ReDoS rules the CLI does (the TS
+    Worker mirrors this — it cannot import Python — alongside the allow-list).
+
+    NOTE: regex *compile* validation is intentionally NOT done here — Python ``re``
+    and JS ``new RegExp`` dialects diverge (inline flags like ``(?i)`` throw in JS),
+    so a shared compile check is impossible cross-backend. The CLI compiles
+    separately; only the dialect-independent ReDoS heuristic above is shared.
+    """
+    value = (value or "").strip()
+    rule_key = (dimension, mode)
+    if rule_key in VALUE_REQUIRED and not value:
+        raise ValueError(f"{dimension} {mode} rules require a non-empty value")
+    if rule_key == ("gender", "require_lead"):
+        normalized = value.casefold()
+        if normalized not in GENDER_VALUES:
+            raise ValueError(
+                f"gender require_lead rules require a value of {GENDER_VALUES}"
+            )
+        return normalized
+    if rule_key == ("gender", "exclude_all_male"):
+        if value:
+            raise ValueError("gender exclude_all_male rules do not accept a value")
+        return ""
+    if dimension == "age":
+        if not value.isdigit():
+            raise ValueError("age rules require a non-negative integer value")
+        return str(int(value))
+    if dimension == "release_date":
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+            raise ValueError("release_date rules require an ISO date (YYYY-MM-DD)")
+        try:
+            return date.fromisoformat(value).isoformat()
+        except ValueError:
+            raise ValueError("release_date rules require an ISO date (YYYY-MM-DD)")
+    if mode in ("regex_exclude", "regex_include"):
+        risk = regex_write_risk(value)
+        if risk:
+            raise ValueError(risk)
+        return value
+    return value
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -75,31 +160,22 @@ def _print_rules(repo: ContentFilterRepo) -> None:
 
 def _validate_add(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
     rule_key = (args.dimension, args.mode)
-    value = (args.value or "").strip()
     if rule_key not in VALID_RULE_MODES:
         parser.error(
             f"{args.dimension} rules do not support mode {args.mode!r}"
         )
-    if rule_key in VALUE_REQUIRED and not value:
-        parser.error(f"{args.dimension} {args.mode} rules require --value")
-    if rule_key == ("gender", "require_lead"):
-        normalized = value.casefold()
-        if normalized not in GENDER_VALUES:
-            parser.error(
-                "gender require_lead rules require --value "
-                f"to be one of {GENDER_VALUES}"
-            )
-        args.value = normalized
-    elif rule_key == ("gender", "exclude_all_male"):
-        if value:
-            parser.error("gender exclude_all_male rules do not accept --value")
-        args.value = ""
-    elif args.dimension == "age":
-        if not value.isdigit():
-            parser.error("age rules require --value to be a non-negative integer")
-        args.value = str(int(value))
-    else:
-        args.value = value
+    try:
+        normalized = validate_rule_value(args.dimension, args.mode, args.value)
+    except ValueError as exc:
+        parser.error(str(exc))
+    # The CLI additionally compile-validates regex (Python-side only; the
+    # dual-backend web boundary cannot replicate the Python `re` dialect).
+    if args.mode in ("regex_exclude", "regex_include"):
+        try:
+            re.compile(normalized)
+        except re.error as exc:
+            parser.error(f"--value must be a valid regular expression: {exc}")
+    args.value = normalized
 
 
 def _rule_exists(repo: ContentFilterRepo, rule_id: int) -> bool:

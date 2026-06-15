@@ -19,6 +19,40 @@ Work the phases in order: **A (Python)** → **B (TS Worker)** → **C (allow-li
 
 ---
 
+## Execution reconciliation notes (2026-06-15, applied during WS4a)
+
+This IMP was authored against the **pre-IMP-03** allow-list (7 `(dimension, mode)` pairs).
+Because [IMP-ADR040-03](IMP-ADR040-03-content-filter-regex-date.md) shipped first and grew the
+canonical CLI tuples to **13 `VALID_RULE_MODES` / 12 `VALUE_REQUIRED`** pairs (adding the regex
+and release_date modes), the following were reconciled during execution. None re-litigate a
+locked decision; they keep the dual-backend surface coherent with the engine that already ships.
+
+1. **Allow-list golden = 13/12, not 7/6.** The Python router imports the CLI tuples (now 13/12),
+   so the parity golden (`test_content_filter_modes_parity.py`) and the TS `Set`s were set to the
+   same 13/12 — updating the golden to track the source of truth (the CLI), per WS4-D3, never the
+   reverse.
+2. **Web-boundary value validation = `release_date` only (strict ISO), NOT regex.** JS `new RegExp`
+   and Python `re` dialects diverge (inline flags like `(?i)…` are valid in Python but throw in JS),
+   so a shared regex compile-check is impossible cross-backend and would wrongly reject common
+   patterns on the Worker. Both backends validate `release_date` (strict `YYYY-MM-DD`); regex is
+   left to the engine's fail-open (ADR-040 "fail-open everywhere"). The CLI keeps its Python-only
+   regex check.
+3. **Settings page dropdowns extended** to all 13 rule types (added `release_date` + `regex_*` +
+   `before`/`after`) so the UI can author every rule the backend now accepts. The backend returns
+   422 for an illegal `(dimension, mode)` pair, surfaced as a save-error toast.
+4. **Overlay test lives at `tests/unit/content-filter-overlay.spec.ts`** (not the IMP's
+   `src/pages/data/__tests__/*.test.ts`): the repo's default `vitest.config.ts` only includes
+   `tests/unit/**/*.spec.ts`, so a co-located `src` test would never run. The matcher source stays
+   co-located at `src/pages/data/content-filter-overlay.ts`.
+5. **i18n is three-way (en/zh-CN/ja).** `tests/unit/i18n-parity.spec.ts` enforces parity across all
+   three locales (matching the ADR-054 campaign i18n scope); `ja.json` was added alongside en/zh.
+6. **api types + openapi were consumed from the MAIN worktree path**
+   (`.claude/worktrees/ws4a-content-filter/docs/api/openapi.json`), not the main checkout.
+7. **Router test uses a CSRF cookie/header fixture** (the app's CSRF middleware runs before DI),
+   mirroring `test_watchlist_router.py` — the IMP's bare auth override alone returns 403 on mutations.
+
+---
+
 ## Design decisions locked by ADR-054 D6/D7 + WS4-D2/D3/D6 (do not re-litigate)
 
 - **No new D1 table, no migration.** `ContentFilterRule(id, dimension, mode, value, enabled, created_at)` already exists in `REPORTS_DB` (ADR-040 Phase 1, `javdb/migrations/d1/2026_05_29_add_content_filter_rule.sql`; mirrored in `_REPORTS_DDL`). This IMP is pure dual-backend plumbing + UI on top of an existing table.
@@ -76,7 +110,7 @@ Work the phases in order: **A (Python)** → **B (TS Worker)** → **C (allow-li
 **Files:**
 - Create: `apps/api/schemas/content_filter.py`
 
-- [ ] **Step 1: Write the schemas**
+- [x] **Step 1: Write the schemas**
 
 Create `apps/api/schemas/content_filter.py` (the response mirrors the `Rule` dataclass shape that `ContentFilterRepo` returns — `id/dimension/mode/value/enabled`; the create payload leaves `(dimension, mode)` validation to the router so the error envelope can reference the canonical allow-list rather than a generic 422 enum):
 
@@ -123,7 +157,7 @@ class ContentFilterRuleListResponse(BaseModel):
 - Create: `apps/api/routers/content_filter.py`
 - Modify: `apps/api/services/runtime.py`
 
-- [ ] **Step 1: Write the router**
+- [x] **Step 1: Write the router**
 
 Create `apps/api/routers/content_filter.py`. It imports the **canonical allow-list tuples** (`VALID_RULE_MODES`, `VALUE_REQUIRED`) from the CLI, opens a **`REPORTS_DB`** connection exactly as the CLI does (`get_db(_db.REPORTS_DB_PATH)`), and delegates every operation to the existing `ContentFilterRepo`. `GET` requires auth; mutations require admin (`Depends(require_role("admin"))`). The list route uses path `""` so the full path is exactly `/api/content-filter`:
 
@@ -241,7 +275,7 @@ def remove_rule(rule_id: int, _admin=Depends(require_role("admin"))):
 
 > **Why `list_rules()` re-reads after a mutation:** `ContentFilterRepo` exposes no `get_rule(id)` and `add_rule` returns only the new id, so the router re-reads the (small, operator-authored) rule set to build the response. This keeps the repo untouched (no new methods) per the locked decision. `list_rules()` returns every rule (enabled and disabled), unlike `load_rules()` which returns only enabled rows.
 
-- [ ] **Step 2: Register the router**
+- [x] **Step 2: Register the router**
 
 In `apps/api/services/runtime.py`: add the import alongside the other `*_router` imports (next to `from apps.api.routers.watchlist import router as watchlist_router` on line 57):
 
@@ -251,7 +285,7 @@ from apps.api.routers.content_filter import router as content_filter_router
 
 Then add `content_filter_router,` into the `for router in (...)` tuple (after `watchlist_router,`).
 
-- [ ] **Step 3: Write the router smoke test**
+- [x] **Step 3: Write the router smoke test**
 
 Create `tests/unit/test_content_filter_router.py` (seeds the real `ContentFilterRule` DDL from the production migration into a temp file, monkeypatches `REPORTS_DB_PATH`, and overrides BOTH auth seams — `_require_auth` for GET and `require_role` is satisfied by giving the override user `role == admin`):
 
@@ -337,12 +371,12 @@ def test_toggle_missing_rule_404(client):
     assert client.put("/api/content-filter/999", json={"enabled": True}).status_code == 404
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `python3 -m pytest tests/unit/test_content_filter_router.py -q`
 Expected: PASS (4 passed). If `_require_auth` import path or `require_role` differs, re-check `apps/api/infra/auth.py:323-339`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add apps/api/schemas/content_filter.py apps/api/routers/content_filter.py apps/api/services/runtime.py tests/unit/test_content_filter_router.py
@@ -356,7 +390,7 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD commit -m "feat(api): add /api/content
 **Files:**
 - Modify: `apps/api/routers/capabilities.py`, `apps/api/schemas/capabilities_payloads.py`
 
-- [ ] **Step 1: Add the field to the `Features` schema**
+- [x] **Step 1: Add the field to the `Features` schema**
 
 In `apps/api/schemas/capabilities_payloads.py`, add `content_filter: bool` to `class Features(BaseModel)` immediately after `watch_intent: bool` (line 23):
 
@@ -366,7 +400,7 @@ In `apps/api/schemas/capabilities_payloads.py`, add `content_filter: bool` to `c
     site_drift_sentinel: bool
 ```
 
-- [ ] **Step 2: Add the probe + wire it**
+- [x] **Step 2: Add the probe + wire it**
 
 In `apps/api/routers/capabilities.py`, add this probe after `_watch_intent_enabled()` (line 83). **Critical: probes `REPORTS_DB`, where `ContentFilterRule` lives — NOT `HISTORY_DB` (where `WatchIntent` lives) and NOT `OPERATIONS_DB`):**
 
@@ -386,12 +420,12 @@ def _content_filter_enabled() -> bool:
 
 Then in `build_capabilities()`, add `content_filter=_content_filter_enabled(),` to the `Features(...)` call, immediately after `watch_intent=_watch_intent_enabled(),` (line 122).
 
-- [ ] **Step 3: Verify capabilities builds and exposes the flag**
+- [x] **Step 3: Verify capabilities builds and exposes the flag**
 
 Run: `python3 -c "from apps.api.routers.capabilities import build_capabilities; print(build_capabilities().features.content_filter)"`
 Expected: prints `True` or `False` depending on whether `reports.db` exists on this path — either proves the field exists and the probe degrades gracefully. (On a fresh checkout with no `reports/reports.db`, it prints `False`.)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add apps/api/routers/capabilities.py apps/api/schemas/capabilities_payloads.py
@@ -405,17 +439,17 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD commit -m "feat(api): expose content_f
 **Files:**
 - Modify: `docs/api/openapi.json`
 
-- [ ] **Step 1: Dump the OpenAPI schema**
+- [x] **Step 1: Dump the OpenAPI schema**
 
 Run: `cd /Users/tedwu/JAVDB_AutoSpider_CICD && python3 -m apps.cli.ops.dump_openapi`
 Expected: `wrote /Users/tedwu/JAVDB_AutoSpider_CICD/docs/api/openapi.json (<N> bytes)`
 
-- [ ] **Step 2: Verify the new surface is in the contract**
+- [x] **Step 2: Verify the new surface is in the contract**
 
 Run: `python3 -c "import json; d=json.load(open('docs/api/openapi.json')); print('/api/content-filter' in d['paths']); print('content_filter' in d['components']['schemas']['Features']['properties'])"`
 Expected: prints `True` then `True`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add docs/api/openapi.json
@@ -431,7 +465,7 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD commit -m "chore(api): re-vendor opena
 **Files:**
 - Create: `server/services/content-filter-service.ts`
 
-- [ ] **Step 1: Write the service**
+- [x] **Step 1: Write the service**
 
 Create `server/services/content-filter-service.ts` (mirrors `preference-service.ts`: `D1Database` is an ambient global — do not import it; functions take `db` not `env`). **Every call site passes `env.REPORTS_DB` — this module's SQL must run against the reports DB, mirroring the Python `ContentFilterRepo` which opens `REPORTS_DB_PATH`:**
 
@@ -500,7 +534,7 @@ export async function removeRule(db: D1Database, id: number): Promise<boolean> {
 }
 ```
 
-- [ ] **Step 2: Verify it type-checks**
+- [x] **Step 2: Verify it type-checks**
 
 Run: `npx tsc -p server/tsconfig.json --noEmit`
 Expected: no errors referencing `content-filter-service.ts`. (Commit together with Task 6.)
@@ -513,7 +547,7 @@ Expected: no errors referencing `content-filter-service.ts`. (Commit together wi
 - Create: `server/routes/content-filter.ts`, `server/__tests__/content-filter-routes.test.ts`
 - Modify: `server/app.ts`
 
-- [ ] **Step 1: Write the failing route test**
+- [x] **Step 1: Write the failing route test**
 
 Create `server/__tests__/content-filter-routes.test.ts` (self-seeds the table into **`env.REPORTS_DB`** like `preferences-routes.test.ts` self-seeds; mutations require both the CSRF `mutationHeaders` and an admin token — the seeded `admin` login user has `role == admin`):
 
@@ -636,12 +670,12 @@ describe("Content-filter routes", () => {
 
 > If the test runner's seeded login user is not `admin` (check `server/services/users.ts` / the test seed), give the mutation routes a non-admin path test that asserts 403 instead, and adjust which fixture user has admin. The WS1 watchlist test logged in as `admin` and exercised mutations successfully, so the same seed applies here.
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npx vitest run server/__tests__/content-filter-routes.test.ts --config vitest.server.config.ts`
 Expected: FAIL (route 404s / `contentFilterRoutes` not mounted).
 
-- [ ] **Step 3: Write the route**
+- [x] **Step 3: Write the route**
 
 Create `server/routes/content-filter.ts`. The allow-list is **hand-mirrored from `apps/cli/ops/content_filter.py:16-32`** and pinned by the parity test in Task 7. `GET` is auth-only; mutations use `requireRole("admin")`. All DB calls pass `c.env.REPORTS_DB`:
 
@@ -750,7 +784,7 @@ contentFilterRoutes.delete("/:ruleId", requireRole("admin"), async (c) => {
 });
 ```
 
-- [ ] **Step 4: Mount the route**
+- [x] **Step 4: Mount the route**
 
 In `server/app.ts`: add the import in the route-imports block (near `import { preferencesRoutes } from "./routes/preferences";` on line 23):
 
@@ -764,12 +798,12 @@ Then add the mount immediately after the `app.route("/api/preferences", preferen
 app.route("/api/content-filter", contentFilterRoutes);
 ```
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [x] **Step 5: Run the test to verify it passes**
 
 Run: `npx vitest run server/__tests__/content-filter-routes.test.ts --config vitest.server.config.ts`
 Expected: PASS (2 passed)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add server/services/content-filter-service.ts server/routes/content-filter.ts server/__tests__/content-filter-routes.test.ts server/app.ts
@@ -783,7 +817,7 @@ git commit -m "feat(server): add /api/content-filter worker route (ADR-040 WS4a)
 **Files:**
 - Modify: `server/routes/capabilities.ts`
 
-- [ ] **Step 1: Add the probe**
+- [x] **Step 1: Add the probe**
 
 In `server/routes/capabilities.ts`, after `libraryConsumptionEnabled()` (line 41), add. **Critical: probes `env.REPORTS_DB` — NOT `OPERATIONS_DB` (the three closed-loop probes) and NOT `HISTORY_DB` (where `watch_intent` will probe in the WS1 merge):**
 
@@ -800,7 +834,7 @@ async function contentFilterEnabled(env: Env): Promise<boolean> {
 }
 ```
 
-- [ ] **Step 2: Wire it into the handler**
+- [x] **Step 2: Wire it into the handler**
 
 In the `capabilitiesRoutes.get("/", ...)` handler, after `const library_consumption = await libraryConsumptionEnabled(env);` (line 47) add:
 
@@ -810,13 +844,13 @@ In the `capabilitiesRoutes.get("/", ...)` handler, after `const library_consumpt
 
 Then add `content_filter,` into the `features:` object, immediately after `library_consumption,` (line 67). If the WS1 `watch_intent` key is also present in this file at merge time, place `content_filter` after it for ordering parity with the Python `Features` schema.
 
-- [ ] **Step 3: Verify type-check + capabilities test still passes**
+- [x] **Step 3: Verify type-check + capabilities test still passes**
 
 Run: `npx tsc -p server/tsconfig.json --noEmit`
 Then: `npx vitest run server/__tests__ --config vitest.server.config.ts -t capabilit`
 Expected: type-check clean; capabilities test(s) pass (the `content_filter` key is now present in the response).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add server/routes/capabilities.ts
@@ -835,7 +869,7 @@ The CRUD SQL differs in shape between backends (the repo uses Python DB-API, the
 - Create: `tests/unit/test_content_filter_modes_parity.py` [MAIN]
 - Create: `server/__tests__/content-filter-modes-parity.test.ts` [WEB]
 
-- [ ] **Step 1: Python parity test**
+- [x] **Step 1: Python parity test**
 
 Create `tests/unit/test_content_filter_modes_parity.py`. It asserts the imported-by-the-router CLI tuples equal a frozen canonical set, AND that the router imports the same tuples object (so the router can never diverge from the CLI):
 
@@ -886,7 +920,7 @@ def test_router_imports_the_canonical_cli_tuples():
 Run: `python3 -m pytest tests/unit/test_content_filter_modes_parity.py -q`
 Expected: PASS. (If `test_router_imports_the_canonical_cli_tuples` fails, the router redefined the tuples instead of importing them — fix the router import in Task 2, not the test.)
 
-- [ ] **Step 2: TS parity test (identical CANONICAL set)**
+- [x] **Step 2: TS parity test (identical CANONICAL set)**
 
 Create `server/__tests__/content-filter-modes-parity.test.ts`:
 
@@ -928,7 +962,7 @@ describe("Content-filter allow-list parity", () => {
 Run: `npx vitest run server/__tests__/content-filter-modes-parity.test.ts --config vitest.server.config.ts`
 Expected: PASS.
 
-- [ ] **Step 3: Commit (both repos)**
+- [x] **Step 3: Commit (both repos)**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add tests/unit/test_content_filter_modes_parity.py
@@ -946,17 +980,17 @@ git commit -m "test(server): pin content-filter allow-list parity (ADR-040 WS4a)
 **Files:**
 - Modify: `src/types/api.gen.ts`
 
-- [ ] **Step 1: Regenerate from the local openapi.json produced in Task 4**
+- [x] **Step 1: Regenerate from the local openapi.json produced in Task 4**
 
 Run: `OPENAPI_PATH=/Users/tedwu/JAVDB_AutoSpider_CICD/docs/api/openapi.json node scripts/fetch-openapi.mjs`
 Expected: regenerates `src/types/api.gen.ts`.
 
-- [ ] **Step 2: Verify `Features.content_filter` is now typed**
+- [x] **Step 2: Verify `Features.content_filter` is now typed**
 
 Run: `grep -n "content_filter" src/types/api.gen.ts`
 Expected: matches the new `content_filter: boolean;` line under the `Features` schema.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/types/api.gen.ts
@@ -972,7 +1006,7 @@ git commit -m "chore(web): re-vendor api types for content_filter (ADR-040 WS4a)
 **Files:**
 - Create: `src/api/content-filter.ts`
 
-- [ ] **Step 1: Write the client**
+- [x] **Step 1: Write the client**
 
 Create `src/api/content-filter.ts` (hand-typed, mirroring `src/api/watchlist.ts`: shared `http` wrapper):
 
@@ -1022,7 +1056,7 @@ export async function deleteContentFilterRule(id: number): Promise<void> {
 }
 ```
 
-- [ ] **Step 2: Type-check**
+- [x] **Step 2: Type-check**
 
 Run: `npx vue-tsc --noEmit -p tsconfig.app.json`
 Expected: no errors referencing `content-filter.ts`. (Commit with Task 13.)
@@ -1037,7 +1071,7 @@ Expected: no errors referencing `content-filter.ts`. (Commit with Task 13.)
 
 > The read-side overlay must decide, client-side, whether a `MovieSearchItem` would be excluded by an enabled rule. To keep `MoviesPage.vue` thin and to unit-test the matching logic, extract a pure function. It deliberately covers only the dimensions the Movies grid carries data for (`actor`/`gender` via `actor_name`/`actor_gender`/`supporting_actors`); `tag`/`age`/regex/date dimensions are NOT matchable from the search row, so those rules never dim a row (fail-open — the overlay is a hint, the authoritative filter still runs at ingestion).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `src/pages/data/__tests__/content-filter-overlay.test.ts`:
 
@@ -1081,12 +1115,12 @@ describe('isDimmedByRules', () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npx vitest run src/pages/data/__tests__/content-filter-overlay.test.ts`
 Expected: FAIL (`isDimmedByRules` not found).
 
-- [ ] **Step 3: Implement the matcher**
+- [x] **Step 3: Implement the matcher**
 
 Create `src/pages/data/content-filter-overlay.ts` (mirrors the engine's `_matches_link` casefold-equality semantics; deliberately scoped to the row's available fields):
 
@@ -1123,7 +1157,7 @@ export function isDimmedByRules(row: OverlayMovieRow, rules: ContentFilterRule[]
 }
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `npx vitest run src/pages/data/__tests__/content-filter-overlay.test.ts`
 Expected: PASS (6 passed). (Commit with Task 13.)
@@ -1136,7 +1170,7 @@ Expected: PASS (6 passed). (Commit with Task 13.)
 - Create: `src/pages/settings/SettingsFilterRulesPage.vue`
 - Modify: `src/router/routes.ts`, `src/components/settings/SettingsLayout.vue`
 
-- [ ] **Step 1: Write the CRUD page**
+- [x] **Step 1: Write the CRUD page**
 
 Create `src/pages/settings/SettingsFilterRulesPage.vue` (mirrors the settings-page idiom: `NSpin` + error `NAlert` + `NDataTable`; gated by `content_filter`; mutation controls disabled for non-admins via the auth store). The "add rule" form uses `NSelect` for dimension/mode + `NInput` for value:
 
@@ -1336,7 +1370,7 @@ watch(
 
 > Confirm the auth store exposes `role` (it is referenced by `src/router/routes.ts` via `Role` from `@/stores/auth`). If the accessor differs (e.g. `auth.user?.role`), adjust `isAdmin`. Mutation controls are disabled (not hidden) for non-admins so a readonly operator still sees the rule set the overlay uses.
 
-- [ ] **Step 2: Add the child route**
+- [x] **Step 2: Add the child route**
 
 In `src/router/routes.ts`, inside the `/settings` route's `children` array, add after the `appearance` child (line 104):
 
@@ -1348,7 +1382,7 @@ In `src/router/routes.ts`, inside the `/settings` route's `children` array, add 
       },
 ```
 
-- [ ] **Step 3: Add the gated settings tab**
+- [x] **Step 3: Add the gated settings tab**
 
 In `src/components/settings/SettingsLayout.vue`:
 
@@ -1385,7 +1419,7 @@ Update `active`/`onTab` to read `TABS.value` instead of `TABS`, and add an `NTab
 
 > `import { computed } from 'vue'` is already present in this file. The `TABS[number]['key']` type alias becomes `(typeof TABS.value)[number]['key']` — or just type `active` as `computed<string>`.
 
-- [ ] **Step 4: Type-check**
+- [x] **Step 4: Type-check**
 
 Run: `npx vue-tsc --noEmit -p tsconfig.app.json`
 Expected: no errors. (Commit with Task 13.)
@@ -1397,7 +1431,7 @@ Expected: no errors. (Commit with Task 13.)
 **Files:**
 - Modify: `src/pages/data/MoviesPage.vue`
 
-- [ ] **Step 1: Add imports + state + rule load**
+- [x] **Step 1: Add imports + state + rule load**
 
 In `src/pages/data/MoviesPage.vue` `<script setup>`:
 
@@ -1438,7 +1472,7 @@ watch(
 )
 ```
 
-- [ ] **Step 2: Dim matched rows via `rowProps`**
+- [x] **Step 2: Dim matched rows via `rowProps`**
 
 Extend the existing `rowProps` function (line 117) to add a dimmed style when an enabled rule matches the row. Keep the existing batch-focus style and append:
 
@@ -1459,12 +1493,12 @@ function rowProps(row: MovieSearchItem, index: number) {
 
 > The first param was `_row` (unused); rename to `row` since it is now read. Verify the `<NDataTable>` binds `:row-props="rowProps"` (it does — the function already exists for batch focus). The overlay is purely visual; it never removes rows or changes the query.
 
-- [ ] **Step 3: Type-check**
+- [x] **Step 3: Type-check**
 
 Run: `npx vue-tsc --noEmit -p tsconfig.app.json`
 Expected: no errors. (`MovieSearchItem` carries `actor_name`, `actor_gender`, `supporting_actors` — the fields `isDimmedByRules` reads.)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/api/content-filter.ts src/pages/data/content-filter-overlay.ts src/pages/data/__tests__/content-filter-overlay.test.ts src/pages/settings/SettingsFilterRulesPage.vue src/router/routes.ts src/components/settings/SettingsLayout.vue src/pages/data/MoviesPage.vue
@@ -1478,7 +1512,7 @@ git commit -m "feat(web): content-filter CRUD page + read-side Movies overlay (A
 **Files:**
 - Modify: `src/i18n/locales/en.json`, `src/i18n/locales/zh-CN.json`
 
-- [ ] **Step 1: Add the English strings**
+- [x] **Step 1: Add the English strings**
 
 In `src/i18n/locales/en.json`:
 
@@ -1509,7 +1543,7 @@ In `src/i18n/locales/en.json`:
 
 4. Ensure `common.delete` exists (it is used by the page). If absent, add `"delete": "Delete"` to `common`.
 
-- [ ] **Step 2: Add the matching Chinese strings**
+- [x] **Step 2: Add the matching Chinese strings**
 
 In `src/i18n/locales/zh-CN.json`, add the **same key paths** with translated values:
 
@@ -1542,7 +1576,7 @@ In `src/i18n/locales/zh-CN.json`, add the **same key paths** with translated val
 
 > Code-block values like `actor`/`tag`/`gender`/`age` in the `NSelect` option labels are NOT translated (they are the literal allow-list tokens the backend expects) — they are hard-coded in the component, not i18n keys, so no translation drift. Only the surrounding UI chrome is translated.
 
-- [ ] **Step 3: Verify en/zh key parity**
+- [x] **Step 3: Verify en/zh key parity**
 
 Run:
 ```bash
@@ -1557,7 +1591,7 @@ console.log('missing in zh:', missZ); console.log('missing in en:', missE);
 ```
 Expected: both arrays empty.
 
-- [ ] **Step 4: Final frontend type-check + targeted tests**
+- [x] **Step 4: Final frontend type-check + targeted tests**
 
 Run:
 ```bash
@@ -1566,7 +1600,7 @@ npx vitest run src/pages/data/__tests__/content-filter-overlay.test.ts
 ```
 Expected: type-check clean; overlay tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/i18n/locales/en.json src/i18n/locales/zh-CN.json
@@ -1582,18 +1616,18 @@ git commit -m "i18n(web): content-filter rules strings en/zh (ADR-040 WS4a)"
 **Files:**
 - Modify: `docs/design/ADR-040-Content-Filter-Rules/ADR-040-*.md` and the paired `ADR-040-*.zh.md`
 
-- [ ] **Step 1: Locate the ADR files**
+- [x] **Step 1: Locate the ADR files**
 
 Run: `ls docs/design/ADR-040-Content-Filter-Rules/`
 Identify the `ADR-040-<topic>.md` and `ADR-040-<topic>.zh.md` pair (the decision record), and confirm the roadmap/Status-Log section names.
 
-- [ ] **Step 2: Append the Status Log entry (both languages)**
+- [x] **Step 2: Append the Status Log entry (both languages)**
 
 Add a Status Log row/entry recording that **Phase 4 (web CRUD) shipped** — dual-backend `/api/content-filter` over the existing `ContentFilterRule` table in REPORTS_DB, a `content_filter` capability flag, a Settings CRUD page, and a read-side Movies overlay; no schema migration (reused the Phase-1 table). Reference this IMP (`IMP-ADR040-04-content-filter-web-crud.md`) by filename only (same-folder link convention). Mark the roadmap's "Phase 4 — Web/MCP" item's web-CRUD portion as **done** (MCP remains future). Update both the `.md` and the `.zh.md` in the same commit (translation drift is a defect).
 
 > Per the WS4a stale-comment finding, also confirm the engine-side IMP (IMP-ADR040-03) backfilled the stale `age`/`min_age`/`max_age` (and regex/date) comments in `javdb/migrations/d1/2026_05_29_add_content_filter_rule.sql:7-10` and `javdb/storage/db/_db_migrations.py:236-238`. If IMP-ADR040-03 has not landed yet, do NOT touch those comments here — they belong to the engine IMP; just note the dependency in the Status Log.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add docs/design/ADR-040-Content-Filter-Rules/
@@ -1606,7 +1640,7 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD commit -m "docs(adr-040): record Phase
 
 Run all of the following and confirm green before declaring done.
 
-- [ ] **[MAIN] Python tests**
+- [x] **[MAIN] Python tests**
 
 ```bash
 cd /Users/tedwu/JAVDB_AutoSpider_CICD
@@ -1614,7 +1648,7 @@ python3 -m pytest tests/unit/test_content_filter_router.py tests/unit/test_conte
 ```
 Expected: all pass.
 
-- [ ] **[MAIN] capability + contract spot-check**
+- [x] **[MAIN] capability + contract spot-check**
 
 ```bash
 python3 -c "from apps.api.routers.capabilities import build_capabilities as b; print('content_filter' in b().features.model_dump())"
@@ -1622,7 +1656,7 @@ python3 -c "import json; d=json.load(open('docs/api/openapi.json')); print('/api
 ```
 Expected: `True`, `True`.
 
-- [ ] **[WEB] Worker + frontend tests + type-check**
+- [x] **[WEB] Worker + frontend tests + type-check**
 
 ```bash
 # from the [WEB] cwd
@@ -1633,15 +1667,15 @@ npx vue-tsc --noEmit -p tsconfig.app.json
 ```
 Expected: all pass; both type-checks clean.
 
-- [ ] **[WEB] i18n parity** — re-run the Task 14 Step 3 parity script; both arrays empty.
+- [x] **[WEB] i18n parity** — re-run the Task 14 Step 3 parity script; both arrays empty.
 
-- [ ] **Manual smoke** (optional, requires both backends + a seeded `ContentFilterRule` table in REPORTS_DB):
+- [ ] **Manual smoke** (optional, requires both backends + a seeded `ContentFilterRule` table in REPORTS_DB): _Left unchecked: deferred (needs a live both-backends deployment + seeded REPORTS_DB, out of scope for the isolated worktrees). The automated router/route/overlay/i18n suites pin the same behavior deterministically._
   1. Log in as `admin` → Settings shows a **Filter Rules** tab (absent if `content_filter` is false).
   2. Add a rule `dimension=actor mode=exclude value="<an actor on your Movies list>"`.
   3. Open Data → Movies → rows by that actor render dimmed/struck-through (the read-side overlay), while the data is unchanged.
   4. Log in as a readonly user → the tab still appears but Add/Delete/Toggle controls are disabled; the overlay still dims.
 
-- [ ] **REPORTS_DB audit (the load-bearing check):** grep every file this IMP touched for the DB binding and confirm NONE accidentally use `HISTORY_DB`/`HISTORY_DB_PATH`/`OPERATIONS_DB`:
+- [x] **REPORTS_DB audit (the load-bearing check):** grep every file this IMP touched for the DB binding and confirm NONE accidentally use `HISTORY_DB`/`HISTORY_DB_PATH`/`OPERATIONS_DB`:
 
 ```bash
 # [MAIN]

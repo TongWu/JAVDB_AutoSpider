@@ -83,6 +83,19 @@ def _watch_intent_enabled() -> bool:
         return False
 
 
+def _content_filter_enabled() -> bool:
+    """True when the ADR-040 ContentFilterRule table is queryable in REPORTS_DB
+    (capability honesty). NOTE: REPORTS_DB, not HISTORY_DB — distinct from
+    watch_intent above."""
+    try:
+        from javdb.storage.db import REPORTS_DB_PATH, get_db
+        with get_db(REPORTS_DB_PATH) as conn:
+            conn.execute("SELECT 1 FROM ContentFilterRule LIMIT 1").fetchone()
+        return True
+    except Exception:
+        return False
+
+
 def _magnet_aggregation_enabled() -> bool:
     """True when at least one indexer source is configured (ADR-054 WS3, capability honesty).
 
@@ -145,6 +158,7 @@ def build_capabilities() -> CapabilitiesResponse:
             library_ownership=_library_ownership_enabled(),
             library_consumption=_library_consumption_enabled(),
             watch_intent=_watch_intent_enabled(),
+            content_filter=_content_filter_enabled(),
             magnet_aggregation=_magnet_aggregation_enabled(),
             subscriptions=_subscriptions_enabled(),
             # ADR-035: site-contract drift sentinel ships with the system; the

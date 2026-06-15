@@ -69,12 +69,19 @@ CREATE TABLE ContentFilterRule (
 | 阶段 | IMP | 交付内容 |
 | --- | --- | --- |
 | Phase 1 — 排除 + 属性 | IMP-ADR040-01 (done) | 演员/标签/性别规则 |
-| Phase 2 — 年龄过滤 | IMP-ADR040-02 (this plan) | `age` 维度；外部来源拓展（minnano-av；xslist 推迟）；`ActorMetadata` 缓存 |
+| Phase 2 — 年龄过滤 | IMP-ADR040-02 (done) | `age` 维度；外部来源拓展（minnano-av；xslist 推迟）；`ActorMetadata` 缓存 |
+| Phase 2b — 正则 + 上映日期 | IMP-ADR040-03 (done) | `regex_exclude`/`regex_include`（actor/tag）；`release_date` 的 `before`/`after`；无 schema 迁移（复用通用三元组） |
 | Phase 3 — 订阅 | 已由 [ADR-054 WS2](../ADR-054-User-Intent-Discovery-Layer/IMP-ADR054-02-subscriptions.md) supersede | 统一的演员订阅 + 新作 feed；评分阈值绕过通过复用 AdHoc 抓取路径实现（无 ADR-040 旁路代码），由 `tests/unit/test_adhoc_bypasses_rating_gate.py` 锁定 |
-| Phase 4 — Web/MCP 规则管理 | IMP-ADR040-04 (stub) | 规则的 REST CRUD（web 现可构建；MCP 阻塞于 ADR-038） |
+| Phase 4 — Web/MCP 规则管理 | IMP-ADR040-04 (web CRUD 已完成；MCP 待定) | 双后端 `/api/content-filter` REST CRUD + `content_filter` 标志 + 设置页 + 只读 Movies 叠加层；MCP 仍阻塞于 ADR-038 |
 | Phase 5 — 组合（可选） | IMP-ADR040-05 (stub) | 与 ADR-025 偏好分组合 |
 
 Phase 1 附加且向后兼容（无规则 → 无变化）。Phase 2 拓宽属性覆盖。原 Phase 3 不再是 ADR-040 阶段；它由 ADR-054 WS2 归口，使 "Subscription" 只有一个领域含义。
+
+> **IMP 编号说明（WS4a，2026-06-15）：** ADR-054 用户意图行动复用了
+> IMP-ADR040-03 / -04 编号——**IMP-ADR040-03 现为正则/上映日期引擎**（上面的
+> Phase 2b），**IMP-ADR040-04 为 web CRUD 界面**（Phase 4）。曾以 IMP-ADR040-03
+> 草拟的旧"订阅"设想已**迁移至 ADR-054 WS2**（上面的 Phase 3 行已记录该 supersede）；
+> Phase 5 上的 `(stub)` 标签早于此变更，由其新负责人协调。
 
 ### 明确的非目标 (YAGNI)
 
@@ -86,7 +93,13 @@ Phase 1 附加且向后兼容（无规则 → 无变化）。Phase 2 拓宽属�
 
 ## 领域语言 (CONTEXT.md 待补充项)
 
-- **Content filter rule（内容过滤规则）**——`ContentFilterRule` 中一行:一个维度（actor/tag/gender）、一个 mode（exclude/include/…）、一个 value。
+- **Content filter rule（内容过滤规则）**——`ContentFilterRule` 中一行:一个维度
+  （actor/tag/gender/age/release_date）、一个 mode（exclude/include/regex_exclude/
+  regex_include/require_lead/exclude_all_male/min_age/max_age/before/after）、一个 value。
+- **Regex rule（正则规则）**——value 为 Python `re.search` 模式的 `regex_exclude`/
+  `regex_include` 规则；坏模式 fail-open（不丢弃、不抛错）。
+- **Release-date rule（上映日期规则）**——`release_date` 的 `before`/`after` 规则,
+  将影片已解析的 `release_date` 与一个 ISO 边界比较;日期缺失/不可解析时永不丢弃。
 - **Blacklist（黑名单）**——exclude 模式的内容过滤规则（最高优先级）。
 - **Attribute filter（属性过滤）**——对某个解析属性（gender、tag）的规则。
 - **Filter decision（过滤判定）**——引擎对一部影片的 `keep` + `reasons`。
@@ -111,6 +124,21 @@ Phase 1 附加且向后兼容（无规则 → 无变化）。Phase 2 拓宽属�
 - 2026-05-30: Phase 1 已通过 [IMP-ADR040-01](IMP-ADR040-01-content-filter.md) 实现;ADR 继续保持 active,用于 Phase 2/3。
 - 2026-06-04: Phase 2 范围更正——javdb 演员页不含生日信息；年龄过滤改用 minnano-av（尽力匹配，按名称），年龄以影片上映日期计算。路线图重新编号（年龄=Phase 2；订阅=Phase 3；web/MCP=Phase 4）。计划见 [IMP-ADR040-02](IMP-ADR040-02-age-filter.md)。
 - 2026-06-07：Phase 2 经 [IMP-ADR040-02](IMP-ADR040-02-age-filter.md) 实现（PR #180）——`age` 维度、minnano-av 富集、`ActorMetadata` 缓存。ADR 对 Phase 3-5 仍然有效。
+- 2026-06-15：内容过滤引擎新增 **正则**（actor/tag 上的 `regex_exclude` /
+  `regex_include`）与 **上映日期**（`release_date` 维度，`before` / `after`）模式，
+  见 [IMP-ADR040-03](IMP-ADR040-03-content-filter-regex-date.md)。两者复用通用的
+  `(dimension, mode, value)` 三元组，**无需 schema 迁移**——沿用 Phase 2（age）的
+  免迁移模板。仅引擎 + CLI（[MAIN]）；双后端 web CRUD `/api/content-filter` 与
+  SPA 设置/叠加界面仍归 [IMP-ADR040-04](IMP-ADR040-04-content-filter-web-crud.md)。
 - 2026-06-15：原 Phase 3 "Subscriptions" 已由
   [ADR-054 WS2](../ADR-054-User-Intent-Discovery-Layer/IMP-ADR054-02-subscriptions.md)
   supersede。WS2 定义唯一的 Subscription 域（`ActorSubscription` + `NewWorks`），并复用 AdHoc 抓取路径；该路径的 phase-2 选择天然绕过评分/打分人数阈值。ADR-040 不再拥有订阅旁路代码；行为由 `tests/unit/test_adhoc_bypasses_rating_gate.py` 锁定。
+- 2026-06-15：Phase 4（web CRUD）经 [IMP-ADR040-04](IMP-ADR040-04-content-filter-web-crud.md) 落地：
+  双后端 `/api/content-filter` CRUD API（Python FastAPI 路由委托 `ContentFilterRepo`；TS Hono
+  Worker 用相同 SQL 对 **REPORTS_DB** 重新实现）、`content_filter` 能力标志（两个后端都探测
+  REPORTS_DB 中的 `ContentFilterRule`）、`SettingsFilterRulesPage.vue` CRUD 表格，以及只读的
+  Movies 叠加层（变暗命中规则的行；ADR-054 D6——仅展示，非并行过滤）。**无 schema 迁移。**
+  `(dimension, mode)` 白名单以 CLI 为准，Python 路由导入、TS 手动镜像，并由跨后端 parity golden
+  钉住（已对齐到含 IMP-03 正则/上映日期模式的 13/12 对）。web 边界校验 `release_date`（严格 ISO），
+  但不校验正则可编译性：JS `new RegExp` 与 Python `re` 方言不同（`(?i)` 等内联标志在 JS 中会抛错），
+  故引擎的 fail-open 是权威防护。MCP 管理仍待定（ADR-038）。ADR 对 Phase 5 仍然有效。

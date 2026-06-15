@@ -251,12 +251,15 @@ CREATE INDEX IF NOT EXISTS idx_new_works_dismissed ON NewWorks(dismissed);
 """
 
 _REPORTS_DDL = _SCHEMA_VERSION_DDL + """
--- Dynamic content-filter rules (ADR-040 Phase 1).  Rules live in the
--- reports DB and are applied after detail parse; no rows means no
--- behavior change.
--- dimension: actor | tag | gender
--- mode: exclude | include | require_lead | exclude_all_male
--- value: actor name/href | tag | gender value
+-- Dynamic content-filter rules (ADR-040).  Rules live in the reports DB
+-- and are applied after detail parse; no rows means no behavior change.
+-- The (dimension, mode, value) triple is generic; new dimensions/modes
+-- reuse it without a schema change (age = Phase 2; regex/release_date = WS4a).
+-- dimension: actor | tag | gender | age | release_date
+-- mode: exclude | include | require_lead | exclude_all_male | min_age | max_age
+--       | regex_exclude | regex_include | before | after
+-- value: actor name/href | tag | gender | integer age | ISO date (YYYY-MM-DD)
+--        | regex pattern
 CREATE TABLE IF NOT EXISTS ContentFilterRule (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     dimension  TEXT NOT NULL,
