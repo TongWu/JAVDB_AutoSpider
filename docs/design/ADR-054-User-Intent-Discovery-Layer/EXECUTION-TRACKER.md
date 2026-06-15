@@ -3,7 +3,7 @@
 **Owner ADR:** [ADR-054](ADR-054-user-intent-discovery-layer.md) (umbrella)
 **Scope:** ADR-054 WS1–WS4a + the delegated [ADR-040](../ADR-040-Content-Filter-Rules/ADR-040-content-filter-rules.md) WS4a + the parallel [ADR-026 Phase 4](../ADR-026-AI-Operations-Diagnosis/IMP-ADR026-04-proactive-incident-alerting.md).
 **Created:** 2026-06-14
-**Status:** Active — WS1 verified done on `origin/main`; Sprint 2 backend/server complete; Sprint 3 WS2 frontend pending.
+**Status:** Active — Sprints 1–3 verified done on `origin/main` of both repos; Sprint 4 (ADR-026-P4) is next. ADR-055 Phase 2 (hand-mirror cleanup) spun off to its own task.
 
 > This is a coordination/tracking artifact (English-only, like an IMP). It does
 > not replace the ADRs/IMPs it points to — it sequences them across two agents.
@@ -92,6 +92,8 @@ Agent F:
 - [x] New-Works feed view (reuse WS1 `StatusControl.vue` for one-click want)
 - [x] subscriptions management UI + en/zh
 
+**WS2 verification (2026-06-15):** Sprint-2 backend + Sprint-3 UI adversarially verified on `origin/main` of both repos — all deliverables complete; tests green. Review fix: the Worker `listSubscriptions`/`listNewWorks` lacked Python's secondary sort key — added `actor_href` / `video_code ASC` + a tie-break regression test (WEB `6ffec5a`). Added the missing WS2 frontend unit specs (`subscriptions-view`/`new-works-view`). The hand-mirrored `ACTOR_SUBSCRIPTION_UPSERT_SQL` is an ADR-055 Phase-2 item (chipped).
+
 ### WS3 — Magnet aggregation · [IMP-ADR054-03](IMP-ADR054-03-magnet-aggregation.md)
 Agent B:
 - [x] ADR-039 `indexer` plugin category (`IndexerPlugin` Protocol + `IndexerResult`), JAVBUS + Sukebei plugins
@@ -101,6 +103,8 @@ Agent B:
 
 Agent F:
 - [x] gated **Source** column in `ResolveMagnetTable.vue` (only when flag on) + i18n
+
+**WS3 verification (2026-06-15):** verified on `origin/main` — indexer fan-out (JAVBUS/Sukebei, self-registering), fetch reuses the proxy pool but bypasses javdb guards, info-hash dedup + live ADR-024 scoring, Python-real / Worker-501 capability honesty, gated Source column. Ephemeral v1 as designed; all 8 deliverables complete (135 Python + 43 web tests green).
 
 ### WS4a — Content filtering · ADR-040 (delegated)
 Agent F (full vertical — self-contained, low backend risk):
@@ -149,3 +153,4 @@ Agent F:
 - 2026-06-15: WS3 Agent B backend slice completed: MAIN indexer plugins/fetch/aggregation/Python API/OpenAPI/capability, plus WEB `server/` Worker 501 mirror and hardcoded-false capability. Frontend `src/` work remains with Agent F.
 - 2026-06-15: **Sprint 3 / Agent F — WS2 UI complete.** Library `Subscriptions` + `New-Works` tabs (reuse WS1 `StatusControl.vue` unchanged), hand-typed `src/api/{subscriptions,new-works}.ts`, gated on `subscriptions`, en/zh-CN/**ja**. `api.gen.ts` re-vendored post-#217 (typed gate), drift-clean, 155 web unit tests + build green. 2 commits on `claude/priceless-curie-b0a53f`.
 - 2026-06-15: **Sprint 3 / Agent F — WS3 UI complete (unblocked same day).** WS3 backend landed mid-session (MAIN #218 + WEB `server/` mirror #36), so the UI was built on a fresh branch `claude/adr054-ws3-magnet-source` off WEB `main`: re-vendored `api.gen.ts` for `magnet_aggregation`; `apiAggregateMagnets` client (`skipErrorToast`); capability-gated `browse.aggregateMagnets` store action (+3 unit tests); `ResolveCard` orchestration (call/merge/error); gated **Source** column in `ResolveMagnetTable` rendering per-source provenance + ADR-024 `quality_score`; en/zh-CN/**ja**. Verified: drift-clean, typecheck, 167 web unit tests, server 501-mirror suite 9/9, build. 3 commits (chore→feat→test).
+- 2026-06-15: **Sprints 2 & 3 adversarially verified** on `origin/main` of both repos (two 11–14-agent workflows). Both `done` — all deliverables independently confirmed, Sprint-2 143 tests green, Sprint-3 135 Python + 43 web green. One real WS2 dual-backend parity defect found & fixed: the Worker `listSubscriptions`/`listNewWorks` lacked Python's secondary sort key → added `actor_href`/`video_code ASC` + a tie-break regression test, and added the previously-missing WS2 frontend unit specs (WEB `846b322..6ffec5a`). New hand-mirror follow-ups (`ACTOR_SUBSCRIPTION_UPSERT_SQL`, content-filter allow-list **and** the `INSERT INTO ContentFilterRule` statement) spun off to the **ADR-055 Phase-2** task (`task_7ae01603`).
