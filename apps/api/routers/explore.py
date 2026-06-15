@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse
 
 from apps.api.infra.auth import _require_auth, _require_auth_or_token, require_role
+from apps.api.schemas.aggregate import AggregateMagnetsPayload, AggregateMagnetsResponse
 from apps.api.schemas.payloads import (
     ExploreCookiePayload,
     ExploreIndexStatusPayload,
@@ -46,6 +47,14 @@ async def explore_resolve(
     return await explore_service.resolve_payload(payload, current["sub"])
 
 
+@router.post("/aggregate-magnets", response_model=AggregateMagnetsResponse)
+async def explore_aggregate_magnets(
+    payload: AggregateMagnetsPayload,
+    current=Depends(_require_auth),
+):
+    return await explore_service.aggregate_magnets_payload(payload, current["sub"])
+
+
 @router.post("/download-magnet", response_model=StatusOkResponse)
 async def explore_download_magnet(
     payload: ExploreMagnetPayload,
@@ -84,6 +93,7 @@ async def explore_search_by_video_code(
 
 
 __all__ = [
+    "explore_aggregate_magnets",
     "explore_download_magnet",
     "explore_index_status",
     "explore_one_click",

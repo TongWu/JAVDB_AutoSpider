@@ -144,6 +144,20 @@ TRANSMISSION_DOWNLOAD_DIR = '/media/downloads'
 
 > **注意：** `DOWNLOADER_BACKEND` 仅控制示例 CLI。主管道上传路径（`apps.cli.qb.uploader`）在 Phase 2 中仍为 qB 专用。
 
+### 磁力来源 / 索引器（Magnet Sources / Indexers — ADR-054 WS3）
+
+外部磁力聚合在服务端执行，并且仅支持 Python 后端。只有当
+`MAGNET_SOURCES` 非空时，`magnet_aggregation` capability 才为 true；
+Cloudflare Worker 后端固定报告 false。
+
+| 变量 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `MAGNET_SOURCES` | `list[str]` \| `str` | `[]` | active 外部磁力索引器，按 fan-out 查询。默认空列表表示功能关闭。接受列表（`['javbus', 'sukebei']`）或逗号分隔字符串（`'javbus, sukebei'`）。 |
+| `JAVBUS_BASE_URL` | `str` | `'https://www.javbus.com'` | JAVBUS 索引器 base URL。仅在使用可信镜像时覆盖。 |
+| `SUKEBEI_BASE_URL` | `str` | `'https://sukebei.nyaa.si'` | Sukebei 索引器 base URL。仅在使用可信镜像时覆盖。 |
+| `MAGNET_SOURCES_USE_PROXY` | `bool` | `True` | 让索引器请求走已配置的 proxy pool。推荐开启，因为服务端访问外部索引器可能带来封禁或法律 / 服务条款风险。避免高频抓取。 |
+| `MAGNET_SOURCE_TIMEOUT_SECONDS` | `float` | `10.0` | 外部索引器 fan-out 中每个 source 的 wall-clock 时间预算。慢 source 会返回 timeout 结果，不阻塞更快的 source。 |
+
 ---
 
 ## 4. Proxy 配置

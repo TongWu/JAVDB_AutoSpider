@@ -18,6 +18,7 @@ from fastapi.responses import HTMLResponse
 from apps.api.infra.security import _resolve_public_target_or_422
 from javdb.parsing import detect_page_type, parse_detail_page, parse_index_page
 from apps.api.services import config_service, context
+from javdb.integrations.indexer.aggregate import aggregate_magnets
 from javdb.integrations.qb.client import (
     LOGIN_REJECTED,
     LOGIN_SUCCESS,
@@ -580,6 +581,18 @@ async def resolve_payload(payload: Any, username: str) -> Dict[str, Any]:
     return body
 
 
+async def aggregate_magnets_payload(payload: Any, username: str) -> Dict[str, Any]:
+    code = str(payload.video_code).strip()
+    rows = await asyncio.to_thread(aggregate_magnets, code)
+    context.audit_logger.info(
+        "explore_aggregate_magnets username=%s video_code=%s count=%s",
+        username,
+        code,
+        len(rows),
+    )
+    return {"video_code": code, "magnets": rows}
+
+
 async def download_magnet_payload(payload: Any, username: str) -> Dict[str, str]:
     cfg = config_service.load_runtime_config()
     _qb_add_magnet(cfg, payload.magnet, payload.title or "JavDB", payload.category)
@@ -693,6 +706,8 @@ __all__ = [
     "_resolve_public_target_or_422",
     "_resolved_history_csv_path",
     "_validate_javdb_url_or_422",
+    "aggregate_magnets",
+    "aggregate_magnets_payload",
     "download_magnet_payload",
     "index_status_payload",
     "one_click_payload",

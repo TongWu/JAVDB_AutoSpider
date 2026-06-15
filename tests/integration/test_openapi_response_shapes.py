@@ -28,6 +28,7 @@ def test_each_fe_consumed_endpoint_has_typed_200_response(admin_client):
         ("/api/config", "get"),
         ("/api/config", "put"),
         ("/api/explore/resolve", "post"),
+        ("/api/explore/aggregate-magnets", "post"),
         ("/api/explore/one-click", "post"),
         ("/api/explore/index-status", "post"),
         ("/api/explore/download-magnet", "post"),

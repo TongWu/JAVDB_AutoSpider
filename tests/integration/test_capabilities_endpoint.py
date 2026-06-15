@@ -20,6 +20,7 @@ def test_capabilities_returns_locked_shape(admin_client):
         "library_ownership",
         "library_consumption",
         "watch_intent",
+        "magnet_aggregation",
         "subscriptions",
     ):
         assert key in body["features"]

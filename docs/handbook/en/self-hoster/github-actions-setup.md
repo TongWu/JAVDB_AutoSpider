@@ -120,6 +120,20 @@ These are non-sensitive values. The `config_generator` reads them via `VAR_*` en
 | `D1_BATCHING_ENABLED` | `false` | Enable ADR-010 safe-path D1 micro-batching. Accepted truthy values include `1`, `true`, `yes`, and `on`. |
 | `D1_STARTUP_REPLAY_ENABLED` | `false` | Enable ADR-010 startup replay before the first D1/Dual operation. Accepted truthy values include `1`, `true`, `yes`, and `on`. |
 
+### Optional Magnet Aggregation Variables (Python API)
+
+These variables are only useful for custom GitHub Actions jobs that generate a
+`config.py` for the Python API. The stock ingestion workflows do not serve the
+Python API or call external indexer aggregation.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `MAGNET_SOURCES_JSON` | `[]` | JSON array of active external magnet indexers, e.g. `["javbus", "sukebei"]`. Empty keeps the `magnet_aggregation` capability false. |
+| `JAVBUS_BASE_URL` | `https://www.javbus.com` | JAVBUS indexer base URL. |
+| `SUKEBEI_BASE_URL` | `https://sukebei.nyaa.si` | Sukebei indexer base URL. |
+| `MAGNET_SOURCES_USE_PROXY` | `true` | Route external indexer fetches through the proxy pool. |
+| `MAGNET_SOURCE_TIMEOUT_SECONDS` | `10.0` | Per-source wall-clock budget for external indexer fan-out. |
+
 ### Spider Tuning Variables
 
 | Variable | Default | Purpose |

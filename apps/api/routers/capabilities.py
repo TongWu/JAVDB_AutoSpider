@@ -83,6 +83,20 @@ def _watch_intent_enabled() -> bool:
         return False
 
 
+def _magnet_aggregation_enabled() -> bool:
+    """True when at least one indexer source is configured (ADR-054 WS3, capability honesty).
+
+    v1 is ephemeral (no cache table) so there is nothing to probe; the flag is
+    config-presence -- MAGNET_SOURCES non-empty -- via the dispatcher's parser.
+    """
+    try:
+        from javdb.integrations.indexer.dispatch import active_sources
+
+        return bool(active_sources())
+    except Exception:
+        return False
+
+
 def _subscriptions_enabled() -> bool:
     """True when the ADR-054 ActorSubscription table is queryable."""
     try:
@@ -131,6 +145,7 @@ def build_capabilities() -> CapabilitiesResponse:
             library_ownership=_library_ownership_enabled(),
             library_consumption=_library_consumption_enabled(),
             watch_intent=_watch_intent_enabled(),
+            magnet_aggregation=_magnet_aggregation_enabled(),
             subscriptions=_subscriptions_enabled(),
             # ADR-035: site-contract drift sentinel ships with the system; the
             # frontend hides the drift panel only when explicitly disabled.

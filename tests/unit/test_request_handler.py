@@ -336,6 +336,45 @@ class TestRequestHandler:
         assert success is True
         assert is_turnstile is False
         assert 'movie-list' in html
+
+    @patch.object(requests.Session, 'get')
+    def test_fetch_direct_default_timeout_remains_30_seconds(self, mock_get):
+        """Existing JavDB callers keep the historical direct-request timeout."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = '<html><div class="movie-list">Content</div></html>'
+        mock_response.content = mock_response.text.encode()
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        handler = RequestHandler(config=RequestConfig(use_curl_cffi=False))
+        handler._fetch_direct('http://test.com', None, 'Test')
+
+        assert mock_get.call_args.kwargs["timeout"] == 30
+
+    @patch.object(requests.Session, 'get')
+    def test_get_page_can_override_direct_timeout(self, mock_get):
+        """External callers can bound their own direct request timeout."""
+        html_text = '<html>external indexer</html>'
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = html_text
+        mock_response.content = html_text.encode()
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        handler = RequestHandler(config=RequestConfig(use_curl_cffi=False))
+        assert handler.get_page(
+            'https://example.test/search',
+            use_proxy=False,
+            use_cf_bypass=False,
+            module_name='indexer',
+            max_retries=1,
+            validate_html=False,
+            timeout=4.5,
+        ) == html_text
+
+        assert mock_get.call_args.kwargs["timeout"] == 4.5
     
     @patch.object(requests.Session, 'get')
     def test_fetch_direct_turnstile(self, mock_get):
@@ -354,6 +393,29 @@ class TestRequestHandler:
         
         assert success is False
         assert is_turnstile is True
+
+    @patch.object(requests.Session, 'get')
+    def test_get_page_validate_html_false_returns_external_guard_text(self, mock_get):
+        """External indexers can opt out of JavDB-oriented HTML guards."""
+        html_text = '<html>banned your access Security Verification turnstile</html>'
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = html_text
+        mock_response.content = html_text.encode()
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        handler = RequestHandler(config=RequestConfig(use_curl_cffi=False))
+        result = handler.get_page(
+            'https://example.test/search',
+            use_proxy=False,
+            use_cf_bypass=False,
+            module_name='indexer',
+            max_retries=1,
+            validate_html=False,
+        )
+
+        assert result == html_text
     
     @patch.object(requests.Session, 'get')
     def test_fetch_direct_with_cookie(self, mock_get):

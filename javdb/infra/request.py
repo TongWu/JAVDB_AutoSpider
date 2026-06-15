@@ -486,7 +486,7 @@ class RequestHandler:
         target_url: str,
         req_headers: Dict,
         req_proxies: Optional[Dict],
-        timeout: int,
+        timeout: float,
         context_msg: str,
         session: Optional[requests.Session] = None,
         *,
@@ -585,7 +585,7 @@ class RequestHandler:
         target_url: str,
         req_headers: Dict,
         req_proxies: Optional[Dict],
-        timeout: int,
+        timeout: float,
         context_msg: str,
         *,
         proxy_name: Optional[str] = None,
@@ -968,7 +968,9 @@ class RequestHandler:
     
     def _fetch_direct(self, url: str, req_proxies: Optional[Dict], context_msg: str,
                       use_cookie: bool = False, session: Optional[requests.Session] = None,
-                      proxy_name: Optional[str] = None) -> Tuple[Optional[str], bool, bool]:
+                      proxy_name: Optional[str] = None,
+                      validate_html: bool = True,
+                      timeout: float = 30) -> Tuple[Optional[str], bool, bool]:
         """
         Fetch directly without CF bypass. Uses browser-like headers.
         
@@ -996,7 +998,7 @@ class RequestHandler:
         if self.use_curl_cffi:
             attempt_started = time.monotonic()
             html_content, error = self._do_request_curl_cffi(
-                url, headers, req_proxies, timeout=30, 
+                url, headers, req_proxies, timeout=timeout,
                 context_msg=f"Direct {context_msg}",
                 proxy_name=proxy_name,
                 report_health=should_report,
@@ -1018,7 +1020,7 @@ class RequestHandler:
         if not html_content:
             attempt_started = time.monotonic()
             html_content, error = self._do_request(
-                url, headers, req_proxies, timeout=30, 
+                url, headers, req_proxies, timeout=timeout,
                 context_msg=f"Direct {context_msg}",
                 session=session,
                 proxy_name=proxy_name,
@@ -1028,6 +1030,14 @@ class RequestHandler:
             success_elapsed_ms = int((time.monotonic() - attempt_started) * 1000)
         
         if html_content:
+            if not validate_html:
+                success = error is None
+                if success and should_report:
+                    self._record_request_complete(
+                        proxy_name, "success", success_elapsed_ms,
+                    )
+                return html_content, success, False
+
             # Check for IP ban page before any other inspection
             if self.is_ban_page(html_content):
                 if should_report and error is None:
@@ -1054,7 +1064,8 @@ class RequestHandler:
     
     def _process_html(self, url: str, html_content: Optional[str], req_proxies: Optional[Dict],
                       use_cookie: bool = False, session: Optional[requests.Session] = None,
-                      from_cf_bypass: bool = False) -> Optional[str]:
+                      from_cf_bypass: bool = False,
+                      validate_html: bool = True) -> Optional[str]:
         """Process HTML content: check for Cloudflare and age verification.
         
         Args:
@@ -1067,6 +1078,9 @@ class RequestHandler:
         """
         if not html_content:
             return None
+
+        if not validate_html:
+            return html_content
         
         use_session = session or self.session
         headers = self.BROWSER_HEADERS.copy()
@@ -1116,7 +1130,8 @@ class RequestHandler:
     
     def get_page(self, url: str, session: Optional[requests.Session] = None, use_cookie: bool = False,
                  use_proxy: bool = False, module_name: str = 'unknown', max_retries: int = 3,
-                 use_cf_bypass: bool = False) -> Optional[str]:
+                 use_cf_bypass: bool = False, validate_html: bool = True,
+                 timeout: float = 30) -> Optional[str]:
         """
         Fetch a webpage with proper headers, age verification bypass, and proxy pool support.
         
@@ -1141,6 +1156,7 @@ class RequestHandler:
             module_name: Module name for proxy control ('spider', 'qbittorrent', 'pikpak', etc.)
             max_retries: Maximum number of retries with different proxies (only for proxy pool mode)
             use_cf_bypass: Whether to use CF bypass service (set by fallback mechanism)
+            validate_html: Whether to apply JavDB-oriented ban/Turnstile/age checks
             
         Returns:
             HTML content as string, or None if failed
@@ -1195,7 +1211,9 @@ class RequestHandler:
                     use_proxy_pool_mode=use_proxy_pool_mode,
                     proxy_name=proxy_name,
                     use_local_bypass=use_local_bypass,
-                    use_proxy_bypass=use_proxy_bypass
+                    use_proxy_bypass=use_proxy_bypass,
+                    validate_html=validate_html,
+                    timeout=timeout,
                 )
             
             # Non-CF bypass mode: standard retry logic
@@ -1207,7 +1225,9 @@ class RequestHandler:
                 max_retries=max_retries,
                 proxies=proxies,
                 use_proxy_pool_mode=use_proxy_pool_mode,
-                proxy_name=proxy_name
+                proxy_name=proxy_name,
+                validate_html=validate_html,
+                timeout=timeout,
             )
         except ProxyBannedError as e:
             logger.debug(f"[{module_name}] Proxy '{e.proxy_name}' banned: {e.reason}")
@@ -1218,7 +1238,9 @@ class RequestHandler:
     def _get_page_with_cf_bypass(self, url: str, session: requests.Session, use_cookie: bool,
                                   use_proxy: bool, module_name: str, max_retries: int,
                                   proxies: Optional[Dict], use_proxy_pool_mode: bool,
-                                  proxy_name: str, use_local_bypass: bool, use_proxy_bypass: bool) -> Optional[str]:
+                                  proxy_name: str, use_local_bypass: bool, use_proxy_bypass: bool,
+                                  validate_html: bool = True,
+                                  timeout: float = 30) -> Optional[str]:
         """Handle page fetching with CF bypass enabled."""
         turnstile_detected = False
         _last_fallback_html = None
@@ -1238,7 +1260,10 @@ class RequestHandler:
         if html_content:
             _last_fallback_html = html_content
         if success:
-            result = self._process_html(url, html_content, proxies, use_cookie, session, from_cf_bypass=True)
+            result = self._process_html(
+                url, html_content, proxies, use_cookie, session,
+                from_cf_bypass=True, validate_html=validate_html,
+            )
             if result and len(result) >= 10000:
                 if use_proxy_pool_mode and self.proxy_pool:
                     self.proxy_pool.mark_success()
@@ -1275,7 +1300,10 @@ class RequestHandler:
         if html_content:
             _last_fallback_html = html_content
         if success:
-            result = self._process_html(url, html_content, proxies, use_cookie, session, from_cf_bypass=True)
+            result = self._process_html(
+                url, html_content, proxies, use_cookie, session,
+                from_cf_bypass=True, validate_html=validate_html,
+            )
             if result and len(result) >= 10000:
                 if use_proxy_pool_mode and self.proxy_pool:
                     self.proxy_pool.mark_success()
@@ -1307,11 +1335,18 @@ class RequestHandler:
                 self._pause_between_attempts(legacy_seconds=self.config.fallback_cooldown)
             
             logger.debug(f"[{module_name}] Fallback step (b): Direct request with current proxy (no bypass)")
-            html_content, success, is_turnstile = self._fetch_direct(url, proxies, f"Proxy={proxy_name}", use_cookie, session, proxy_name=proxy_name)
+            html_content, success, is_turnstile = self._fetch_direct(
+                url, proxies, f"Proxy={proxy_name}", use_cookie, session,
+                proxy_name=proxy_name, validate_html=validate_html,
+                timeout=timeout,
+            )
             if html_content:
                 _last_fallback_html = html_content
             if success:
-                result = self._process_html(url, html_content, proxies, use_cookie, session)
+                result = self._process_html(
+                    url, html_content, proxies, use_cookie, session,
+                    validate_html=validate_html,
+                )
                 if result and len(result) >= 10000:
                     if use_proxy_pool_mode and self.proxy_pool:
                         self.proxy_pool.mark_success()
@@ -1345,11 +1380,18 @@ class RequestHandler:
                 
                 # Step (c): Try direct with new proxy
                 logger.debug(f"[{module_name}] Fallback step (c): Direct request with new proxy={proxy_name} (no bypass)")
-                html_content, success, is_turnstile = self._fetch_direct(url, proxies, f"Proxy={proxy_name}", use_cookie, session, proxy_name=proxy_name)
+                html_content, success, is_turnstile = self._fetch_direct(
+                    url, proxies, f"Proxy={proxy_name}", use_cookie, session,
+                    proxy_name=proxy_name, validate_html=validate_html,
+                    timeout=timeout,
+                )
                 if html_content:
                     _last_fallback_html = html_content
                 if success:
-                    result = self._process_html(url, html_content, proxies, use_cookie, session)
+                    result = self._process_html(
+                        url, html_content, proxies, use_cookie, session,
+                        validate_html=validate_html,
+                    )
                     if result and len(result) >= 10000:
                         self.proxy_pool.mark_success()
                         return result
@@ -1371,7 +1413,10 @@ class RequestHandler:
                 if html_content:
                     _last_fallback_html = html_content
                 if success:
-                    result = self._process_html(url, html_content, proxies, use_cookie, session, from_cf_bypass=True)
+                    result = self._process_html(
+                        url, html_content, proxies, use_cookie, session,
+                        from_cf_bypass=True, validate_html=validate_html,
+                    )
                     if result and len(result) >= 10000:
                         self.proxy_pool.mark_success()
                         self.cf_bypass_failure_count = 0
@@ -1431,7 +1476,9 @@ class RequestHandler:
     
     def _get_page_direct(self, url: str, session: requests.Session, use_cookie: bool,
                           module_name: str, max_retries: int, proxies: Optional[Dict],
-                          use_proxy_pool_mode: bool, proxy_name: str) -> Optional[str]:
+                          use_proxy_pool_mode: bool, proxy_name: str,
+                          validate_html: bool = True,
+                          timeout: float = 30) -> Optional[str]:
         """Handle page fetching without CF bypass (direct mode)."""
         retry_count = 0
         log_ctx = self._log_ctx(module_name, proxy_name)
@@ -1443,14 +1490,19 @@ class RequestHandler:
             
             html_content, success, is_turnstile = self._fetch_direct(
                 url, proxies, f"Proxy={proxy_name}" if proxies else "No proxy", 
-                use_cookie, session, proxy_name=proxy_name
+                use_cookie, session, proxy_name=proxy_name,
+                validate_html=validate_html,
+                timeout=timeout,
             )
             
             if success:
                 if use_proxy_pool_mode and self.proxy_pool:
                     self.proxy_pool.mark_success()
                 
-                result = self._process_html(url, html_content, proxies, use_cookie, session)
+                result = self._process_html(
+                    url, html_content, proxies, use_cookie, session,
+                    validate_html=validate_html,
+                )
                 if result and len(result) >= 10000:
                     return result
                 elif result:

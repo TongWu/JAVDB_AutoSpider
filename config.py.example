@@ -94,6 +94,27 @@ TRANSMISSION_PASSWORD = ''
 TRANSMISSION_DOWNLOAD_DIR = '/downloads' # default save directory
 
 # =============================================================================
+# MAGNET SOURCES / INDEXERS (ADR-054 WS3)
+# =============================================================================
+
+# Active external magnet indexers, queried in a fan-out (every active source).
+# Default empty = feature OFF (no aggregation, capability flag false). Accepts a
+# list or a CSV string, e.g. ['javbus', 'sukebei']. Aggregation runs server-side
+# in the Python backend only; the Cloudflare Worker cannot reach external hosts.
+MAGNET_SOURCES = []
+
+# Per-source base URLs (override only if you use a mirror).
+JAVBUS_BASE_URL = 'https://www.javbus.com'
+SUKEBEI_BASE_URL = 'https://sukebei.nyaa.si'
+
+# Whether indexer fetches go through the proxy pool (recommended for ban safety).
+MAGNET_SOURCES_USE_PROXY = True
+
+# Per-source wall-clock budget for external indexer fan-out. Slow sources return
+# a timeout result without blocking faster sources.
+MAGNET_SOURCE_TIMEOUT_SECONDS = 10.0
+
+# =============================================================================
 # PROXY CONFIGURATION
 # =============================================================================
 
