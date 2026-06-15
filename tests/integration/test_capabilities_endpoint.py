@@ -20,6 +20,7 @@ def test_capabilities_returns_locked_shape(admin_client):
         "library_ownership",
         "library_consumption",
         "watch_intent",
+        "subscriptions",
     ):
         assert key in body["features"]
         assert isinstance(body["features"][key], bool)

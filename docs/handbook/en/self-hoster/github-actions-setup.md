@@ -252,6 +252,24 @@ Go to **Actions > JavDB Ad-Hoc Ingestion Pipeline > Run workflow** and fill in:
 - **date_filter**: Filter by release date
 - **qb_category**: Custom qBittorrent category (empty = default "Ad Hoc"; `顶级` uses the daily qB credentials)
 
+### SubscriptionMonitor Workflow
+
+`SubscriptionMonitor.yml` runs daily at **14:00 UTC** and can also be triggered
+manually. It reads active `ActorSubscription` rows from D1, scrapes each actor
+through the existing AdHoc spider path, and writes genuinely new releases into
+the `NewWorks` feed.
+
+Manual inputs:
+
+- **proxy_spider**: Enable proxy use for actor-page scrapes.
+- **dry_run**: List active subscriptions without scraping.
+- **runner**: Choose `ubuntu-latest` or `self-hosted`.
+- **log_level**: CLI log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`).
+
+The workflow uses the same `Production` environment secrets and variables as
+the ingestion workflows, including the D1 credentials, JavDB login credentials,
+proxy settings, `DEPLOY_KEY`, and `ARTIFACT_KEY`.
+
 ## Step 7 -- Monitoring
 
 ### Email Notifications
@@ -292,6 +310,7 @@ openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
 |---|---|---|
 | `QBFileFilter.yml` | Cron (2h after daily ingestion) | Filter small files from recently added torrents |
 | `ReconcileLibrary.yml` | Hourly cron / manual dispatch | Run ADR-033 closed-loop passes: acquisition outcomes against live qB state + ownership ledger (gdrive/qb/pikpak/nas) + consumption signal from media servers |
+| `SubscriptionMonitor.yml` | Daily cron / manual dispatch | Scrape followed actors through the AdHoc path and write the New Works feed |
 | `WeeklyDedup.yml` | Weekly cron | Rclone deduplication |
 | `RollbackD1.yml` | Manual dispatch | Manual session rollback |
 | `StaleSessionCleanup.yml` | Daily cron | Auto-cleanup sessions stuck > 48h |

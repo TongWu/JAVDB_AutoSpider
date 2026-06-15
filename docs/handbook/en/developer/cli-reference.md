@@ -897,6 +897,38 @@ Flags applicable to canary mode: `--run-id`, `--attempt`, `--json`, `--log-level
 
 ---
 
+## Subscription Monitor CLI
+
+**Module:** `apps.cli.ops.subscription_monitor`
+
+Scrapes every active `ActorSubscription` through the existing AdHoc spider path
+and writes genuinely new releases into the `NewWorks` feed (ADR-054 WS2). It
+does not add a new rating-threshold bypass path; AdHoc index selection already
+ignores the phase-2 rating and comment gates.
+
+### Arguments
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--use-proxy` | Route actor scrapes through the configured proxy pool. | `False` |
+| `--dry-run` | List active subscriptions without scraping. | `False` |
+| `--log-level` | Logging level. Choices: `DEBUG`, `INFO`, `WARNING`, `ERROR`. | `INFO` |
+
+### Examples
+
+```bash
+# List active subscriptions without scraping
+python3 -m apps.cli.ops.subscription_monitor --dry-run
+
+# Production-style run against D1, with spider proxying enabled
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.subscription_monitor --use-proxy
+```
+
+The scheduled production entrypoint is `SubscriptionMonitor.yml`, which runs
+daily after the main ingestion window and can also be dispatched manually.
+
+---
+
 ## Config Generator CLI
 
 **Module:** `apps.cli.ops.config_generator`

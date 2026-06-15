@@ -3,7 +3,7 @@
 **Owner ADR:** [ADR-054](ADR-054-user-intent-discovery-layer.md) (umbrella)
 **Scope:** ADR-054 WS1–WS4a + the delegated [ADR-040](../ADR-040-Content-Filter-Rules/ADR-040-content-filter-rules.md) WS4a + the parallel [ADR-026 Phase 4](../ADR-026-AI-Operations-Diagnosis/IMP-ADR026-04-proactive-incident-alerting.md).
 **Created:** 2026-06-14
-**Status:** Active — Sprint 1 (WS1) verified done on `origin/main` of both repos (MAIN `7a0adf47`, WEB `28c98f5`); Sprint 2 ready to dispatch.
+**Status:** Active — WS1 verified done on `origin/main`; Sprint 2 backend/server complete; Sprint 3 WS2 frontend pending.
 
 > This is a coordination/tracking artifact (English-only, like an IMP). It does
 > not replace the ADRs/IMPs it points to — it sequences them across two agents.
@@ -82,11 +82,11 @@ Agent F:
 
 ### WS2 — Subscriptions + New-Works · [IMP-ADR054-02](IMP-ADR054-02-subscriptions.md)
 Agent B:
-- [ ] `ActorSubscription` + `NewWorks` D1 tables (`HISTORY_DB`)
-- [ ] `SubscriptionMonitor.yml` GH-cron reusing the AdHoc scrape path
-- [ ] `subscription_monitor` pipeline module + CLI
-- [ ] Python `/api/subscriptions` + `/api/new-works` + `subscriptions` flag + TS mirror
-- [ ] supersede ADR-040 Phase-3 "Subscription" (bilingual amendment) + bypass regression test
+- [x] `ActorSubscription` + `NewWorks` D1 tables (`HISTORY_DB`)
+- [x] `SubscriptionMonitor.yml` GH-cron reusing the AdHoc scrape path
+- [x] `subscription_monitor` pipeline module + CLI
+- [x] Python `/api/subscriptions` + `/api/new-works` + `subscriptions` flag + TS mirror
+- [x] supersede ADR-040 Phase-3 "Subscription" (bilingual amendment) + bypass regression test
 
 Agent F:
 - [ ] New-Works feed view (reuse WS1 `StatusControl.vue` for one-click want)
@@ -133,3 +133,8 @@ Agent F:
 - 2026-06-14: Recorded MANDATORY execution method — every IMP is driven via `superpowers:subagent-driven-development` (or `superpowers:executing-plans`), task-by-task with checkbox tracking.
 - 2026-06-14: Sprint 1 (WS1, B+F) and Sprint 2 (B → WS2; F → WS4a) agent prompts drafted and ready to dispatch. Dispatch Sprint 2 after WS1 merges.
 - 2026-06-15: WS1 verified done on `origin/main` (both repos) via a 12-agent adversarial workflow; 36 tests green; remote D1 migration confirmed applied. Added `tests/unit/test_watch_intent_capability_probe.py` to close the B3 probe-honesty gap. WS1 → Sprint 2 unblocked.
+- 2026-06-15: Sprint 2 WS2 backend/server closeout completed for
+  [IMP-ADR054-02](IMP-ADR054-02-subscriptions.md): MAIN backend + CLI +
+  workflow + docs and WEB `server/` mirror are ready for PR. WS2 Vue frontend
+  remains a Sprint 3 / Agent F item, and remote D1 apply + cron enablement
+  remain deployment gates.

@@ -875,6 +875,34 @@ python3 -m apps.cli.ops.sentinel --capture-anchors --url <detail-url> [--url ...
 
 ---
 
+## Subscription Monitor CLI
+
+**模块：** `apps.cli.ops.subscription_monitor`
+
+抓取每个 active 的 `ActorSubscription`，复用现有 AdHoc spider 路径，并将真正的新作写入 `NewWorks` feed（ADR-054 WS2）。它不新增评分阈值绕过路径；AdHoc 索引选择本来就会忽略 phase-2 评分与评论数门槛。
+
+### 参数
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--use-proxy` | 使用已配置的代理池抓取演员页。 | `False` |
+| `--dry-run` | 只列出 active subscriptions，不执行抓取。 | `False` |
+| `--log-level` | 日志级别。可选：`DEBUG`、`INFO`、`WARNING`、`ERROR`。 | `INFO` |
+
+### 示例
+
+```bash
+# 只列出 active subscriptions，不抓取
+python3 -m apps.cli.ops.subscription_monitor --dry-run
+
+# 生产风格：对 D1 运行，并启用 spider 代理
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.subscription_monitor --use-proxy
+```
+
+计划任务入口是 `SubscriptionMonitor.yml`，它在主摄取窗口之后每日运行，也可以手动触发。
+
+---
+
 ## Config Generator CLI
 
 **模块：** `apps.cli.ops.config_generator`

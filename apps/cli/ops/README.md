@@ -12,6 +12,7 @@ Operator tooling — workflow bootstrap, debugging, health checks, profiling, an
 | `fetch_page.py` | Standalone JAVDB page fetcher (debugging / fixture capture). Aliases `javdb.infra.fetch_page`. |
 | `health_check.py` | Pre-flight check for required services (qBittorrent, proxies, JAVDB reachability). Aliases `javdb.infra.health_check`. Workflows call this before the spider step. |
 | `profile_hot_paths.py` | Micro-benchmark spider hot paths to locate the next Rust acceleration target. Offline fixtures only; outputs `pstats` dumps under `reports/profiling/`. |
+| `subscription_monitor.py` | Scrape active actor subscriptions through the AdHoc spider path and write the New Works feed. Invoked by `SubscriptionMonitor.yml`. |
 | `dump_openapi.py` | Dump the FastAPI app's OpenAPI schema to `docs/api/openapi.json`. |
 
 ## Invoked by
@@ -19,6 +20,7 @@ Operator tooling — workflow bootstrap, debugging, health checks, profiling, an
 - **`DailyIngestion.yml` / `AdHocIngestion.yml` / `AuditArchive.yml` / `StaleSessionCleanup.yml` / `RollbackD1.yml`** — every workflow runs `python3 -m apps.cli.config_generator --github-actions` as its bootstrap step.
 - **`DailyIngestion.yml` / `AdHocIngestion.yml`** — `python3 -m apps.cli.health_check` before the spider step.
 - **`DailyIngestion.yml` / `AdHocIngestion.yml`** — on failed or cancelled runs, `python3 -m apps.cli.ops.diagnose_run` creates a persisted read-only incident record for email/API review.
+- **`SubscriptionMonitor.yml`** — `python3 -m apps.cli.ops.subscription_monitor` scrapes followed actors and updates `NewWorks`.
 - `content_filter`, `profile_hot_paths`, `dump_openapi`, `fetch_page` are operator-run on demand.
 
 ## Related

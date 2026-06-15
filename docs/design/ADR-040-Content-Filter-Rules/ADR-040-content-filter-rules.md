@@ -2,7 +2,7 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Accepted — Phase 1-2 implemented; later phases pending                  |
+| **Status**  | Accepted — Phase 1-2 implemented; Phase 3 superseded by ADR-054 WS2; later phases pending |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
 | **Related** | [ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md), [ADR-038](../ADR-038-Agentic-Operator-MCP/ADR-038-agentic-operator-mcp-surface.md) |
@@ -81,9 +81,11 @@ birthdate**, so age cannot come from a javdb lookup. Phase 2 instead resolves
 birthdates **best-effort from minnano-av** (matched by actor name), cached in
 `ActorMetadata`, computing age at the movie's release date. Actors with no
 resolved birthdate have unknown age and never cause a drop. (xslist was weighed as
-a fallback but deferred — it cannot match javdb's Japanese names.) **Subscriptions (whitelist that bypasses the
-rating threshold) are deferred (Phase 3)** — they are the include counterpart and
-a larger change.
+a fallback but deferred — it cannot match javdb's Japanese names.)
+**Subscriptions are superseded by [ADR-054 WS2](../ADR-054-User-Intent-Discovery-Layer/ADR-054-user-intent-discovery-layer.md)**:
+the rating-threshold bypass is now part of one unified Subscription domain
+(`ActorSubscription` + `NewWorks`) rather than an ADR-040-only whitelist. The
+bypass is pinned by `tests/unit/test_adhoc_bypasses_rating_gate.py`.
 
 **D6. Deterministic and explainable; orthogonal to the preference model.** The
 engine returns a `FilterDecision(keep, reasons)`; drop reasons are surfaced (stats
@@ -125,18 +127,20 @@ queueing.
 | --- | --- | --- |
 | Phase 1 — Exclude + attribute | IMP-ADR040-01 (done) | actor/tag/gender rules |
 | Phase 2 — Age filter | IMP-ADR040-02 (this plan) | `age` dimension; external-source enrichment (minnano-av; xslist deferred); `ActorMetadata` cache |
-| Phase 3 — Subscriptions | IMP-ADR040-03 (stub) | whitelist bypassing the rating threshold (needs an index-gate-bypass design) |
+| Phase 3 — Subscriptions | Superseded by [ADR-054 WS2](../ADR-054-User-Intent-Discovery-Layer/IMP-ADR054-02-subscriptions.md) | unified actor subscriptions + new-works feed; rating threshold bypass occurs by reusing the AdHoc scrape path (no ADR-040 bypass code), pinned by `tests/unit/test_adhoc_bypasses_rating_gate.py` |
 | Phase 4 — Web/MCP rule mgmt | IMP-ADR040-04 (stub) | REST CRUD over rules (web buildable now; MCP blocked on ADR-038) |
 | Phase 5 — Compose (optional) | IMP-ADR040-05 (stub) | combine with the ADR-025 preference score |
 
-Phase 1 is additive and backward-compatible (no rules → no change). Phases 2/3
-widen the include side and attribute coverage.
+Phase 1 is additive and backward-compatible (no rules → no change). Phase 2
+widens attribute coverage. The former Phase 3 is no longer an ADR-040 phase; it
+is owned by ADR-054 WS2 so "Subscription" has one domain meaning.
 
 ### Explicit non-goals (YAGNI)
 
 - **No streaming / frequent cron** — the pivot; the daily cadence stays.
 - **No age filter in Phase 1** — needs actor-profile enrichment (Phase 2).
-- **No subscriptions in Phase 1** — the include/whitelist side is Phase 3.
+- **No subscriptions in Phase 1** — the include/whitelist side was deferred and
+  is now superseded by ADR-054 WS2.
 - **No ML** — deterministic rules only; preference scoring is ADR-022/025.
 - **No rewrite of the rating/rater filter** — a parallel second gate (D3).
 
@@ -147,8 +151,10 @@ widen the include side and attribute coverage.
 - **Blacklist** — exclude-mode content filter rules (highest precedence).
 - **Attribute filter** — a rule on a parsed attribute (gender, tag).
 - **Filter decision** — the engine's `keep` + `reasons` for one movie.
-- **Subscription** — (Phase 3) a followed entity whose new releases bypass the
-  rating threshold.
+- **Subscription** — superseded by ADR-054 WS2: a followed entity whose new
+  releases surface in a New-Works feed and bypass the rating threshold through
+  the AdHoc scrape path; the bypass is a property of `is_adhoc_mode` selection,
+  not a new index-gate hook.
 
 ## Alternatives Considered
 
@@ -180,3 +186,10 @@ widen the include side and attribute coverage.
 - 2026-06-07: Phase 2 implemented via [IMP-ADR040-02](IMP-ADR040-02-age-filter.md)
   (PR #180) — `age` dimension, minnano-av enrichment, `ActorMetadata` cache. ADR
   remains active for Phases 3-5.
+- 2026-06-15: Former Phase 3 "Subscriptions" superseded by
+  [ADR-054 WS2](../ADR-054-User-Intent-Discovery-Layer/IMP-ADR054-02-subscriptions.md).
+  WS2 defines the single Subscription domain (`ActorSubscription` + `NewWorks`)
+  and reuses the AdHoc scrape path, whose phase-2 selection bypasses the
+  rating/rater threshold by construction. ADR-040 no longer owns subscription
+  bypass code; the behavior is pinned by
+  `tests/unit/test_adhoc_bypasses_rating_gate.py`.

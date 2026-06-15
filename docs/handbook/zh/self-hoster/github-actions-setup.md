@@ -252,6 +252,20 @@ GitHub Actions 的 cron 在高负载时可能延迟最多 15 分钟。cron 仅�
 - **date_filter**：按发布日期过滤
 - **qb_category**：自定义 qBittorrent 分类（空 = 默认 "Ad Hoc"；`顶级` 使用每日 qB 凭据）
 
+### SubscriptionMonitor 工作流
+
+`SubscriptionMonitor.yml` 每天 **14:00 UTC** 运行，也可以手动触发。它从 D1
+读取 active 的 `ActorSubscription` 行，通过现有 AdHoc spider 路径抓取每个演员，并将真正的新作写入 `NewWorks` feed。
+
+手动输入：
+
+- **proxy_spider**：为演员页抓取启用代理。
+- **dry_run**：只列出 active subscriptions，不执行抓取。
+- **runner**：选择 `ubuntu-latest` 或 `self-hosted`。
+- **log_level**：CLI 日志级别（`DEBUG`、`INFO`、`WARNING`、`ERROR`）。
+
+该工作流复用摄取工作流所在的 `Production` environment secrets 和 variables，包括 D1 凭据、JavDB 登录凭据、代理设置、`DEPLOY_KEY` 和 `ARTIFACT_KEY`。
+
 ## 步骤 7 —— 监控
 
 ### 邮件通知
@@ -292,6 +306,7 @@ openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
 |---|---|---|
 | `QBFileFilter.yml` | 定时（每日抓取后 2 小时） | 过滤最近添加种子中的小文件 |
 | `ReconcileLibrary.yml` | 每小时定时 / 手动触发 | 运行 ADR-033 闭环轮次：采集结果对账（实时 qB 状态）+ 所有权账本（gdrive/qb/pikpak/nas）+ 消费信号（媒体服务器） |
+| `SubscriptionMonitor.yml` | 每日定时 / 手动触发 | 通过 AdHoc 路径抓取已关注演员并写入 New Works feed |
 | `WeeklyDedup.yml` | 每周定时 | Rclone 去重 |
 | `RollbackD1.yml` | 手动触发 | 手动会话回滚 |
 | `StaleSessionCleanup.yml` | 每日定时 | 自动清理超过 48 小时的卡住会话 |

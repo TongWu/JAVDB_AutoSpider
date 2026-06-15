@@ -227,6 +227,27 @@ CREATE TABLE IF NOT EXISTS WatchIntent (
     updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_watch_intent_status ON WatchIntent(status);
+CREATE TABLE IF NOT EXISTS ActorSubscription (
+    actor_href      TEXT PRIMARY KEY,
+    actor_name      TEXT,
+    active          INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1)),
+    last_seen_href  TEXT,
+    last_checked_at TEXT,
+    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_actor_subscription_active ON ActorSubscription(active);
+CREATE TABLE IF NOT EXISTS NewWorks (
+    video_code    TEXT PRIMARY KEY,
+    href          TEXT NOT NULL,
+    actor_href    TEXT NOT NULL,
+    title         TEXT,
+    release_date  TEXT,
+    discovered_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    dismissed     INTEGER NOT NULL DEFAULT 0 CHECK (dismissed IN (0,1))
+);
+CREATE INDEX IF NOT EXISTS idx_new_works_actor     ON NewWorks(actor_href);
+CREATE INDEX IF NOT EXISTS idx_new_works_dismissed ON NewWorks(dismissed);
 """
 
 _REPORTS_DDL = _SCHEMA_VERSION_DDL + """

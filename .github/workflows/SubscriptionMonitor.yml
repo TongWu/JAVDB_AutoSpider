@@ -1,0 +1,138 @@
+name: JavDB Subscription Monitor
+
+# ADR-054 WS2: scrape every followed actor (ActorSubscription, D1) through the
+# AdHoc spider path and write genuinely-new works into the NewWorks feed.
+# The AdHoc selection path bypasses the ADR-040 rating threshold by
+# construction; see tests/unit/test_adhoc_bypasses_rating_gate.py.
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      proxy_spider:
+        description: 'Enable proxy for spider requests'
+        required: false
+        default: true
+        type: boolean
+      dry_run:
+        description: 'List active subscriptions without scraping'
+        required: false
+        default: false
+        type: boolean
+      runner:
+        description: 'Runner type'
+        required: false
+        default: 'ubuntu-latest'
+        type: choice
+        options:
+          - 'ubuntu-latest'
+          - 'self-hosted'
+      log_level:
+        description: 'CLI log level'
+        required: false
+        default: 'INFO'
+        type: choice
+        options:
+          - DEBUG
+          - INFO
+          - WARNING
+          - ERROR
+  schedule:
+    # Daily at 14:00 UTC, offset from DailyIngestion's 12:00 UTC cron.
+    - cron: '00 14 * * *'
+
+concurrency:
+  group: subscription-monitor-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    name: Monitor subscriptions and update New Works
+    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
+    timeout-minutes: 120
+    environment: Production
+    env:
+      TZ: Asia/Singapore
+      STORAGE_BACKEND: d1
+      JAVDB_HISTORY_WRITE_MODE: pending
+      D1_RECOVERY_OUTBOX_ENABLED: ${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}
+      D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
+      D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
+      INPUT_PROXY_SPIDER: ${{ github.event_name == 'workflow_dispatch' && (inputs.proxy_spider && 'true' || 'false') || 'true' }}
+      INPUT_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
+      INPUT_LOG_LEVEL: ${{ inputs.log_level || 'INFO' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+          persist-credentials: false
+          lfs: true
+
+      - name: Set up Python, venv, dependencies, Rust extension
+        uses: ./.github/actions/setup-python-env
+        with:
+          python-version: '3.11'
+
+      - name: Generate config.py from GitHub Variables and Secrets
+        env:
+          VAR_QB_URL: ${{ secrets.QB_URL_ADHOC || secrets.QB_URL }}
+          VAR_QB_USERNAME: ${{ secrets.QB_USERNAME_ADHOC || secrets.QB_USERNAME }}
+          VAR_QB_PASSWORD: ${{ secrets.QB_PASSWORD_ADHOC || secrets.QB_PASSWORD }}
+          VAR_PROXY_POOL_JSON: ${{ secrets.PROXY_POOL_JSON }}
+          VAR_JAVDB_PASSWORD: ${{ secrets.JAVDB_PASSWORD }}
+          VAR_JAVDB_SESSION_COOKIE: ${{ secrets.JAVDB_SESSION_COOKIE }}
+          VAR_JAVDB_USERNAME: ${{ secrets.JAVDB_USERNAME }}
+          VAR_PROXY_MODE: ${{ vars.PROXY_MODE }}
+          VAR_PROXY_POOL_MAX_FAILURES: ${{ vars.PROXY_POOL_MAX_FAILURES || 3 }}
+          VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}
+          VAR_PROXY_SPIDER_ENABLED: ${{ github.event_name == 'workflow_dispatch' && (inputs.proxy_spider && 'true' || 'false') || 'true' }}
+          VAR_LOGIN_PROXY_NAME: ${{ vars.LOGIN_PROXY_NAME || '' }}
+          VAR_CF_BYPASS_SERVICE_PORT: ${{ vars.CF_BYPASS_SERVICE_PORT }}
+          VAR_CF_BYPASS_ENABLED: ${{ vars.CF_BYPASS_ENABLED || 'True' }}
+          VAR_BASE_URL: ${{ vars.BASE_URL || 'https://javdb.com' }}
+          VAR_PAGE_START: ${{ vars.PAGE_START }}
+          VAR_PAGE_END: ${{ vars.PAGE_END }}
+          VAR_LOG_LEVEL: ${{ vars.LOG_LEVEL || 'INFO' }}
+          VAR_SPIDER_LOG_FILE: ${{ vars.SPIDER_LOG_FILE || 'logs/spider.log' }}
+          VAR_REPORTS_DIR: ${{ vars.REPORTS_DIR || 'reports' }}
+          VAR_AD_HOC_DIR: ${{ vars.AD_HOC_DIR || 'reports/AdHoc' }}
+          VAR_TORRENT_CATEGORY_ADHOC: ${{ vars.TORRENT_CATEGORY_ADHOC }}
+          VAR_TORRENT_SAVE_PATH: ${{ vars.TORRENT_SAVE_PATH }}
+          VAR_STORAGE_BACKEND: d1
+          VAR_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VAR_CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          VAR_D1_HISTORY_DB_ID: ${{ secrets.D1_HISTORY_DB_ID }}
+          VAR_D1_REPORTS_DB_ID: ${{ secrets.D1_REPORTS_DB_ID }}
+          VAR_D1_OPERATIONS_DB_ID: ${{ secrets.D1_OPERATIONS_DB_ID }}
+          VAR_PROXY_COORDINATOR_URL: ${{ vars.PROXY_COORDINATOR_URL }}
+          VAR_PROXY_COORDINATOR_TOKEN: ${{ secrets.PROXY_COORDINATOR_TOKEN }}
+          VAR_MOVIE_CLAIM_ENABLED: ${{ vars.MOVIE_CLAIM_ENABLED || 'auto' }}
+        run: python3 -m apps.cli.ops.config_generator --github-actions
+
+      - name: Run subscription monitor
+        run: |
+          set -euo pipefail
+          mkdir -p logs
+
+          CMD=(python3 -m apps.cli.ops.subscription_monitor --log-level "$INPUT_LOG_LEVEL")
+          if [ "$INPUT_PROXY_SPIDER" = "true" ]; then
+            CMD+=(--use-proxy)
+          fi
+          if [ "$INPUT_DRY_RUN" = "true" ]; then
+            CMD+=(--dry-run)
+          fi
+
+          echo "Executing: ${CMD[*]}"
+          "${CMD[@]}" 2>&1 | tee logs/subscription_monitor.log
+
+      - name: Upload monitor log
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: subscription-monitor-log
+          path: logs/subscription_monitor.log
+          retention-days: 7
+          if-no-files-found: ignore
