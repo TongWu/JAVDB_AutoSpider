@@ -2190,17 +2190,19 @@ Agent F), manual smoke, remote D1 apply, and cron enablement land.
 **Files:**
 - Modify: `src/types/api.gen.ts`
 
-- [ ] **Step 1: Regenerate from the local openapi.json produced in Task 5**
+- [x] **Step 1: Regenerate from the local openapi.json produced in Task 5**
 
 Run: `OPENAPI_PATH=/Users/tedwu/JAVDB_AutoSpider_CICD/docs/api/openapi.json node scripts/fetch-openapi.mjs`
 Expected: regenerates `src/types/api.gen.ts`.
 
-- [ ] **Step 2: Verify `Features.subscriptions` is now typed**
+> Execution note (2026-06-15, Agent F): re-vendored after MAIN #217 added `subscriptions` to `openapi.json`. In a worktree the script's relative `node_modules/.bin` path fails — run `openapi-typescript` by absolute path. Drift-clean against MAIN `main`.
+
+- [x] **Step 2: Verify `Features.subscriptions` is now typed**
 
 Run: `grep -n "subscriptions" src/types/api.gen.ts`
 Expected: matches the new `subscriptions: boolean;` line under the `Features` schema.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/types/api.gen.ts
@@ -2216,7 +2218,7 @@ git commit -m "chore(web): re-vendor api types for subscriptions (ADR-054 WS2)"
 **Files:**
 - Create: `src/api/subscriptions.ts`, `src/api/new-works.ts`
 
-- [ ] **Step 1: Write the subscriptions client**
+- [x] **Step 1: Write the subscriptions client**
 
 Create `src/api/subscriptions.ts` (hand-typed, mirroring `src/api/watchlist.ts`: shared `http` wrapper, `encodeURIComponent` path segment, 404→null). The actor identifier is the bare `<id>` (e.g. `EvkJ`); the client builds `/api/subscriptions/actors/<id>` to match both backends' routes:
 
@@ -2294,7 +2296,7 @@ export async function deleteSubscription(actorHref: string): Promise<void> {
 }
 ```
 
-- [ ] **Step 2: Write the new-works client**
+- [x] **Step 2: Write the new-works client**
 
 Create `src/api/new-works.ts` (hand-typed):
 
@@ -2343,7 +2345,7 @@ export async function dismissNewWork(videoCode: string): Promise<void> {
 }
 ```
 
-- [ ] **Step 3: Type-check**
+- [x] **Step 3: Type-check**
 
 Run: `npx vue-tsc --noEmit -p tsconfig.app.json`
 Expected: no errors referencing `subscriptions.ts` / `new-works.ts`. (Commit with Task 15.)
@@ -2355,7 +2357,7 @@ Expected: no errors referencing `subscriptions.ts` / `new-works.ts`. (Commit wit
 **Files:**
 - Create: `src/pages/library/SubscriptionsView.vue`, `src/pages/library/NewWorksView.vue`
 
-- [ ] **Step 1: Write SubscriptionsView**
+- [x] **Step 1: Write SubscriptionsView**
 
 Create `src/pages/library/SubscriptionsView.vue` (mirrors `ConsumptionView.vue`/`WatchlistView.vue`: `NSpin` + error `NAlert` + KPI `NGrid` + add-actor `NInput` row + `NDataTable` with an active-toggle and unfollow action):
 
@@ -2543,7 +2545,7 @@ onMounted(() => void fetchList())
 </style>
 ```
 
-- [ ] **Step 2: Write NewWorksView**
+- [x] **Step 2: Write NewWorksView**
 
 Create `src/pages/library/NewWorksView.vue` (mirrors `WatchlistView.vue`; embeds WS1's `StatusControl.vue` for one-click want; a dismiss action removes the row from the feed):
 
@@ -2709,7 +2711,7 @@ onMounted(() => void fetchList())
 **Files:**
 - Modify: `src/pages/library/LibraryPage.vue`
 
-- [ ] **Step 1: Import the views**
+- [x] **Step 1: Import the views**
 
 In `src/pages/library/LibraryPage.vue`, after `import WatchlistView from './WatchlistView.vue'`:
 
@@ -2718,7 +2720,7 @@ import SubscriptionsView from './SubscriptionsView.vue'
 import NewWorksView from './NewWorksView.vue'
 ```
 
-- [ ] **Step 2: Add the gate computed**
+- [x] **Step 2: Add the gate computed**
 
 After `const showWatchlist = computed(() => !!features.value?.watch_intent)`:
 
@@ -2726,7 +2728,7 @@ After `const showWatchlist = computed(() => !!features.value?.watch_intent)`:
 const showSubscriptions = computed(() => !!features.value?.subscriptions)
 ```
 
-- [ ] **Step 3: Push the tabs into `visibleTabs`**
+- [x] **Step 3: Push the tabs into `visibleTabs`**
 
 In the `visibleTabs` computed, after `if (showWatchlist.value) tabs.push('watchlist')`:
 
@@ -2737,7 +2739,7 @@ In the `visibleTabs` computed, after `if (showWatchlist.value) tabs.push('watchl
   }
 ```
 
-- [ ] **Step 4: Add the tab panes**
+- [x] **Step 4: Add the tab panes**
 
 After the watchlist `<NTabPane>`:
 
@@ -2758,7 +2760,7 @@ After the watchlist `<NTabPane>`:
       </NTabPane>
 ```
 
-- [ ] **Step 5: Type-check**
+- [x] **Step 5: Type-check**
 
 Run: `npx vue-tsc --noEmit -p tsconfig.app.json`
 Expected: no errors. (Commit with Task 17, together with the i18n keys the templates reference.)
@@ -2768,9 +2770,11 @@ Expected: no errors. (Commit with Task 17, together with the i18n keys the templ
 ### Task 17: i18n strings (en + zh parity)
 
 **Files:**
-- Modify: `src/i18n/locales/en.json`, `src/i18n/locales/zh-CN.json`
+- Modify: `src/i18n/locales/en.json`, `src/i18n/locales/zh-CN.json`, `src/i18n/locales/ja.json`
 
-- [ ] **Step 1: en.json**
+> Execution note (Agent F): 3-locale parity (`tests/unit/i18n-parity.spec.ts`) requires `ja.json` too, beyond the en+zh in this plan.
+
+- [x] **Step 1: en.json**
 
 In `src/i18n/locales/en.json`:
 
@@ -2826,7 +2830,7 @@ In `src/i18n/locales/en.json`:
     },
 ```
 
-- [ ] **Step 2: zh-CN.json (same keys, translated values)**
+- [x] **Step 2: zh-CN.json (same keys, translated values)**
 
 In `src/i18n/locales/zh-CN.json`:
 
@@ -2882,7 +2886,7 @@ In `src/i18n/locales/zh-CN.json`:
     },
 ```
 
-- [ ] **Step 3: Verify both locales parse and have the same keys**
+- [x] **Step 3: Verify both locales parse and have the same keys**
 
 Run:
 ```bash
@@ -2890,12 +2894,12 @@ node -e "const en=require('./src/i18n/locales/en.json').library; const zh=requir
 ```
 Expected: `i18n parity ok`
 
-- [ ] **Step 4: Full frontend type-check + unit tests**
+- [x] **Step 4: Full frontend type-check + unit tests**
 
 Run: `npx vue-tsc --noEmit -p tsconfig.app.json && npx vitest run --config vitest.config.ts`
 Expected: type-check clean; frontend unit tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/api/subscriptions.ts src/api/new-works.ts src/pages/library/SubscriptionsView.vue src/pages/library/NewWorksView.vue src/pages/library/LibraryPage.vue src/i18n/locales/en.json src/i18n/locales/zh-CN.json
@@ -3058,7 +3062,7 @@ npx vitest run \
 ```
 Expected: server type-check and server tests pass.
 
-- [ ] **[WEB] frontend tests + type-check (Sprint 3 / Agent F scope)**
+- [x] **[WEB] frontend tests + type-check (Sprint 3 / Agent F scope)**
 
 Run after Phase E is implemented:
 ```bash

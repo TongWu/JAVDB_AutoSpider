@@ -1326,22 +1326,30 @@ git commit -m "feat(server): expose magnet_aggregation capability flag (hardcode
 
 ## Phase D — Frontend [WEB]
 
+> **Execution notes (2026-06-15, Agent F — branch `claude/adr054-ws3-magnet-source` off WEB `main`):**
+> - **Re-vendor (Task 10):** in a git worktree `fetch-openapi.mjs`'s relative `node_modules/.bin` path fails; ran `openapi-typescript` by absolute path from MAIN `openapi.json`. +116 additive lines (aggregate-magnets path + `AggregatedMagnet` schema + `Features.magnet_aggregation`); drift-clean.
+> - **`ResolveCard.vue` was also modified** (File Structure listed only `ResolveMagnetTable.vue`): the aggregate call/merge/error must live where the `video_code` is. `ResolveCard` calls `browse.aggregateMagnets(code)` on mount + url-change (latest-wins guard), appends rows into `displayMagnets`, and surfaces `aggregateError` via an `NAlert`.
+> - **Score is rendered too:** the gated Source column shows provenance `NTag`(s) **and** the ADR-024 `quality_score` (warning `NTag`, `quality_reasons` in the tooltip), per the campaign deliverable. Added a `browse.resolve.magnet.score` i18n key.
+> - **`skipErrorToast: true`** on the aggregate POST (the caller renders the inline `NAlert`) — avoids a duplicate global toast.
+> - **i18n:** en + zh-CN + **ja** (the repo's `tests/unit/i18n-parity.spec.ts` enforces 3-locale parity, beyond the en/zh in this plan).
+> - **v1 known behavior:** aggregated rows are appended without dedup against the javdb magnets (the backend dedups across external sources only).
+
 ### Task 10: Regenerate api types
 
 **Files:**
 - Modify: `src/types/api.gen.ts`
 
-- [ ] **Step 1: Regenerate from the local openapi.json produced in Task 7**
+- [x] **Step 1: Regenerate from the local openapi.json produced in Task 7**
 
 Run: `OPENAPI_PATH=/Users/tedwu/JAVDB_AutoSpider_CICD/docs/api/openapi.json node scripts/fetch-openapi.mjs`
 Expected: regenerates `src/types/api.gen.ts`.
 
-- [ ] **Step 2: Verify `Features.magnet_aggregation` is now typed**
+- [x] **Step 2: Verify `Features.magnet_aggregation` is now typed**
 
 Run: `grep -n "magnet_aggregation" src/types/api.gen.ts`
 Expected: matches the new `magnet_aggregation: boolean;` line under the `Features` schema.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/types/api.gen.ts
@@ -1357,7 +1365,7 @@ git commit -m "chore(web): re-vendor api types for magnet_aggregation (ADR-054 W
 **Files:**
 - Modify: `src/api/explore.ts`, `src/stores/browse.ts`
 
-- [ ] **Step 1: Add the api client**
+- [x] **Step 1: Add the api client**
 
 In `src/api/explore.ts`, add the aggregated-magnet types + the client function (hand-typed, mirroring the other `apiX` functions; shapes mirror `AggregateMagnetsResponse`):
 
@@ -1390,7 +1398,7 @@ export async function apiAggregateMagnets(
 }
 ```
 
-- [ ] **Step 2: Extend `MagnetRow` + add a store merge action**
+- [x] **Step 2: Extend `MagnetRow` + add a store merge action**
 
 In `src/stores/browse.ts`, extend `MagnetRow` (it is already an open shape, so this is additive typing only):
 
@@ -1450,7 +1458,7 @@ Add this action inside `useBrowseStore` (capability-gated; merges `source`-tagge
 
 Export `aggregateMagnets` in the store's returned object (add `aggregateMagnets,` near `downloadMagnet,`). The caller (`ResolveCard`, Task 12) spreads `.rows` into the magnet array and, when `.error` is non-null, surfaces `t('browse.resolve.magnet.aggregateError')` (e.g. an `NAlert`/message) so a failed aggregation is visible rather than silent.
 
-- [ ] **Step 3: Type-check**
+- [x] **Step 3: Type-check**
 
 Run: `npx vue-tsc --noEmit -p tsconfig.app.json`
 Expected: no errors referencing `explore.ts` / `browse.ts`. (Commit with Task 12.)
@@ -1465,7 +1473,7 @@ Expected: no errors referencing `explore.ts` / `browse.ts`. (Commit with Task 12
 
 Add ONE gated **Source** column (NTag) after the existing quality column. Gate it on `cap.data?.features?.magnet_aggregation` so deployments without indexers never render the column. Existing index-status dots + download action + `browse.resolve.magnet.*` keys keep working.
 
-- [ ] **Step 1: Add the capability gate + Source column**
+- [x] **Step 1: Add the capability gate + Source column**
 
 In `src/components/browse/ResolveMagnetTable.vue` `<script setup>`, add the capabilities store import + ref near the other store imports:
 
@@ -1498,7 +1506,7 @@ In the `columns` computed, after the `quality` column entry and before the `date
 
 > Place this `if (showSource.value)` block **before** the existing `if (isAdmin.value)` action-column block so Source renders left of the Action column. The `NTag` import already exists in this file.
 
-- [ ] **Step 2: Add the i18n strings (en)**
+- [x] **Step 2: Add the i18n strings (en)**
 
 In `src/i18n/locales/en.json`, under `browse.resolve.magnet.col`, add a `source` label (sibling of `title`/`size`/`quality`/`date`/`status`/`action`):
 
@@ -1512,7 +1520,7 @@ Add an aggregation-error string under `browse.resolve.magnet` (sibling of `empty
       "aggregateError": "Failed to aggregate magnets from external sources."
 ```
 
-- [ ] **Step 3: Add the i18n strings (zh-CN, parity)**
+- [x] **Step 3: Add the i18n strings (zh-CN, parity)**
 
 In `src/i18n/locales/zh-CN.json`, mirror both keys (en/zh parity is mandatory — translation drift is a defect):
 
@@ -1526,18 +1534,18 @@ In `src/i18n/locales/zh-CN.json`, mirror both keys (en/zh parity is mandatory �
 
 > The repo also carries `ja.json`. The house pairing rule is en↔zh; updating `ja.json` is optional and out of WS3 scope. If your CI enforces a 3-locale key-parity check, add the same two keys to `ja.json` ("ソース" / aggregation-failure message) to keep it green — otherwise leave it.
 
-- [ ] **Step 4: Type-check + lint**
+- [x] **Step 4: Type-check + lint**
 
 Run: `npx vue-tsc --noEmit -p tsconfig.app.json`
 Then: `npx eslint src/components/browse/ResolveMagnetTable.vue src/stores/browse.ts src/api/explore.ts`
 Expected: no errors.
 
-- [ ] **Step 5: Verify i18n parity (no missing keys across en/zh)**
+- [x] **Step 5: Verify i18n parity (no missing keys across en/zh)**
 
 Run: `node -e "const en=require('./src/i18n/locales/en.json'),zh=require('./src/i18n/locales/zh-CN.json'); const c=en.browse.resolve.magnet.col; console.log('en source:',c.source,'| zh source:',zh.browse.resolve.magnet.col.source); console.log('en err:',en.browse.resolve.magnet.aggregateError,'| zh err:',zh.browse.resolve.magnet.aggregateError)"`
 Expected: prints both en and zh values for `source` and `aggregateError` (no `undefined`).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/api/explore.ts src/stores/browse.ts src/components/browse/ResolveMagnetTable.vue src/i18n/locales/en.json src/i18n/locales/zh-CN.json

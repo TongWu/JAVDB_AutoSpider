@@ -89,8 +89,8 @@ Agent B:
 - [x] supersede ADR-040 Phase-3 "Subscription" (bilingual amendment) + bypass regression test
 
 Agent F:
-- [ ] New-Works feed view (reuse WS1 `StatusControl.vue` for one-click want)
-- [ ] subscriptions management UI + en/zh
+- [x] New-Works feed view (reuse WS1 `StatusControl.vue` for one-click want)
+- [x] subscriptions management UI + en/zh
 
 ### WS3 — Magnet aggregation · [IMP-ADR054-03](IMP-ADR054-03-magnet-aggregation.md)
 Agent B:
@@ -100,7 +100,7 @@ Agent B:
 - [x] `POST /api/explore/aggregate-magnets` (Python real; Worker 501 in cloudflare mode); `magnet_aggregation` flag = `bool(MAGNET_SOURCES)`
 
 Agent F:
-- [ ] gated **Source** column in `ResolveMagnetTable.vue` (only when flag on) + i18n
+- [x] gated **Source** column in `ResolveMagnetTable.vue` (only when flag on) + i18n
 
 ### WS4a — Content filtering · ADR-040 (delegated)
 Agent F (full vertical — self-contained, low backend risk):
@@ -147,3 +147,5 @@ Agent F:
   remains a Sprint 3 / Agent F item, and remote D1 apply + cron enablement
   remain deployment gates.
 - 2026-06-15: WS3 Agent B backend slice completed: MAIN indexer plugins/fetch/aggregation/Python API/OpenAPI/capability, plus WEB `server/` Worker 501 mirror and hardcoded-false capability. Frontend `src/` work remains with Agent F.
+- 2026-06-15: **Sprint 3 / Agent F — WS2 UI complete.** Library `Subscriptions` + `New-Works` tabs (reuse WS1 `StatusControl.vue` unchanged), hand-typed `src/api/{subscriptions,new-works}.ts`, gated on `subscriptions`, en/zh-CN/**ja**. `api.gen.ts` re-vendored post-#217 (typed gate), drift-clean, 155 web unit tests + build green. 2 commits on `claude/priceless-curie-b0a53f`.
+- 2026-06-15: **Sprint 3 / Agent F — WS3 UI complete (unblocked same day).** WS3 backend landed mid-session (MAIN #218 + WEB `server/` mirror #36), so the UI was built on a fresh branch `claude/adr054-ws3-magnet-source` off WEB `main`: re-vendored `api.gen.ts` for `magnet_aggregation`; `apiAggregateMagnets` client (`skipErrorToast`); capability-gated `browse.aggregateMagnets` store action (+3 unit tests); `ResolveCard` orchestration (call/merge/error); gated **Source** column in `ResolveMagnetTable` rendering per-source provenance + ADR-024 `quality_score`; en/zh-CN/**ja**. Verified: drift-clean, typecheck, 167 web unit tests, server 501-mirror suite 9/9, build. 3 commits (chore→feat→test).
