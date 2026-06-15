@@ -473,6 +473,9 @@ def main() -> int:
             enqueue_qb=args.align_enqueue_qb,
             qb_category=args.align_qb_category,
             execute_delete=args.align_execute_delete,
+            # No --session-id on the migration CLI: run_alignment opens its
+            # own pending session and commits it (ADR-005 PR-4 staging path).
+            session_id=None,
         )
         arc = run_alignment(align_ns)
         if arc != 0:

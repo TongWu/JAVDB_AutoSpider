@@ -71,21 +71,12 @@ from javdb.pipeline.policies import (
 from javdb.infra.config import cfg
 from javdb.storage.db import (
     init_db,
+    set_active_run_identity,
     SESSION_ID_PATTERN,
 )
 from javdb.storage.repos.history_repo import HistoryRepo
 from javdb.storage.repos.operations_repo import OperationsRepo
-
-
-def _audit_retired_stub(*args, **kwargs):
-    raise NotImplementedError(
-        "db_upsert_history was removed by ADR-005 PR-4. "
-        "This migration tool needs rewriting to use staging+commit."
-    )
-
-
-db_upsert_history = _audit_retired_stub
-db_upsert_history_batch = _audit_retired_stub
+from javdb.storage.repos.session_lifecycle_repo import SessionLifecycleRepo
 from javdb.infra.logging import get_logger, setup_logging
 from javdb.spider.magnet_extractor import extract_magnets
 from javdb.infra.paths import ensure_dated_dir
@@ -208,17 +199,97 @@ def _history_video_code_for_moviehistory(exact_entry, inventory_video_code: str)
 
 _DEFAULT_HISTORY_BATCH_SIZE = 50
 
+# Torrent buckets recorded for each aligned movie. All four are staged when
+# present — matching the pre-ADR-005 alignment behaviour (the retired
+# ``db_upsert_history`` wrote every non-empty category), not the spider's
+# best-of-pair collapse in ``save_parsed_movie_to_history``.
+_TORRENT_CATEGORIES = ('hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle')
+
+
+def _blank_actor_field_to_none(value):
+    """Map an empty / placeholder actor value to ``None``.
+
+    The pending-stage write coerces an empty ``ActorName`` / ``ActorGender`` /
+    ``ActorLink`` (``''``) to ``None`` (``payload.get("X") or ...``), but an
+    empty ``SupportingActors`` of ``'[]'`` is truthy and survives verbatim.
+    The commit path treats a ``None`` field as "leave the existing column
+    unchanged" and a non-``None`` field as "overwrite", so a parse that found
+    no actors would otherwise stamp ``'[]'`` over good supporting-actor data on
+    an existing canonical movie. The retired ``db_upsert_history`` was guarded
+    by ``_has_meaningful_actor_data``; reproduce that protection here by
+    nulling blank fields before they reach the stage so the commit preserves
+    existing actor metadata.
+    """
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text or text == '[]':
+        return None
+    return value
+
+
+def _stage_aligned_movie(repo: HistoryRepo, session_id: str, upsert_kwargs: dict) -> None:
+    """Stage one aligned movie + its torrents into the session pending tables.
+
+    Mirrors the write surface of the retired ``db_upsert_history``: a
+    MovieHistory row plus one TorrentHistory row per non-empty bucket in
+    ``_TORRENT_CATEGORIES``. The rows land in the live tables only when the
+    caller commits the session (``HistoryRepo.commit_session``).
+    """
+    href = upsert_kwargs['href']
+    video_code = upsert_kwargs['video_code']
+    magnet_links = upsert_kwargs.get('magnet_links') or {}
+    size_links = upsert_kwargs.get('size_links') or {}
+    file_count_links = upsert_kwargs.get('file_count_links') or {}
+    resolution_links = upsert_kwargs.get('resolution_links') or {}
+
+    repo.stage_movie(
+        session_id,
+        {
+            'Href': href,
+            'VideoCode': video_code,
+            'ActorName': _blank_actor_field_to_none(upsert_kwargs.get('actor_name')),
+            'ActorGender': _blank_actor_field_to_none(upsert_kwargs.get('actor_gender')),
+            'ActorLink': _blank_actor_field_to_none(upsert_kwargs.get('actor_link')),
+            'SupportingActors': _blank_actor_field_to_none(
+                upsert_kwargs.get('supporting_actors')
+            ),
+        },
+    )
+    for cat in _TORRENT_CATEGORIES:
+        magnet = magnet_links.get(cat)
+        if not magnet:
+            continue
+        repo.stage_torrent(
+            session_id,
+            {
+                'Href': href,
+                'VideoCode': video_code,
+                'Category': cat,
+                'MagnetUri': magnet,
+                'Size': size_links.get(cat, ''),
+                'FileCount': int(file_count_links.get(cat, 0) or 0),
+                'ResolutionType': resolution_links.get(cat),
+            },
+        )
+
 
 class _BatchedHistoryWriter:
-    """Buffer ``db_upsert_history`` calls and flush them via the batched
-    upsert helper so a long alignment run pays one DualConnection
-    transaction per *batch_size* movies instead of one per movie.
+    """Buffer aligned movies and stage them into the session pending tables.
 
-    Use from a single thread (alignment's result consumer runs in the
-    main thread; workers do not call ``add`` directly).
+    Replaces the retired ``db_upsert_history`` direct-upsert path (ADR-005
+    PR-4). Buffered rows are flushed in batches through the session-scoped
+    staging API (``HistoryRepo.stage_movie`` / ``stage_torrent``); the
+    caller commits the session once at the end of the run so the pending
+    rows land in MovieHistory / TorrentHistory.
+
+    ``session_id`` is the active ``ReportSessions.Id`` (pending mode) for
+    this run. Use from a single thread (alignment's result consumer runs in
+    the main thread; workers do not call ``add`` directly).
     """
 
-    def __init__(self, batch_size: int = _DEFAULT_HISTORY_BATCH_SIZE):
+    def __init__(self, session_id: str, batch_size: int = _DEFAULT_HISTORY_BATCH_SIZE):
+        self._session_id = session_id
         self._batch_size = max(1, int(batch_size))
         self._upsert_rows: List[dict] = []
         self._delete_codes: List[str] = []
@@ -235,9 +306,19 @@ class _BatchedHistoryWriter:
     def flush(self) -> None:
         if not self._upsert_rows and not self._delete_codes:
             return
+        if not self._session_id:
+            # Defensive: dry-run constructs the writer with session_id=None but
+            # never stages (add()/flush() are guarded by `not args.dry_run`).
+            # Guard against a future refactor staging without a real session.
+            raise RuntimeError(
+                "_BatchedHistoryWriter.flush() requires a session_id; "
+                "staged history rows cannot land without a pending session."
+            )
         n_up = len(self._upsert_rows)
         if self._upsert_rows:
-            db_upsert_history_batch(self._upsert_rows)
+            repo = HistoryRepo()
+            for row in self._upsert_rows:
+                _stage_aligned_movie(repo, self._session_id, row)
             self._upsert_rows = []
         if self._delete_codes:
             ops_repo = OperationsRepo()
@@ -248,7 +329,7 @@ class _BatchedHistoryWriter:
             self.flushed_rows += n_up
             self.flushed_batches += 1
             logger.info(
-                "Flushed history batch: %d row(s) (cumulative %d in %d batch(es))",
+                "Staged history batch: %d movie(s) (cumulative %d in %d batch(es))",
                 n_up, self.flushed_rows, self.flushed_batches,
             )
 
@@ -256,7 +337,7 @@ class _BatchedHistoryWriter:
 def _build_db_upsert_kwargs(detail_href: str, video_code: str, magnet_links: dict,
                             actor_name: str, actor_gender: str, actor_link: str,
                             supporting_actors: str) -> dict:
-    """Build keyword arguments for ``db_upsert_history``."""
+    """Build the row dict consumed by ``_stage_aligned_movie`` / the writer."""
     return {
         'href': detail_href,
         'video_code': video_code,
@@ -605,14 +686,103 @@ def _align_eff_denominator(
     return min(queued_total, limit_per_worker * max(1, active_proxy_count))
 
 
-def run_alignment(args: argparse.Namespace) -> int:
-    if not args.dry_run and db_upsert_history is _audit_retired_stub:
-        logger.error(
-            "db_upsert_history was removed by ADR-005 PR-4. "
-            "This tool cannot write history in non-dry-run mode until "
-            "it is rewritten to use the staging+commit path."
+def _open_alignment_session() -> str:
+    """Create a pending ReportSessions row for an alignment run.
+
+    Staged MovieHistory / TorrentHistory rows are tagged with this
+    SessionId and land in the live tables only when the run commits
+    (``HistoryRepo.commit_session``). The active run identity is primed so
+    pending rows carry (RunId, RunAttempt) for rollback-by-run.
+    """
+    run_id = os.environ.get('GITHUB_RUN_ID') or None
+    run_attempt: Optional[int] = None
+    raw_attempt = os.environ.get('GITHUB_RUN_ATTEMPT')
+    if raw_attempt:
+        try:
+            run_attempt = int(raw_attempt)
+        except ValueError:
+            run_attempt = None
+    now = datetime.now()
+    session_id = SessionLifecycleRepo().create_report_session(
+        report_type='alignment',
+        report_date=now.strftime('%Y-%m-%d'),
+        csv_filename=f'inventory_history_align_{now.strftime("%Y%m%d_%H%M%S")}.csv',
+        url_type='alignment',
+        display_name='Inventory↔MovieHistory alignment',
+        run_id=run_id,
+        run_attempt=run_attempt,
+        write_mode='pending',
+    )
+    try:
+        set_active_run_identity(run_id, run_attempt)
+    except Exception as exc:  # best-effort; staging still works without it
+        logger.debug("Could not prime active run identity: %s", exc)
+    logger.info(
+        "Opened alignment session %s (run_id=%s attempt=%s, write_mode=pending)",
+        session_id, run_id, run_attempt,
+    )
+    return session_id
+
+
+def _verify_adoptable_session(session_id: str) -> None:
+    """Fail fast if an explicit ``--session-id`` cannot receive staged history.
+
+    Staging never validates ``ReportSessions``, and the commit is a no-op for a
+    session that does not exist (empty drain) or is already ``committed`` (the
+    residual-cleanup branch just deletes the freshly-staged pending rows). Either
+    way the run would exit 0 having written nothing. Require the row to exist,
+    be pending mode, and still be ``in_progress`` so commit can actually drain.
+    """
+    from javdb.storage.db._db_reports import db_get_session_status
+
+    state = db_get_session_status(session_id)
+    if state is None:
+        raise SystemExit(
+            f"--session-id {session_id} does not exist in ReportSessions; "
+            "omit it to open a fresh session."
         )
-        raise SystemExit(1)
+    write_mode, status = state
+    if write_mode != 'pending' or status != 'in_progress':
+        raise SystemExit(
+            f"--session-id {session_id} is not adoptable "
+            f"(WriteMode={write_mode!r}, Status={status!r}); alignment needs a "
+            "pending session still in_progress so its history can commit."
+        )
+
+
+def _finalize_alignment_session(session_id: Optional[str], rc: int) -> int:
+    """Commit the alignment session on success; roll it back otherwise.
+
+    Returns 0 when there is nothing to do or after a clean commit/rollback.
+    On a failing ``rc`` the session is rolled back here. A commit that itself
+    raises is **re-raised** so the caller's outer guard runs the status-aware
+    cleanup: ``rollback_session`` resumes a ``finalizing`` session (whose drain
+    started, so rolling it back would lose applied rows) and rolls back one
+    still ``in_progress`` — neither is left orphaned for the 48h stale-session
+    sweep.
+    """
+    if not session_id:
+        return 0
+    if rc != 0:
+        logger.warning(
+            "Alignment did not complete cleanly (rc=%s); rolling back session %s",
+            rc, session_id,
+        )
+        try:
+            SessionLifecycleRepo().rollback_session(
+                session_id, failure_reason=f'alignment rc={rc}',
+            )
+        except Exception as exc:
+            logger.error(
+                "Rollback of alignment session %s failed: %s", session_id, exc,
+            )
+        return 0
+    drain = HistoryRepo().commit_session(session_id)
+    logger.info("Committed alignment session %s: %s", session_id, drain)
+    return 0
+
+
+def run_alignment(args: argparse.Namespace) -> int:
     init_db(force=True)
     history = HistoryRepo().load_history()
     inventory = OperationsRepo().load_rclone_inventory()
@@ -669,17 +839,60 @@ def run_alignment(args: argparse.Namespace) -> int:
     spider_state.initialize_request_handler()
     base_url = cfg('BASE_URL', 'https://javdb.com').rstrip('/')
 
+    # Open the pending session now that there is work to do — staged history
+    # rows land in MovieHistory / TorrentHistory only when this session commits
+    # (ADR-005 PR-4 retired the direct db_upsert_history path). An explicit
+    # --session-id is adopted instead. Dry-run never writes, so it stays None.
+    # Everything that stages or commits runs inside _run_alignment_core under a
+    # guard: any failure — mid-batch staging, an interrupt, an unexpected error
+    # — rolls the session back rather than orphaning an in_progress row with
+    # staged pending writes for a later stale-session resume to pick up.
+    session_id = getattr(args, 'session_id', None)
+    if not args.dry_run:
+        if session_id is None:
+            session_id = _open_alignment_session()
+        else:
+            _verify_adoptable_session(session_id)
+    args.session_id = session_id
+    try:
+        return _run_alignment_core(
+            args, session_id, inventory, missing_codes, total,
+            use_proxy=use_proxy, limit_per_worker=limit_per_worker,
+            base_url=base_url,
+        )
+    except BaseException:
+        if not args.dry_run and session_id:
+            logger.error(
+                "Alignment aborted; rolling back session %s", session_id,
+                exc_info=True,
+            )
+            _finalize_alignment_session(session_id, 1)
+        raise
+
+
+def _run_alignment_core(
+    args: argparse.Namespace,
+    session_id: Optional[str],
+    inventory: Dict,
+    missing_codes: List[str],
+    total: int,
+    *,
+    use_proxy: bool,
+    limit_per_worker: int,
+    base_url: str,
+) -> int:
+    """Run the staging + commit body of an alignment. Wrapped by
+    ``run_alignment`` so any failure rolls the session back."""
     no_login = getattr(args, 'no_login', False)
     process_results: List[MissingProcessResult] = []
     qb_rows: List[dict] = []
     purge_plan_rows: List[dict] = []
     rc = 0
-    # Per-row db_upsert_history opens a fresh connection and runs ~5 D1
-    # batch_execute round-trips. For an N-movie alignment that becomes
-    # 5N. The batched writer holds one connection / DualConnection
-    # transaction across `batch_size` rows so SQLite WAL fsync and D1
-    # drift accounting amortise across the batch.
-    history_writer = _BatchedHistoryWriter()
+    # Each aligned movie is staged into the session pending tables and only
+    # lands in MovieHistory / TorrentHistory when the session commits at the
+    # end of the run. The writer buffers rows and stages them in batches; the
+    # heavy D1 work is the single commit drain, not per-row staging.
+    history_writer = _BatchedHistoryWriter(session_id)
 
     from javdb.spider.runtime.config import PROXY_POOL
 
@@ -1029,11 +1242,16 @@ def run_alignment(args: argparse.Namespace) -> int:
             )
             movie_sleep_mgr.record_parsed_movie()
 
-    # Flush any pending history rows that did not fill a full batch.
-    # In dual mode under STRICT_DUAL_WRITE this is where a D1 failure
-    # for the tail batch surfaces.
+    # Flush any staged history rows that did not fill a full batch, then
+    # commit the session so the pending rows drain into MovieHistory /
+    # TorrentHistory. A non-zero rc (e.g. parallel interrupt) rolls the session
+    # back instead of committing a partial alignment. A failure in flush (e.g. a
+    # D1 write under STRICT_DUAL_WRITE) or in the commit propagates to
+    # run_alignment's guard, which rolls back / resumes the session and
+    # re-raises — neither leaves an orphaned in_progress row.
     if not args.dry_run:
         history_writer.flush()
+        _finalize_alignment_session(session_id, rc)
 
     # ------------------------------------------------------------------
     # Write outputs (common for both paths)
@@ -1082,7 +1300,18 @@ def run_alignment(args: argparse.Namespace) -> int:
     if args.enqueue_qb and qb_rows:
         qb_ok = _enqueue_qb_from_csv(qb_csv, use_proxy=use_proxy, category_override=args.qb_category)
         if not qb_ok:
-            logger.error("qB enqueue failed")
+            # History is committed before this step on purpose: the aligned codes
+            # must be recorded so the next run does not re-scrape JavDB for them.
+            # The flip side is that those codes are now in MovieHistory, so a
+            # future run's compute_missing_codes excludes them and will NOT
+            # regenerate this upgrade plan. The plan is persisted to qb_csv —
+            # re-enqueue it once qB is reachable rather than re-running alignment.
+            logger.error(
+                "qB enqueue failed. The aligned codes are already committed to "
+                "history and will not be re-aligned; re-enqueue the upgrade plan "
+                "from %s once qB is reachable.",
+                qb_csv,
+            )
             return 1
 
     if args.execute_delete and purge_plan_rows:
@@ -1103,7 +1332,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description='Align inventory-only movie codes into MovieHistory with JavDB search/detail enrichment.',
     )
-    parser.add_argument('--dry-run', action='store_true', help='Parse and plan only; do not write DB. (Required until staging+commit rewrite; see ADR-005 PR-4.)')
+    parser.add_argument('--dry-run', action='store_true', help='Parse and plan only; do not open a session or write DB.')
     parser.add_argument(
         '--limit',
         type=int,
@@ -1148,9 +1377,11 @@ def parse_args() -> argparse.Namespace:
         '--session-id',
         type=str,
         default=None,
-        help='Tag every D1 write inside this run with the given ReportSessions.Id '
+        help='Adopt an existing pending ReportSessions.Id for this run '
              '(TEXT: YYYYMMDDTHHMMSS.ffffffZ-TTTT-SSSS). Optional; if omitted '
-             'no SessionId is recorded and the writes are immune to scoped rollback.',
+             'the tool opens its own pending session. The run stages history '
+             'into this session and commits it at the end, so a half-finished '
+             'run is rolled back rather than left applied.',
     )
     args = parser.parse_args()
     if args.no_proxy and args.legacy_use_proxy:
