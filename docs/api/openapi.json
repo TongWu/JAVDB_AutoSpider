@@ -5543,6 +5543,19 @@
         "title": "VideoCodeSearchResponse",
         "type": "object"
       },
+      "WatchIntentDeleteResponse": {
+        "properties": {
+          "deleted": {
+            "title": "Deleted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "deleted"
+        ],
+        "title": "WatchIntentDeleteResponse",
+        "type": "object"
+      },
       "WatchIntentListResponse": {
         "properties": {
           "items": {
@@ -5582,6 +5595,10 @@
             "title": "Notes"
           },
           "status": {
+            "enum": [
+              "want",
+              "viewed"
+            ],
             "title": "Status",
             "type": "string"
           },
@@ -5617,6 +5634,7 @@
       "WatchIntentUpsert": {
         "properties": {
           "href": {
+            "minLength": 1,
             "title": "Href",
             "type": "string"
           },
@@ -14843,7 +14861,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/WatchIntentDeleteResponse"
+                }
               }
             },
             "description": "Successful Response"

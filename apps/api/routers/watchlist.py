@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from apps.api.infra.auth import _require_auth, require_role
 from apps.api.schemas.watchlist import (
+    WatchIntentDeleteResponse,
     WatchIntentListResponse,
     WatchIntentResponse,
     WatchIntentUpsert,
@@ -73,7 +74,7 @@ def get_watch_intent(video_code: str, _user=Depends(_require_auth)):
     return _row_to_intent(row)
 
 
-@router.delete("/{video_code}")
+@router.delete("/{video_code}", response_model=WatchIntentDeleteResponse)
 def delete_watch_intent(video_code: str, _admin=Depends(require_role("admin"))):
     deleted = WatchIntentRepo().delete(video_code)
-    return {"deleted": deleted}
+    return WatchIntentDeleteResponse(deleted=deleted)

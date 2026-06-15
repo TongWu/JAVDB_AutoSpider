@@ -66,12 +66,12 @@ WS1 (foundation) ──► WS2 (subscriptions)
 
 ### WS1 — Watchlist · [IMP-ADR054-01](IMP-ADR054-01-watchlist.md)
 Agent B:
-- [ ] `WatchIntent` D1 migration in `HISTORY_DB` (PK `video_code`, `status IN ('want','viewed')`, `href` bridge col)
-- [ ] Python `/api/watchlist` read + write (upsert / delete-on-untrack) in `apps/api/`
-- [ ] `watch_intent` capability flag (both backends)
-- [ ] `openapi.json` update + publish contract to F
-- [ ] TS Hono Worker `/api/watchlist` mirror (`server/`)
-- [ ] cross-backend upsert-parity golden test
+- [x] `WatchIntent` D1 migration in `HISTORY_DB` (PK `video_code`, `status IN ('want','viewed')`, `href` bridge col)
+- [x] Python `/api/watchlist` read + write (upsert / delete-on-untrack) in `apps/api/`
+- [x] `watch_intent` capability flag (both backends)
+- [x] `openapi.json` update + publish contract to F
+- [x] TS Hono Worker `/api/watchlist` mirror (`server/`)
+- [x] cross-backend upsert-parity golden test
 
 Agent F:
 - [ ] `StatusControl.vue` inline setter on the movie list (model on `HeartButton.vue`)
