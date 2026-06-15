@@ -55,6 +55,7 @@ from apps.api.routers.stats import router as stats_router
 from apps.api.routers.system_state import router as system_state_router
 from apps.api.routers.preferences import router as preferences_router
 from apps.api.routers.watchlist import router as watchlist_router
+from apps.api.routers.content_filter import router as content_filter_router
 from apps.api.routers.subscriptions import new_works_router, subscriptions_router
 from apps.api.routers.quality import router as quality_router
 from apps.api.routers.config import (
@@ -192,6 +193,7 @@ for router in (
     stats_router,
     preferences_router,
     watchlist_router,
+    content_filter_router,
     subscriptions_router,
     new_works_router,
     quality_router,

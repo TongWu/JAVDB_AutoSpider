@@ -104,10 +104,18 @@ Agent F:
 
 ### WS4a — Content filtering · ADR-040 (delegated)
 Agent F (full vertical — self-contained, low backend risk):
-- [ ] engine: `regex_exclude/include` + `release_date before/after` on existing `ContentFilterRule` (no migration) — [IMP-ADR040-03](../ADR-040-Content-Filter-Rules/IMP-ADR040-03-content-filter-regex-date.md)
-- [ ] dual-backend `/api/content-filter` CRUD (delegates to existing `ContentFilterRepo`) — [IMP-ADR040-04](../ADR-040-Content-Filter-Rules/IMP-ADR040-04-content-filter-web-crud.md)
-- [ ] `SettingsFilterRulesPage.vue` + read-side Browse overlay + `content_filter` flag + en/zh
+- [x] engine: `regex_exclude/include` + `release_date before/after` on existing `ContentFilterRule` (no migration) — [IMP-ADR040-03](../ADR-040-Content-Filter-Rules/IMP-ADR040-03-content-filter-regex-date.md)
+- [x] dual-backend `/api/content-filter` CRUD (delegates to existing `ContentFilterRepo`) — [IMP-ADR040-04](../ADR-040-Content-Filter-Rules/IMP-ADR040-04-content-filter-web-crud.md)
+- [x] `SettingsFilterRulesPage.vue` + read-side Browse overlay + `content_filter` flag + en/zh/ja
 > If F's Python comfort is low, split: B takes IMP-040-03 engine + IMP-040-04 router/TS; F takes the Vue page + overlay.
+> **Done 2026-06-15 (Agent F, full vertical).** MAIN branch `claude/ws4a-content-filter`
+> (engine + CLI + dual-backend Python router + capability + openapi + parity, 14 commits);
+> WEB branch `claude/nostalgic-hawking-fe6c0b` (TS Worker route/service/capability/parity +
+> api client + overlay matcher + Settings CRUD page + Movies overlay + en/zh/ja i18n, 8 commits).
+> Allow-list reconciled to 13/12 pairs (regex/release_date included); web-boundary validation
+> covers release_date (strict ISO) but not regex (JS/Python dialect — engine fail-opens);
+> i18n is three-way (en/zh/ja). Two correctness fixes landed (engine actor `regex_include`;
+> `StrictBool`/non-string-value cross-backend parity). All tests green; no schema migration.
 
 ### ADR-026-P4 — Proactive incident alerting · [IMP-ADR026-04](../ADR-026-AI-Operations-Diagnosis/IMP-ADR026-04-proactive-incident-alerting.md)
 Agent B:

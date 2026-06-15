@@ -62,7 +62,7 @@ Work the phases in order: **A (engine, TDD)** → **B (CLI, TDD)** → **C (doc-
 - Modify: `javdb/spider/services/content_filter.py`
 - Test: `tests/unit/test_content_filter_regex.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_content_filter_regex.py` (mirrors `test_content_filter_age.py`: local lightweight dataclasses so the engine is exercised in isolation; `ActorCredit`/`MovieLink`-shaped objects need only `name`/`href`):
 
@@ -115,7 +115,7 @@ def test_regex_include_requires_a_match():
     detail = _Detail(tags=[_Link(name="Drama", href="/tags/drama")])
     dec = evaluate(detail, [_rule("tag", "regex_include", r"comedy")])
     assert dec.keep is False
-    assert any("missing required tag regex" in r for r in dec.reasons)
+    assert any("missing required regex include" in r for r in dec.reasons)
 
 
 def test_regex_include_passes_when_one_tag_matches():
@@ -147,12 +147,22 @@ def test_disabled_regex_rule_ignored():
     assert evaluate(detail, [_rule("tag", "regex_exclude", r"vr", enabled=False)]).keep is True
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+> **Plan correction (2026-06-15, applied during IMP-03 execution):** the
+> `test_regex_include_requires_a_match` assertion above originally read
+> `"missing required tag regex"`, which contradicted the Step-5 wiring's reason
+> string `missing required regex include: {expected}`. The reason string is the
+> correct side — a `regex_include` rule is legal on `actor` **or** `tag`, so the
+> reason must not hard-code `tag`. The assertion was corrected to
+> `"missing required regex include"`; the as-shipped engine emits exactly that
+> string. (This is an engine-internal test, distinct from the protected
+> cross-backend allow-list parity test in IMP-ADR040-04.)
+
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `python3 -m pytest tests/unit/test_content_filter_regex.py -q`
 Expected: FAIL — the current engine ignores `regex_exclude`/`regex_include` (no branch handles them), so `keep` is `True` where the test expects `False` (and the include-requirement reason is never produced).
 
-- [ ] **Step 3: Add the `_matches_regex` helper**
+- [x] **Step 3: Add the `_matches_regex` helper**
 
 In `javdb/spider/services/content_filter.py`, add `import re` to the top of the file (after `from typing import Iterable`), then add this helper immediately after `_matches_link` (it does `re.search`, not casefold equality, and fails open on `re.error` — the regex analogue of the age `int()` guard):
 
@@ -176,7 +186,7 @@ def _matches_regex(pattern: str, item) -> bool:
     return bool(compiled.search(name) or compiled.search(href))
 ```
 
-- [ ] **Step 4: Wire `regex_exclude` into `_matches_exclude_rule`**
+- [x] **Step 4: Wire `regex_exclude` into `_matches_exclude_rule`**
 
 In `_matches_exclude_rule`, the current body only handles `mode == 'exclude'`. Add a `regex_exclude` branch. Replace:
 
@@ -212,7 +222,7 @@ def _matches_exclude_rule(detail, rule: Rule) -> bool:
 
 > `_exclude_reason(rule)` already renders `excluded by {dimension} rule: {value}` for any matched exclude rule, so `regex_exclude` reuses it verbatim — no new reason builder needed. (That is what `test_regex_exclude_drops_matching_tag` pins.)
 
-- [ ] **Step 5: Wire `regex_include` into the include path**
+- [x] **Step 5: Wire `regex_include` into the include path**
 
 In `evaluate()`, the existing tag-include block collects `tag`/`include` rules and adds a `missing required tag include` reason. Add a parallel `regex_include` block immediately after it. Locate this block in `evaluate()`:
 
@@ -244,7 +254,7 @@ Insert directly after it (still inside `evaluate()`, before the `gender` loop):
     if include_regex_rules and not any(
         _matches_regex(rule.value, field)
         for rule in include_regex_rules
-        for field in (list(detail.tags) + [a.name for a in detail.actors])
+        for field in (list(detail.tags) + list(detail.actors))
     ):
         expected = ', '.join(_clean_value(rule.value) for rule in include_regex_rules)
         reasons.append(f'missing required regex include: {expected}')
@@ -260,9 +270,11 @@ Insert directly after it (still inside `evaluate()`, before the `gender` loop):
         and _is_valid_regex(rule.value)
     ]
     # actor/tag parity: a regex_include rule is satisfied if it matches any tag
-    # OR any actor name (the allow-list permits `actor` + `regex_include`, and
-    # the requirement is "at least one tag/actor matches").
-    _include_fields = list(detail.tags) + [a.name for a in detail.actors]
+    # OR any actor by name/href (the allow-list permits `actor` + `regex_include`,
+    # and the requirement is "at least one tag/actor matches"). Pass actor OBJECTS
+    # (not `a.name` strings) so `_matches_regex` reads .name/.href — identical to
+    # the `regex_exclude` actor path.
+    _include_fields = list(detail.tags) + list(detail.actors)
     if include_regex_rules and not any(
         _matches_regex(rule.value, field)
         for rule in include_regex_rules
@@ -271,6 +283,16 @@ Insert directly after it (still inside `evaluate()`, before the `gender` loop):
         expected = ', '.join(_clean_value(rule.value) for rule in include_regex_rules)
         reasons.append(f'missing required regex include: {expected}')
 ```
+
+> **Plan correction (2026-06-15, applied during IMP-03 execution):** the original
+> draft built `_include_fields` as `list(detail.tags) + [a.name for a in detail.actors]`.
+> That is a **bug**: `_matches_regex` reads `item.name`/`item.href`, so passing a
+> bare `a.name` **string** makes every actor field unmatchable — an
+> `(actor, regex_include)` rule then never matches and drops *every* movie. Fixed
+> to pass actor **objects** (`list(detail.actors)`), mirroring the `regex_exclude`
+> actor path. Pinned by `test_regex_include_matches_actor_name` /
+> `test_regex_include_matches_actor_href` / `test_regex_include_actor_no_match_drops`
+> and shipped in commit `fix(spider): match actor regex_include against actor name/href`.
 
 and add the small validity helper next to `_matches_regex`:
 
@@ -286,17 +308,17 @@ def _is_valid_regex(pattern: str) -> bool:
     return True
 ```
 
-- [ ] **Step 6: Run the test to verify it passes**
+- [x] **Step 6: Run the test to verify it passes**
 
 Run: `python3 -m pytest tests/unit/test_content_filter_regex.py -q`
 Expected: PASS (9 passed).
 
-- [ ] **Step 7: Run the existing engine suite to confirm no regression**
+- [x] **Step 7: Run the existing engine suite to confirm no regression**
 
 Run: `python3 -m pytest tests/unit/test_content_filter_engine.py tests/unit/test_content_filter_age.py -q`
 Expected: PASS (no existing case regressed — the new branches are additive and gated on the new modes).
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add javdb/spider/services/content_filter.py tests/unit/test_content_filter_regex.py
@@ -311,7 +333,7 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD commit -m "feat(spider): add regex con
 - Modify: `javdb/spider/services/content_filter.py`
 - Test: `tests/unit/test_content_filter_release_date.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_content_filter_release_date.py` (mirrors `test_content_filter_age.py`; the local `_Detail` carries a `release_date` field — note the engine reads `detail.release_date`, already present on the real `MovieDetail` at `javdb/parsing/models.py:117`):
 
@@ -380,12 +402,12 @@ def test_disabled_release_date_rule_ignored():
     assert evaluate(_Detail(release_date="2021-01-01"), [_date_rule("before", "2020-01-01", enabled=False)]).keep is True
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `python3 -m pytest tests/unit/test_content_filter_release_date.py -q`
 Expected: FAIL — `evaluate()` has no `release_date` branch, so every drop case returns `keep=True`.
 
-- [ ] **Step 3: Add the helper**
+- [x] **Step 3: Add the helper**
 
 In `javdb/spider/services/content_filter.py`, add `from datetime import date` near the top (after `from dataclasses import dataclass`). Then add `_release_date_drop_reasons` immediately after `_age_drop_reasons` (it parallels the age helper: iterate `release_date` rules, parse the bound, `try/except` fail-open, append a reason). The `date.fromisoformat(raw[:10])` truncation matches how `actor_age.py:131-134` already parses `detail.release_date`:
 
@@ -411,7 +433,7 @@ def _release_date_drop_reasons(rules: list[Rule], detail) -> list[str]:
     return out
 ```
 
-- [ ] **Step 4: Wire it into `evaluate()`**
+- [x] **Step 4: Wire it into `evaluate()`**
 
 In `evaluate()`, find the line that extends `reasons` with the age drops:
 
@@ -427,17 +449,17 @@ Add the release-date call immediately after it (both fold into the same `reasons
 
 > Note `_release_date_drop_reasons` takes `detail` (it reads `detail.release_date`), whereas `_age_drop_reasons` takes the pre-resolved `actor_ages` map — that is the entire "no resolver wiring" simplification. `evaluate()`'s signature is unchanged; `runner.py:775` already passes `movie_detail`.
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [x] **Step 5: Run the test to verify it passes**
 
 Run: `python3 -m pytest tests/unit/test_content_filter_release_date.py -q`
 Expected: PASS (10 passed).
 
-- [ ] **Step 6: Run the full engine suite**
+- [x] **Step 6: Run the full engine suite**
 
 Run: `python3 -m pytest tests/unit/test_content_filter_engine.py tests/unit/test_content_filter_age.py tests/unit/test_content_filter_regex.py tests/unit/test_content_filter_release_date.py -q`
 Expected: PASS (all engine cases green; no regression).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add javdb/spider/services/content_filter.py tests/unit/test_content_filter_release_date.py
@@ -454,7 +476,7 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD commit -m "feat(spider): add release_d
 - Modify: `apps/cli/ops/content_filter.py`
 - Test: `tests/smoke/test_content_filter_cli.py`
 
-- [ ] **Step 1: Write the failing CLI test cases**
+- [x] **Step 1: Write the failing CLI test cases**
 
 In `tests/smoke/test_content_filter_cli.py`, add acceptance cases for the new modes and rejection cases for bad regex/date input. Append these functions (they reuse the existing `cli_conn` fixture for accept-path cases and the `monkeypatch` `_Repo`/`_fake_db` idiom from `test_add_age_rule*` for the captured-call cases):
 
@@ -524,12 +546,12 @@ Also extend the existing `test_content_filter_cli_rejects_invalid_rule_shapes` p
         ),
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `python3 -m pytest tests/smoke/test_content_filter_cli.py -q`
 Expected: FAIL — `regex_exclude`/`regex_include`/`before`/`after` are not in `MODES` (argparse `choices` rejects them with "invalid choice") and `release_date` is not in `DIMENSIONS`.
 
-- [ ] **Step 3: Extend the allow-list tuples**
+- [x] **Step 3: Extend the allow-list tuples**
 
 In `apps/cli/ops/content_filter.py`, extend the four module-level tuples/sets (keep the existing entries; add the new ones):
 
@@ -570,7 +592,7 @@ VALUE_REQUIRED = {
 }
 ```
 
-- [ ] **Step 4: Add regex-compile + ISO-date validation to `_validate_add`**
+- [x] **Step 4: Add regex-compile + ISO-date validation to `_validate_add`**
 
 In `_validate_add`, add two new `elif` branches. The current tail is:
 
@@ -612,12 +634,12 @@ Replace it with (the regex branch compiles to validate then keeps the verbatim p
 
 > Order matters: the `regex_*` branch is keyed on `args.mode` (so it catches both `actor` and `tag` regex rules) and is placed **before** the `release_date` branch (keyed on `args.dimension`) and the `else`. The `("gender", "require_lead")` / `("gender", "exclude_all_male")` / `age` branches above are untouched and still take precedence for their dimensions.
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [x] **Step 5: Run the test to verify it passes**
 
 Run: `python3 -m pytest tests/smoke/test_content_filter_cli.py -q`
 Expected: PASS (all existing CLI cases + the new regex/date acceptance and rejection cases green).
 
-- [ ] **Step 6: Manual CLI smoke (real REPORTS_DB / SQLite)**
+- [x] **Step 6: Manual CLI smoke (real REPORTS_DB / SQLite)** — _SKIPPED during execution (2026-06-15): the isolated worktree has no `reports/reports.db`, and running it would create gitignored runtime files. The monkeypatched `cli_conn` automated cases (`test_add_regex_exclude_rule`, `test_add_release_date_before_rule`, …) fully cover the add→list path._
 
 This exercises the full add → list path against the real reports DB (no migration needed — the table already exists from Phase 1):
 
@@ -630,7 +652,7 @@ python3 -m apps.cli.ops.content_filter list
 
 Expected: two `Added content filter rule <id>.` lines, then a `list` table containing a `tag	regex_exclude	(?i)\bvr\b	yes` row and a `release_date	before	2020-01-01	yes` row. (Clean up afterward with `remove --id <id>` for each, or leave them if intended.)
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add apps/cli/ops/content_filter.py tests/smoke/test_content_filter_cli.py
@@ -648,7 +670,7 @@ Both `ContentFilterRule` DDL header comments are pre-Phase-2 stale (they say `di
 **Files:**
 - Modify: `javdb/migrations/d1/2026_05_29_add_content_filter_rule.sql`
 
-- [ ] **Step 1: Update the comment block (lines 7-10)**
+- [x] **Step 1: Update the comment block (lines 7-10)**
 
 Replace:
 
@@ -672,7 +694,7 @@ with:
 --        | regex pattern
 ```
 
-- [ ] **Step 2: Verify the Write-Class CI check still passes**
+- [x] **Step 2: Verify the Write-Class CI check still passes**
 
 The file's `-- Write-Class:` header is unchanged, but re-run the validator to confirm the comment edit did not disturb it:
 
@@ -686,7 +708,7 @@ Expected: exits 0 / prints OK. (If the script takes no args, run it with no args
 **Files:**
 - Modify: `javdb/storage/db/_db_migrations.py`
 
-- [ ] **Step 1: Update the mirror comment (around lines 233-238)**
+- [x] **Step 1: Update the mirror comment (around lines 233-238)**
 
 In the `_REPORTS_DDL` triple-quoted literal, replace:
 
@@ -713,12 +735,12 @@ with:
 --        | regex pattern
 ```
 
-- [ ] **Step 2: Verify `_REPORTS_DDL` still parses and creates the table**
+- [x] **Step 2: Verify `_REPORTS_DDL` still parses and creates the table**
 
 Run: `python3 -c "import sqlite3; from javdb.storage.db import _db_migrations as m; c=sqlite3.connect(':memory:'); c.executescript(m._REPORTS_DDL); print([r[0] for r in c.execute(\"SELECT name FROM sqlite_master WHERE type='table' AND name='ContentFilterRule'\")])"`
 Expected: prints `['ContentFilterRule']` (the comment edit did not break the embedded DDL — SQL `--` comments are inert).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add javdb/migrations/d1/2026_05_29_add_content_filter_rule.sql javdb/storage/db/_db_migrations.py
@@ -736,7 +758,7 @@ ADR-040's Status Log and roadmap describe Phases 1-5 but predate the regex/relea
 **Files:**
 - Modify: `docs/design/ADR-040-Content-Filter-Rules/ADR-040-content-filter-rules.md`
 
-- [ ] **Step 1: Append a Status Log entry**
+- [x] **Step 1: Append a Status Log entry**
 
 After the last Status Log bullet (`- 2026-06-07: Phase 2 implemented ...`), append:
 
@@ -751,7 +773,7 @@ After the last Status Log bullet (`- 2026-06-07: Phase 2 implemented ...`), appe
   active for Phases 4-5.
 ```
 
-- [ ] **Step 2: Amend the roadmap table**
+- [x] **Step 2: Amend the roadmap table**
 
 In the `## Implementation Roadmap` table, insert a row immediately after the Phase 2 row (the regex/release-date extension is a sub-phase of the existing engine, not a renumber of Phases 3-5):
 
@@ -759,7 +781,7 @@ In the `## Implementation Roadmap` table, insert a row immediately after the Pha
 | Phase 2b — Regex + release-date | IMP-ADR040-03 (done) | `regex_exclude`/`regex_include` (actor/tag); `release_date` `before`/`after`; no schema migration (reuses the generic triple) |
 ```
 
-- [ ] **Step 3: Add the new modes to Domain Language**
+- [x] **Step 3: Add the new modes to Domain Language**
 
 In `## Domain Language (additions for CONTEXT.md)`, extend the **Content filter rule** bullet so the dimension/mode list is current:
 
@@ -788,7 +810,7 @@ with:
 **Files:**
 - Modify: `docs/design/ADR-040-Content-Filter-Rules/ADR-040-content-filter-rules.zh.md`
 
-- [ ] **Step 1: Append the Status Log entry (Chinese)**
+- [x] **Step 1: Append the Status Log entry (Chinese)**
 
 After the last `状态日志 (Status Log)` bullet (`- 2026-06-07：Phase 2 经 ...`), append:
 
@@ -802,7 +824,7 @@ After the last `状态日志 (Status Log)` bullet (`- 2026-06-07：Phase 2 经 .
   ADR 对 Phase 4-5 仍然有效。
 ```
 
-- [ ] **Step 2: Amend the roadmap table (Chinese)**
+- [x] **Step 2: Amend the roadmap table (Chinese)**
 
 Insert after the Phase 2 row in the 路线图 table:
 
@@ -810,7 +832,7 @@ Insert after the Phase 2 row in the 路线图 table:
 | Phase 2b — 正则 + 上映日期 | IMP-ADR040-03 (done) | `regex_exclude`/`regex_include`（actor/tag）；`release_date` 的 `before`/`after`；无 schema 迁移（复用通用三元组） |
 ```
 
-- [ ] **Step 3: Update Domain Language (Chinese)**
+- [x] **Step 3: Update Domain Language (Chinese)**
 
 Replace the `Content filter rule（内容过滤规则）` bullet under `## 领域语言 (CONTEXT.md 待补充项)`:
 
@@ -824,7 +846,7 @@ Replace the `Content filter rule（内容过滤规则）` bullet under `## 领�
   将影片已解析的 `release_date` 与一个 ISO 边界比较;日期缺失/不可解析时永不丢弃。
 ```
 
-- [ ] **Step 4: Commit (both ADR files together)**
+- [x] **Step 4: Commit (both ADR files together)**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add docs/design/ADR-040-Content-Filter-Rules/ADR-040-content-filter-rules.md docs/design/ADR-040-Content-Filter-Rules/ADR-040-content-filter-rules.zh.md
@@ -837,7 +859,7 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD commit -m "docs(adr): record regex/rel
 
 ## Final verification gate
 
-- [ ] **[MAIN] full engine + CLI suite**
+- [x] **[MAIN] full engine + CLI suite**
 
 Run:
 ```bash
@@ -851,17 +873,17 @@ python3 -m pytest \
 ```
 Expected: all pass (new regex + release-date engine cases, all existing engine/age cases, all CLI cases including the new accept/reject pairs).
 
-- [ ] **[MAIN] DDL still parses (comment-only edits inert)**
+- [x] **[MAIN] DDL still parses (comment-only edits inert)**
 
 Run: `python3 -c "import sqlite3; from javdb.storage.db import _db_migrations as m; c=sqlite3.connect(':memory:'); c.executescript(m._REPORTS_DDL); print('REPORTS_DDL ok')"`
 Expected: `REPORTS_DDL ok`.
 
-- [ ] **[MAIN] no accidental web/API/migration touch**
+- [x] **[MAIN] no accidental web/API/migration touch**
 
 Run: `git -C /Users/tedwu/JAVDB_AutoSpider_CICD diff --name-only main...HEAD`
 Expected: only the files in the File Structure list — no `server/`, no `src/`, no `docs/api/openapi.json`, no new `javdb/migrations/d1/*.sql` (the SQL file appears only as a comment edit). If any of those show up, a step over-reached.
 
-- [ ] **Manual ingestion-path smoke (optional, requires a real run):** add a `tag regex_exclude '(?i)\bvr\b'` rule via the CLI, run a dry-run spider against a page known to contain a VR title, confirm the title is dropped with reason `excluded by tag rule: (?i)\bvr\b` in the filter stats (`runner.py` emits a `content_filtered` event). Remove the rule afterward.
+- [ ] **Manual ingestion-path smoke (optional, requires a real run):** add a `tag regex_exclude '(?i)\bvr\b'` rule via the CLI, run a dry-run spider against a page known to contain a VR title, confirm the title is dropped with reason `excluded by tag rule: (?i)\bvr\b` in the filter stats (`runner.py` emits a `content_filtered` event). Remove the rule afterward. — _Left unchecked: deferred (requires a live javdb network run, out of scope for the isolated worktree). The 66 automated engine/CLI cases pin the same behavior deterministically._
 
 > **No migration to apply.** `ContentFilterRule` already exists in remote D1 (`javdb-reports`) from Phase 1; regex/release-date add no columns. There is **no** `wrangler d1 execute` / `sync_d1_to_sqlite` deploy step in this IMP.
 

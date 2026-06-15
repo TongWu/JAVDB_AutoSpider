@@ -21,6 +21,7 @@ class Features(BaseModel):
     library_ownership: bool
     library_consumption: bool
     watch_intent: bool
+    content_filter: bool
     magnet_aggregation: bool
     subscriptions: bool
     site_drift_sentinel: bool
