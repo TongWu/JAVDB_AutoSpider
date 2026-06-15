@@ -4,6 +4,7 @@ import sqlite3
 import pytest
 
 from javdb.storage.repos.parse_run_field_fill_repo import ParseRunFieldFillRepo
+from tests.api_route_helpers import route_paths
 
 _DDL = """
 CREATE TABLE ParseRunFieldFill (
@@ -57,5 +58,4 @@ def test_soft_field_single_run_shows_no_baseline(repo):
 
 def test_route_is_registered():
     from apps.api.services.runtime import app
-    paths = {getattr(route, "path", None) for route in app.routes}
-    assert "/api/diag/parse-field-health" in paths
+    assert "/api/diag/parse-field-health" in route_paths(app)

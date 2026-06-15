@@ -87,3 +87,30 @@ def test_readonly_cannot_mutate(client):
     assert deleted.status_code == 403
     # Reads stay allowed for a readonly account.
     assert client.get("/api/watchlist/RO-1").status_code == 404
+
+
+def test_empty_href_is_rejected(client):
+    res = client.put(
+        "/api/watchlist/EMPTY-1",
+        json={"href": "", "status": "want"},
+    )
+    assert res.status_code == 422
+
+
+def test_openapi_publishes_watch_status_enum():
+    from apps.api.services.runtime import app
+
+    app.openapi_schema = None
+    schema = app.openapi()
+    status_schema = schema["components"]["schemas"]["WatchIntentResponse"][
+        "properties"
+    ]["status"]
+    assert status_schema["enum"] == ["want", "viewed"]
+
+    delete_schema = schema["paths"]["/api/watchlist/{video_code}"]["delete"][
+        "responses"
+    ]["200"]["content"]["application/json"]["schema"]
+    assert delete_schema == {"$ref": "#/components/schemas/WatchIntentDeleteResponse"}
+    assert schema["components"]["schemas"]["WatchIntentDeleteResponse"][
+        "properties"
+    ]["deleted"]["type"] == "boolean"

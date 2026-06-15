@@ -20,6 +20,7 @@ from javdb.spider.spider_gateway import (
     _build_page_url,
 )
 from javdb.spider.html_validators import result_to_dict
+from tests.api_route_helpers import iter_effective_routes, route_paths
 
 
 # ---------------------------------------------------------------------------
@@ -262,8 +263,7 @@ class TestRustFallback:
 class TestApiParseUrl:
     def test_endpoint_exists(self):
         from apps.api.server import app
-        routes = [r.path for r in app.routes]
-        assert '/api/parse/url' in routes
+        assert '/api/parse/url' in route_paths(app)
 
     def test_endpoint_schema(self):
         from apps.api.server import UrlPayload
@@ -366,18 +366,16 @@ class TestApiRouteRegistry:
             '/api/jobs/spider',
             '/api/jobs/{job_id}/status',
         }
-        routes = {route.path for route in app.routes}
+        routes = route_paths(app)
         assert expected.issubset(routes)
 
     def test_no_duplicate_path_method_pairs(self):
         from apps.api.server import app
-        from fastapi.routing import APIRoute
-
         seen = {}
-        for route in app.routes:
-            if not isinstance(route, APIRoute):
+        for route in iter_effective_routes(app):
+            if not getattr(route, "path", None) or not getattr(route, "methods", None):
                 continue
-            for method in route.methods - {'HEAD', 'OPTIONS'}:
+            for method in set(route.methods) - {'HEAD', 'OPTIONS'}:
                 key = (route.path, method)
                 assert key not in seen, f'duplicate route registered for {key}'
                 seen[key] = route.endpoint.__name__
@@ -455,8 +453,7 @@ class TestCrawlPages:
 class TestApiCrawlIndex:
     def test_endpoint_exists(self):
         from apps.api.server import app
-        routes = [r.path for r in app.routes]
-        assert '/api/crawl/index' in routes
+        assert '/api/crawl/index' in route_paths(app)
 
     def test_crawl_index_schema(self):
         from apps.api.server import CrawlIndexPayload
@@ -474,7 +471,7 @@ class TestApiCrawlIndex:
 class TestApiSpiderJob:
     def test_endpoints_exist(self):
         from apps.api.server import app
-        routes = [r.path for r in app.routes]
+        routes = route_paths(app)
         assert '/api/jobs/spider' in routes
         assert '/api/jobs/{job_id}/status' in routes
 

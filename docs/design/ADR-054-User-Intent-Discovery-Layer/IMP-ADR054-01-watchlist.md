@@ -71,7 +71,7 @@ Work the phases in order: **A (D1 + Python)** → **B (TS Worker)** → **C (par
 - Create: `javdb/migrations/d1/2026_06_13_add_watch_intent.sql`
 - Modify: `javdb/storage/db/_db_migrations.py` (inside the `_HISTORY_DDL` triple-quoted literal, before its closing `"""`)
 
-- [ ] **Step 1: Write the migration file**
+- [x] **Step 1: Write the migration file**
 
 Create `javdb/migrations/d1/2026_06_13_add_watch_intent.sql` (2-space indent matches the existing `d1/*.sql` convention; the `-- Write-Class:` header is mandatory on new `CREATE TABLE` migrations per `javdb/migrations/README.md` / ADR-042 D6, enforced by `.github/workflows/validate-d1-write-class.yml`):
 
@@ -103,12 +103,12 @@ CREATE TABLE IF NOT EXISTS WatchIntent (
 CREATE INDEX IF NOT EXISTS idx_watch_intent_status ON WatchIntent(status);
 ```
 
-- [ ] **Step 2: Verify the Write-Class CI check passes for the new file**
+- [x] **Step 2: Verify the Write-Class CI check passes for the new file**
 
-Run: `python3 scripts/ci/validate_d1_write_class.py javdb/migrations/d1/2026_06_13_add_watch_intent.sql`
+Run: `python3 scripts/ci/validate_d1_write_class.py --paths javdb/migrations/d1/2026_06_13_add_watch_intent.sql`
 Expected: exits 0 / prints OK (a valid `Write-Class: authoritative` header is detected). If the script takes no args, run it with no args and confirm it does not report the new file as missing a header.
 
-- [ ] **Step 3: Mirror the DDL into `_HISTORY_DDL`**
+- [x] **Step 3: Mirror the DDL into `_HISTORY_DDL`**
 
 In `javdb/storage/db/_db_migrations.py`, find the `ContentPreferences` block inside the `_HISTORY_DDL` triple-quoted string literal (it ends with the `idx_content_prefs_hearted` index, just before the literal's closing `"""`). Insert the following **immediately after** that index line, still inside the same `"""` literal (4-space indent matches the surrounding Python-embedded DDL):
 
@@ -124,12 +124,12 @@ CREATE TABLE IF NOT EXISTS WatchIntent (
 CREATE INDEX IF NOT EXISTS idx_watch_intent_status ON WatchIntent(status);
 ```
 
-- [ ] **Step 4: Verify `_HISTORY_DDL` still parses and creates the table**
+- [x] **Step 4: Verify `_HISTORY_DDL` still parses and creates the table**
 
 Run: `python3 -c "import sqlite3; from javdb.storage.db import _db_migrations as m; c=sqlite3.connect(':memory:'); c.executescript(m._HISTORY_DDL); print([r[0] for r in c.execute(\"SELECT name FROM sqlite_master WHERE type='table' AND name='WatchIntent'\")])"`
 Expected: prints `['WatchIntent']`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add javdb/migrations/d1/2026_06_13_add_watch_intent.sql javdb/storage/db/_db_migrations.py
@@ -144,7 +144,7 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD commit -m "feat(db): add WatchIntent t
 - Create: `javdb/storage/repos/watchlist_repo.py`
 - Test: `tests/unit/test_watchlist_repo.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_watchlist_repo.py` (mirrors `tests/unit/test_preference_repo.py`: seed the schema from the real D1 migration so CHECK constraints match production):
 
@@ -213,12 +213,12 @@ def test_delete_removes_row(db_path):
     assert repo.delete("A-1") is False  # already gone
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `python3 -m pytest tests/unit/test_watchlist_repo.py -q`
 Expected: FAIL with `ModuleNotFoundError: No module named 'javdb.storage.repos.watchlist_repo'`
 
-- [ ] **Step 3: Implement the repo**
+- [x] **Step 3: Implement the repo**
 
 Create `javdb/storage/repos/watchlist_repo.py` (mirrors `preference_repo.py`: lazy `HISTORY_DB_PATH` via `_db` for BFR-016, `get_db` context manager, dict rows):
 
@@ -242,7 +242,7 @@ WATCH_INTENT_UPSERT_SQL = """
     ON CONFLICT(video_code) DO UPDATE SET
         href       = excluded.href,
         status     = excluded.status,
-        notes      = excluded.notes,
+        notes      = COALESCE(excluded.notes, notes),
         status_at  = strftime('%Y-%m-%dT%H:%M:%fZ','now'),
         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
 """
@@ -302,12 +302,12 @@ class WatchIntentRepo:
             return cur.rowcount > 0
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `python3 -m pytest tests/unit/test_watchlist_repo.py -q`
 Expected: PASS (5 passed)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add javdb/storage/repos/watchlist_repo.py tests/unit/test_watchlist_repo.py
@@ -322,7 +322,7 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD commit -m "feat(storage): add WatchInt
 - Create: `apps/api/schemas/watchlist.py`, `apps/api/routers/watchlist.py`
 - Modify: `apps/api/services/runtime.py`
 
-- [ ] **Step 1: Write the schemas**
+- [x] **Step 1: Write the schemas**
 
 Create `apps/api/schemas/watchlist.py` (the `Literal` status gives an automatic 422 on bad input, mirroring how `MovieRatingUpsert` bounds `rating`):
 
@@ -356,7 +356,7 @@ class WatchIntentListResponse(BaseModel):
     total: int
 ```
 
-- [ ] **Step 2: Write the router**
+- [x] **Step 2: Write the router**
 
 Create `apps/api/routers/watchlist.py` (mirrors `routers/preferences.py`: per-route `_require_auth`, `_row_to_*` mapper, `{"error": {"code", "message"}}` envelope). The list route uses path `""` so the full path is exactly `/api/watchlist` (no trailing slash, matching the client). Declare the list route before the `/{video_code}` routes:
 
@@ -440,7 +440,7 @@ def delete_watch_intent(video_code: str, _user=Depends(_require_auth)):
     return {"deleted": deleted}
 ```
 
-- [ ] **Step 3: Register the router**
+- [x] **Step 3: Register the router**
 
 In `apps/api/services/runtime.py`: add the import alongside the other `*_router` imports (search for `preferences_router`):
 
@@ -450,7 +450,7 @@ from apps.api.routers.watchlist import router as watchlist_router
 
 Then add `watchlist_router,` into the `for router in (...)` tuple (after `preferences_router,`).
 
-- [ ] **Step 4: Write a router smoke test**
+- [x] **Step 4: Write a router smoke test**
 
 Create `tests/unit/test_watchlist_router.py`:
 
@@ -520,12 +520,12 @@ def test_put_then_get_then_delete(client):
 
 > The fixture uses `app.dependency_overrides[_require_auth]` — FastAPI's standard auth seam — so it needs no real token. This also now asserts the bare-path list route (`GET /api/watchlist`) returns `total == 1`, confirming the `@router.get("")` path resolves without a trailing-slash redirect.
 
-- [ ] **Step 5: Run the test**
+- [x] **Step 5: Run the test**
 
 Run: `python3 -m pytest tests/unit/test_watchlist_router.py -q`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add apps/api/schemas/watchlist.py apps/api/routers/watchlist.py apps/api/services/runtime.py tests/unit/test_watchlist_router.py
@@ -539,7 +539,7 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD commit -m "feat(api): add /api/watchli
 **Files:**
 - Modify: `apps/api/routers/capabilities.py`, `apps/api/schemas/capabilities_payloads.py`
 
-- [ ] **Step 1: Add the field to the `Features` schema**
+- [x] **Step 1: Add the field to the `Features` schema**
 
 In `apps/api/schemas/capabilities_payloads.py`, add `watch_intent: bool` to `class Features(BaseModel)` immediately after `library_consumption: bool`:
 
@@ -549,7 +549,7 @@ In `apps/api/schemas/capabilities_payloads.py`, add `watch_intent: bool` to `cla
     site_drift_sentinel: bool
 ```
 
-- [ ] **Step 2: Add the probe + wire it**
+- [x] **Step 2: Add the probe + wire it**
 
 In `apps/api/routers/capabilities.py`, add this probe after `_library_consumption_enabled()` (note: probes `HISTORY_DB`, where `WatchIntent` lives — not `OPERATIONS_DB`):
 
@@ -567,12 +567,12 @@ def _watch_intent_enabled() -> bool:
 
 Then in `build_capabilities()`, add `watch_intent=_watch_intent_enabled(),` to the `Features(...)` call, immediately after `library_consumption=_library_consumption_enabled(),`.
 
-- [ ] **Step 3: Verify capabilities builds and exposes the flag**
+- [x] **Step 3: Verify capabilities builds and exposes the flag**
 
 Run: `python3 -c "from apps.api.routers.capabilities import build_capabilities; print(build_capabilities().features.watch_intent)"`
 Expected: prints `False` (no table on this path) — proves the field exists and the probe degrades gracefully.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add apps/api/routers/capabilities.py apps/api/schemas/capabilities_payloads.py
@@ -586,17 +586,17 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD commit -m "feat(api): expose watch_int
 **Files:**
 - Modify: `docs/api/openapi.json`
 
-- [ ] **Step 1: Dump the OpenAPI schema**
+- [x] **Step 1: Dump the OpenAPI schema**
 
 Run: `cd /Users/tedwu/JAVDB_AutoSpider_CICD && python3 -m apps.cli.ops.dump_openapi`
 Expected: `wrote /Users/tedwu/JAVDB_AutoSpider_CICD/docs/api/openapi.json (<N> bytes)`
 
-- [ ] **Step 2: Verify the new surface is in the contract**
+- [x] **Step 2: Verify the new surface is in the contract**
 
 Run: `python3 -c "import json; d=json.load(open('docs/api/openapi.json')); print('/api/watchlist' in d['paths']); print('watch_intent' in d['components']['schemas']['Features']['properties'])"`
 Expected: prints `True` then `True`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add docs/api/openapi.json
@@ -612,7 +612,7 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD commit -m "chore(api): re-vendor opena
 **Files:**
 - Create: `server/services/watchlist-service.ts`
 
-- [ ] **Step 1: Write the service**
+- [x] **Step 1: Write the service**
 
 Create `server/services/watchlist-service.ts` (mirrors `preference-service.ts`: `D1Database` is an ambient global — do not import it; functions take `db` not `env`; the UPSERT SQL is byte-identical to the Python `WATCH_INTENT_UPSERT_SQL`):
 
@@ -639,7 +639,7 @@ export const WATCH_INTENT_UPSERT_SQL = `
     ON CONFLICT(video_code) DO UPDATE SET
         href       = excluded.href,
         status     = excluded.status,
-        notes      = excluded.notes,
+        notes      = COALESCE(excluded.notes, notes),
         status_at  = strftime('%Y-%m-%dT%H:%M:%fZ','now'),
         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')`;
 
@@ -701,7 +701,7 @@ export async function deleteWatchIntent(
 }
 ```
 
-- [ ] **Step 2: Verify it type-checks**
+- [x] **Step 2: Verify it type-checks**
 
 Run: `npx tsc -p server/tsconfig.json --noEmit`
 Expected: no errors referencing `watchlist-service.ts`.
@@ -716,7 +716,7 @@ Expected: no errors referencing `watchlist-service.ts`.
 - Create: `server/routes/watchlist.ts`, `server/__tests__/watchlist-routes.test.ts`
 - Modify: `server/app.ts`
 
-- [ ] **Step 1: Write the failing route test**
+- [x] **Step 1: Write the failing route test**
 
 Create `server/__tests__/watchlist-routes.test.ts` (self-seeds the table like `preferences-routes.test.ts`; mutations require the CSRF `mutationHeaders`):
 
@@ -828,12 +828,12 @@ describe("Watchlist routes", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npx vitest run server/__tests__/watchlist-routes.test.ts --config vitest.server.config.ts`
 Expected: FAIL (route 404s / `watchlistRoutes` not mounted).
 
-- [ ] **Step 3: Write the route**
+- [x] **Step 3: Write the route**
 
 Create `server/routes/watchlist.ts` (mirrors `routes/preferences.ts`; the list route `/` is declared before the `/:videoCode` routes):
 
@@ -904,7 +904,7 @@ watchlistRoutes.delete("/:videoCode", async (c) => {
 });
 ```
 
-- [ ] **Step 4: Mount the route**
+- [x] **Step 4: Mount the route**
 
 In `server/app.ts`: add the import in the route-imports block (near `import { preferencesRoutes } from "./routes/preferences";`):
 
@@ -918,12 +918,12 @@ Then add the mount immediately after the `app.route("/api/preferences", preferen
 app.route("/api/watchlist", watchlistRoutes);
 ```
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [x] **Step 5: Run the test to verify it passes**
 
 Run: `npx vitest run server/__tests__/watchlist-routes.test.ts --config vitest.server.config.ts`
 Expected: PASS (2 passed)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add server/services/watchlist-service.ts server/routes/watchlist.ts server/__tests__/watchlist-routes.test.ts server/app.ts
@@ -937,7 +937,7 @@ git commit -m "feat(server): add /api/watchlist worker route (ADR-054 WS1)"
 **Files:**
 - Modify: `server/routes/capabilities.ts`
 
-- [ ] **Step 1: Add the probe**
+- [x] **Step 1: Add the probe**
 
 In `server/routes/capabilities.ts`, after `libraryConsumptionEnabled()`, add (note: probes `HISTORY_DB`, unlike the three closed-loop probes which use `OPERATIONS_DB`):
 
@@ -953,7 +953,7 @@ async function watchIntentEnabled(env: Env): Promise<boolean> {
 }
 ```
 
-- [ ] **Step 2: Wire it into the handler**
+- [x] **Step 2: Wire it into the handler**
 
 In the `capabilitiesRoutes.get("/", ...)` handler, after `const library_consumption = await libraryConsumptionEnabled(env);` add:
 
@@ -963,13 +963,13 @@ In the `capabilitiesRoutes.get("/", ...)` handler, after `const library_consumpt
 
 Then add `watch_intent,` into the `features:` object, immediately after `library_consumption,`.
 
-- [ ] **Step 3: Verify type-check + existing capabilities test still passes**
+- [x] **Step 3: Verify type-check + existing capabilities test still passes**
 
 Run: `npx tsc -p server/tsconfig.json --noEmit`
 Then: `npx vitest run server/__tests__ --config vitest.server.config.ts -t capabilit`
 Expected: type-check clean; capabilities test(s) pass (the `watch_intent` key is now present in the response).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add server/routes/capabilities.ts
@@ -988,7 +988,7 @@ The Query Contract Golden pins only read query-builders; the WatchIntent UPSERT 
 - Create: `tests/unit/test_watch_intent_upsert_parity.py` [MAIN]
 - Create: `server/__tests__/watch-intent-upsert-parity.test.ts` [WEB]
 
-- [ ] **Step 1: Python parity test**
+- [x] **Step 1: Python parity test**
 
 Create `tests/unit/test_watch_intent_upsert_parity.py`:
 
@@ -1005,7 +1005,8 @@ CANONICAL = (
     "VALUES (?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), "
     "strftime('%Y-%m-%dT%H:%M:%fZ','now')) "
     "ON CONFLICT(video_code) DO UPDATE SET "
-    "href = excluded.href, status = excluded.status, notes = excluded.notes, "
+    "href = excluded.href, status = excluded.status, "
+    "notes = COALESCE(excluded.notes, notes), "
     "status_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'), "
     "updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')"
 )
@@ -1022,7 +1023,7 @@ def test_python_upsert_matches_canonical():
 Run: `python3 -m pytest tests/unit/test_watch_intent_upsert_parity.py -q`
 Expected: PASS. (If it fails, the `CANONICAL` constant here is the source of truth — fix whichever SQL drifted, not the test, and keep the TS test below identical.)
 
-- [ ] **Step 2: TS parity test (identical CANONICAL string)**
+- [x] **Step 2: TS parity test (identical CANONICAL string)**
 
 Create `server/__tests__/watch-intent-upsert-parity.test.ts`:
 
@@ -1036,7 +1037,8 @@ const CANONICAL =
   "VALUES (?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), " +
   "strftime('%Y-%m-%dT%H:%M:%fZ','now')) " +
   "ON CONFLICT(video_code) DO UPDATE SET " +
-  "href = excluded.href, status = excluded.status, notes = excluded.notes, " +
+  "href = excluded.href, status = excluded.status, " +
+  "notes = COALESCE(excluded.notes, notes), " +
   "status_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'), " +
   "updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')";
 
@@ -1052,7 +1054,7 @@ describe("WatchIntent upsert SQL parity", () => {
 Run: `npx vitest run server/__tests__/watch-intent-upsert-parity.test.ts --config vitest.server.config.ts`
 Expected: PASS.
 
-- [ ] **Step 3: Commit (both repos)**
+- [x] **Step 3: Commit (both repos)**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add tests/unit/test_watch_intent_upsert_parity.py
