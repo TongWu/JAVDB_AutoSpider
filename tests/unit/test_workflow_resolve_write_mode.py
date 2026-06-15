@@ -41,6 +41,7 @@ D1_STAGING_WORKFLOWS = WORKFLOWS + (
 )
 TEST_INGESTION = REPO_ROOT / ".github" / "workflows" / "TestIngestion.yml"
 QB_FILE_FILTER = REPO_ROOT / ".github" / "workflows" / "QBFileFilter.yml"
+SUBSCRIPTION_MONITOR = REPO_ROOT / ".github" / "workflows" / "SubscriptionMonitor.yml"
 ADR010_D1_GATE_WORKFLOWS = D1_STAGING_WORKFLOWS + (
     TEST_INGESTION,
     QB_FILE_FILTER,
@@ -535,6 +536,15 @@ def test_workflow_dispatch_inputs_stay_under_github_limit(workflow):
         f"{workflow.name} defines {len(inputs)} workflow_dispatch inputs; "
         f"GitHub Actions allows at most {WORKFLOW_DISPATCH_INPUT_LIMIT}"
     )
+
+
+def test_subscription_monitor_preserves_manual_proxy_false():
+    """Manual proxy_spider=false must not fall back to the scheduled default."""
+    data = _load_workflow(SUBSCRIPTION_MONITOR)
+    env = data["jobs"]["monitor"]["env"]
+
+    expected = "${{ github.event_name == 'workflow_dispatch' && (inputs.proxy_spider && 'true' || 'false') || 'true' }}"
+    assert env["INPUT_PROXY_SPIDER"] == expected
 
 
 # ──────────────────────────────────────────────────────────────────────

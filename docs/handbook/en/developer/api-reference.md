@@ -29,6 +29,19 @@ These endpoints were added in 2026-05 to support the new web console (`javdb-aut
 - `GET /api/quality/evaluations?limit=&movie_href=` — authenticated, read-only list of ADR-024 shadow quality evaluations. When `movie_href` is omitted, returns recent evaluations.
 - `GET /api/quality/evidence/{info_hash}` — authenticated, read-only torrent-level evidence for the `production_download` role.
 
+### User intent and discovery
+
+These endpoints are dual-backend: the Python FastAPI surface and the
+Cloudflare Worker mirror expose the same shapes. UI rendering is gated by
+`capabilities.features.watch_intent` and `capabilities.features.subscriptions`.
+
+- `GET /api/subscriptions?active_only=&limit=&offset=` — authenticated list of followed actors (`ActorSubscription`).
+- `PUT /api/subscriptions/{actor_href}` — admin-only; follow or reactivate an actor with body `{actor_name?, active}`. The stored key is the normalized `/actors/<id>` href.
+- `GET /api/subscriptions/{actor_href}` — authenticated detail for one followed actor.
+- `DELETE /api/subscriptions/{actor_href}` — admin-only; unfollow an actor.
+- `GET /api/new-works?actor_href=&include_dismissed=&limit=&offset=` — authenticated feed of newly discovered works from followed actors.
+- `POST /api/new-works/{video_code}/dismiss` — admin-only; hide a discovered work from the default feed.
+
 ### Sessions
 
 - `GET /api/sessions?state=&cursor=&limit=` — cursor-paginated list of ReportSessions.

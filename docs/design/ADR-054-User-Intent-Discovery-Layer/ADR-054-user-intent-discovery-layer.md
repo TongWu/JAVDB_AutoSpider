@@ -313,3 +313,11 @@ against the real shapes at the time (cadence per ADR-034).
   translation) + WS4c (availability) deferred to backlog** this round. Key
   finding: WS2's rating-threshold bypass is already free on the AdHoc path (no
   new code; ADR-040 P3 superseded by amendment at WS2 implementation).
+- 2026-06-15: WS2 backend/server slice implemented via
+  [IMP-ADR054-02](IMP-ADR054-02-subscriptions.md): `ActorSubscription` +
+  `NewWorks` D1 tables in `HISTORY_DB`; Python `/api/subscriptions` and
+  `/api/new-works`; TS Worker server mirror; `subscriptions` capability flag in
+  both backends; `SubscriptionMonitor.yml` GitHub cron + CLI/pipeline; OpenAPI
+  contract updated; cross-backend UPSERT parity tests added. ADR-040 Phase-3
+  "Subscriptions" is superseded by amendment. Vue/UI work remains scheduled for
+  the frontend Sprint 3 slice.

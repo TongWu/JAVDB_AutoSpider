@@ -244,3 +244,10 @@ reason codes），而非重新解析。Cloudflare 质询在**服务端**处理�
   （扩展 `REPORTS_DB` 里的 `ContentFilterRule`，无迁移）。**WS4b（AI 翻译）+ WS4c
   （可用性）本轮延期进 backlog**。关键发现：WS2 的评分阈值绕过在 AdHoc 路径上本就免费
   （无新代码；ADR-040 P3 在 WS2 实现时以修订 supersede）。
+- 2026-06-15：WS2 backend/server 切片已通过
+  [IMP-ADR054-02](IMP-ADR054-02-subscriptions.md) 实现：`ActorSubscription` +
+  `NewWorks` D1 表落 `HISTORY_DB`；Python `/api/subscriptions` 与
+  `/api/new-works`；TS Worker server mirror；两后端均有 `subscriptions`
+  capability flag；`SubscriptionMonitor.yml` GitHub cron + CLI/pipeline；
+  OpenAPI 合约已更新；新增跨后端 UPSERT parity 测试。ADR-040 Phase-3
+  "Subscriptions" 已通过修订 supersede。Vue/UI 工作留给前端 Sprint 3 切片。

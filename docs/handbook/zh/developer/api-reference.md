@@ -29,6 +29,19 @@
 - `GET /api/quality/evaluations?limit=&movie_href=` — 需认证、只读，列出 ADR-024 影子质量评估。省略 `movie_href` 时返回最近评估。
 - `GET /api/quality/evidence/{info_hash}` — 需认证、只读，返回 `production_download` 角色的种子级证据。
 
+### 用户意图与发现
+
+这些端点是双后端接口：Python FastAPI surface 与 Cloudflare Worker mirror
+暴露相同 shape。UI 渲染由 `capabilities.features.watch_intent` 和
+`capabilities.features.subscriptions` gate。
+
+- `GET /api/subscriptions?active_only=&limit=&offset=` — 需认证，列出已关注演员（`ActorSubscription`）。
+- `PUT /api/subscriptions/{actor_href}` — 仅 admin；通过 `{actor_name?, active}` 关注或重新启用演员。存储键是规范化后的 `/actors/<id>` href。
+- `GET /api/subscriptions/{actor_href}` — 需认证，读取单个已关注演员。
+- `DELETE /api/subscriptions/{actor_href}` — 仅 admin；取消关注演员。
+- `GET /api/new-works?actor_href=&include_dismissed=&limit=&offset=` — 需认证，列出已关注演员的新作 feed。
+- `POST /api/new-works/{video_code}/dismiss` — 仅 admin；从默认 feed 隐藏某条新作。
+
 ### 会话(Sessions)
 
 - `GET /api/sessions?state=&cursor=&limit=` — ReportSessions 的游标分页列表。

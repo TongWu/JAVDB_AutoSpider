@@ -79,7 +79,7 @@ Work the phases in order: **A (D1 + Python)** → **B (Cron / scrape)** → **C 
 - Create: `javdb/migrations/d1/2026_06_14_add_actor_subscription_new_works.sql`
 - Modify: `javdb/storage/db/_db_migrations.py` (inside the `_HISTORY_DDL` triple-quoted literal, after the `WatchIntent` block, before its closing `"""`)
 
-- [ ] **Step 1: Write the migration file**
+- [x] **Step 1: Write the migration file**
 
 Create `javdb/migrations/d1/2026_06_14_add_actor_subscription_new_works.sql` (2-space indent matches the existing `d1/*.sql` convention; the `-- Write-Class:` header is mandatory on new `CREATE TABLE` migrations per `javdb/migrations/README.md` / ADR-042 D6, enforced by `.github/workflows/validate-d1-write-class.yml`):
 
@@ -131,12 +131,12 @@ CREATE INDEX IF NOT EXISTS idx_new_works_actor     ON NewWorks(actor_href);
 CREATE INDEX IF NOT EXISTS idx_new_works_dismissed ON NewWorks(dismissed);
 ```
 
-- [ ] **Step 2: Verify the Write-Class CI check passes for the new file**
+- [x] **Step 2: Verify the Write-Class CI check passes for the new file**
 
 Run: `python3 scripts/ci/validate_d1_write_class.py javdb/migrations/d1/2026_06_14_add_actor_subscription_new_works.sql`
 Expected: exits 0 / prints OK (a valid `Write-Class: authoritative` header is detected). If the script takes no args, run it with no args and confirm it does not report the new file as missing a header.
 
-- [ ] **Step 3: Mirror both DDLs into `_HISTORY_DDL`**
+- [x] **Step 3: Mirror both DDLs into `_HISTORY_DDL`**
 
 In `javdb/storage/db/_db_migrations.py`, find the `WatchIntent` block inside the `_HISTORY_DDL` triple-quoted string literal (it ends with `CREATE INDEX IF NOT EXISTS idx_watch_intent_status ON WatchIntent(status);`, just before the literal's closing `"""`). Insert the following **immediately after** that index line, still inside the same `"""` literal (4-space indent matches the surrounding Python-embedded DDL):
 
@@ -164,7 +164,7 @@ CREATE INDEX IF NOT EXISTS idx_new_works_actor     ON NewWorks(actor_href);
 CREATE INDEX IF NOT EXISTS idx_new_works_dismissed ON NewWorks(dismissed);
 ```
 
-- [ ] **Step 4: Verify `_HISTORY_DDL` still parses and creates both tables**
+- [x] **Step 4: Verify `_HISTORY_DDL` still parses and creates both tables**
 
 Run:
 ```bash
@@ -172,7 +172,7 @@ python3 -c "import sqlite3; from javdb.storage.db import _db_migrations as m; c=
 ```
 Expected: prints `['ActorSubscription', 'NewWorks']`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add javdb/migrations/d1/2026_06_14_add_actor_subscription_new_works.sql javdb/storage/db/_db_migrations.py
@@ -187,7 +187,7 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD commit -m "feat(db): add ActorSubscrip
 - Create: `javdb/storage/repos/subscription_repo.py`
 - Test: `tests/unit/test_subscription_repo.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_subscription_repo.py` (mirrors `tests/unit/test_watchlist_repo.py`: seed the schema from the real D1 migration so CHECK constraints match production):
 
@@ -314,12 +314,12 @@ def test_list_filters_by_actor(db_path):
     assert items[0]["video_code"] == "B-1"
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `python3 -m pytest tests/unit/test_subscription_repo.py -q`
 Expected: FAIL with `ModuleNotFoundError: No module named 'javdb.storage.repos.subscription_repo'`
 
-- [ ] **Step 3: Implement the repo**
+- [x] **Step 3: Implement the repo**
 
 Create `javdb/storage/repos/subscription_repo.py` (mirrors `watchlist_repo.py`: lazy `HISTORY_DB_PATH` via `_db` for BFR-016, `get_db` context manager, dict rows; `ACTOR_SUBSCRIPTION_UPSERT_SQL` is byte-mirrored with the TS service):
 
@@ -493,12 +493,12 @@ class NewWorksRepo:
             return cur.rowcount > 0
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `python3 -m pytest tests/unit/test_subscription_repo.py -q`
 Expected: PASS (10 passed)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add javdb/storage/repos/subscription_repo.py tests/unit/test_subscription_repo.py
@@ -514,7 +514,7 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD commit -m "feat(storage): add ActorSub
 - Modify: `apps/api/services/runtime.py`
 - Test: `tests/unit/test_subscriptions_router.py`
 
-- [ ] **Step 1: Write the schemas**
+- [x] **Step 1: Write the schemas**
 
 Create `apps/api/schemas/subscriptions.py` (mirrors `apps/api/schemas/watchlist.py`):
 
@@ -563,7 +563,7 @@ class NewWorkListResponse(BaseModel):
     total: int
 ```
 
-- [ ] **Step 2: Write the router**
+- [x] **Step 2: Write the router**
 
 Create `apps/api/routers/subscriptions.py` (mirrors `apps/api/routers/watchlist.py`: per-route `_require_auth` for reads, `Depends(require_role("admin"))` for mutations, `{"error": {"code", "message"}}` envelope, list route declared with path `""` so the full path is exactly `/api/subscriptions` / `/api/new-works`). The `actor_href` and `video_code` are taken from the path; declare the list routes before the `/{...}` routes:
 
@@ -715,7 +715,7 @@ def _norm_actor_href(raw: str) -> str:
 
 > Note: the `{actor_href:path}` converter is used because the identifier contains a `/` (`actors/EvkJ`). `_norm_actor_href` re-adds the leading slash so the stored key matches `MovieHistory.ActorLink`. The client (`src/api/subscriptions.ts`, Task 14) builds the path with `encodeURIComponent` on the `<id>` segment only, so this stays unambiguous.
 
-- [ ] **Step 3: Register both routers**
+- [x] **Step 3: Register both routers**
 
 In `apps/api/services/runtime.py`: add the import alongside the other `*_router` imports (search for `watchlist_router`):
 
@@ -728,7 +728,7 @@ from apps.api.routers.subscriptions import (
 
 Then add `subscriptions_router,` and `new_works_router,` into the `for router in (...)` tuple (after `watchlist_router,`).
 
-- [ ] **Step 4: Write a router smoke test**
+- [x] **Step 4: Write a router smoke test**
 
 Create `tests/unit/test_subscriptions_router.py` (mirrors `tests/unit/test_watchlist_router.py`: seed from the real migration, override `_require_auth` *and* `require_role("admin")` so the smoke test needs no real JWT/role):
 
@@ -821,12 +821,12 @@ def test_new_works_feed_and_dismiss(client):
     assert client.post("/api/new-works/NOPE-999/dismiss").status_code == 404
 ```
 
-- [ ] **Step 5: Run the test**
+- [x] **Step 5: Run the test**
 
 Run: `python3 -m pytest tests/unit/test_subscriptions_router.py -q`
 Expected: PASS (2 passed)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add apps/api/schemas/subscriptions.py apps/api/routers/subscriptions.py apps/api/services/runtime.py tests/unit/test_subscriptions_router.py
@@ -840,7 +840,7 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD commit -m "feat(api): add /api/subscri
 **Files:**
 - Modify: `apps/api/routers/capabilities.py`, `apps/api/schemas/capabilities_payloads.py`
 
-- [ ] **Step 1: Add the field to the `Features` schema**
+- [x] **Step 1: Add the field to the `Features` schema**
 
 In `apps/api/schemas/capabilities_payloads.py`, add `subscriptions: bool` to `class Features(BaseModel)` immediately after `watch_intent: bool`:
 
@@ -850,7 +850,7 @@ In `apps/api/schemas/capabilities_payloads.py`, add `subscriptions: bool` to `cl
     site_drift_sentinel: bool
 ```
 
-- [ ] **Step 2: Add the probe + wire it**
+- [x] **Step 2: Add the probe + wire it**
 
 In `apps/api/routers/capabilities.py`, add this probe after `_watch_intent_enabled()` (note: probes `HISTORY_DB`, where `ActorSubscription` lives — matching WS1, not the closed-loop probes which use `OPERATIONS_DB`):
 
@@ -868,12 +868,12 @@ def _subscriptions_enabled() -> bool:
 
 Then in `build_capabilities()`, add `subscriptions=_subscriptions_enabled(),` to the `Features(...)` call, immediately after `watch_intent=_watch_intent_enabled(),`.
 
-- [ ] **Step 3: Verify capabilities builds and exposes the flag**
+- [x] **Step 3: Verify capabilities builds and exposes the flag**
 
 Run: `python3 -c "from apps.api.routers.capabilities import build_capabilities; print(build_capabilities().features.subscriptions)"`
 Expected: prints `False` (no table on this path) — proves the field exists and the probe degrades gracefully.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add apps/api/routers/capabilities.py apps/api/schemas/capabilities_payloads.py
@@ -887,12 +887,12 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD commit -m "feat(api): expose subscript
 **Files:**
 - Modify: `docs/api/openapi.json`
 
-- [ ] **Step 1: Dump the OpenAPI schema**
+- [x] **Step 1: Dump the OpenAPI schema**
 
 Run: `cd /Users/tedwu/JAVDB_AutoSpider_CICD && python3 -m apps.cli.ops.dump_openapi`
 Expected: `wrote /Users/tedwu/JAVDB_AutoSpider_CICD/docs/api/openapi.json (<N> bytes)`
 
-- [ ] **Step 2: Verify the new surface is in the contract**
+- [x] **Step 2: Verify the new surface is in the contract**
 
 Run:
 ```bash
@@ -900,7 +900,7 @@ python3 -c "import json; d=json.load(open('docs/api/openapi.json')); p=d['paths'
 ```
 Expected: prints `True`, `True`, `True`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add docs/api/openapi.json
@@ -919,7 +919,7 @@ The scrape reuses the proven full spider pipeline. The monitor reads the followe
 - Create: `javdb/pipeline/subscription_monitor.py`
 - Test: `tests/unit/test_subscription_monitor.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_subscription_monitor.py`. It seeds `ActorSubscription` + a `MovieHistory`-shaped seen-set, injects a fake "scrape" that returns parsed index entries, and asserts only genuinely-new works (absent from the seen-set, past the cursor) land in `NewWorks`, the cursor advances, and a re-run is idempotent:
 
@@ -1022,12 +1022,12 @@ def test_process_actor_empty_scrape_advances_nothing(db_path):
     assert row["last_seen_href"] is None
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `python3 -m pytest tests/unit/test_subscription_monitor.py -q`
 Expected: FAIL with `ModuleNotFoundError: No module named 'javdb.pipeline.subscription_monitor'`
 
-- [ ] **Step 3: Implement the monitor**
+- [x] **Step 3: Implement the monitor**
 
 Create `javdb/pipeline/subscription_monitor.py`. The pure `process_actor` (diff + persist + cursor) is separated from `scrape_actor` (the AdHoc spider invocation) and `run_subscription_monitor` (the orchestrator) so the diff logic is unit-testable without a live site:
 
@@ -1209,12 +1209,12 @@ def _scraped_works_from_history(
 
 > **Diff strategy note.** The AdHoc spider's result sidecar (`javdb/spider/app/result.py`) carries only run *stats*, not parsed entries. So the monitor reconstructs the scrape outcome from `MovieHistory` (the authoritative ingestion record, `ActorLink == actor_href`). `NewWorks.add` is `INSERT OR IGNORE`, so the diff is naturally idempotent: works the operator has already seen in the feed are never re-added, and the per-subscription `last_seen_href` cursor records the newest href for display/debugging. The unit tests exercise the pure `process_actor` directly with injected `ScrapedWork`s, so they do not need a live site or a `MovieHistory` snapshot.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `python3 -m pytest tests/unit/test_subscription_monitor.py -q`
 Expected: PASS (3 passed)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add javdb/pipeline/subscription_monitor.py tests/unit/test_subscription_monitor.py
@@ -1230,7 +1230,7 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD commit -m "feat(pipeline): add subscri
 
 This is the test that makes the ADR-040-Phase-3 supersession safe: it asserts that `select_index_entries(..., is_adhoc_mode=True)` keeps a low-rate, low-comment magnet entry that the daily phase-2 path drops. If a future refactor moves the rating gate into the adhoc branch, this test fails and the supersession guarantee is restored before it silently regresses.
 
-- [ ] **Step 1: Write the test**
+- [x] **Step 1: Write the test**
 
 Create `tests/unit/test_adhoc_bypasses_rating_gate.py`. It builds a minimal `page_result`-shaped fake whose single entry carries a magnet tag but a rating/comment count well below `PHASE2_MIN_RATE`/`PHASE2_MIN_COMMENTS`, then asserts the adhoc path keeps it while the daily phase-2 path drops it:
 
@@ -1313,12 +1313,12 @@ def test_daily_phase2_drops_the_same_low_rate_entry():
     )
 ```
 
-- [ ] **Step 2: Run the test**
+- [x] **Step 2: Run the test**
 
 Run: `python3 -m pytest tests/unit/test_adhoc_bypasses_rating_gate.py -q`
 Expected: PASS (2 passed). If `test_daily_phase2_drops_the_same_low_rate_entry` does not drop the entry, re-confirm the entry's tags reach the rating gate (`_has_release_date` true, not a subtitle entry) — the daily branch only applies the gate after the release-date filter (`index_selection.py:103-124`).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add tests/unit/test_adhoc_bypasses_rating_gate.py
@@ -1332,7 +1332,7 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD commit -m "test(pipeline): pin AdHoc r
 **Files:**
 - Create: `apps/cli/ops/subscription_monitor.py`, `.github/workflows/SubscriptionMonitor.yml`
 
-- [ ] **Step 1: Write the CLI**
+- [x] **Step 1: Write the CLI**
 
 Create `apps/cli/ops/subscription_monitor.py` (mirrors the lean argparse style of the `apps/cli/ops/*.py` tools; the cron invokes `python3 -m apps.cli.ops.subscription_monitor`):
 
@@ -1389,12 +1389,12 @@ if __name__ == "__main__":
 
 > If `javdb.infra.logging` does not export `setup_logging`, drop that import and the `setup_logging()` call — the function only configures handlers and the CLI works without it (logging falls back to the root config). Confirm with `grep -n "def setup_logging" javdb/infra/logging.py` before committing.
 
-- [ ] **Step 2: Smoke the CLI against an empty subscription set**
+- [x] **Step 2: Smoke the CLI against an empty subscription set**
 
 Run: `STORAGE_BACKEND=sqlite python3 -m apps.cli.ops.subscription_monitor --dry-run`
 Expected: logs `Active subscriptions (0): (none)` and exits 0 (no live scrape; proves the CLI imports and the repo reads cleanly).
 
-- [ ] **Step 3: Write the cron workflow**
+- [x] **Step 3: Write the cron workflow**
 
 Create `.github/workflows/SubscriptionMonitor.yml`. It mirrors the `setup` job of `AdHocIngestion.yml` (config generation from secrets/vars, encrypted-config artifact) and adds a single `monitor` job that runs the CLI with `STORAGE_BACKEND=d1`. The cron schedule mirrors `DailyIngestion.yml:88` (daily, offset so it does not collide with the daily ingestion):
 
@@ -1582,12 +1582,12 @@ jobs:
           if-no-files-found: ignore
 ```
 
-- [ ] **Step 4: Lint the workflow YAML**
+- [x] **Step 4: Lint the workflow YAML**
 
 Run: `python3 -c "import yaml; yaml.safe_load(open('.github/workflows/SubscriptionMonitor.yml')); print('SubscriptionMonitor.yml: valid YAML')"`
 Expected: `SubscriptionMonitor.yml: valid YAML`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add apps/cli/ops/subscription_monitor.py .github/workflows/SubscriptionMonitor.yml
@@ -1603,7 +1603,7 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD commit -m "feat(ci): add SubscriptionM
 **Files:**
 - Create: `server/services/subscription-service.ts`
 
-- [ ] **Step 1: Write the service**
+- [x] **Step 1: Write the service**
 
 Create `server/services/subscription-service.ts` (mirrors `server/services/watchlist-service.ts`: `D1Database` is an ambient global — do not import it; functions take `db` not `env`; the UPSERT SQL is byte-identical to the Python `ACTOR_SUBSCRIPTION_UPSERT_SQL`):
 
@@ -1748,7 +1748,7 @@ export async function dismissNewWork(
 }
 ```
 
-- [ ] **Step 2: Verify it type-checks**
+- [x] **Step 2: Verify it type-checks**
 
 Run: `npx tsc -p server/tsconfig.json --noEmit`
 Expected: no errors referencing `subscription-service.ts`.
@@ -1763,7 +1763,7 @@ Expected: no errors referencing `subscription-service.ts`.
 - Create: `server/routes/subscriptions.ts`, `server/__tests__/subscription-routes.test.ts`
 - Modify: `server/app.ts`
 
-- [ ] **Step 1: Write the failing route test**
+- [x] **Step 1: Write the failing route test**
 
 Create `server/__tests__/subscription-routes.test.ts` (self-seeds the tables like `watchlist-routes.test.ts`; mutations require the CSRF `mutationHeaders` and the admin role — the test login user is `admin`):
 
@@ -1904,12 +1904,12 @@ describe("Subscription routes", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npx vitest run server/__tests__/subscription-routes.test.ts --config vitest.server.config.ts`
 Expected: FAIL (routes 404 / `subscriptionsRoutes` not mounted).
 
-- [ ] **Step 3: Write the route**
+- [x] **Step 3: Write the route**
 
 Create `server/routes/subscriptions.ts` (mirrors `server/routes/watchlist.ts`; mutations gated by `requireRole("admin")`; one Hono app mounts both `/api/subscriptions` and `/api/new-works` via two sub-paths — see the mount in Step 4). To keep both prefixes clean and matching the Python routers, this file exports ONE Hono app that handles both URL spaces by using full sub-paths under a shared `/api` mount:
 
@@ -2015,7 +2015,7 @@ subscriptionsRoutes.post("/new-works/:videoCode/dismiss", requireRole("admin"), 
 
 > The route uses `/subscriptions/actors/:id` (a single `:id` param) rather than a wildcard, because actor hrefs are always `/actors/<id>`. The Python side accepts the full `{actor_href:path}` for generality; both backends store the identical normalized `/actors/<id>` key, so the parity guard (Task 12) only needs to pin the *upsert SQL*, not the route shape.
 
-- [ ] **Step 4: Mount the route**
+- [x] **Step 4: Mount the route**
 
 In `server/app.ts`: add the import in the route-imports block (near `import { watchlistRoutes } from "./routes/watchlist";`):
 
@@ -2029,12 +2029,12 @@ Then add the mount immediately after the `app.route("/api/watchlist", watchlistR
 app.route("/api", subscriptionsRoutes);
 ```
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [x] **Step 5: Run the test to verify it passes**
 
 Run: `npx vitest run server/__tests__/subscription-routes.test.ts --config vitest.server.config.ts`
 Expected: PASS (2 passed)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add server/services/subscription-service.ts server/routes/subscriptions.ts server/__tests__/subscription-routes.test.ts server/app.ts
@@ -2048,7 +2048,7 @@ git commit -m "feat(server): add /api/subscriptions + /api/new-works worker rout
 **Files:**
 - Modify: `server/routes/capabilities.ts`
 
-- [ ] **Step 1: Add the probe**
+- [x] **Step 1: Add the probe**
 
 In `server/routes/capabilities.ts`, after `watchIntentEnabled()`, add (probes `HISTORY_DB`, matching WS1):
 
@@ -2064,7 +2064,7 @@ async function subscriptionsEnabled(env: Env): Promise<boolean> {
 }
 ```
 
-- [ ] **Step 2: Wire it into the handler**
+- [x] **Step 2: Wire it into the handler**
 
 In the `capabilitiesRoutes.get("/", ...)` handler, after `const watch_intent = await watchIntentEnabled(env);` add:
 
@@ -2074,13 +2074,13 @@ In the `capabilitiesRoutes.get("/", ...)` handler, after `const watch_intent = a
 
 Then add `subscriptions,` into the `features:` object, immediately after `watch_intent,`.
 
-- [ ] **Step 3: Verify type-check + existing capabilities test still passes**
+- [x] **Step 3: Verify type-check + existing capabilities test still passes**
 
 Run: `npx tsc -p server/tsconfig.json --noEmit`
 Then: `npx vitest run server/__tests__ --config vitest.server.config.ts -t capabilit`
 Expected: type-check clean; capabilities test(s) pass (the `subscriptions` key is now present in the response).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add server/routes/capabilities.ts
@@ -2099,7 +2099,7 @@ The Query Contract Golden pins only read query-builders; the `ActorSubscription`
 - Create: `tests/unit/test_actor_subscription_upsert_parity.py` [MAIN]
 - Create: `server/__tests__/actor-subscription-upsert-parity.test.ts` [WEB]
 
-- [ ] **Step 1: Python parity test**
+- [x] **Step 1: Python parity test**
 
 Create `tests/unit/test_actor_subscription_upsert_parity.py`:
 
@@ -2133,7 +2133,7 @@ def test_python_upsert_matches_canonical():
 Run: `python3 -m pytest tests/unit/test_actor_subscription_upsert_parity.py -q`
 Expected: PASS. (If it fails, the `CANONICAL` constant here is the source of truth — fix whichever SQL drifted, not the test, and keep the TS test below identical.)
 
-- [ ] **Step 2: TS parity test (identical CANONICAL string)**
+- [x] **Step 2: TS parity test (identical CANONICAL string)**
 
 Create `server/__tests__/actor-subscription-upsert-parity.test.ts`:
 
@@ -2164,7 +2164,7 @@ describe("ActorSubscription upsert SQL parity", () => {
 Run: `npx vitest run server/__tests__/actor-subscription-upsert-parity.test.ts --config vitest.server.config.ts`
 Expected: PASS.
 
-- [ ] **Step 3: Commit (both repos)**
+- [x] **Step 3: Commit (both repos)**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add tests/unit/test_actor_subscription_upsert_parity.py
@@ -2176,6 +2176,14 @@ git commit -m "test(server): pin ActorSubscription upsert SQL parity (ADR-054 WS
 ---
 
 ## Phase E — Frontend [WEB]
+
+Backend Sprint 2 intentionally does **not** implement Phase E. The user scoped
+this agent to the MAIN backend plus the WEB repo's `server/` directory only;
+the WS2 UI lands in Sprint 3 after the contract-first handoff.
+
+**Closeout status (2026-06-15):** backend/server scope is locally verified and
+ready for PR. The full IMP remains partially open until Phase E (Sprint 3 /
+Agent F), manual smoke, remote D1 apply, and cron enablement land.
 
 ### Task 13: Regenerate api types
 
@@ -2907,7 +2915,7 @@ WS2 owns superseding ADR-040 Phase-3 ("Subscriptions: whitelist bypassing the ra
 - Modify: `docs/design/ADR-040-Content-Filter-Rules/ADR-040-content-filter-rules.zh.md`
 - Modify: `docs/design/ADR-054-User-Intent-Discovery-Layer/ADR-054-user-intent-discovery-layer.md` + `.zh.md` (Status Log)
 
-- [ ] **Step 1: Amend the en roadmap row**
+- [x] **Step 1: Amend the en roadmap row**
 
 In `docs/design/ADR-040-Content-Filter-Rules/ADR-040-content-filter-rules.md`, edit the Phase-3 row of the Implementation Roadmap table (currently line ~128):
 
@@ -2920,7 +2928,7 @@ With:
 | Phase 3 — Subscriptions | **Superseded by [ADR-054](../ADR-054-User-Intent-Discovery-Layer/ADR-054-user-intent-discovery-layer.md) WS2** | Actor subscriptions ship in ADR-054 WS2 ([IMP-ADR054-02](../ADR-054-User-Intent-Discovery-Layer/IMP-ADR054-02-subscriptions.md)). The "whitelist bypassing the rating threshold" is realized by reusing the **AdHoc selection path** (`is_adhoc_mode=True`), which is tag-based only and never applies `PHASE2_MIN_RATE`/`PHASE2_MIN_COMMENTS` — no new index-gate-bypass code. Pinned by `tests/unit/test_adhoc_bypasses_rating_gate.py`. |
 ```
 
-- [ ] **Step 2: Amend the en "Subscription" domain-language note**
+- [x] **Step 2: Amend the en "Subscription" domain-language note**
 
 In the same file, find the Domain Language entry (line ~150-151):
 ```
@@ -2935,7 +2943,7 @@ Append a superseded note:
   `is_adhoc_mode` selection, not a new index-gate hook).
 ```
 
-- [ ] **Step 3: Add an en Status Log entry**
+- [x] **Step 3: Add an en Status Log entry**
 
 In the ADR-040 `## Status Log`, append:
 ```
@@ -2946,7 +2954,7 @@ In the ADR-040 `## Status Log`, append:
   `ContentFilterRule` engine keeps its exclude/include/age scope unchanged.
 ```
 
-- [ ] **Step 4: Mirror Steps 1-3 in the zh file**
+- [x] **Step 4: Mirror Steps 1-3 in the zh file**
 
 In `docs/design/ADR-040-Content-Filter-Rules/ADR-040-content-filter-rules.zh.md`:
 
@@ -2974,7 +2982,7 @@ Append a zh Status Log entry:
   `ContentFilterRule` 引擎的 exclude/include/age 范围保持不变。
 ```
 
-- [ ] **Step 5: Add an ADR-054 Status Log entry (en + zh)**
+- [x] **Step 5: Add an ADR-054 Status Log entry (en + zh)**
 
 In `docs/design/ADR-054-User-Intent-Discovery-Layer/ADR-054-user-intent-discovery-layer.md` (and `.zh.md`), append to the Status Log:
 ```
@@ -2986,7 +2994,7 @@ In `docs/design/ADR-054-User-Intent-Discovery-Layer/ADR-054-user-intent-discover
 ```
 (zh: translate the same entry; preserve table/identifier names verbatim.)
 
-- [ ] **Step 6: Verify links + commit**
+- [x] **Step 6: Verify links + commit**
 
 Run (sanity-check the new cross-links resolve):
 ```bash
@@ -3010,7 +3018,7 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD commit -m "docs(adr): supersede ADR-04
 
 ## Final verification gate
 
-- [ ] **[MAIN] backend tests**
+- [x] **[MAIN] backend tests**
 
 Run:
 ```bash
@@ -3018,29 +3026,42 @@ cd /Users/tedwu/JAVDB_AutoSpider_CICD && python3 -m pytest \
   tests/unit/test_subscription_repo.py \
   tests/unit/test_subscriptions_router.py \
   tests/unit/test_subscription_monitor.py \
+  tests/unit/test_subscription_monitor_cli.py \
   tests/unit/test_adhoc_bypasses_rating_gate.py \
   tests/unit/test_actor_subscription_upsert_parity.py -q
 ```
 Expected: all pass.
 
-- [ ] **[MAIN] CLI + workflow smoke**
+- [x] **[MAIN] CLI + workflow smoke**
 
 Run:
 ```bash
 cd /Users/tedwu/JAVDB_AutoSpider_CICD
-STORAGE_BACKEND=sqlite python3 -m apps.cli.ops.subscription_monitor --dry-run
+tmp_cfg="$(mktemp -d)" && tmp_reports="$(mktemp -d)" && \
+printf "STORAGE_MODE='db'\nSTORAGE_BACKEND='sqlite'\nREPORTS_DIR=r'%s'\nHISTORY_DB_PATH=r'%s/history.db'\nREPORTS_DB_PATH=r'%s/reports.db'\nOPERATIONS_DB_PATH=r'%s/operations.db'\n" \
+  "$tmp_reports" "$tmp_reports" "$tmp_reports" "$tmp_reports" > "$tmp_cfg/config.py" && \
+PYTHONPATH="$tmp_cfg:/Users/tedwu/JAVDB_AutoSpider_CICD:javdb/rust_core/python" \
+  /opt/anaconda3/bin/python3 -m apps.cli.ops.subscription_monitor --dry-run
 python3 -c "import yaml; yaml.safe_load(open('.github/workflows/SubscriptionMonitor.yml')); print('yaml ok')"
 ```
 Expected: CLI lists 0 active subscriptions + exits 0; `yaml ok`.
 
-- [ ] **[WEB] worker + frontend tests + type-check**
+- [x] **[WEB] worker server tests + type-check**
 
-Run (from cwd):
+Run (from WEB repo):
 ```bash
+npx tsc -p server/tsconfig.json --noEmit
 npx vitest run \
   server/__tests__/subscription-routes.test.ts \
   server/__tests__/actor-subscription-upsert-parity.test.ts \
   --config vitest.server.config.ts
+```
+Expected: server type-check and server tests pass.
+
+- [ ] **[WEB] frontend tests + type-check (Sprint 3 / Agent F scope)**
+
+Run after Phase E is implemented:
+```bash
 npx vue-tsc --noEmit -p tsconfig.app.json
 ```
 Expected: all pass; no type errors.

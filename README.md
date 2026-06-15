@@ -133,6 +133,7 @@ For the full CLI reference, see [CLI Reference](docs/handbook/en/developer/cli-r
 |----------|---------|-------------|
 | `DailyIngestion.yml` | Cron 12:00 UTC + manual | Daily scraping pipeline |
 | `AdHocIngestion.yml` | Manual | Custom URL scraping |
+| `SubscriptionMonitor.yml` | Cron 14:00 UTC + manual | Scrape followed actors and write the New Works feed |
 | `QBFileFilter.yml` | Cron 16:00 UTC + manual | Filter small files (4h after daily) + optional quality evidence |
 | `WeeklyDedup.yml` | Cron Sunday + manual | Rclone deduplication |
 | `RollbackD1.yml` | Manual | Session rollback |
