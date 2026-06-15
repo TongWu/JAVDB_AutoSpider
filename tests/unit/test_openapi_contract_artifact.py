@@ -54,3 +54,9 @@ def test_onboarding_test_path_is_single_and_well_formed():
     # The auth-failure bodies belong under responses, never under requestBody.
     assert set(op["requestBody"].keys()) == {"content", "required"}
     assert {"401", "403"}.issubset(op["responses"].keys())
+
+
+def test_aggregate_magnets_response_requires_magnets_array():
+    schema = json.loads(_OPENAPI.read_text(encoding="utf-8"))
+    response_schema = schema["components"]["schemas"]["AggregateMagnetsResponse"]
+    assert set(response_schema["required"]) == {"video_code", "magnets"}

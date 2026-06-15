@@ -388,6 +388,65 @@ class TestNotifyBackends:
         assert "TELEGRAM_CHAT_ID = '-100123'" in content
 
 
+class TestMagnetSources:
+    """ADR-054 WS3: MAGNET_SOURCES must reach generated config.py and API metadata."""
+
+    def test_config_map_contains_magnet_source_entries(self):
+        config_map = get_config_map()
+        by_name = {item[0]: item for item in config_map}
+
+        assert by_name['MAGNET_SOURCES'][1] == 'MAGNET_SOURCES_JSON'
+        assert by_name['MAGNET_SOURCES'][2] is get_env_json
+        assert by_name['MAGNET_SOURCES'][3] == []
+        assert by_name['MAGNET_SOURCES'][4] == 'MAGNET SOURCES / INDEXERS'
+
+        assert by_name['JAVBUS_BASE_URL'][1] == 'JAVBUS_BASE_URL'
+        assert by_name['JAVBUS_BASE_URL'][3] == 'https://www.javbus.com'
+        assert by_name['JAVBUS_BASE_URL'][4] == 'MAGNET SOURCES / INDEXERS'
+
+        assert by_name['SUKEBEI_BASE_URL'][1] == 'SUKEBEI_BASE_URL'
+        assert by_name['SUKEBEI_BASE_URL'][3] == 'https://sukebei.nyaa.si'
+        assert by_name['SUKEBEI_BASE_URL'][4] == 'MAGNET SOURCES / INDEXERS'
+
+        assert by_name['MAGNET_SOURCES_USE_PROXY'][1] == 'MAGNET_SOURCES_USE_PROXY'
+        assert by_name['MAGNET_SOURCES_USE_PROXY'][2] is get_env_bool
+        assert by_name['MAGNET_SOURCES_USE_PROXY'][3] is True
+        assert by_name['MAGNET_SOURCES_USE_PROXY'][4] == 'MAGNET SOURCES / INDEXERS'
+
+        assert by_name['MAGNET_SOURCE_TIMEOUT_SECONDS'][1] == 'MAGNET_SOURCE_TIMEOUT_SECONDS'
+        assert by_name['MAGNET_SOURCE_TIMEOUT_SECONDS'][2] is get_env_float
+        assert by_name['MAGNET_SOURCE_TIMEOUT_SECONDS'][3] == 10.0
+        assert by_name['MAGNET_SOURCE_TIMEOUT_SECONDS'][4] == 'MAGNET SOURCES / INDEXERS'
+
+    def test_generated_config_defaults_to_feature_off_and_proxy_on(self):
+        with patch.dict(os.environ, {}, clear=True):
+            content = generate_config_content()
+
+        assert '# MAGNET SOURCES / INDEXERS' in content
+        assert 'MAGNET_SOURCES = []' in content
+        assert "JAVBUS_BASE_URL = 'https://www.javbus.com'" in content
+        assert "SUKEBEI_BASE_URL = 'https://sukebei.nyaa.si'" in content
+        assert 'MAGNET_SOURCES_USE_PROXY = True' in content
+        assert 'MAGNET_SOURCE_TIMEOUT_SECONDS = 10.0' in content
+
+    def test_generated_config_honours_env_overrides(self):
+        env = {
+            'VAR_MAGNET_SOURCES_JSON': '["javbus", "sukebei"]',
+            'VAR_JAVBUS_BASE_URL': 'https://javbus.example.test',
+            'VAR_SUKEBEI_BASE_URL': 'https://sukebei.example.test',
+            'VAR_MAGNET_SOURCES_USE_PROXY': 'false',
+            'VAR_MAGNET_SOURCE_TIMEOUT_SECONDS': '3.5',
+        }
+        with patch.dict(os.environ, env, clear=True):
+            content = generate_config_content()
+
+        assert 'MAGNET_SOURCES = ["javbus", "sukebei"]' in content
+        assert "JAVBUS_BASE_URL = 'https://javbus.example.test'" in content
+        assert "SUKEBEI_BASE_URL = 'https://sukebei.example.test'" in content
+        assert 'MAGNET_SOURCES_USE_PROXY = False' in content
+        assert 'MAGNET_SOURCE_TIMEOUT_SECONDS = 3.5' in content
+
+
 class TestGenerateConfigContent:
     """Tests for generate_config_content function."""
     

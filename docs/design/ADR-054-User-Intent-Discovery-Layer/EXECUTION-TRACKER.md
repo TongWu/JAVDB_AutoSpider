@@ -94,10 +94,10 @@ Agent F:
 
 ### WS3 — Magnet aggregation · [IMP-ADR054-03](IMP-ADR054-03-magnet-aggregation.md)
 Agent B:
-- [ ] ADR-039 `indexer` plugin category (`IndexerPlugin` Protocol + `IndexerResult`), JAVBUS + Sukebei plugins
-- [ ] source-agnostic fetch helper (reuse `RequestHandler` proxy pool, `use_cf_bypass=False`)
-- [ ] aggregator: info-hash dedup + `video_code` grouping + live ADR-024 `score_torrent`
-- [ ] `POST /api/explore/aggregate-magnets` (Python real; Worker 501 in cloudflare mode); `magnet_aggregation` flag = `bool(MAGNET_SOURCES)`
+- [x] ADR-039 `indexer` plugin category (`IndexerPlugin` Protocol + `IndexerResult`), JAVBUS + Sukebei plugins
+- [x] source-agnostic fetch helper (reuse `RequestHandler` proxy pool, `use_cf_bypass=False`)
+- [x] aggregator: info-hash dedup + `video_code` grouping + live ADR-024 `score_torrent`
+- [x] `POST /api/explore/aggregate-magnets` (Python real; Worker 501 in cloudflare mode); `magnet_aggregation` flag = `bool(MAGNET_SOURCES)`
 
 Agent F:
 - [ ] gated **Source** column in `ResolveMagnetTable.vue` (only when flag on) + i18n
@@ -138,3 +138,4 @@ Agent F:
   workflow + docs and WEB `server/` mirror are ready for PR. WS2 Vue frontend
   remains a Sprint 3 / Agent F item, and remote D1 apply + cron enablement
   remain deployment gates.
+- 2026-06-15: WS3 Agent B backend slice completed: MAIN indexer plugins/fetch/aggregation/Python API/OpenAPI/capability, plus WEB `server/` Worker 501 mirror and hardcoded-false capability. Frontend `src/` work remains with Agent F.

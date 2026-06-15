@@ -163,6 +163,20 @@ TRANSMISSION_DOWNLOAD_DIR = '/media/downloads'
 > **Note:** `DOWNLOADER_BACKEND` controls the demonstrator CLI only. The main
 > pipeline upload path (`apps.cli.qb.uploader`) remains qB-only in Phase 2.
 
+### Magnet Sources / Indexers (ADR-054 WS3)
+
+External magnet aggregation is server-side and Python-backend only. The
+`magnet_aggregation` capability is true only when `MAGNET_SOURCES` is non-empty;
+the Cloudflare Worker backend reports it as false.
+
+| Variable | Type | Default | Description |
+|---|---|---|---|
+| `MAGNET_SOURCES` | `list[str]` \| `str` | `[]` | Active external magnet indexers, queried in fan-out. Default empty means the feature is off. Accepts a list (`['javbus', 'sukebei']`) or a CSV string (`'javbus, sukebei'`). |
+| `JAVBUS_BASE_URL` | `str` | `'https://www.javbus.com'` | JAVBUS indexer base URL. Override only for a trusted mirror. |
+| `SUKEBEI_BASE_URL` | `str` | `'https://sukebei.nyaa.si'` | Sukebei indexer base URL. Override only for a trusted mirror. |
+| `MAGNET_SOURCES_USE_PROXY` | `bool` | `True` | Route indexer fetches through the configured proxy pool. Recommended because external indexer fetches can trigger bans or legal/terms-of-service risk. Avoid aggressive crawling. |
+| `MAGNET_SOURCE_TIMEOUT_SECONDS` | `float` | `10.0` | Per-source wall-clock budget for external indexer fan-out. A slow source returns a timeout result without blocking faster sources. |
+
 ---
 
 ## 4. Proxy Configuration

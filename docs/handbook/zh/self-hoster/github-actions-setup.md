@@ -120,6 +120,19 @@ GitHub Actions 部署提供：
 | `D1_BATCHING_ENABLED` | `false` | 启用 ADR-010 safe-path D1 micro-batching。可识别的真值包括 `1`、`true`、`yes`、`on`。 |
 | `D1_STARTUP_REPLAY_ENABLED` | `false` | 在首次 D1/Dual 操作前启用 ADR-010 startup replay。可识别的真值包括 `1`、`true`、`yes`、`on`。 |
 
+### 可选磁力聚合 Variables（Python API）
+
+这些变量只适用于会为 Python API 生成 `config.py` 的自定义 GitHub Actions
+任务。现有抓取工作流不会启动 Python API，也不会调用外部索引器聚合。
+
+| Variable | 默认值 | 用途 |
+|---|---|---|
+| `MAGNET_SOURCES_JSON` | `[]` | active 外部磁力索引器的 JSON 数组，例如 `["javbus", "sukebei"]`。为空时 `magnet_aggregation` capability 保持 false。 |
+| `JAVBUS_BASE_URL` | `https://www.javbus.com` | JAVBUS 索引器 base URL。 |
+| `SUKEBEI_BASE_URL` | `https://sukebei.nyaa.si` | Sukebei 索引器 base URL。 |
+| `MAGNET_SOURCES_USE_PROXY` | `true` | 让外部索引器请求走 proxy pool。 |
+| `MAGNET_SOURCE_TIMEOUT_SECONDS` | `10.0` | 外部索引器 fan-out 中每个 source 的 wall-clock 时间预算。 |
+
 ### 爬虫调优 Variables
 
 | Variable | 默认值 | 用途 |

@@ -326,6 +326,13 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         ('NOTIFY_BACKENDS', 'NOTIFY_BACKENDS_JSON', get_env_json, ['email'], 'NOTIFICATION BACKENDS'),
         ('TELEGRAM_BOT_TOKEN', 'TELEGRAM_BOT_TOKEN', get_env, '', 'NOTIFICATION BACKENDS'),
         ('TELEGRAM_CHAT_ID', 'TELEGRAM_CHAT_ID', get_env, '', 'NOTIFICATION BACKENDS'),
+        # Magnet sources / indexers (ADR-054 WS3). Defaults to empty so
+        # aggregation is feature-off unless the operator explicitly opts in.
+        ('MAGNET_SOURCES', 'MAGNET_SOURCES_JSON', get_env_json, [], 'MAGNET SOURCES / INDEXERS'),
+        ('JAVBUS_BASE_URL', 'JAVBUS_BASE_URL', get_env, 'https://www.javbus.com', 'MAGNET SOURCES / INDEXERS'),
+        ('SUKEBEI_BASE_URL', 'SUKEBEI_BASE_URL', get_env, 'https://sukebei.nyaa.si', 'MAGNET SOURCES / INDEXERS'),
+        ('MAGNET_SOURCES_USE_PROXY', 'MAGNET_SOURCES_USE_PROXY', get_env_bool, True, 'MAGNET SOURCES / INDEXERS'),
+        ('MAGNET_SOURCE_TIMEOUT_SECONDS', 'MAGNET_SOURCE_TIMEOUT_SECONDS', get_env_float, 10.0, 'MAGNET SOURCES / INDEXERS'),
         # Proxy Configuration
         ('PROXY_MODE', 'PROXY_MODE', get_env, 'pool', 'PROXY CONFIGURATION'),
         ('PROXY_POOL', 'PROXY_POOL_JSON', get_env_json, [], 'PROXY CONFIGURATION'),

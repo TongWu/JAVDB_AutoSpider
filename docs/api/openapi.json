@@ -368,6 +368,107 @@
         "title": "AdhocTaskPayload",
         "type": "object"
       },
+      "AggregateMagnetsPayload": {
+        "properties": {
+          "video_code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Video Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "video_code"
+        ],
+        "title": "AggregateMagnetsPayload",
+        "type": "object"
+      },
+      "AggregateMagnetsResponse": {
+        "properties": {
+          "magnets": {
+            "items": {
+              "$ref": "#/components/schemas/AggregatedMagnet"
+            },
+            "title": "Magnets",
+            "type": "array"
+          },
+          "video_code": {
+            "title": "Video Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "video_code",
+          "magnets"
+        ],
+        "title": "AggregateMagnetsResponse",
+        "type": "object"
+      },
+      "AggregatedMagnet": {
+        "properties": {
+          "file_count": {
+            "default": 0,
+            "title": "File Count",
+            "type": "integer"
+          },
+          "info_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Info Hash"
+          },
+          "magnet_uri": {
+            "title": "Magnet Uri",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "quality_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Quality Reasons",
+            "type": "array"
+          },
+          "quality_score": {
+            "default": 0.0,
+            "title": "Quality Score",
+            "type": "number"
+          },
+          "size": {
+            "default": "",
+            "title": "Size",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          }
+        },
+        "required": [
+          "magnet_uri",
+          "name"
+        ],
+        "title": "AggregatedMagnet",
+        "type": "object"
+      },
       "Build": {
         "properties": {
           "backend_version": {
@@ -1593,6 +1694,10 @@
             "title": "Library Ownership",
             "type": "boolean"
           },
+          "magnet_aggregation": {
+            "title": "Magnet Aggregation",
+            "type": "boolean"
+          },
           "pikpak": {
             "title": "Pikpak",
             "type": "boolean"
@@ -1637,6 +1742,7 @@
           "library_ownership",
           "library_consumption",
           "watch_intent",
+          "magnet_aggregation",
           "subscriptions",
           "site_drift_sentinel"
         ],
@@ -7498,6 +7604,85 @@
         "tags": [
           "diagnostics"
         ]
+      }
+    },
+    "/api/explore/aggregate-magnets": {
+      "post": {
+        "operationId": "explore_aggregate_magnets_api_explore_aggregate_magnets_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AggregateMagnetsPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AggregateMagnetsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "detail"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "detail"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Explore Aggregate Magnets"
       }
     },
     "/api/explore/download-magnet": {

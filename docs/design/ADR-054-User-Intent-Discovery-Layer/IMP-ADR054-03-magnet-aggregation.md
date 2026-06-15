@@ -21,7 +21,7 @@ Work the phases in order: **A (indexer plugin category + dedup/score)** → **B 
 - **WS3-D1 — ephemeral v1, no D1 table.** Fetch + dedup + score on each request, per-source timeout + per-source failure isolation. The cache table `MagnetSourceResult` (keyed `(info_hash, video_code, source)` + `fetched_at` TTL) is the roadmap-blessed **deferred** follow-up — do **not** add a migration in this IMP.
 - **WS3-D2 — single `magnet_aggregation` flag, backend-asymmetric.** Python: `bool(MAGNET_SOURCES)` (config-presence, no probe table in v1). Worker: hardcoded `false`. This reuses the existing index-status `has_uncensored=false` Python-only-capability precedent (`server/routes/explore.ts:263`).
 - **WS3-D3 — exactly two plugins: JAVBUS + Sukebei.** Ship the `indexer` category + these two built-ins. BTdig/BTSOW are the deferred "more sources" follow-up. Two sources is the minimum that genuinely exercises cross-source infohash dedup.
-- **WS3-D4 — sibling endpoint, not enriched `/resolve`.** `POST /api/explore/aggregate-magnets` (`{video_code | url}`). Python implements; Worker 501s in cloudflare mode. **Do NOT** fold external magnets into `/resolve` — its dual-backend payload must stay byte-parallel.
+- **WS3-D4 — sibling endpoint, not enriched `/resolve`.** `POST /api/explore/aggregate-magnets` (`{video_code}`). Python implements; Worker 501s in cloudflare mode. **Do NOT** fold external magnets into `/resolve` — its dual-backend payload must stay byte-parallel.
 - **WS3-D5 — run ADR-024 `score_torrent` LIVE per magnet.** File-list-dependent signals degrade to `probe_unavailable`; name/tag/size signals drive the score. The stored-evaluation join is the deferred Option-B follow-up (needs the D1 cache table).
 - **Fetch caveat.** Indexer hosts (JAVBUS/Sukebei) need the proxy pool + curl_cffi but `use_cf_bypass=False` and source-specific success validation — NOT the javdb `is_ban_page`/over18/Turnstile checks (which false-trigger on non-javdb hosts).
 - **No `user_id`** (single-operator). Mutations stay `require_role("admin")` where they write; the aggregate endpoint is a read so it uses `_require_auth` like `/resolve`.
@@ -79,7 +79,7 @@ Work the phases in order: **A (indexer plugin category + dedup/score)** → **B 
 
 The dispatcher clones the **notify fan-out** (`javdb/integrations/notify/dispatch.py`): `active_sources()` reads a **list** config `MAGNET_SOURCES` (like `active_names()` reads `NOTIFY_BACKENDS`), and `aggregate()` iterates every active source with per-source try/except isolation (like `send()`). It does **not** clone the downloader single-select.
 
-- [ ] **Step 1: Write the package marker**
+- [x] **Step 1: Write the package marker**
 
 Create `javdb/integrations/indexer/__init__.py`:
 
@@ -87,7 +87,7 @@ Create `javdb/integrations/indexer/__init__.py`:
 """ADR-039 `indexer` plugin category — multi-source magnet aggregation (ADR-054 WS3)."""
 ```
 
-- [ ] **Step 2: Write the contract**
+- [x] **Step 2: Write the contract**
 
 Create `javdb/integrations/indexer/plugin.py` (mirrors `downloader/plugin.py:9-24` — a result dataclass + a `Protocol` with `name` + `is_configured()` + a domain method; adds an `IndexerMagnet` row dataclass since indexers return rows, not a single ok/detail):
 
@@ -143,7 +143,7 @@ class IndexerPlugin(Protocol):
     def search(self, video_code: str) -> IndexerResult: ...
 ```
 
-- [ ] **Step 3: Write the failing dispatcher test**
+- [x] **Step 3: Write the failing dispatcher test**
 
 Create `tests/unit/test_indexer_dispatch.py` (clones `tests/unit/test_notify_dispatch.py`: monkeypatch `cfg` + `REGISTRY`, assert list parsing + fan-out + failure isolation):
 
@@ -232,12 +232,12 @@ def test_active_sources_sanitizes_invalid_list_items(monkeypatch):
     assert dispatch.active_sources() == ["javbus", "sukebei"]
 ```
 
-- [ ] **Step 4: Run to verify it fails**
+- [x] **Step 4: Run to verify it fails**
 
 Run: `python3 -m pytest tests/unit/test_indexer_dispatch.py -q`
 Expected: FAIL with `ModuleNotFoundError: No module named 'javdb.integrations.indexer.dispatch'`
 
-- [ ] **Step 5: Implement the dispatcher**
+- [x] **Step 5: Implement the dispatcher**
 
 Create `javdb/integrations/indexer/dispatch.py` (mirrors `notify/dispatch.py`: imports built-ins to self-register, discovers entry points, list-parses config, fan-out with per-source isolation). Note the **deliberate divergence** from notify: an empty `MAGNET_SOURCES` returns `[]` (feature off) — there is no implicit default source.
 
@@ -298,7 +298,7 @@ def aggregate(video_code: str) -> list[IndexerResult]:
 
 > The Task-1 test monkeypatches `REGISTRY`/`cfg` and never imports a real source, but importing `dispatch` triggers the JAVBUS/Sukebei imports. Those plugin modules are created in Task 3 — if you are running TDD strictly task-by-task, stub the two plugin files as empty `pass` modules now (the imports just need to resolve) and fill them in Task 3, OR implement Task 3 plugins before re-running this test. The recommended order is: write `dispatch.py` + the two `plugin.py` skeletons (Task 3 Step 1), then run this test green.
 
-- [ ] **Step 6: Run to verify it passes**
+- [x] **Step 6: Run to verify it passes**
 
 Run: `python3 -m pytest tests/unit/test_indexer_dispatch.py -q`
 Expected: PASS (6 passed)
@@ -315,7 +315,7 @@ Expected: PASS (6 passed)
 
 The helper reuses the `RequestHandler` proxy pool + curl_cffi impersonation but bypasses the javdb-specific guards. Concretely it calls `handler.get_page(url, use_cf_bypass=False, module_name="indexer", ...)` — `use_cf_bypass=False` means the CF-bypass cascade (`_fetch_with_cf_bypass`, over18, Turnstile, `is_ban_page`) is never entered (see `request.py:1117-1190`). It builds the handler via `create_request_handler_from_config` exactly as `explore_service._new_request_handler` does, but **never** passes the javdb session cookie (those hosts don't use it).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_indexer_fetch.py`:
 
@@ -358,12 +358,12 @@ def test_fetch_returns_none_on_empty(monkeypatch):
     assert indexer_fetch.fetch_source_html("https://x", {}, use_proxy=False) is None
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `python3 -m pytest tests/unit/test_indexer_fetch.py -q`
 Expected: FAIL with `ModuleNotFoundError: No module named 'javdb.integrations.indexer.fetch'`
 
-- [ ] **Step 3: Implement the fetch helper**
+- [x] **Step 3: Implement the fetch helper**
 
 Create `javdb/integrations/indexer/fetch.py`:
 
@@ -436,7 +436,7 @@ def fetch_source_html(
     )
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `python3 -m pytest tests/unit/test_indexer_fetch.py -q`
 Expected: PASS (2 passed)
@@ -455,7 +455,7 @@ Expected: PASS (2 passed)
 
 Each plugin reads its own base-URL config, fetches via the Task-2 helper, parses its source HTML into `IndexerMagnet` rows (computing `info_hash` via the existing `extract_hash_from_magnet` in `javdb/integrations/qb/client.py:552`), and ends with `REGISTRY.register("indexer", XPlugin())` at import. To keep parsing pure and testable, factor a module-level `parse(html, base_url) -> list[IndexerMagnet]` that the test drives directly with a saved fixture, while `search()` wires fetch → parse.
 
-- [ ] **Step 1: Save fixture HTML**
+- [x] **Step 1: Save fixture HTML**
 
 Save a representative search-result page (or hand-trim a minimal one) for each source. The fixtures must contain the structure the parser keys on:
 - `tests/fixtures/indexer/javbus_ABC-001.html` — a JAVBUS movie page whose magnet table rows carry `a[href^="magnet:"]` anchors with a name cell, a size cell, and tag spans (e.g. 高清/字幕).
@@ -463,7 +463,7 @@ Save a representative search-result page (or hand-trim a minimal one) for each s
 
 > Keep fixtures SMALL and synthetic — do not commit a full live capture. Two or three magnet rows each is enough to exercise dedup. Anonymise any real codes.
 
-- [ ] **Step 2: Write the JAVBUS plugin skeleton (so `dispatch.py` imports resolve)**
+- [x] **Step 2: Write the JAVBUS plugin skeleton (so `dispatch.py` imports resolve)**
 
 Create `javdb/integrations/indexer/javbus/__init__.py`:
 
@@ -557,7 +557,7 @@ def _runtime_config() -> dict:
 REGISTRY.register("indexer", JavbusIndexerPlugin())
 ```
 
-- [ ] **Step 3: Write the Sukebei plugin**
+- [x] **Step 3: Write the Sukebei plugin**
 
 Create `javdb/integrations/indexer/sukebei/__init__.py`:
 
@@ -652,7 +652,7 @@ def _runtime_config() -> dict:
 REGISTRY.register("indexer", SukebeiIndexerPlugin())
 ```
 
-- [ ] **Step 4: Write the parser tests**
+- [x] **Step 4: Write the parser tests**
 
 Create `tests/unit/test_indexer_javbus.py`:
 
@@ -684,12 +684,12 @@ def test_is_configured_true_with_default_base():
 
 Create `tests/unit/test_indexer_sukebei.py` (same shape, `source == "sukebei"`, fixture `sukebei_ABC-001.html`).
 
-- [ ] **Step 5: Run the parser tests + the (now-importable) dispatcher test**
+- [x] **Step 5: Run the parser tests + the (now-importable) dispatcher test**
 
 Run: `python3 -m pytest tests/unit/test_indexer_javbus.py tests/unit/test_indexer_sukebei.py tests/unit/test_indexer_dispatch.py tests/unit/test_indexer_fetch.py -q`
 Expected: PASS (all). Adjust the `parse()` CSS selectors to match whatever real structure you saved in the fixtures — the fixtures are the contract here.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add javdb/integrations/indexer tests/unit/test_indexer_dispatch.py tests/unit/test_indexer_fetch.py tests/unit/test_indexer_javbus.py tests/unit/test_indexer_sukebei.py tests/fixtures/indexer
@@ -706,7 +706,7 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD commit -m "feat(indexer): add indexer 
 
 `aggregate_magnets()` collects rows from `dispatch.aggregate()`, dedups on **normalized info_hash** (primary) + normalized `video_code` (secondary grouping), and runs ADR-024 `score_torrent` **live** per surviving magnet. Because external indexers expose no file list, it feeds `extract_file_features([])` so all file-list signals degrade — `score_torrent` returns `main_video_missing` etc. — and the aggregator stamps a `probe_unavailable` reason so the degradation is explicit (the reason exists in the ADR-024 canon for exactly this case). Among same-infohash cross-source dupes it keeps the higher ADR-024 score and records every `source` that carried it.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_indexer_aggregate.py`:
 
@@ -783,12 +783,12 @@ def test_malformed_magnet_falls_back_to_video_code_group(monkeypatch):
     assert sorted(rows[0]["sources"]) == ["javbus", "sukebei"]
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `python3 -m pytest tests/unit/test_indexer_aggregate.py -q`
 Expected: FAIL with `ModuleNotFoundError: No module named 'javdb.integrations.indexer.aggregate'`
 
-- [ ] **Step 3: Implement the aggregator**
+- [x] **Step 3: Implement the aggregator**
 
 Create `javdb/integrations/indexer/aggregate.py`:
 
@@ -896,12 +896,12 @@ def aggregate_magnets(video_code: str) -> List[Dict[str, Any]]:
     return rows
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `python3 -m pytest tests/unit/test_indexer_aggregate.py -q`
 Expected: PASS (4 passed)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add javdb/integrations/indexer/aggregate.py tests/unit/test_indexer_aggregate.py
@@ -921,7 +921,7 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD commit -m "feat(indexer): infohash ded
 
 The endpoint accepts `{video_code}` (a code, not a javdb URL — aggregation is code-keyed) and returns `{video_code, magnets: [...]}`. It is a **read** (no side effects), so it uses `_require_auth` like `/resolve`, not `require_role("admin")`. The service delegates to `aggregate.aggregate_magnets`.
 
-- [ ] **Step 1: Write the schemas**
+- [x] **Step 1: Write the schemas**
 
 Create `apps/api/schemas/aggregate.py` (the response is permissive-extra like the other explore responses so fields can grow):
 
@@ -956,7 +956,7 @@ class AggregateMagnetsResponse(BaseModel):
     magnets: List[AggregatedMagnet]
 ```
 
-- [ ] **Step 2: Add the service function**
+- [x] **Step 2: Add the service function**
 
 In `apps/api/services/explore_service.py`, add the import near the top (alongside the other `javdb.*` imports):
 
@@ -981,7 +981,7 @@ async def aggregate_magnets_payload(payload: Any, username: str) -> Dict[str, An
 
 Add `"aggregate_magnets_payload",` to the `__all__` list.
 
-- [ ] **Step 3: Register the route**
+- [x] **Step 3: Register the route**
 
 In `apps/api/routers/explore.py`, add the schema import:
 
@@ -1005,7 +1005,7 @@ async def explore_aggregate_magnets(
 
 Add `"explore_aggregate_magnets",` to `__all__`.
 
-- [ ] **Step 4: Write the router test**
+- [x] **Step 4: Write the router test**
 
 Create `tests/unit/test_aggregate_magnets_router.py` (monkeypatch the aggregator so the test has no network; override `_require_auth` like the WS1 watchlist router test):
 
@@ -1064,12 +1064,12 @@ def test_aggregate_rejects_empty_code(client):
 
 > Monkeypatching `explore_service.aggregate_magnets` works because Step 2 imported the symbol into that module's namespace (`from ... import aggregate_magnets`), so the service function resolves the patched reference.
 
-- [ ] **Step 5: Run the test**
+- [x] **Step 5: Run the test**
 
 Run: `python3 -m pytest tests/unit/test_aggregate_magnets_router.py -q`
 Expected: PASS (2 passed)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add apps/api/schemas/aggregate.py apps/api/routers/explore.py apps/api/services/explore_service.py tests/unit/test_aggregate_magnets_router.py
@@ -1085,7 +1085,7 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD commit -m "feat(api): add /api/explore
 
 Unlike the table-probe flags (`closed_loop`, `watch_intent`), v1 has no table, so the flag is **config-presence**: `bool(active_sources())`. Reuse the dispatcher's `active_sources()` so the flag is honest about which config actually drives aggregation.
 
-- [ ] **Step 1: Add the field to the `Features` schema**
+- [x] **Step 1: Add the field to the `Features` schema**
 
 In `apps/api/schemas/capabilities_payloads.py`, add `magnet_aggregation: bool` to `class Features(BaseModel)` immediately after `watch_intent: bool`:
 
@@ -1096,7 +1096,7 @@ In `apps/api/schemas/capabilities_payloads.py`, add `magnet_aggregation: bool` t
     site_drift_sentinel: bool
 ```
 
-- [ ] **Step 2: Add the probe + wire it**
+- [x] **Step 2: Add the probe + wire it**
 
 In `apps/api/routers/capabilities.py`, add this after `_watch_intent_enabled()` (config-presence, not a table probe):
 
@@ -1116,12 +1116,12 @@ def _magnet_aggregation_enabled() -> bool:
 
 Then in `build_capabilities()`, add `magnet_aggregation=_magnet_aggregation_enabled(),` to the `Features(...)` call, immediately after `watch_intent=_watch_intent_enabled(),`.
 
-- [ ] **Step 3: Verify capabilities builds and exposes the flag**
+- [x] **Step 3: Verify capabilities builds and exposes the flag**
 
 Run: `python3 -c "from apps.api.routers.capabilities import build_capabilities; print(build_capabilities().features.magnet_aggregation)"`
 Expected: prints `False` (no `MAGNET_SOURCES` configured on this path) — proves the field exists and degrades gracefully.
 
-- [ ] **Step 4: Document the config keys**
+- [x] **Step 4: Document the config keys**
 
 In `config.py.example`, add a new block after the DOWNLOADER BACKENDS section (mirror the NOTIFY_BACKENDS doc style):
 
@@ -1144,7 +1144,7 @@ SUKEBEI_BASE_URL = 'https://sukebei.nyaa.si'
 MAGNET_SOURCES_USE_PROXY = True
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add apps/api/routers/capabilities.py apps/api/schemas/capabilities_payloads.py config.py.example
@@ -1158,17 +1158,17 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD commit -m "feat(api): expose magnet_ag
 **Files:**
 - Modify: `docs/api/openapi.json`
 
-- [ ] **Step 1: Dump the OpenAPI schema**
+- [x] **Step 1: Dump the OpenAPI schema**
 
 Run: `cd /Users/tedwu/JAVDB_AutoSpider_CICD && python3 -m apps.cli.ops.dump_openapi`
 Expected: `wrote /Users/tedwu/JAVDB_AutoSpider_CICD/docs/api/openapi.json (<N> bytes)`
 
-- [ ] **Step 2: Verify the new surface is in the contract**
+- [x] **Step 2: Verify the new surface is in the contract**
 
 Run: `python3 -c "import json; d=json.load(open('docs/api/openapi.json')); print('/api/explore/aggregate-magnets' in d['paths']); print('magnet_aggregation' in d['components']['schemas']['Features']['properties'])"`
 Expected: prints `True` then `True`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD add docs/api/openapi.json
@@ -1187,7 +1187,7 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD commit -m "chore(api): re-vendor opena
 
 The Worker cannot reach/clear external indexers (no proxy pool / curl_cffi), so it mirrors the route but returns 501 in cloudflare mode — cloning the existing `/download-magnet` 501 at `server/routes/explore.ts:201`. This preserves the dual-backend route surface without advertising a capability the Worker cannot deliver.
 
-- [ ] **Step 1: Write the failing route test**
+- [x] **Step 1: Write the failing route test**
 
 Create `server/__tests__/explore-aggregate.test.ts`:
 
@@ -1230,12 +1230,12 @@ describe("Explore aggregate-magnets (Worker mirror)", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npx vitest run server/__tests__/explore-aggregate.test.ts --config vitest.server.config.ts`
 Expected: FAIL (route 404s — not yet mirrored).
 
-- [ ] **Step 3: Add the 501 route**
+- [x] **Step 3: Add the 501 route**
 
 In `server/routes/explore.ts`, add this route (place it after the `/resolve` route, before `/download-magnet`; a read so no `requireRole`, matching the Python `_require_auth`):
 
@@ -1255,7 +1255,7 @@ exploreRoutes.post("/aggregate-magnets", async (c) => {
 });
 ```
 
-- [ ] **Step 4: Extend `ParsedMagnet`**
+- [x] **Step 4: Extend `ParsedMagnet`**
 
 In `server/services/explore-parser.ts`, add the optional fields to `ParsedMagnet` (so a Python-sourced aggregated magnet folded into the shared shape type-checks; optional → existing `/resolve` parse is unchanged):
 
@@ -1271,17 +1271,17 @@ export interface ParsedMagnet {
 }
 ```
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [x] **Step 5: Run the test to verify it passes**
 
 Run: `npx vitest run server/__tests__/explore-aggregate.test.ts --config vitest.server.config.ts`
 Expected: PASS (1 passed)
 
-- [ ] **Step 6: Type-check**
+- [x] **Step 6: Type-check**
 
 Run: `npx tsc -p server/tsconfig.json --noEmit`
 Expected: no errors referencing `explore.ts` / `explore-parser.ts`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add server/routes/explore.ts server/services/explore-parser.ts server/__tests__/explore-aggregate.test.ts
@@ -1297,7 +1297,7 @@ git commit -m "feat(server): mirror aggregate-magnets route as 501 (ADR-054 WS3)
 
 The Worker cannot aggregate, so it must report `false` — capability-honest by construction, mirroring the existing index-status `has_uncensored=false` and `site_drift_sentinel` hardcodes. There is no probe function; it is a literal in the `features:` object.
 
-- [ ] **Step 1: Add the hardcoded flag**
+- [x] **Step 1: Add the hardcoded flag**
 
 In `server/routes/capabilities.ts`, inside the `features:` object, add `magnet_aggregation` immediately after `watch_intent` (note the explanatory comment — this is a deliberate backend-asymmetric flag, WS3-D2):
 
@@ -1309,13 +1309,13 @@ In `server/routes/capabilities.ts`, inside the `features:` object, add `magnet_a
       magnet_aggregation: false,
 ```
 
-- [ ] **Step 2: Verify type-check + capabilities test still passes**
+- [x] **Step 2: Verify type-check + capabilities test still passes**
 
 Run: `npx tsc -p server/tsconfig.json --noEmit`
 Then: `npx vitest run server/__tests__ --config vitest.server.config.ts -t capabilit`
 Expected: type-check clean; capabilities test(s) pass with the `magnet_aggregation: false` key present.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add server/routes/capabilities.ts
