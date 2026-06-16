@@ -254,3 +254,21 @@ Safety level：
 - `safe_to_prepare` - 可以安全展示为下一步只读操作。
 - `requires_review` - 使用 command preview 前必须复核 required checks。
 - `blocked` - blocked reasons 解决前不能执行。
+
+### 主动 incident 告警
+
+ADR-026 Phase 4 可以在检测到 incident 时主动告警 operator。incident 持久化到 D1 之后，一个确定性 policy 决定是否告警。投递本身由现有的 ADR-039 notify dispatch 负责；这一层只决定是否触发并记录结果。它不执行 remediation。
+
+Alert policy 由 operator 按 incident type 调整：
+
+- `enabled` - 该 incident type 是否告警。
+- `min_confidence` - 仅当诊断 confidence 至少达到该级别时才告警（`low` < `medium` < `high`）。
+- `channels` - 该 policy 允许使用的 ADR-039 backend 名称。为空表示使用 ADR-039 常规 active backend 列表；非空时通过 ADR-039 现有 backend 选择逻辑过滤投递目标。
+
+Alert event 状态：
+
+- `fired` - 存在匹配且启用的 policy、confidence 达到阈值，且当前进程已取得 incident 级告警 claim；随后投递交给 ADR-039。
+- `suppressed` - 该 incident 此前已经告警过（按 `incident_id` 去重）。
+- `skipped` - 没有匹配且启用的 policy、incident confidence 低于 policy 阈值，或 policy channel 与 active ADR-039 notify backend 没有交集（`no_delivery`）。
+
+告警是 opt-in 且尽力而为：投递失败会记录日志但不会让诊断崩溃，alert event 仍会被记录以供审计。

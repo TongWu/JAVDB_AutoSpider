@@ -522,6 +522,39 @@ CREATE INDEX IF NOT EXISTS idx_ops_remediation_status
 CREATE INDEX IF NOT EXISTS idx_ops_remediation_action_type
     ON OpsRemediationProposals(action_type);
 
+-- Proactive alerting policy and event ledger (ADR-026 Phase 4). Mirrors
+-- javdb/migrations/d1/2026_06_13_add_ops_alert_tables.sql so a fresh local
+-- init_db() builds it too. Alert delivery remains in ADR-039 NotifyPlugin
+-- dispatch; these tables only store policy and dedupe/audit decisions.
+CREATE TABLE IF NOT EXISTS OpsAlertPolicy (
+    policy_id TEXT PRIMARY KEY,
+    incident_type TEXT NOT NULL,
+    min_confidence TEXT NOT NULL DEFAULT 'medium'
+        CHECK (min_confidence IN ('low', 'medium', 'high')),
+    enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+    channels_json TEXT NOT NULL DEFAULT '[]',
+    updated_by TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ops_alert_policy_incident_type
+    ON OpsAlertPolicy(incident_type);
+
+CREATE TABLE IF NOT EXISTS OpsAlertEvent (
+    alert_id TEXT PRIMARY KEY,
+    incident_id TEXT NOT NULL,
+    policy_id TEXT,
+    status TEXT NOT NULL DEFAULT 'fired'
+        CHECK (status IN ('fired', 'suppressed', 'skipped')),
+    reason TEXT,
+    fired_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    FOREIGN KEY (incident_id) REFERENCES OpsIncidents(incident_id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ops_alert_event_incident
+    ON OpsAlertEvent(incident_id);
+CREATE INDEX IF NOT EXISTS idx_ops_alert_event_status
+    ON OpsAlertEvent(status);
+
 -- Event-spine tables (ADR-036 Phase 1). Mirrors
 -- javdb/migrations/d1/2026_05_29_add_pipeline_event.sql so a fresh local
 -- init_db() builds them too (not just the remote D1 migration). Additive,

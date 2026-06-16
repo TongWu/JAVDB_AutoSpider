@@ -14,6 +14,8 @@ from apps.api.schemas.capabilities_payloads import (
     Features,
     GhActions,
 )
+from javdb.storage.contract import fragments
+from javdb.storage.db import get_db
 
 
 def _get_git_sha() -> str:
@@ -121,6 +123,19 @@ def _subscriptions_enabled() -> bool:
         return False
 
 
+def _ops_alerting_enabled() -> bool:
+    """True when both ADR-026 alert tables are queryable in REPORTS_DB."""
+    try:
+        from javdb.storage.db import REPORTS_DB_PATH, get_db
+
+        with get_db(REPORTS_DB_PATH) as conn:
+            conn.execute(fragments.OPS_ALERT_POLICY_PROBE.sql).fetchone()
+            conn.execute(fragments.OPS_ALERT_EVENT_PROBE.sql).fetchone()
+        return True
+    except Exception:
+        return False
+
+
 def build_capabilities() -> CapabilitiesResponse:
     ingestion_mode = cast(
         "Literal['local', 'github', 'dual']",
@@ -164,6 +179,7 @@ def build_capabilities() -> CapabilitiesResponse:
             # ADR-035: site-contract drift sentinel ships with the system; the
             # frontend hides the drift panel only when explicitly disabled.
             site_drift_sentinel=_bool_env("FEATURE_SITE_DRIFT_SENTINEL", default=True),
+            ops_alerting=_ops_alerting_enabled(),
         ),
         deployment=deployment,
         build=Build(

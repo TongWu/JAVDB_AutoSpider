@@ -1792,6 +1792,10 @@
             "title": "Magnet Aggregation",
             "type": "boolean"
           },
+          "ops_alerting": {
+            "title": "Ops Alerting",
+            "type": "boolean"
+          },
           "pikpak": {
             "title": "Pikpak",
             "type": "boolean"
@@ -1839,7 +1843,8 @@
           "content_filter",
           "magnet_aggregation",
           "subscriptions",
-          "site_drift_sentinel"
+          "site_drift_sentinel",
+          "ops_alerting"
         ],
         "title": "Features",
         "type": "object"
@@ -3249,6 +3254,183 @@
           "message"
         ],
         "title": "OnboardingTestResponse",
+        "type": "object"
+      },
+      "OpsAlertEventListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OpsAlertEventSchema"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "OpsAlertEventListResponse",
+        "type": "object"
+      },
+      "OpsAlertEventSchema": {
+        "properties": {
+          "alert_id": {
+            "title": "Alert Id",
+            "type": "string"
+          },
+          "fired_at": {
+            "title": "Fired At",
+            "type": "string"
+          },
+          "incident_id": {
+            "title": "Incident Id",
+            "type": "string"
+          },
+          "policy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Id"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "status": {
+            "enum": [
+              "fired",
+              "suppressed",
+              "skipped"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "alert_id",
+          "incident_id",
+          "status",
+          "fired_at"
+        ],
+        "title": "OpsAlertEventSchema",
+        "type": "object"
+      },
+      "OpsAlertPolicyListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OpsAlertPolicySchema"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "OpsAlertPolicyListResponse",
+        "type": "object"
+      },
+      "OpsAlertPolicySchema": {
+        "properties": {
+          "channels": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Channels",
+            "type": "array"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "incident_type": {
+            "title": "Incident Type",
+            "type": "string"
+          },
+          "min_confidence": {
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Min Confidence",
+            "type": "string"
+          },
+          "policy_id": {
+            "title": "Policy Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "updated_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By"
+          }
+        },
+        "required": [
+          "policy_id",
+          "incident_type",
+          "min_confidence",
+          "enabled",
+          "channels",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "OpsAlertPolicySchema",
+        "type": "object"
+      },
+      "OpsAlertPolicyUpsertRequest": {
+        "properties": {
+          "channels": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Channels",
+            "type": "array"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "min_confidence": {
+            "default": "medium",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Min Confidence",
+            "type": "string"
+          }
+        },
+        "title": "OpsAlertPolicyUpsertRequest",
         "type": "object"
       },
       "OpsIncidentAnalyticsResponse": {
@@ -7170,6 +7352,162 @@
         "summary": "Api Detect Page Type"
       }
     },
+    "/api/diag/alert-policies": {
+      "get": {
+        "operationId": "list_alert_policies_api_diag_alert_policies_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpsAlertPolicyListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "detail"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "detail"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "List Alert Policies",
+        "tags": [
+          "diagnostics"
+        ]
+      }
+    },
+    "/api/diag/alert-policies/{incident_type}": {
+      "put": {
+        "description": "Upsert alert policy for an incident type (admin only).",
+        "operationId": "upsert_alert_policy_api_diag_alert_policies__incident_type__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_type",
+            "required": true,
+            "schema": {
+              "title": "Incident Type",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpsAlertPolicyUpsertRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpsAlertPolicySchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "detail"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "detail"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Upsert Alert Policy",
+        "tags": [
+          "diagnostics"
+        ]
+      }
+    },
     "/api/diag/javdb-session": {
       "get": {
         "description": "Return current JavDB session cookie status.",
@@ -7641,6 +7979,89 @@
           }
         ],
         "summary": "Get Ops Incident",
+        "tags": [
+          "diagnostics"
+        ]
+      }
+    },
+    "/api/diag/ops-incidents/{incident_id}/alert-events": {
+      "get": {
+        "operationId": "list_alert_events_api_diag_ops_incidents__incident_id__alert_events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpsAlertEventListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "detail"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "detail"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "List Alert Events",
         "tags": [
           "diagnostics"
         ]
