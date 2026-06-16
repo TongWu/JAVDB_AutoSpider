@@ -117,7 +117,19 @@ class NewWorksRepo:
         title: Optional[str] = None,
         release_date: Optional[str] = None,
     ) -> bool:
-        """Insert a discovered work. Returns True iff a row was added."""
+        """Insert a discovered work. Returns True iff a row was added.
+
+        Keyed by the composite (actor_href, video_code) so the same release can
+        persist once per followed actor (issue #223). ``INSERT OR IGNORE`` is
+        used rather than an explicit ``ON CONFLICT(actor_href, video_code)``
+        target so the write stays schema-tolerant during the D1-first migration
+        window: a backend whose NewWorks still carries the old single-column
+        ``video_code`` PK (D1 before 2026_06_16_*.sql, or a SQLite mirror before
+        ``_ensure_newworks_composite_pk`` / ``--force-overwrite-all``) would make
+        an explicit composite conflict target raise ``OperationalError``. ``OR
+        IGNORE`` degrades to plain idempotency instead of crashing, and once the
+        composite PK is in place it keeps cross-actor rows.
+        """
         with get_db(self._db_path) as conn:
             cur = conn.execute(
                 "INSERT OR IGNORE INTO NewWorks "
@@ -157,7 +169,15 @@ class NewWorksRepo:
         return [dict(r) for r in rows], total
 
     def dismiss(self, video_code: str) -> bool:
-        """Mark a feed row dismissed. Returns True if a row was updated."""
+        """Mark feed row(s) for ``video_code`` dismissed. Returns True if any
+        row was updated.
+
+        NOTE: dismissal is global per video_code — it clears the release from
+        every followed actor's feed at once. Now that a release can occupy one
+        row per actor (composite PK, issue #223), scoping dismissal to a single
+        actor needs an ``actor_href`` argument and a matching API/route change
+        (dual-backend, OpenAPI re-vendor); tracked as a follow-up.
+        """
         with get_db(self._db_path) as conn:
             cur = conn.execute(
                 "UPDATE NewWorks SET dismissed = 1 WHERE video_code = ?", (video_code,)

@@ -114,6 +114,29 @@ def test_add_new_work_is_idempotent(db_path):
     assert items[0]["video_code"] == "ABC-001"
 
 
+def test_add_same_video_code_under_two_actors_keeps_both(db_path):
+    # issue #223: a release that surfaces under two followed actors must persist
+    # one row per actor; the old single-column video_code PK dropped the second.
+    repo = NewWorksRepo(db_path=db_path)
+    assert repo.add(
+        video_code="ABC-001", href="/v/abc001", actor_href="/actors/A"
+    ) is True
+    assert repo.add(
+        video_code="ABC-001", href="/v/abc001", actor_href="/actors/B"
+    ) is True
+
+    _, total = repo.list()
+    assert total == 2
+    items_a, total_a = repo.list(actor_href="/actors/A")
+    items_b, total_b = repo.list(actor_href="/actors/B")
+    assert total_a == 1 and items_a[0]["video_code"] == "ABC-001"
+    assert total_b == 1 and items_b[0]["video_code"] == "ABC-001"
+    # Re-scraping the same (actor, video) stays idempotent per actor.
+    assert repo.add(
+        video_code="ABC-001", href="/v/abc001", actor_href="/actors/B"
+    ) is False
+
+
 def test_list_excludes_dismissed_by_default(db_path):
     repo = NewWorksRepo(db_path=db_path)
     repo.add(video_code="A-1", href="/v/a1", actor_href="/actors/A")
@@ -138,3 +161,70 @@ def test_list_filters_by_actor(db_path):
 def test_dismiss_returns_false_when_absent(db_path):
     repo = NewWorksRepo(db_path=db_path)
     assert repo.dismiss("NOPE-999") is False
+
+
+# -- In-place schema upgrade (issue #223) ----------------------------------
+
+_OLD_NEWWORKS_DDL = """
+CREATE TABLE NewWorks (
+  video_code    TEXT PRIMARY KEY,
+  href          TEXT NOT NULL,
+  actor_href    TEXT NOT NULL,
+  title         TEXT,
+  release_date  TEXT,
+  discovered_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  dismissed     INTEGER NOT NULL DEFAULT 0 CHECK (dismissed IN (0,1))
+);
+"""
+
+
+def _pk_cols(conn):
+    cols = conn.execute("PRAGMA table_info(NewWorks)").fetchall()
+    return [r[1] for r in sorted((c for c in cols if c[5] > 0), key=lambda c: c[5])]
+
+
+def test_ensure_newworks_composite_pk_upgrades_old_single_column_pk(tmp_path):
+    from javdb.storage.db._db_migrations import _ensure_newworks_composite_pk
+
+    path = str(tmp_path / "old_schema.db")
+    conn = sqlite3.connect(path)
+    conn.executescript(_OLD_NEWWORKS_DDL)
+    conn.execute(
+        "INSERT INTO NewWorks(video_code, href, actor_href, title, dismissed) "
+        "VALUES ('ABC-001', '/v/abc001', '/actors/A', 't1', 1)"
+    )
+    conn.commit()
+    assert _pk_cols(conn) == ["video_code"]
+
+    _ensure_newworks_composite_pk(conn)
+
+    # PK is now composite and the existing row (with dismissed state) survived.
+    assert _pk_cols(conn) == ["actor_href", "video_code"]
+    row = conn.execute(
+        "SELECT actor_href, title, dismissed FROM NewWorks WHERE video_code='ABC-001'"
+    ).fetchone()
+    assert row == ("/actors/A", "t1", 1)
+    # The cross-actor write that used to collide on the old PK now persists.
+    conn.execute(
+        "INSERT OR IGNORE INTO NewWorks(video_code, href, actor_href) "
+        "VALUES ('ABC-001', '/v/abc001', '/actors/B')"
+    )
+    assert conn.execute(
+        "SELECT COUNT(*) FROM NewWorks WHERE video_code='ABC-001'"
+    ).fetchone()[0] == 2
+
+    # Idempotent: a second run is a no-op on the already-composite table.
+    _ensure_newworks_composite_pk(conn)
+    assert _pk_cols(conn) == ["actor_href", "video_code"]
+    conn.close()
+
+
+def test_ensure_newworks_composite_pk_noops_on_fresh_schema(db_path):
+    # The db_path fixture builds NewWorks from the canonical (composite) DDL.
+    from javdb.storage.db._db_migrations import _ensure_newworks_composite_pk
+
+    conn = sqlite3.connect(db_path)
+    assert _pk_cols(conn) == ["actor_href", "video_code"]
+    _ensure_newworks_composite_pk(conn)  # must not raise / rebuild
+    assert _pk_cols(conn) == ["actor_href", "video_code"]
+    conn.close()

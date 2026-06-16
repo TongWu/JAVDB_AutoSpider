@@ -118,9 +118,10 @@ def test_live_score_marks_probe_unavailable(monkeypatch):
     assert "probe_unavailable" in rows[0]["quality_reasons"]
 
 
-def test_malformed_magnets_without_infohash_fall_back_to_video_code_group(
-    monkeypatch,
-):
+def test_hashless_magnets_across_sources_do_not_collapse(monkeypatch):
+    # issue #224: a magnet with no resolvable info-hash can't be deduped, so each
+    # must survive as its own row. The old code keyed every hashless magnet to a
+    # single video_code group, silently dropping N-1 of N results.
     from javdb.integrations.indexer import aggregate as agg
 
     monkeypatch.setattr(
@@ -129,20 +130,45 @@ def test_malformed_magnets_without_infohash_fall_back_to_video_code_group(
         lambda video_code: [
             _result(
                 "JAVBUS",
-                [_magnet("JAVBUS", "magnet:?xt=urn:btmh:bad-v2-only")],
+                [_magnet("JAVBUS", "magnet:?xt=urn:btmh:bad-v2-only", name="from-javbus")],
             ),
             _result(
                 "Sukebei",
-                [_magnet("Sukebei", "not a magnet")],
+                [_magnet("Sukebei", "not a magnet", name="from-sukebei")],
             ),
         ],
     )
 
     rows = agg.aggregate_magnets(" ａｂｃ-001 ")
 
-    assert len(rows) == 1
-    assert rows[0]["info_hash"] is None
-    assert rows[0]["sources"] == ["JAVBUS", "Sukebei"]
+    assert len(rows) == 2
+    assert all(row["info_hash"] is None for row in rows)
+    assert {row["sources"][0] for row in rows} == {"JAVBUS", "Sukebei"}
+    assert {row["name"] for row in rows} == {"from-javbus", "from-sukebei"}
+
+
+def test_multiple_hashless_magnets_same_source_each_survive(monkeypatch):
+    # issue #224: two hashless magnets from the SAME source also must not collapse.
+    from javdb.integrations.indexer import aggregate as agg
+
+    monkeypatch.setattr(
+        agg,
+        "_collect",
+        lambda video_code: [
+            _result(
+                "Sukebei",
+                [
+                    _magnet("Sukebei", "magnet:?dn=one", name="one"),
+                    _magnet("Sukebei", "magnet:?dn=two", name="two"),
+                ],
+            ),
+        ],
+    )
+
+    rows = agg.aggregate_magnets("ABC-001")
+
+    assert len(rows) == 2
+    assert {row["name"] for row in rows} == {"one", "two"}
 
 
 def test_duplicate_infohash_keeps_higher_quality_score_and_reasons(monkeypatch):

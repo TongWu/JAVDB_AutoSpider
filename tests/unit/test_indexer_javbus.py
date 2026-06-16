@@ -81,6 +81,28 @@ def test_search_keeps_url_like_video_code_on_configured_host(monkeypatch, video_
     assert fetched_url.hostname == "javbus.example.test"
 
 
+def test_runtime_config_fails_closed_on_load_error(monkeypatch):
+    # issue #226: a config-load error must NOT degrade to an empty (proxy-less)
+    # config that would scrape direct and leak the operator IP. search() must
+    # raise (the dispatcher then marks the source failed) and never fetch direct.
+    from apps.api.services import config_service
+
+    def boom():
+        raise RuntimeError("store unreadable")
+
+    monkeypatch.setattr(config_service, "load_runtime_config", boom)
+    fetched = []
+    monkeypatch.setattr(
+        javbus_plugin,
+        "fetch_source_html",
+        lambda url, config, use_proxy: fetched.append(url),
+    )
+
+    with pytest.raises(RuntimeError):
+        JavbusIndexerPlugin().search("ABC-001")
+    assert fetched == []
+
+
 def test_search_url_encodes_special_video_code(monkeypatch):
     calls = []
 

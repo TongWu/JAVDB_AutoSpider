@@ -18,6 +18,11 @@
 -- feed-state table (discovered_at + dismissed), NOT an ingestion record -
 -- MovieHistory remains the authoritative ingestion log. The SubscriptionMonitor
 -- cron writes NewWorks from the scrape diff and never reads it back as truth.
+-- Identity is the COMPOSITE (actor_href, video_code): the same release can
+-- surface under several followed actors, and the per-actor feed
+-- (GET /api/new-works?actor_href=...) must keep one row per (actor, video). A
+-- single-column video_code PK silently dropped cross-actor rows (issue #223);
+-- deployed instances are repaired by 2026_06_16_newworks_composite_pk.sql.
 
 CREATE TABLE IF NOT EXISTS ActorSubscription (
   actor_href      TEXT PRIMARY KEY,
@@ -32,13 +37,14 @@ CREATE TABLE IF NOT EXISTS ActorSubscription (
 CREATE INDEX IF NOT EXISTS idx_actor_subscription_active ON ActorSubscription(active);
 
 CREATE TABLE IF NOT EXISTS NewWorks (
-  video_code    TEXT PRIMARY KEY,
+  video_code    TEXT NOT NULL,
   href          TEXT NOT NULL,
   actor_href    TEXT NOT NULL,
   title         TEXT,
   release_date  TEXT,
   discovered_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-  dismissed     INTEGER NOT NULL DEFAULT 0 CHECK (dismissed IN (0,1))
+  dismissed     INTEGER NOT NULL DEFAULT 0 CHECK (dismissed IN (0,1)),
+  PRIMARY KEY (actor_href, video_code)
 );
 
 CREATE INDEX IF NOT EXISTS idx_new_works_actor     ON NewWorks(actor_href);

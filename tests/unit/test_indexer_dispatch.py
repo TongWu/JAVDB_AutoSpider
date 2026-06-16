@@ -1,5 +1,6 @@
 """Fan-out + isolation tests for the indexer dispatcher (ADR-054 WS3)."""
 
+import threading
 import time
 
 import javdb.integrations.indexer.dispatch as dispatch
@@ -113,6 +114,51 @@ def test_aggregate_times_out_slow_source_without_blocking_fast_source(monkeypatc
     assert results["fast"].magnets[0].source == "fast"
     assert results["slow"].ok is False
     assert "timeout" in (results["slow"].detail or "").lower()
+
+
+class _HangPlugin:
+    """A source whose search blocks until released — simulates hung network I/O."""
+
+    def __init__(self, name, release):
+        self.name = name
+        self._release = release
+
+    def is_configured(self):
+        return True
+
+    def search(self, video_code):
+        self._release.wait(timeout=5)  # safety cap so a forgotten release can't wedge the suite
+        return IndexerResult(source=self.name, ok=True, magnets=[])
+
+
+def test_aggregate_bounds_threads_when_source_hangs(monkeypatch):
+    # issue #225: repeated calls against a hung source must not leak threads. The
+    # shared bounded pool caps worker threads regardless of how many times we ask.
+    release = threading.Event()
+
+    def _cfg(name, default):
+        if name == "MAGNET_SOURCES":
+            return ["hang"]
+        if name == "MAGNET_SOURCE_TIMEOUT_SECONDS":
+            return "0.02"
+        return default
+
+    monkeypatch.setattr(dispatch, "cfg", _cfg)
+    monkeypatch.setattr(dispatch, "REGISTRY", _registry(_HangPlugin("hang", release)))
+
+    try:
+        peak = 0
+        for _ in range(dispatch._MAX_WORKERS_PER_SOURCE * 3):
+            results = dispatch.aggregate("ABC-001")
+            assert results[0].ok is False
+            assert "timeout" in (results[0].detail or "").lower()
+            # Scope the count to the hung source's own pool — per-source pools
+            # name threads "indexer-<source>", isolating this from other tests.
+            live = [t for t in threading.enumerate() if t.name.startswith("indexer-hang")]
+            peak = max(peak, len(live))
+        assert peak <= dispatch._MAX_WORKERS_PER_SOURCE
+    finally:
+        release.set()
 
 
 def test_aggregate_times_out_later_source_past_its_launch_deadline(monkeypatch):

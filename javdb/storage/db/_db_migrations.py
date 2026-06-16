@@ -238,13 +238,14 @@ CREATE TABLE IF NOT EXISTS ActorSubscription (
 );
 CREATE INDEX IF NOT EXISTS idx_actor_subscription_active ON ActorSubscription(active);
 CREATE TABLE IF NOT EXISTS NewWorks (
-    video_code    TEXT PRIMARY KEY,
+    video_code    TEXT NOT NULL,
     href          TEXT NOT NULL,
     actor_href    TEXT NOT NULL,
     title         TEXT,
     release_date  TEXT,
     discovered_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    dismissed     INTEGER NOT NULL DEFAULT 0 CHECK (dismissed IN (0,1))
+    dismissed     INTEGER NOT NULL DEFAULT 0 CHECK (dismissed IN (0,1)),
+    PRIMARY KEY (actor_href, video_code)
 );
 CREATE INDEX IF NOT EXISTS idx_new_works_actor     ON NewWorks(actor_href);
 CREATE INDEX IF NOT EXISTS idx_new_works_dismissed ON NewWorks(dismissed);
@@ -1147,6 +1148,49 @@ def _ensure_moviehistory_actor_columns(conn: sqlite3.Connection) -> None:
         pass
 
 
+def _ensure_newworks_composite_pk(conn: sqlite3.Connection) -> None:
+    """Rebuild NewWorks with a composite (actor_href, video_code) primary key.
+
+    The original table (2026_06_14) declared ``video_code TEXT PRIMARY KEY``
+    (single column), which silently dropped a release that surfaced under a
+    second followed actor (issue #223). ``CREATE TABLE IF NOT EXISTS`` never
+    rebuilds an existing table, so an already-initialised SQLite mirror keeps
+    the old key and the composite write contract cannot take effect. This
+    idempotently rebuilds the table (copy -> drop -> rename) only when the PK is
+    still the old single column; on a fresh DB (already composite) it no-ops.
+    Mirrors the D1 forward migration 2026_06_16_newworks_composite_pk.sql.
+    """
+    if not _has_table(conn, 'NewWorks'):
+        return
+    cols = conn.execute("PRAGMA table_info(NewWorks)").fetchall()
+    pk_cols = [r[1] for r in sorted((c for c in cols if c[5] > 0), key=lambda c: c[5])]
+    if pk_cols == ['actor_href', 'video_code']:
+        return
+    logger.info("Rebuilding NewWorks with composite primary key (issue #223)")
+    conn.executescript(
+        """
+        CREATE TABLE NewWorks__pkfix (
+            video_code    TEXT NOT NULL,
+            href          TEXT NOT NULL,
+            actor_href    TEXT NOT NULL,
+            title         TEXT,
+            release_date  TEXT,
+            discovered_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            dismissed     INTEGER NOT NULL DEFAULT 0 CHECK (dismissed IN (0,1)),
+            PRIMARY KEY (actor_href, video_code)
+        );
+        INSERT OR IGNORE INTO NewWorks__pkfix
+            (video_code, href, actor_href, title, release_date, discovered_at, dismissed)
+        SELECT video_code, href, actor_href, title, release_date, discovered_at, dismissed
+        FROM NewWorks;
+        DROP TABLE NewWorks;
+        ALTER TABLE NewWorks__pkfix RENAME TO NewWorks;
+        CREATE INDEX IF NOT EXISTS idx_new_works_actor     ON NewWorks(actor_href);
+        CREATE INDEX IF NOT EXISTS idx_new_works_dismissed ON NewWorks(dismissed);
+        """
+    )
+
+
 def _moviehistory_actor_column_names(conn: sqlite3.Connection) -> List[str]:
     rows = conn.execute("PRAGMA table_info(MovieHistory)").fetchall()
     return [r[1] for r in rows]
@@ -2023,6 +2067,7 @@ def _init_single_db(db_path: str, ddl: str, *, force: bool = False):
             pass
 
         _ensure_moviehistory_actor_columns(conn)
+        _ensure_newworks_composite_pk(conn)
         _normalize_moviehistory_actor_column_order(conn)
         _ensure_rollback_columns(conn)
         _materialize_report_session_status_default(conn)
@@ -2074,6 +2119,7 @@ def _init_single_legacy_db(db_path: str, *, force: bool = False):
             pass
 
         _ensure_moviehistory_actor_columns(conn)
+        _ensure_newworks_composite_pk(conn)
         _normalize_moviehistory_actor_column_order(conn)
         _ensure_rollback_columns(conn)
         _materialize_report_session_status_default(conn)
