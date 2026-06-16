@@ -1,6 +1,6 @@
 # IMP-ADR026-04: ADR-026 Phase 4 - Proactive Incident Alerting & Operator Config
 
-**Status:** Proposed
+**Status:** In Progress — backend/server slice complete; frontend Agent F scope pending
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -46,12 +46,12 @@
 | Create | `tests/unit/test_ops_alert_repo.py` | Alert repository tests. |
 | Modify | `tests/unit/test_ops_diagnosis_service.py` | Service orchestration tests for opt-in alert generation and ADR-039 dispatch reuse. |
 | Modify | `tests/unit/test_ops_diagnostics_api.py` | API tests for alert policy and alert event endpoints. |
-| Modify | `../JAVDB_AutoSpider_Web/server/routes/diagnostics.ts` | Worker alert-policy and alert-event endpoint parity. |
-| Modify | `../JAVDB_AutoSpider_Web/server/__tests__/diagnostics-routes.test.ts` | Worker alert route tests. |
-| Modify | `../JAVDB_AutoSpider_Web/src/api/diagnostics.ts` | Frontend alert policy/event API types and functions. |
-| Create | `../JAVDB_AutoSpider_Web/src/components/diagnostics/AlertPolicyPanel.vue` | Operator alerting config panel (per incident_type). |
-| Modify | `../JAVDB_AutoSpider_Web/src/pages/diagnostics/OpsIncidentsPage.vue` | Mount alerting config panel and show alert-status badge on incident detail. |
-| Create | `../JAVDB_AutoSpider_Web/tests/unit/ops-alerting-api.spec.ts` | Frontend API client tests. |
+| Modify | `../../../JAVDB_AutoSpider_Web/server/routes/diagnostics.ts` | Worker alert-policy and alert-event endpoint parity. |
+| Modify | `../../../JAVDB_AutoSpider_Web/server/__tests__/diagnostics-routes.test.ts` | Worker alert route tests. |
+| Modify | `../../../JAVDB_AutoSpider_Web/src/api/diagnostics.ts` | Frontend alert policy/event API types and functions. |
+| Create | `../../../JAVDB_AutoSpider_Web/src/components/diagnostics/AlertPolicyPanel.vue` | Operator alerting config panel (per incident_type). |
+| Modify | `../../../JAVDB_AutoSpider_Web/src/pages/diagnostics/OpsIncidentsPage.vue` | Mount alerting config panel and show alert-status badge on incident detail. |
+| Create | `../../../JAVDB_AutoSpider_Web/tests/unit/ops-alerting-api.spec.ts` | Frontend API client tests. |
 | Modify | `docs/handbook/en/ops/troubleshooting.md` | Document alerting policy semantics and fired/suppressed/skipped states. |
 | Modify | `docs/handbook/zh/ops/troubleshooting.md` | Chinese mirror. |
 
@@ -72,7 +72,7 @@
 - Create: `javdb/migrations/d1/2026_06_13_add_ops_alert_tables.sql`
 - Modify: `javdb/storage/db/_db_migrations.py`
 
-- [ ] **Step 1: Create alert tables migration**
+- [x] **Step 1: Create alert tables migration**
 
 Create `javdb/migrations/d1/2026_06_13_add_ops_alert_tables.sql`:
 
@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS OpsAlertPolicy (
   incident_type TEXT NOT NULL,
   min_confidence TEXT NOT NULL DEFAULT 'medium'
     CHECK (min_confidence IN ('low', 'medium', 'high')),
-  enabled INTEGER NOT NULL DEFAULT 1,
+  enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
   channels_json TEXT NOT NULL DEFAULT '[]',
   updated_by TEXT,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -113,18 +113,18 @@ CREATE TABLE IF NOT EXISTS OpsAlertEvent (
   FOREIGN KEY (incident_id) REFERENCES OpsIncidents(incident_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_ops_alert_event_incident
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ops_alert_event_incident
   ON OpsAlertEvent(incident_id);
 
 CREATE INDEX IF NOT EXISTS idx_ops_alert_event_status
   ON OpsAlertEvent(status);
 ```
 
-- [ ] **Step 2: Add local mirror DDL**
+- [x] **Step 2: Add local mirror DDL**
 
 Modify `javdb/storage/db/_db_migrations.py` by adding the same two tables and indexes to the reports DDL block.
 
-- [ ] **Step 3: Verify schema syntax locally**
+- [x] **Step 3: Verify schema syntax locally**
 
 Run:
 
@@ -134,7 +134,7 @@ python3 -m compileall javdb/storage/db/_db_migrations.py
 
 Expected: compile succeeds.
 
-- [ ] **Step 4: Defer remote apply**
+- [x] **Step 4: Defer remote apply**
 
 Record this command for rollout, but do not run it while writing the plan:
 
@@ -154,7 +154,7 @@ Expected during rollout: D1 creates `OpsAlertPolicy` and `OpsAlertEvent`.
 - Create: `javdb/ops/diagnosis/alerting.py`
 - Create: `tests/unit/test_ops_alerting.py`
 
-- [ ] **Step 1: Write evaluation tests**
+- [x] **Step 1: Write evaluation tests**
 
 Create `tests/unit/test_ops_alerting.py`:
 
@@ -250,7 +250,7 @@ def test_confidence_ordering_is_deterministic():
     assert skips.status == "skipped"
 ```
 
-- [ ] **Step 2: Add alert model types**
+- [x] **Step 2: Add alert model types**
 
 Add to `javdb/ops/diagnosis/models.py`:
 
@@ -335,7 +335,7 @@ class AlertDecision:
 
 Export `OpsAlertPolicy`, `OpsAlertEvent`, `AlertDecision`, `confidence_rank`, and `build_alert_policy_id` from `javdb/ops/diagnosis/__init__.py`.
 
-- [ ] **Step 3: Implement deterministic evaluation**
+- [x] **Step 3: Implement deterministic evaluation**
 
 Create `javdb/ops/diagnosis/alerting.py`:
 
@@ -426,7 +426,7 @@ def evaluate_alert(
     )
 ```
 
-- [ ] **Step 4: Run evaluation tests**
+- [x] **Step 4: Run evaluation tests**
 
 Run:
 
@@ -444,7 +444,7 @@ Expected: pass.
 - Create: `javdb/storage/repos/ops_alert_repo.py`
 - Create: `tests/unit/test_ops_alert_repo.py`
 
-- [ ] **Step 1: Write repository tests**
+- [x] **Step 1: Write repository tests**
 
 Create `tests/unit/test_ops_alert_repo.py`:
 
@@ -468,6 +468,8 @@ CREATE TABLE OpsAlertPolicy (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+CREATE UNIQUE INDEX idx_ops_alert_policy_incident_type
+  ON OpsAlertPolicy(incident_type);
 CREATE TABLE OpsAlertEvent (
   alert_id TEXT PRIMARY KEY,
   incident_id TEXT NOT NULL,
@@ -476,6 +478,8 @@ CREATE TABLE OpsAlertEvent (
   reason TEXT,
   fired_at TEXT NOT NULL
 );
+CREATE UNIQUE INDEX idx_ops_alert_event_incident
+  ON OpsAlertEvent(incident_id);
 """
 
 
@@ -542,7 +546,7 @@ def test_repo_upserts_and_lists_events_for_incident():
     assert events[0].status == "fired"
 ```
 
-- [ ] **Step 2: Implement repository**
+- [x] **Step 2: Implement repository**
 
 Create `javdb/storage/repos/ops_alert_repo.py`:
 
@@ -613,7 +617,7 @@ class OpsAlertRepo:
             f"""
             INSERT INTO OpsAlertPolicy ({columns})
             VALUES ({placeholders})
-            ON CONFLICT(policy_id) DO UPDATE SET {updates}
+            ON CONFLICT(incident_type) DO UPDATE SET {updates}
             """,
             values,
         )
@@ -635,14 +639,13 @@ class OpsAlertRepo:
         values = [getattr(event, column) for column in _EVENT_COLUMNS]
         columns = ", ".join(_EVENT_COLUMNS)
         placeholders = ", ".join(["?"] * len(_EVENT_COLUMNS))
-        updates = ", ".join(
-            f"{column}=excluded.{column}" for column in _EVENT_COLUMNS if column != "alert_id"
-        )
+        updates = ", ".join(f"{column}=excluded.{column}" for column in _EVENT_COLUMNS)
         self._conn.execute(
             f"""
             INSERT INTO OpsAlertEvent ({columns})
             VALUES ({placeholders})
-            ON CONFLICT(alert_id) DO UPDATE SET {updates}
+            ON CONFLICT(incident_id) DO UPDATE SET {updates}
+            WHERE status != 'fired'
             """,
             values,
         )
@@ -660,7 +663,7 @@ class OpsAlertRepo:
         return [_row_to_event(row) for row in rows]
 ```
 
-- [ ] **Step 3: Run repository tests**
+- [x] **Step 3: Run repository tests**
 
 Run:
 
@@ -678,7 +681,7 @@ Expected: pass.
 - Modify: `javdb/ops/diagnosis/service.py`
 - Modify: `tests/unit/test_ops_diagnosis_service.py`
 
-- [ ] **Step 1: Add service tests**
+- [x] **Step 1: Add service tests**
 
 Add to `tests/unit/test_ops_diagnosis_service.py`:
 
@@ -788,20 +791,22 @@ def test_service_does_not_reimplement_delivery():
     assert "smtplib" not in source
 ```
 
-- [ ] **Step 2: Wire opt-in alert evaluation**
+- [x] **Step 2: Wire opt-in alert evaluation**
 
 Modify `javdb/ops/diagnosis/service.py`:
 
 ```python
 import logging
 
-from javdb.integrations.notify import dispatch_notify_message  # ADR-039 Phase 1 entry point
-from javdb.integrations.notify.models import NotifyMessage
+from javdb.integrations.notify import dispatch as notify_dispatch
+from javdb.integrations.notify.plugin import NotifyMessage
 from javdb.ops.diagnosis.alerting import evaluate_alert
 from javdb.storage.db import REPORTS_DB_PATH, get_db
 from javdb.storage.repos.ops_alert_repo import OpsAlertRepo
 
 logger = logging.getLogger(__name__)
+
+dispatch_notify_message = notify_dispatch.send
 
 _CONFIDENCE_TO_LEVEL = {"low": "info", "medium": "warning", "high": "error"}
 
@@ -823,13 +828,7 @@ def _maybe_alert(record: OpsIncidentRecord, alert_repo: object | None) -> None:
     A delivery failure must not crash diagnosis. This function never executes
     remediation and never performs its own SMTP/channel delivery.
     """
-    repo = alert_repo
-    conn_ctx = None
-    if repo is None:
-        conn_ctx = get_db(REPORTS_DB_PATH)
-        conn = conn_ctx.__enter__()
-        repo = OpsAlertRepo(conn)
-    try:
+    def evaluate_with_repo(repo: object) -> None:
         policies = repo.list_policies()
         already_fired = any(
             event.status == "fired"
@@ -842,9 +841,19 @@ def _maybe_alert(record: OpsIncidentRecord, alert_repo: object | None) -> None:
             except Exception:  # best-effort: delivery must not crash diagnosis
                 logger.warning("Alert delivery failed for %s", record.incident_id, exc_info=True)
         repo.upsert_event(decision.to_event())
-    finally:
-        if conn_ctx is not None:
-            conn_ctx.__exit__(None, None, None)
+
+    try:
+        if alert_repo is not None:
+            evaluate_with_repo(alert_repo)
+            return
+        with get_db(REPORTS_DB_PATH) as conn:
+            evaluate_with_repo(OpsAlertRepo(conn))
+    except Exception:
+        logger.exception(
+            "Failed to evaluate or persist alert event (non-critical); "
+            "continuing diagnosis: incident_id=%s",
+            record.incident_id,
+        )
 ```
 
 Extend `diagnose_incident(...)`:
@@ -872,13 +881,13 @@ def diagnose_incident(
     return persisted
 ```
 
-> Note: import the ADR-039 dispatch symbol from `javdb/integrations/notify`. Do NOT reimplement delivery. If the existing ADR-039 entry point is named differently (e.g. `send`/`dispatch`), alias it to `dispatch_notify_message` at import time so the service code and the guard test in Step 1 stay stable.
+> Note: import ADR-039 dispatch as `from javdb.integrations.notify import dispatch as notify_dispatch`, then alias `dispatch_notify_message = notify_dispatch.send`. Do NOT reimplement delivery. Keep the service code and the guard test in Step 1 stable through the alias.
 
-- [ ] **Step 3: Keep workflow default unchanged**
+- [x] **Step 3: Keep workflow default unchanged**
 
 Do not change Phase 1 workflow steps to pass `generate_alerts=True` in this task. Alert generation should be enabled explicitly after the alert ledger exists in D1 and operators have configured at least one policy.
 
-- [ ] **Step 4: Run service tests**
+- [x] **Step 4: Run service tests**
 
 Run:
 
@@ -897,7 +906,7 @@ Expected: pass.
 - Modify: `apps/api/routers/diagnostics.py`
 - Modify: `tests/unit/test_ops_diagnostics_api.py`
 
-- [ ] **Step 1: Add API tests**
+- [x] **Step 1: Add API tests**
 
 Add to `tests/unit/test_ops_diagnostics_api.py`:
 
@@ -962,7 +971,7 @@ def test_ops_alert_events_returns_items(monkeypatch, admin_client: TestClient):
     assert response.json()["items"][0]["status"] == "fired"
 ```
 
-- [ ] **Step 2: Add schemas**
+- [x] **Step 2: Add schemas**
 
 Add to `apps/api/schemas/diagnostics.py`:
 
@@ -985,7 +994,7 @@ class OpsAlertPolicyListResponse(BaseModel):
 class OpsAlertPolicyUpsertRequest(BaseModel):
     min_confidence: Literal["low", "medium", "high"] = "medium"
     enabled: bool = True
-    channels: list[str] = []
+    channels: list[str] = Field(default_factory=list)
 
 
 class OpsAlertEventSchema(BaseModel):
@@ -1003,7 +1012,7 @@ class OpsAlertEventListResponse(BaseModel):
 
 Add the schema names to `__all__`.
 
-- [ ] **Step 3: Add router helpers**
+- [x] **Step 3: Add router helpers**
 
 Add to `apps/api/routers/diagnostics.py`:
 
@@ -1018,7 +1027,10 @@ def _policy_to_schema(policy) -> OpsAlertPolicySchema:
         incident_type=policy.incident_type,
         min_confidence=policy.min_confidence,
         enabled=policy.enabled,
-        channels=json.loads(policy.channels_json),
+        channels=[
+            item for item in _json_list_field(policy.channels_json)
+            if isinstance(item, str)
+        ],
         updated_by=policy.updated_by,
         created_at=policy.created_at,
         updated_at=policy.updated_at,
@@ -1067,7 +1079,7 @@ def _list_alert_events(incident_id: str):
         return OpsAlertRepo(conn).list_events_for_incident(incident_id)
 ```
 
-- [ ] **Step 4: Add endpoints**
+- [x] **Step 4: Add endpoints**
 
 Add to `apps/api/routers/diagnostics.py`:
 
@@ -1114,7 +1126,7 @@ def list_ops_alert_events(
 
 These endpoints only read policies/events and upsert a policy. They must not trigger delivery, remediation, or any execution.
 
-- [ ] **Step 5: Run API tests**
+- [x] **Step 5: Run API tests**
 
 Run:
 
@@ -1124,15 +1136,37 @@ pytest tests/unit/test_ops_diagnostics_api.py -v
 
 Expected: pass.
 
+- [x] **Step 6: Add contract-first capability and OpenAPI coverage**
+
+Add `features.ops_alerting` to the Python capabilities schema/router. The
+capability must return `true` only when both `OpsAlertPolicy` and
+`OpsAlertEvent` are queryable in `REPORTS_DB`; any probe exception returns
+`false`.
+
+Regenerate `docs/api/openapi.json` with:
+
+```bash
+python -m apps.cli.ops.dump_openapi
+```
+
+The published schema includes `ops_alerting`, `OpsAlertPolicy*`,
+`OpsAlertEvent*`, `GET /api/diag/alert-policies`,
+`PUT /api/diag/alert-policies/{incident_type}`, and
+`GET /api/diag/ops-incidents/{incident_id}/alert-events`.
+
 ---
 
 ## Task 6: Cloudflare Worker API Parity
 
 **Files:**
-- Modify: `../JAVDB_AutoSpider_Web/server/routes/diagnostics.ts`
-- Modify: `../JAVDB_AutoSpider_Web/server/__tests__/diagnostics-routes.test.ts`
+- Modify: `../../../JAVDB_AutoSpider_Web/server/routes/diagnostics.ts`
+- Modify: `../../../JAVDB_AutoSpider_Web/server/__tests__/diagnostics-routes.test.ts`
+- Modify: `../../../JAVDB_AutoSpider_Web/server/routes/capabilities.ts`
+- Modify: `../../../JAVDB_AutoSpider_Web/server/contract/sql-contract.gen.ts`
+- Modify: `javdb/storage/contract/fragments.py`
+- Modify: `docs/api/contract/sql-contract.gen.ts`
 
-- [ ] **Step 1: Add Worker tests**
+- [x] **Step 1: Add Worker tests**
 
 Add to `server/__tests__/diagnostics-routes.test.ts` in the Web repo:
 
@@ -1162,13 +1196,9 @@ async function seedAlertTables(db: D1Database) {
   `).run();
   await db.prepare("DELETE FROM OpsAlertPolicy").run();
   await db.prepare("DELETE FROM OpsAlertEvent").run();
-  await db.prepare(`
-    INSERT INTO OpsAlertEvent (alert_id, incident_id, policy_id, status, reason, fired_at)
-    VALUES ('opsalert_test', 'opsinc_test', 'opspolicy_test', 'fired', 'fired', '2026-06-13T00:00:00Z')
-  `).run();
 }
 
-it("GET /api/diag/alert-policies returns policies", async () => {
+it("GET /api/diag/alert-policies returns mapped policies without channels_json", async () => {
   await seedAlertTables(env.REPORTS_DB);
   const token = await getToken();
 
@@ -1178,16 +1208,22 @@ it("GET /api/diag/alert-policies returns policies", async () => {
 
   expect(res.status).toBe(200);
   const data = await res.json() as any;
-  expect(Array.isArray(data.items)).toBe(true);
+  expect(data.items[0].channels).toEqual(["email", "github_issue"]);
+  expect(data.items[0]).not.toHaveProperty("channels_json");
 });
 
-it("PUT /api/diag/alert-policies/:incident_type upserts a policy as admin", async () => {
+it("PUT /api/diag/alert-policies/:incident_type upserts as admin and returns the mapped policy", async () => {
   await seedAlertTables(env.REPORTS_DB);
-  const token = await getAdminToken();
+  const { token, csrfToken, csrfCookie } = await getCsrf();
 
   const res = await app.request("/api/diag/alert-policies/failed_ingestion", {
     method: "PUT",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "X-CSRF-Token": csrfToken,
+      Cookie: csrfCookie,
+    },
     body: JSON.stringify({ min_confidence: "high", enabled: true, channels: ["email"] }),
   }, env);
 
@@ -1195,6 +1231,14 @@ it("PUT /api/diag/alert-policies/:incident_type upserts a policy as admin", asyn
   const data = await res.json() as any;
   expect(data.min_confidence).toBe("high");
   expect(data.channels).toEqual(["email"]);
+});
+
+it("PUT /api/diag/alert-policies/:incident_type rejects invalid min_confidence with 422", async () => {
+  // Seed table, call PUT with min_confidence='urgent', assert 422.
+});
+
+it("PUT /api/diag/alert-policies/:incident_type rejects readonly users", async () => {
+  // Log in as readonly, include CSRF headers, assert 403.
 });
 
 it("GET /api/diag/ops-incidents/:id/alert-events returns events", async () => {
@@ -1211,7 +1255,36 @@ it("GET /api/diag/ops-incidents/:id/alert-events returns events", async () => {
 });
 ```
 
-- [ ] **Step 2: Add Worker mapping helpers**
+- [x] **Step 2: Add ADR-055 SQL fragments and Worker mapping helpers**
+
+Register the Worker-shared alert SQL in `javdb/storage/contract/fragments.py`
+and regenerate `docs/api/contract/sql-contract.gen.ts`, then vendor the
+generated artifact to `server/contract/sql-contract.gen.ts`.
+
+The Worker route must import and call generated helpers:
+
+```ts
+import {
+  prepareOpsAlertEventsListByIncident,
+  prepareOpsAlertPoliciesList,
+  prepareOpsAlertPolicyGetByIncidentType,
+  prepareOpsAlertPolicyUpsert,
+} from "../contract/sql-contract.gen";
+```
+
+Required generated fragments:
+
+- `ops_alert_policy_upsert`
+- `ops_alert_policy_get_by_incident_type`
+- `ops_alert_policies_list`
+- `ops_alert_events_list_by_incident`
+- `ops_alert_policy_probe`
+- `ops_alert_event_probe`
+
+The upsert fragment uses `REPORTS_DB`, `ON CONFLICT(incident_type)`, preserves
+`policy_id`, `incident_type`, and `created_at`, and sets timestamps with D1 SQL
+`strftime('%Y-%m-%dT%H:%M:%fZ','now')`. Do not hand-copy these static alert
+queries into Worker routes.
 
 Modify `server/routes/diagnostics.ts`:
 
@@ -1249,15 +1322,13 @@ function buildAlertPolicyId(incidentType: string): string {
 
 > The Worker already needs a sha256 hex helper for parity with Python id derivation. If one does not exist, add a small `sha256Hex` helper (Web Crypto `crypto.subtle.digest`) alongside the other helpers and reuse it.
 
-- [ ] **Step 3: Add Worker alert routes**
+- [x] **Step 3: Add Worker alert routes**
 
 Add to `server/routes/diagnostics.ts`:
 
 ```ts
 diagnosticsRoutes.get("/alert-policies", async (c) => {
-  const rows = await c.env.REPORTS_DB
-    .prepare("SELECT * FROM OpsAlertPolicy ORDER BY incident_type ASC")
-    .all();
+  const rows = await prepareOpsAlertPoliciesList(c.env.REPORTS_DB, {}).all<OpsAlertPolicyRow>();
   return c.json({ items: rows.results.map(mapAlertPolicy) });
 });
 
@@ -1269,57 +1340,45 @@ diagnosticsRoutes.put("/alert-policies/:incident_type", requireRole("admin"), as
     throw new HTTPException(422, { message: "min_confidence must be low, medium, or high" });
   }
   const user = c.get("user");
-  const now = new Date().toISOString();
   const policyId = await buildAlertPolicyId(incidentType);
-  await c.env.REPORTS_DB
-    .prepare(`
-      INSERT INTO OpsAlertPolicy
-        (policy_id, incident_type, min_confidence, enabled, channels_json, updated_by, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(policy_id) DO UPDATE SET
-        min_confidence = excluded.min_confidence,
-        enabled = excluded.enabled,
-        channels_json = excluded.channels_json,
-        updated_by = excluded.updated_by,
-        updated_at = excluded.updated_at
-    `)
-    .bind(
-      policyId,
-      incidentType,
-      minConfidence,
-      body.enabled === false ? 0 : 1,
-      JSON.stringify(body.channels ?? []),
-      user.sub,
-      now,
-      now,
-    )
-    .run();
-  const row = await c.env.REPORTS_DB
-    .prepare("SELECT * FROM OpsAlertPolicy WHERE incident_type = ?")
-    .bind(incidentType)
-    .first();
+  await prepareOpsAlertPolicyUpsert(c.env.REPORTS_DB, {
+    policyId,
+    incidentType,
+    minConfidence,
+    enabled: body.enabled === false ? 0 : 1,
+    channelsJson: JSON.stringify(body.channels ?? []),
+    updatedBy: user.sub,
+  }).run();
+  const row = await prepareOpsAlertPolicyGetByIncidentType(c.env.REPORTS_DB, { incidentType }).first();
   if (!row) throw new HTTPException(500, { message: "Failed to persist alert policy" });
   return c.json(mapAlertPolicy(row));
 });
 
 diagnosticsRoutes.get("/ops-incidents/:incident_id/alert-events", async (c) => {
   const incidentId = c.req.param("incident_id");
-  const rows = await c.env.REPORTS_DB
-    .prepare("SELECT * FROM OpsAlertEvent WHERE incident_id = ? ORDER BY fired_at ASC")
-    .bind(incidentId)
-    .all();
+  const rows = await prepareOpsAlertEventsListByIncident(c.env.REPORTS_DB, { incidentId }).all();
   return c.json({ items: rows.results.map(mapAlertEvent) });
 });
 ```
 
 Do not call notify delivery, GitHub Actions, remediation, or any execution from these routes. The Worker only reads/writes alert config and reads alert events.
 
-- [ ] **Step 4: Run Worker tests**
+- [x] **Step 4: Add Worker capability probe**
+
+Add `features.ops_alerting` to the Worker capabilities response. It returns
+`true` only when both `OpsAlertPolicy` and `OpsAlertEvent` are queryable in
+`REPORTS_DB`; any probe exception returns `false`. The two probe SELECTs are
+also generated from the ADR-055 contract registry, not hand-copied into the
+Worker route.
+
+- [x] **Step 5: Run Worker tests**
 
 Run from the Web repo:
 
 ```bash
+SQL_CONTRACT_PATH=/Users/tedwu/.codex/worktrees/2139/JAVDB_AutoSpider_CICD/docs/api/contract/sql-contract.gen.ts npm run gen:sql-contract
 npm run test:server -- server/__tests__/diagnostics-routes.test.ts
+npm run typecheck:server
 ```
 
 Expected: pass.
@@ -1328,11 +1387,33 @@ Expected: pass.
 
 ## Task 7: Web Alerting Config Panel
 
+> Backend-agent handoff status (2026-06-15): this task is intentionally handed
+> to Agent F because the backend agent is scoped to MAIN plus Web `server/`
+> only. Do not implement or modify Web `src/` in this backend slice. The
+> frontend contract is already published via `docs/api/openapi.json`, Python
+> `/api/diag/*` endpoints, `features.ops_alerting`, and the Cloudflare Worker
+> `server/` mirror.
+
 **Files:**
-- Modify: `../JAVDB_AutoSpider_Web/src/api/diagnostics.ts`
-- Create: `../JAVDB_AutoSpider_Web/src/components/diagnostics/AlertPolicyPanel.vue`
-- Modify: `../JAVDB_AutoSpider_Web/src/pages/diagnostics/OpsIncidentsPage.vue`
-- Create: `../JAVDB_AutoSpider_Web/tests/unit/ops-alerting-api.spec.ts`
+- Modify: `../../../JAVDB_AutoSpider_Web/src/api/diagnostics.ts`
+- Create: `../../../JAVDB_AutoSpider_Web/src/components/diagnostics/AlertPolicyPanel.vue`
+- Modify: `../../../JAVDB_AutoSpider_Web/src/pages/diagnostics/OpsIncidentsPage.vue`
+- Create: `../../../JAVDB_AutoSpider_Web/tests/unit/ops-alerting-api.spec.ts`
+
+- [x] **Step 0: Backend contract handoff to frontend agent**
+
+Published for Agent F:
+
+- OpenAPI: `docs/api/openapi.json`
+- Capability: `features.ops_alerting`
+- Python routes: `GET /api/diag/alert-policies`,
+  `PUT /api/diag/alert-policies/{incident_type}`,
+  `GET /api/diag/ops-incidents/{incident_id}/alert-events`
+- Worker mirror: matching Web `server/` routes and generated SQL-contract
+  helpers.
+
+The remaining Task 7 `src/` UI/API-client implementation is out of this
+backend-agent scope and remains with the frontend agent.
 
 - [ ] **Step 1: Add frontend API tests**
 
@@ -1481,7 +1562,7 @@ Expected: pass.
 - Modify: `docs/handbook/en/ops/troubleshooting.md`
 - Modify: `docs/handbook/zh/ops/troubleshooting.md`
 
-- [ ] **Step 1: Document alerting policy semantics in English**
+- [x] **Step 1: Document alerting policy semantics in English**
 
 Add to `docs/handbook/en/ops/troubleshooting.md`:
 
@@ -1494,7 +1575,7 @@ Alert policies are operator-tunable per incident type:
 
 - `enabled` - whether this incident type alerts at all.
 - `min_confidence` - alert only when the diagnosis confidence is at least this level (`low` < `medium` < `high`).
-- `channels` - which notification channels ADR-039 should use.
+- `channels` - optional ADR-039 backend names to allow for this policy. Empty means use the normal ADR-039 active backend list; non-empty values filter the dispatch through ADR-039's existing backend selection.
 
 Alert event states:
 
@@ -1505,7 +1586,7 @@ Alert event states:
 Alerting is opt-in and best-effort: a delivery failure is logged but does not crash diagnosis, and the alert event is still recorded for audit.
 ````
 
-- [ ] **Step 2: Mirror alerting policy semantics in Chinese**
+- [x] **Step 2: Mirror alerting policy semantics in Chinese**
 
 Add to `docs/handbook/zh/ops/troubleshooting.md`:
 
@@ -1518,7 +1599,7 @@ Alert policy 由 operator 按 incident type 调整：
 
 - `enabled` - 该 incident type 是否告警。
 - `min_confidence` - 仅当诊断 confidence 至少达到该级别时才告警（`low` < `medium` < `high`）。
-- `channels` - ADR-039 应使用哪些通知 channel。
+- `channels` - 该 policy 允许使用的 ADR-039 backend 名称。为空表示使用 ADR-039 常规 active backend 列表；非空时通过 ADR-039 现有 backend 选择逻辑过滤投递目标。
 
 Alert event 状态：
 
@@ -1529,7 +1610,7 @@ Alert event 状态：
 告警是 opt-in 且尽力而为：投递失败会记录日志但不会让诊断崩溃，alert event 仍会被记录以供审计。
 ````
 
-- [ ] **Step 3: Run documentation checks**
+- [x] **Step 3: Run documentation checks**
 
 Run:
 
@@ -1546,7 +1627,7 @@ Expected: no output.
 
 ## Task 9: Verification And Closeout
 
-- [ ] **Step 1: Run Python tests**
+- [x] **Step 1: Run Python tests**
 
 Run:
 
@@ -1561,18 +1642,73 @@ pytest \
 
 Expected: all pass.
 
-- [ ] **Step 2: Run Web tests**
+Verified on 2026-06-15:
 
-Run from `../JAVDB_AutoSpider_Web`:
+```bash
+PYTHONPATH=/Users/tedwu/.codex/worktrees/2139/JAVDB_AutoSpider_CICD:javdb/rust_core/python \
+  /opt/anaconda3/bin/python3 -m pytest --continue-on-collection-errors \
+  tests/unit/test_ops_alerting.py \
+  tests/unit/test_ops_alert_repo.py \
+  tests/unit/test_ops_diagnosis_service.py \
+  tests/unit/test_ops_diagnostics_api.py \
+  -v
+```
+
+Result: 54 passed.
+
+Also verified contract/capability/OpenAPI coverage:
+
+```bash
+PYTHONPATH=/Users/tedwu/.codex/worktrees/2139/JAVDB_AutoSpider_CICD:javdb/rust_core/python \
+  /opt/anaconda3/bin/python3 -m pytest --continue-on-collection-errors \
+  tests/unit/test_ops_alerting_capability_probe.py \
+  tests/unit/test_contract_types.py \
+  tests/unit/test_contract_fragments.py \
+  tests/unit/test_dump_sql_contract.py \
+  tests/unit/test_sql_contract_freshness.py \
+  tests/integration/test_capabilities_endpoint.py \
+  tests/integration/test_openapi_response_shapes.py \
+  -q
+```
+
+Result: 32 passed.
+
+- [x] **Step 2: Run Web server tests**
+
+Run from `../../../JAVDB_AutoSpider_Web`:
 
 ```bash
 npm run test:server -- server/__tests__/diagnostics-routes.test.ts
+```
+
+Expected: pass.
+
+Verified on 2026-06-15 with the backend-owned server mirror suite:
+
+```bash
+npm run test:server -- \
+  server/__tests__/diagnostics-routes.test.ts \
+  server/__tests__/capabilities-ops-alerting.test.ts \
+  server/__tests__/contract-compliance.test.ts \
+  server/__tests__/actor-subscription-contract.test.ts \
+  server/__tests__/system-state-contract.test.ts \
+  server/__tests__/content-filter-contract.test.ts
+```
+
+Result: 6 files / 44 tests passed.
+
+- [ ] **Step 2b: Run frontend tests (Agent F scope)**
+
+Run from `../../../JAVDB_AutoSpider_Web` after Agent F implements the Web `src/`
+alerting UI/API client:
+
+```bash
 npm run test:unit -- tests/unit/ops-alerting-api.spec.ts
 ```
 
 Expected: all pass.
 
-- [ ] **Step 3: Run static checks**
+- [x] **Step 3: Run static checks**
 
 Run from the main repo:
 
@@ -1590,6 +1726,37 @@ npm run lint
 
 Expected: no failures.
 
+Verified on 2026-06-15 for the backend/server-owned scope:
+
+```bash
+python3 -m compileall \
+  javdb/ops/diagnosis \
+  javdb/storage/repos \
+  apps/api/routers/diagnostics.py \
+  apps/api/schemas/diagnostics.py \
+  apps/api/routers/capabilities.py \
+  apps/api/schemas/capabilities_payloads.py \
+  apps/cli/ops/dump_sql_contract.py
+git diff --check -- . ':!reports/**'
+python3 scripts/ci/validate_d1_write_class.py --paths \
+  javdb/migrations/d1/2026_06_13_add_ops_alert_tables.sql
+```
+
+Result: compileall passed; diff check had no output; D1 Write-Class validation
+passed.
+
+```bash
+npm run typecheck:server
+npx eslint server --ext .ts,.tsx,.js,.mjs
+git diff --check -- server
+```
+
+Result: server typecheck, server-scoped lint, and server diff check passed.
+
+Full Web `npm run lint` was not used as the backend gate because it traverses
+pre-existing `.worktrees/` and unrelated frontend files outside this backend
+slice.
+
 - [ ] **Step 4: Manual safety smoke**
 
 Open the Web UI at:
@@ -1606,7 +1773,7 @@ Expected:
 - No UI element sends or re-sends a notification directly; delivery stays in ADR-039.
 - No UI element executes remediation, rollback, rerun, drift apply, qB cleanup, or recovery resolve.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Commit only the Phase 4 source, tests, and docs. Do not commit `reports/` data files.
 
@@ -1619,27 +1786,43 @@ git add \
   javdb/ops/diagnosis/service.py \
   javdb/ops/diagnosis/__init__.py \
   javdb/storage/repos/ops_alert_repo.py \
+  javdb/storage/contract/types.py \
+  javdb/storage/contract/fragments.py \
+  javdb/storage/contract/__init__.py \
+  apps/cli/ops/dump_sql_contract.py \
   apps/api/schemas/diagnostics.py \
   apps/api/routers/diagnostics.py \
+  apps/api/schemas/capabilities_payloads.py \
+  apps/api/routers/capabilities.py \
+  docs/api/contract/sql-contract.gen.ts \
+  docs/api/openapi.json \
+  tests/unit/test_contract_types.py \
+  tests/unit/test_contract_fragments.py \
+  tests/unit/test_dump_sql_contract.py \
+  tests/unit/test_ops_alerting_capability_probe.py \
+  tests/integration/test_capabilities_endpoint.py \
+  tests/integration/test_openapi_response_shapes.py \
   tests/unit/test_ops_alerting.py \
   tests/unit/test_ops_alert_repo.py \
   tests/unit/test_ops_diagnosis_service.py \
   tests/unit/test_ops_diagnostics_api.py \
+  docs/design/ADR-026-AI-Operations-Diagnosis/IMP-ADR026-04-proactive-incident-alerting.md \
+  docs/design/ADR-054-User-Intent-Discovery-Layer/EXECUTION-TRACKER.md \
   docs/handbook/en/ops/troubleshooting.md \
   docs/handbook/zh/ops/troubleshooting.md
 git commit -m "feat(ops): add proactive incident alerting and operator config"
 ```
 
-Commit the Web repo changes separately:
+Commit the backend-owned Web `server/` mirror changes separately:
 
 ```bash
-cd ../JAVDB_AutoSpider_Web
+cd ../../../JAVDB_AutoSpider_Web
 git add \
   server/routes/diagnostics.ts \
+  server/routes/capabilities.ts \
+  server/contract/sql-contract.gen.ts \
   server/__tests__/diagnostics-routes.test.ts \
-  src/api/diagnostics.ts \
-  src/components/diagnostics/AlertPolicyPanel.vue \
-  src/pages/diagnostics/OpsIncidentsPage.vue \
-  tests/unit/ops-alerting-api.spec.ts
-git commit -m "feat(diagnostics): add proactive alerting config and status badge"
+  server/__tests__/capabilities-ops-alerting.test.ts \
+  server/__tests__/contract-compliance.test.ts
+git commit -m "feat(api): mirror proactive incident alerting routes"
 ```

@@ -26,6 +26,13 @@ class SqlFragment:
     params: Tuple[Param, ...]  # ordered; count MUST equal the number of ? in sql
 
 
+@dataclass(frozen=True)
+class SharedConstant:
+    name: str                  # snake_case id; the generator uppercases it for TS
+    kind: str                  # 'string' | 'number' | 'string_set' | 'string_array'
+    values: str | int | Tuple[str, ...]
+
+
 def normalize_sql(sql: str) -> str:
     """Collapse whitespace runs to one space and trim (cross-backend norm)."""
     return re.sub(r"\s+", " ", sql).strip()

@@ -1,7 +1,13 @@
 """ADR-055: contract registry primitives."""
 import pytest
 
-from javdb.storage.contract.types import Param, SqlFragment, normalize_sql, order_params
+from javdb.storage.contract.types import (
+    Param,
+    SharedConstant,
+    SqlFragment,
+    normalize_sql,
+    order_params,
+)
 
 _F = SqlFragment(
     name="demo",
@@ -36,3 +42,31 @@ def test_order_params_rejects_missing_and_extra():
         order_params(_F, a="aye")  # missing b
     with pytest.raises(ValueError, match=r"order_params\(demo\):.*extra=\['c'\]"):
         order_params(_F, a="aye", b="bee", c="nope")  # extra c
+
+
+def test_shared_constant_declares_static_cross_backend_values():
+    literal = SharedConstant(
+        name="demo_literal",
+        kind="string",
+        values="prefix_",
+    )
+    constant = SharedConstant(
+        name="demo_values",
+        kind="string_set",
+        values=("alpha", "beta"),
+    )
+    numeric = SharedConstant(
+        name="demo_number",
+        kind="number",
+        values=24,
+    )
+
+    assert literal.name == "demo_literal"
+    assert literal.kind == "string"
+    assert literal.values == "prefix_"
+    assert numeric.name == "demo_number"
+    assert numeric.kind == "number"
+    assert numeric.values == 24
+    assert constant.name == "demo_values"
+    assert constant.kind == "string_set"
+    assert constant.values == ("alpha", "beta")

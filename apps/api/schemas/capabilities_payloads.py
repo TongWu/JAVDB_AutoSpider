@@ -25,6 +25,7 @@ class Features(BaseModel):
     magnet_aggregation: bool
     subscriptions: bool
     site_drift_sentinel: bool
+    ops_alerting: bool
 
 
 class Build(BaseModel):

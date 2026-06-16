@@ -3,7 +3,7 @@
 **Owner ADR:** [ADR-054](ADR-054-user-intent-discovery-layer.md) (umbrella)
 **Scope:** ADR-054 WS1–WS4a + the delegated [ADR-040](../ADR-040-Content-Filter-Rules/ADR-040-content-filter-rules.md) WS4a + the parallel [ADR-026 Phase 4](../ADR-026-AI-Operations-Diagnosis/IMP-ADR026-04-proactive-incident-alerting.md).
 **Created:** 2026-06-14
-**Status:** Active — Sprints 1–3 verified done on `origin/main` of both repos; Sprint 4 (ADR-026-P4) is next. ADR-055 Phase 2 (hand-mirror cleanup) spun off to its own task.
+**Status:** Active — Sprints 1–3 verified done on `origin/main` of both repos; Sprint 4 (ADR-026-P4) backend contract/server slice is implemented and under closeout. ADR-055 Phase 2 (hand-mirror cleanup) spun off to its own task.
 
 > This is a coordination/tracking artifact (English-only, like an IMP). It does
 > not replace the ADRs/IMPs it points to — it sequences them across two agents.
@@ -123,8 +123,8 @@ Agent F (full vertical — self-contained, low backend risk):
 
 ### ADR-026-P4 — Proactive incident alerting · [IMP-ADR026-04](../ADR-026-AI-Operations-Diagnosis/IMP-ADR026-04-proactive-incident-alerting.md)
 Agent B:
-- [ ] deterministic alert-trigger policy after incident `d1_written`; build `NotifyMessage` → hand to existing ADR-039 notify dispatch
-- [ ] alert-event audit row (dedup keyed on incident) + operator-config API + TS mirror
+- [x] deterministic alert-trigger policy after incident `d1_written`; build `NotifyMessage` → hand to existing ADR-039 notify dispatch
+- [x] alert-event audit row (dedup keyed on incident) + operator-config API + TS mirror
 
 Agent F:
 - [ ] operator alert-config page (per-type enable + confidence threshold + channels, Naive UI) + en/zh
@@ -154,3 +154,4 @@ Agent F:
 - 2026-06-15: **Sprint 3 / Agent F — WS2 UI complete.** Library `Subscriptions` + `New-Works` tabs (reuse WS1 `StatusControl.vue` unchanged), hand-typed `src/api/{subscriptions,new-works}.ts`, gated on `subscriptions`, en/zh-CN/**ja**. `api.gen.ts` re-vendored post-#217 (typed gate), drift-clean, 155 web unit tests + build green. 2 commits on `claude/priceless-curie-b0a53f`.
 - 2026-06-15: **Sprint 3 / Agent F — WS3 UI complete (unblocked same day).** WS3 backend landed mid-session (MAIN #218 + WEB `server/` mirror #36), so the UI was built on a fresh branch `claude/adr054-ws3-magnet-source` off WEB `main`: re-vendored `api.gen.ts` for `magnet_aggregation`; `apiAggregateMagnets` client (`skipErrorToast`); capability-gated `browse.aggregateMagnets` store action (+3 unit tests); `ResolveCard` orchestration (call/merge/error); gated **Source** column in `ResolveMagnetTable` rendering per-source provenance + ADR-024 `quality_score`; en/zh-CN/**ja**. Verified: drift-clean, typecheck, 167 web unit tests, server 501-mirror suite 9/9, build. 3 commits (chore→feat→test).
 - 2026-06-15: **Sprints 2 & 3 adversarially verified** on `origin/main` of both repos (two 11–14-agent workflows). Both `done` — all deliverables independently confirmed, Sprint-2 143 tests green, Sprint-3 135 Python + 43 web green. One real WS2 dual-backend parity defect found & fixed: the Worker `listSubscriptions`/`listNewWorks` lacked Python's secondary sort key → added `actor_href`/`video_code ASC` + a tie-break regression test, and added the previously-missing WS2 frontend unit specs (WEB `846b322..6ffec5a`). New hand-mirror follow-ups (`ACTOR_SUBSCRIPTION_UPSERT_SQL`, content-filter allow-list **and** the `INSERT INTO ContentFilterRule` statement) spun off to the **ADR-055 Phase-2** task (`task_7ae01603`).
+- 2026-06-15: **Sprint 4 / Agent B backend slice complete pending final suite closeout.** ADR-026-P4 now has D1 alert policy/event tables, deterministic post-`d1_written` alert evaluation, incident-keyed alert audit dedupe, ADR-039 notify-dispatch handoff (no delivery reimplementation), Python config/event API + `ops_alerting` capability/OpenAPI, and Web `server/` Hono mirror. ADR-055 contract registry now owns the new alert static SQL/probes and preserves existing generated Worker exports. Agent F still owns the Web `src/` alert config/status UI.

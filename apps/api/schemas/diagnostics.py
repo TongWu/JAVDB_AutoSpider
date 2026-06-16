@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 
 class JavdbSessionStatus(BaseModel):
@@ -146,11 +146,50 @@ class OpsRemediationDecisionRequest(BaseModel):
     decision_note: Optional[str] = None
 
 
+class OpsAlertPolicySchema(BaseModel):
+    policy_id: str
+    incident_type: str
+    min_confidence: Literal["low", "medium", "high"]
+    enabled: bool
+    channels: list[str]
+    updated_by: Optional[str] = None
+    created_at: str
+    updated_at: str
+
+
+class OpsAlertPolicyListResponse(BaseModel):
+    items: list[OpsAlertPolicySchema]
+
+
+class OpsAlertPolicyUpsertRequest(BaseModel):
+    min_confidence: Literal["low", "medium", "high"] = "medium"
+    enabled: bool = True
+    channels: list[str] = Field(default_factory=list)
+
+
+class OpsAlertEventSchema(BaseModel):
+    alert_id: str
+    incident_id: str
+    policy_id: Optional[str] = None
+    status: Literal["fired", "suppressed", "skipped"]
+    reason: Optional[str] = None
+    fired_at: str
+
+
+class OpsAlertEventListResponse(BaseModel):
+    items: list[OpsAlertEventSchema]
+
+
 __all__ = [
     "EvidenceRefSchema",
     "JavdbSessionRefreshRequest",
     "JavdbSessionRefreshResponse",
     "JavdbSessionStatus",
+    "OpsAlertEventListResponse",
+    "OpsAlertEventSchema",
+    "OpsAlertPolicyListResponse",
+    "OpsAlertPolicySchema",
+    "OpsAlertPolicyUpsertRequest",
     "OpsIncidentAnalyticsResponse",
     "OpsIncidentListResponse",
     "OpsIncidentSchema",

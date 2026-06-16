@@ -19,6 +19,11 @@ from apps.api.schemas.diagnostics import (
     JavdbSessionRefreshRequest,
     JavdbSessionRefreshResponse,
     JavdbSessionStatus,
+    OpsAlertEventListResponse,
+    OpsAlertEventSchema,
+    OpsAlertPolicyListResponse,
+    OpsAlertPolicySchema,
+    OpsAlertPolicyUpsertRequest,
     OpsIncidentAnalyticsResponse,
     OpsIncidentListResponse,
     OpsIncidentSchema,
@@ -32,10 +37,11 @@ from apps.api.schemas.diagnostics import (
 )
 from javdb.infra.config import cfg
 from javdb.ops.diagnosis.analytics import summarize_incidents
-from javdb.ops.diagnosis.models import OpsRemediationProposal
+from javdb.ops.diagnosis.models import OpsAlertEvent, OpsAlertPolicy, OpsRemediationProposal
 from javdb.ops.diagnosis.similarity import rank_similar_incidents
 from javdb.ops.sentinel.health import compute_field_health
 from javdb.storage.db import OPERATIONS_DB_PATH, REPORTS_DB_PATH, get_db
+from javdb.storage.repos.ops_alert_repo import OpsAlertRepo
 from javdb.storage.repos.ops_incident_repo import OpsIncidentRepo
 from javdb.storage.repos.ops_remediation_repo import OpsRemediationRepo
 from javdb.storage.repos.parse_run_field_fill_repo import ParseRunFieldFillRepo
@@ -222,9 +228,67 @@ def _proposal_to_schema(proposal: OpsRemediationProposal) -> OpsRemediationPropo
     )
 
 
+def _policy_to_schema(policy: OpsAlertPolicy) -> OpsAlertPolicySchema:
+    return OpsAlertPolicySchema(
+        policy_id=policy.policy_id,
+        incident_type=policy.incident_type,
+        min_confidence=policy.min_confidence,
+        enabled=policy.enabled,
+        channels=[
+            item for item in _json_list_field(policy.channels_json)
+            if isinstance(item, str)
+        ],
+        updated_by=policy.updated_by,
+        created_at=policy.created_at,
+        updated_at=policy.updated_at,
+    )
+
+
+def _event_to_schema(event: OpsAlertEvent) -> OpsAlertEventSchema:
+    return OpsAlertEventSchema(
+        alert_id=event.alert_id,
+        incident_id=event.incident_id,
+        policy_id=event.policy_id,
+        status=event.status,
+        reason=event.reason,
+        fired_at=event.fired_at,
+    )
+
+
 def _list_remediation_proposals(incident_id: str) -> list[OpsRemediationProposal]:
     with get_db(REPORTS_DB_PATH) as conn:
         return OpsRemediationRepo(conn).list_for_incident(incident_id)
+
+
+def _list_alert_policies() -> list[OpsAlertPolicy]:
+    with get_db(REPORTS_DB_PATH) as conn:
+        return OpsAlertRepo(conn).list_policies()
+
+
+def _upsert_alert_policy(
+    incident_type: str,
+    *,
+    min_confidence: str,
+    enabled: bool,
+    channels: list[str],
+    updated_by: str | None,
+) -> OpsAlertPolicy | None:
+    with get_db(REPORTS_DB_PATH) as conn:
+        repo = OpsAlertRepo(conn)
+        policy = OpsAlertPolicy.create(
+            incident_type=incident_type,
+            min_confidence=min_confidence,
+            enabled=enabled,
+            channels=channels,
+            updated_by=updated_by,
+        )
+        repo.upsert_policy(policy)
+        return repo.get_policy(incident_type)
+
+
+def _list_alert_events(incident_id: str) -> list[OpsAlertEvent]:
+    with get_db(REPORTS_DB_PATH) as conn:
+        return OpsAlertRepo(conn).list_events_for_incident(incident_id)
 
 
 def _record_remediation_decision(
@@ -357,6 +421,47 @@ def get_similar_ops_incidents(
             )
             for item in items
         ],
+    )
+
+
+@router.get("/alert-policies", response_model=OpsAlertPolicyListResponse)
+def list_alert_policies(
+    _user: Dict[str, Any] = Depends(_require_auth),
+) -> OpsAlertPolicyListResponse:
+    return OpsAlertPolicyListResponse(
+        items=[_policy_to_schema(item) for item in _list_alert_policies()]
+    )
+
+
+@router.put("/alert-policies/{incident_type}", response_model=OpsAlertPolicySchema)
+def upsert_alert_policy(
+    incident_type: str,
+    body: OpsAlertPolicyUpsertRequest,
+    current: Dict[str, Any] = Depends(require_role("admin")),
+) -> OpsAlertPolicySchema:
+    """Upsert alert policy for an incident type (admin only)."""
+    policy = _upsert_alert_policy(
+        incident_type,
+        min_confidence=body.min_confidence,
+        enabled=body.enabled,
+        channels=body.channels,
+        updated_by=str(current.get("sub") or "unknown"),
+    )
+    if policy is None:
+        raise HTTPException(status_code=500, detail="Failed to persist alert policy")
+    return _policy_to_schema(policy)
+
+
+@router.get(
+    "/ops-incidents/{incident_id}/alert-events",
+    response_model=OpsAlertEventListResponse,
+)
+def list_alert_events(
+    incident_id: str,
+    _user: Dict[str, Any] = Depends(_require_auth),
+) -> OpsAlertEventListResponse:
+    return OpsAlertEventListResponse(
+        items=[_event_to_schema(item) for item in _list_alert_events(incident_id)]
     )
 
 
@@ -510,8 +615,11 @@ __all__ = [
     "get_ops_incident_analytics",
     "get_parse_field_health",
     "get_similar_ops_incidents",
+    "list_alert_events",
+    "list_alert_policies",
     "list_ops_incidents",
     "list_ops_remediation_proposals",
     "refresh_javdb_session_diag",
     "router",
+    "upsert_alert_policy",
 ]

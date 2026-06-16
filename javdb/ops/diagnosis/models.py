@@ -8,9 +8,18 @@ import hashlib
 import json
 from typing import Any, Literal
 
+from javdb.storage.contract.fragments import (
+    OPS_ALERT_POLICY_ID_HASH_LENGTH,
+    OPS_ALERT_POLICY_ID_PREFIX,
+    OPS_ALERT_POLICY_ID_SALT,
+)
+
 
 Confidence = Literal["low", "medium", "high"]
 IncidentStatus = Literal["open", "acknowledged", "resolved", "dismissed"]
+AlertStatus = Literal["fired", "suppressed", "skipped"]
+
+_CONFIDENCE_ORDER: dict[str, int] = {"low": 0, "medium": 1, "high": 2}
 
 
 def utc_now_iso() -> str:
@@ -20,6 +29,10 @@ def utc_now_iso() -> str:
 
 def _json_dumps(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def confidence_rank(value: str) -> int:
+    return _CONFIDENCE_ORDER.get(value, 0)
 
 
 def build_incident_id(
@@ -39,6 +52,14 @@ def build_incident_id(
     ])
     digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
     return f"opsinc_{digest}"
+
+
+def build_alert_policy_id(incident_type: str) -> str:
+    salt = str(OPS_ALERT_POLICY_ID_SALT.values)
+    prefix = str(OPS_ALERT_POLICY_ID_PREFIX.values)
+    hash_length = int(OPS_ALERT_POLICY_ID_HASH_LENGTH.values)
+    digest = hashlib.sha256(f"{salt}{incident_type}".encode("utf-8")).hexdigest()[:hash_length]
+    return f"{prefix}{digest}"
 
 
 @dataclass(frozen=True)
@@ -166,6 +187,69 @@ class OpsIncidentFeatures:
     evidence_kinds_json: str
     created_at: str
     updated_at: str
+
+
+@dataclass(frozen=True)
+class OpsAlertPolicy:
+    policy_id: str
+    incident_type: str
+    min_confidence: Confidence
+    enabled: bool
+    channels_json: str
+    updated_by: str | None
+    created_at: str
+    updated_at: str
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        incident_type: str,
+        min_confidence: Confidence = "medium",
+        enabled: bool = True,
+        channels: list[str] | None = None,
+        updated_by: str | None = None,
+    ) -> "OpsAlertPolicy":
+        now = utc_now_iso()
+        return cls(
+            policy_id=build_alert_policy_id(incident_type),
+            incident_type=incident_type,
+            min_confidence=min_confidence,
+            enabled=enabled,
+            channels_json=_json_dumps(channels or []),
+            updated_by=updated_by,
+            created_at=now,
+            updated_at=now,
+        )
+
+
+@dataclass(frozen=True)
+class OpsAlertEvent:
+    alert_id: str
+    incident_id: str
+    policy_id: str | None
+    status: AlertStatus
+    reason: str | None
+    fired_at: str
+
+
+@dataclass(frozen=True)
+class AlertDecision:
+    alert_id: str
+    incident_id: str
+    policy_id: str | None
+    status: AlertStatus
+    reason: str
+
+    def to_event(self) -> OpsAlertEvent:
+        return OpsAlertEvent(
+            alert_id=self.alert_id,
+            incident_id=self.incident_id,
+            policy_id=self.policy_id,
+            status=self.status,
+            reason=self.reason,
+            fired_at=utc_now_iso(),
+        )
 
 
 @dataclass(frozen=True)

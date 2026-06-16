@@ -255,3 +255,21 @@ Safety levels:
 - `safe_to_prepare` - safe to show as a next read-only step.
 - `requires_review` - review the required checks before using the command preview.
 - `blocked` - do not act until blocked reasons are resolved.
+
+### Proactive Incident Alerting
+
+ADR-026 Phase 4 can proactively alert operators when an incident is detected. After an incident is persisted to D1, a deterministic policy decides whether to alert. Delivery itself is handled by the existing ADR-039 notify dispatch; this layer only decides whether to fire and records what happened. It does not run remediation.
+
+Alert policies are operator-tunable per incident type:
+
+- `enabled` - whether this incident type alerts at all.
+- `min_confidence` - alert only when the diagnosis confidence is at least this level (`low` < `medium` < `high`).
+- `channels` - optional ADR-039 backend names to allow for this policy. Empty means use the normal ADR-039 active backend list; non-empty values filter the dispatch through ADR-039's existing backend selection.
+
+Alert event states:
+
+- `fired` - a matching enabled policy existed, confidence met the threshold, and this process claimed the incident-level alert before handing delivery to ADR-039.
+- `suppressed` - an alert had already fired for this incident (deduplicated on `incident_id`).
+- `skipped` - no matching enabled policy, the incident confidence was below the policy threshold, or no configured policy channel matched an active ADR-039 notify backend (`no_delivery`).
+
+Alerting is opt-in and best-effort: a delivery failure is logged but does not crash diagnosis, and the alert event is still recorded for audit.

@@ -36,6 +36,9 @@ def test_each_fe_consumed_endpoint_has_typed_200_response(admin_client):
         ("/api/library/acquisition/summary", "get"),
         ("/api/library/acquisition/recent", "get"),
         ("/api/library/acquisition/trend", "get"),
+        ("/api/diag/alert-policies", "get"),
+        ("/api/diag/alert-policies/{incident_type}", "put"),
+        ("/api/diag/ops-incidents/{incident_id}/alert-events", "get"),
     ]
     for path, method in must_be_typed:
         assert path in paths, f"missing path {path}"
@@ -92,6 +95,9 @@ def test_jwt_protected_operations_declare_bearer_security(admin_client):
     # exactly one entry, not a duplicate, now that the dependency emits it).
     protected = [
         ("/api/diag/ops-incidents", "get"),             # _require_auth
+        ("/api/diag/alert-policies", "get"),            # _require_auth
+        ("/api/diag/alert-policies/{incident_type}", "put"),  # require_role("admin")
+        ("/api/diag/ops-incidents/{incident_id}/alert-events", "get"),  # _require_auth
         ("/api/sessions", "get"),                       # _require_auth
         ("/api/diag/javdb-session/refresh", "post"),    # require_role("admin")
         ("/api/sessions/{session_id}/commit", "post"),  # require_role("admin")
