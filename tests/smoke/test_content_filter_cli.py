@@ -348,6 +348,15 @@ def test_add_regex_rejects_nested_quantifier(cli_conn, capsys):
     assert "nested quantifiers" in capsys.readouterr().err
 
 
+def test_add_regex_rejects_quantified_alternation(cli_conn, capsys):
+    # ReDoS write-boundary guard (issue #222): quantified alternation, e.g.
+    # (a|a)+, backtracks exponentially and must be rejected like nested quantifiers.
+    with pytest.raises(SystemExit) as exc:
+        content_filter.main(["add", "--dimension", "tag", "--mode", "regex_exclude", "--value", "(a|a)+"])
+    assert exc.value.code == 2
+    assert "alternation" in capsys.readouterr().err
+
+
 def test_add_gender_require_lead_rejects_typo(cli_conn, capsys):
     # The CLI (and now the API) reject an invalid gender value rather than store it.
     with pytest.raises(SystemExit) as exc:

@@ -3,6 +3,8 @@
 import pathlib
 from urllib.parse import parse_qs, urlparse
 
+import pytest
+
 from javdb.integrations.indexer.sukebei import plugin as sukebei_plugin
 from javdb.integrations.indexer.sukebei.plugin import SukebeiIndexerPlugin, parse
 
@@ -52,6 +54,28 @@ def test_search_uses_configured_base_url_and_encoded_query(monkeypatch):
     assert parsed.path == "/custom/"
     assert parsed.query == "q=ABC%20001%2F%E4%B8%AD%E5%AD%97"
     assert parse_qs(parsed.query)["q"] == ["ABC 001/中字"]
+
+
+def test_runtime_config_fails_closed_on_load_error(monkeypatch):
+    # issue #226: a config-load error must NOT degrade to an empty (proxy-less)
+    # config that would scrape direct and leak the operator IP. search() must
+    # raise (the dispatcher then marks the source failed) and never fetch direct.
+    from apps.api.services import config_service
+
+    def boom():
+        raise RuntimeError("store unreadable")
+
+    monkeypatch.setattr(config_service, "load_runtime_config", boom)
+    fetched = []
+    monkeypatch.setattr(
+        sukebei_plugin,
+        "fetch_source_html",
+        lambda url, config, use_proxy: fetched.append(url),
+    )
+
+    with pytest.raises(RuntimeError):
+        SukebeiIndexerPlugin().search("ABC-001")
+    assert fetched == []
 
 
 def test_search_empty_response_reports_failure(monkeypatch):

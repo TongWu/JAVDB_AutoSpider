@@ -5,7 +5,7 @@ Importing this module registers the built-in plugins (javbus, sukebei).
 
 from __future__ import annotations
 
-import queue
+import concurrent.futures
 import threading
 import time
 
@@ -21,6 +21,32 @@ import javdb.integrations.indexer.sukebei.plugin  # noqa: F401,E402
 REGISTRY.discover_entry_points("javdb.indexer_plugins")
 
 DEFAULT_SOURCE_TIMEOUT_SECONDS = 10.0
+
+# Per-source bounded pools. The previous implementation spawned a fresh daemon
+# thread per source per request and abandoned it on timeout; the underlying
+# network I/O kept running, so repeated calls against a hung source (a proxy
+# that accepts TCP but never replies) accumulated threads and file descriptors
+# without bound. A single shared pool would bound threads but let one hung
+# source occupy every slot and starve the others — breaking the per-source
+# failure isolation this module promises. Each source instead gets its own small
+# bounded pool: a hung source can occupy at most ``_MAX_WORKERS_PER_SOURCE`` of
+# ITS pool's threads (excess work queues there, no thread leak) and can never
+# block a healthy source.
+_MAX_WORKERS_PER_SOURCE = 4
+_executors: dict[str, concurrent.futures.ThreadPoolExecutor] = {}
+_executors_lock = threading.Lock()
+
+
+def _executor_for(source: str) -> concurrent.futures.ThreadPoolExecutor:
+    with _executors_lock:
+        executor = _executors.get(source)
+        if executor is None:
+            executor = concurrent.futures.ThreadPoolExecutor(
+                max_workers=_MAX_WORKERS_PER_SOURCE,
+                thread_name_prefix=f"indexer-{source}",
+            )
+            _executors[source] = executor
+        return executor
 
 
 def active_sources() -> list[str]:
@@ -43,58 +69,11 @@ def source_timeout_seconds() -> float:
     return timeout
 
 
-def _start_search(
-    plugin,
-    video_code: str,
-    timeout: float,
-) -> tuple[queue.Queue[tuple[float, IndexerResult | Exception]], float]:
-    done: queue.Queue[tuple[float, IndexerResult | Exception]] = queue.Queue(maxsize=1)
-    deadline = time.monotonic() + timeout
-
-    def _run() -> None:
-        try:
-            result = plugin.search(video_code)
-        except Exception as exc:  # preserve existing per-source isolation
-            result = exc
-        done.put((time.monotonic(), result))
-
-    worker = threading.Thread(target=_run, name=f"indexer-{plugin.name}", daemon=True)
-    worker.start()
-    return done, deadline
-
-
-def _finish_search(
-    plugin,
-    done: queue.Queue[tuple[float, IndexerResult | Exception]],
-    deadline: float,
-    timeout: float,
-) -> IndexerResult:
-    try:
-        finished_at, result = done.get(timeout=max(0.0, deadline - time.monotonic()))
-    except queue.Empty:
-        return IndexerResult(
-            source=plugin.name,
-            ok=False,
-            detail=f"timeout after {timeout:g}s",
-        )
-    if finished_at > deadline:
-        return IndexerResult(
-            source=plugin.name,
-            ok=False,
-            detail=f"timeout after {timeout:g}s",
-        )
-    if isinstance(result, Exception):
-        raise result
-    return result
-
-
 def aggregate(video_code: str) -> list[IndexerResult]:
     """Query every active source for ``video_code`` with per-source isolation."""
     results: list[IndexerResult] = []
     timeout = source_timeout_seconds()
-    pending: list[
-        tuple[str, object, queue.Queue[tuple[float, IndexerResult | Exception]], float]
-    ] = []
+    pending: list[tuple[str, concurrent.futures.Future]] = []
     for name in active_sources():
         plugin = REGISTRY.get("indexer", name)
         if plugin is None:
@@ -104,13 +83,21 @@ def aggregate(video_code: str) -> list[IndexerResult]:
             if not plugin.is_configured():
                 results.append(IndexerResult(source=name, ok=False, detail="not configured"))
                 continue
-            done, deadline = _start_search(plugin, video_code, timeout)
-            pending.append((name, plugin, done, deadline))
+            pending.append((name, _executor_for(name).submit(plugin.search, video_code)))
         except Exception as exc:  # failure isolation includes is_configured errors
             results.append(IndexerResult(source=name, ok=False, detail=f"error: {exc}"))
-    for name, plugin, done, deadline in pending:
+    deadline = time.monotonic() + timeout
+    for name, future in pending:
         try:
-            results.append(_finish_search(plugin, done, deadline, timeout))
-        except Exception as exc:
+            results.append(future.result(timeout=max(0.0, deadline - time.monotonic())))
+        except concurrent.futures.TimeoutError:
+            # Free the slot if the task has not started; a running task keeps
+            # going on its pool thread until the HTTP read timeout unblocks it,
+            # but the pool is bounded so no thread leaks.
+            future.cancel()
+            results.append(
+                IndexerResult(source=name, ok=False, detail=f"timeout after {timeout:g}s")
+            )
+        except Exception as exc:  # preserve per-source failure isolation
             results.append(IndexerResult(source=name, ok=False, detail=f"error: {exc}"))
     return results

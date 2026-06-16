@@ -50,12 +50,19 @@ VALUE_REQUIRED = {
 GENDER_VALUES = ("female", "male")
 
 _MAX_REGEX_LEN = 200
-# Heuristic ReDoS guard: a quantified group whose body contains an unbounded
-# quantifier (the classic catastrophic-backtracking shape, e.g. (a+)+, (a*)*,
-# (.*)+). Not exhaustive, but rejects the common risky patterns at the write
-# boundary, where the ingestion engine's matcher has no execution timeout.
-# Shared by the CLI and the API router (mirrored in the TS Worker).
+# Heuristic ReDoS guard at the write boundary, where the ingestion engine's
+# matcher has no execution timeout. Two classic catastrophic-backtracking
+# shapes are rejected (not exhaustive, but covers the common risky patterns;
+# may flag a few benign ones such as (http|https)+ — a deliberate trade-off):
+#   1. A quantified group whose body holds an unbounded quantifier, e.g.
+#      (a+)+, (a*)*, (.*)+ — _NESTED_QUANTIFIER_RE.
+#   2. A quantified group whose body holds an alternation, e.g. (a|a)+,
+#      (.|.)+, ([ab]|[cd])+, (x|y)* — _QUANTIFIED_ALTERNATION_RE. Overlapping
+#      alternatives under a quantifier backtrack exponentially and the nested
+#      check above does not catch them.
+# Both are shared by the CLI and the API router (mirrored in the TS Worker).
 _NESTED_QUANTIFIER_RE = re.compile(r"\([^()]*[*+][^()]*\)[*+]")
+_QUANTIFIED_ALTERNATION_RE = re.compile(r"\([^()]*\|[^()]*\)[*+]")
 
 
 def regex_write_risk(pattern: str) -> str | None:
@@ -66,6 +73,12 @@ def regex_write_risk(pattern: str) -> str | None:
         return (
             "regex pattern has nested quantifiers (catastrophic-backtracking risk); "
             "rewrite it without a quantified group inside another quantifier"
+        )
+    if _QUANTIFIED_ALTERNATION_RE.search(pattern):
+        return (
+            "regex pattern has a quantified alternation (catastrophic-backtracking "
+            "risk); rewrite it without a quantifier applied to a group that "
+            "contains an alternation (|)"
         )
     return None
 

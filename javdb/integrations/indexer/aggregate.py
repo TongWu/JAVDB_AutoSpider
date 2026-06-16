@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import unicodedata
 from typing import Any
 
 from javdb.integrations.indexer import dispatch
@@ -16,10 +15,6 @@ _PROBE_UNAVAILABLE = "probe_unavailable"
 
 def _collect(video_code: str) -> list[IndexerResult]:
     return dispatch.aggregate(video_code)
-
-
-def _normalize_video_code(video_code: str) -> str:
-    return unicodedata.normalize("NFKC", video_code or "").strip().upper()
 
 
 def _normalize_info_hash(value: str | None) -> str | None:
@@ -77,8 +72,8 @@ def _row(magnet: IndexerMagnet, info_hash: str | None) -> dict[str, Any]:
 
 def aggregate_magnets(video_code: str) -> list[dict[str, Any]]:
     """Return deduped, ADR-024-scored magnet rows across all active sources."""
-    fallback_code = _normalize_video_code(video_code)
     rows_by_key: dict[tuple[str, str], dict[str, Any]] = {}
+    hashless_index = 0
 
     for result in _collect(video_code):
         if not result.ok:
@@ -98,7 +93,15 @@ def aggregate_magnets(video_code: str) -> list[dict[str, Any]]:
                 file_count=raw_magnet.file_count,
             )
             info_hash = _info_hash(normalized_magnet)
-            key = ("info_hash", info_hash) if info_hash else ("video_code", fallback_code)
+            if info_hash:
+                key = ("info_hash", info_hash)
+            else:
+                # A magnet with no resolvable info-hash can't be deduped across
+                # sources. Give each one a unique key so hashless results never
+                # collapse into a single row (silent N-1 data loss); they survive
+                # as distinct rows instead.
+                key = ("no_hash", f"{source}#{hashless_index}")
+                hashless_index += 1
             candidate = _row(normalized_magnet, info_hash)
             existing = rows_by_key.get(key)
             if existing is None:

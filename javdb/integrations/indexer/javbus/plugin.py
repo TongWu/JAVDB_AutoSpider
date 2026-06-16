@@ -64,12 +64,17 @@ class JavbusIndexerPlugin:
 
 
 def _runtime_config() -> dict:
-    try:
-        from apps.api.services import config_service
+    """Load runtime config (PROXY_POOL etc.) for the source fetch.
 
-        return config_service.load_runtime_config()
-    except Exception:
-        return {}
+    Fails closed: a config-load error must NOT degrade to an empty config. An
+    empty config carries no ``PROXY_POOL``, so the fetch would go out direct and
+    leak the operator's IP to the upstream source (privacy regression).
+    Propagating the error makes the dispatcher mark this source failed instead
+    of scraping direct (see ``dispatch.aggregate`` per-source isolation).
+    """
+    from apps.api.services import config_service
+
+    return config_service.load_runtime_config()
 
 
 REGISTRY.register("indexer", JavbusIndexerPlugin())
