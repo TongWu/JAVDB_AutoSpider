@@ -850,7 +850,7 @@ git -C /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web add .github/workf
 git -C /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web commit -m "ci(server): ADR-055 sql-contract freshness check + re-vendor workflow"
 ```
 
-> **Follow-up (out of P1 scope, note in PR):** to auto-open the re-vendor PR on every Python-side change, mirror the MAIN-repo `publish-query-contract.yml` into a `publish-sql-contract.yml` that fires `repository_dispatch: sql-contract-updated` when `docs/api/contract/sql-contract.gen.ts` changes on `main`. Until then the WEB CI freshness step is the guard (it reds the next WEB PR) and the workflow can be run manually via `workflow_dispatch`.
+> **Follow-up (CLOSED 2026-06-18):** the deferred auto-push sender now exists. MAIN-repo `.github/workflows/publish-sql-contract.yml` mirrors `publish-query-contract.yml` — it fires `repository_dispatch: sql-contract-updated` to the web repo whenever `docs/api/contract/sql-contract.gen.ts` changes on `main` (also triggers on `javdb/storage/contract/**` and `apps/cli/ops/dump_sql_contract.py`, with a regen + self-commit safety net and a push-diff gate so the dispatch fires even when the artifact arrived already-committed in the source PR). The WEB CI freshness step remains as a backstop, and `workflow_dispatch` is still available for manual runs.
 
 ---
 
