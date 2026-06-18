@@ -5,7 +5,7 @@
 | **Status**  | Completed — codifies the current boundary between D1 transport, session-level history, and additive enrichment |
 | **Date**    | 2026-05-31                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-005](../ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md), [ADR-009](../ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md), [ADR-010](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-019](../ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md), [ADR-032](../ADR-032-Mandatory-Session-Binding/ADR-032-mandatory-session-binding.md), [ADR-033](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-036](../../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md) |
+| **Related** | [ADR-005](../ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md), [ADR-009](../ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md), [ADR-010](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-019](../ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md), [ADR-032](../ADR-032-Mandatory-Session-Binding/ADR-032-mandatory-session-binding.md), [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-036](../../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md) |
 | **Related Implementation Plans** | [IMP-ADR042-01](IMP-ADR042-01-d1-atomic-commit-boundaries.md) - Phase 1 docs follow-through; [IMP-ADR042-02](IMP-ADR042-02-d1-write-class-enforcement.md) - Phase 2 D6 enforcement |
 
 > This ADR was written after a grilling session that separated "D1 itself" from "the authoritative write boundary". That distinction matters: the system does not need a distributed transaction manager, but it does need a session-level boundary that behaves like one for the authoritative history path.
@@ -131,7 +131,7 @@ Rejected. The repository already has additive enrichment and diagnostic surfaces
 - [ADR-010 — D1 Access Port](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.md)
 - [ADR-019 — Session Lifecycle Authority](../ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md)
 - [ADR-032 — Mandatory Session Binding](../ADR-032-Mandatory-Session-Binding/ADR-032-mandatory-session-binding.md)
-- [ADR-033 — Media Closed Loop](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
+- [ADR-033 — Media Closed Loop](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
 - [ADR-036 — Event Sourced Pipeline Spine](../../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md)
 - [D1 rollback handbook](../../../handbook/en/ops/d1-rollback.md)
 - [javdb/storage/d1_client.py](../../../../javdb/storage/d1_client.py)

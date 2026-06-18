@@ -2,10 +2,10 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Accepted — umbrella; all three phases implemented and locally verified (Phase 1 2026-05-30, Phases 2-3 2026-06-06). Remote D1 apply + SQLite mirror refresh remain deployment-environment gates |
+| **Status**  | Completed — umbrella; all three phases implemented & verified; remote D1 confirmed applied 2026-06-18 (`OwnershipLedger` live with 58,171 rows; `ConsumptionSignal`/`UnresolvedMediaItem` ready). Archived. |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-024](../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md), [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-028](../_archive/ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md) |
+| **Related** | [ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-024](../../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md), [ADR-025](../../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), [ADR-015](../ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-010](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-028](../ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md) |
 
 > Originated from a 2026-05-29 brainstorming session on net-new directions not yet
 > captured by any existing ADR.
@@ -47,13 +47,13 @@ This blindness has three costs:
    it only knows scrape history and a weekly GDrive snapshot.
 2. **Failures and stalls are invisible** — a torrent that never completes leaves
    no trace distinguishable from one that succeeded.
-3. **The deferred preference model ([ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md) /
-   [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md))
+3. **The deferred preference model ([ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md) /
+   [ADR-025](../../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md))
    lacks its single strongest implicit signal** — actual watch behavior — because
    nothing reads the media servers the operator already runs (Emby + Plex).
 
 This ADR closes the loop in three layers, governed as one umbrella initiative
-sequenced into phases (mirroring the [ADR-028](../_archive/ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md)
+sequenced into phases (mirroring the [ADR-028](../ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md)
 umbrella pattern).
 
 ## Decision
@@ -67,7 +67,7 @@ change as sources are added.
 ### Design Decisions
 
 **D1. Three dedicated enrichment tables, not extensions of the history tables.**
-Following the [ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md)
+Following the [ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md)
 precedent (which created a separate `MovieMetadata` rather than widening
 `MovieHistory`), closed-loop state lives in new tables that are written off the
 Pending→Commit critical path. `MovieHistory` / `TorrentHistory` stay pure
@@ -152,7 +152,7 @@ collectors.** A new `javdb/ops/reconcile/` module exposes
 `sys.exit`; `apps/cli/ops/reconcile.py` is the CLI adapter that owns process
 concerns. Each external source is a **read-only `SourceCollector`** that produces
 normalized `Observation`s and never writes; **all DB writes are centralized in
-the service**. This is exactly the [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md)
+the service**. This is exactly the [ADR-015](../ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md)
 seam shape. Tests target `Options → Result`, not live qB/Emby/Plex.
 
 **D5. Dual trigger, bound to neither deployment.** The reconciliation loop is
@@ -201,7 +201,7 @@ Pending→Commit path. `AcquisitionOutcome.session_id` is provenance only.
 
 **D11. Scope is the *signal*, not the model.** This ADR produces
 `ConsumptionSignal` and stops; consuming it for preference scoring is
-[ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md)'s
+[ADR-025](../../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md)'s
 concern. The boundary is deliberate to keep this initiative shippable and
 auditable.
 
@@ -292,19 +292,19 @@ binding refinements (sibling `--pass` services, heterogeneous `category`, the
 
 ## References
 
-- [ADR-022 — User Preference Data Foundation](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md)
-- [ADR-024 — Torrent Quality Evidence Foundation](../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md)
-- [ADR-025 — User Preference Model](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md)
-- [ADR-015 — Integrations Interface Boundary](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md)
-- [ADR-010 — D1 Access Port](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md)
-- [ADR-028 — Web Platform & Capability Completeness Roadmap](../_archive/ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md)
+- [ADR-022 — User Preference Data Foundation](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md)
+- [ADR-024 — Torrent Quality Evidence Foundation](../../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md)
+- [ADR-025 — User Preference Model](../../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md)
+- [ADR-015 — Integrations Interface Boundary](../ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md)
+- [ADR-010 — D1 Access Port](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.md)
+- [ADR-028 — Web Platform & Capability Completeness Roadmap](../ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md)
 
 ## Status Log
 
 - 2026-05-29: Proposed (umbrella; three phases scoped, IMPs pending).
 - 2026-05-29: IMP-ADR033-01 (Phase 1) plan written; IMP-02/03 deferred to a
   post-Phase-1 `grill-me` + `brainstorming` round. Web surface split out to
-  [ADR-034](../_archive/ADR-034-Media-Closed-Loop-Web-Surface/ADR-034-media-closed-loop-web-surface.md).
+  [ADR-034](../ADR-034-Media-Closed-Loop-Web-Surface/ADR-034-media-closed-loop-web-surface.md).
 - 2026-05-30: IMP-ADR033-01 (Phase 1) implemented and locally verified. Remote
   D1 apply and local SQLite mirror refresh remain deployment-environment gates.
 - 2026-06-06: IMP-ADR033-02 (Phase 2) and IMP-ADR033-03 (Phase 3) plans written
@@ -334,3 +334,9 @@ binding refinements (sibling `--pass` services, heterogeneous `category`, the
   green. Remote D1 apply (`wrangler`) + `sync_d1_to_sqlite --force-overwrite-all` and
   the Emby/Plex live-endpoint `TODO-VERIFY` confirmations remain deployment-environment
   gates. Status advanced Proposed → Accepted.
+- 2026-06-18: Deployment gate **closed** + ADR **completed & archived**. Remote
+  `operations` D1 verified: `OwnershipLedger` exists and is actively populated
+  (58,171 rows — the ownership pass is live in production); `ConsumptionSignal`
+  and `UnresolvedMediaItem` exist and are ready (0 rows — they fill once an
+  operator configures a media server via `MEDIA_SERVERS`, an ops choice, not a
+  schema/code gate). Both 2026-06-06 migrations are applied. Status → Completed.

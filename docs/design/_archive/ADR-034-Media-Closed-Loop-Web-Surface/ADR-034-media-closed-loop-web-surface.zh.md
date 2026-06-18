@@ -5,14 +5,14 @@
 | **状态**   | Completed — FE Phase 1、2、3 已实现并验证 2026-06-10;ADR-033 的 web 对应面 |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
-| **关联**   | [ADR-033](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-008](../ADR-008-Frontend-Rewrite/ADR-008-frontend-rewrite-architecture.md), [ADR-027](../ADR-027-Stats-Dashboard-Charts/ADR-027-stats-dashboard-charts.md), [ADR-030](../ADR-030-Web-Feature-Parity/ADR-030-web-feature-parity.md), [ADR-017](../ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md) |
+| **关联**   | [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-008](../ADR-008-Frontend-Rewrite/ADR-008-frontend-rewrite-architecture.md), [ADR-027](../ADR-027-Stats-Dashboard-Charts/ADR-027-stats-dashboard-charts.md), [ADR-030](../ADR-030-Web-Feature-Parity/ADR-030-web-feature-parity.md), [ADR-017](../ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md) |
 
 > 源自 2026-05-29 一次(用了视觉伴侣的)关于
-> [ADR-033](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) 媒体闭环 web 面的头脑风暴。
+> [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) 媒体闭环 web 面的头脑风暴。
 
 ## 背景 (Context)
 
-[ADR-033](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) 构建了三层媒体闭环,并落到新的 D1 表（`AcquisitionOutcome`,以及后续的 `OwnershipLedger`、`ConsumptionSignal`）。这些数据目前**不可见**——没有任何 web 面承载它。运维者跑着 Vue 控制台（`javdb-autospider-web`,ADR-008），却看不到昨晚选中的种子有没有真正落地、跨源拥有了什么、看了什么。
+[ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) 构建了三层媒体闭环,并落到新的 D1 表（`AcquisitionOutcome`,以及后续的 `OwnershipLedger`、`ConsumptionSignal`）。这些数据目前**不可见**——没有任何 web 面承载它。运维者跑着 Vue 控制台（`javdb-autospider-web`,ADR-008），却看不到昨晚选中的种子有没有真正落地、跨源拥有了什么、看了什么。
 
 web 平台是**一个 Vue 前端背后两套后端**（ADR-017）:一套 TypeScript Worker（Hono,在 Cloudflare 上查 D1），一套 Python FastAPI（全本地执行）。ADR-018/030 要求二者重叠的查询面保持 parity。因此闭环的任何新只读面都必须设计成**双后端契约**,而非单后端特性。
 
@@ -89,7 +89,7 @@ FE Phase 1 只依赖 ADR-033 Phase 1（`AcquisitionOutcome`）。Phase 2/3 依�
 
 ## 参考 (References)
 
-- [ADR-033 — Media Closed-Loop](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
+- [ADR-033 — Media Closed-Loop](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
 - [ADR-008 — Frontend Rewrite](../ADR-008-Frontend-Rewrite/ADR-008-frontend-rewrite-architecture.md)
 - [ADR-027 — Stats Dashboard Chart Expansion](../ADR-027-Stats-Dashboard-Charts/ADR-027-stats-dashboard-charts.md)
 - [ADR-030 — Web Feature Parity](../ADR-030-Web-Feature-Parity/ADR-030-web-feature-parity.md)

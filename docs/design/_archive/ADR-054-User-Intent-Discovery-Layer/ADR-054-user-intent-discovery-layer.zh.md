@@ -6,7 +6,7 @@
 | **日期 (Date)**    | 2026-06-13                                                            |
 | **作者 (Authors)** | Ted                                                                   |
 | **D1 写入类别 (D1 Write Class)** | n/a（umbrella 自身不交付代码；WS1/WS2 引入 **authoritative** 写入，在各自 IMP 中分类） |
-| **关联 (Related)** | [ADR-033](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-034](../ADR-034-Media-Closed-Loop-Web-Surface/ADR-034-media-closed-loop-web-surface.md), [ADR-040](../../ADR-040-Content-Filter-Rules/ADR-040-content-filter-rules.md), [ADR-039](../../ADR-039-Pluggable-Integration-Platform/ADR-039-pluggable-integration-platform.md), [ADR-024](../../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md), [ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-025](../../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), [ADR-017](../ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md) |
+| **关联 (Related)** | [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-034](../ADR-034-Media-Closed-Loop-Web-Surface/ADR-034-media-closed-loop-web-surface.md), [ADR-040](../../ADR-040-Content-Filter-Rules/ADR-040-content-filter-rules.md), [ADR-039](../../ADR-039-Pluggable-Integration-Platform/ADR-039-pluggable-integration-platform.md), [ADR-024](../../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md), [ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-025](../../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), [ADR-017](../ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md) |
 
 > 起源于 2026-06-13 的一次 brainstorming 会话，对
 > [Adsryen/JavdBviewed](https://github.com/Adsryen/JavdBviewed) 浏览器扩展
@@ -21,7 +21,7 @@
 `viewed | browsed | want | untracked` 状态、带定时新作监控的演员订阅、多源磁链聚合、
 内容过滤、AI 翻译等。它展示了我们系统所缺的那一类面向用户的 JAVDB 功能。
 
-我们的 media closed-loop（[ADR-033](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
+我们的 media closed-loop（[ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
 后端、[ADR-034](../ADR-034-Media-Closed-Loop-Web-Surface/ADR-034-media-closed-loop-web-surface.md)
 web 面）记录的是**系统做了什么**——`AcquisitionOutcome`（入队/下载了什么）、
 `OwnershipLedger`（在 qB/NAS/GDrive/PikPak 各源持有什么）、`ConsumptionSignal`
@@ -209,7 +209,7 @@ reason codes），而非重新解析。Cloudflare 质询在**服务端**处理�
 
 ## 参考 (References)
 
-- [ADR-033 — Media Closed-Loop](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
+- [ADR-033 — Media Closed-Loop](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
 - [ADR-034 — Media Closed-Loop Web Surface](../ADR-034-Media-Closed-Loop-Web-Surface/ADR-034-media-closed-loop-web-surface.md)
 - [ADR-040 — Content Filter Rules](../../ADR-040-Content-Filter-Rules/ADR-040-content-filter-rules.md)
 - [ADR-039 — Pluggable Integration Platform](../../ADR-039-Pluggable-Integration-Platform/ADR-039-pluggable-integration-platform.md)

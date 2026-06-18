@@ -5,15 +5,15 @@
 | **Status**  | Completed — FE Phases 1, 2 & 3 implemented & verified 2026-06-10; web counterpart to ADR-033            |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-033](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-008](../ADR-008-Frontend-Rewrite/ADR-008-frontend-rewrite-architecture.md), [ADR-027](../ADR-027-Stats-Dashboard-Charts/ADR-027-stats-dashboard-charts.md), [ADR-030](../ADR-030-Web-Feature-Parity/ADR-030-web-feature-parity.md), [ADR-017](../ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md) |
+| **Related** | [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-008](../ADR-008-Frontend-Rewrite/ADR-008-frontend-rewrite-architecture.md), [ADR-027](../ADR-027-Stats-Dashboard-Charts/ADR-027-stats-dashboard-charts.md), [ADR-030](../ADR-030-Web-Feature-Parity/ADR-030-web-feature-parity.md), [ADR-017](../ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md) |
 
 > Originated from a 2026-05-29 brainstorming session (with the visual companion)
-> on the web surface for the [ADR-033](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
+> on the web surface for the [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
 > media closed-loop.
 
 ## Context
 
-[ADR-033](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) builds a
+[ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) builds a
 three-layer media closed-loop and persists it to new D1 tables
 (`AcquisitionOutcome`, then `OwnershipLedger`, `ConsumptionSignal`). That data is
 currently **invisible** — there is no web surface for it. The operator runs the
@@ -160,7 +160,7 @@ real endpoint shapes rather than a paper contract.
 
 ## References
 
-- [ADR-033 — Media Closed-Loop](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
+- [ADR-033 — Media Closed-Loop](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
 - [ADR-008 — Frontend Rewrite](../ADR-008-Frontend-Rewrite/ADR-008-frontend-rewrite-architecture.md)
 - [ADR-027 — Stats Dashboard Chart Expansion](../ADR-027-Stats-Dashboard-Charts/ADR-027-stats-dashboard-charts.md)
 - [ADR-030 — Web Feature Parity](../ADR-030-Web-Feature-Parity/ADR-030-web-feature-parity.md)
