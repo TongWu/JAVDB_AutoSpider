@@ -82,15 +82,16 @@ def test_search_keeps_url_like_video_code_on_configured_host(monkeypatch, video_
 
 
 def test_runtime_config_fails_closed_on_load_error(monkeypatch):
-    # issue #226: a config-load error must NOT degrade to an empty (proxy-less)
-    # config that would scrape direct and leak the operator IP. search() must
-    # raise (the dispatcher then marks the source failed) and never fetch direct.
-    from apps.api.services import config_service
+    # issue #226 + #228: a config-load error in the registered provider must NOT
+    # degrade to an empty (proxy-less) config that would scrape direct and leak
+    # the operator IP. search() must raise (the dispatcher then marks the source
+    # failed) and never fetch direct.
+    from javdb.infra import runtime_config
 
     def boom():
         raise RuntimeError("store unreadable")
 
-    monkeypatch.setattr(config_service, "load_runtime_config", boom)
+    monkeypatch.setattr(runtime_config, "_provider", boom)
     fetched = []
     monkeypatch.setattr(
         javbus_plugin,
