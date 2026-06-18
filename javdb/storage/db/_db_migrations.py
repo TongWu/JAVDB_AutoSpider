@@ -247,8 +247,11 @@ CREATE TABLE IF NOT EXISTS NewWorks (
     dismissed     INTEGER NOT NULL DEFAULT 0 CHECK (dismissed IN (0,1)),
     PRIMARY KEY (actor_href, video_code)
 );
-CREATE INDEX IF NOT EXISTS idx_new_works_actor     ON NewWorks(actor_href);
-CREATE INDEX IF NOT EXISTS idx_new_works_dismissed ON NewWorks(dismissed);
+CREATE INDEX IF NOT EXISTS idx_new_works_actor      ON NewWorks(actor_href);
+CREATE INDEX IF NOT EXISTS idx_new_works_dismissed  ON NewWorks(dismissed);
+-- video_code alone is not a left-prefix of the composite PK (actor_href,
+-- video_code), so dismiss()'s `WHERE video_code = ?` needs its own index.
+CREATE INDEX IF NOT EXISTS idx_new_works_video_code ON NewWorks(video_code);
 """
 
 _REPORTS_DDL = _SCHEMA_VERSION_DDL + """
@@ -1185,8 +1188,9 @@ def _ensure_newworks_composite_pk(conn: sqlite3.Connection) -> None:
         FROM NewWorks;
         DROP TABLE NewWorks;
         ALTER TABLE NewWorks__pkfix RENAME TO NewWorks;
-        CREATE INDEX IF NOT EXISTS idx_new_works_actor     ON NewWorks(actor_href);
-        CREATE INDEX IF NOT EXISTS idx_new_works_dismissed ON NewWorks(dismissed);
+        CREATE INDEX IF NOT EXISTS idx_new_works_actor      ON NewWorks(actor_href);
+        CREATE INDEX IF NOT EXISTS idx_new_works_dismissed  ON NewWorks(dismissed);
+        CREATE INDEX IF NOT EXISTS idx_new_works_video_code ON NewWorks(video_code);
         """
     )
 

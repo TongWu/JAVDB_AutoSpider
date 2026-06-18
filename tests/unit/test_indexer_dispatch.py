@@ -133,7 +133,9 @@ class _HangPlugin:
 
 def test_aggregate_bounds_threads_when_source_hangs(monkeypatch):
     # issue #225: repeated calls against a hung source must not leak threads. The
-    # shared bounded pool caps worker threads regardless of how many times we ask.
+    # per-source bounded permits cap worker threads regardless of how many times
+    # we ask; once every permit is held by a still-hung search, further calls
+    # fail fast ("busy") instead of spawning more daemon threads.
     release = threading.Event()
 
     def _cfg(name, default):
@@ -151,14 +153,20 @@ def test_aggregate_bounds_threads_when_source_hangs(monkeypatch):
         for _ in range(dispatch._MAX_WORKERS_PER_SOURCE * 3):
             results = dispatch.aggregate("ABC-001")
             assert results[0].ok is False
-            assert "timeout" in (results[0].detail or "").lower()
-            # Scope the count to the hung source's own pool — per-source pools
-            # name threads "indexer-<source>", isolating this from other tests.
+            # A failure reason either way: the first calls time out waiting on the
+            # hung worker; once every permit is taken, later calls are refused.
+            detail = (results[0].detail or "").lower()
+            assert "timeout" in detail or "busy" in detail
+            # Scope the count to the hung source's own daemon threads — they are
+            # named "indexer-<source>", isolating this from other tests.
             live = [t for t in threading.enumerate() if t.name.startswith("indexer-hang")]
             peak = max(peak, len(live))
         assert peak <= dispatch._MAX_WORKERS_PER_SOURCE
     finally:
+        # Release the hung workers so they drain their permits, then drop the
+        # per-source semaphore this test created so module state stays clean.
         release.set()
+        dispatch._source_slots.clear()
 
 
 def test_aggregate_times_out_later_source_past_its_launch_deadline(monkeypatch):

@@ -32,14 +32,22 @@ _MAX_REGEX_LEN = 200
 # shapes are rejected (not exhaustive, but covers the common risky patterns;
 # may flag a few benign ones such as (http|https)+ — a deliberate trade-off):
 #   1. A quantified group whose body holds an unbounded quantifier, e.g.
-#      (a+)+, (a*)*, (.*)+ — _NESTED_QUANTIFIER_RE.
+#      (a+)+, (a*)*, (.*)+, (a{2,}){3,} — _NESTED_QUANTIFIER_RE.
 #   2. A quantified group whose body holds an alternation, e.g. (a|a)+,
-#      (.|.)+, ([ab]|[cd])+, (x|y)* — _QUANTIFIED_ALTERNATION_RE. Overlapping
-#      alternatives under a quantifier backtrack exponentially and the nested
-#      check above does not catch them.
+#      (.|.)+, ([ab]|[cd])+, (x|y)*, (a|a){2,} — _QUANTIFIED_ALTERNATION_RE.
+#      Overlapping alternatives under a quantifier backtrack exponentially and
+#      the nested check above does not catch them.
+# "Unbounded quantifier" means *, +, OR an open-ended interval {n,} — the
+# interval form backtracks just as catastrophically, so it must not bypass the
+# guard (it previously did, since both regexes only looked for * / +).
 # Both are shared by the CLI and the API router (mirrored in the TS Worker).
-_NESTED_QUANTIFIER_RE = re.compile(r"\([^()]*[*+][^()]*\)[*+]")
-_QUANTIFIED_ALTERNATION_RE = re.compile(r"\([^()]*\|[^()]*\)[*+]")
+_UNBOUNDED_QUANTIFIER = r"(?:[*+]|\{\d+,\})"
+_NESTED_QUANTIFIER_RE = re.compile(
+    r"\([^()]*" + _UNBOUNDED_QUANTIFIER + r"[^()]*\)" + _UNBOUNDED_QUANTIFIER
+)
+_QUANTIFIED_ALTERNATION_RE = re.compile(
+    r"\([^()]*\|[^()]*\)" + _UNBOUNDED_QUANTIFIER
+)
 
 
 def regex_write_risk(pattern: str) -> str | None:

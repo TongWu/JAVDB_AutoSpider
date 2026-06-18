@@ -25,6 +25,12 @@ from apps.cli.ops.content_filter import regex_write_risk
         "(x|y)*",
         "(http|https)+",  # benign-looking but deliberately flagged (documented trade-off)
         "(a|b|c)+",       # >2 alternatives still caught
+        # Open-ended interval {n,} is just as unbounded as * / + and must not
+        # slip past the guard (the prior regexes only looked for * / +).
+        "(a+){3,}",       # inner +, outer {n,}
+        "(a{2,}){3,}",    # nested open-ended intervals
+        "(a|a){1,}",      # quantified alternation with {n,}
+        "(a|b){2,}",
     ],
 )
 def test_catastrophic_patterns_are_rejected(pattern):
@@ -39,6 +45,8 @@ def test_catastrophic_patterns_are_rejected(pattern):
         "a|b",               # bare alternation, not under a quantifier
         "(a|b)",             # grouped alternation, not quantified
         "(abc)+",            # quantified group, no alternation or inner quantifier
+        "(abc){3,}",         # open-ended interval on a plain group is not catastrophic
+        "(a{2,4})+",         # bounded inner interval {n,m} is not unbounded
         "/actors/Evk",       # path literal
     ],
 )
