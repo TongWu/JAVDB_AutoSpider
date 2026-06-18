@@ -6,8 +6,17 @@ import logging
 import sqlite3
 
 from javdb.ops.diagnosis.models import OpsAlertEvent, OpsAlertPolicy
+from javdb.storage.contract import fragments, order_params
 
 logger = logging.getLogger(__name__)
+
+# Single source of truth: the ADR-055 contract registry. Re-exported for any
+# back-compat importers; the SQL itself lives only in javdb/storage/contract.
+# Policy reads/writes are cross-backend (Python here + the TS Worker mirror), so
+# they execute the registry fragments verbatim. The event helpers below
+# (upsert_event / claim_fired_event / mark_no_delivery) are Python-only and
+# legitimately stay inline — no Worker counterpart, out of registry scope.
+OPS_ALERT_POLICY_UPSERT_SQL = fragments.OPS_ALERT_POLICY_UPSERT.sql
 
 _POLICY_COLUMNS = (
     "policy_id",
@@ -49,50 +58,36 @@ class OpsAlertRepo:
             logger.debug("row_factory set failed", exc_info=True)
 
     def upsert_policy(self, policy: OpsAlertPolicy) -> None:
-        values = [
-            policy.policy_id,
-            policy.incident_type,
-            policy.min_confidence,
-            1 if policy.enabled else 0,
-            policy.channels_json,
-            policy.updated_by,
-            policy.created_at,
-            policy.updated_at,
-        ]
-        columns = ", ".join(_POLICY_COLUMNS)
-        placeholders = ", ".join(["?"] * len(_POLICY_COLUMNS))
-        updates = ", ".join(
-            f"{column}=excluded.{column}"
-            for column in _POLICY_COLUMNS
-            if column not in ("policy_id", "incident_type", "created_at")
-        )
+        # created_at / updated_at are set by the DB clock (strftime) inside the
+        # registry fragment, so both backends produce identical writes — the
+        # dataclass timestamps are ignored on write (ADR-055 D6).
         self._conn.execute(
-            f"""
-            INSERT INTO OpsAlertPolicy ({columns})
-            VALUES ({placeholders})
-            ON CONFLICT(incident_type) DO UPDATE SET {updates}
-            """,
-            values,
+            fragments.OPS_ALERT_POLICY_UPSERT.sql,
+            order_params(
+                fragments.OPS_ALERT_POLICY_UPSERT,
+                policy_id=policy.policy_id,
+                incident_type=policy.incident_type,
+                min_confidence=policy.min_confidence,
+                enabled=1 if policy.enabled else 0,
+                channels_json=policy.channels_json,
+                updated_by=policy.updated_by,
+            ),
         )
 
     def get_policy(self, incident_type: str) -> OpsAlertPolicy | None:
         row = self._conn.execute(
-            f"""
-            SELECT {', '.join(_POLICY_COLUMNS)}
-            FROM OpsAlertPolicy
-            WHERE incident_type = ?
-            """,
-            [incident_type],
+            fragments.OPS_ALERT_POLICY_GET_BY_INCIDENT_TYPE.sql,
+            order_params(
+                fragments.OPS_ALERT_POLICY_GET_BY_INCIDENT_TYPE,
+                incident_type=incident_type,
+            ),
         ).fetchone()
         return None if row is None else _row_to_policy(row)
 
     def list_policies(self) -> list[OpsAlertPolicy]:
         rows = self._conn.execute(
-            f"""
-            SELECT {', '.join(_POLICY_COLUMNS)}
-            FROM OpsAlertPolicy
-            ORDER BY incident_type ASC
-            """
+            fragments.OPS_ALERT_POLICIES_LIST.sql,
+            order_params(fragments.OPS_ALERT_POLICIES_LIST),
         ).fetchall()
         return [_row_to_policy(row) for row in rows]
 
@@ -153,12 +148,10 @@ class OpsAlertRepo:
 
     def list_events_for_incident(self, incident_id: str) -> list[OpsAlertEvent]:
         rows = self._conn.execute(
-            f"""
-            SELECT {', '.join(_EVENT_COLUMNS)}
-            FROM OpsAlertEvent
-            WHERE incident_id = ?
-            ORDER BY fired_at ASC
-            """,
-            [incident_id],
+            fragments.OPS_ALERT_EVENTS_LIST_BY_INCIDENT.sql,
+            order_params(
+                fragments.OPS_ALERT_EVENTS_LIST_BY_INCIDENT,
+                incident_id=incident_id,
+            ),
         ).fetchall()
         return [_row_to_event(row) for row in rows]
