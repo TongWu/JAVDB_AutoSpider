@@ -3,8 +3,9 @@
 Delegates to the already-CRUD-complete ContentFilterRepo. ContentFilterRule
 lives in REPORTS_DB (javdb-reports) — NOT HISTORY_DB. The legal (dimension,
 mode) allow-list is imported from apps.cli.ops.content_filter (the single
-source of truth), hand-mirrored in server/routes/content-filter.ts, and pinned
-by tests/unit/test_content_filter_modes_parity.py. release_date values are
+source of truth — itself sourced from the ADR-055 contract registry and
+mirrored to server/routes/content-filter.ts via sql-contract.gen.ts).
+release_date values are
 validated as strict ISO dates at this boundary (matching the TS route); regex
 patterns are NOT compile-checked here — see _validate_value for why (cross-backend
 JS/Python regex-dialect incompatibility; the ingestion engine fail-opens).
@@ -81,7 +82,7 @@ def list_rules(_user=Depends(_require_auth)):
 
 @router.post("", response_model=ContentFilterRuleResponse, status_code=201)
 def add_rule(body: ContentFilterRuleCreate, _admin=Depends(require_role("admin"))):
-    rule_key = (body.dimension, body.mode)
+    rule_key = f"{body.dimension}:{body.mode}"
     value = (body.value or "").strip()
     if rule_key not in VALID_RULE_MODES:
         raise HTTPException(status_code=422, detail=_invalid_mode(body.dimension, body.mode))

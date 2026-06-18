@@ -1,6 +1,6 @@
 # ADR-055：双后端契约单一真源（SQL 片段 + 常量 codegen）
 
-**状态 (Status):** Accepted —— Phase 1 已于 2026-06-15 交付；Phase 2/3 后续仍待推进
+**状态 (Status):** Accepted —— Phase 1 和 Phase 2 已于 2026-06-15 交付；仅余 Phase 3（约定/惯例）
 **日期 (Date):** 2026-06-15
 **作者 (Author):** Ted
 **关联实现计划 (Related Implementation Plans):** [IMP-ADR055-01](IMP-ADR055-01-registry-generator-watchintent.md)（Phase 1 —— registry + 生成器 + CI + WatchIntent 迁移）
@@ -72,7 +72,7 @@
 | 阶段 | IMP | 交付 | 推迟 |
 | --- | --- | --- | --- |
 | Phase 1 | [IMP-ADR055-01](IMP-ADR055-01-registry-generator-watchintent.md) | `javdb/storage/contract/` registry + `dump_sql_contract.py` + `sql-contract.gen.ts` + Python freshness CI + web `fetch-sql-contract.mjs` vendoring + TS freshness/conformance CI + **端到端迁移 WatchIntent upsert**(4 份 → 1 条 registry;删掉手抄 CANONICAL parity 测试) | 其余实例 |
-| Phase 2 | IMP-ADR055-02（目标落地时对着真实形态写） | 迁移其余静态镜像点:WS4a 允许表(`VALID_RULE_MODES`/`VALUE_REQUIRED`)、`system_state` upsert、`ReportSessions` 列清单、被镜像的静态 SELECT | — |
+| Phase 2 | [IMP-ADR055-02](IMP-ADR055-02-migrate-static-mirrors.md) | 迁移其余静态镜像点:WS4a 允许表(`VALID_RULE_MODES`/`VALUE_REQUIRED`)、`system_state` upsert、`ReportSessions` 列清单、`ActorSubscription` upsert | — |
 | Phase 3 | （约定,无 IMP） | ADR 强制 + PR 清单:今后每个双后端静态 SQL/常量都进 registry | — |
 
 ### 明确的非目标 (YAGNI)
@@ -107,3 +107,4 @@
 - 2026-06-15：Proposed。由 ADR-054 WS1 的 gap B6 brainstorm 而来。已定决策:eliminate(而非 guard);范围 = 所有静态片段(mutation SQL + 静态 select + 常量),动态 builder 留 ADR-018;机制 = Python registry → 经 openapi/`api.gen.ts` 通道 codegen TS;两边 typed bind helper(不手写 bind 顺序)。Phase 1 → [IMP-ADR055-01](IMP-ADR055-01-registry-generator-watchintent.md)。
 - 2026-06-15：Phase 1 已交付（[IMP-ADR055-01](IMP-ADR055-01-registry-generator-watchintent.md)）—— registry + generator + freshness/conformance CI；WatchIntent upsert 已迁移（4 份 → 1 条 registry entry）；手写 CANONICAL parity tests 已移除。
 - 2026-06-15：Closeout 将 ADR 状态推进为 Accepted。Phase 1 已实现并完成本地验证；Phase 2/3 仍是活跃后续，因此 ADR 文件夹不归档。
+- 2026-06-17：Phase 2 已交付（[IMP-ADR055-02](IMP-ADR055-02-migrate-static-mirrors.md)）—— 将两端消费者接入 ADR-055 registry，覆盖其余静态镜像点（ActorSubscription 与 system_state upsert、content-filter 允许表 VALID_RULE_MODES/VALUE_REQUIRED、ReportSessions 列投影），删除手写 CANONICAL parity 测试（ActorSubscription、content-filter），并在两端新增行为/一致性 smoke。`SharedConstant` 原语与这些 registry 条目已随 #220（incident alerting）独立落到 `main`；IMP-ADR055-02 据此对齐其实现。ADR-018 query golden 不变（组装 SQL 字节一致）。

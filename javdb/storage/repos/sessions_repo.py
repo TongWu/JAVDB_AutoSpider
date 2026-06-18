@@ -17,6 +17,14 @@ import json
 import sqlite3
 from dataclasses import dataclass
 
+from javdb.storage.contract import fragments as _contract
+
+# ReportSessions full-row projection — single source of truth is the ADR-055
+# registry (fragments.py CONSTANTS). The ASSEMBLED query is pinned byte-for-byte
+# by the ADR-018 query Contract Golden, so changing the registry value will
+# (correctly) red that golden.
+_SESSION_COLUMNS = ", ".join(_contract.REPORT_SESSION_COLUMNS.values)
+
 
 @dataclass
 class SessionRow:
@@ -59,11 +67,7 @@ def _build_session_query(
     for pagination. Pinned by ADR-018 golden fixtures so the Python and TS
     backends cannot silently drift.
     """
-    sql = (
-        "SELECT Id, Status, WriteMode, RunId, RunAttempt, DateTimeCreated, "
-        "ReportType, ReportDate, FailureReason "
-        "FROM ReportSessions"
-    )
+    sql = f"SELECT {_SESSION_COLUMNS} FROM ReportSessions"
     params: list = []
     clauses: list[str] = []
     if state:
@@ -116,9 +120,7 @@ class SessionsRepo:
 
     def get(self, session_id: str) -> SessionRow | None:
         row = self._conn.execute(
-            "SELECT Id, Status, WriteMode, RunId, RunAttempt, DateTimeCreated, "
-            "ReportType, ReportDate, FailureReason "
-            "FROM ReportSessions WHERE Id = ?",
+            f"SELECT {_SESSION_COLUMNS} FROM ReportSessions WHERE Id = ?",
             (session_id,),
         ).fetchone()
         if not row:
