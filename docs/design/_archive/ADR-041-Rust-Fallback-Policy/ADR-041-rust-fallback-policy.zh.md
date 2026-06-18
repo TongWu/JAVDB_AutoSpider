@@ -5,7 +5,7 @@
 | **状态**   | Completed —— 已实现并合入（PR #131，2026-05-30）；执行见 [IMP-ADR041-01](IMP-ADR041-01-demote-and-split.md)  |
 | **日期**   | 2026-05-30                                                            |
 | **作者**   | Ted                                                                   |
-| **关联**   | [ADR-020](../ADR-020-Parser-Interface-Consolidation/ADR-020-parser-interface-consolidation.zh.md)(解析器接口;依赖本 ADR 修订的"冻结镜像 + parity 守卫"), [ADR-035](../../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.zh.md)(Rust scraper 是规范解析路径), [ADR-023](../../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.zh.md)(Selection Signal 插在 `ProxyPool.set_health_provider` 上), [ADR-011](../ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.zh.md)(确立了 parsing 模块 + 冻结 Python 镜像) |
+| **关联**   | [ADR-020](../ADR-020-Parser-Interface-Consolidation/ADR-020-parser-interface-consolidation.zh.md)(解析器接口;依赖本 ADR 修订的"冻结镜像 + parity 守卫"), [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.zh.md)(Rust scraper 是规范解析路径), [ADR-023](../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.zh.md)(Selection Signal 插在 `ProxyPool.set_health_provider` 上), [ADR-011](../ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.zh.md)(确立了 parsing 模块 + 冻结 Python 镜像) |
 
 > 源自 2026-05-30 架构评审(候选 1 ——"哪些部分该用 Rust/Go 重构"):[architecture-review-2026-05-30.zh.html](../../architecture/architecture-review-2026-05-30.zh.html)。评审发现 Rust 迁移只做了一半:若干 Rust 模块的接缝后面顶着一份**保持 value-parity 锁步的完整 Python 重实现**,外加一个**幽灵** Rust 适配器(HTTP requester)。本 ADR 确定这一回退层的稳态策略;幽灵 requester 单独跟踪(评审卡片 2)。
 
@@ -18,7 +18,7 @@ Rust core(`javdb/rust_core/`,经 PyO3/maturin 安装为 `javdb.rust_core`)是 HT
 - **约 2,826 行 Python 在这些接缝后重实现了 Rust**:解析器 `javdb/parsing/fallback/`(1,070)、代理 `javdb/proxy/pool.py` + `ban_manager.py`(942)、以及 `javdb/spider/url_helper.py` + `javdb/parsing/magnet_categorize.py` + `javdb/infra/masking.py`(814)。
 - **两份实现被要求完全一致**,由 **value-parity 测试**强制 —— `tests/parity/test_parser_parity.py`(368)与 `tests/unit/test_magnet_parity.py`(105)。[ADR-020](../ADR-020-Parser-Interface-Consolidation/ADR-020-parser-interface-consolidation.zh.md)(D6)把 `test_magnet_parity.py` 定为迁移"全程保持绿色"的守卫。
 - **两个适配器只有在行为跨接缝有差异时才构成真正的接缝**。这里行为*不允许*有差异 —— parity 即契约 —— 所以接缝顶着的是重复的局部性(locality),不是变化;代价是一份永久的双语言锁步。
-- **生产从不跑这份回退**。`docker/Dockerfile` 与 `docker/Dockerfile.api` 都用 `maturin build --release` 构建 wheel;CI 经 `setup-python-env` → `install-rust-wheel` 安装。Python 镜像只在 wheel 缺失时运行 —— 即没有 Rust 工具链的本地开发。[ADR-035](../../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.zh.md) 已把 **Rust scraper 视为规范解析路径**(其 parse contract 与 fill-rate 遥测观测的是 Rust 输出)。
+- **生产从不跑这份回退**。`docker/Dockerfile` 与 `docker/Dockerfile.api` 都用 `maturin build --release` 构建 wheel;CI 经 `setup-python-env` → `install-rust-wheel` 安装。Python 镜像只在 wheel 缺失时运行 —— 即没有 Rust 工具链的本地开发。[ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.zh.md) 已把 **Rust scraper 视为规范解析路径**(其 parse contract 与 fill-rate 遥测观测的是 Rust 输出)。
 - **部分模块的回退是静默的**。解析器和代理池在回退时记 `WARNING`;`javdb/parsing/magnet_categorize.py` 只记 `logger.debug` —— 所以 magnet 归类的降级是看不见的。
 - **各回退风险并不相等**。parser/magnet/url/masking 的回退即便偏差,输出是*可检查的* —— 开发者会看到解析错了。但 **代理池与 ban manager 是有状态的**(选择、冷却、封禁):一份悄悄偏差的副本会以无法肉眼发现的方式行为异常,而这恰恰可能是开发者本地正在调的东西。"best-effort 的代理选择"是调试陷阱,不是便利。
 
@@ -45,7 +45,7 @@ Rust core(`javdb/rust_core/`,经 PyO3/maturin 安装为 `javdb.rust_core`)是 HT
 
 **D5a. 代理行为测试面迁移到 Rust 池 —— 不是删除(实现期修订)。** 代理池/封禁管理器**没有任何 Rust 端测试**(`pool.rs` / `ban_manager.rs` 的 `#[test]` 为零),因此 `tests/unit/test_proxy_pool.py` + `tests/unit/test_proxy_ban_manager.py`(~1,000 行)是选择/冷却/health 加权/ban-skip/session 级封禁的**唯一**行为规格。这些测试大多直接构造 *Python* `ProxyPool()` / `ProxyBanManager()`,所以删 Python 类会把代理行为覆盖降到接近零。因此把行为测试**改指向**经工厂 `create_proxy_pool_from_config(...)` / `get_ban_manager()` 构造(本环境下返回 Rust 池),并针对 Rust 实现断言同一行为契约 —— **保留并升级**测试面(它现在通过真正的接口测试生产实现;接口即测试面)。依赖 Python-only 形状的直接 API 测试(`add_proxy()` 单数、直接 `ProxyBanManager()` singleton 语义)适配到 Rust API(`add_proxies_from_list` / 工厂),或在 Rust 面确有差异处舍弃。`apps/cli/ops/profile_hot_paths.py` 的两个 Python 池微基准(`bench_get_next_proxy_rr`、`bench_get_next_proxy_weighted`)失去对象,删除;`ProxyInfo` / `is_proxy_usable` 基准保留。
 
-**D6. 生产不受影响;本变更只改无 Rust 路径。** Docker 与 CI 总是携带 wheel,所以生产从未跑过回退、也永不触发 D4 错误。本变更删除了一个维护锚点(双语言逐值 parity),并在本地开发中拒绝了一条不可检测的偏差路径(代理池)。这与 [ADR-035](../../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.zh.md)(Rust 是规范解析路径)和 [ADR-020](../ADR-020-Parser-Interface-Consolidation/ADR-020-parser-interface-consolidation.zh.md)(Rust-first 分派)一致。
+**D6. 生产不受影响;本变更只改无 Rust 路径。** Docker 与 CI 总是携带 wheel,所以生产从未跑过回退、也永不触发 D4 错误。本变更删除了一个维护锚点(双语言逐值 parity),并在本地开发中拒绝了一条不可检测的偏差路径(代理池)。这与 [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.zh.md)(Rust 是规范解析路径)和 [ADR-020](../ADR-020-Parser-Interface-Consolidation/ADR-020-parser-interface-consolidation.zh.md)(Rust-first 分派)一致。
 
 **D7. 与 ADR-020 / ADR-011 的关系 —— 修订,不是 supersede。** ADR-020 的解析器接口合并与 ADR-011 的 parsing 模块原样保留。本 ADR 只修订它们依赖的*回退策略*维度:ADR-020 D6 把 value parity 当作**迁移守卫**(现已 Implemented);ADR-041 把 Best-Effort 层的**稳态**守卫设为*形状而非逐值*,并对 Rust-Required 层整体移除镜像。会在 ADR-020 的 Status Log 加一条回指。
 
@@ -98,8 +98,8 @@ Rust core(`javdb/rust_core/`,经 PyO3/maturin 安装为 `javdb.rust_core`)是 HT
 ## 参考
 
 - [ADR-020 — Parser Interface Consolidation](../ADR-020-Parser-Interface-Consolidation/ADR-020-parser-interface-consolidation.zh.md)
-- [ADR-035 — Site-Contract Drift Sentinel](../../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.zh.md)
-- [ADR-023 — Proxy Recommendation Policy](../../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.zh.md)
+- [ADR-035 — Site-Contract Drift Sentinel](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.zh.md)
+- [ADR-023 — Proxy Recommendation Policy](../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.zh.md)
 - [ADR-011 — JavDB Parsing Module](../ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.zh.md)
 - 2026-05-30 架构评审:[architecture-review-2026-05-30.zh.html](../../architecture/architecture-review-2026-05-30.zh.html)
 

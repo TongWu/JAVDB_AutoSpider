@@ -14,7 +14,7 @@
 
 **Source spec:** [ADR-039](ADR-039-pluggable-integration-platform.md), Implementation Roadmap (Phase 4 row), D2/D3/D4.
 
-**Non-negotiable:** This phase owns **delivery, routing, digest, webhook, and operator config only**. It must NOT detect incidents (that is [ADR-026](../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md)), must NOT change the `NotifyPlugin` contract, and must NOT add downloader/media-server plugin categories (that is the reserved Phase 3). With zero routing rules configured, behaviour is identical to today: fan-out to all active backends.
+**Non-negotiable:** This phase owns **delivery, routing, digest, webhook, and operator config only**. It must NOT detect incidents (that is [ADR-026](../_archive/ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md)), must NOT change the `NotifyPlugin` contract, and must NOT add downloader/media-server plugin categories (that is the reserved Phase 3). With zero routing rules configured, behaviour is identical to today: fan-out to all active backends.
 
 ## Table of Contents
 
@@ -73,7 +73,7 @@
 
 - Routing and digest sit **above** `notify.send`; the `NotifyPlugin` contract (`name`, `is_configured()`, `send(message)`) is unchanged.
 - Default/backward-compat behaviour: with **zero** routing rules, `dispatch(message)` fans out to all active backends exactly as Phase 1 does.
-- This phase does not detect incidents, raise alerts, or decide *whether* an alert is warranted — it only decides *where/how* an already-raised `NotifyMessage` is delivered. Incident detection stays in [ADR-026](../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md).
+- This phase does not detect incidents, raise alerts, or decide *whether* an alert is warranted — it only decides *where/how* an already-raised `NotifyMessage` is delivered. Incident detection stays in [ADR-026](../_archive/ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md).
 - No downloader/media-server plugin categories — those are the reserved Phase 3 (`IMP-ADR039-03`), which this IMP must not touch or renumber.
 - The digest flush is driven by a scheduled job; this IMP records the cron/CLI command but does **not** add a new GitHub Actions workflow.
 - Webhook delivery is a plain JSON POST of `{subject, body, level}`; no per-backend templating in this phase.

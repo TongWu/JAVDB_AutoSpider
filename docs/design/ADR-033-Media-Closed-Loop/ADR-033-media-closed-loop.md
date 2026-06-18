@@ -5,7 +5,7 @@
 | **Status**  | Accepted — umbrella; all three phases implemented and locally verified (Phase 1 2026-05-30, Phases 2-3 2026-06-06). Remote D1 apply + SQLite mirror refresh remain deployment-environment gates |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-024](../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md), [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-028](../ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md) |
+| **Related** | [ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-024](../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md), [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-028](../_archive/ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md) |
 
 > Originated from a 2026-05-29 brainstorming session on net-new directions not yet
 > captured by any existing ADR.
@@ -53,7 +53,7 @@ This blindness has three costs:
    nothing reads the media servers the operator already runs (Emby + Plex).
 
 This ADR closes the loop in three layers, governed as one umbrella initiative
-sequenced into phases (mirroring the [ADR-028](../ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md)
+sequenced into phases (mirroring the [ADR-028](../_archive/ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md)
 umbrella pattern).
 
 ## Decision
@@ -297,14 +297,14 @@ binding refinements (sibling `--pass` services, heterogeneous `category`, the
 - [ADR-025 — User Preference Model](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md)
 - [ADR-015 — Integrations Interface Boundary](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md)
 - [ADR-010 — D1 Access Port](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md)
-- [ADR-028 — Web Platform & Capability Completeness Roadmap](../ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md)
+- [ADR-028 — Web Platform & Capability Completeness Roadmap](../_archive/ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md)
 
 ## Status Log
 
 - 2026-05-29: Proposed (umbrella; three phases scoped, IMPs pending).
 - 2026-05-29: IMP-ADR033-01 (Phase 1) plan written; IMP-02/03 deferred to a
   post-Phase-1 `grill-me` + `brainstorming` round. Web surface split out to
-  [ADR-034](../ADR-034-Media-Closed-Loop-Web-Surface/ADR-034-media-closed-loop-web-surface.md).
+  [ADR-034](../_archive/ADR-034-Media-Closed-Loop-Web-Surface/ADR-034-media-closed-loop-web-surface.md).
 - 2026-05-30: IMP-ADR033-01 (Phase 1) implemented and locally verified. Remote
   D1 apply and local SQLite mirror refresh remain deployment-environment gates.
 - 2026-06-06: IMP-ADR033-02 (Phase 2) and IMP-ADR033-03 (Phase 3) plans written

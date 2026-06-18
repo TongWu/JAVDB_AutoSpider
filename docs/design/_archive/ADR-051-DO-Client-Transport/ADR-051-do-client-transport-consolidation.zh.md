@@ -5,7 +5,7 @@
 | **状态**   | Completed（2026-06-14）——已由 [IMP-ADR051-01](IMP-ADR051-01-do-client-transport.md) 实现 |
 | **日期**   | 2026-06-13                                                        |
 | **作者**   | Ted                                                              |
-| **关联**   | [ADR-023](../../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.md)（拥有 `/recommend_proxy` **打分**；D19 要求 `/lease` 保持简单确定——本 ADR 守住它）、[ADR-013](../ADR-013-Runner-Runtime-State/ADR-013-runner-runtime-state-consolidation.md)（调用 `report_async` 的运行时状态）、[ADR-041](../ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md)（`ProxyPool` 是 Rust-Required，但 DO-client HTTP 层是纯 Python，不受影响） |
+| **关联**   | [ADR-023](../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.md)（拥有 `/recommend_proxy` **打分**；D19 要求 `/lease` 保持简单确定——本 ADR 守住它）、[ADR-013](../ADR-013-Runner-Runtime-State/ADR-013-runner-runtime-state-consolidation.md)（调用 `report_async` 的运行时状态）、[ADR-041](../ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md)（`ProxyPool` 是 Rust-Required，但 DO-client HTTP 层是纯 Python，不受影响） |
 
 > 源自 2026-06-13 架构评审（候选 4 ——"让 `ProxyCoordinatorClient` 走 `_do_request`"）：[architecture-review-2026-06-13.html](../../architecture/architecture-review-2026-06-13.html)。
 
@@ -33,7 +33,7 @@
 
 **D4. 关闭 sentinel 变成类型化 `ASYNC_QUEUE_SENTINEL` 常量；坍缩死解包。** 模块级 `ASYNC_QUEUE_SENTINEL = AsyncReportEvent(...)` 使队列同质（无 `Union`）；`_async_report_loop` 检查 `item is ASYNC_QUEUE_SENTINEL` 后访问命名字段。删除 `len(item) > 2/3/4` 兼容分支——其推送点已消失。
 
-**D5. 公开 API 不变。** `report_async()`、`lease()`、`report()`、`LeaseResult`、`ReportResult` 签名不变；外部调用点与队列生产者接口不动。这守住 [ADR-023](../../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.md) D19（"保持 `/lease` 与请求热路径简单确定"）——外部契约逐字节相同；只有内部传输路由与队列类型改变。
+**D5. 公开 API 不变。** `report_async()`、`lease()`、`report()`、`LeaseResult`、`ReportResult` 签名不变；外部调用点与队列生产者接口不动。这守住 [ADR-023](../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.md) D19（"保持 `/lease` 与请求热路径简单确定"）——外部契约逐字节相同；只有内部传输路由与队列类型改变。
 
 ## 后果（Consequences）
 
@@ -79,7 +79,7 @@
 
 ## 参考（References）
 
-- [ADR-023 — Proxy Recommendation Policy](../../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.md)
+- [ADR-023 — Proxy Recommendation Policy](../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.md)
 - [ADR-013 — Runner Runtime State](../ADR-013-Runner-Runtime-State/ADR-013-runner-runtime-state-consolidation.md)
 - [ADR-041 — Rust Core Fallback Policy](../ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md)
 - 2026-06-13 架构评审：[architecture-review-2026-06-13.html](../../architecture/architecture-review-2026-06-13.html)

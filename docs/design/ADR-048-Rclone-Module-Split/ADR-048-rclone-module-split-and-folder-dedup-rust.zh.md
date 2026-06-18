@@ -5,7 +5,7 @@
 | **状态**   | Proposed —— 执行见 [IMP-ADR048-01](IMP-ADR048-01-module-split-and-rust-folder-dedup.md)（3 阶段） |
 | **日期**   | 2026-06-13                                                        |
 | **作者**   | Ted                                                              |
-| **关联**   | [ADR-041](../_archive/ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md)（本 ADR 实例化并扩展的 fallback 分层策略）、[ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md)（拆了 rclone **manager** 但明确推迟了 **helper** 深拆——ADR-048 正是这块推迟工作的延续）、[ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)（Rust 是规范解析路径）、[ADR-039](../ADR-039-Pluggable-Integration-Platform/ADR-039-pluggable-integration-platform.md)（插件平台——拥有 **downloader/notify** 类别，**不**含 rclone 清理） |
+| **关联**   | [ADR-041](../_archive/ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md)（本 ADR 实例化并扩展的 fallback 分层策略）、[ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md)（拆了 rclone **manager** 但明确推迟了 **helper** 深拆——ADR-048 正是这块推迟工作的延续）、[ADR-035](../_archive/ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)（Rust 是规范解析路径）、[ADR-039](../ADR-039-Pluggable-Integration-Platform/ADR-039-pluggable-integration-platform.md)（插件平台——拥有 **downloader/notify** 类别，**不**含 rclone 清理） |
 
 > 源自 2026-06-13 架构评审（候选 1 ——"拆分 `rclone/helper.py`"）：[architecture-review-2026-06-13.html](../architecture/architecture-review-2026-06-13.html)。评审发现 `javdb/integrations/rclone/helper.py` 是一个 1,438 行的扁平模块，其 55 函数接口逼着 `manager/service.py` 按名导入 27 个符号、横跨三个结构无关的 concern；扫描引擎内埋着一处 Rust 迁移欠债，而一个永久删除级联被并进同一个浅接口。
 
@@ -116,7 +116,7 @@
 ## 参考（References）
 
 - [ADR-041 — Rust Core Fallback Policy](../_archive/ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md)
-- [ADR-035 — Site-Contract Drift Sentinel](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)
+- [ADR-035 — Site-Contract Drift Sentinel](../_archive/ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)
 - [ADR-015 — Integrations Interface](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md)（Phase 4–5 推迟的 helper 深拆由本 ADR 完成）
 - 2026-06-13 架构评审：[architecture-review-2026-06-13.html](../architecture/architecture-review-2026-06-13.html)
 

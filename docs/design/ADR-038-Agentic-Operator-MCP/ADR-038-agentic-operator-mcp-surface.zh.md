@@ -5,18 +5,18 @@
 | **状态**   | Accepted — Phase 1 / 2 已交付（2026-06-06 / 2026-06-14）；`trigger_run` 与可选的 Phase 3 后续仍待推进 |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
-| **关联**   | [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-026](../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md), [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md), [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md) |
+| **关联**   | [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-026](../_archive/ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md), [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-035](../_archive/ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md), [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md) |
 
 > 源自 2026-05-29 一次关于全新方向(方向四——智能体操作台)的头脑风暴。
 
 ## 背景 (Context)
 
-系统通过 Vue 控制台 + REST API 和 CLI 操作。**没有对话式/agent 接口**:要回答"为什么昨晚那次 run 只找到三部?",运维者得手工把 workflow 结果、会话生命周期、D1 漂移、邮件摘要、runbook 页拼起来——[ADR-026](../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md) 加了只读 AI 诊断,但只是单个端点,而非 agent 能探索的面。
+系统通过 Vue 控制台 + REST API 和 CLI 操作。**没有对话式/agent 接口**:要回答"为什么昨晚那次 run 只找到三部?",运维者得手工把 workflow 结果、会话生命周期、D1 漂移、邮件摘要、runbook 页拼起来——[ADR-026](../_archive/ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md) 加了只读 AI 诊断,但只是单个端点,而非 agent 能探索的面。
 
 两个事实让 MCP 面既便宜又当时:
 
 1. **service 层已分层良好。** `apps/api/services/`（`task_service`、`spider_jobs`、`explore_service`、sessions、`system_service`、`config_service`…）被 FastAPI router 和 CLI 同时 adapt。一个新的 **MCP adapter** 是对*同一套* service 的第三个 adapter——正是 [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md) 的"一套 service、多个 adapter"形态。目前没有任何 MCP server（干净起点）。
-2. **本会话刚建好 agent 想读的数据。** 事件脊柱（[ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md)）、incidents（[ADR-026](../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md)）、获取结果（[ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)）、漂移（[ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)）正是让 agent 能回答"这次 run 发生了什么"的那个面。
+2. **本会话刚建好 agent 想读的数据。** 事件脊柱（[ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md)）、incidents（[ADR-026](../_archive/ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md)）、获取结果（[ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)）、漂移（[ADR-035](../_archive/ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)）正是让 agent 能回答"这次 run 发生了什么"的那个面。
 
 本 ADR 把系统**经 MCP 暴露成对话式 agent 面**,从**只读**起步（镜像 ADR-026 刻意的只读优先），gated 动作推迟到后期。
 
@@ -107,9 +107,9 @@ Phase 1 独立成立（只读、附加）。Phase 2 加 gated mutate 面。Phase
 ## 参考 (References)
 
 - [ADR-015 — Integrations Interface Boundary](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md)
-- [ADR-026 — AI Operations Diagnosis](../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md)
+- [ADR-026 — AI Operations Diagnosis](../_archive/ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md)
 - [ADR-033 — Media Closed-Loop](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
-- [ADR-035 — Site-Contract Drift Sentinel](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)
+- [ADR-035 — Site-Contract Drift Sentinel](../_archive/ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)
 - [ADR-036 — Event-Sourced Pipeline Spine](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md)
 
 ## 状态日志 (Status Log)

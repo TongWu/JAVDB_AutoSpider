@@ -5,7 +5,7 @@
 | **状态**   | Accepted — 伞型;三期均已实现并完成本地验证(Phase 1 于 2026-05-30,Phase 2-3 于 2026-06-06)。远端 D1 apply 与 SQLite mirror refresh 仍属部署环境验证门 |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
-| **关联**   | [ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-024](../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md), [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-028](../ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md) |
+| **关联**   | [ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-024](../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md), [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-028](../_archive/ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md) |
 
 > 源自 2026-05-29 一次关于"现有 ADR 尚未收编的全新方向"的头脑风暴。
 
@@ -26,7 +26,7 @@
 2. **失败与卡住不可见** —— 一个永远下不完的种子,留不下任何与"成功"可区分的痕迹。
 3. **被搁置的偏好模型（[ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md) / [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md)）缺了它最强的隐式信号** —— 实际观看行为 —— 因为没有任何东西去读运维者本就在跑的媒体服务器(Emby + Plex)。
 
-本 ADR 分三层闭环,作为一个 umbrella 初始计划统一治理、分期推进(沿用 [ADR-028](../ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md) 的伞型模式)。
+本 ADR 分三层闭环,作为一个 umbrella 初始计划统一治理、分期推进(沿用 [ADR-028](../_archive/ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md) 的伞型模式)。
 
 ## 决策 (Decision)
 
@@ -169,14 +169,14 @@ queued ──→ downloading ──→ completed ──→ in_library
 - [ADR-025 — User Preference Model](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md)
 - [ADR-015 — Integrations Interface Boundary](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md)
 - [ADR-010 — D1 Access Port](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md)
-- [ADR-028 — Web Platform & Capability Completeness Roadmap](../ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md)
+- [ADR-028 — Web Platform & Capability Completeness Roadmap](../_archive/ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md)
 
 ## 状态日志 (Status Log)
 
 - 2026-05-29: Proposed(伞型;三期已划定,IMP 待出)。
 - 2026-05-29: IMP-ADR033-01（Phase 1）计划已成文;IMP-02/03 推迟到 Phase 1 落地后的
   一轮 `grill-me` + `brainstorming`。web 面拆分到
-  [ADR-034](../ADR-034-Media-Closed-Loop-Web-Surface/ADR-034-media-closed-loop-web-surface.md)。
+  [ADR-034](../_archive/ADR-034-Media-Closed-Loop-Web-Surface/ADR-034-media-closed-loop-web-surface.md)。
 - 2026-05-30: IMP-ADR033-01（Phase 1）已实现并完成本地验证。远端 D1 apply 与本地
   SQLite mirror refresh 仍属于部署环境验证门。
 - 2026-06-06: IMP-ADR033-02（Phase 2）与 IMP-ADR033-03（Phase 3）计划经一轮 `grill-me`

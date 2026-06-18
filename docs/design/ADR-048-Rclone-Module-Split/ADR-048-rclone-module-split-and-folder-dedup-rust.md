@@ -5,7 +5,7 @@
 | **Status**  | Proposed — execution in [IMP-ADR048-01](IMP-ADR048-01-module-split-and-rust-folder-dedup.md) (3 phases) |
 | **Date**    | 2026-06-13                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-041](../_archive/ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md) (the fallback-tier policy this ADR instantiates and extends), [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md) (split the rclone **manager** but explicitly deferred the **helper** deep-split — ADR-048 is that deferred continuation), [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md) (Rust is the canonical parse path), [ADR-039](../ADR-039-Pluggable-Integration-Platform/ADR-039-pluggable-integration-platform.md) (plugin platform — owns the **downloader/notify** categories, **not** rclone cleanup) |
+| **Related** | [ADR-041](../_archive/ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md) (the fallback-tier policy this ADR instantiates and extends), [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md) (split the rclone **manager** but explicitly deferred the **helper** deep-split — ADR-048 is that deferred continuation), [ADR-035](../_archive/ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md) (Rust is the canonical parse path), [ADR-039](../ADR-039-Pluggable-Integration-Platform/ADR-039-pluggable-integration-platform.md) (plugin platform — owns the **downloader/notify** categories, **not** rclone cleanup) |
 
 > Originated from the 2026-06-13 architecture review (Candidate 1 — "split `rclone/helper.py`"): [architecture-review-2026-06-13.html](../architecture/architecture-review-2026-06-13.html). The review found `javdb/integrations/rclone/helper.py` is a 1,438-line flat module whose 55-function interface forces `manager/service.py` to name-import 27 symbols spanning three structurally independent concerns, with one Rust migration debt buried inside the scan engine and a permanent-deletion cascade bundled into the same shallow surface.
 
@@ -116,7 +116,7 @@ A violated invariant is a Rust-side error (fail-closed), not a silent mis-deleti
 ## References
 
 - [ADR-041 — Rust Core Fallback Policy](../_archive/ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md)
-- [ADR-035 — Site-Contract Drift Sentinel](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)
+- [ADR-035 — Site-Contract Drift Sentinel](../_archive/ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)
 - [ADR-015 — Integrations Interface](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md) (Phase 4–5 deferred the helper deep-split this ADR completes)
 - 2026-06-13 architecture review: [architecture-review-2026-06-13.html](../architecture/architecture-review-2026-06-13.html)
 

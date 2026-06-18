@@ -5,7 +5,7 @@
 | **Status**  | Completed (2026-06-14) — implemented by [IMP-ADR053-01](IMP-ADR053-01-d1-transient-error-typed-recovery.md) |
 | **Date**    | 2026-06-13                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-009](../ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md) (created the `D1TransientError` classifier — owns *which* errors are transient, not the recovery-signal interface), [ADR-042](../../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md) (the recovery/commit-boundary **policy** these signals feed — unchanged), [ADR-010](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.md) (`d1_port.py` is the access port that sets the signals) |
+| **Related** | [ADR-009](../ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md) (created the `D1TransientError` classifier — owns *which* errors are transient, not the recovery-signal interface), [ADR-042](../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md) (the recovery/commit-boundary **policy** these signals feed — unchanged), [ADR-010](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.md) (`d1_port.py` is the access port that sets the signals) |
 
 > Originated from the 2026-06-13 architecture review (Candidate 6 — "promote `D1TransientError`'s recovery attributes to a typed interface"): [architecture-review-2026-06-13.html](../../architecture/architecture-review-2026-06-13.html).
 
@@ -101,7 +101,7 @@ The signals are determined **after** the error is constructed (in the `except` h
 ## References
 
 - [ADR-009 — D1 Drift Classifier & Diagnose](../ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md)
-- [ADR-042 — D1 Atomic Commit Boundaries](../../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md)
+- [ADR-042 — D1 Atomic Commit Boundaries](../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md)
 - [ADR-010 — D1 Access Port](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.md)
 - 2026-06-13 architecture review: [architecture-review-2026-06-13.html](../../architecture/architecture-review-2026-06-13.html)
 

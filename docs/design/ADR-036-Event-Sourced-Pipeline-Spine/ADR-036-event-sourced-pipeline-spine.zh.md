@@ -5,7 +5,7 @@
 | **状态**   | Proposed — 伞型;Phase 1 & Phase 2 已实现并验证;Phase 2（附加式 emit + 影子消费者）已于 2026-06-10 落地;Phase 3（strangler）可选/推迟;执行下放给各期 IMP |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
-| **关联**   | [ADR-012](../_archive/ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md), [ADR-019](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md), [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md) |
+| **关联**   | [ADR-012](../_archive/ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md), [ADR-019](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md), [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-035](../_archive/ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md) |
 
 > 源自 2026-05-29 一次关于全新方向(方向三——可重放的管道内核)的头脑风暴。
 
@@ -14,7 +14,7 @@
 管道是一条**编排式、命令式**过程:`javdb/pipeline/` 把 spider → uploader → pikpak 作为子进程/进程内步骤运行,带结构化 result sidecar（[ADR-012](../_archive/ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md)）。加一个横切能力就意味着**管道手术**——最近两份设计就是证据:
 
 - [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)（媒体闭环）不得不**给 uploader 插桩**（加种时写）并**从 cleanup 步骤 push**（完成）才能得知种子的命运。
-- [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)（漂移哨兵）不得不**hook index 解析边界**并**门控 commit 路径**。
+- [ADR-035](../_archive/ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)（漂移哨兵）不得不**hook index 解析边界**并**门控 commit 路径**。
 
 每个新功能都从不同的点伸进管道。没有一条共享的流供消费者订阅。
 
@@ -69,7 +69,7 @@ CREATE TABLE EventConsumerCursor (
 
 **D5. cursor 幂等消费者 + 免费重放。** 消费者读 `seq > last_seq`、幂等投影、推进 cursor。**重放** = 把某消费者 cursor 重置为 0 再跑 → 它的投影从日志重建。这是头号价值（可重放/可审计），且在 cursor 模型下几乎免费。
 
-**D6. 对现有 hook 的 strangler 路径——附加优先，切换有门控。** Phase 2 让脊柱*承载*逐实体生命周期事件并以**影子**投影验证消费路径，但**不**拆除现有的直接写 hook。具体：在管道自然点 emit `MovieDiscovered` / `MovieSelected` / `TorrentSelected` / `TorrentQueued` / `TorrentCompleted`（附加式，per D4 best-effort）；加一个消费者，从这些事件重建一个 `AcquisitionOutcome` 形状的投影，用于与 [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) 的权威直接写路径做**交叉验证**（影子投影不被生产决策读取）。[ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md) 哨兵**仅在干净映射到逐实体事件的部分**改为消费事件流；若其逐字段填充率计算不适合，则保留当前的 piggyback hook。**ADR-033 数据关键路径 `AcquisitionOutcome` 的实际切换——它驱动 ADR-024/025 质量/偏好数据时钟——推迟**，直到 in-run 事件在生产中证明可靠（或决定结果的事件按 D4 晋升为 commit 类）。理由：`AcquisitionOutcome` 的当前 hook 是同步直接写；用 *best-effort* in-run emit + 异步投影替换它，在 emit 失败时有静默丢失 acquisition 行的风险，会回归一条刚落地的关键路径。让 `pending→commit` / history 成为日志投影仍属 Phase 3+，推迟且高谨慎。
+**D6. 对现有 hook 的 strangler 路径——附加优先，切换有门控。** Phase 2 让脊柱*承载*逐实体生命周期事件并以**影子**投影验证消费路径，但**不**拆除现有的直接写 hook。具体：在管道自然点 emit `MovieDiscovered` / `MovieSelected` / `TorrentSelected` / `TorrentQueued` / `TorrentCompleted`（附加式，per D4 best-effort）；加一个消费者，从这些事件重建一个 `AcquisitionOutcome` 形状的投影，用于与 [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) 的权威直接写路径做**交叉验证**（影子投影不被生产决策读取）。[ADR-035](../_archive/ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md) 哨兵**仅在干净映射到逐实体事件的部分**改为消费事件流；若其逐字段填充率计算不适合，则保留当前的 piggyback hook。**ADR-033 数据关键路径 `AcquisitionOutcome` 的实际切换——它驱动 ADR-024/025 质量/偏好数据时钟——推迟**，直到 in-run 事件在生产中证明可靠（或决定结果的事件按 D4 晋升为 commit 类）。理由：`AcquisitionOutcome` 的当前 hook 是同步直接写；用 *best-effort* in-run emit + 异步投影替换它，在 emit 失败时有静默丢失 acquisition 行的风险，会回归一条刚落地的关键路径。让 `pending→commit` / history 成为日志投影仍属 Phase 3+，推迟且高谨慎。
 
 **D7. 模块形态遵循仓库惯例。** `javdb/pipeline/events/` 含 `models.py`（事件类型）、`store.py`（`emit` + read-since-cursor）、`consumer.py`（基类消费者 + cursor 推进）;`javdb/storage/repos/pipeline_event_repo.py` 是 D1 访问。emit 调用点位于现有管道点。
 
@@ -129,7 +129,7 @@ Phase 1 独立成立、不碰任何权威物。Phase 2 依赖 ADR-033/035 已落
 - [ADR-005 — db.py Retirement & Repo Pattern](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md)
 - [ADR-010 — D1 Access Port](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md)
 - [ADR-033 — Media Closed-Loop](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
-- [ADR-035 — Site-Contract Drift Sentinel](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)
+- [ADR-035 — Site-Contract Drift Sentinel](../_archive/ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)
 
 ## 状态日志 (Status Log)
 

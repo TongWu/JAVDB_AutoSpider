@@ -4,7 +4,7 @@
 **Date**: 2026-05-31
 **Severity**: High
 **Affected**: `javdb/rust_core/src/scraper/common.rs`, `javdb/parsing/common.py`, `javdb/spider/parse_contract.py`, `javdb/ops/sentinel/`, `javdb/migrations/d1/2026_05_27_add_ops_incidents.sql`
-**Related**: [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md), [ADR-026](../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md)
+**Related**: [ADR-035](../_archive/ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md), [ADR-026](../_archive/ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md)
 
 ---
 

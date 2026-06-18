@@ -5,7 +5,7 @@
 | **状态**   | Completed（2026-06-14）——已由 [IMP-ADR052-01](IMP-ADR052-01-drift-io-consolidation.md) 实现 |
 | **日期**   | 2026-06-13                                                        |
 | **作者**   | Ted                                                              |
-| **关联**   | [BFR-016](../../BFR-016-Import-Time-DB-Path-Binding/BFR-016-import-time-db-path-binding.md)（import-时路径绑定——本 ADR 为 drift 日志兑现其教训）、[ADR-050](../ADR-050-Pending-Verify-Builder/ADR-050-pending-verify-record-builder.md)（共享 `append_jsonl_record` 调用方——协调导入路径）、[ADR-009](../ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md)（拥有 drift-诊断**语义**——不动）、[ADR-047](../../ADR-047-Dual-Backend-Drift-Reconciliation/ADR-047-dual-backend-drift-reconciliation.md)（拥有 reconcile **逻辑**——不碰这些 helper）、[ADR-042](../../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md)（drift 日志是**诊断写入**） |
+| **关联**   | [BFR-016](../../BFR-016-Import-Time-DB-Path-Binding/BFR-016-import-time-db-path-binding.md)（import-时路径绑定——本 ADR 为 drift 日志兑现其教训）、[ADR-050](../ADR-050-Pending-Verify-Builder/ADR-050-pending-verify-record-builder.md)（共享 `append_jsonl_record` 调用方——协调导入路径）、[ADR-009](../ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md)（拥有 drift-诊断**语义**——不动）、[ADR-047](../ADR-047-Dual-Backend-Drift-Reconciliation/ADR-047-dual-backend-drift-reconciliation.md)（拥有 reconcile **逻辑**——不碰这些 helper）、[ADR-042](../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md)（drift 日志是**诊断写入**） |
 
 > 源自 2026-06-13 架构评审（候选 5 ——"整合 drift-cell helper 与重复的 drift-log writer"）：[architecture-review-2026-06-13.html](../../architecture/architecture-review-2026-06-13.html)。
 
@@ -101,7 +101,7 @@ drift 检测与 drift 日志分散在四个文件,各自携带一份相同的底
 - [BFR-016 — Import-Time DB Path Binding](../../BFR-016-Import-Time-DB-Path-Binding/BFR-016-import-time-db-path-binding.md)
 - [ADR-050 — Pending Verify Record Builder](../ADR-050-Pending-Verify-Builder/ADR-050-pending-verify-record-builder.md)
 - [ADR-009 — D1 Drift Classifier & Diagnose](../ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md)
-- [ADR-047 — Dual-Backend Drift Reconciliation](../../ADR-047-Dual-Backend-Drift-Reconciliation/ADR-047-dual-backend-drift-reconciliation.md)
+- [ADR-047 — Dual-Backend Drift Reconciliation](../ADR-047-Dual-Backend-Drift-Reconciliation/ADR-047-dual-backend-drift-reconciliation.md)
 - 2026-06-13 架构评审：[architecture-review-2026-06-13.html](../../architecture/architecture-review-2026-06-13.html)
 
 ## 状态日志（Status Log）

@@ -5,7 +5,7 @@
 | **状态**   | Completed（2026-06-14）——已由 [IMP-ADR053-01](IMP-ADR053-01-d1-transient-error-typed-recovery.md) 实现 |
 | **日期**   | 2026-06-13                                                        |
 | **作者**   | Ted                                                              |
-| **关联**   | [ADR-009](../ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md)（创建了 `D1TransientError` 分类器——拥有"*哪些*错误算 transient"，非恢复信号接口）、[ADR-042](../../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md)（这些信号喂给的恢复/提交边界**策略**——不变）、[ADR-010](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.md)（设置信号的 `d1_port.py` 访问端口） |
+| **关联**   | [ADR-009](../ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md)（创建了 `D1TransientError` 分类器——拥有"*哪些*错误算 transient"，非恢复信号接口）、[ADR-042](../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md)（这些信号喂给的恢复/提交边界**策略**——不变）、[ADR-010](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.md)（设置信号的 `d1_port.py` 访问端口） |
 
 > 源自 2026-06-13 架构评审（候选 6 ——"把 `D1TransientError` 的恢复属性提升为类型化接口"）：[architecture-review-2026-06-13.html](../../architecture/architecture-review-2026-06-13.html)。
 
@@ -101,7 +101,7 @@ class D1TransientError(D1Error):
 ## 参考（References）
 
 - [ADR-009 — D1 Drift Classifier & Diagnose](../ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md)
-- [ADR-042 — D1 Atomic Commit Boundaries](../../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md)
+- [ADR-042 — D1 Atomic Commit Boundaries](../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md)
 - [ADR-010 — D1 Access Port](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.md)
 - 2026-06-13 架构评审：[architecture-review-2026-06-13.html](../../architecture/architecture-review-2026-06-13.html)
 

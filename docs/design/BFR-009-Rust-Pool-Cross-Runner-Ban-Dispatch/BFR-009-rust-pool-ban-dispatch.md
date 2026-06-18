@@ -4,7 +4,7 @@
 **Date**: 2026-05-30
 **Severity**: Medium
 **Affected**: `javdb/proxy/ban_manager.py` (`_dispatch_remote_ban`, `set_remote_ban_hook`), `javdb/proxy/pool.py` (Python `ProxyPool.ban_proxy` / drain), `javdb/spider/runtime/state.py:722`, `javdb/spider/runtime/context.py:880` (hook registration), `javdb/rust_core/src/proxy/{pool,ban_manager}.rs`
-**Related**: [ADR-043](../_archive/ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.md) (fixes this — Approach 1, via IMP-ADR043-02), [ADR-041](../_archive/ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md) (surfaced this during Task 4 — removed the last Python callers of the dispatcher), [ADR-023](../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.md) (proxy coordination), CONTEXT.md → "Signal" (`ban_proxy`)
+**Related**: [ADR-043](../_archive/ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.md) (fixes this — Approach 1, via IMP-ADR043-02), [ADR-041](../_archive/ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md) (surfaced this during Task 4 — removed the last Python callers of the dispatcher), [ADR-023](../_archive/ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.md) (proxy coordination), CONTEXT.md → "Signal" (`ban_proxy`)
 
 ---
 

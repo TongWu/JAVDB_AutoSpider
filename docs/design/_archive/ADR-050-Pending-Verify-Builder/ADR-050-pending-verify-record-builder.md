@@ -5,7 +5,7 @@
 | **Status**  | Completed (2026-06-14) — implemented by [IMP-ADR050-01](IMP-ADR050-01-pending-verify-builder.md) |
 | **Date**    | 2026-06-13                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-042](../../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md) (`pending_session_verify` is a **diagnostic write** — never authoritative), [ADR-019](../ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md) (the lifecycle whose commit/fail/rollback events emit the record), [ADR-036](../../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md) (the `PipelineEvent` spine is a separate codepath — not this JSONL sidecar), [ADR-026](../../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md) (`log_analysis` consumes the record for pending alerts) |
+| **Related** | [ADR-042](../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md) (`pending_session_verify` is a **diagnostic write** — never authoritative), [ADR-019](../ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md) (the lifecycle whose commit/fail/rollback events emit the record), [ADR-036](../../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md) (the `PipelineEvent` spine is a separate codepath — not this JSONL sidecar), [ADR-026](../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md) (`log_analysis` consumes the record for pending alerts) |
 
 > Originated from the 2026-06-13 architecture review (Candidate 3 — "consolidate the `pending_session_verify` builder"): [architecture-review-2026-06-13.html](../../architecture/architecture-review-2026-06-13.html).
 
@@ -85,9 +85,9 @@ Extract one pure builder + a single exported field-name vocabulary; the three em
 
 ## References
 
-- [ADR-042 — D1 Atomic Commit Boundaries](../../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md)
+- [ADR-042 — D1 Atomic Commit Boundaries](../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md)
 - [ADR-019 — Session Lifecycle Authority](../ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md)
-- [ADR-026 — AI Operations Diagnosis](../../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md)
+- [ADR-026 — AI Operations Diagnosis](../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md)
 - 2026-06-13 architecture review: [architecture-review-2026-06-13.html](../../architecture/architecture-review-2026-06-13.html)
 
 ## Status Log
