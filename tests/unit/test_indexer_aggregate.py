@@ -139,7 +139,9 @@ def test_hashless_magnets_across_sources_do_not_collapse(monkeypatch):
         ],
     )
 
-    rows = agg.aggregate_magnets(" ａｂｃ-001 ")
+    # Fullwidth ａｂｃ + surrounding whitespace: deliberately messy operator input
+    # the aggregator must tolerate; the ambiguous-unicode lint flag is intentional.
+    rows = agg.aggregate_magnets(" ａｂｃ-001 ")  # noqa: RUF001
 
     assert len(rows) == 2
     assert all(row["info_hash"] is None for row in rows)

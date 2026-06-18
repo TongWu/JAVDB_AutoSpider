@@ -1,0 +1,24 @@
+-- 2026-06-18: Add idx_new_works_video_code on NewWorks(video_code).
+-- Write-Class: authoritative
+--
+-- Why
+-- ---
+-- NewWorks uses the composite primary key (actor_href, video_code) (see
+-- 2026_06_16_newworks_composite_pk.sql). SQLite/D1 serve a composite-PK index
+-- only for a left-prefix of its columns, so the PK covers lookups by
+-- actor_href (and by the full pair) but NOT lookups by video_code alone.
+-- SubscriptionRepo.dismiss() runs `UPDATE NewWorks SET dismissed = 1 WHERE
+-- video_code = ?` (dismissal is global per video_code), which therefore falls
+-- back to a full table scan. This index makes that write a point lookup.
+--
+-- Depends on NewWorks existing (2026_06_14_add_actor_subscription_new_works.sql)
+-- with the composite PK already in place (2026_06_16_newworks_composite_pk.sql);
+-- run those first. CREATE INDEX IF NOT EXISTS is idempotent — re-running is safe.
+--
+-- Apply with:
+--   wrangler d1 execute javdb-history --remote \
+--     --file=javdb/migrations/d1/2026_06_18_newworks_video_code_index.sql
+-- Then re-align the SQLite mirror:
+--   python3 -m apps.cli.db.sync_d1_to_sqlite --apply --force-overwrite-all
+
+CREATE INDEX IF NOT EXISTS idx_new_works_video_code ON NewWorks(video_code);
