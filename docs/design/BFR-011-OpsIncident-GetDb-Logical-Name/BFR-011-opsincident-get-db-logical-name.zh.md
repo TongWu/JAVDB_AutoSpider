@@ -4,7 +4,7 @@
 **Date**: 2026-05-31
 **Severity**: High
 **Affected**: `javdb/ops/diagnosis/persistence.py`(`persist_incident`)、`apps/api/routers/diagnostics.py`(`_list_ops_incident_records`、`_get_ops_incident_record`)
-**Related**: [ADR-026](../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.zh.md)(AI 运维诊断——`OpsIncidents` 表的归属）、[ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.zh.md)(站点契约哨兵——其 IMP 计划带有相同的错误调用形式）、`CLAUDE.md` →「Database Access」（传播了错误形式的示例）
+**Related**: [ADR-026](../_archive/ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.zh.md)(AI 运维诊断——`OpsIncidents` 表的归属）、[ADR-035](../_archive/ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.zh.md)(站点契约哨兵——其 IMP 计划带有相同的错误调用形式）、`CLAUDE.md` →「Database Access」（传播了错误形式的示例）
 
 ---
 

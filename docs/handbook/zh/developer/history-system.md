@@ -35,7 +35,7 @@ Spider 包含一个智能历史记录系统，用于跟踪每部电影已找到�
 - **增量（additive）** 表可以重放或重建，但绝不能决定一个 session 是否提交。
 - **诊断（diagnostic）** 记录（drift log、recovery outbox 条目）是可观测性辅助，而不是用户真相。
 
-分类规则详见 [ADR-042](../../../design/ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.zh.md)。
+分类规则详见 [ADR-042](../../../design/_archive/ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.zh.md)。
 
 ---
 

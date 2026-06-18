@@ -5,7 +5,7 @@
 | **Status**  | Completed (2026-06-14) — implemented by [IMP-ADR052-01](IMP-ADR052-01-drift-io-consolidation.md) |
 | **Date**    | 2026-06-13                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [BFR-016](../../BFR-016-Import-Time-DB-Path-Binding/BFR-016-import-time-db-path-binding.md) (import-time path binding — this ADR realizes its lesson for the drift log), [ADR-050](../ADR-050-Pending-Verify-Builder/ADR-050-pending-verify-record-builder.md) (shares the `append_jsonl_record` callers — coordinate the import path), [ADR-009](../ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md) (owns drift-diagnose **semantics** — untouched), [ADR-047](../../ADR-047-Dual-Backend-Drift-Reconciliation/ADR-047-dual-backend-drift-reconciliation.md) (owns reconcile **logic** — does not touch these helpers), [ADR-042](../../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md) (the drift log is a **diagnostic write**) |
+| **Related** | [BFR-016](../../BFR-016-Import-Time-DB-Path-Binding/BFR-016-import-time-db-path-binding.md) (import-time path binding — this ADR realizes its lesson for the drift log), [ADR-050](../ADR-050-Pending-Verify-Builder/ADR-050-pending-verify-record-builder.md) (shares the `append_jsonl_record` callers — coordinate the import path), [ADR-009](../ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md) (owns drift-diagnose **semantics** — untouched), [ADR-047](../ADR-047-Dual-Backend-Drift-Reconciliation/ADR-047-dual-backend-drift-reconciliation.md) (owns reconcile **logic** — does not touch these helpers), [ADR-042](../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md) (the drift log is a **diagnostic write**) |
 
 > Originated from the 2026-06-13 architecture review (Candidate 5 — "consolidate drift-cell helpers and the duplicate drift-log writer"): [architecture-review-2026-06-13.html](../../architecture/architecture-review-2026-06-13.html).
 
@@ -101,7 +101,7 @@ Extract one stdlib-only `drift_io` module, unify the two writers into it on **ca
 - [BFR-016 — Import-Time DB Path Binding](../../BFR-016-Import-Time-DB-Path-Binding/BFR-016-import-time-db-path-binding.md)
 - [ADR-050 — Pending Verify Record Builder](../ADR-050-Pending-Verify-Builder/ADR-050-pending-verify-record-builder.md)
 - [ADR-009 — D1 Drift Classifier & Diagnose](../ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.md)
-- [ADR-047 — Dual-Backend Drift Reconciliation](../../ADR-047-Dual-Backend-Drift-Reconciliation/ADR-047-dual-backend-drift-reconciliation.md)
+- [ADR-047 — Dual-Backend Drift Reconciliation](../ADR-047-Dual-Backend-Drift-Reconciliation/ADR-047-dual-backend-drift-reconciliation.md)
 - 2026-06-13 architecture review: [architecture-review-2026-06-13.html](../../architecture/architecture-review-2026-06-13.html)
 
 ## Status Log

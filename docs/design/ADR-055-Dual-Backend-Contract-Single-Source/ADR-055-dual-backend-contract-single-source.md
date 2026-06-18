@@ -5,7 +5,7 @@
 **Author:** Ted
 **Related Implementation Plans:** [IMP-ADR055-01](IMP-ADR055-01-registry-generator-watchintent.md) (Phase 1 — registry + generator + CI + WatchIntent migration)
 **D1 Write Class:** n/a (this ADR ships a codegen/contract mechanism; each centralized fragment keeps its own existing write class — e.g. WatchIntent stays `authoritative`)
-**Related:** [ADR-018](../ADR-018-Dual-Backend-Query-Contract/ADR-018-dual-backend-query-contract.md) (query contract — guard for dynamic SELECT builders; this executes its deferred D7), [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md) (dual-backend split), [ADR-054](../ADR-054-User-Intent-Discovery-Layer/ADR-054-user-intent-discovery-layer.md) (WS1 verification surfaced gap B6), [ADR-029](../_archive/ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md) (auth — out of scope), [ADR-042](../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md) (D1 write classes)
+**Related:** [ADR-018](../_archive/ADR-018-Dual-Backend-Query-Contract/ADR-018-dual-backend-query-contract.md) (query contract — guard for dynamic SELECT builders; this executes its deferred D7), [ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md) (dual-backend split), [ADR-054](../_archive/ADR-054-User-Intent-Discovery-Layer/ADR-054-user-intent-discovery-layer.md) (WS1 verification surfaced gap B6), [ADR-029](../_archive/ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.md) (auth — out of scope), [ADR-042](../_archive/ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md) (D1 write classes)
 
 ## Context
 
@@ -14,9 +14,9 @@
 - **Python** — `apps/api/` + `javdb/storage/` (FastAPI, Docker / local).
 - **TypeScript** — `JAVDB_AutoSpider_Web/server/` (Hono on Cloudflare Workers).
 
-Overlapping query/mutation logic must produce equivalent results regardless of which backend answers. [ADR-018](../ADR-018-Dual-Backend-Query-Contract/ADR-018-dual-backend-query-contract.md) mechanized part of this — a Python-sourced **Contract Golden** for the **dynamic SELECT builders**, vendored to TS and pinned by CI freshness + conformance. But ADR-018 D3 scoped that guard to dynamic SELECT builders **only**; static statements, mutations, and shared data constants were left to a prose rule plus per-repo tests. ADR-018 D7 — "**eliminate**" (a single source of truth, not just a drift guard) — was **deferred** "until recurring drift justifies it."
+Overlapping query/mutation logic must produce equivalent results regardless of which backend answers. [ADR-018](../_archive/ADR-018-Dual-Backend-Query-Contract/ADR-018-dual-backend-query-contract.md) mechanized part of this — a Python-sourced **Contract Golden** for the **dynamic SELECT builders**, vendored to TS and pinned by CI freshness + conformance. But ADR-018 D3 scoped that guard to dynamic SELECT builders **only**; static statements, mutations, and shared data constants were left to a prose rule plus per-repo tests. ADR-018 D7 — "**eliminate**" (a single source of truth, not just a drift guard) — was **deferred** "until recurring drift justifies it."
 
-[ADR-054](../ADR-054-User-Intent-Discovery-Layer/ADR-054-user-intent-discovery-layer.md) WS1 verification surfaced that recurrence as **gap B6**. The `WatchIntent` UPSERT SQL exists as **four hand-maintained copies**:
+[ADR-054](../_archive/ADR-054-User-Intent-Discovery-Layer/ADR-054-user-intent-discovery-layer.md) WS1 verification surfaced that recurrence as **gap B6**. The `WatchIntent` UPSERT SQL exists as **four hand-maintained copies**:
 
 | # | Location | Role |
 | --- | --- | --- |
@@ -97,10 +97,10 @@ Execute ADR-018's deferred D7 as a dedicated mechanism, **widened to all static 
 
 ## References
 
-- [ADR-018 — Dual-Backend Query Contract](../ADR-018-Dual-Backend-Query-Contract/ADR-018-dual-backend-query-contract.md)
+- [ADR-018 — Dual-Backend Query Contract](../_archive/ADR-018-Dual-Backend-Query-Contract/ADR-018-dual-backend-query-contract.md)
 - [ADR-017 — Cloudflare-First Deployment](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md)
-- [ADR-054 — User-Intent & Discovery Layer](../ADR-054-User-Intent-Discovery-Layer/ADR-054-user-intent-discovery-layer.md) (WS1 verification, gap B6)
-- [ADR-042 — D1 Atomic Commit Boundaries](../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md) (D1 write classes)
+- [ADR-054 — User-Intent & Discovery Layer](../_archive/ADR-054-User-Intent-Discovery-Layer/ADR-054-user-intent-discovery-layer.md) (WS1 verification, gap B6)
+- [ADR-042 — D1 Atomic Commit Boundaries](../_archive/ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md) (D1 write classes)
 
 ## Status Log
 

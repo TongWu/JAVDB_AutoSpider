@@ -42,7 +42,7 @@ CREATE TABLE ContentFilterRule (
 
 **D4. 优先级:黑名单最高;规则 AND 在一起。** 任一命中的 **exclude** 规则立即 drop。其余 **include/属性** 规则 AND（如 tag-include 集要求至少一个匹配 tag;性别规则要求配置的条件）。内容过滤与现有评分过滤 AND——彼此不削弱。
 
-**D5. Phase 1 维度来自现有解析。** 从 `MovieDetail`（`actors` 带 name/href/**gender**、`tags`）:**演员黑名单**（按 name/href exclude）、**tag include/exclude**、**性别**（如要求女主演、排除全男）。**年龄为 Phase 2（IMP-ADR040-02）。** 对原背景说明的更正：javdb 自身的 `/actors/<id>` 页面是影片*列表*页，**不含生日信息**，因此年龄无法来自 javdb 查询。Phase 2 改为**尽力从 minnano-av**（按演员名称匹配）解析生日，缓存于 `ActorMetadata`，并以影片上映日期计算年龄。未能解析到生日的演员年龄为未知，永远不会导致影片被 drop。（xslist 曾作为备选方案权衡，但推迟——它无法匹配 javdb 的日文名。）**订阅已由 [ADR-054 WS2](../ADR-054-User-Intent-Discovery-Layer/ADR-054-user-intent-discovery-layer.zh.md) supersede**：评分阈值绕过现在属于统一的 Subscription 域（`ActorSubscription` + `NewWorks`），不再是 ADR-040 专属白名单；该旁路行为由 `tests/unit/test_adhoc_bypasses_rating_gate.py` 锁定。
+**D5. Phase 1 维度来自现有解析。** 从 `MovieDetail`（`actors` 带 name/href/**gender**、`tags`）:**演员黑名单**（按 name/href exclude）、**tag include/exclude**、**性别**（如要求女主演、排除全男）。**年龄为 Phase 2（IMP-ADR040-02）。** 对原背景说明的更正：javdb 自身的 `/actors/<id>` 页面是影片*列表*页，**不含生日信息**，因此年龄无法来自 javdb 查询。Phase 2 改为**尽力从 minnano-av**（按演员名称匹配）解析生日，缓存于 `ActorMetadata`，并以影片上映日期计算年龄。未能解析到生日的演员年龄为未知，永远不会导致影片被 drop。（xslist 曾作为备选方案权衡，但推迟——它无法匹配 javdb 的日文名。）**订阅已由 [ADR-054 WS2](../_archive/ADR-054-User-Intent-Discovery-Layer/ADR-054-user-intent-discovery-layer.zh.md) supersede**：评分阈值绕过现在属于统一的 Subscription 域（`ActorSubscription` + `NewWorks`），不再是 ADR-040 专属白名单；该旁路行为由 `tests/unit/test_adhoc_bypasses_rating_gate.py` 锁定。
 
 **D6. 确定性、可解释;与偏好模型正交。** 引擎返回 `FilterDecision(keep, reasons)`;drop 原因被surface（stats / `MovieFiltered` 事件 / MCP）。这是一个**硬的、确定性规则**层——区别于 [ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md) / [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md) 的 **ML 偏好分**。两者正交:规则决定*资格*,模型日后决定*排序*。
 
@@ -71,7 +71,7 @@ CREATE TABLE ContentFilterRule (
 | Phase 1 — 排除 + 属性 | IMP-ADR040-01 (done) | 演员/标签/性别规则 |
 | Phase 2 — 年龄过滤 | IMP-ADR040-02 (done) | `age` 维度；外部来源拓展（minnano-av；xslist 推迟）；`ActorMetadata` 缓存 |
 | Phase 2b — 正则 + 上映日期 | IMP-ADR040-03 (done) | `regex_exclude`/`regex_include`（actor/tag）；`release_date` 的 `before`/`after`；无 schema 迁移（复用通用三元组） |
-| Phase 3 — 订阅 | 已由 [ADR-054 WS2](../ADR-054-User-Intent-Discovery-Layer/IMP-ADR054-02-subscriptions.md) supersede | 统一的演员订阅 + 新作 feed；评分阈值绕过通过复用 AdHoc 抓取路径实现（无 ADR-040 旁路代码），由 `tests/unit/test_adhoc_bypasses_rating_gate.py` 锁定 |
+| Phase 3 — 订阅 | 已由 [ADR-054 WS2](../_archive/ADR-054-User-Intent-Discovery-Layer/IMP-ADR054-02-subscriptions.md) supersede | 统一的演员订阅 + 新作 feed；评分阈值绕过通过复用 AdHoc 抓取路径实现（无 ADR-040 旁路代码），由 `tests/unit/test_adhoc_bypasses_rating_gate.py` 锁定 |
 | Phase 4 — Web/MCP 规则管理 | IMP-ADR040-04 (web CRUD 已完成；MCP 待定) | 双后端 `/api/content-filter` REST CRUD + `content_filter` 标志 + 设置页 + 只读 Movies 叠加层；MCP 仍阻塞于 ADR-038 |
 | Phase 5 — 组合（可选） | IMP-ADR040-05 (stub) | 与 ADR-025 偏好分组合 |
 
@@ -131,7 +131,7 @@ Phase 1 附加且向后兼容（无规则 → 无变化）。Phase 2 拓宽属�
   免迁移模板。仅引擎 + CLI（[MAIN]）；双后端 web CRUD `/api/content-filter` 与
   SPA 设置/叠加界面仍归 [IMP-ADR040-04](IMP-ADR040-04-content-filter-web-crud.md)。
 - 2026-06-15：原 Phase 3 "Subscriptions" 已由
-  [ADR-054 WS2](../ADR-054-User-Intent-Discovery-Layer/IMP-ADR054-02-subscriptions.md)
+  [ADR-054 WS2](../_archive/ADR-054-User-Intent-Discovery-Layer/IMP-ADR054-02-subscriptions.md)
   supersede。WS2 定义唯一的 Subscription 域（`ActorSubscription` + `NewWorks`），并复用 AdHoc 抓取路径；该路径的 phase-2 选择天然绕过评分/打分人数阈值。ADR-040 不再拥有订阅旁路代码；行为由 `tests/unit/test_adhoc_bypasses_rating_gate.py` 锁定。
 - 2026-06-15：Phase 4（web CRUD）经 [IMP-ADR040-04](IMP-ADR040-04-content-filter-web-crud.md) 落地：
   双后端 `/api/content-filter` CRUD API（Python FastAPI 路由委托 `ContentFilterRepo`；TS Hono

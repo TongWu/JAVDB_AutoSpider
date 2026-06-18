@@ -82,7 +82,7 @@ birthdates **best-effort from minnano-av** (matched by actor name), cached in
 `ActorMetadata`, computing age at the movie's release date. Actors with no
 resolved birthdate have unknown age and never cause a drop. (xslist was weighed as
 a fallback but deferred — it cannot match javdb's Japanese names.)
-**Subscriptions are superseded by [ADR-054 WS2](../ADR-054-User-Intent-Discovery-Layer/ADR-054-user-intent-discovery-layer.md)**:
+**Subscriptions are superseded by [ADR-054 WS2](../_archive/ADR-054-User-Intent-Discovery-Layer/ADR-054-user-intent-discovery-layer.md)**:
 the rating-threshold bypass is now part of one unified Subscription domain
 (`ActorSubscription` + `NewWorks`) rather than an ADR-040-only whitelist. The
 bypass is pinned by `tests/unit/test_adhoc_bypasses_rating_gate.py`.
@@ -128,7 +128,7 @@ queueing.
 | Phase 1 — Exclude + attribute | IMP-ADR040-01 (done) | actor/tag/gender rules |
 | Phase 2 — Age filter | IMP-ADR040-02 (done) | `age` dimension; external-source enrichment (minnano-av; xslist deferred); `ActorMetadata` cache |
 | Phase 2b — Regex + release-date | IMP-ADR040-03 (done) | `regex_exclude`/`regex_include` (actor/tag); `release_date` `before`/`after`; no schema migration (reuses the generic triple) |
-| Phase 3 — Subscriptions | Superseded by [ADR-054 WS2](../ADR-054-User-Intent-Discovery-Layer/IMP-ADR054-02-subscriptions.md) | unified actor subscriptions + new-works feed; rating threshold bypass occurs by reusing the AdHoc scrape path (no ADR-040 bypass code), pinned by `tests/unit/test_adhoc_bypasses_rating_gate.py` |
+| Phase 3 — Subscriptions | Superseded by [ADR-054 WS2](../_archive/ADR-054-User-Intent-Discovery-Layer/IMP-ADR054-02-subscriptions.md) | unified actor subscriptions + new-works feed; rating threshold bypass occurs by reusing the AdHoc scrape path (no ADR-040 bypass code), pinned by `tests/unit/test_adhoc_bypasses_rating_gate.py` |
 | Phase 4 — Web/MCP rule mgmt | IMP-ADR040-04 (web CRUD done; MCP future) | dual-backend `/api/content-filter` REST CRUD + `content_filter` flag + Settings page + read-side Movies overlay; MCP still blocked on ADR-038 |
 | Phase 5 — Compose (optional) | IMP-ADR040-05 (stub) | combine with the ADR-025 preference score |
 
@@ -209,7 +209,7 @@ is owned by ADR-054 WS2 so "Subscription" has one domain meaning.
   ([MAIN]); the dual-backend web CRUD `/api/content-filter` + SPA Settings/overlay
   surface remain [IMP-ADR040-04](IMP-ADR040-04-content-filter-web-crud.md).
 - 2026-06-15: Former Phase 3 "Subscriptions" superseded by
-  [ADR-054 WS2](../ADR-054-User-Intent-Discovery-Layer/IMP-ADR054-02-subscriptions.md).
+  [ADR-054 WS2](../_archive/ADR-054-User-Intent-Discovery-Layer/IMP-ADR054-02-subscriptions.md).
   WS2 defines the single Subscription domain (`ActorSubscription` + `NewWorks`)
   and reuses the AdHoc scrape path, whose phase-2 selection bypasses the
   rating/rater threshold by construction. ADR-040 no longer owns subscription

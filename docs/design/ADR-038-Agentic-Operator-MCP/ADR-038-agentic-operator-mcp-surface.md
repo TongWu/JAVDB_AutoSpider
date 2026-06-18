@@ -5,7 +5,7 @@
 | **Status**  | Accepted — Phases 1-2 delivered (2026-06-06 / 2026-06-14); `trigger_run` and optional Phase 3 follow-ups pending |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-026](../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md), [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md), [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md) |
+| **Related** | [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-026](../_archive/ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md), [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-035](../_archive/ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md), [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md) |
 
 > Originated from a 2026-05-29 brainstorming session on net-new directions
 > (Direction 4 — an agentic operator console).
@@ -16,7 +16,7 @@ The system is operated through a Vue console + REST API and a CLI. There is **no
 conversational/agent interface**: to answer "why did last night's run only find
 three movies?" an operator stitches together the workflow result, session
 lifecycle, D1 drift, the email summary, and runbook pages by hand —
-[ADR-026](../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md)
+[ADR-026](../_archive/ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md)
 added read-only AI diagnosis but only as a single endpoint, not a surface an agent
 can explore.
 
@@ -30,10 +30,10 @@ Two facts make an MCP surface cheap and timely:
    one-service/many-adapters shape. No MCP server exists yet (clean slate).
 2. **This session just built the data an agent wants to read.** The event spine
    ([ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md)),
-   incidents ([ADR-026](../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md)),
+   incidents ([ADR-026](../_archive/ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md)),
    acquisition outcomes
    ([ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)), and drift
-   ([ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md))
+   ([ADR-035](../_archive/ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md))
    are exactly the surface that lets an agent answer "what happened in this run?"
 
 This ADR exposes the system as a **conversational agent surface via MCP**, starting
@@ -169,9 +169,9 @@ Phase 3 is optional remote/serverless reach.
 ## References
 
 - [ADR-015 — Integrations Interface Boundary](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md)
-- [ADR-026 — AI Operations Diagnosis](../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md)
+- [ADR-026 — AI Operations Diagnosis](../_archive/ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md)
 - [ADR-033 — Media Closed-Loop](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
-- [ADR-035 — Site-Contract Drift Sentinel](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)
+- [ADR-035 — Site-Contract Drift Sentinel](../_archive/ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)
 - [ADR-036 — Event-Sourced Pipeline Spine](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md)
 
 ## Status Log

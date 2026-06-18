@@ -5,7 +5,7 @@
 | **状态**   | Completed — 三期已于 2026-06-07 全部交付;伞型,各期 IMP                |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
-| **关联**   | [ADR-012](../ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md), [ADR-015](../ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-033](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-035](../../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md), [ADR-036](../../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md) |
+| **关联**   | [ADR-012](../ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md), [ADR-015](../ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-033](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md), [ADR-036](../../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md) |
 
 > 源自 2026-05-29 一次关于全新方向(方向五——确定性仿真测试床)的头脑风暴。
 
@@ -17,7 +17,7 @@
 - 但 **HTTP 是逐测试手搓 mock**（如 `test_spider_backends.py` 里 `responses = iter(...)` + `monkeypatch`）;**没有共享的 record/replay**。
 - **没有可复用的 fake qB**;qB 逐测试 mock。
 
-成本如今叠加:本会话同源的三份 Phase-1 设计（[ADR-033](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) 闭环、[ADR-035](../../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md) 哨兵、[ADR-036](../../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md) 事件脊柱）都依赖**管道行为**——qB 状态转换、commit 门控、发出的事件——而当前没有任何测试能端到端驱动它们。
+成本如今叠加:本会话同源的三份 Phase-1 设计（[ADR-033](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) 闭环、[ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md) 哨兵、[ADR-036](../../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md) 事件脊柱）都依赖**管道行为**——qB 状态转换、commit 门控、发出的事件——而当前没有任何测试能端到端驱动它们。
 
 本 ADR 建一个**确定性、进程内、端到端的管道 harness**,对 fake 跑 spider → uploader → commit,使整条管道（及三个新功能）能在 CI 里零网络、零 live 服务地验证。
 
@@ -39,7 +39,7 @@ tests/harness/
   scenarios/          # cassette（HTML）+ 场景定义
 ```
 
-**D3. `FixtureHTTP` 从 cassette 回放 javdb;record 模式可选且门控。** cassette = 一个目录,把请求 URL → 响应（status/headers/body）映射,在 `request.py` 传输接缝回放。**默认 fixtures 为精选的最小 index/detail HTML**（扩展 `tests/fixtures/parser/`）。一个**可选、env 门控的 record 模式**在 cassette miss 时打真实请求并存档——用于 javdb 改版后刷新 cassette。默认精选最小,因为 javdb 是成人内容、整页大且敏感;录制只是开发期刷新工具,绝不在 CI 跑。（这个"金页"录制与 [ADR-035](../../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md) 哨兵的 golden-anchor 同源。）
+**D3. `FixtureHTTP` 从 cassette 回放 javdb;record 模式可选且门控。** cassette = 一个目录,把请求 URL → 响应（status/headers/body）映射,在 `request.py` 传输接缝回放。**默认 fixtures 为精选的最小 index/detail HTML**（扩展 `tests/fixtures/parser/`）。一个**可选、env 门控的 record 模式**在 cassette miss 时打真实请求并存档——用于 javdb 改版后刷新 cassette。默认精选最小,因为 javdb 是成人内容、整页大且敏感;录制只是开发期刷新工具,绝不在 CI 跑。（这个"金页"录制与 [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md) 哨兵的 golden-anchor 同源。）
 
 **D4. `FakeQB` 为 in-memory、可控状态。** 它在一个 in-memory 种子字典上实现代码实际用到的 `QBittorrentClient` 面（`add_torrent`、`get_torrents_multiple_categories`、`delete_torrents`、`get_existing_hashes`），外加控制方法（`complete(hash)`、`stall(hash)`），让场景能模拟下载完成——正是 ADR-033 / ADR-035 / ADR-036 要断言的。
 
@@ -108,7 +108,7 @@ Phase 1 独立成立、只加测试支撑代码。Phase 2/3 扩展覆盖。Phase
 - [ADR-012 — Pipeline Run Structured Boundary](../ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md)
 - [ADR-015 — Integrations Interface Boundary](../ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md)
 - [ADR-033 — Media Closed-Loop](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
-- [ADR-035 — Site-Contract Drift Sentinel](../../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)
+- [ADR-035 — Site-Contract Drift Sentinel](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)
 - [ADR-036 — Event-Sourced Pipeline Spine](../../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md)
 
 ## 状态日志 (Status Log)

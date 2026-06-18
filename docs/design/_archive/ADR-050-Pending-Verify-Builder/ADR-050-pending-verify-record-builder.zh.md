@@ -5,7 +5,7 @@
 | **状态**   | Completed（2026-06-14）——已由 [IMP-ADR050-01](IMP-ADR050-01-pending-verify-builder.md) 实现 |
 | **日期**   | 2026-06-13                                                        |
 | **作者**   | Ted                                                              |
-| **关联**   | [ADR-042](../../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md)（`pending_session_verify` 是**诊断写入**——永不权威）、[ADR-019](../ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md)（发出该记录的 commit/fail/rollback 生命周期）、[ADR-036](../../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md)（`PipelineEvent` 主线是另一条 codepath——非本 JSONL 旁路）、[ADR-026](../../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md)（`log_analysis` 消费该记录做 pending 告警） |
+| **关联**   | [ADR-042](../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md)（`pending_session_verify` 是**诊断写入**——永不权威）、[ADR-019](../ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md)（发出该记录的 commit/fail/rollback 生命周期）、[ADR-036](../../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md)（`PipelineEvent` 主线是另一条 codepath——非本 JSONL 旁路）、[ADR-026](../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md)（`log_analysis` 消费该记录做 pending 告警） |
 
 > 源自 2026-06-13 架构评审（候选 3 ——"整合 `pending_session_verify` 构建器"）：[architecture-review-2026-06-13.html](../../architecture/architecture-review-2026-06-13.html)。
 
@@ -85,9 +85,9 @@
 
 ## 参考（References）
 
-- [ADR-042 — D1 Atomic Commit Boundaries](../../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md)
+- [ADR-042 — D1 Atomic Commit Boundaries](../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md)
 - [ADR-019 — Session Lifecycle Authority](../ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md)
-- [ADR-026 — AI Operations Diagnosis](../../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md)
+- [ADR-026 — AI Operations Diagnosis](../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md)
 - 2026-06-13 架构评审：[architecture-review-2026-06-13.html](../../architecture/architecture-review-2026-06-13.html)
 
 ## 状态日志（Status Log）

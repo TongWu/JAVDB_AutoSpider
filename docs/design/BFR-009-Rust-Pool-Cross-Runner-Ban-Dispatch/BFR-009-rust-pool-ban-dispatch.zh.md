@@ -4,7 +4,7 @@
 **日期**: 2026-05-30
 **严重度**: Medium
 **影响范围**: `javdb/proxy/ban_manager.py`(`_dispatch_remote_ban`、`set_remote_ban_hook`)、`javdb/proxy/pool.py`(Python `ProxyPool.ban_proxy` / drain)、`javdb/spider/runtime/state.py:722`、`javdb/spider/runtime/context.py:880`(hook 注册)、`javdb/rust_core/src/proxy/{pool,ban_manager}.rs`
-**关联**: [ADR-043](../_archive/ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.zh.md)(修复本缺口——Approach 1，经 IMP-ADR043-02)、[ADR-041](../_archive/ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.zh.md)(在其 Task 4 中暴露——删掉了 dispatcher 的最后几个 Python 调用方)、[ADR-023](../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.zh.md)(代理协调)、CONTEXT.md →「Signal」(`ban_proxy`)
+**关联**: [ADR-043](../_archive/ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.zh.md)(修复本缺口——Approach 1，经 IMP-ADR043-02)、[ADR-041](../_archive/ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.zh.md)(在其 Task 4 中暴露——删掉了 dispatcher 的最后几个 Python 调用方)、[ADR-023](../_archive/ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.zh.md)(代理协调)、CONTEXT.md →「Signal」(`ban_proxy`)
 
 ---
 

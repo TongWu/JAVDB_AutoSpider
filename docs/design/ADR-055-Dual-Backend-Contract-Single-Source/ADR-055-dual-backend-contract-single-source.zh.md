@@ -5,7 +5,7 @@
 **作者 (Author):** Ted
 **关联实现计划 (Related Implementation Plans):** [IMP-ADR055-01](IMP-ADR055-01-registry-generator-watchintent.md)（Phase 1 —— registry + 生成器 + CI + WatchIntent 迁移）
 **D1 写入类别 (D1 Write Class):** n/a（本 ADR 交付的是 codegen/契约机制；被收编的每个片段保留其原有写入类别 —— 例如 WatchIntent 仍是 `authoritative`）
-**关联 (Related):** [ADR-018](../ADR-018-Dual-Backend-Query-Contract/ADR-018-dual-backend-query-contract.zh.md)（查询契约 —— 动态 SELECT builder 的守卫；本 ADR 执行其推迟的 D7）、[ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.zh.md)（双后端拆分）、[ADR-054](../ADR-054-User-Intent-Discovery-Layer/ADR-054-user-intent-discovery-layer.zh.md)（WS1 验证暴露 gap B6）、[ADR-029](../_archive/ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.zh.md)（auth —— 不在范围）、[ADR-042](../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.zh.md)（D1 写入类别）
+**关联 (Related):** [ADR-018](../_archive/ADR-018-Dual-Backend-Query-Contract/ADR-018-dual-backend-query-contract.zh.md)（查询契约 —— 动态 SELECT builder 的守卫；本 ADR 执行其推迟的 D7）、[ADR-017](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.zh.md)（双后端拆分）、[ADR-054](../_archive/ADR-054-User-Intent-Discovery-Layer/ADR-054-user-intent-discovery-layer.zh.md)（WS1 验证暴露 gap B6）、[ADR-029](../_archive/ADR-029-Web-Security-Hardening/ADR-029-web-security-hardening.zh.md)（auth —— 不在范围）、[ADR-042](../_archive/ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.zh.md)（D1 写入类别）
 
 ## 背景 (Context)
 
@@ -14,9 +14,9 @@
 - **Python** —— `apps/api/` + `javdb/storage/`（FastAPI，Docker / 本地）。
 - **TypeScript** —— `JAVDB_AutoSpider_Web/server/`（Cloudflare Workers 上的 Hono）。
 
-无论哪一边应答,重叠的查询/写入逻辑都必须产出等价结果。[ADR-018](../ADR-018-Dual-Backend-Query-Contract/ADR-018-dual-backend-query-contract.zh.md) 已机制化了其中一部分 —— 给**动态 SELECT builder** 做了一个 Python 真源的 **Contract Golden**,vendoring 给 TS 并由 CI 的 freshness + conformance 锁住。但 ADR-018 D3 把那个守卫**只**限定在动态 SELECT builder;静态语句、mutation、共享数据常量都被留给一条散文规则加各 repo 自测。ADR-018 D7 ——"**eliminate**"(真正的单一真源,而不只是漂移守卫)—— 被**推迟**,"until recurring drift justifies it"。
+无论哪一边应答,重叠的查询/写入逻辑都必须产出等价结果。[ADR-018](../_archive/ADR-018-Dual-Backend-Query-Contract/ADR-018-dual-backend-query-contract.zh.md) 已机制化了其中一部分 —— 给**动态 SELECT builder** 做了一个 Python 真源的 **Contract Golden**,vendoring 给 TS 并由 CI 的 freshness + conformance 锁住。但 ADR-018 D3 把那个守卫**只**限定在动态 SELECT builder;静态语句、mutation、共享数据常量都被留给一条散文规则加各 repo 自测。ADR-018 D7 ——"**eliminate**"(真正的单一真源,而不只是漂移守卫)—— 被**推迟**,"until recurring drift justifies it"。
 
-[ADR-054](../ADR-054-User-Intent-Discovery-Layer/ADR-054-user-intent-discovery-layer.zh.md) 的 WS1 验证把这个"复发"暴露为 **gap B6**。`WatchIntent` 的 UPSERT SQL 存在**四份手工维护的拷贝**：
+[ADR-054](../_archive/ADR-054-User-Intent-Discovery-Layer/ADR-054-user-intent-discovery-layer.zh.md) 的 WS1 验证把这个"复发"暴露为 **gap B6**。`WatchIntent` 的 UPSERT SQL 存在**四份手工维护的拷贝**：
 
 | # | 位置 | 角色 |
 | --- | --- | --- |
@@ -97,10 +97,10 @@
 
 ## 参考 (References)
 
-- [ADR-018 — 双后端查询契约](../ADR-018-Dual-Backend-Query-Contract/ADR-018-dual-backend-query-contract.zh.md)
+- [ADR-018 — 双后端查询契约](../_archive/ADR-018-Dual-Backend-Query-Contract/ADR-018-dual-backend-query-contract.zh.md)
 - [ADR-017 — Cloudflare-First 部署](../_archive/ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.zh.md)
-- [ADR-054 — 用户意图与发现层](../ADR-054-User-Intent-Discovery-Layer/ADR-054-user-intent-discovery-layer.zh.md)（WS1 验证,gap B6）
-- [ADR-042 — D1 原子提交边界](../ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.zh.md)（D1 写入类别）
+- [ADR-054 — 用户意图与发现层](../_archive/ADR-054-User-Intent-Discovery-Layer/ADR-054-user-intent-discovery-layer.zh.md)（WS1 验证,gap B6）
+- [ADR-042 — D1 原子提交边界](../_archive/ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.zh.md)（D1 写入类别）
 
 ## 状态日志 (Status Log)
 
