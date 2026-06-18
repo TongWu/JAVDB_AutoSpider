@@ -1,6 +1,6 @@
 # ADR-055: Dual-Backend Contract Single-Source (SQL-fragment + constant codegen)
 
-**Status:** Accepted — Phase 1 delivered 2026-06-15; Phase 2/3 follow-ups remain
+**Status:** Accepted — Phase 1 & 2 delivered 2026-06-15; Phase 3 (convention) remains
 **Date:** 2026-06-15
 **Author:** Ted
 **Related Implementation Plans:** [IMP-ADR055-01](IMP-ADR055-01-registry-generator-watchintent.md) (Phase 1 — registry + generator + CI + WatchIntent migration)
@@ -72,7 +72,7 @@ Execute ADR-018's deferred D7 as a dedicated mechanism, **widened to all static 
 | Phase | IMP | Ships | Deferred |
 | --- | --- | --- | --- |
 | Phase 1 | [IMP-ADR055-01](IMP-ADR055-01-registry-generator-watchintent.md) | `javdb/storage/contract/` registry + `dump_sql_contract.py` + `sql-contract.gen.ts` + Python freshness CI + web `fetch-sql-contract.mjs` vendor + TS freshness/conformance CI + **migrate the WatchIntent upsert end-to-end** (4 copies → 1 registry entry; delete the hand-CANONICAL parity tests) | other instances |
-| Phase 2 | IMP-ADR055-02 (written against real shapes when targets land) | migrate remaining static mirror points: WS4a allow-list (`VALID_RULE_MODES`/`VALUE_REQUIRED`), `system_state` upsert, `ReportSessions` column list, mirrored static SELECTs | — |
+| Phase 2 | [IMP-ADR055-02](IMP-ADR055-02-migrate-static-mirrors.md) | migrate remaining static mirror points: WS4a allow-list (`VALID_RULE_MODES`/`VALUE_REQUIRED`), `system_state` upsert, `ReportSessions` column list, `ActorSubscription` upsert | — |
 | Phase 3 | (convention, no IMP) | ADR mandate + PR checklist: every new dual-backend static SQL/constant enters the registry | — |
 
 ### Explicit non-goals (YAGNI)
@@ -107,3 +107,4 @@ Execute ADR-018's deferred D7 as a dedicated mechanism, **widened to all static 
 - 2026-06-15: Proposed. Brainstormed from ADR-054 WS1 gap B6. Decisions fixed: eliminate (not guard); scope = all static fragments (mutation SQL + static select + constants), dynamic builders stay under ADR-018; mechanism = Python registry → codegen TS via the openapi/`api.gen.ts` path; typed bind helpers both sides (no hand-written bind order). Phase 1 → [IMP-ADR055-01](IMP-ADR055-01-registry-generator-watchintent.md).
 - 2026-06-15: Phase 1 delivered ([IMP-ADR055-01](IMP-ADR055-01-registry-generator-watchintent.md)) — registry + generator + freshness/conformance CI; WatchIntent upsert migrated (4 copies → 1 registry entry); hand-CANONICAL parity tests removed.
 - 2026-06-15: Closeout advanced ADR status to Accepted. Phase 1 is implemented and locally verified; Phase 2/3 remain active follow-ups, so the ADR folder stays unarchived.
+- 2026-06-17: Phase 2 delivered ([IMP-ADR055-02](IMP-ADR055-02-migrate-static-mirrors.md)) — wired both backends' consumers onto the ADR-055 registry for the remaining static mirror points (ActorSubscription + system_state upserts, content-filter allow-lists VALID_RULE_MODES/VALUE_REQUIRED, ReportSessions column projection), removed the hand-CANONICAL parity tests (ActorSubscription, content-filter), and added behavioral/conformance smokes each side. The `SharedConstant` primitive and these registry entries had independently landed on `main` alongside #220 (incident alerting); IMP-ADR055-02 reconciled to that implementation. ADR-018 query golden unchanged (byte-identical assembled SQL).

@@ -7,24 +7,11 @@ from typing import List, Optional, Tuple
 from javdb.storage import db as _db
 from javdb.storage.db import get_db
 
-# Byte-mirrored with server/services/subscription-service.ts
-# ACTOR_SUBSCRIPTION_UPSERT_SQL (ADR-017 dual-backend parity). Pinned by
-# tests/unit/test_actor_subscription_upsert_parity.py.
-#
-# created_at is preserved on conflict; active / actor_name / updated_at are
-# refreshed. Cursor columns are advanced separately by the monitor and must not
-# be clobbered by a follow/unfollow upsert.
-ACTOR_SUBSCRIPTION_UPSERT_SQL = """
-    INSERT INTO ActorSubscription
-        (actor_href, actor_name, active, created_at, updated_at)
-    VALUES (?, ?, ?,
-        strftime('%Y-%m-%dT%H:%M:%fZ','now'),
-        strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-    ON CONFLICT(actor_href) DO UPDATE SET
-        actor_name = excluded.actor_name,
-        active     = excluded.active,
-        updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
-"""
+from javdb.storage.contract import fragments, order_params
+
+# Single source of truth: the ADR-055 contract registry. Re-exported for any
+# back-compat importers; the SQL itself lives only in javdb/storage/contract.
+ACTOR_SUBSCRIPTION_UPSERT_SQL = fragments.ACTOR_SUBSCRIPTION_UPSERT.sql
 
 
 class ActorSubscriptionRepo:
@@ -41,7 +28,13 @@ class ActorSubscriptionRepo:
         """Follow or update an actor subscription. Returns the row as a dict."""
         with get_db(self._db_path) as conn:
             conn.execute(
-                ACTOR_SUBSCRIPTION_UPSERT_SQL, (actor_href, actor_name, active)
+                fragments.ACTOR_SUBSCRIPTION_UPSERT.sql,
+                order_params(
+                    fragments.ACTOR_SUBSCRIPTION_UPSERT,
+                    actor_href=actor_href,
+                    actor_name=actor_name,
+                    active=active,
+                ),
             )
             row = conn.execute(
                 "SELECT * FROM ActorSubscription WHERE actor_href = ?", (actor_href,)

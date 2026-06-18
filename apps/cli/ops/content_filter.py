@@ -9,6 +9,7 @@ from datetime import date
 
 from javdb.infra.logging import setup_logging
 from javdb.storage import db as _db
+from javdb.storage.contract import fragments as _contract
 from javdb.storage.db import get_db
 from javdb.storage.repos.content_filter_repo import ContentFilterRepo
 
@@ -18,35 +19,11 @@ MODES = (
     "exclude", "include", "require_lead", "exclude_all_male", "min_age", "max_age",
     "regex_exclude", "regex_include", "before", "after",
 )
-VALID_RULE_MODES = {
-    ("actor", "exclude"),
-    ("tag", "exclude"),
-    ("tag", "include"),
-    ("gender", "require_lead"),
-    ("gender", "exclude_all_male"),
-    ("age", "min_age"),
-    ("age", "max_age"),
-    ("actor", "regex_exclude"),
-    ("actor", "regex_include"),
-    ("tag", "regex_exclude"),
-    ("tag", "regex_include"),
-    ("release_date", "before"),
-    ("release_date", "after"),
-}
-VALUE_REQUIRED = {
-    ("actor", "exclude"),
-    ("tag", "exclude"),
-    ("tag", "include"),
-    ("gender", "require_lead"),
-    ("age", "min_age"),
-    ("age", "max_age"),
-    ("actor", "regex_exclude"),
-    ("actor", "regex_include"),
-    ("tag", "regex_exclude"),
-    ("tag", "regex_include"),
-    ("release_date", "before"),
-    ("release_date", "after"),
-}
+# (dimension:mode) allow-list — single source of truth is the ADR-055 contract
+# registry (javdb/storage/contract/fragments.py CONSTANTS), mirrored to the TS
+# Worker. Encoded as "dim:mode" strings so both backends share one representation.
+VALID_RULE_MODES = frozenset(_contract.VALID_RULE_MODES.values)
+VALUE_REQUIRED = frozenset(_contract.VALUE_REQUIRED.values)
 GENDER_VALUES = ("female", "male")
 
 _MAX_REGEX_LEN = 200
@@ -98,17 +75,17 @@ def validate_rule_value(dimension: str, mode: str, value: str) -> str:
     separately; only the dialect-independent ReDoS heuristic above is shared.
     """
     value = (value or "").strip()
-    rule_key = (dimension, mode)
+    rule_key = f"{dimension}:{mode}"
     if rule_key in VALUE_REQUIRED and not value:
         raise ValueError(f"{dimension} {mode} rules require a non-empty value")
-    if rule_key == ("gender", "require_lead"):
+    if rule_key == "gender:require_lead":
         normalized = value.casefold()
         if normalized not in GENDER_VALUES:
             raise ValueError(
                 f"gender require_lead rules require a value of {GENDER_VALUES}"
             )
         return normalized
-    if rule_key == ("gender", "exclude_all_male"):
+    if rule_key == "gender:exclude_all_male":
         if value:
             raise ValueError("gender exclude_all_male rules do not accept a value")
         return ""
@@ -172,7 +149,7 @@ def _print_rules(repo: ContentFilterRepo) -> None:
 
 
 def _validate_add(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
-    rule_key = (args.dimension, args.mode)
+    rule_key = f"{args.dimension}:{args.mode}"
     if rule_key not in VALID_RULE_MODES:
         parser.error(
             f"{args.dimension} rules do not support mode {args.mode!r}"
