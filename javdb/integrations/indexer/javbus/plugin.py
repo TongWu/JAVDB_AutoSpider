@@ -8,6 +8,7 @@ from urllib.parse import quote
 from bs4 import BeautifulSoup
 
 from javdb.infra.config import cfg
+from javdb.infra.runtime_config import get_runtime_config
 from javdb.integrations.indexer.fetch import fetch_source_html
 from javdb.integrations.indexer.plugin import IndexerMagnet, IndexerResult
 from javdb.integrations.plugins.registry import REGISTRY
@@ -64,17 +65,14 @@ class JavbusIndexerPlugin:
 
 
 def _runtime_config() -> dict:
-    """Load runtime config (PROXY_POOL etc.) for the source fetch.
+    """Load merged runtime config (PROXY_POOL etc.) for the source fetch.
 
-    Fails closed: a config-load error must NOT degrade to an empty config. An
-    empty config carries no ``PROXY_POOL``, so the fetch would go out direct and
-    leak the operator's IP to the upstream source (privacy regression).
-    Propagating the error makes the dispatcher mark this source failed instead
-    of scraping direct (see ``dispatch.aggregate`` per-source isolation).
+    Reads through the canonical ``javdb.infra`` accessor (issue #228) instead of
+    importing the API layer directly. Still fails closed: a missing provider or
+    a config-load error propagates so the dispatcher marks this source failed
+    rather than scraping direct and leaking the operator IP (issue #226).
     """
-    from apps.api.services import config_service
-
-    return config_service.load_runtime_config()
+    return get_runtime_config()
 
 
 REGISTRY.register("indexer", JavbusIndexerPlugin())

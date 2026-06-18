@@ -287,3 +287,14 @@ __all__ = [
     "set_javdb_session_cookie",
     "update_config_payload",
 ]
+
+
+# Register this module's loader as the canonical runtime-config provider for
+# core (javdb.*) code (issue #228). The indexer source plugins read config via
+# javdb.infra.runtime_config.get_runtime_config() instead of importing apps.*
+# directly; this registration wires the app-owned implementation behind that
+# accessor. config_service is always imported in the API process (routers depend
+# on it), so the provider is registered before any indexer search runs.
+from javdb.infra import runtime_config as _runtime_config  # noqa: E402
+
+_runtime_config.register_provider(load_runtime_config)
