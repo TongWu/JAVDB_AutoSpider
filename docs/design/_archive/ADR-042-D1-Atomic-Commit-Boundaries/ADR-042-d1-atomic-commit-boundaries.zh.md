@@ -5,7 +5,7 @@
 | **状态 (Status)** | Completed — 将当前边界固化为文档：D1 传输、会话级历史、增量 enrichment 分层处理 |
 | **日期 (Date)** | 2026-05-31 |
 | **作者 (Authors)** | Ted |
-| **关联 (Related)** | [ADR-005](../ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.zh.md), [ADR-009](../ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.zh.md), [ADR-010](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.zh.md), [ADR-019](../ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.zh.md), [ADR-032](../ADR-032-Mandatory-Session-Binding/ADR-032-mandatory-session-binding.zh.md), [ADR-033](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.zh.md), [ADR-036](../../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.zh.md) |
+| **关联 (Related)** | [ADR-005](../ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.zh.md), [ADR-009](../ADR-009-D1-Drift-Classifier/ADR-009-d1-drift-classifier-and-diagnose.zh.md), [ADR-010](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.zh.md), [ADR-019](../ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.zh.md), [ADR-032](../ADR-032-Mandatory-Session-Binding/ADR-032-mandatory-session-binding.zh.md), [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.zh.md), [ADR-036](../../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.zh.md) |
 | **关联实现计划 (Related Implementation Plans)** | [IMP-ADR042-01](IMP-ADR042-01-d1-atomic-commit-boundaries.md) - Phase 1 docs follow-through；[IMP-ADR042-02](IMP-ADR042-02-d1-write-class-enforcement.md) - Phase 2 D6 强制执行 |
 
 > 这份 ADR 来自一次 grill 结论：需要把“D1 本身”与“权威写入边界”分开看。这个区分很重要，因为系统不需要一个分布式事务管理器，但它确实需要一个在会话层面表现得像事务一样的边界。
@@ -131,7 +131,7 @@ drift log、port summary、recovery outbox 这些都对可观测性和恢复非�
 - [ADR-010 — D1 Access Port](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.zh.md)
 - [ADR-019 — Session Lifecycle Authority](../ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.zh.md)
 - [ADR-032 — Mandatory Session Binding](../ADR-032-Mandatory-Session-Binding/ADR-032-mandatory-session-binding.zh.md)
-- [ADR-033 — Media Closed Loop](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.zh.md)
+- [ADR-033 — Media Closed Loop](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.zh.md)
 - [ADR-036 — Event Sourced Pipeline Spine](../../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.zh.md)
 - [D1 rollback handbook](../../../handbook/zh/ops/d1-rollback.md)
 - [javdb/storage/d1_client.py](../../../../javdb/storage/d1_client.py)

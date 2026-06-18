@@ -5,7 +5,7 @@
 | **Status**  | Proposed — umbrella; Phases 1 & 2 implemented & verified; Phase 2 (additive emit + shadow consumer) landed 2026-06-10; Phase 3 (strangler) optional/deferred; execution delegated to per-phase IMPs |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-012](../_archive/ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md), [ADR-019](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md), [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-035](../_archive/ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md) |
+| **Related** | [ADR-012](../_archive/ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md), [ADR-019](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md), [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-033](../_archive/ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-035](../_archive/ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md) |
 
 > Originated from a 2026-05-29 brainstorming session on net-new directions
 > (Direction 3 — a replayable pipeline core).
@@ -18,7 +18,7 @@ result sidecars ([ADR-012](../_archive/ADR-012-Pipeline-Run-Boundary/ADR-012-pip
 Adding a new cross-cutting capability means **pipeline surgery** — the two most
 recent designs prove it:
 
-- [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) (media
+- [ADR-033](../_archive/ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) (media
   closed-loop) had to **instrument the uploader** (queue-time write) and **push
   from the cleanup step** (completed) to learn a torrent's fate.
 - [ADR-035](../_archive/ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)
@@ -112,7 +112,7 @@ consumer's cursor to 0 and re-run → its projection rebuilds from the log. This
 the headline value (replayable / auditable), and it is nearly free with the
 cursor model.
 
-**D6. Strangler path for the existing hooks — additive first, cutover gated.** Phase 2 makes the spine *carry* the per-entity lifecycle events and proves the consume path with a **shadow** projection, but does **not** rip out the existing direct-write hooks. Concretely: emit `MovieDiscovered` / `MovieSelected` / `TorrentSelected` / `TorrentQueued` / `TorrentCompleted` at the natural pipeline points (additive, best-effort per D4); add a consumer that rebuilds an `AcquisitionOutcome`-shaped projection from those events for **cross-validation** against [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)'s authoritative direct-write path (the shadow projection is never read by production decisions). The [ADR-035](../_archive/ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md) sentinel is re-pointed onto the event stream **only where it maps cleanly** to per-entity events; if its per-field fill computation does not, it stays on its current piggyback hook. **The actual cutover of ADR-033's data-critical `AcquisitionOutcome` — which feeds the ADR-024/025 quality/preference data clock — is deferred** until the in-run events prove reliable in production (or the outcome-determining events are promoted to commit-class per D4). Rationale: `AcquisitionOutcome`'s current hook is a synchronous direct write; replacing it with a *best-effort* in-run emit + async projection would risk silently dropping acquisition rows under emit failure, regressing a freshly-landed critical path. Making `pending→commit` / history a projection of the log remains Phase 3+, deferred and high-care.
+**D6. Strangler path for the existing hooks — additive first, cutover gated.** Phase 2 makes the spine *carry* the per-entity lifecycle events and proves the consume path with a **shadow** projection, but does **not** rip out the existing direct-write hooks. Concretely: emit `MovieDiscovered` / `MovieSelected` / `TorrentSelected` / `TorrentQueued` / `TorrentCompleted` at the natural pipeline points (additive, best-effort per D4); add a consumer that rebuilds an `AcquisitionOutcome`-shaped projection from those events for **cross-validation** against [ADR-033](../_archive/ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)'s authoritative direct-write path (the shadow projection is never read by production decisions). The [ADR-035](../_archive/ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md) sentinel is re-pointed onto the event stream **only where it maps cleanly** to per-entity events; if its per-field fill computation does not, it stays on its current piggyback hook. **The actual cutover of ADR-033's data-critical `AcquisitionOutcome` — which feeds the ADR-024/025 quality/preference data clock — is deferred** until the in-run events prove reliable in production (or the outcome-determining events are promoted to commit-class per D4). Rationale: `AcquisitionOutcome`'s current hook is a synchronous direct write; replacing it with a *best-effort* in-run emit + async projection would risk silently dropping acquisition rows under emit failure, regressing a freshly-landed critical path. Making `pending→commit` / history a projection of the log remains Phase 3+, deferred and high-care.
 
 **D7. Module shape mirrors the repo's conventions.** `javdb/pipeline/events/`
 holds `models.py` (event types), `store.py` (`emit` + read-since-cursor),
@@ -196,7 +196,7 @@ high-care authority migration.
 - [ADR-019 — Session Lifecycle Authority](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md)
 - [ADR-005 — db.py Retirement & Repo Pattern](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md)
 - [ADR-010 — D1 Access Port](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md)
-- [ADR-033 — Media Closed-Loop](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
+- [ADR-033 — Media Closed-Loop](../_archive/ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
 - [ADR-035 — Site-Contract Drift Sentinel](../_archive/ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)
 
 ## Status Log

@@ -5,7 +5,7 @@
 | **Status**  | Proposed — umbrella; Phases 1 & 2 implemented & verified; Phase 2 (entry-point discovery + downloader category, demonstrator) landed 2026-06-10; Phase 3 (ecosystem) optional/deferred |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md), [ADR-038](../ADR-038-Agentic-Operator-MCP/ADR-038-agentic-operator-mcp-surface.md), [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) |
+| **Related** | [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md), [ADR-038](../ADR-038-Agentic-Operator-MCP/ADR-038-agentic-operator-mcp-surface.md), [ADR-033](../_archive/ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) |
 
 > Originated from a 2026-05-29 brainstorming session on net-new directions
 > (Direction 6 — a pluggable extension platform).
@@ -184,7 +184,7 @@ Phase 1 stands alone and is backward-compatible. Phases 2/3 widen the platform.
 - [ADR-015 — Integrations Interface Boundary](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md)
 - [ADR-036 — Event-Sourced Pipeline Spine](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md)
 - [ADR-038 — Agentic Operator MCP Surface](../ADR-038-Agentic-Operator-MCP/ADR-038-agentic-operator-mcp-surface.md)
-- [ADR-033 — Media Closed-Loop](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
+- [ADR-033 — Media Closed-Loop](../_archive/ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
 
 ## Status Log
 

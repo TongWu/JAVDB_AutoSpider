@@ -5,7 +5,7 @@
 | **Status**  | Completed — all three phases shipped 2026-06-07; umbrella, per-phase IMPs |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-012](../ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md), [ADR-015](../ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-033](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md), [ADR-036](../../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md) |
+| **Related** | [ADR-012](../ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md), [ADR-015](../ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md), [ADR-036](../../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md) |
 
 > Originated from a 2026-05-29 brainstorming session on net-new directions
 > (Direction 5 — a deterministic simulation test-bed).
@@ -26,7 +26,7 @@ real DB". Today's tests paper over this **ad hoc**:
 - There is **no reusable fake qB**; qB is mocked per test.
 
 The cost compounds now: the three Phase-1 designs from this same session
-([ADR-033](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) closed-loop,
+([ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) closed-loop,
 [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)
 sentinel, [ADR-036](../../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md)
 event spine) all depend on **pipeline behaviour** — qB state transitions, the
@@ -175,7 +175,7 @@ Phase 1 stands alone and adds only test-support code. Phases 2/3 grow coverage. 
 
 - [ADR-012 — Pipeline Run Structured Boundary](../ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md)
 - [ADR-015 — Integrations Interface Boundary](../ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md)
-- [ADR-033 — Media Closed-Loop](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
+- [ADR-033 — Media Closed-Loop](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
 - [ADR-035 — Site-Contract Drift Sentinel](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)
 - [ADR-036 — Event-Sourced Pipeline Spine](../../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md)
 

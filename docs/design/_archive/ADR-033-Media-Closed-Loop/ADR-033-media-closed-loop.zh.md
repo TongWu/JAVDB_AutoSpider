@@ -2,10 +2,10 @@
 
 | 字段       | 值                                                                    |
 | ---------- | --------------------------------------------------------------------- |
-| **状态**   | Accepted — 伞型;三期均已实现并完成本地验证(Phase 1 于 2026-05-30,Phase 2-3 于 2026-06-06)。远端 D1 apply 与 SQLite mirror refresh 仍属部署环境验证门 |
+| **状态**   | Completed — 伞型;三期均已实现并验证;远端 D1 已于 2026-06-18 确认应用(`OwnershipLedger` 已上线,58,171 行;`ConsumptionSignal`/`UnresolvedMediaItem` 就绪)。已归档。 |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
-| **关联**   | [ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-024](../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md), [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-028](../_archive/ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md) |
+| **关联**   | [ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-024](../../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md), [ADR-025](../../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), [ADR-015](../ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-010](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-028](../ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md) |
 
 > 源自 2026-05-29 一次关于"现有 ADR 尚未收编的全新方向"的头脑风暴。
 
@@ -24,9 +24,9 @@
 
 1. **去重无法区分"下载中" / "已拥有" / "从未尝试"** —— 它只知道爬虫历史和一份每周的 GDrive 快照。
 2. **失败与卡住不可见** —— 一个永远下不完的种子,留不下任何与"成功"可区分的痕迹。
-3. **被搁置的偏好模型（[ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md) / [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md)）缺了它最强的隐式信号** —— 实际观看行为 —— 因为没有任何东西去读运维者本就在跑的媒体服务器(Emby + Plex)。
+3. **被搁置的偏好模型（[ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md) / [ADR-025](../../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md)）缺了它最强的隐式信号** —— 实际观看行为 —— 因为没有任何东西去读运维者本就在跑的媒体服务器(Emby + Plex)。
 
-本 ADR 分三层闭环,作为一个 umbrella 初始计划统一治理、分期推进(沿用 [ADR-028](../_archive/ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md) 的伞型模式)。
+本 ADR 分三层闭环,作为一个 umbrella 初始计划统一治理、分期推进(沿用 [ADR-028](../ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md) 的伞型模式)。
 
 ## 决策 (Decision)
 
@@ -34,7 +34,7 @@
 
 ### 设计决策 (Design Decisions)
 
-**D1. 三张专用 enrichment 表,而非扩展历史表。** 沿用 [ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md) 的先例(它新建独立的 `MovieMetadata` 而非加宽 `MovieHistory`),闭环状态住进新表,写入旁路 Pending→Commit 关键路径。`MovieHistory` / `TorrentHistory` 保持为纯去重/追踪表。
+**D1. 三张专用 enrichment 表,而非扩展历史表。** 沿用 [ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md) 的先例(它新建独立的 `MovieMetadata` 而非加宽 `MovieHistory`),闭环状态住进新表,写入旁路 Pending→Commit 关键路径。`MovieHistory` / `TorrentHistory` 保持为纯去重/追踪表。
 
 ```sql
 -- Per selected torrent: its real fate after qB.
@@ -93,7 +93,7 @@ queued ──→ downloading ──→ completed ──→ in_library
 
 **D3. `completed` 做成*推送*信号,在清理步骤捕获,而非轮询。** 这是承重决策。已完成的种子**会被从 qB 删除**(`remove_completed_torrents_keep_files` 与 file-filter 清理保留文件但移除种子)。一个几小时后才跑的对账过程经常会发现 hash *早已从 qB 消失*,所以"还在不在 qB"无法判定完成。改为:清理步骤——它本就在枚举已完成种子——被插桩,为这些 hash 写入 `state=completed`。对账过程再据此派生 `in_library`(经 Ledger)与 `stalled`/`failed`(还在 qB 但无进度,或超过 N 天既无 `completed` 也无 `in_library`)。被否决的替代方案——高频轮询以赶在删除前抓到完成——脆弱且与清理步骤竞态。
 
-**D4. 对账是一个纯 `Options → Result` service,配只读收集器。** 新模块 `javdb/ops/reconcile/` 暴露 `service.run(ReconcileOptions) -> ReconcileResult`,无 argparse、无 `sys.exit`;`apps/cli/ops/reconcile.py` 是持有进程关切的 CLI adapter。每个外部源是一个**只读 `SourceCollector`**,产出归一化的 `Observation` 且从不写库;**所有 DB 写入集中在 service 一处**。这正是 [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md) 的接缝形态。测试打 `Options → Result`,不打真实 qB/Emby/Plex。
+**D4. 对账是一个纯 `Options → Result` service,配只读收集器。** 新模块 `javdb/ops/reconcile/` 暴露 `service.run(ReconcileOptions) -> ReconcileResult`,无 argparse、无 `sys.exit`;`apps/cli/ops/reconcile.py` 是持有进程关切的 CLI adapter。每个外部源是一个**只读 `SourceCollector`**,产出归一化的 `Observation` 且从不写库;**所有 DB 写入集中在 service 一处**。这正是 [ADR-015](../ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md) 的接缝形态。测试打 `Options → Result`,不打真实 qB/Emby/Plex。
 
 **D5. 双触发,不绑死任何一种部署。** 对账循环**默认**由新的 `ReconcileLibrary.yml` cron workflow 调度(self-hosted runner,有 LAN 访问 qB/Emby/Plex);当可选的 Docker API 后端部署时,它可进程内调用同一个 `service.run(...)` 做近实时对账。两者调用同一份实现。若 Docker 后端未运行,cron 路径不受影响。
 
@@ -107,7 +107,7 @@ queued ──→ downloading ──→ completed ──→ in_library
 
 **D10. enrichment 写入旁路 session/rollback;幂等 UPSERT;D1-canonical。** 闭环写入是可恢复的 enrichment:每次写入都是按表主键的 UPSERT,`last_seen_at` / `observed_at` 每轮刷新,写入失败下轮重试即可。该循环从不触碰 Pending→Commit 路径。`AcquisitionOutcome.session_id` 仅作溯源。
 
-**D11. 范围是*信号*,不是模型。** 本 ADR 产出 `ConsumptionSignal` 即止;消费它做偏好打分是 [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md) 的事。这个边界是刻意的,以保持本初始计划可交付、可审计。
+**D11. 范围是*信号*,不是模型。** 本 ADR 产出 `ConsumptionSignal` 即止;消费它做偏好打分是 [ADR-025](../../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md) 的事。这个边界是刻意的,以保持本初始计划可交付、可审计。
 
 ## 后果 (Consequences)
 
@@ -164,19 +164,19 @@ queued ──→ downloading ──→ completed ──→ in_library
 
 ## 参考 (References)
 
-- [ADR-022 — User Preference Data Foundation](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md)
-- [ADR-024 — Torrent Quality Evidence Foundation](../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md)
-- [ADR-025 — User Preference Model](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md)
-- [ADR-015 — Integrations Interface Boundary](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md)
-- [ADR-010 — D1 Access Port](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md)
-- [ADR-028 — Web Platform & Capability Completeness Roadmap](../_archive/ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md)
+- [ADR-022 — User Preference Data Foundation](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md)
+- [ADR-024 — Torrent Quality Evidence Foundation](../../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md)
+- [ADR-025 — User Preference Model](../../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md)
+- [ADR-015 — Integrations Interface Boundary](../ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md)
+- [ADR-010 — D1 Access Port](../ADR-010-D1-Access-Port/ADR-010-d1-access-port.md)
+- [ADR-028 — Web Platform & Capability Completeness Roadmap](../ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md)
 
 ## 状态日志 (Status Log)
 
 - 2026-05-29: Proposed(伞型;三期已划定,IMP 待出)。
 - 2026-05-29: IMP-ADR033-01（Phase 1）计划已成文;IMP-02/03 推迟到 Phase 1 落地后的
   一轮 `grill-me` + `brainstorming`。web 面拆分到
-  [ADR-034](../_archive/ADR-034-Media-Closed-Loop-Web-Surface/ADR-034-media-closed-loop-web-surface.md)。
+  [ADR-034](../ADR-034-Media-Closed-Loop-Web-Surface/ADR-034-media-closed-loop-web-surface.md)。
 - 2026-05-30: IMP-ADR033-01（Phase 1）已实现并完成本地验证。远端 D1 apply 与本地
   SQLite mirror refresh 仍属于部署环境验证门。
 - 2026-06-06: IMP-ADR033-02（Phase 2）与 IMP-ADR033-03（Phase 3）计划经一轮 `grill-me`
@@ -199,3 +199,8 @@ queued ──→ downloading ──→ completed ──→ in_library
   全仓成立;dedup 改读 Ledger 并带过渡性回退(公共 API 字节不变)。263 个针对性测试通过。
   远端 D1 apply(`wrangler`)+ `sync_d1_to_sqlite --force-overwrite-all` 以及 Emby/Plex
   实时端点 `TODO-VERIFY` 确认仍属部署环境验证门。状态由 Proposed 推进至 Accepted。
+- 2026-06-18:部署门**已关闭**,ADR **完成并归档**。已核实远端 `operations` D1:
+  `OwnershipLedger` 存在且在持续写入(58,171 行——ownership pass 已在生产上线);
+  `ConsumptionSignal` 与 `UnresolvedMediaItem` 存在且就绪(0 行——待运营者通过
+  `MEDIA_SERVERS` 配置媒体服务器后才会填充,属运营选择,非 schema/代码门)。两个
+  2026-06-06 migration 均已应用。状态 → Completed。

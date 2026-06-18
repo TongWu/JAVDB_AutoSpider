@@ -5,7 +5,7 @@
 | **状态**   | Completed（2026-06-14）——已由 [IMP-ADR049-01](IMP-ADR049-01-dedup-module-split.md) 实现 |
 | **日期**   | 2026-06-13                                                        |
 | **作者**   | Ted                                                              |
-| **关联**   | [ADR-048](../../ADR-048-Rclone-Module-Split/ADR-048-rclone-module-split-and-folder-dedup-rust.md)（**清理时**去重——兄弟 ADR；本 ADR 拥有**跳过时**去重）、[ADR-046](../ADR-046-Retire-Db-Facade/ADR-046-retire-db-facade.md)（Repo 是唯一公开存储入口——`dedup_store` 经 `OperationsRepo` 读写）、[ADR-011](../ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md)（`normalise_code` 落户的解析模块）、[ADR-033](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)（`dedup_store` 消费的所有权账本读取）、[ADR-041](../ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md)（`dedup_query` 包装的 Rust dedup bridge 保持 Best-Effort） |
+| **关联**   | [ADR-048](../../ADR-048-Rclone-Module-Split/ADR-048-rclone-module-split-and-folder-dedup-rust.md)（**清理时**去重——兄弟 ADR；本 ADR 拥有**跳过时**去重）、[ADR-046](../ADR-046-Retire-Db-Facade/ADR-046-retire-db-facade.md)（Repo 是唯一公开存储入口——`dedup_store` 经 `OperationsRepo` 读写）、[ADR-011](../ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md)（`normalise_code` 落户的解析模块）、[ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)（`dedup_store` 消费的所有权账本读取）、[ADR-041](../ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md)（`dedup_query` 包装的 Rust dedup bridge 保持 Best-Effort） |
 
 > 源自 2026-06-13 架构评审（候选 2 ——"拆分 `dedup.py`"）：[architecture-review-2026-06-13.html](../../architecture/architecture-review-2026-06-13.html)。
 

@@ -5,7 +5,7 @@
 | **状态**   | Proposed — 伞型；Phase 1 & 2 已实现并验证；Phase 2（entry-point 发现 + downloader 类别，示例）已于 2026-06-10 落地；Phase 3（生态）可选/推迟 |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
-| **关联**   | [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md), [ADR-038](../ADR-038-Agentic-Operator-MCP/ADR-038-agentic-operator-mcp-surface.md), [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) |
+| **关联**   | [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md), [ADR-038](../ADR-038-Agentic-Operator-MCP/ADR-038-agentic-operator-mcp-surface.md), [ADR-033](../_archive/ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) |
 
 > 源自 2026-05-29 一次关于全新方向(方向六——可插拔扩展平台)的头脑风暴。
 
@@ -115,7 +115,7 @@ Phase 1 独立成立且向后兼容。Phase 2/3 拓宽平台。
 - [ADR-015 — Integrations Interface Boundary](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md)
 - [ADR-036 — Event-Sourced Pipeline Spine](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md)
 - [ADR-038 — Agentic Operator MCP Surface](../ADR-038-Agentic-Operator-MCP/ADR-038-agentic-operator-mcp-surface.md)
-- [ADR-033 — Media Closed-Loop](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
+- [ADR-033 — Media Closed-Loop](../_archive/ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
 
 ## 状态日志 (Status Log)
 

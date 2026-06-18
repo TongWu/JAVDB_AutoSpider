@@ -6,7 +6,7 @@
 | **Date**    | 2026-06-13                                                            |
 | **Authors** | Ted                                                                   |
 | **D1 Write Class** | n/a (umbrella ships no code; WS1/WS2 introduce **authoritative** writes, classified in their own IMPs) |
-| **Related** | [ADR-033](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-034](../ADR-034-Media-Closed-Loop-Web-Surface/ADR-034-media-closed-loop-web-surface.md), [ADR-040](../../ADR-040-Content-Filter-Rules/ADR-040-content-filter-rules.md), [ADR-039](../../ADR-039-Pluggable-Integration-Platform/ADR-039-pluggable-integration-platform.md), [ADR-024](../../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md), [ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-025](../../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), [ADR-017](../ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md) |
+| **Related** | [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-034](../ADR-034-Media-Closed-Loop-Web-Surface/ADR-034-media-closed-loop-web-surface.md), [ADR-040](../../ADR-040-Content-Filter-Rules/ADR-040-content-filter-rules.md), [ADR-039](../../ADR-039-Pluggable-Integration-Platform/ADR-039-pluggable-integration-platform.md), [ADR-024](../../ADR-024-Torrent-Quality-Evidence/ADR-024-torrent-quality-evidence.md), [ADR-022](../ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-025](../../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), [ADR-017](../ADR-017-Cloudflare-First-Deployment/ADR-017-cloudflare-first-deployment.md) |
 
 > Originated from a 2026-06-13 brainstorming session triaging the
 > [Adsryen/JavdBviewed](https://github.com/Adsryen/JavdBviewed) browser extension
@@ -23,7 +23,7 @@ status, actor subscriptions with scheduled new-works monitoring, multi-source
 magnet aggregation, content filtering, AI translation, and more. It demonstrates
 the user-facing JAVDB features our system lacks.
 
-Our media closed-loop ([ADR-033](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
+Our media closed-loop ([ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
 backend, [ADR-034](../ADR-034-Media-Closed-Loop-Web-Surface/ADR-034-media-closed-loop-web-surface.md)
 web surface) records **what the system did** — `AcquisitionOutcome` (what was
 queued/downloaded), `OwnershipLedger` (what is owned across qB/NAS/GDrive/PikPak),
@@ -273,7 +273,7 @@ against the real shapes at the time (cadence per ADR-034).
 
 ## References
 
-- [ADR-033 — Media Closed-Loop](../../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
+- [ADR-033 — Media Closed-Loop](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
 - [ADR-034 — Media Closed-Loop Web Surface](../ADR-034-Media-Closed-Loop-Web-Surface/ADR-034-media-closed-loop-web-surface.md)
 - [ADR-040 — Content Filter Rules](../../ADR-040-Content-Filter-Rules/ADR-040-content-filter-rules.md)
 - [ADR-039 — Pluggable Integration Platform](../../ADR-039-Pluggable-Integration-Platform/ADR-039-pluggable-integration-platform.md)

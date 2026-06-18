@@ -56,7 +56,7 @@ dedup additions: `load_rclone_inventory` re-pointed (public signature `load_rclo
 
 > **Heterogeneous category (ADR-033 D-P2-1):** `OwnershipLedger.category` is **source-native and NOT NULL** (`DEFAULT ''`). `gdrive` stores a glyph composite `"<SensorCategory>|<SubtitleCategory>"` (e.g. `无码破解|中字`); `qb` stores the `AcquisitionOutcome` **English** category (`subtitle` / `no_subtitle` / `hacked_subtitle` / `hacked_no_subtitle`); `pikpak` / `nas` store `''` when unknown. There is **no lossy cross-source unification** (D11 YAGNI). The PK `(video_code, source, category)` is safe precisely because `category` is `NOT NULL`.
 
-> **Phase boundary:** This IMP is **backend data layer only**. No web read-API, no TypeScript, no Vue. Web surface for ownership is tracked by [ADR-034](../_archive/ADR-034-Media-Closed-Loop-Web-Surface/ADR-034-media-closed-loop-web-surface.md) Phase 2 and is out of scope here.
+> **Phase boundary:** This IMP is **backend data layer only**. No web read-API, no TypeScript, no Vue. Web surface for ownership is tracked by [ADR-034](../ADR-034-Media-Closed-Loop-Web-Surface/ADR-034-media-closed-loop-web-surface.md) Phase 2 and is out of scope here.
 
 ---
 
@@ -1474,6 +1474,6 @@ git add -A && git commit -m "test(reconcile): full-suite verification for ADR-03
 - `OperationsRepo.load_pikpak_history()` is a new read helper added in Task 7 because only a write helper (`db_append_pikpak_history`) existed; keep it read-only.
 - gdrive ownership self-heals on every `run_ownership` pass (D-P2-2) and is **not** coupled into `WeeklyDedup`.
 
-**Web surface note:** Web surface (read endpoints, dual-backend parity, Vue ownership view) is tracked by [ADR-034](../_archive/ADR-034-Media-Closed-Loop-Web-Surface/ADR-034-media-closed-loop-web-surface.md) Phase 2 and is out of scope here. No dual-backend parity gate applies to this IMP.
+**Web surface note:** Web surface (read endpoints, dual-backend parity, Vue ownership view) is tracked by [ADR-034](../ADR-034-Media-Closed-Loop-Web-Surface/ADR-034-media-closed-loop-web-surface.md) Phase 2 and is out of scope here. No dual-backend parity gate applies to this IMP.
 
 **Open verification dependencies (deployment-environment gates, mirror IMP-01):** Task 1 Steps 3-4 require live `wrangler` D1 access and `apps.cli.db.sync_d1_to_sqlite`; run them where other migrations are applied (Cloudflare creds present). All other tasks verify with in-memory sqlite and the local bootstrap DDL.
