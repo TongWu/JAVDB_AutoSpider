@@ -1,6 +1,6 @@
 # IMP-ADR026-04: ADR-026 Phase 4 - Proactive Incident Alerting & Operator Config
 
-**Status:** In Progress — backend/server slice complete; frontend Agent F scope pending
+**Status:** Completed — backend/server + frontend slices implemented and verified on 2026-06-15 (MAIN #220 + WEB #46, both on `main`); adversarial Sprint-4 verification passed (120 tests green). One follow-up tracked outside this IMP: the Python `ops_alert_repo.py` must consume the ADR-055 contract registry (it currently hand-mirrors the SQL).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -1415,7 +1415,7 @@ Published for Agent F:
 The remaining Task 7 `src/` UI/API-client implementation is out of this
 backend-agent scope and remains with the frontend agent.
 
-- [ ] **Step 1: Add frontend API tests**
+- [x] **Step 1: Add frontend API tests**
 
 Create `tests/unit/ops-alerting-api.spec.ts` in the Web repo:
 
@@ -1466,7 +1466,7 @@ describe('ops alerting config API', () => {
 })
 ```
 
-- [ ] **Step 2: Add frontend API contracts**
+- [x] **Step 2: Add frontend API contracts**
 
 Modify `src/api/diagnostics.ts` in the Web repo:
 
@@ -1526,7 +1526,7 @@ export async function listAlertEvents(incidentId: string): Promise<OpsAlertEvent
 }
 ```
 
-- [ ] **Step 3: Build the alerting config panel**
+- [x] **Step 3: Build the alerting config panel**
 
 Create `src/components/diagnostics/AlertPolicyPanel.vue`:
 
@@ -1535,7 +1535,7 @@ Create `src/components/diagnostics/AlertPolicyPanel.vue`:
 - On save, call `upsertAlertPolicy(incidentType, { min_confidence, enabled, channels })`, then reload.
 - The panel only configures policies. It must not trigger delivery, send a test notification, or call any execution endpoint.
 
-- [ ] **Step 4: Show alert status on incident detail**
+- [x] **Step 4: Show alert status on incident detail**
 
 Modify `src/pages/diagnostics/OpsIncidentsPage.vue`:
 
@@ -1544,7 +1544,7 @@ Modify `src/pages/diagnostics/OpsIncidentsPage.vue`:
 - Render an alert-status badge on the incident detail derived from the latest event: `fired` (e.g. success/info), `suppressed` (neutral), `skipped` (neutral), or "no alert" when there are no events.
 - Alert-event consumption is read-only. Do not add controls that send or re-send notifications from this page.
 
-- [ ] **Step 5: Run Web unit test**
+- [x] **Step 5: Run Web unit test**
 
 Run from the Web repo:
 
@@ -1697,7 +1697,7 @@ npm run test:server -- \
 
 Result: 6 files / 44 tests passed.
 
-- [ ] **Step 2b: Run frontend tests (Agent F scope)**
+- [x] **Step 2b: Run frontend tests (Agent F scope)**
 
 Run from `../../../JAVDB_AutoSpider_Web` after Agent F implements the Web `src/`
 alerting UI/API client:
