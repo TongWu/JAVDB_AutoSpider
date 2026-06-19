@@ -94,17 +94,19 @@
 
 ### Tasks (Phase 2)
 
-- [ ] **Step P2.1 — Freeze the Python baseline.** Capture today's Python `get_all_movie_folders_for_year` / `get_year_folders` output on a representative recorded `lsjson`/`lsd` fixture; commit as the parity golden.
-- [ ] **Step P2.2 — Fix Rust `parse_lsjson_for_year`** for the 3-level layout; add Rust `#[test]`s for 3-level dirs/files + leaf validation.
-- [ ] **Step P2.3 — Switch `scan.py` to the Rust primitives** behind the unchanged `scan_folder_structure` interface; keep the Best-Effort Python fallback on `ImportError` (loud `WARNING`, ADR-041 D3).
+- [x] **Step P2.1 — Freeze the Python baseline.** Capture today's Python `get_all_movie_folders_for_year` / `get_year_folders` output on a representative recorded `lsjson`/`lsd` fixture; commit as the parity golden.
+- [x] **Step P2.2 — Fix Rust `parse_lsjson_for_year`** for the 3-level layout; add Rust `#[test]`s for 3-level dirs/files + leaf validation.
+- [x] **Step P2.3 — Switch `scan.py` to the Rust primitives** behind the unchanged `scan_folder_structure` interface; keep the Best-Effort Python fallback on `ImportError` (loud `WARNING`, ADR-041 D3).
 
   **Verification gate:** `maturin develop --release` then `pytest tests/unit/test_rclone_scan_parity.py tests/unit -k rclone -q` green; the Rust and Python paths produce identical structures on the fixture; `--no-Rust` (monkeypatched) still scans via the Python fallback with a `WARNING`.
 
+  **Divergence (2026-06-19):** `group_folders_by_movie_code` (`dedup.py`) was NOT routed through Rust `group_by_movie_code` as P2.3 originally listed. That function groups assembled `FolderInfo` dataclass instances across the whole `Dict[year][actor]->List[FolderInfo]`; Rust `group_by_movie_code` operates on plain dicts. Routing through it would force a lossy `FolderInfo`→dict→group→`FolderInfo` round-trip — strictly more code, slower, for a trivial non-hot-path `defaultdict` grouping. Left as pure Python, untouched.
+
 ### Phase 2 final gate
 
-- [ ] Rust `cargo test` (rclone_ops) green; `parse_lsjson_for_year` 3-level tests pass.
-- [ ] Parity golden matches Rust output; the `:754` unconditional-Python comment is gone.
-- [ ] `scan_folder_structure` interface unchanged (callers untouched).
+- [x] Rust `cargo test` (rclone_ops) green; `parse_lsjson_for_year` 3-level tests pass.
+- [x] Parity golden matches Rust output; the `:754` unconditional-Python comment is gone.
+- [x] `scan_folder_structure` interface unchanged (callers untouched).
 
 ---
 
