@@ -1,6 +1,6 @@
 # ADR-056: D1 transport circuit breaker for transient-outage resilience
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-06-15
 **Author:** Ted
 **Related Implementation Plans:** [IMP-ADR056-01](IMP-ADR056-01-d1-transport-circuit-breaker.md) (Phase 1 — breaker + bounded wait + tests)
@@ -76,12 +76,22 @@ natural, thread-minimal design. After `D1_BREAKER_HALF_OPEN_SUCCESSES` (default 
 successful probes the breaker goes `HALF_OPEN → CLOSED` and `notify_all()` wakes
 every waiter.
 
-D4. **Bounded OPEN → terminal fail-fast + rollback** — While `OPEN`, waiters block
-up to `D1_BREAKER_MAX_OPEN_SEC` (default 900 = 15 min) measured from `opened_at`.
-If D1 has not recovered by the deadline the breaker enters `TERMINAL`, wakes all
-waiters, and they (and the prober) raise `D1CircuitOpenError`. This propagates to
-crash the run, and the existing `cleanup-on-failure` job rolls the session back —
-predictable, reuses proven machinery, and never holds a runner for the full 6h.
+D4. **Bounded OPEN → terminal fail-fast + rollback (recoverable for daemons)** —
+While `OPEN`, waiters block up to `D1_BREAKER_MAX_OPEN_SEC` (default 900 = 15 min)
+measured from `opened_at`. If D1 has not recovered by the deadline the breaker
+enters `TERMINAL`, wakes all waiters, and they (and the prober) raise
+`D1CircuitOpenError`. This propagates to crash the run, and the existing
+`cleanup-on-failure` job rolls the session back — predictable, reuses proven
+machinery, and never holds a runner for the full 6h. **`TERMINAL` is not a
+permanent sink:** a one-shot run (spider / CLI / Actions) crashes on the raise and
+exits, so it never re-arms; but a long-lived process (e.g. the `apps/api` backend
+on a D1 backend) survives the raise, and its cached process-global breaker would
+otherwise reject that database forever. To avoid that self-lock, a `TERMINAL`
+breaker re-arms to `CLOSED` on the next `acquire()` once another
+`D1_BREAKER_MAX_OPEN_SEC` cooldown has elapsed from `terminal_at`, giving a
+recovered D1 a fresh attempt (it re-trips and re-probes from scratch if still
+down). The cooldown never elapses within a crashing run, so one-shot fail-fast is
+unchanged.
 
 D5. **Terminal error bypasses the recovery outbox (does not worsen [BFR-020](../BFR-020-D1-Recovery-Outbox-Replay-After-Rollback/BFR-020-d1-recovery-outbox-replay-after-rollback.md))**
 — `D1CircuitOpenError` subclasses `D1Error` but is **not** a `D1TransientError`,
@@ -140,7 +150,7 @@ close the breaker and wake the fleet into renewed failures.
 
 | Phase | IMP | Ships | Deferred |
 | --- | --- | --- | --- |
-| Phase 1 | [IMP-ADR056-01](IMP-ADR056-01-d1-transport-circuit-breaker.md) | `D1CircuitBreaker` per-DB registry + state machine, `_post` integration, `D1CircuitOpenError`, env knobs read at construction (default on), inner-retry tweak for 7500, observability (logs + aggregated `d1_port_summary` metrics), unit + port-level + concurrency tests, `vars` wiring across **all** D1 workflows | BFR-020 orphan fix (separate); optional spider-side explicit worker-pool pause UX (Approach B); resume-time login/lease revalidation (only if R1/R2 verification shows it is needed) |
+| Phase 1 ✅ (delivered 2026-06-19) | [IMP-ADR056-01](IMP-ADR056-01-d1-transport-circuit-breaker.md) | `D1CircuitBreaker` per-DB registry + state machine, `_post` integration, `D1CircuitOpenError`, env knobs read at construction (default on), inner-retry tweak for 7500, observability (logs + aggregated `d1_port_summary` metrics), unit + port-level + concurrency tests, `vars` wiring across **all** D1 workflows | BFR-020 orphan fix (separate); optional spider-side explicit worker-pool pause UX (Approach B); resume-time login/lease revalidation (only if R1/R2 verification shows it is needed) |
 
 ## References
 
@@ -151,3 +161,7 @@ close the breaker and wake the fleet into renewed failures.
 ## Status Log
 
 - 2026-06-15: Proposed
+- 2026-06-19: **Accepted.** Phase 1 ([IMP-ADR056-01](IMP-ADR056-01-d1-transport-circuit-breaker.md)) delivered — breaker registry + state machine, `_post_with_retry`/`_probe_d1` integration, `D1CircuitOpenError`, construction-time env knobs (default on), 7500 backoff floor, aggregated `circuit_breaker` metrics in `d1_port_summary.json`, 17 passing breaker tests, and `D1_CIRCUIT_BREAKER_ENABLED` wired across all 12 D1 workflows (recovery jobs capped at 120s).
+  - **R1 (login/session resume) — verified safe:** `JAVDB_SESSION_COOKIE` is a static credential replayed per request (`javdb/infra/request.py` sets the `_jdb_session` Cookie header on every fetch) and login is validated lazily via page fetches, so a ≤15-min pause cannot outlive client-side login state; server-side session TTLs far exceed the max-open window. No resume-revalidation feature needed.
+  - **R2 (MovieClaim / WorkDistributor lease) — verified safe:** the coordinator clients are best-effort fail-open (`javdb/spider/detail/runner.py` catches `MovieClaimUnavailable` → per-process dedup fallback; login-state/session paths also fail open). Default MovieClaim TTL is 30 min (> the 15-min max-open), so default claims survive a max pause; a lease expiring mid-pause at worst causes a history-deduped duplicate fetch. No lease-renewal feature needed. The roadmap's deferred items (BFR-020 orphan fix, Approach-B pause UX) stand.
+- 2026-06-19: PR-review follow-up (PR #240, Codex P2) — made `TERMINAL` recoverable so a long-lived process (`apps/api` on D1) no longer self-locks after one >15-min outage: a `TERMINAL` breaker re-arms to `CLOSED` after one more `D1_BREAKER_MAX_OPEN_SEC` cooldown (one-shot fail-fast unchanged — see amended D4). Added `rearms` metric + deterministic re-arm test.

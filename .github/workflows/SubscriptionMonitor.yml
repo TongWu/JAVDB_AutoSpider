@@ -58,6 +58,7 @@ jobs:
       STORAGE_BACKEND: d1
       JAVDB_HISTORY_WRITE_MODE: pending
       D1_RECOVERY_OUTBOX_ENABLED: ${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}
+      D1_CIRCUIT_BREAKER_ENABLED: ${{ vars.D1_CIRCUIT_BREAKER_ENABLED || 'true' }}
       D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
       D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
       INPUT_PROXY_SPIDER: ${{ github.event_name == 'workflow_dispatch' && (inputs.proxy_spider && 'true' || 'false') || 'true' }}

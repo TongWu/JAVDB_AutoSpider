@@ -32,10 +32,12 @@ from javdb.storage.d1_client import (
     D1TransientError,
     _EXPORT_LOCK_BACKOFF_FLOOR_SEC,
     _EXPORT_LOCK_KEYWORDS,
+    _INTERNAL_ERROR_BACKOFF_FLOOR_SEC,
     _TRANSIENT_ERROR_KEYWORDS,
     _matches_keyword,
     _params_for_d1_json,
 )
+from javdb.storage.d1_circuit_breaker import aggregate_metrics, get_circuit_breaker
 from javdb.storage.d1_recovery import (
     RecoveryEvent,
     append_event,
@@ -384,6 +386,12 @@ class D1AccessPort:
                 aggregate[key] = _numeric_summary_value(aggregate.get(key)) + delta[key]
             aggregate = _with_derived_summary(aggregate)
 
+            # Circuit breakers are per-D1-database and NOT delta-aggregated;
+            # write the absolute SUM across all endpoints (ADR-056). Different
+            # logical DBs share this one summary file, so a per-endpoint snapshot
+            # would clobber — aggregate_metrics() sums the registry instead.
+            aggregate["circuit_breaker"] = aggregate_metrics()
+
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(
                 json.dumps(aggregate, ensure_ascii=False, indent=2, sort_keys=True)
@@ -402,11 +410,16 @@ class D1AccessPort:
                 logger.warning("Failed to close D1 port session", exc_info=True)
 
     def _post_with_retry(self, body: dict[str, Any]) -> list[D1Cursor]:
+        breaker = get_circuit_breaker(self._url)  # one breaker per D1 database
         last_exc: D1TransientError | None = None
         attempts = max(1, self._config.max_retries)
         for attempt in range(attempts):
+            # Pause here if the breaker is OPEN; raise D1CircuitOpenError if the
+            # outage outlasts the bounded max-open window (ADR-056 D4).
+            breaker.acquire(self._probe_d1)
             try:
                 result = self._post(body)
+                breaker.record_success()
                 if attempt > 0:
                     self._summary["retry_successes"] += 1
                 return result
@@ -415,6 +428,7 @@ class D1AccessPort:
                 raise
             except D1TransientError as exc:
                 self._summary["transient_errors"] += 1
+                breaker.record_failure()
                 last_exc = exc
                 if attempt >= attempts - 1:
                     break
@@ -422,6 +436,30 @@ class D1AccessPort:
                 self._sleep(self._compute_backoff(attempt, exc))
         assert last_exc is not None
         raise last_exc
+
+    def _probe_d1(self) -> bool:
+        """Health probe used by the circuit breaker (ADR-056 D8).
+
+        Issues a bare ``SELECT 1`` directly via the transport, bypassing
+        ``_post_with_retry`` / ``breaker.acquire`` so it cannot deadlock on the
+        open breaker. Applies the SAME success criterion as ``_post`` — HTTP 200
+        AND a JSON body with ``success == true`` — so an application-level D1
+        fault (HTTP 200 + ``success=false``) does NOT falsely declare recovery
+        and wake the fleet into renewed failures.
+        """
+        try:
+            response = self._post_request(
+                self._url,
+                headers=self._headers,
+                json={"sql": "SELECT 1", "params": []},
+                timeout=self._config.timeout,
+            )
+            if getattr(response, "status_code", None) != 200:
+                return False
+            payload = response.json()
+        except Exception:  # noqa: BLE001 — any error (incl. non-JSON) == still down
+            return False
+        return bool(isinstance(payload, dict) and payload.get("success"))
 
     def _post(self, body: dict[str, Any]) -> list[D1Cursor]:
         self._summary["http_posts"] += 1
@@ -442,6 +480,8 @@ class D1AccessPort:
             err = D1TransientError(
                 f"D1 API returned HTTP {status}: {response.text[:500]}"
             )
+            if "internal error" in (response.text or "").lower():
+                err.is_internal_error = True
             retry_after = response.headers.get("Retry-After")
             if retry_after:
                 err.retry_after = retry_after
@@ -505,6 +545,8 @@ class D1AccessPort:
         base = self._config.retry_base_sec * (2**attempt)
         if exc.is_export_lock:
             base = max(base, _EXPORT_LOCK_BACKOFF_FLOOR_SEC)
+        if getattr(exc, "is_internal_error", False):
+            base = max(base, _INTERNAL_ERROR_BACKOFF_FLOOR_SEC)
         return min(base, self._config.retry_max_sleep_sec) + self._jitter()
 
     @staticmethod

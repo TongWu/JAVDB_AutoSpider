@@ -142,6 +142,7 @@ jobs:
     env:
       TZ: Asia/Singapore
       D1_RECOVERY_OUTBOX_ENABLED: ${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}
+      D1_CIRCUIT_BREAKER_ENABLED: ${{ vars.D1_CIRCUIT_BREAKER_ENABLED || 'true' }}
       D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
       D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
 
@@ -385,6 +386,7 @@ jobs:
     env:
       TZ: Asia/Singapore
       D1_RECOVERY_OUTBOX_ENABLED: ${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}
+      D1_CIRCUIT_BREAKER_ENABLED: ${{ vars.D1_CIRCUIT_BREAKER_ENABLED || 'true' }}
       D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
       D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
       # Ingestion Perfect Rollback (Phase 3): default WriteMode='pending'.
@@ -908,6 +910,7 @@ jobs:
     env:
       TZ: Asia/Singapore
       D1_RECOVERY_OUTBOX_ENABLED: ${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}
+      D1_CIRCUIT_BREAKER_ENABLED: ${{ vars.D1_CIRCUIT_BREAKER_ENABLED || 'true' }}
       D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
       D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
       STORAGE_BACKEND: ${{ vars.STORAGE_BACKEND || 'sqlite' }}
@@ -1003,6 +1006,7 @@ jobs:
     env:
       TZ: Asia/Singapore
       D1_RECOVERY_OUTBOX_ENABLED: ${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}
+      D1_CIRCUIT_BREAKER_ENABLED: ${{ vars.D1_CIRCUIT_BREAKER_ENABLED || 'true' }}
       D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
       D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
       PIPELINE_WORKFLOW_RUN_STARTED_AT: ${{ needs.setup.outputs.pipeline_workflow_run_started_at }}
@@ -1265,6 +1269,7 @@ jobs:
     env:
       TZ: Asia/Singapore
       D1_RECOVERY_OUTBOX_ENABLED: ${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}
+      D1_CIRCUIT_BREAKER_ENABLED: ${{ vars.D1_CIRCUIT_BREAKER_ENABLED || 'true' }}
       D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
       D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
       GH_TOKEN: ${{ github.token }}

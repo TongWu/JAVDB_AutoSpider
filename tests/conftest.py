@@ -222,6 +222,39 @@ def _drop_dead_root_log_handlers() -> None:
     return
 
 
+@pytest.fixture(autouse=True)
+def _isolate_d1_circuit_breaker(monkeypatch):
+    """Keep the process-global D1 circuit breaker inert + un-leaked per test.
+
+    The breaker (ADR-056) defaults ON in production and lives in a process-global
+    registry (``javdb.storage.d1_circuit_breaker._BREAKERS``) keyed by D1 endpoint
+    URL, consulted by ``D1AccessPort._post_with_retry``. Left at its production
+    default, any test that drives ``_post_with_retry`` through ``trip_threshold``
+    consecutive transient 5xx (e.g. the retry-exhaustion cases in
+    ``test_d1_port.py``) trips it; the elected prober then sleeps real time every
+    ``probe_interval_sec`` up to ``max_open_sec`` (900s default) — hanging the test
+    for ~15 min and leaking a tripped breaker into every later test that shares the
+    registry.
+
+    Default the breaker OFF for the suite and reset the registry around each test
+    so it never trips or leaks. Tests that actually exercise the breaker opt back
+    in explicitly and run *after* this (broader-scoped) fixture, so they win:
+    ``test_d1_circuit_breaker`` constructs ``D1CircuitBreaker`` instances directly
+    with explicit kwargs (env-independent), and the ``test_d1_port_circuit_breaker``
+    ``_fresh_breaker`` fixture re-enables the env flag and registers its own
+    deterministic breaker. Lazy-imported so tests that never touch D1 pay only the
+    cached import cost.
+    """
+    from javdb.storage import d1_circuit_breaker
+
+    monkeypatch.setenv("D1_CIRCUIT_BREAKER_ENABLED", "false")
+    d1_circuit_breaker.reset_circuit_breaker()
+    try:
+        yield
+    finally:
+        d1_circuit_breaker.reset_circuit_breaker()
+
+
 @pytest.fixture
 def storage_mode_db(monkeypatch):
     """Force STORAGE_MODE='db' for the test."""
