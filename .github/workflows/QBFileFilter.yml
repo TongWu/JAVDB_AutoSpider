@@ -132,6 +132,12 @@ jobs:
           VAR_TORRENT_QUALITY_EVIDENCE_ENABLED: ${{ vars.TORRENT_QUALITY_EVIDENCE_ENABLED || 'false' }}
           VAR_TORRENT_QUALITY_POLICY_MODE: ${{ vars.TORRENT_QUALITY_POLICY_MODE || 'shadow' }}
           VAR_TORRENT_QUALITY_CATEGORIES: ${{ vars.TORRENT_QUALITY_CATEGORIES || '' }}
+          VAR_QUALITY_PROBE_ENABLED: ${{ vars.QUALITY_PROBE_ENABLED || 'false' }}
+          VAR_QUALITY_PROBE_QB_URL: ${{ secrets.QUALITY_PROBE_QB_URL || '' }}
+          VAR_QUALITY_PROBE_QB_USERNAME: ${{ secrets.QUALITY_PROBE_QB_USERNAME || '' }}
+          VAR_QUALITY_PROBE_QB_PASSWORD: ${{ secrets.QUALITY_PROBE_QB_PASSWORD || '' }}
+          VAR_QUALITY_PROBE_TOPK: ${{ vars.QUALITY_PROBE_TOPK || '2' }}
+          VAR_QUALITY_PROBE_GLOBAL_CAP: ${{ vars.QUALITY_PROBE_GLOBAL_CAP || '50' }}
           VAR_STORAGE_MODE: ${{ vars.STORAGE_MODE }}
           # D1 / Cloudflare (only required when STORAGE_BACKEND in {d1,dual})
           VAR_STORAGE_BACKEND: ${{ vars.STORAGE_BACKEND || 'sqlite' }}
@@ -356,6 +362,14 @@ jobs:
           fi
           echo "Running: python3 -m apps.cli.qb.quality_evidence ${ARGS[*]}"
           python3 -m apps.cli.qb.quality_evidence "${ARGS[@]}"
+
+      - name: Probe runner-up quality candidates (ADR-024, remote shadow)
+        if: ${{ vars.TORRENT_QUALITY_EVIDENCE_ENABLED == 'true' && vars.QUALITY_PROBE_ENABLED == 'true' && github.event.inputs.dry_run != 'true' }}
+        run: |
+          set -e
+          set -o pipefail
+          echo "Running: python3 -m apps.cli.qb.quality_probe"
+          python3 -m apps.cli.qb.quality_probe
 
   # =============================================================================
   # Job 3: Run File Filter on Adhoc qBittorrent (only when QB_URL_ADHOC is set)

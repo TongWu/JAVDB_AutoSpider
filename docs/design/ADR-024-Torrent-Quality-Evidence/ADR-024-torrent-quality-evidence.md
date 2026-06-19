@@ -199,7 +199,8 @@ production pipeline unchanged.
 | Phase | IMP | Ships | Deferred |
 | --- | --- | --- | --- |
 | Phase 1 | [IMP-ADR024-01](IMP-ADR024-01-d1-schema.md) · [-02](IMP-ADR024-02-models-repo.md) · [-03](IMP-ADR024-03-feature-extraction-scoring.md) · [-04](IMP-ADR024-04-file-filter-modularize.md) · [-05](IMP-ADR024-05-evidence-collection.md) · [-06](IMP-ADR024-06-read-api.md) · [-07](IMP-ADR024-07-docs-verification.md) | D1 evidence schema, **production-download** evidence collection (reusing the QBFileFilter read helpers), explainable shadow scoring, logs + read-only API report | Remote `quality_probe` endpoint + metadata-only capability canary; bounded Top-K runner-up collection; any production download behavior change |
-| Phase 2 | [IMP-ADR024-08](IMP-ADR024-08-phase2-assist.md) (outline) | Assist mode that can recommend per-category replacements and surface review actions in API/Web; movie-context join; Top-K + remote probe prerequisites | Fully automatic enforcement |
+| Phase 2 prerequisite | [IMP-ADR024-10](IMP-ADR024-10-remote-probe-topk.md) | Remote `quality_probe` endpoint (D4-D7) + bounded Top-K runner-up collection (D8) → `target_role=quality_probe` evidence rows. Gated off by default, fail-closed, no production-path change. | Scoring across candidates, API/Web (those are IMP-08) |
+| Phase 2 | [IMP-ADR024-08](IMP-ADR024-08-phase2-assist.md) (outline) | Assist mode that can recommend per-category replacements and surface review actions in API; movie-context join; operator review-label store. Builds on IMP-10's runner-up evidence. | Web review UI (separate `javdb-autospider-web` round); fully automatic enforcement |
 | Phase 3 | [IMP-ADR024-09](IMP-ADR024-09-phase3-enforce.md) (outline) | Enforce mode behind rollout gates, threshold tuning via offline replay, backfill/reporting jobs | Video frame/CV inspection and heavyweight ML runtimes |
 
 > **Phase 1 scope note (2026-05-31, recorded during IMP planning).** The original
@@ -236,3 +237,21 @@ production pipeline unchanged.
   (0 rows — shadow-only, `TORRENT_QUALITY_EVIDENCE_ENABLED` defaults False, so
   nothing has run in production). Status advanced Proposed → Accepted. Phase 2/3
   (assist / enforce) remain outlines; the folder is not archived until they land.
+- 2026-06-19: Phase 2/3 scope grilled. Decisions: (1) enable Phase 1
+  `production_download` collection in production first to accumulate real shadow
+  data; (2) Phase 2 assist takes the **full** form (recommend a better alternative
+  candidate), which requires the deferred remote probe + Top-K — split into a new
+  executable [IMP-ADR024-10](IMP-ADR024-10-remote-probe-topk.md) (gating
+  prerequisite); (3) the operator owns a dedicated remote qB for probing;
+  (4) Phase 3 builds the enforce *machinery* only (gate / offline replay / backfill
+  / off-switch) with enforce gated OFF — thresholds wait for assist-era labelled
+  data; (5) the Phase 2 Web review UI is deferred to a separate
+  `javdb-autospider-web` round (API-only here). IMP-10 authored and entered
+  execution; IMP-08/09 to be refined from their outlines after IMP-10 lands.
+- 2026-06-19: IMP-ADR024-10 **implemented & verified** (11 commits; 40 new unit
+  tests; 1016-pass broad regression, 0 failures). Remote `quality_probe` endpoint
+  + bounded Top-K runner-up capture land gated OFF by default. Two design slips
+  were corrected during execution (production-safe parallel `_bucket_magnets` with
+  a drift guard; probe must add `paused=False` for metadata-only). Outstanding
+  operator step: apply the `TorrentProbeCandidate` D1 migration + re-align SQLite.
+  IMP-08 (assist) / IMP-09 (enforce machinery) remain outlines for a later round.

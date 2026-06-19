@@ -692,6 +692,28 @@ CREATE INDEX IF NOT EXISTS idx_torrent_quality_eval_video_code
 
 CREATE INDEX IF NOT EXISTS idx_torrent_quality_eval_created_at
     ON TorrentQualityEvaluation(created_at);
+
+-- ADR-024 IMP-10: runner-up probe queue. Mirrors the D1 migration
+-- 2026_06_19_add_torrent_probe_candidate.sql verbatim (same columns) so the
+-- D1<->local schema-parity contract (test_rollback_full_fidelity) holds.
+CREATE TABLE IF NOT EXISTS TorrentProbeCandidate (
+    info_hash        TEXT NOT NULL,
+    movie_href       TEXT NOT NULL,
+    video_code       TEXT,
+    javdb_category   TEXT,
+    magnet_uri       TEXT NOT NULL,
+    magnet_name      TEXT,
+    javdb_tags_json  TEXT,
+    javdb_size_text  TEXT,
+    status           TEXT NOT NULL DEFAULT 'pending'
+                         CHECK (status IN ('pending', 'probed', 'failed')),
+    enqueued_at      TEXT NOT NULL,
+    probed_at        TEXT,
+    PRIMARY KEY (info_hash, movie_href)
+);
+
+CREATE INDEX IF NOT EXISTS idx_torrent_probe_candidate_status
+    ON TorrentProbeCandidate(status);
 """
 
 _OPERATIONS_DDL = _SCHEMA_VERSION_DDL + """
