@@ -14,11 +14,13 @@ from javdb.parsing.magnet_categorize import (
     _python_categorize as _python_extract_magnets,
     _sort_key,
     categorize as extract_magnets,
+    collect_runner_ups,
     infer_resolution,
 )
 
 __all__ = [
     'extract_magnets',
+    'collect_runner_ups',
     'infer_resolution',
     '_parse_size',
     '_sort_key',

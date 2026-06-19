@@ -563,6 +563,18 @@ TORRENT_QUALITY_POLICY_MODE = 'shadow'
 # than scanning every qBittorrent category.
 TORRENT_QUALITY_CATEGORIES = ''
 
+# --- ADR-024 Phase 2 prerequisite: remote quality_probe endpoint (IMP-10) ---
+# Runner-up shadow probing. Capture (Top-K runner-up enqueue) is gated by
+# TORRENT_QUALITY_EVIDENCE_ENABLED above. Probing the runner-ups on a dedicated
+# REMOTE qBittorrent requires QUALITY_PROBE_ENABLED *and* a configured endpoint.
+# Both default off: a fresh deploy captures nothing and probes nothing.
+QUALITY_PROBE_ENABLED = False
+QUALITY_PROBE_QB_URL = ''          # Dedicated remote qB; never the production NAS qB
+QUALITY_PROBE_QB_USERNAME = ''     # Falls back to QB_USERNAME when empty
+QUALITY_PROBE_QB_PASSWORD = ''     # Falls back to QB_PASSWORD when empty
+QUALITY_PROBE_TOPK = 2             # Runner-up magnets captured per category
+QUALITY_PROBE_GLOBAL_CAP = 50      # Max runner-ups enqueued per ingestion run
+
 # =============================================================================
 # API CONSOLE / BACKEND SERVICE
 # =============================================================================

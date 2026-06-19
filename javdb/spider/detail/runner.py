@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import json as _json
 from threading import Event
 from typing import List, Optional, Set, Tuple
 from urllib.parse import urljoin
 
 from javdb.infra.logging import get_logger
-from javdb.infra.config import use_sqlite
+from javdb.infra.config import cfg, use_sqlite
 from javdb.storage import db as _db
 from javdb.storage.db import get_db
 from javdb.storage.history_manager import (
@@ -41,8 +42,45 @@ from javdb.spider.fetch.backend import FetchBackend
 from javdb.spider.fetch.fetch_engine import EngineTask
 from javdb.spider.runtime.config import BASE_URL
 from javdb.pipeline.events import emit as _emit_event  # ADR-036 Phase 2
+from javdb.quality.probe_queue import maybe_capture_runner_ups
 
 logger = get_logger(__name__)
+
+
+def _capture_runner_ups_for_result(
+    result: dict,
+    *,
+    href: str,
+    video_code,
+    repo,
+    enabled: bool,
+    k: int,
+    global_cap: int,
+    enqueued_at: str,
+) -> int:
+    """ADR-024 IMP-10: additively enqueue Top-K runner-ups for a parsed result.
+
+    Reads the raw magnet list from ``result['movie_detail']`` (the production
+    selection result is untouched). Safe no-op when capture is disabled or the
+    detail object is missing/odd. Never raises into the persistence path.
+    """
+    if not enabled:
+        return 0
+    detail = result.get("movie_detail")
+    getter = getattr(detail, "get_magnets_as_legacy", None)
+    if getter is None:
+        return 0
+    try:
+        magnets = getter() or []
+        return maybe_capture_runner_ups(
+            magnets,
+            context={"movie_href": href, "video_code": video_code},
+            repo=repo, enabled=True, k=k, global_cap=global_cap,
+            enqueued_at=enqueued_at,
+        )
+    except Exception:  # noqa: BLE001 - shadow capture must never break ingestion
+        logger.warning("Runner-up capture failed for %s", href, exc_info=True)
+        return 0
 
 
 def _dedup_record_field(record: object, *names: str) -> str:
@@ -460,6 +498,23 @@ def process_detail_entries(
     runtime = _resolve_runtime(runtime)
     holder_id = _holder_id(runtime)
 
+    # ADR-024 IMP-10: runner-up capture config. Only parse the int knobs when the
+    # feature is ON, and fail safe (disable capture) on a bad value — a malformed
+    # QUALITY_PROBE_* setting must never crash the core ingestion run.
+    _capture_enabled = bool(cfg("TORRENT_QUALITY_EVIDENCE_ENABLED", False))
+    _capture_topk = 2
+    _capture_cap = 50
+    if _capture_enabled:
+        try:
+            _capture_topk = int(cfg("QUALITY_PROBE_TOPK", 2) or 2)
+            _capture_cap = int(cfg("QUALITY_PROBE_GLOBAL_CAP", 50) or 50)
+        except (TypeError, ValueError):
+            logger.warning(
+                "Invalid QUALITY_PROBE_TOPK / QUALITY_PROBE_GLOBAL_CAP; "
+                "disabling runner-up capture for this run"
+            )
+            _capture_enabled = False
+
     total_entries = len(entries)
     if cancel_event is not None and cancel_event.is_set():
         logger.info("Phase %d detail processing cancelled before dispatch", phase)
@@ -689,6 +744,24 @@ def process_detail_entries(
     no_new_torrents = 0
     previous_runtime_state = runtime_state
 
+    # ADR-024 IMP-10: open ONE probe repo for the run (gated; no-op when disabled).
+    # ExitStack lets us conditionally enter the get_db context manager without
+    # restructuring the existing try/finally below.
+    import contextlib
+    from javdb.storage.repos.torrent_probe_repo import TorrentProbeRepo
+    _probe_repo = None
+    _probe_enqueued_at = datetime.now(timezone.utc).isoformat()
+    _captured_total = 0  # run-wide running count, enforces _capture_cap across all movies
+    _probe_stack = contextlib.ExitStack()
+    if _capture_enabled:
+        try:
+            _probe_conn = _probe_stack.enter_context(get_db(_db.REPORTS_DB_PATH))
+            _probe_repo = TorrentProbeRepo(_probe_conn)
+        except Exception:  # noqa: BLE001 — capture setup must never break ingestion
+            logger.warning("Runner-up probe repo setup failed; capture disabled for this run", exc_info=True)
+            _capture_enabled = False
+            _probe_stack.close()
+
     try:
         for result in backend.results():
             if cancel_event is not None and cancel_event.is_set():
@@ -836,6 +909,18 @@ def process_detail_entries(
             if outcome.row is not None:
                 phase_rows.append(outcome.row)
 
+            # ADR-024 IMP-10: additive runner-up capture (gated; never raises into ingestion path).
+            # global_cap is a RUN-WIDE budget: pass the remaining headroom each movie
+            # and accumulate, so the cap bounds the whole run rather than per-movie.
+            if _capture_enabled and _probe_repo is not None and _captured_total < _capture_cap:
+                _captured_total += _capture_runner_ups_for_result(
+                    data, href=href,
+                    video_code=entry.get('video_code', ''),
+                    repo=_probe_repo, enabled=True,
+                    k=_capture_topk, global_cap=_capture_cap - _captured_total,
+                    enqueued_at=_probe_enqueued_at,
+                )
+
             # Phase-1 success path — stage the claim instead of jumping
             # straight to ``completed_committed``.  Subsequent claim
             # attempts inside the SAME session_id observe
@@ -905,6 +990,8 @@ def process_detail_entries(
                     exc_info=True,
                 )
             queue_held_hrefs.clear()
+        # ADR-024 IMP-10: close the probe DB connection (no-op when disabled).
+        _probe_stack.close()
         backend.shutdown()
 
     finalize_detail_phase(
