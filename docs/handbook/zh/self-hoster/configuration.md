@@ -531,6 +531,12 @@ uvicorn 之前 `export VAR=...`。
 | `COMMIT_SESSION_BULK` | `str` | 启用 | pending session commit 默认使用 bulk 路径。设为 `'0'`、`'false'`、`'no'`、`'off'` 或空值可回退到 per-href 路径。 |
 | `D1_RECOVERY_OUTBOX_ENABLED` | `str` | `''` | ADR-010 Phase 2 开关。设为 `'1'` 时，安全 D1 写失败可进入 `reports/D1/d1_recovery_outbox.jsonl`；D1 模式仍会让写入失败，dual 模式会在 ordering key 清空前阻止提交。 |
 | `D1_BATCHING_ENABLED` | `str` | `''` | 设为 `'1'` 可启用 ADR-010 Phase 3 safe-path micro-batching，仅作用于显式标记为 batch-safe 的操作。普通 SQL 仍同步执行。 |
+| `D1_CIRCUIT_BREAKER_ENABLED` | `bool` | `true` | ADR-056 熔断器总开关（由 `_env_bool` 解析；接受 `1`/`true`/`yes`/`on`）。设为 `false` 可完全禁用按端点的熔断器。在熔断器构造时读取。 |
+| `D1_BREAKER_TRIP_THRESHOLD` | `int` | `3` | 触发熔断器 OPEN 所需的连续瞬时 5xx 响应次数。 |
+| `D1_BREAKER_PROBE_INTERVAL_SEC` | `float` | `5.0` | 熔断器 OPEN 期间 `SELECT 1` 健康检查探活的间隔秒数。 |
+| `D1_BREAKER_MAX_OPEN_SEC` | `int` | `900` | 熔断器保持 OPEN 的最长秒数，超时后抛出 `D1CircuitOpenError`。recovery/cleanup 工作流通过 `D1_BREAKER_MAX_OPEN_SEC_RECOVERY` 将此值覆盖为 `120`。 |
+| `D1_BREAKER_HALF_OPEN_SUCCESSES` | `int` | `1` | 关闭熔断器并恢复正常流量所需的成功探活次数。 |
+| `D1_INTERNAL_ERROR_FLOOR_SEC` | `float` | `2.0` | D1 code-7500 内部错误内层重试退避的最小延迟（秒）。 |
 | `D1_FLUSH_INTERVAL_MS` | `int` | `250` | 启用 D1 batching 后 safe batch 的最大等待窗口。 |
 | `D1_STARTUP_REPLAY_ENABLED` | `str` | `''` | ADR-010 Phase 4 开关。设为 `'1'` 时，进程首次打开 D1 或 Dual 连接会清空非 dead-lettered 的恢复工作。 |
 | `D1_STARTUP_REPLAY_MAX_ORDERING_KEYS` | `int` | `25` | 自动 startup replay 每次最多 drain 的 ordering key 数量。 |

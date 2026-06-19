@@ -22,6 +22,7 @@
 
 - [摘要](#摘要)
 - [D1 Recovery Outbox](#d1-recovery-outbox)
+- [瞬时 D1 故障处理（熔断器）](#瞬时-d1-故障处理熔断器)
 - [策略概要（仅 Pending）](#策略概要仅-pending)
   - [为什么 history 需要 audit 表？*（遗留——保留供上下文参考，参见附录 A）*](#为什么-history-需要-audit-表遗留保留供上下文参考参见附录-a)
   - [SessionId 生成（2026-05-08+）](#sessionid-生成2026-05-08)
@@ -119,6 +120,42 @@ python3 -m apps.cli.db.d1_recovery startup-drain
 ```
 
 Startup replay 是显式开启且受 outbox 状态约束的。如果 replay 将事件写入 `dead_lettered`，保持 workflow 停止，检查该 ordering key，并在重试 session commit 前修复或放弃该事件。
+
+## 瞬时 D1 故障处理（熔断器）
+
+ADR-056 为每个 D1 数据库连接按端点 URL 加装独立熔断器。熔断器可吸收短暂的 5xx 故障而不使运行崩溃，并在 D1 未能在配置的时间窗口内恢复时快速失败。
+
+**触发条件：**
+- 每个 D1 数据库（以 endpoint URL 为键）拥有独立的熔断器。
+- 连续 `D1_BREAKER_TRIP_THRESHOLD`（默认 `3`）次瞬时 5xx 响应会将熔断器置为 **OPEN**。
+- 永久性错误（不可重试的状态码）不计入计数，直接透传。
+
+**OPEN 期间 — 暂停、探活、恢复：**
+- 该数据库的所有 D1 调用方暂停并等待。
+- 一个选举产生的探活器每隔 `D1_BREAKER_PROBE_INTERVAL_SEC`（默认 `5.0` 秒）发出一次 `SELECT 1` 健康检查。
+- `D1_BREAKER_HALF_OPEN_SUCCESSES`（默认 `1`）次成功探活后，熔断器关闭，所有等待的调用方自动恢复。
+
+**超时后快速失败：**
+- 如果 D1 在 `D1_BREAKER_MAX_OPEN_SEC`（默认 `900` 秒 / 15 分钟）内未恢复，熔断器抛出终止性错误 `D1CircuitOpenError`。
+- 该错误会使运行崩溃并进入已有的 `cleanup-on-failure` 回滚流程——终止语义与之前完全一致，只是对短暂故障更具韧性。
+- `D1CircuitOpenError` 刻意**不**继承自 `D1TransientError`，因此会绕过 recovery outbox，不会加剧 [BFR-020](../../../design/BFR-020-D1-Recovery-Outbox-Replay-After-Rollback/BFR-020-d1-recovery-outbox-replay-after-rollback.zh.md) 问题。
+- 一次性运行（spider / CLI / Actions）在终止性抛错时直接退出，因此熔断器在那里实际上是永久终止——即预期的快速失败。而长期存活的进程（例如运行在 D1 上的 `apps/api` 后端）会在抛错后继续存活：其缓存的熔断器会在再经过一个 `D1_BREAKER_MAX_OPEN_SEC` 冷却期后自动 re-arm 回 CLOSED，从而重试已恢复的 D1，而不是让进程自锁直到重启。
+
+**运维说明 — recovery/cleanup 工作流：**
+`RollbackD1.yml`、`StaleSessionCleanup.yml` 以及 DailyIngestion 的 `cleanup-on-failure` 步骤通过 repository variable 将 `D1_BREAKER_MAX_OPEN_SEC_RECOVERY` 设为 `120` 秒，以便失败运行尽快暴露。摄取任务保持默认的 900 秒（其窗口余量为 6 小时）。
+
+**环境变量：**
+
+| 环境变量 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `D1_CIRCUIT_BREAKER_ENABLED` | `bool` | `true` | 总开关（由 `_env_bool` 解析；接受 `1`/`true`/`yes`/`on`）。在熔断器构造时读取；设为 `false` 可完全禁用。 |
+| `D1_BREAKER_TRIP_THRESHOLD` | `int` | `3` | 触发 OPEN 所需的连续瞬时 5xx 响应次数。 |
+| `D1_BREAKER_PROBE_INTERVAL_SEC` | `float` | `5.0` | OPEN 期间 `SELECT 1` 健康检查探活的间隔秒数。 |
+| `D1_BREAKER_MAX_OPEN_SEC` | `int` | `900` | 熔断器保持 OPEN 的最长秒数，超时后抛出 `D1CircuitOpenError`（15 分钟）。recovery/cleanup 工作流通过 `D1_BREAKER_MAX_OPEN_SEC_RECOVERY` 将此值覆盖为 `120`。 |
+| `D1_BREAKER_HALF_OPEN_SUCCESSES` | `int` | `1` | 关闭熔断器并恢复正常流量所需的成功探活次数。 |
+| `D1_INTERNAL_ERROR_FLOOR_SEC` | `float` | `2.0` | D1 code-7500 内部错误内层重试退避的最小延迟（秒）。 |
+
+设计原理参见 [ADR-056](../../../design/ADR-056-D1-Transport-Circuit-Breaker/ADR-056-d1-transport-circuit-breaker.zh.md)；recovery outbox 交互参见 [BFR-020](../../../design/BFR-020-D1-Recovery-Outbox-Replay-After-Rollback/BFR-020-d1-recovery-outbox-replay-after-rollback.zh.md)。
 
 ## 策略概要（仅 Pending）
 

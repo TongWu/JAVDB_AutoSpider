@@ -22,6 +22,7 @@ This document is the operator's reference for rolling back partial Cloudflare D1
 
 - [TL;DR](#tldr)
 - [D1 Recovery Outbox](#d1-recovery-outbox)
+- [Transient D1 outage handling (circuit breaker)](#transient-d1-outage-handling-circuit-breaker)
 - [Strategy summary (Pending only)](#strategy-summary-pending-only)
   - [Why audit tables for history? *(legacy — kept for context, see Appendix A)*](#why-audit-tables-for-history-legacy--kept-for-context-see-appendix-a)
   - [SessionId generation (2026-05-08+)](#sessionid-generation-2026-05-08)
@@ -114,6 +115,42 @@ python3 -m apps.cli.db.d1_recovery startup-drain
 ```
 
 Startup replay is opt-in and bounded by the recovery outbox state. If replay sends an event to `dead_lettered`, leave the workflow stopped, inspect the ordering key, and repair or abandon that event before retrying the session commit.
+
+## Transient D1 outage handling (circuit breaker)
+
+ADR-056 wraps every D1 database connection in a per-endpoint circuit breaker. The breaker absorbs transient 5xx brownouts without crashing a run and fails fast when D1 does not recover within the configured window.
+
+**How it trips:**
+- Each D1 database (keyed by endpoint URL) has its own breaker.
+- `D1_BREAKER_TRIP_THRESHOLD` (default `3`) consecutive transient 5xx responses trip the breaker **OPEN**.
+- Permanent errors (non-retriable status codes) are not counted — they pass through immediately.
+
+**While OPEN — pause, probe, resume:**
+- All D1 callers for that database pause and wait.
+- One elected prober issues a `SELECT 1` health check every `D1_BREAKER_PROBE_INTERVAL_SEC` (default `5.0` s).
+- After `D1_BREAKER_HALF_OPEN_SUCCESSES` (default `1`) successful probes the breaker closes and all waiting callers resume automatically.
+
+**Fail-fast after timeout:**
+- If D1 does not recover within `D1_BREAKER_MAX_OPEN_SEC` (default `900` s / 15 min), the breaker raises a terminal `D1CircuitOpenError`.
+- This error crashes the run into the existing `cleanup-on-failure` rollback — same terminal semantics as before, just resilient to short brownouts.
+- `D1CircuitOpenError` is deliberately **not** a `D1TransientError`, so it bypasses the recovery outbox and does not worsen [BFR-020](../../../design/BFR-020-D1-Recovery-Outbox-Replay-After-Rollback/BFR-020-d1-recovery-outbox-replay-after-rollback.md).
+- A one-shot run (spider / CLI / Actions) exits on the terminal raise, so the breaker is effectively permanent there. A long-lived process (e.g. the `apps/api` backend on D1) survives the raise: its cached breaker re-arms to CLOSED automatically after one more `D1_BREAKER_MAX_OPEN_SEC` cooldown, so a recovered D1 is retried instead of the process self-locking until restart.
+
+**Operational note — recovery/cleanup workflows:**
+`RollbackD1.yml`, `StaleSessionCleanup.yml`, and the DailyIngestion `cleanup-on-failure` step set `D1_BREAKER_MAX_OPEN_SEC_RECOVERY` to `120` s via a repository variable so a failed run surfaces quickly. Ingestion jobs keep the 900 s default (they have a 6-hour headroom window).
+
+**Environment variables:**
+
+| Env var | Type | Default | Description |
+|---|---|---|---|
+| `D1_CIRCUIT_BREAKER_ENABLED` | `bool` | `true` | Master on/off switch (parsed by `_env_bool`; accepts `1`/`true`/`yes`/`on`). Read at breaker construction time; set `false` to disable entirely. |
+| `D1_BREAKER_TRIP_THRESHOLD` | `int` | `3` | Consecutive transient 5xx responses required to trip the breaker OPEN. |
+| `D1_BREAKER_PROBE_INTERVAL_SEC` | `float` | `5.0` | Interval in seconds between `SELECT 1` health-check probes while OPEN. |
+| `D1_BREAKER_MAX_OPEN_SEC` | `int` | `900` | Maximum seconds the breaker stays OPEN before raising `D1CircuitOpenError` (15 min). Recovery/cleanup workflows override this to `120` via `D1_BREAKER_MAX_OPEN_SEC_RECOVERY`. |
+| `D1_BREAKER_HALF_OPEN_SUCCESSES` | `int` | `1` | Number of successful probes required to close the breaker and resume normal traffic. |
+| `D1_INTERNAL_ERROR_FLOOR_SEC` | `float` | `2.0` | Minimum backoff floor (seconds) for inner-retry delays on D1 code-7500 internal errors. |
+
+See [ADR-056](../../../design/ADR-056-D1-Transport-Circuit-Breaker/ADR-056-d1-transport-circuit-breaker.md) for design rationale and [BFR-020](../../../design/BFR-020-D1-Recovery-Outbox-Replay-After-Rollback/BFR-020-d1-recovery-outbox-replay-after-rollback.md) for the recovery-outbox interaction.
 
 ## Strategy summary (Pending only)
 

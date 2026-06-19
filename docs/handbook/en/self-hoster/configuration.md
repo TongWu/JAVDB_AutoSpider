@@ -573,6 +573,12 @@ runtime by various modules.
 | `COMMIT_SESSION_BULK` | `str` | enabled | Pending session commits use the bulk path by default. Set `'0'`, `'false'`, `'no'`, `'off'`, or an empty value to fall back to the per-href path. |
 | `D1_RECOVERY_OUTBOX_ENABLED` | `str` | `''` | ADR-010 Phase 2 gate. Set `'1'` to allow safe D1 write failures to queue in `reports/D1/d1_recovery_outbox.jsonl`; D1 mode still fails the write, and dual mode blocks commit until the ordering key drains. |
 | `D1_BATCHING_ENABLED` | `str` | `''` | Set `'1'` to enable ADR-010 Phase 3 safe-path micro-batching for explicitly batch-safe operations. Ordinary SQL remains synchronous. |
+| `D1_CIRCUIT_BREAKER_ENABLED` | `bool` | `true` | ADR-056 circuit breaker master switch (parsed by `_env_bool`; accepts `1`/`true`/`yes`/`on`). Set `false` to disable the per-endpoint breaker entirely. Read at breaker construction time. |
+| `D1_BREAKER_TRIP_THRESHOLD` | `int` | `3` | Consecutive transient 5xx responses required to trip the breaker OPEN. |
+| `D1_BREAKER_PROBE_INTERVAL_SEC` | `float` | `5.0` | Interval in seconds between `SELECT 1` health-check probes while the breaker is OPEN. |
+| `D1_BREAKER_MAX_OPEN_SEC` | `int` | `900` | Maximum seconds the breaker stays OPEN before raising `D1CircuitOpenError`. Recovery/cleanup workflows cap this to `120` via `D1_BREAKER_MAX_OPEN_SEC_RECOVERY`. |
+| `D1_BREAKER_HALF_OPEN_SUCCESSES` | `int` | `1` | Successful probes needed to close the breaker and resume normal traffic. |
+| `D1_INTERNAL_ERROR_FLOOR_SEC` | `float` | `2.0` | Minimum backoff floor (seconds) for inner-retry delays on D1 code-7500 internal errors. |
 | `D1_FLUSH_INTERVAL_MS` | `int` | `250` | Maximum safe-batch wait window when D1 batching is enabled. |
 | `D1_STARTUP_REPLAY_ENABLED` | `str` | `''` | ADR-010 Phase 4 gate. Set `'1'` to drain non-dead-lettered recovery work when a process first opens a D1 or Dual connection. |
 | `D1_STARTUP_REPLAY_MAX_ORDERING_KEYS` | `int` | `25` | Maximum ordering keys drained during automatic startup replay. |

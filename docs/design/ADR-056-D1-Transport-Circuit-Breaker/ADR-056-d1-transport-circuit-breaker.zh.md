@@ -1,6 +1,6 @@
 # ADR-056：面向瞬时宕机韧性的 D1 传输层熔断器
 
-**状态 (Status):** Proposed
+**状态 (Status):** Accepted
 **日期 (Date):** 2026-06-15
 **作者 (Author):** Ted
 **关联实现计划 (Related Implementation Plans):** [IMP-ADR056-01](IMP-ADR056-01-d1-transport-circuit-breaker.md)（Phase 1 — 熔断器 + 有界等待 + 测试）
@@ -61,11 +61,16 @@ worker 都已暂停，由其中之一探活、其余在 `Condition` 上等待，
 连续 `D1_BREAKER_HALF_OPEN_SUCCESSES`（默认 1）次探活成功后，熔断器 `HALF_OPEN → CLOSED`
 并 `notify_all()` 唤醒所有等待者。
 
-D4. **有界 OPEN → 终态 fail-fast + 回滚** — `OPEN` 期间，等待者最多阻塞
+D4. **有界 OPEN → 终态 fail-fast + 回滚（对守护进程可恢复）** — `OPEN` 期间，等待者最多阻塞
 `D1_BREAKER_MAX_OPEN_SEC`（默认 900=15min，从 `opened_at` 起算）。若到期 D1 仍未恢复，
 熔断器进入 `TERMINAL`，唤醒所有等待者，它们（与探活者）抛 `D1CircuitOpenError`。该错误上抛
 使 run 崩溃，由现有 `cleanup-on-failure` 作业回滚 session——可预测、复用成熟机制、且绝不会
-把 runner 占满 6h。
+把 runner 占满 6h。**`TERMINAL` 不是永久汇点：** 一次性运行（spider / CLI / Actions）在抛错时
+崩溃退出，因此永不 re-arm；但长期存活的进程（例如运行在 D1 backend 上的 `apps/api` 后端）会在
+抛错后存活，其缓存的进程全局熔断器本会永久拒绝该数据库。为避免该自锁，`TERMINAL` 熔断器在下一次
+`acquire()` 时——只要从 `terminal_at` 起又过了一个 `D1_BREAKER_MAX_OPEN_SEC` 冷却期——会
+re-arm 回 `CLOSED`，给已恢复的 D1 一次全新尝试（若仍宕机则从头重新跳闸、重新探活）。该冷却期在
+崩溃的 run 内永不到期，故一次性 fail-fast 语义不变。
 
 D5. **终态错误绕开 recovery outbox（不加重 [BFR-020](../BFR-020-D1-Recovery-Outbox-Replay-After-Rollback/BFR-020-d1-recovery-outbox-replay-after-rollback.zh.md)）**
 — `D1CircuitOpenError` 继承 `D1Error` 但**不是** `D1TransientError`，因此
@@ -112,7 +117,7 @@ D8. **探活旁路 + 与响应体一致的成功判定** — 探活者的 `SELEC
 
 | 阶段 | IMP | 交付内容 | 推迟内容 |
 | --- | --- | --- | --- |
-| Phase 1 | [IMP-ADR056-01](IMP-ADR056-01-d1-transport-circuit-breaker.md) | `D1CircuitBreaker` 按 DB 注册表 + 状态机、`_post` 集成、`D1CircuitOpenError`、构造时读取的环境变量（默认开）、对 7500 的内层退避微调、可观测（日志 + 聚合的 `d1_port_summary` 指标）、单元 + port 级 + 并发测试、`vars` 接线到**所有** D1 workflow | BFR-020 孤儿修复（独立）；可选的 spider 侧显式 worker 池暂停 UX（方案 B）；resume 时登录/租约重验（仅当 R1/R2 验证表明需要） |
+| Phase 1 ✅（2026-06-19 交付） | [IMP-ADR056-01](IMP-ADR056-01-d1-transport-circuit-breaker.md) | `D1CircuitBreaker` 按 DB 注册表 + 状态机、`_post` 集成、`D1CircuitOpenError`、构造时读取的环境变量（默认开）、对 7500 的内层退避微调、可观测（日志 + 聚合的 `d1_port_summary` 指标）、单元 + port 级 + 并发测试、`vars` 接线到**所有** D1 workflow | BFR-020 孤儿修复（独立）；可选的 spider 侧显式 worker 池暂停 UX（方案 B）；resume 时登录/租约重验（仅当 R1/R2 验证表明需要） |
 
 ## 参考 (References)
 
@@ -123,3 +128,7 @@ D8. **探活旁路 + 与响应体一致的成功判定** — 探活者的 `SELEC
 ## 状态日志 (Status Log)
 
 - 2026-06-15: Proposed
+- 2026-06-19：**已接受 (Accepted)。** Phase 1（[IMP-ADR056-01](IMP-ADR056-01-d1-transport-circuit-breaker.md)）已交付——熔断器注册表 + 状态机、`_post_with_retry`/`_probe_d1` 集成、`D1CircuitOpenError`、构造时读取的环境变量（默认开）、7500 退避下限、`d1_port_summary.json` 中聚合的 `circuit_breaker` 指标、17 个通过的熔断器测试，以及 `D1_CIRCUIT_BREAKER_ENABLED` 接线到全部 12 个 D1 workflow（recovery 作业上限 120s）。
+  - **R1（登录/会话 resume）——验证安全：** `JAVDB_SESSION_COOKIE` 是每次请求重放的静态凭据（`javdb/infra/request.py` 在每次抓取时设置 `_jdb_session` Cookie 头），登录通过页面抓取惰性校验；≤15 分钟的暂停不会让客户端登录状态过期，服务端会话 TTL 也远超 max-open 窗口。无需 resume 重验功能。
+  - **R2（MovieClaim / WorkDistributor 租约）——验证安全：** 协调器客户端为尽力而为的 fail-open（`javdb/spider/detail/runner.py` 捕获 `MovieClaimUnavailable` → 回退到进程内去重；登录态/会话路径同样 fail-open）。MovieClaim 默认 TTL 为 30 分钟（> 15 分钟 max-open），故默认 claim 可挺过最长暂停；暂停期间租约过期最坏只导致一次被历史去重的重复抓取。无需租约续约功能。路线图中推迟的项（BFR-020 孤儿修复、方案 B 暂停 UX）维持不变。
+- 2026-06-19：PR review 跟进（PR #240，Codex P2）——将 `TERMINAL` 改为可恢复，使长期存活的进程（运行在 D1 上的 `apps/api`）在一次 >15 分钟故障后不再自锁：`TERMINAL` 熔断器会在再经过一个 `D1_BREAKER_MAX_OPEN_SEC` 冷却期后 re-arm 回 `CLOSED`（一次性 fail-fast 语义不变——见修订后的 D4）。新增 `rearms` 指标与确定性 re-arm 测试。
