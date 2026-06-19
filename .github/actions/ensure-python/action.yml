@@ -49,10 +49,20 @@ runs:
         esac
 
         TOOL_CACHE="${RUNNER_TOOL_CACHE:?RUNNER_TOOL_CACHE is not set}"
-        if compgen -G "${TOOL_CACHE}/Python/${REQUESTED}.*/${ARCH_DIR}.complete" > /dev/null; then
-          echo "✓ Python ${REQUESTED} already in tool cache"
-          exit 0
-        fi
+        # A `.complete` marker is enough for actions/setup-python to trust an
+        # entry, but a partial/broken seed (e.g. missing libpython*.so) leaves
+        # the marker while failing at runtime. Verify the interpreter actually
+        # runs before trusting it; drop and re-seed any broken entry.
+        for marker in "${TOOL_CACHE}/Python/${REQUESTED}."*"/${ARCH_DIR}.complete"; do
+          [ -e "$marker" ] || continue
+          py="${marker%.complete}/bin/python3"
+          if "$py" --version > /dev/null 2>&1; then
+            echo "✓ Python ${REQUESTED} already in tool cache ($("$py" --version 2>&1))"
+            exit 0
+          fi
+          echo "::warning::ensure-python: cached ${py} is broken; re-seeding"
+          rm -rf "${marker%.complete}" "$marker"
+        done
 
         ASSET="cpython-${FULL}+${TAG}-${TRIPLE}-install_only.tar.gz"
         URL="https://github.com/astral-sh/python-build-standalone/releases/download/${TAG}/${ASSET}"
