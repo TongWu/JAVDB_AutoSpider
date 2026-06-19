@@ -2,7 +2,7 @@
 
 | 字段       | 值                                                                 |
 | ---------- | ----------------------------------------------------------------- |
-| **状态**   | 部分实施 —— Phase 1 已发布（2026-06-14);**Phase 2、3 未开始**(文件夹去重级联仍在 Python —— `dedup.py` 的 `SIZE_THRESHOLD_RATIO` 是活的生产消费者)。执行追踪见 [IMP-ADR048-01](IMP-ADR048-01-module-split-and-rust-folder-dedup.md)（3 阶段） |
+| **状态**   | 部分实施 —— Phase 1（2026-06-14）与 Phase 2（2026-06-19）已发布;**Phase 3 未开始**(文件夹去重级联仍在 Python —— `dedup.py` 的级联与 `SIZE_THRESHOLD_RATIO` 在 Phase 3 前仍是活的生产消费者)。执行追踪见 [IMP-ADR048-01](IMP-ADR048-01-module-split-and-rust-folder-dedup.md)（3 阶段） |
 | **日期**   | 2026-06-13                                                        |
 | **作者**   | Ted                                                              |
 | **关联**   | [ADR-041](../_archive/ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md)（本 ADR 实例化并扩展的 fallback 分层策略）、[ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md)（拆了 rclone **manager** 但明确推迟了 **helper** 深拆——ADR-048 正是这块推迟工作的延续）、[ADR-035](../_archive/ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)（Rust 是规范解析路径）、[ADR-039](../ADR-039-Pluggable-Integration-Platform/ADR-039-pluggable-integration-platform.md)（插件平台——拥有 **downloader/notify** 类别，**不**含 rclone 清理） |
@@ -124,3 +124,4 @@
 
 - 2026-06-13：Proposed（源自 2026-06-13 架构评审候选 1 的 grilling）。决定：4 模块拆分（`types`/`path_utils`/`scan`/`dedup`）；Phase 2 采用已有 Rust 扫描原语 + 修 `parse_lsjson_for_year` 适配 3 级 layout；Phase 3 把文件夹去重级联移入 **Rust-Required** 模块并带显式不变量（D5）。记录判据扩展（D6：不可逆性作为 Rust-Required 第二触发）与清理 vs 跳过去重的术语澄清。IMP-ADR048-01（3 阶段）待评审。
 - 2026-06-14：**Phase 1 已发布**（纯模块拆分 —— `helper.py` → `types`/`path_utils`/`scan`/`dedup`;行为不变）。**Phase 2、3 未开始。** 须注意的后果：文件夹去重 keep/delete 级联（`analyze_duplicates_for_code` 及其 helper,含 1.30× size 例外）**仍是 Python**,`types.py` 的 `SIZE_THRESHOLD_RATIO` 经 `dedup.py` → `service.py` → `RcloneManager` 工作流仍是活的生产消费者。`dedup_ops.rs` **尚未**拥有这个决策(它只有跳过时的 `should_skip_from_rclone`/`check_dedup_upgrade`)。Phase 3(Step P3.2/P3.5)落地前,切勿删除 Python 级联或 `SIZE_THRESHOLD_RATIO`。
+- 2026-06-19：Phase 2 完成。修复 Rust `parse_lsjson_for_year` 以适配 3 级 `<actor>/<movie_code>/<sensor-subtitle>` layout（Rust `#[test]` 全绿）；把 `scan.py` 的 `get_year_folders`/`get_actor_folders`/`get_all_movie_folders_for_year` 路由到 Rust `parse_lsd_output`/`parse_lsjson_for_year`，并在 `ImportError` 时保留纯 Python Best-Effort 回退（D7）；由 `tests/unit/test_rclone_scan_parity.py` 锁定。**偏离：** `group_folders_by_movie_code` 未路由到 Rust `group_by_movie_code` —— 它对 `FolderInfo` dataclass 分组（Rust 操作纯 dict），路由会为一个非热路径的简单分组强加有损往返；保留纯 Python。Phase 2 未触及 Python 文件夹去重级联与 `SIZE_THRESHOLD_RATIO`,二者在 Phase 3 前仍是活的。

@@ -326,18 +326,49 @@ def parse_leaf_name(leaf_name: str) -> Optional[Tuple[str, str]]:
     return sensor, subtitle
 
 
+def _py_parse_lsd_output(output: str) -> List[str]:
+    """Pure-Python fallback for ``rclone lsd`` line parsing.
+
+    Each line looks like ``-1 2024-01-01 00:00:00 -1 <folder name>``; the
+    folder name is everything from the 5th whitespace-delimited token onward
+    (so names containing spaces are preserved).
+    """
+    folders: List[str] = []
+    for line in output.splitlines():
+        trimmed = line.strip()
+        if not trimmed:
+            continue
+        parts = trimmed.split()
+        if len(parts) >= 5:
+            folders.append(' '.join(parts[4:]))
+    return folders
+
+
 try:
     from javdb.rust_core import (
         parse_folder_name as _rs_parse_folder_name,
+        parse_lsd_output as _rs_parse_lsd_output,
+        parse_lsjson_for_year as _rs_parse_lsjson_for_year,
     )
     _RUST_RCLONE_PARSE = True
 
     def parse_folder_name(folder_name: str) -> Optional[Tuple[str, str, str]]:
         """Parse a legacy movie folder name (Rust-accelerated)."""
         return _rs_parse_folder_name(folder_name)
+
+    def parse_lsd_output(output: str) -> List[str]:
+        """Parse ``rclone lsd`` output into folder names (Rust-accelerated)."""
+        return _rs_parse_lsd_output(output)
 except ImportError:
     _RUST_RCLONE_PARSE = False
     parse_folder_name = _py_parse_folder_name
+    parse_lsd_output = _py_parse_lsd_output
+    # ADR-041 D3: loud WARNING when the Rust accelerator is unavailable and we
+    # fall back to the Best-Effort pure-Python scan path (ADR-048 D7).
+    logger.warning(
+        "javdb.rust_core unavailable — rclone scan parsing falls back to "
+        "pure-Python (slower). Build the Rust extension for full performance."
+    )
 
 
 def get_year_folders(remote_name: str, root_folder: str) -> List[str]:
@@ -350,14 +381,11 @@ def get_year_folders(remote_name: str, root_folder: str) -> List[str]:
         )
         if result.returncode != 0:
             raise RuntimeError(f"Failed to list year folders: {result.stderr}")
-        years = []
-        for line in result.stdout.strip().split('\n'):
-            if line.strip():
-                parts = line.strip().split()
-                if len(parts) >= 5:
-                    folder_name = ' '.join(parts[4:])
-                    if re.match(r'^\d{4}$', folder_name) or folder_name == '未知':
-                        years.append(folder_name)
+        years = [
+            folder_name
+            for folder_name in parse_lsd_output(result.stdout)
+            if re.match(r'^\d{4}$', folder_name) or folder_name == '未知'
+        ]
         logger.info(f"Found {len(years)} year folders: {years}")
         return years
     except subprocess.TimeoutExpired:
@@ -378,14 +406,7 @@ def get_actor_folders(remote_name: str, root_folder: str, year: str) -> List[str
             if "directory not found" in result.stderr.lower():
                 return []
             raise RuntimeError(f"Failed to list actor folders: {result.stderr}")
-        actors = []
-        for line in result.stdout.strip().split('\n'):
-            if line.strip():
-                parts = line.strip().split()
-                if len(parts) >= 5:
-                    folder_name = ' '.join(parts[4:])
-                    actors.append(folder_name)
-        return actors
+        return parse_lsd_output(result.stdout)
     except subprocess.TimeoutExpired:
         raise RuntimeError(f"Timeout listing actor folders from {remote_path}")
 
@@ -503,33 +524,24 @@ def get_movie_folders_with_stats(
     return folders
 
 
-def get_all_movie_folders_for_year(
-    remote_name: str, root_folder: str, year: str,
-) -> List[FolderInfo]:
-    """Get ALL movie folders under a year with one ``rclone lsjson -R`` call."""
-    remote_path = f"{remote_name}:{root_folder}/{year}"
-    try:
-        result = subprocess.run(
-            ['rclone', 'lsjson', remote_path, '-R', '--fast-list'],
-            capture_output=True, text=True, timeout=300,
-        )
-        if result.returncode != 0:
-            if "directory not found" in result.stderr.lower():
-                return []
-            raise RuntimeError(f"Failed to list {remote_path}: {result.stderr}")
-    except subprocess.TimeoutExpired:
-        raise RuntimeError(f"Timeout listing {remote_path}")
+def _py_parse_lsjson_for_year(json_str: str) -> List[dict]:
+    """Pure-Python fallback mirroring Rust ``parse_lsjson_for_year``.
 
-    # NOTE: the Rust ``parse_lsjson_for_year`` helper still expects the legacy
-    # 2-level ``<actor>/<code [sensor-subtitle]>`` layout; the new layout adds
-    # a ``<code>/`` directory so we route the Python parser unconditionally
-    # until the Rust side is updated.
-    try:
-        entries = json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"Invalid JSON from rclone for {remote_path}: {exc}") from exc
+    Layout: ``<actor>/<movie_code>/<sensor-subtitle>/<files...>``. Directories
+    register at depth 3; files at depth >=4 contribute size/file_count keyed by
+    the same ``(actor, movie_code, leaf)`` 3-tuple. Returns one dict per kept
+    leaf with keys ``actor``, ``movie_code``, ``folder_name``, ``sensor``,
+    ``subtitle``, ``size``, ``file_count`` (same contract as the Rust helper).
+    ``full_path``/``year`` are added by the caller when assembling FolderInfo.
+    """
+    entries = json.loads(json_str)
+    if not isinstance(entries, list):
+        # Mirror the Rust ``parse_lsjson_for_year`` contract, which rejects any
+        # JSON that is not an array-of-objects (e.g. ``{}``, ``null``, ``42``)
+        # with a sequence/struct error. Raise ValueError here so the caller's
+        # single ``except`` maps it to RuntimeError identically on both paths.
+        raise ValueError(f"expected a JSON array of objects, got {type(entries).__name__}")
 
-    # Layout: <actor>/<movie_code>/<sensor-subtitle>/<files...>
     movie_dirs: set = set()
     dir_sizes: Dict[Tuple[str, str, str], int] = defaultdict(int)
     dir_counts: Dict[Tuple[str, str, str], int] = defaultdict(int)
@@ -547,22 +559,69 @@ def get_all_movie_folders_for_year(
             dir_sizes[key] += entry.get('Size', 0)
             dir_counts[key] += 1
 
-    folders: List[FolderInfo] = []
+    results: List[dict] = []
     for actor, movie_code, leaf in movie_dirs:
         parsed = parse_leaf_name(leaf)
         if not parsed:
             continue
         sensor, subtitle = parsed
         key = (actor, movie_code, leaf)
+        results.append({
+            'actor': actor,
+            'movie_code': movie_code,
+            'folder_name': leaf,
+            'sensor': sensor,
+            'subtitle': subtitle,
+            'size': dir_sizes.get(key, 0),
+            'file_count': dir_counts.get(key, 0),
+        })
+    return results
+
+
+def get_all_movie_folders_for_year(
+    remote_name: str, root_folder: str, year: str,
+) -> List[FolderInfo]:
+    """Get ALL movie folders under a year with one ``rclone lsjson -R`` call."""
+    remote_path = f"{remote_name}:{root_folder}/{year}"
+    try:
+        result = subprocess.run(
+            ['rclone', 'lsjson', remote_path, '-R', '--fast-list'],
+            capture_output=True, text=True, timeout=300,
+        )
+        if result.returncode != 0:
+            if "directory not found" in result.stderr.lower():
+                return []
+            raise RuntimeError(f"Failed to list {remote_path}: {result.stderr}")
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"Timeout listing {remote_path}") from exc
+
+    # ADR-048 Phase 2: the Rust ``parse_lsjson_for_year`` now handles the
+    # 3-level ``<actor>/<movie_code>/<sensor-subtitle>`` layout. Route through
+    # it when available; the pure-Python ``_py_parse_lsjson_for_year`` is the
+    # Best-Effort fallback (ADR-048 D7) used when the extension is missing.
+    try:
+        if _RUST_RCLONE_PARSE:
+            parsed_rows = _rs_parse_lsjson_for_year(result.stdout)
+        else:
+            parsed_rows = _py_parse_lsjson_for_year(result.stdout)
+    except (json.JSONDecodeError, ValueError, TypeError, AttributeError) as exc:
+        raise RuntimeError(f"Invalid JSON from rclone for {remote_path}: {exc}") from exc
+
+    # Layout: <actor>/<movie_code>/<sensor-subtitle>/<files...>
+    folders: List[FolderInfo] = []
+    for row in parsed_rows:
+        actor = row['actor']
+        movie_code = row['movie_code']
+        leaf = row['folder_name']
         folders.append(FolderInfo(
             full_path=f"{remote_path}/{actor}/{movie_code}/{leaf}",
             year=year, actor=actor,
             movie_code=movie_code,
-            sensor_category=sensor,
-            subtitle_category=subtitle,
+            sensor_category=row['sensor'],
+            subtitle_category=row['subtitle'],
             folder_name=leaf,
-            size=dir_sizes.get(key, 0),
-            file_count=dir_counts.get(key, 0),
+            size=row['size'],
+            file_count=row['file_count'],
         ))
     return folders
 
