@@ -120,6 +120,31 @@ LOGIN_VERIFICATION_URLS = []  # 用于验证会话有效性的 URL
 
 `DailyIngestion.yml` 和 `AdHocIngestion.yml` 工作流包含登录步骤，会在每次运行前自动刷新会话 cookie。
 
+## 与 CI Runner 共享登录状态
+
+GitHub Actions runner 通过 Proxy Coordinator 的 `GlobalLoginState` Durable
+Object 共享会话 cookie：第一个登录成功的 runner 把 cookie 发布上去，其余
+runner 直接采用并跳过自己的登录。该缓存**只能由一次成功的登录填充**——当
+Cloudflare 拦住 CI 登录（验证码被拒、POST 返回 HTTP 403）时，没有任何东西被
+发布，于是每次运行都从零重新登录。
+
+要打破这个死循环，在本地运行 `python3 -m apps.cli.login`——本地可以用未被标记的 IP 并
+解出验证码——登录成功后它会把 cookie 发布到协调器。之后的 CI 运行就能采用它
+并跳过登录。
+
+这需要先配置好协调器（与 spider 使用的是同一组值）：
+
+```python
+# In config.py
+PROXY_COORDINATOR_URL = 'https://proxy-coordinator.<account>.workers.dev'
+PROXY_COORDINATOR_TOKEN = 'your_shared_secret'
+```
+
+为让发布的 cookie 能绑定到某个 CI worker，请通过一个同样存在于 runner
+`PROXY_POOL` 中的代理登录——把 `LOGIN_PROXY_NAME` 设为池中某个代理即可。当协
+调器未配置或不可达时，发布步骤会被静默跳过；本地 cookie 与 `config.py` 更新
+仍照常成功。
+
 ## 手动提取 Cookie
 
 如果自动登录失败，可以手动提取 cookie：
