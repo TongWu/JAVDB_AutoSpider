@@ -1,6 +1,6 @@
 # IMP-ADR048-01: Split the rclone Helper & Port the Folder-Dedup Cascade to Rust — Implementation Plan
 
-> **Status: ✅ Phase 1 implemented (2026-06-14).** Authored from the [ADR-048](ADR-048-rclone-module-split-and-folder-dedup-rust.md) grilling. Three sequential phases, each shipping as its own PR with a final verification gate. Phase 1 is implemented in this change; Phases 2–3 remain proposed and intentionally out of scope for this PR.
+> **Status: ✅ All 3 phases implemented (Phase 1 2026-06-14; Phases 2–3 2026-06-19).** Authored from the [ADR-048](ADR-048-rclone-module-split-and-folder-dedup-rust.md) grilling. Three sequential phases, each shipping as its own PR with a final verification gate. Phase 2 routed the scan engine through Rust `rclone_ops`; Phase 3 made the folder-dedup cascade Rust-Required (3a ported + proved parity, 3b removed the Python cascade + added the chokepoint guard).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -128,12 +128,12 @@
 
 ### Tasks (Phase 3)
 
-- [ ] **Step P3.1 — Freeze the Python cascade baseline** on generated multi-folder fixtures (the parity golden for `test_rclone_dedup_parity.py`).
-- [ ] **Step P3.2 — Port the cascade to Rust** (`dedup_ops.rs`), enforcing the D5 invariants; add Rust `#[test]`s incl. the never-purge-all and 1.30×-boundary cases.
-- [ ] **Step P3.3 — Repoint cascade behaviour tests to Rust** and run green **with the Python cascade still present** (proves the Rust port satisfies the contract). Gate 3.A.
-- [ ] **Step P3.4 — Parity check** (`test_rclone_dedup_parity.py`) green Rust-vs-Python on generated sets.
-- [ ] **Step P3.5 — Remove the Python cascade bodies** + add the chokepoint guard; keep `execute_deletions`/`rclone_purge`. Remove orphaned imports the deletion creates.
-- [ ] **Step P3.6 — Docs:** CONTEXT.md Rust-Required extension term; ADR-041 Status Log back-ref (both languages): *"2026-06-13: Rust-Required tier extended by [ADR-048](../../ADR-048-Rclone-Module-Split/ADR-048-rclone-module-split-and-folder-dedup-rust.md) — the rclone folder-dedup cascade joins ProxyPool/ProxyBanManager as a Rust-Required module, on a new irreversibility/blast-radius trigger (ADR-048 D6)."*; flip ADR-048 + this IMP status to Completed.
+- [x] **Step P3.1 — Freeze the Python cascade baseline** on generated multi-folder fixtures (Phase 3a parity guard, then frozen as the golden in `test_rclone_dedup_golden.py`).
+- [x] **Step P3.2 — Port the cascade to Rust** (`dedup_ops.rs` `analyze_folder_dedup`), enforcing the D5 invariants; Rust `#[test]`s incl. never-purge-all, the 1.30×-boundary, equal-priority tie, unclassifiable fail-closed, and the three invariant-guard `Err` arms (`EmptyKeep`/`PartitionViolation`/`MultipleSensorWinners`).
+- [x] **Step P3.3 — Repoint cascade behaviour tests to Rust** — the `TestAnalyzeDuplicates`/`TestSizeException` suites now exercise the Rust path via `analyze_duplicates_for_code`, green **with the Python cascade still present** (Phase 3a, Gate 3.A).
+- [x] **Step P3.4 — Parity check** — Phase 3a asserted Rust == Python on the generated sets (incl. a 20k-input brute force). Retired in 3b per the ADR; the fixtures live on as a frozen golden (`test_rclone_dedup_golden.py`).
+- [x] **Step P3.5 — Remove the Python cascade bodies** (`_analyze_duplicates_for_code_py`/`_process_wuma_dedup`/`_apply_sensor_priority`/`_process_subtitle_dedup`) + added the `_require_rust_dedup` chokepoint guard; kept `execute_deletions`/`rclone_purge`; removed the orphaned `SensorCategory`/`SubtitleCategory`/`SIZE_THRESHOLD_RATIO` imports. Added a defensive partition assertion in the Python wrapper.
+- [x] **Step P3.6 — Docs:** CONTEXT.md Rust-Required extension term + the now-done Phase 2/3 entries; ADR-041 Status Log back-ref (both languages): *"2026-06-13: Rust-Required tier extended by [ADR-048](../../ADR-048-Rclone-Module-Split/ADR-048-rclone-module-split-and-folder-dedup-rust.md) — the rclone folder-dedup cascade joins ProxyPool/ProxyBanManager as a Rust-Required module, on a new irreversibility/blast-radius trigger (ADR-048 D6)."*; flipped ADR-048 + this IMP status to Completed.
 
   **Verification gate:**
   ```bash
@@ -145,11 +145,11 @@
 
 ### Phase 3 final gate
 
-- [ ] Rust `cargo test` (dedup_ops) green incl. invariant tests.
-- [ ] Cascade behaviour tests green against Rust; parity golden matches.
-- [ ] No-Rust path raises the clear chokepoint `RuntimeError` (monkeypatched test).
-- [ ] `pytest tests/unit tests/smoke -q -k rclone` green; `ruff check javdb/integrations/rclone`.
-- [ ] A dry-run `python3 -m apps.cli.rclone.manager` (with fixtures) produces the same keep/delete report as pre-port.
+- [x] Rust `cargo test` (dedup_ops) green incl. invariant tests (24 passed).
+- [x] Cascade behaviour tests green against Rust; golden (`test_rclone_dedup_golden.py`) matches.
+- [x] No-Rust path raises the clear chokepoint `RuntimeError` (monkeypatched `TestRustRequiredChokepoint`).
+- [x] `pytest tests/unit tests/smoke -q -k "rclone or dedup"` green (448 passed); `ruff check javdb/integrations/rclone javdb/rust_core` clean.
+- [x] The `test_rclone_manager.py` dry-run cases (the fixture-backed stand-in for `apps.cli.rclone.manager`) produce the same keep/delete report as pre-port.
 
 ---
 

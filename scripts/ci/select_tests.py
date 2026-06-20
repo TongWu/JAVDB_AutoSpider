@@ -95,6 +95,9 @@ RUST_REQUIRED_TEST_FILES = frozenset({
     # Asserts the Rust extension is active (parity vs the Rust scan primitives),
     # so it must trigger the wheel build even when only Python rclone files change.
     "tests/unit/test_rclone_scan_parity.py",
+    # ADR-048 Phase 3: the folder-dedup cascade is Rust-Required — these golden
+    # tests call the Rust decision (no Python fallback), so they need the wheel.
+    "tests/unit/test_rclone_dedup_golden.py",
 })
 FALLBACK_TESTS = (
     "tests/unit/test_rust_adapters_fallback.py",
