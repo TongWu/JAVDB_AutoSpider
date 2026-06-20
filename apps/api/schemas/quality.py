@@ -1,6 +1,7 @@
 """Schemas for /api/quality/* torrent-quality endpoints (ADR-024)."""
 from __future__ import annotations
 
+from enum import Enum
 from typing import Optional
 
 from pydantic import BaseModel
@@ -38,6 +39,7 @@ class TorrentQualityEvaluationSchema(BaseModel):
     inferred_category: Optional[str] = None
     category_consistent: Optional[bool] = None
     subtitle_evidence: Optional[str] = None
+    resolution_consistent: Optional[bool] = None
     score: Optional[float] = None
     shadow_rank: Optional[int] = None
     would_replace_current_choice: Optional[bool] = None
@@ -50,7 +52,46 @@ class TorrentQualityEvaluationListResponse(BaseModel):
     items: list[TorrentQualityEvaluationSchema]
 
 
+# ---------------------------------------------------------------------------
+# ADR-024 IMP-08: assist-mode schemas
+# ---------------------------------------------------------------------------
+
+class QualityRecommendationSchema(BaseModel):
+    """Per-category recommendation: current vs recommended candidate + diff."""
+
+    javdb_category: str
+    current: Optional[TorrentQualityEvaluationSchema] = None
+    recommended: Optional[TorrentQualityEvaluationSchema] = None
+    reason_diff: list[str] = []
+
+
+class QualityRecommendationListResponse(BaseModel):
+    items: list[QualityRecommendationSchema]
+
+
+class _LabelEnum(str, Enum):
+    accept = "accept"
+    reject = "reject"
+    skip = "skip"
+
+
+class ReviewLabelRequest(BaseModel):
+    info_hash: str
+    movie_href: str
+    scoring_version: str
+    label: _LabelEnum
+    note: Optional[str] = None
+
+
+class ReviewLabelResponse(BaseModel):
+    status: str
+
+
 __all__ = [
+    "QualityRecommendationListResponse",
+    "QualityRecommendationSchema",
+    "ReviewLabelRequest",
+    "ReviewLabelResponse",
     "TorrentQualityEvaluationListResponse",
     "TorrentQualityEvaluationSchema",
     "TorrentQualityEvidenceSchema",

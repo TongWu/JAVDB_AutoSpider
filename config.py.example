@@ -554,8 +554,14 @@ QB_FILE_FILTER_LOG_FILE = 'logs/qb_file_filter.log'
 # changing torrent selection or download behaviour.
 TORRENT_QUALITY_EVIDENCE_ENABLED = False
 
-# Phase 1 supports only 'shadow'. The 'assist' and 'enforce' modes are reserved
-# for later ADR-024 phases.
+# Controls the active phase of ADR-024 torrent quality evaluation:
+#   'shadow'  — Phase 1 (default): collect evidence only; never changes downloads.
+#   'assist'  — Phase 2 (ADR-024 IMP-08): rank probe vs production evidence and
+#               surface recommendations via the /api/quality API. Still no
+#               production-path change — writes shadow evaluations + review labels
+#               only. Requires TORRENT_QUALITY_EVIDENCE_ENABLED and
+#               QUALITY_PROBE_ENABLED to also be True.
+#   'enforce' — Phase 3 (ADR-024 IMP-09, reserved): not yet implemented.
 TORRENT_QUALITY_POLICY_MODE = 'shadow'
 
 # Optional JSON array of qBittorrent categories, e.g. '["Daily Ingestion"]'.

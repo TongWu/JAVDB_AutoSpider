@@ -714,6 +714,23 @@ CREATE TABLE IF NOT EXISTS TorrentProbeCandidate (
 
 CREATE INDEX IF NOT EXISTS idx_torrent_probe_candidate_status
     ON TorrentProbeCandidate(status);
+
+-- ADR-024 IMP-08: operator accept/reject labels over shadow quality evaluations.
+-- Labelled dataset Phase 3 tunes thresholds against. Diagnostic only.
+CREATE TABLE IF NOT EXISTS TorrentQualityReviewLabel (
+    info_hash        TEXT NOT NULL,
+    movie_href       TEXT NOT NULL,
+    scoring_version  TEXT NOT NULL,
+    label            TEXT NOT NULL
+                         CHECK (label IN ('accept', 'reject', 'skip')),
+    reviewer         TEXT,
+    note             TEXT,
+    reviewed_at      TEXT NOT NULL,
+    PRIMARY KEY (info_hash, movie_href, scoring_version)
+);
+
+CREATE INDEX IF NOT EXISTS idx_quality_review_label_movie
+    ON TorrentQualityReviewLabel(movie_href);
 """
 
 _OPERATIONS_DDL = _SCHEMA_VERSION_DDL + """

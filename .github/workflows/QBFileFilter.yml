@@ -373,6 +373,16 @@ jobs:
           echo "Running: python3 -m apps.cli.qb.quality_probe"
           python3 -m apps.cli.qb.quality_probe
 
+      - name: Rank assist candidates (ADR-024, assist mode)
+        if: ${{ vars.TORRENT_QUALITY_EVIDENCE_ENABLED == 'true' && vars.TORRENT_QUALITY_POLICY_MODE == 'assist' && vars.QUALITY_PROBE_ENABLED == 'true' && github.event.inputs.dry_run != 'true' }}
+        env:
+          DAYS: ${{ github.event.inputs.days || '2' }}
+        run: |
+          set -e
+          set -o pipefail
+          echo "Running: python3 -m apps.cli.qb.quality_assist --days $DAYS"
+          python3 -m apps.cli.qb.quality_assist --days "$DAYS"
+
   # =============================================================================
   # Job 3: Run File Filter on Adhoc qBittorrent (only when QB_URL_ADHOC is set)
   # =============================================================================
