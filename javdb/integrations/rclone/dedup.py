@@ -15,12 +15,34 @@ from javdb.integrations.rclone.types import (
     DedupResult,
     DeletionRecord,
     FolderInfo,
-    SensorCategory,
-    SIZE_THRESHOLD_RATIO,
-    SubtitleCategory,
 )
 
+try:
+    from javdb.rust_core import analyze_folder_dedup as _rs_analyze_folder_dedup
+
+    _RUST_DEDUP_AVAILABLE = True
+except ImportError:  # pragma: no cover - exercised via monkeypatch in tests
+    _rs_analyze_folder_dedup = None
+    _RUST_DEDUP_AVAILABLE = False
+
 logger = get_logger(__name__)
+
+
+def _require_rust_dedup() -> None:
+    """Fail closed when the Rust dedup decision is unavailable (ADR-048 D4).
+
+    The folder-dedup cascade is a Rust-Required module: there is no Python
+    fallback, because a divergent keep/delete decision drives irreversible
+    ``rclone purge`` (ADR-048 D6 — irreversibility/blast-radius trigger). It
+    must fail loud, never silently degrade.
+    """
+    if not _RUST_DEDUP_AVAILABLE:
+        raise RuntimeError(
+            "rclone folder-dedup cascade is Rust-Required (ADR-048 D4): "
+            "javdb.rust_core is unavailable. Build it with "
+            "`maturin develop --release -m javdb/rust_core/Cargo.toml` "
+            "or install the prebuilt wheel."
+        )
 
 
 # ============================================================================
@@ -39,119 +61,85 @@ def group_folders_by_movie_code(
     return dict(code_map)
 
 
-def analyze_duplicates_for_code(movie_code: str, folders: List[FolderInfo]) -> DedupResult:
-    """Analyze folders for a single movie code and determine which to delete."""
-    if len(folders) <= 1:
-        return DedupResult(
-            movie_code=movie_code,
-            year=folders[0].year if folders else "",
-            actor=folders[0].actor if folders else "",
-            folders_to_keep=folders,
-            folders_to_delete=[],
+def _build_delete_reason(rule_info: dict) -> str:
+    """Rebuild the EXACT Python reason string for a Rust-decided deletion.
+
+    The Rust cascade owns the keep/delete *decision* (ADR-048 D4); the
+    human-readable reason strings live here so reports stay byte-identical to
+    the pre-port Python cascade templates. ``rule_info`` carries the rule that
+    fired plus the referenced sensors.
+    """
+    rule = rule_info["rule"]
+    if rule == "Rule1":
+        keep = rule_info["keep_sensor"]
+        loser = rule_info["loser_sensor"]
+        return (
+            f"Rule1: Uncensored priority ({keep} > {loser}), "
+            f"keep {keep}, delete {loser}"
         )
+    if rule == "Rule2_youma":
+        category_name = rule_info["category_name"]
+        return f"Rule2: Subtitle version exists in {category_name} category, delete no-subtitle version"
+    if rule == "Rule2_wuma":
+        kept_zhongzi_sensor = rule_info["kept_zhongzi_sensor"]
+        return (
+            f"Rule2: Subtitle version exists ({kept_zhongzi_sensor}-中字), "
+            f"delete no-subtitle version"
+        )
+    raise ValueError(f"Unknown dedup rule: {rule!r}")
+
+
+def analyze_duplicates_for_code(movie_code: str, folders: List[FolderInfo]) -> DedupResult:
+    """Analyze folders for a single movie code and determine which to delete.
+
+    ADR-048 Phase 3a: the keep/delete *decision* is made in Rust
+    (``analyze_folder_dedup``). Folders cross the boundary as dicts keyed by
+    their input index; Rust returns indices to keep plus per-deletion rule
+    context, and this function reattaches the original ``FolderInfo`` objects
+    and rebuilds the exact reason strings in Python.
+    """
+    _require_rust_dedup()
 
     result = DedupResult(
         movie_code=movie_code,
-        year=folders[0].year,
-        actor=folders[0].actor,
+        year=folders[0].year if folders else "",
+        actor=folders[0].actor if folders else "",
         folders_to_keep=[],
         folders_to_delete=[],
     )
 
-    youma_folders = [f for f in folders if f.sensor_category == SensorCategory.YOUMA]
-    wuma_folders = [f for f in folders if SensorCategory.is_wuma_category(f.sensor_category)]
-
-    result = _process_subtitle_dedup(result, youma_folders, "有码")
-    result = _process_wuma_dedup(result, wuma_folders)
-    return result
-
-
-def _process_wuma_dedup(result: DedupResult, folders: List[FolderInfo]) -> DedupResult:
-    """Process deduplication for 无码 category folders."""
-    if not folders:
+    if len(folders) <= 1:
+        result.folders_to_keep = list(folders)
         return result
 
-    zhongzi_folders = [f for f in folders if f.subtitle_category == SubtitleCategory.ZHONGZI]
-    wuzi_folders = [f for f in folders if f.subtitle_category == SubtitleCategory.WUZI]
+    decision = _rs_analyze_folder_dedup([
+        {
+            "sensor_category": f.sensor_category,
+            "subtitle_category": f.subtitle_category,
+            "size": f.size,
+        }
+        for f in folders
+    ])
 
-    kept_zhongzi = _apply_sensor_priority(zhongzi_folders, result)
-    kept_wuzi = _apply_sensor_priority(wuzi_folders, result)
-
-    if kept_zhongzi:
-        result.folders_to_keep.extend(kept_zhongzi)
-        zhongzi_size = max(f.size for f in kept_zhongzi) if kept_zhongzi else 0
-        for folder in kept_wuzi:
-            wuzi_size = folder.size
-            if zhongzi_size > 0 and wuzi_size > zhongzi_size * SIZE_THRESHOLD_RATIO:
-                reason = (
-                    f"Exception: No-subtitle version ({format_size(wuzi_size)}) "
-                    f"is 30%+ larger than subtitle version ({format_size(zhongzi_size)}), kept"
-                )
-                logger.debug(f"Size exception for {folder.movie_code}: {reason}")
-                result.folders_to_keep.append(folder)
-            else:
-                reason = (
-                    f"Rule2: Subtitle version exists ({kept_zhongzi[0].sensor_category}-中字), "
-                    f"delete no-subtitle version"
-                )
-                result.folders_to_delete.append((folder, reason))
-    else:
-        result.folders_to_keep.extend(kept_wuzi)
-    return result
-
-
-def _apply_sensor_priority(folders: List[FolderInfo], result: DedupResult) -> List[FolderInfo]:
-    """Apply sensor category priority within a group."""
-    if not folders:
-        return []
-    if len(folders) == 1:
-        return folders
-
-    sorted_folders = sorted(
-        folders,
-        key=lambda f: SensorCategory.get_priority(f.sensor_category),
-        reverse=True,
-    )
-    keep_folder = sorted_folders[0]
-    for folder in sorted_folders[1:]:
-        reason = (
-            f"Rule1: Uncensored priority ({keep_folder.sensor_category} > {folder.sensor_category}), "
-            f"keep {keep_folder.sensor_category}, delete {folder.sensor_category}"
+    # Defense-in-depth: the Rust core already guarantees a total, disjoint
+    # partition, so this never fires — but it converts a would-be opaque
+    # IndexError (out-of-range / duplicate index) into an explicit signal that
+    # Rust returned a non-partition decision for this code.
+    keep_idx = list(decision["keep"])
+    del_idx = [d["index"] for d in decision["delete"]]
+    if sorted(keep_idx + del_idx) != list(range(len(folders))):
+        # ValueError (not RuntimeError) so analyze_all_duplicates classifies it
+        # with the Rust-side D5 violations under DEDUP_INVARIANT_VIOLATION.
+        raise ValueError(
+            f"Rust dedup returned a non-partition decision for {movie_code}: "
+            f"keep={keep_idx} delete={del_idx} n={len(folders)}"
         )
-        result.folders_to_delete.append((folder, reason))
-    return [keep_folder]
 
-
-def _process_subtitle_dedup(
-    result: DedupResult,
-    folders: List[FolderInfo],
-    category_name: str,
-) -> DedupResult:
-    """Process deduplication based on subtitle category."""
-    if not folders:
-        return result
-
-    zhongzi = [f for f in folders if f.subtitle_category == SubtitleCategory.ZHONGZI]
-    wuzi = [f for f in folders if f.subtitle_category == SubtitleCategory.WUZI]
-
-    if zhongzi and wuzi:
-        result.folders_to_keep.extend(zhongzi)
-        for wuzi_folder in wuzi:
-            zhongzi_size = max(f.size for f in zhongzi) if zhongzi else 0
-            wuzi_size = wuzi_folder.size
-            if zhongzi_size > 0 and wuzi_size > zhongzi_size * SIZE_THRESHOLD_RATIO:
-                reason = (
-                    f"Exception: No-subtitle version ({format_size(wuzi_size)}) "
-                    f"is 30%+ larger than subtitle version ({format_size(zhongzi_size)}), kept"
-                )
-                logger.debug(f"Size exception for {wuzi_folder.movie_code}: {reason}")
-                result.folders_to_keep.append(wuzi_folder)
-            else:
-                reason = f"Rule2: Subtitle version exists in {category_name} category, delete no-subtitle version"
-                result.folders_to_delete.append((wuzi_folder, reason))
-    else:
-        result.folders_to_keep.extend(zhongzi)
-        result.folders_to_keep.extend(wuzi)
+    result.folders_to_keep = [folders[i] for i in keep_idx]
+    result.folders_to_delete = [
+        (folders[d["index"]], _build_delete_reason(d))
+        for d in decision["delete"]
+    ]
     return result
 
 
@@ -160,6 +148,10 @@ def analyze_all_duplicates(
     max_workers: int = 4,
 ) -> List[DedupResult]:
     """Analyze all folders for duplicates using parallel processing."""
+    # Fail loud at the chokepoint before spawning workers — a per-code raise
+    # inside the pool below would be swallowed by the except handler.
+    _require_rust_dedup()
+
     logger.info("Analyzing duplicates...")
     code_map = group_folders_by_movie_code(folder_structure)
     logger.info(f"Found {len(code_map)} unique movie codes")
@@ -176,6 +168,10 @@ def analyze_all_duplicates(
                 r = future.result()
                 if r.folders_to_delete:
                     results.append(r)
+            except ValueError as e:
+                # A Rust D5 invariant violation: skip this code (no deletions)
+                # but mark it greppably — it warrants operator investigation.
+                logger.error(f"DEDUP_INVARIANT_VIOLATION for code {code}, deletions skipped: {e}")
             except Exception as e:
                 logger.error(f"Error analyzing code {code}: {str(e)}")
 
