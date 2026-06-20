@@ -164,7 +164,7 @@ Phase 1 的 scoring 刻意保持可解释：
 | --- | --- | --- | --- |
 | Phase 1 | [IMP-ADR024-01](IMP-ADR024-01-d1-schema.md) · [-02](IMP-ADR024-02-models-repo.md) · [-03](IMP-ADR024-03-feature-extraction-scoring.md) · [-04](IMP-ADR024-04-file-filter-modularize.md) · [-05](IMP-ADR024-05-evidence-collection.md) · [-06](IMP-ADR024-06-read-api.md) · [-07](IMP-ADR024-07-docs-verification.md) | D1 evidence schema、**生产下载**（production_download）evidence 采集（复用 QBFileFilter 读取轮子）、可解释 shadow scoring、日志 + 只读 API 报告 | 远端 `quality_probe` 端点 + 仅元数据能力金丝雀；有边界的 Top-K 候补采集；任何生产下载行为变化 |
 | Phase 2 前置 | [IMP-ADR024-10](IMP-ADR024-10-remote-probe-topk.md) | 远端 `quality_probe` 端点（D4-D7）+ 有界 Top-K 候补采集（D8）→ `target_role=quality_probe` 证据行。默认全关、fail-closed、不改生产路径。 | 跨候选评分、API/Web（属 IMP-08） |
-| Phase 2 | [IMP-ADR024-08](IMP-ADR024-08-phase2-assist.md)（轮廓） | Assist mode，可推荐每个分类的替换候选，并在 API 中暴露 review 动作；影片上下文关联；operator review-label 存储。基于 IMP-10 的候补证据。 | Web review UI（独立 `javdb-autospider-web` 轮次）；完全自动执行 |
+| Phase 2 | [IMP-ADR024-08](IMP-ADR024-08-phase2-assist.md) | **Assist 后端已落地（2026-06-20）：** 分类内候选排名、`TorrentQualityReviewLabel` 存储、生产+探测证据关联、带 gate 的评估器（`TORRENT_QUALITY_POLICY_MODE=assist`）、三个新 `/api/quality` 端点（recommendations / needs-review / review-labels）、带 gate 的 CLI + 工作流步骤。不改变生产下载决策。 | Web review UI（独立 `javdb-autospider-web` 轮次）；完全自动执行 |
 | Phase 3 | [IMP-ADR024-09](IMP-ADR024-09-phase3-enforce.md)（轮廓） | Enforce mode，带 rollout gate、通过离线重放进行阈值调优、backfill/reporting jobs | 视频抽帧/CV 检查和重量级 ML runtime |
 
 > **Phase 1 范围说明（2026-05-31，IMP 规划时记录）。** 原 Phase 1 一行把远端 probe 证据、
@@ -210,3 +210,12 @@ Phase 1 的 scoring 刻意保持可解释：
   probe 必须 `paused=False` 才能只抓 metadata)。待运维步骤:应用
   `TorrentProbeCandidate` D1 迁移并重对齐 SQLite。IMP-08(assist)/IMP-09
   (enforce 机器)仍为大纲,留待后续轮次。
+- 2026-06-19:IMP-ADR024-08 **assist 后端已实现**（分支 `claude/adr024-imp08-assist`）。
+  交付内容:分类内候选排名（`javdb/quality/assist.py`）、`TorrentQualityReviewLabel`
+  D1-first 存储 + repo、生产+探测证据关联（`list_evidence_for_movie`）、带 gate 的
+  评估器（`javdb/quality/assist_evaluator.py`，仅在
+  `TORRENT_QUALITY_POLICY_MODE=assist` 时生效）、三个新 `/api/quality` 端点
+  （`GET /recommendations`、`GET /needs-review`、`POST /review-labels`）、以及带
+  双重 gate 的 CLI + `QBFileFilter.yml` 工作流步骤。不改变生产下载决策。
+  Web review UI 推迟到独立的 `javdb-autospider-web` 轮次。待运维步骤：将
+  `TorrentQualityReviewLabel` D1 迁移应用到远端 `javdb-reports`。

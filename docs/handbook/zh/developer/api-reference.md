@@ -29,6 +29,12 @@
 - `GET /api/quality/evaluations?limit=&movie_href=` — 需认证、只读，列出 ADR-024 影子质量评估。省略 `movie_href` 时返回最近评估。
 - `GET /api/quality/evidence/{info_hash}` — 需认证、只读，返回 `production_download` 角色的种子级证据。
 
+以下三个端点由 ADR-024 IMP-08（assist 模式，2026-06-19）新增。仅当 `TORRENT_QUALITY_POLICY_MODE=assist` 时，底层评估行才会被带 gate 的 assist 评估器填充。
+
+- `GET /api/quality/recommendations?movie_href=` — 需认证、只读。按分类返回当前生产选择与 `shadow_rank=1` 推荐候选，以及 reason-code 差异。响应结构：`{items: [{javdb_category, current, recommended, reason_diff}]}`。
+- `GET /api/quality/needs-review?limit=` — 需认证、只读。返回 `decision='needs_review'` 或 `would_replace_current_choice=true` 的评估。`limit` 默认 50，上限 200；`limit<=0` → 400。
+- `POST /api/quality/review-labels` — 仅 admin。请求体：`{info_hash, movie_href, scoring_version, label, note?}`，其中 `label ∈ accept | reject | skip`。通过 `TorrentQualityReviewRepo` 记录运维决策（该标注数据集供 Phase 3 调优阈值使用）。返回 `{status: "recorded"}`。`label` 非法 → 422。`reviewed_at` 由服务端生成；`reviewer` 从 JWT subject 读取。
+
 ### 用户意图与发现
 
 这些端点是双后端接口：Python FastAPI surface 与 Cloudflare Worker mirror

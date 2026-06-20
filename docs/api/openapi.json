@@ -4379,6 +4379,64 @@
         "title": "QbTorrentsResponse",
         "type": "object"
       },
+      "QualityRecommendationListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QualityRecommendationSchema"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "QualityRecommendationListResponse",
+        "type": "object"
+      },
+      "QualityRecommendationSchema": {
+        "description": "Per-category recommendation: current vs recommended candidate + diff.",
+        "properties": {
+          "current": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TorrentQualityEvaluationSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "javdb_category": {
+            "title": "Javdb Category",
+            "type": "string"
+          },
+          "reason_diff": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reason Diff",
+            "type": "array"
+          },
+          "recommended": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TorrentQualityEvaluationSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "javdb_category"
+        ],
+        "title": "QualityRecommendationSchema",
+        "type": "object"
+      },
       "RcloneLastResponse": {
         "properties": {
           "dedup_completed": {
@@ -4487,6 +4545,57 @@
           "expires_in"
         ],
         "title": "RefreshTokenResponse",
+        "type": "object"
+      },
+      "ReviewLabelRequest": {
+        "properties": {
+          "info_hash": {
+            "title": "Info Hash",
+            "type": "string"
+          },
+          "label": {
+            "$ref": "#/components/schemas/_LabelEnum"
+          },
+          "movie_href": {
+            "title": "Movie Href",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "scoring_version": {
+            "title": "Scoring Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "info_hash",
+          "movie_href",
+          "scoring_version",
+          "label"
+        ],
+        "title": "ReviewLabelRequest",
+        "type": "object"
+      },
+      "ReviewLabelResponse": {
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "ReviewLabelResponse",
         "type": "object"
       },
       "RunItem": {
@@ -5486,6 +5595,17 @@
             "title": "Reasons",
             "type": "array"
           },
+          "resolution_consistent": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolution Consistent"
+          },
           "score": {
             "anyOf": [
               {
@@ -6392,6 +6512,15 @@
         ],
         "title": "WorkflowsResponse",
         "type": "object"
+      },
+      "_LabelEnum": {
+        "enum": [
+          "accept",
+          "reject",
+          "skip"
+        ],
+        "title": "_LabelEnum",
+        "type": "string"
       }
     },
     "securitySchemes": {
@@ -14985,6 +15114,297 @@
           }
         ],
         "summary": "Get Evidence",
+        "tags": [
+          "quality"
+        ]
+      }
+    },
+    "/api/quality/needs-review": {
+      "get": {
+        "description": "Queue of evaluations that need operator review.\n\nIncludes rows where decision='needs_review' OR would_replace_current_choice\nis true (a probe candidate outranked the production download). Limit defaults\nto 50, capped at 200.",
+        "operationId": "list_needs_review_api_quality_needs_review_get",
+        "parameters": [
+          {
+            "description": "Number of recent evaluations to return. Values greater than 200 are truncated to 200 by the server.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "description": "Number of recent evaluations to return. Values greater than 200 are truncated to 200 by the server.",
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TorrentQualityEvaluationListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "detail"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "detail"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "detail"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "List Needs Review",
+        "tags": [
+          "quality"
+        ]
+      }
+    },
+    "/api/quality/recommendations": {
+      "get": {
+        "description": "Per-category recommendation: current vs best probe candidate + reason diff.",
+        "operationId": "list_recommendations_api_quality_recommendations_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "movie_href",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Movie Href"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QualityRecommendationListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "detail"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "detail"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "detail"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "List Recommendations",
+        "tags": [
+          "quality"
+        ]
+      }
+    },
+    "/api/quality/review-labels": {
+      "post": {
+        "description": "Record an operator review label (accept / reject / skip) for an evaluation.\n\nStamps reviewed_at server-side and stores the reviewer from the JWT subject.\nIdempotent: a second call with the same (info_hash, movie_href, scoring_version)\noverwrites the previous label.",
+        "operationId": "write_review_label_api_quality_review_labels_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewLabelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewLabelResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "detail"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "detail"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "description": "Unprocessable Entity"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Write Review Label",
         "tags": [
           "quality"
         ]

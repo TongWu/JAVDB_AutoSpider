@@ -29,6 +29,12 @@ These endpoints were added in 2026-05 to support the new web console (`javdb-aut
 - `GET /api/quality/evaluations?limit=&movie_href=` — authenticated, read-only list of ADR-024 shadow quality evaluations. When `movie_href` is omitted, returns recent evaluations.
 - `GET /api/quality/evidence/{info_hash}` — authenticated, read-only torrent-level evidence for the `production_download` role.
 
+The following three endpoints are added by ADR-024 IMP-08 (assist mode, 2026-06-19). They are active only when `TORRENT_QUALITY_POLICY_MODE=assist`; the underlying evaluation rows are populated by the gated assist evaluator.
+
+- `GET /api/quality/recommendations?movie_href=` — authenticated, read-only. Per category, returns the current production choice and the `shadow_rank=1` recommended candidate with a reason-code diff. Response shape: `{items: [{javdb_category, current, recommended, reason_diff}]}`.
+- `GET /api/quality/needs-review?limit=` — authenticated, read-only. Returns evaluations where `decision='needs_review'` or `would_replace_current_choice=true`. `limit` defaults to 50, capped at 200; `limit<=0` → 400.
+- `POST /api/quality/review-labels` — admin-only. Body: `{info_hash, movie_href, scoring_version, label, note?}` where `label ∈ accept | reject | skip`. Records an operator decision via `TorrentQualityReviewRepo` (the labelled dataset Phase 3 tunes thresholds against). Returns `{status: "recorded"}`. Invalid `label` → 422. `reviewed_at` is stamped server-side; `reviewer` is read from the JWT subject.
+
 ### User intent and discovery
 
 These endpoints are dual-backend: the Python FastAPI surface and the

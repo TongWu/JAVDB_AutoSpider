@@ -202,16 +202,115 @@ class TorrentQualityRepo:
         rows = self._conn.execute(sql, (movie_href,)).fetchall()
         return [self._to_dict(r, _EVALUATION_COLUMNS) for r in rows]
 
-    def list_recent_evaluations(self, *, limit: int = 50) -> list[dict[str, Any]]:
+    def list_evidence_for_movie(
+        self, movie_href: str, *, probe_schema_version: Optional[str] = None
+    ) -> list[dict]:
+        """Return all usable candidate evidence for one movie.
+
+        Unions the production-download evidence (joined via TorrentQualityEvaluation)
+        with runner-up probe evidence (joined via TorrentProbeCandidate). Only rows
+        whose metadata_status is 'metadata_received' are included — rows still pending
+        or that timed out have no usable feature signal and are excluded. (The UNION
+        is DISTINCT, so multiple TorrentQualityEvaluation scoring_version rows for the
+        same info_hash collapse to one production candidate.)
+
+        When ``probe_schema_version`` is given, both branches are scoped to that
+        evidence schema so an older-schema row for the same info_hash cannot leak
+        stale features into assist scoring. Callers in the quality layer pass
+        ``features.PROBE_SCHEMA_VERSION``; the param keeps the storage layer from
+        importing the quality layer (avoids a dependency cycle).
+        """
+        schema_clause = (
+            "  AND e.probe_schema_version = ?\n" if probe_schema_version else ""
+        )
+        sql = f"""
+SELECT e.info_hash,
+       'production_download' AS target_role,
+       ev.movie_href         AS movie_href,
+       ev.javdb_category     AS javdb_category,
+       ev.magnet_name        AS magnet_name,
+       e.metadata_status,
+       e.total_size_bytes,
+       e.main_video_size_bytes,
+       e.main_video_ratio,
+       e.video_file_count,
+       e.subtitle_file_count,
+       e.non_video_file_count,
+       e.junk_size_bytes,
+       e.junk_size_ratio,
+       e.suspicious_file_count,
+       e.features_json
+FROM TorrentQualityEvidence e
+JOIN TorrentQualityEvaluation ev ON ev.info_hash = e.info_hash
+WHERE e.target_role = 'production_download'
+  AND e.metadata_status = 'metadata_received'
+{schema_clause}  AND ev.movie_href = ?
+UNION
+SELECT e.info_hash,
+       'quality_probe'       AS target_role,
+       pc.movie_href         AS movie_href,
+       pc.javdb_category     AS javdb_category,
+       pc.magnet_name        AS magnet_name,
+       e.metadata_status,
+       e.total_size_bytes,
+       e.main_video_size_bytes,
+       e.main_video_ratio,
+       e.video_file_count,
+       e.subtitle_file_count,
+       e.non_video_file_count,
+       e.junk_size_bytes,
+       e.junk_size_ratio,
+       e.suspicious_file_count,
+       e.features_json
+FROM TorrentQualityEvidence e
+JOIN TorrentProbeCandidate pc ON pc.info_hash = e.info_hash
+WHERE e.target_role = 'quality_probe'
+  AND e.metadata_status = 'metadata_received'
+{schema_clause}  AND pc.movie_href = ?
+"""
+        if probe_schema_version:
+            params = (probe_schema_version, movie_href, probe_schema_version, movie_href)
+        else:
+            params = (movie_href, movie_href)
+        cur = self._conn.execute(sql, params)
+        return [dict(row) for row in cur.fetchall()]
+
+    def list_needs_review(self, *, limit: int = 50) -> list[dict[str, Any]]:
+        """Return evaluations that need operator attention.
+
+        Includes rows where decision='needs_review' OR would_replace_current_choice=1
+        (a probe candidate outranked the production download). Results are ordered
+        by created_at DESC.
+        """
         limit = int(limit)
         if limit <= 0:
             raise ValueError("limit must be positive")
         sql = (
             f"SELECT {', '.join(_EVALUATION_COLUMNS)} FROM TorrentQualityEvaluation "
+            "WHERE decision = 'needs_review' OR would_replace_current_choice = 1 "
             "ORDER BY created_at DESC, info_hash DESC, movie_href DESC, "
             "scoring_version DESC LIMIT ?"
         )
         rows = self._conn.execute(sql, (limit,)).fetchall()
+        return [self._to_dict(r, _EVALUATION_COLUMNS) for r in rows]
+
+    def list_recent_evaluations(
+        self, *, limit: int = 50, since: Optional[str] = None
+    ) -> list[dict[str, Any]]:
+        """Recent evaluations, newest first. When ``since`` (an ISO timestamp) is
+        given, only rows with ``created_at >= since`` are returned (the assist
+        runner uses this to honour its --days look-back window)."""
+        limit = int(limit)
+        if limit <= 0:
+            raise ValueError("limit must be positive")
+        where = "WHERE created_at >= ? " if since else ""
+        sql = (
+            f"SELECT {', '.join(_EVALUATION_COLUMNS)} FROM TorrentQualityEvaluation "
+            f"{where}ORDER BY created_at DESC, info_hash DESC, movie_href DESC, "
+            "scoring_version DESC LIMIT ?"
+        )
+        params = (since, limit) if since else (limit,)
+        rows = self._conn.execute(sql, params).fetchall()
         return [self._to_dict(r, _EVALUATION_COLUMNS) for r in rows]
 
     @staticmethod
