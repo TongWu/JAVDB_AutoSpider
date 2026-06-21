@@ -388,6 +388,12 @@ jobs:
   # =============================================================================
   run-file-filter-adhoc:
     runs-on: ubuntu-latest
+    # The adhoc qBittorrent instance is best-effort/secondary — the default
+    # (NAS) filter above is the gate. When the adhoc box is unreachable
+    # (server down, creds wrong, port now answering SSH instead of HTTP),
+    # this job must not turn the whole workflow red. Real code bugs still
+    # surface via run-file-filter (same code, not continue-on-error).
+    continue-on-error: true
     environment: Production
     permissions:
       contents: read

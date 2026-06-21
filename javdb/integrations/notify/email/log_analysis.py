@@ -193,9 +193,21 @@ def analyze_pikpak_log(log_path):
         "Connection refused"
     ]
 
-    for pattern in critical_patterns:
-        if pattern in log_content:
-            return True, f"Cannot access qBittorrent in PikPak bridge: {pattern}", True
+    # The adhoc qB instance is optional: pikpak_bridge logs its connection
+    # failures at WARNING and keeps going on the primary QB (the process still
+    # exits 0 — see javdb/integrations/pikpak/bridge/service.py). Those WARNING
+    # lines carry the same "Failed to login / Connection refused" text as a real
+    # primary-QB outage, so scan per line and skip the ones tagged "adhoc";
+    # otherwise a tolerated degradation flips the whole pipeline email to FAILED.
+    # ponytail: heuristic on the bridge's log wording — the exit code is the true
+    # signal, but this analyzer only has the log file. Revisit if the bridge ever
+    # stops labelling adhoc failures with "adhoc".
+    for line in log_content.splitlines():
+        if "adhoc" in line.lower():
+            continue
+        for pattern in critical_patterns:
+            if pattern in line:
+                return True, f"Cannot access qBittorrent in PikPak bridge: {pattern}", True
 
     return False, None, True
 
