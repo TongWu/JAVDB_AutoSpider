@@ -25,11 +25,11 @@ so these tests pin the convention:
    test-execution jobs instead pull LFS objects (``reports/*.db``,
    needed by impact-selected tests; see commit c1a78737) via
    ``./.github/actions/ensure-git-lfs`` after checkout;
-5. ``build-rust-extension.yml`` pins each wheel-build job to a single
-   architecture via the default-label array form (``[self-hosted, X64]`` /
-   ``[self-hosted, ARM64]``). The fleet tags boxes only with self-hosted /
-   Linux / X64|ARM64, so a bare ``runs-on: self-hosted`` would let the ARM
-   build land on an x64 box and mislabel the wheel.
+5. ``build-rust-extension.yml`` pins each wheel-build job to an
+   architecture-specific GitHub-hosted runner (``ubuntu-latest`` for x64 /
+   ``ubuntu-24.04-arm`` for arm64; commit 831a296f moved the wheel build off
+   the fleet). Pointing both jobs at the same image would build an x64 wheel
+   under the ``*-arm-*`` artifact name and warm the wrong per-arch cache.
 """
 
 from __future__ import annotations
@@ -93,10 +93,13 @@ def test_unit_tests_jobs_run_self_hosted():
     runners = {
         job_id: job.get("runs-on") for job_id, job in workflow["jobs"].items()
     }
+    # Jobs pin the self-hosted ARM64 fleet via the arch-label array form
+    # ``[self-hosted, ARM64]`` (see test_build_rust_extension... for why the
+    # bare label is unsafe); accept both the array and the bare string.
     not_self_hosted = {
         job_id: runner
         for job_id, runner in runners.items()
-        if runner != "self-hosted"
+        if "self-hosted" not in (runner if isinstance(runner, list) else [runner])
     }
     assert not not_self_hosted, (
         "unit-tests.yml jobs are expected to run on self-hosted runners "
@@ -177,11 +180,12 @@ def test_setup_python_env_composite_seeds_tool_cache_first():
 
 
 def test_build_rust_extension_jobs_pin_runner_arch():
-    """Each wheel-build job must pin its architecture via default labels.
+    """Each wheel-build job must pin an architecture-specific runner image.
 
-    A bare ``runs-on: self-hosted`` matches both x64 and arm64 fleet boxes,
-    so the ARM build could run on an x64 box and ship an x64 wheel under the
-    ``*-arm-*`` artifact name (and warm the wrong per-arch cache).
+    The wheel build runs on GitHub-hosted runners (commit 831a296f). Pointing
+    both jobs at the same image would build an x64 wheel under the ``*-arm-*``
+    artifact name (and warm the wrong per-arch cache), so each job pins a
+    distinct arch: ``ubuntu-latest`` (x64) and ``ubuntu-24.04-arm`` (arm64).
     """
     workflow = yaml.safe_load(
         (WORKFLOWS_DIR / "build-rust-extension.yml").read_text(encoding="utf-8")
@@ -189,5 +193,5 @@ def test_build_rust_extension_jobs_pin_runner_arch():
     runners = {
         job_id: job.get("runs-on") for job_id, job in workflow["jobs"].items()
     }
-    assert runners.get("build-x64") == ["self-hosted", "X64"], runners
-    assert runners.get("build-arm") == ["self-hosted", "ARM64"], runners
+    assert runners.get("build-x64") == "ubuntu-latest", runners
+    assert runners.get("build-arm") == "ubuntu-24.04-arm", runners

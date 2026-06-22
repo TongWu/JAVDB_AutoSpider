@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 import pytest
@@ -81,6 +82,25 @@ def _make_fake_get_db(db_map: Dict[str, sqlite3.Connection]):
         yield conn
 
     return _fake_get_db
+
+
+# The trend fixtures seed fixed dates (2026-05-20..22) while /api/stats/trend
+# filters on a rolling ``cutoff = now - Nd`` window. With a real clock those
+# fixed dates age out of the window ~30d later and every SQL-backed trend test
+# goes red (it happened on 2026-06-22). Freezing "now" to just after the seed
+# dates anchors the window to the data so the tests stay deterministic.
+_FROZEN_TREND_NOW = datetime(2026, 5, 23, tzinfo=timezone.utc)
+
+
+class _FrozenDateTime(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return _FROZEN_TREND_NOW if tz is None else _FROZEN_TREND_NOW.astimezone(tz)
+
+
+def _freeze_trend_now(monkeypatch, stats_module):
+    """Pin ``stats.datetime.now`` so seed dates stay inside the trend window."""
+    monkeypatch.setattr(stats_module, "datetime", _FrozenDateTime)
 
 
 def _build_populated_db_map() -> Dict[str, sqlite3.Connection]:
@@ -441,6 +461,7 @@ class TestStatsTrend:
         db_map = _build_populated_db_map()
         _patch_stats_db(monkeypatch, db_map)
         monkeypatch.setattr(stats_module, "_LOGS_DIR", tmp_path)
+        _freeze_trend_now(monkeypatch, stats_module)
 
         resp = admin_client.get("/api/stats/trend", params={"metric": "success_rate", "period": "30d"})
 
@@ -462,6 +483,7 @@ class TestStatsTrend:
         db_map = _build_populated_db_map()
         _patch_stats_db(monkeypatch, db_map)
         monkeypatch.setattr(stats_module, "_LOGS_DIR", tmp_path)
+        _freeze_trend_now(monkeypatch, stats_module)
 
         resp = admin_client.get("/api/stats/trend", params={"metric": "movies", "period": "30d"})
 
@@ -481,6 +503,7 @@ class TestStatsTrend:
         db_map = _build_populated_db_map()
         _patch_stats_db(monkeypatch, db_map)
         monkeypatch.setattr(stats_module, "_LOGS_DIR", tmp_path)
+        _freeze_trend_now(monkeypatch, stats_module)
 
         resp = admin_client.get("/api/stats/trend", params={"metric": "torrents", "period": "30d"})
 
@@ -495,6 +518,7 @@ class TestStatsTrend:
         db_map = _build_populated_db_map()
         _patch_stats_db(monkeypatch, db_map)
         monkeypatch.setattr(stats_module, "_LOGS_DIR", tmp_path)
+        _freeze_trend_now(monkeypatch, stats_module)
 
         resp = admin_client.get("/api/stats/trend", params={"metric": "history_growth", "period": "30d"})
 
@@ -509,6 +533,7 @@ class TestStatsTrend:
         db_map = _build_populated_db_map()
         _patch_stats_db(monkeypatch, db_map)
         monkeypatch.setattr(stats_module, "_LOGS_DIR", tmp_path)
+        _freeze_trend_now(monkeypatch, stats_module)
 
         resp = admin_client.get("/api/stats/trend", params={"metric": "pikpak", "period": "30d"})
 
@@ -523,6 +548,7 @@ class TestStatsTrend:
         db_map = _build_populated_db_map()
         _patch_stats_db(monkeypatch, db_map)
         monkeypatch.setattr(stats_module, "_LOGS_DIR", tmp_path)
+        _freeze_trend_now(monkeypatch, stats_module)
 
         resp = admin_client.get("/api/stats/trend", params={"metric": "dedup", "period": "30d"})
 
@@ -646,6 +672,7 @@ class TestStatsTrend:
         db_map = _build_populated_db_map()
         _patch_stats_db(monkeypatch, db_map)
         monkeypatch.setattr(stats_module, "_LOGS_DIR", tmp_path)
+        _freeze_trend_now(monkeypatch, stats_module)
 
         resp = admin_client.get("/api/stats/trend", params={"metric": "dedup", "period": "30d"})
 
