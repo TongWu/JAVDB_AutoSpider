@@ -323,6 +323,18 @@ MEDIA_SERVERS = [
 # IMPORTANT: Deploy the CF bypass service on each proxy server using the same port
 CF_BYPASS_SERVICE_PORT = 8000
 
+# Reach each proxy's CF bypass service by tunnelling THROUGH that proxy to
+# 127.0.0.1:{port}, instead of dialling {proxy_ip}:{port} directly. This lets
+# you bind every bypass service to loopback only (off the public internet)
+# without a firewall or VPN.
+#   - False (default): runner connects directly to {proxy_ip}:{port}
+#                       -> bypass must be reachable at the proxy's IP
+#   - True:            runner sends the request through the proxy to
+#                       127.0.0.1:{port} -> bypass can bind to loopback only
+# Requires the proxy software to allow forwarding to 127.0.0.1 (Clash/mihomo:
+# OK by default; Squid: add `acl bypass dst 127.0.0.1` + allow to_localhost).
+CF_BYPASS_VIA_PROXY = False
+
 # =============================================================================
 # SPIDER CONFIGURATION
 # =============================================================================

@@ -265,10 +265,14 @@ The full service URL is built dynamically at runtime:
 - Without proxy: `http://localhost:{CF_BYPASS_SERVICE_PORT}`
 - With proxy pool: `http://{PROXY_IP}:{CF_BYPASS_SERVICE_PORT}` (uses the IP
   of the current proxy)
+- With proxy pool **and** `CF_BYPASS_VIA_PROXY=True`:
+  `http://127.0.0.1:{CF_BYPASS_SERVICE_PORT}` reached *through* the current
+  proxy — lets the bypass service bind to loopback only.
 
 | Variable | Type | Default | Description |
 |---|---|---|---|
 | `CF_BYPASS_SERVICE_PORT` | `int` | `8000` | Port the CloudFlare bypass service listens on. Must match the port configured in the service's `docker-compose.yml`. |
+| `CF_BYPASS_VIA_PROXY` | `bool` | `False` | When `True`, reach each proxy's bypass service by tunnelling through that proxy to `127.0.0.1:{port}` instead of dialling `{proxy_ip}:{port}` directly. Lets every bypass service bind to loopback only (off the public internet) without a firewall or VPN. Requires the proxy software to allow forwarding to `127.0.0.1` (Clash/mihomo: OK by default; Squid: allow `to_localhost`). |
 
 ---
 

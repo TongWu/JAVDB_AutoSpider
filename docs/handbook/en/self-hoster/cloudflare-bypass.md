@@ -31,6 +31,12 @@ Spider → http://localhost:8000 → CF Bypass Service → https://javdb.com
 Spider → http://proxy_ip:8000 → CF Bypass on Proxy Server → https://javdb.com
 ```
 
+**With proxy + `CF_BYPASS_VIA_PROXY=True` (bypass bound to loopback):**
+
+```text
+Spider → proxy (proxy_ip:7890) → http://127.0.0.1:8000 → CF Bypass → https://javdb.com
+```
+
 When using proxy pool, the CF bypass URL automatically adjusts to the current proxy's IP.
 
 ## Setup
@@ -83,6 +89,38 @@ CF_BYPASS_SERVICE_PORT = 8000  # CF bypass service port
 - **With proxy pool**: Uses `http://{proxy_ip}:8000` (extracts IP from current proxy URL)
 
 This allows running CF bypass on the same server as your proxy.
+
+### Keeping the bypass service off the public internet (`CF_BYPASS_VIA_PROXY`)
+
+By default the spider dials `http://{proxy_ip}:8000` directly, so the bypass
+service must be reachable at the proxy's public IP. To keep it private without
+a firewall or VPN, set:
+
+```python
+# In config.py
+CF_BYPASS_VIA_PROXY = True
+```
+
+The spider then tunnels the bypass request *through* the proxy to
+`http://127.0.0.1:8000`. Because the proxy runs on the same host as the bypass
+service, `127.0.0.1` resolves to that host's loopback — so you can bind the
+bypass service to `127.0.0.1` only and remove it from the public internet.
+
+**Requirement:** the proxy software must allow forwarding to `127.0.0.1`.
+Clash/mihomo permit this by default. Squid blocks loopback via its built-in
+`http_access deny to_localhost` rule — add `http_access allow to_localhost`
+above that deny line (or remove the deny) so the proxy can reach the bypass
+service:
+
+```squid
+# squid.conf — allow forwarding to the loopback-bound bypass service
+http_access allow to_localhost
+```
+
+**Non-default ports:** if a proxy's bypass service listens on a port other than
+`CF_BYPASS_SERVICE_PORT` (8000), map it per proxy with `CF_BYPASS_PORT_MAP`
+(`{proxy_ip: local_port}`) so the tunnelled URL targets the right local port —
+e.g. `{'10.0.0.5': 9001}` makes that proxy's bypass URL `http://127.0.0.1:9001`.
 
 ## Performance
 

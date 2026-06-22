@@ -169,9 +169,72 @@ class TestRequestHandler:
         handler = RequestHandler(config=config)
         
         result = handler.get_cf_bypass_service_url(proxy_ip='192.168.1.100')
-        
+
         assert result == 'http://192.168.1.100:8000'
-    
+
+    def test_get_cf_bypass_service_url_via_proxy_uses_loopback(self):
+        """cf_bypass_via_proxy rewrites the host to loopback (port preserved)."""
+        config = RequestConfig(
+            cf_bypass_service_port=8000,
+            cf_bypass_port_map={'192.168.1.100': 9001},
+            cf_bypass_via_proxy=True,
+        )
+        handler = RequestHandler(config=config)
+
+        result = handler.get_cf_bypass_service_url(proxy_ip='192.168.1.100')
+
+        assert result == 'http://127.0.0.1:9001'
+
+    @patch.object(RequestHandler, '_do_request')
+    def test_fetch_with_cf_bypass_via_proxy_tunnels_through_proxy(self, mock_do):
+        """With cf_bypass_via_proxy, the bypass request targets loopback and is
+        sent THROUGH the proxy (so the service can bind to 127.0.0.1 only)."""
+        mock_do.return_value = ('<html>' + 'x' * 20000 + '</html>', None)
+        config = RequestConfig(cf_bypass_via_proxy=True, use_curl_cffi=False)
+        handler = RequestHandler(config=config)
+        proxies = {'http': 'http://10.0.0.5:7890', 'https': 'http://10.0.0.5:7890'}
+
+        handler._fetch_with_cf_bypass(
+            'https://javdb.com/v/abc', proxies, 'Proxy=P1', use_proxy_bypass=True,
+        )
+
+        url_arg, _headers, proxies_arg = mock_do.call_args[0][:3]
+        assert url_arg.startswith('http://127.0.0.1:8000/html?url=')
+        assert proxies_arg == proxies
+
+    @patch.object(RequestHandler, '_do_request')
+    def test_fetch_with_cf_bypass_direct_by_default(self, mock_do):
+        """Default (flag off): bypass dialled directly at the proxy IP, no tunnel."""
+        mock_do.return_value = ('<html>' + 'x' * 20000 + '</html>', None)
+        config = RequestConfig(use_curl_cffi=False)
+        handler = RequestHandler(config=config)
+        proxies = {'http': 'http://10.0.0.5:7890', 'https': 'http://10.0.0.5:7890'}
+
+        handler._fetch_with_cf_bypass(
+            'https://javdb.com/v/abc', proxies, 'Proxy=P1', use_proxy_bypass=True,
+        )
+
+        url_arg, _headers, proxies_arg = mock_do.call_args[0][:3]
+        assert url_arg.startswith('http://10.0.0.5:8000/html?url=')
+        assert proxies_arg is None
+
+    @patch.object(RequestHandler, '_do_request')
+    def test_fetch_with_cf_bypass_via_proxy_https_only_proxy(self, mock_do):
+        """https-only proxy dict must still route the http:// loopback bypass
+        URL through the proxy — requests.select_proxy needs an 'http' key."""
+        mock_do.return_value = ('<html>' + 'x' * 20000 + '</html>', None)
+        config = RequestConfig(cf_bypass_via_proxy=True, use_curl_cffi=False)
+        handler = RequestHandler(config=config)
+        proxies = {'https': 'http://10.0.0.5:7890'}
+
+        handler._fetch_with_cf_bypass(
+            'https://javdb.com/v/abc', proxies, 'Proxy=P1', use_proxy_bypass=True,
+        )
+
+        url_arg, _headers, proxies_arg = mock_do.call_args[0][:3]
+        assert url_arg.startswith('http://127.0.0.1:8000/html?url=')
+        assert proxies_arg.get('http') == 'http://10.0.0.5:7890'
+
     def test_is_cf_bypass_failure_none(self):
         """Test is_cf_bypass_failure with None content."""
         result = RequestHandler.is_cf_bypass_failure(None)

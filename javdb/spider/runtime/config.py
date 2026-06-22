@@ -61,6 +61,7 @@ GIT_BRANCH = cfg('GIT_BRANCH', 'main')
 CF_BYPASS_SERVICE_PORT = cfg('CF_BYPASS_SERVICE_PORT', 8000)
 CF_BYPASS_ENABLED = cfg('CF_BYPASS_ENABLED', True)
 CF_BYPASS_PORT_MAP = cfg('CF_BYPASS_PORT_MAP', {})
+CF_BYPASS_VIA_PROXY = cfg('CF_BYPASS_VIA_PROXY', False)
 
 # Proxy pool
 from javdb.proxy.policy import normalize_proxy_mode
