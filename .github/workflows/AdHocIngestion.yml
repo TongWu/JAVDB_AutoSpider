@@ -85,14 +85,6 @@ on:
         required: false
         default: ''
         type: string
-      runner:
-        description: 'Runner type for run-pipeline (includes health checks)'
-        required: false
-        default: 'ubuntu-latest'
-        type: choice
-        options:
-          - 'ubuntu-latest'
-          - 'self-hosted'
       enable_rclone_filter:
         description: 'Enable rclone inventory filter (skip entries already in rclone inventory with 中字)'
         required: false
@@ -130,7 +122,7 @@ jobs:
   # Job 1: Setup - Checkout, install dependencies, generate config (includes Rust wheel build/cache)
   # =============================================================================
   setup:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, ARM64]  # PUBLIC_RUNNER: ubuntu-latest
     environment: Production
     permissions:
       contents: read
@@ -370,7 +362,7 @@ jobs:
   # Job 2: Run Pipeline - Health checks, then spider, uploader, and pikpak bridge
   # =============================================================================
   run-pipeline:
-    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
+    runs-on: [self-hosted, ARM64]  # PUBLIC_RUNNER: ubuntu-latest
     environment: Production
     permissions:
       contents: read
@@ -901,7 +893,7 @@ jobs:
   # See docs/D1_ROLLBACK.md for the X3 hybrid strategy.
   # =============================================================================
   cleanup-on-failure:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, ARM64]  # PUBLIC_RUNNER: ubuntu-latest
     environment: Production
     permissions:
       contents: read
@@ -991,10 +983,10 @@ jobs:
 
   # =============================================================================
   # Job 4: Email Notification - Always runs (success, failure, or cancel)
-  # (Runs in parallel with commit-results on GitHub-hosted runner)
+  # (Runs in parallel with commit-results on a self-hosted runner)
   # =============================================================================
   email-notification:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, ARM64]  # PUBLIC_RUNNER: ubuntu-latest
     environment: Production
     permissions:
       # ADR-006 — email job also runs the alert+pause step which may
@@ -1256,10 +1248,10 @@ jobs:
 
   # =============================================================================
   # Job 4: Commit Results - Commit CSV files only (no logs)
-  # (Runs in parallel with email-notification on GitHub-hosted runner)
+  # (Runs in parallel with email-notification on a self-hosted runner)
   # =============================================================================
   commit-results:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, ARM64]  # PUBLIC_RUNNER: ubuntu-latest
     environment: Production
     needs: [setup, run-pipeline]
     if: ${{ needs.setup.outputs.paused != 'true' && needs.run-pipeline.result == 'success' }}

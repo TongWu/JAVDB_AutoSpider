@@ -72,7 +72,7 @@ on:
 
 jobs:
   weekly-dedup:
-    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.runner || 'self-hosted' }}
     environment: Production
     env:
       TZ: Asia/Singapore
@@ -81,7 +81,7 @@ jobs:
       D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
       D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
       GH_TOKEN: ${{ github.token }}
-      INPUT_RUNNER: ${{ inputs.runner || 'ubuntu-latest' }}
+      INPUT_RUNNER: ${{ inputs.runner || 'self-hosted' }}
       INPUT_ROOT_PATH: ${{ inputs.root_path || 'gdrive:/剧集/不可以色色/JAV-Sync' }}
       INPUT_YEARS: ${{ inputs.years || '' }}
       INPUT_WORKERS: ${{ inputs.workers || '4' }}
@@ -156,7 +156,7 @@ jobs:
           echo "DEDUP_CSV=$DEDUP_CSV" >> "$GITHUB_ENV"
 
       - name: Install rclone
-        if: inputs.runner != 'self-hosted'
+        if: ${{ (inputs.runner || 'self-hosted') != 'self-hosted' }}
         run: |
           bash .github/scripts/install_rclone.sh
           rclone version

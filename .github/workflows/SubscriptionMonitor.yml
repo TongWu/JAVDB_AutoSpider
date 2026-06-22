@@ -24,7 +24,7 @@ on:
       runner:
         description: 'Runner type'
         required: false
-        default: 'ubuntu-latest'
+        default: 'self-hosted'
         type: choice
         options:
           - 'ubuntu-latest'
@@ -50,7 +50,7 @@ concurrency:
 jobs:
   monitor:
     name: Monitor subscriptions and update New Works
-    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.runner || 'self-hosted' }}
     timeout-minutes: 120
     environment: Production
     env:

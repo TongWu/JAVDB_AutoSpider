@@ -35,10 +35,10 @@ permissions:
 
 jobs:
   # =============================================================================
-  # x64 build (GitHub-hosted, ubuntu-latest)
+  # x64 build (self-hosted, X64)
   # =============================================================================
   build-x64:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, X64]  # PUBLIC_RUNNER: ubuntu-latest
     timeout-minutes: 30
     env:
       TZ: Asia/Singapore
@@ -88,11 +88,11 @@ jobs:
       # tests/unit/test_fallback_shape.py in the unit suite.
 
   # =============================================================================
-  # ARM64 build (GitHub-hosted, ubuntu-24.04-arm)
+  # ARM64 build (self-hosted, ARM64)
   # continue-on-error: an unavailable ARM runner must not block x64 or the push.
   # =============================================================================
   build-arm:
-    runs-on: ubuntu-24.04-arm
+    runs-on: [self-hosted, ARM64]  # PUBLIC_RUNNER: ubuntu-24.04-arm
     timeout-minutes: 30
     continue-on-error: true
     env:
