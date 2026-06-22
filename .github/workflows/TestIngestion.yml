@@ -60,7 +60,7 @@ on:
       runner:
         description: 'Runner type for pipeline jobs'
         required: false
-        default: 'ubuntu-latest'
+        default: 'self-hosted'
         type: choice
         options:
           - 'ubuntu-latest'
@@ -76,7 +76,7 @@ jobs:
   # Job 1: Setup and Run Pipeline - Simplified single job
   # =============================================================================
   run-pipeline:
-    runs-on: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
+    runs-on: ${{ github.event.inputs.runner || 'self-hosted' }}
     environment: Production
     env:
       TZ: Asia/Singapore

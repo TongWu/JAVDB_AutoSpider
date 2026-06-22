@@ -19,7 +19,7 @@ on:
       runner:
         description: 'Runner type. Use the same tier DailyIngestion uses to reach javdb.'
         required: false
-        default: 'ubuntu-latest'
+        default: 'self-hosted'
         type: choice
         options:
           - 'ubuntu-latest'
@@ -32,7 +32,7 @@ concurrency:
 jobs:
   canary:
     name: Canary
-    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.runner || 'self-hosted' }}
     timeout-minutes: 20
     environment: Production
     env:

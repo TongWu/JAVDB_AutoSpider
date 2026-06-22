@@ -48,7 +48,7 @@ jobs:
   # Job 1: Setup - Checkout, install dependencies, generate config (includes Rust wheel build/cache)
   # =============================================================================
   setup:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, ARM64]  # PUBLIC_RUNNER: ubuntu-latest
     environment: Production
     permissions:
       contents: read
@@ -290,7 +290,7 @@ jobs:
   # Job 2: Run File Filter (default qBittorrent)
   # =============================================================================
   run-file-filter:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, ARM64]  # PUBLIC_RUNNER: ubuntu-latest
     environment: Production
     permissions:
       contents: read
@@ -387,7 +387,7 @@ jobs:
   # Job 3: Run File Filter on Adhoc qBittorrent (only when QB_URL_ADHOC is set)
   # =============================================================================
   run-file-filter-adhoc:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, ARM64]  # PUBLIC_RUNNER: ubuntu-latest
     # The adhoc qBittorrent instance is best-effort/secondary — the default
     # (NAS) filter above is the gate. When the adhoc box is unreachable
     # (server down, creds wrong, port now answering SSH instead of HTTP),
