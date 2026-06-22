@@ -31,6 +31,12 @@ Spider → http://localhost:8000 → CF Bypass Service → https://javdb.com
 Spider → http://proxy_ip:8000 → CF Bypass on Proxy Server → https://javdb.com
 ```
 
+**使用 proxy + `CF_BYPASS_VIA_PROXY=True`（绕过服务绑定回环地址）：**
+
+```text
+Spider → proxy (proxy_ip:7890) → http://127.0.0.1:8000 → CF Bypass → https://javdb.com
+```
+
 使用 proxy 池时，CF 绕过 URL 会自动调整为当前 proxy 的 IP。
 
 ## 安装配置
@@ -76,6 +82,33 @@ python3 -m apps.cli.spider --always-bypass-time 0
 - **使用 proxy 池**：使用 `http://{proxy_ip}:8000`（从当前 proxy URL 中提取 IP）
 
 这样可以将 CF 绕过服务部署在与 proxy 相同的服务器上。
+
+### 让绕过服务脱离公网（`CF_BYPASS_VIA_PROXY`）
+
+默认情况下爬虫直接拨号 `http://{proxy_ip}:8000`，因此绕过服务必须在 proxy 的公网
+IP 上可达。若想在不使用防火墙或 VPN 的前提下让它保持私有，可设置：
+
+```python
+# 在 config.py 中
+CF_BYPASS_VIA_PROXY = True
+```
+
+爬虫随后会将绕过请求*经由* proxy 隧道转发到 `http://127.0.0.1:8000`。由于 proxy 与
+绕过服务运行在同一主机上，`127.0.0.1` 解析为该主机的回环地址 —— 因此你可以把绕过
+服务仅绑定到 `127.0.0.1`，将其从公网移除。
+
+**前提：** proxy 软件必须允许转发到 `127.0.0.1`。Clash/mihomo 默认允许；Squid 默认
+通过内置的 `http_access deny to_localhost` 规则拦截回环——需在该 deny 行之前加上
+`http_access allow to_localhost`（或删除该 deny），proxy 才能访问绕过服务：
+
+```squid
+# squid.conf —— 放行转发到仅绑定回环地址的绕过服务
+http_access allow to_localhost
+```
+
+**非默认端口：** 若某 proxy 的绕过服务监听端口不是 `CF_BYPASS_SERVICE_PORT`（8000），
+用 `CF_BYPASS_PORT_MAP`（`{proxy_ip: 本地端口}`）按 proxy 指定，使隧道 URL 指向正确的
+本地端口——例如 `{'10.0.0.5': 9001}` 会让该 proxy 的绕过 URL 变为 `http://127.0.0.1:9001`。
 
 ## 性能
 

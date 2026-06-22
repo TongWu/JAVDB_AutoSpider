@@ -241,10 +241,13 @@ PROXY_POOL = [
 完整的服务 URL 在运行时动态构建：
 - 无 proxy：`http://localhost:{CF_BYPASS_SERVICE_PORT}`
 - 使用 proxy 池：`http://{PROXY_IP}:{CF_BYPASS_SERVICE_PORT}`（使用当前 proxy 的 IP）
+- 使用 proxy 池**且** `CF_BYPASS_VIA_PROXY=True`：经由当前 proxy 转发到
+  `http://127.0.0.1:{CF_BYPASS_SERVICE_PORT}` —— 使绕过服务可仅绑定回环地址。
 
 | 变量 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `CF_BYPASS_SERVICE_PORT` | `int` | `8000` | CloudFlare 绕过服务监听的端口。必须与服务 `docker-compose.yml` 中配置的端口一致。 |
+| `CF_BYPASS_VIA_PROXY` | `bool` | `False` | 为 `True` 时，通过当前 proxy 隧道转发到 `127.0.0.1:{port}` 来访问该 proxy 的绕过服务，而非直接拨号 `{proxy_ip}:{port}`。这样无需防火墙或 VPN 即可让每个绕过服务仅绑定回环地址（脱离公网）。要求 proxy 软件允许转发到 `127.0.0.1`（Clash/mihomo 默认允许；Squid 需放行 `to_localhost`）。 |
 
 ---
 

@@ -360,6 +360,7 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         # Cloudflare Bypass Configuration
         ('CF_BYPASS_SERVICE_PORT', 'CF_BYPASS_SERVICE_PORT', get_env_int, 8000, 'CLOUDFLARE BYPASS CONFIGURATION'),
         ('CF_BYPASS_ENABLED', 'CF_BYPASS_ENABLED', get_env_bool, True, 'CLOUDFLARE BYPASS CONFIGURATION'),
+        ('CF_BYPASS_VIA_PROXY', 'CF_BYPASS_VIA_PROXY', get_env_bool, False, 'CLOUDFLARE BYPASS CONFIGURATION'),
         ('CF_BYPASS_PORT_MAP', 'CF_BYPASS_PORT_MAP_JSON', get_env_json, {}, 'CLOUDFLARE BYPASS CONFIGURATION'),
         # Spider Configuration
         # Fall back to legacy START_PAGE / END_PAGE env vars for backward compatibility

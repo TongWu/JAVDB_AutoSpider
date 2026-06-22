@@ -75,6 +75,7 @@ PROXY_HTTPS = cfg('PROXY_HTTPS', None)
 CF_BYPASS_SERVICE_PORT = cfg('CF_BYPASS_SERVICE_PORT', 8000)
 CF_BYPASS_ENABLED = cfg('CF_BYPASS_ENABLED', True)
 CF_BYPASS_PORT_MAP = cfg('CF_BYPASS_PORT_MAP', {})
+CF_BYPASS_VIA_PROXY = cfg('CF_BYPASS_VIA_PROXY', False)
 
 PROXY_MODE = cfg('PROXY_MODE', 'pool')
 PROXY_POOL = cfg('PROXY_POOL', [])
@@ -120,6 +121,7 @@ def _create_handler():
         cf_bypass_service_port=CF_BYPASS_SERVICE_PORT,
         cf_bypass_port_map=CF_BYPASS_PORT_MAP,
         cf_bypass_enabled=CF_BYPASS_ENABLED,
+        cf_bypass_via_proxy=CF_BYPASS_VIA_PROXY,
         cf_turnstile_cooldown=_cd,
         fallback_cooldown=_cd,
         proxy_http=PROXY_HTTP,

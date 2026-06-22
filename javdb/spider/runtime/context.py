@@ -981,6 +981,7 @@ class SpiderRuntime:
             cf_bypass_service_port=legacy_state.CF_BYPASS_SERVICE_PORT,
             cf_bypass_port_map=legacy_state.CF_BYPASS_PORT_MAP,
             cf_bypass_enabled=legacy_state.CF_BYPASS_ENABLED,
+            cf_bypass_via_proxy=legacy_state.CF_BYPASS_VIA_PROXY,
             cf_bypass_max_failures=3,
             cf_turnstile_cooldown=_cd,
             fallback_cooldown=_cd,
