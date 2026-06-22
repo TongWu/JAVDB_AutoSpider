@@ -32,7 +32,14 @@ def _clear_rust_ban_manager():
     session bans recorded via the singleton don't leak across cases (the Rust
     GLOBAL_BAN_MANAGER OnceCell persists even when the Python wrapper is reset)."""
     def _clear():
-        mgr = get_ban_manager()
+        try:
+            mgr = get_ban_manager()
+        except RuntimeError:
+            # Rust core unavailable, or a test (test_rust_required_guard_raises_
+            # _without_rust) has monkeypatched RUST_BAN_MANAGER_AVAILABLE off and
+            # that patch is still active during this teardown. No global manager
+            # exists, so there are no leaked bans to clear.
+            return
         if hasattr(mgr, "set_ban_dispatch_callback"):
             mgr.set_ban_dispatch_callback(None)
         for name in list(mgr.get_banned_proxy_names()):
