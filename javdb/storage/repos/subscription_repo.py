@@ -161,18 +161,27 @@ class NewWorksRepo:
             ).fetchall()
         return [dict(r) for r in rows], total
 
-    def dismiss(self, video_code: str) -> bool:
+    def dismiss(self, video_code: str, actor_href: Optional[str] = None) -> bool:
         """Mark feed row(s) for ``video_code`` dismissed. Returns True if any
         row was updated.
 
-        NOTE: dismissal is global per video_code — it clears the release from
-        every followed actor's feed at once. Now that a release can occupy one
-        row per actor (composite PK, issue #223), scoping dismissal to a single
-        actor needs an ``actor_href`` argument and a matching API/route change
-        (dual-backend, OpenAPI re-vendor); tracked as a follow-up.
+        When ``actor_href`` is given, only that actor's row is dismissed — the
+        same release can occupy one row per followed actor (composite PK, issue
+        #223), so a scoped dismiss leaves other actors' feeds untouched. Only
+        ``None`` (the query key omitted) takes the global path; a blank
+        ``actor_href=""`` stays scoped and matches no row (safe no-op) rather
+        than silently wiping every actor's feed.
         """
         with get_db(self._db_path) as conn:
-            cur = conn.execute(
-                "UPDATE NewWorks SET dismissed = 1 WHERE video_code = ?", (video_code,)
-            )
+            if actor_href is not None:
+                cur = conn.execute(
+                    "UPDATE NewWorks SET dismissed = 1 "
+                    "WHERE video_code = ? AND actor_href = ?",
+                    (video_code, actor_href),
+                )
+            else:
+                cur = conn.execute(
+                    "UPDATE NewWorks SET dismissed = 1 WHERE video_code = ?",
+                    (video_code,),
+                )
             return cur.rowcount > 0

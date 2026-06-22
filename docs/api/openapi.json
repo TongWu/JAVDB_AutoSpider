@@ -12584,6 +12584,22 @@
               "title": "Video Code",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "actor_href",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Actor Href"
+            }
           }
         ],
         "responses": {

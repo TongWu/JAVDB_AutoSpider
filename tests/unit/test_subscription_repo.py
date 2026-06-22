@@ -163,6 +163,41 @@ def test_dismiss_returns_false_when_absent(db_path):
     assert repo.dismiss("NOPE-999") is False
 
 
+def test_dismiss_scoped_to_actor_leaves_other_actors(db_path):
+    # Same release in two followed actors' feeds (composite PK, issue #223).
+    repo = NewWorksRepo(db_path=db_path)
+    repo.add(video_code="ABC-001", href="/v/abc001", actor_href="/actors/A")
+    repo.add(video_code="ABC-001", href="/v/abc001", actor_href="/actors/B")
+    assert repo.dismiss("ABC-001", actor_href="/actors/A") is True
+    # Only actor A's row is hidden; actor B still sees it (issue #229).
+    items_a, total_a = repo.list(actor_href="/actors/A")
+    items_b, total_b = repo.list(actor_href="/actors/B")
+    assert total_a == 0
+    assert total_b == 1 and items_b[0]["video_code"] == "ABC-001"
+
+
+def test_dismiss_without_actor_clears_all_feeds(db_path):
+    # Back-compat: an actor-less dismiss still clears every actor's feed.
+    repo = NewWorksRepo(db_path=db_path)
+    repo.add(video_code="ABC-001", href="/v/abc001", actor_href="/actors/A")
+    repo.add(video_code="ABC-001", href="/v/abc001", actor_href="/actors/B")
+    assert repo.dismiss("ABC-001") is True
+    _, total = repo.list()
+    assert total == 0
+
+
+def test_dismiss_blank_actor_is_a_no_op_not_a_global_wipe(db_path):
+    # A blank actor_href ("") must NOT fall through to the global dismiss —
+    # only an omitted (None) actor_href is global. Blank stays scoped and
+    # matches no row (PR #244 review).
+    repo = NewWorksRepo(db_path=db_path)
+    repo.add(video_code="ABC-001", href="/v/abc001", actor_href="/actors/A")
+    repo.add(video_code="ABC-001", href="/v/abc001", actor_href="/actors/B")
+    assert repo.dismiss("ABC-001", actor_href="") is False
+    _, total = repo.list()
+    assert total == 2
+
+
 # -- In-place schema upgrade (issue #223) ----------------------------------
 
 _OLD_NEWWORKS_DDL = """
