@@ -127,8 +127,15 @@ def list_new_works(
 
 
 @new_works_router.post("/{video_code}/dismiss", response_model=NewWorkDismissResponse)
-def dismiss_new_work(video_code: str, _admin=Depends(require_role("admin"))):
-    dismissed = NewWorksRepo().dismiss(video_code)
+def dismiss_new_work(
+    video_code: str,
+    actor_href: Optional[str] = Query(default=None),
+    _admin=Depends(require_role("admin")),
+):
+    # actor_href scopes the dismiss to a single followed actor's feed row;
+    # omitting it dismisses the release across every actor's feed (back-compat).
+    # Query param mirrors the sibling GET /api/new-works?actor_href=… contract.
+    dismissed = NewWorksRepo().dismiss(video_code, actor_href=actor_href)
     if not dismissed:
         raise HTTPException(status_code=404, detail=_NW_NOT_FOUND)
     return NewWorkDismissResponse(dismissed=True)

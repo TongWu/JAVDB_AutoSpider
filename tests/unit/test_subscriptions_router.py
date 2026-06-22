@@ -112,6 +112,27 @@ def test_new_works_feed_and_dismiss(client):
     assert client.post("/api/new-works/NOPE-999/dismiss").status_code == 404
 
 
+def test_dismiss_scoped_to_actor_via_query_param(client):
+    # Seed the same release under a second followed actor (composite PK #223).
+    from javdb.storage.repos.subscription_repo import NewWorksRepo
+
+    NewWorksRepo(db_path=_db.HISTORY_DB_PATH).add(
+        video_code="NW-001", href="/v/nw001", actor_href="/actors/Other"
+    )
+
+    dismissed = client.post(
+        "/api/new-works/NW-001/dismiss", params={"actor_href": "/actors/EvkJ"}
+    )
+    assert dismissed.status_code == 200
+    assert dismissed.json()["dismissed"] is True
+
+    # Only the targeted actor's feed row is hidden (issue #229).
+    evkj = client.get("/api/new-works", params={"actor_href": "/actors/EvkJ"})
+    assert evkj.json()["total"] == 0
+    other = client.get("/api/new-works", params={"actor_href": "/actors/Other"})
+    assert other.json()["total"] == 1
+
+
 def test_openapi_publishes_subscription_responses():
     from apps.api.services.runtime import app
 
