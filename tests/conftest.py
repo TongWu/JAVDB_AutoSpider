@@ -133,6 +133,17 @@ def _isolate_sqlite(tmp_path):
     yield test_db
 
     _db_conn_mod.close_db()
+    # Reclaim the per-test SQLite files. This fixture is autouse, so without
+    # cleanup every test leaves a ~0.6-1.7 MB database (schema + WAL) behind in
+    # its tmp_path for the whole session. Across ~5k tests that is several GB,
+    # which has filled CI runners mid-run (sqlite3 "database or disk is full").
+    # unlink() works even if a stray connection is still open (POSIX), so space
+    # is reclaimed regardless. Covers .db plus -wal/-shm/-journal sidecars.
+    for leftover in tmp_path.glob("test.db*"):
+        try:
+            leftover.unlink()
+        except OSError:
+            pass
     _db_conn_mod.DB_PATH = orig_db_path
     _db_conn_mod.HISTORY_DB_PATH = orig_history
     _db_conn_mod.REPORTS_DB_PATH = orig_reports
