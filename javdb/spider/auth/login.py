@@ -202,10 +202,9 @@ def _build_proxies_from_config():
             proxies['http'] = PROXY_HTTP
         if PROXY_HTTPS:
             proxies['https'] = PROXY_HTTPS
-        # ponytail: unnamed single proxy — no pool name to publish, so the
-        # cookie reaches the runner's login state but may not bind to a
-        # worker. Set LOGIN_PROXY_NAME to a pooled proxy to warm CI properly.
-        return proxies, DIRECT_LOGIN_PROXY_NAME
+        # The runtime names this config "Legacy-Proxy" (state.py / context.py),
+        # so publish under that name so CI workers can match the snapshot.
+        return proxies, 'Legacy-Proxy'
 
     if PROXY_POOL and len(PROXY_POOL) > 0:
         first = PROXY_POOL[0]
@@ -215,8 +214,16 @@ def _build_proxies_from_config():
         if first.get('https'):
             proxies['https'] = first['https']
         if proxies:
-            logger.info(f"Using first proxy from pool: {first.get('name', 'unnamed')}")
-            return proxies, first.get('name') or DIRECT_LOGIN_PROXY_NAME
+            proxy_name = first.get('name') or ''
+            if not proxy_name:
+                logger.warning(
+                    "First PROXY_POOL entry has no 'name' — the published "
+                    "cookie will not bind to a CI worker. Add 'name' to the "
+                    "pool entry or set LOGIN_PROXY_NAME to a named proxy.",
+                )
+                return proxies, DIRECT_LOGIN_PROXY_NAME
+            logger.info(f"Using first proxy from pool: {proxy_name}")
+            return proxies, proxy_name
 
     return None, DIRECT_LOGIN_PROXY_NAME
 
