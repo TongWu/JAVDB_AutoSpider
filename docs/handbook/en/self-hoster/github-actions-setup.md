@@ -282,7 +282,8 @@ Manual inputs:
 
 The workflow uses the same `Production` environment secrets and variables as
 the ingestion workflows, including the D1 credentials, JavDB login credentials,
-proxy settings, `DEPLOY_KEY`, and `ARTIFACT_KEY`.
+proxy settings, and `DEPLOY_KEY`. It does not use `ARTIFACT_KEY` — logs are
+uploaded as plaintext artifacts.
 
 ## Step 7 -- Monitoring
 
