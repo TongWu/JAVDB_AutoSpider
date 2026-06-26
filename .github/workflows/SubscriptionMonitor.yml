@@ -62,7 +62,7 @@ jobs:
       D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
       D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
       INPUT_PROXY_SPIDER: ${{ github.event_name == 'workflow_dispatch' && (inputs.proxy_spider && 'true' || 'false') || 'true' }}
-      INPUT_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
+      INPUT_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && (inputs.dry_run && 'true' || 'false') || 'false' }}
       INPUT_LOG_LEVEL: ${{ inputs.log_level || 'INFO' }}
     steps:
       - name: Checkout repository

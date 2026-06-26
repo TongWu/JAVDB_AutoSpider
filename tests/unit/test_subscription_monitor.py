@@ -3,6 +3,7 @@
 import pathlib
 import json
 import sqlite3
+import subprocess
 
 import pytest
 
@@ -321,3 +322,82 @@ def test_commit_spider_session_uses_claim_fanout(monkeypatch):
 def test_commit_spider_session_requires_session_id():
     with pytest.raises(RuntimeError, match="Spider result did not include a session_id"):
         commit_spider_session(None)
+
+
+def test_run_subscription_monitor_raises_when_all_actors_fail(db_path, monkeypatch):
+    """If every actor scrape fails the monitor must exit non-zero (systemic failure)."""
+    subs = ActorSubscriptionRepo(db_path=db_path)
+    subs.upsert(actor_href="/actors/A", actor_name="A")
+    subs.upsert(actor_href="/actors/B", actor_name="B")
+
+    def always_fail(actor_href, *, use_proxy=False):
+        raise subprocess.CalledProcessError(1, "apps.cli.spider")
+
+    monkeypatch.setattr(monitor, "scrape_actor", always_fail)
+
+    with pytest.raises(RuntimeError, match="All 2 actor scrape"):
+        monitor.run_subscription_monitor(db_path=db_path)
+
+    _, total = NewWorksRepo(db_path=db_path).list()
+    assert total == 0
+
+
+def test_run_subscription_monitor_partial_failure_does_not_raise(db_path, monkeypatch):
+    """A partial per-actor failure must not raise; only total failure is systemic."""
+    subs = ActorSubscriptionRepo(db_path=db_path)
+    subs.upsert(actor_href="/actors/A", actor_name="A")
+    subs.upsert(actor_href="/actors/B", actor_name="B")
+
+    def scrape_one_fails(actor_href, *, use_proxy=False):
+        if actor_href == "/actors/A":
+            raise subprocess.CalledProcessError(1, "apps.cli.spider")
+        return "SESSION-B"
+
+    def fake_commit(session_id):
+        conn = sqlite3.connect(db_path)
+        conn.execute(
+            "INSERT INTO MovieHistory (VideoCode, Href, ActorLink, DateTimeCreated) "
+            "VALUES (?, ?, ?, ?)",
+            ("B-1", "/v/b1", "/actors/B", "2026-06-15"),
+        )
+        conn.commit()
+        conn.close()
+
+    monkeypatch.setattr(monitor, "scrape_actor", scrape_one_fails)
+    monkeypatch.setattr(monitor, "commit_spider_session", fake_commit)
+
+    added = monitor.run_subscription_monitor(db_path=db_path)
+    assert added == 1
+
+
+def test_run_subscription_monitor_non_called_process_error_skips_actor(
+    db_path, monkeypatch
+):
+    """FileNotFoundError/ValueError from read_spider_result must skip the actor,
+    not abort the monitor with a misleading 'commit failed' message."""
+    subs = ActorSubscriptionRepo(db_path=db_path)
+    subs.upsert(actor_href="/actors/A", actor_name="A")
+    subs.upsert(actor_href="/actors/B", actor_name="B")
+
+    def scrape_a_raises_file_not_found(actor_href, *, use_proxy=False):
+        if actor_href == "/actors/A":
+            raise FileNotFoundError("spider-result.json not found")
+        return "SESSION-B"
+
+    def fake_commit(session_id):
+        conn = sqlite3.connect(db_path)
+        conn.execute(
+            "INSERT INTO MovieHistory (VideoCode, Href, ActorLink, DateTimeCreated) "
+            "VALUES (?, ?, ?, ?)",
+            ("B-1", "/v/b1", "/actors/B", "2026-06-15"),
+        )
+        conn.commit()
+        conn.close()
+
+    monkeypatch.setattr(monitor, "scrape_actor", scrape_a_raises_file_not_found)
+    monkeypatch.setattr(monitor, "commit_spider_session", fake_commit)
+
+    added = monitor.run_subscription_monitor(db_path=db_path)
+    assert added == 1
+    _, total = NewWorksRepo(db_path=db_path).list()
+    assert total == 1

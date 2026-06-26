@@ -277,7 +277,7 @@ GitHub Actions 的 cron 在高负载时可能延迟最多 15 分钟。cron 仅�
 - **runner**：选择 `ubuntu-latest` 或 `self-hosted`。
 - **log_level**：CLI 日志级别（`DEBUG`、`INFO`、`WARNING`、`ERROR`）。
 
-该工作流复用摄取工作流所在的 `Production` environment secrets 和 variables，包括 D1 凭据、JavDB 登录凭据、代理设置、`DEPLOY_KEY` 和 `ARTIFACT_KEY`。
+该工作流复用摄取工作流所在的 `Production` environment secrets 和 variables，包括 D1 凭据、JavDB 登录凭据、代理设置和 `DEPLOY_KEY`。不使用 `ARTIFACT_KEY`——日志以明文形式上传为 artifact。
 
 ## 步骤 7 —— 监控
 

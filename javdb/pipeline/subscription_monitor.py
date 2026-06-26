@@ -223,19 +223,26 @@ def run_subscription_monitor(
         return 0
 
     total_added = 0
+    failed_count = 0
     for raw_href in actor_hrefs:
         actor_href = normalize_javdb_href_path(raw_href) or raw_href
         seen_before = load_seen_video_codes(actor_href, db_path=db_path)
         try:
             session_id = scrape_actor(actor_href, use_proxy=use_proxy)
-            commit_spider_session(session_id)
         except subprocess.CalledProcessError as exc:
             logger.warning(
                 "Scrape failed for %s (exit %s); skipping",
                 actor_href,
                 exc.returncode,
             )
+            failed_count += 1
             continue
+        except Exception:
+            logger.exception("Scrape failed for %s; skipping", actor_href)
+            failed_count += 1
+            continue
+        try:
+            commit_spider_session(session_id)
         except Exception:
             logger.exception(
                 "Post-scrape commit failed for %s; failing monitor.",
@@ -252,4 +259,9 @@ def run_subscription_monitor(
         )
 
     logger.info("Subscription monitor complete: %d new feed row(s).", total_added)
+    if failed_count and failed_count == len(actor_hrefs):
+        raise RuntimeError(
+            f"All {failed_count} actor scrape(s) failed; "
+            "check JavDB session cookie or proxy availability."
+        )
     return total_added
