@@ -223,6 +223,10 @@ PROXY_MODULES = ['spider']
 # PROXY_COORDINATOR_TOKEN; config_generator writes them into config.py.
 PROXY_COORDINATOR_URL = ''
 PROXY_COORDINATOR_TOKEN = ''
+# Name of the proxy to use for the login CLI (must match a PROXY_POOL entry so
+# the published cookie binds to a specific worker on CI runners).  Leave empty
+# to use the first pool proxy or the configured single PROXY_HTTP/HTTPS proxy.
+LOGIN_PROXY_NAME = ''
 
 # MovieClaim per-day mutex activation (P1-B / P2-E auto-toggle).
 # Three-state semantics; case-insensitive, leading/trailing whitespace ignored:

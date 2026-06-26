@@ -113,10 +113,16 @@ def test_no_bind_warning_for_pooled_name(monkeypatch, caplog):
     assert not any("LOGIN_PROXY_NAME" in r.message for r in caplog.records)
 
 
+def test_client_construction_error_is_swallowed(monkeypatch):
+    monkeypatch.setattr(_CFG_PATH, _cfg_configured)
+    with patch(_CLIENT_PATH, side_effect=RuntimeError("boom")):
+        assert publish_login_state("cookie", "Proxy-1") is False
+
+
 def test_non_string_cfg_does_not_crash(monkeypatch):
     # cfg() is untyped; a misconfigured int/bool must not raise AttributeError
     # on .strip() before the fail-open try block.
-    monkeypatch.setattr(_CFG_PATH, lambda name, default: 12345)
+    monkeypatch.setattr(_CFG_PATH, lambda _name, _default: 12345)
     client = _make_client(healthy=False)
     with patch(_CLIENT_PATH, return_value=client):
         assert publish_login_state("cookie", "Proxy-1") is False
