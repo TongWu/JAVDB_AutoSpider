@@ -318,6 +318,7 @@ openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
 | 工作流 | 触发方式 | 用途 |
 |---|---|---|
 | `QBFileFilter.yml` | 定时（每日抓取后 2 小时） | 过滤最近添加种子中的小文件 |
+| `PurgeMissingFiles.yml` | 每日定时 / 手动触发 | 清理两个 qB 实例的 `missingFiles` 种子：逐个 stop + recheck，然后删除条目（仅当内容缩小超过 50% 且残留 ≤ 100MB 时连文件一起删）。输入：`dry_run`、`min_age_hours`（默认 22） |
 | `ReconcileLibrary.yml` | 每小时定时 / 手动触发 | 运行 ADR-033 闭环轮次：采集结果对账（实时 qB 状态）+ 所有权账本（gdrive/qb/pikpak/nas）+ 消费信号（媒体服务器） |
 | `SubscriptionMonitor.yml` | 每日定时 / 手动触发 | 通过 AdHoc 路径抓取已关注演员并写入 New Works feed |
 | `WeeklyDedup.yml` | 每周定时 | Rclone 去重 |

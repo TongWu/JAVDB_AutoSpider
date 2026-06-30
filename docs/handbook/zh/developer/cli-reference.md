@@ -16,6 +16,7 @@ python3 -m apps.cli.<command> [options]
 - [Pipeline CLI](#pipeline-cli)（`apps.cli.pipeline`）
 - [qBittorrent 上传器](#qbittorrent-上传器)（`apps.cli.qb.uploader`）
 - [qBittorrent 文件过滤器](#qbittorrent-文件过滤器)（`apps.cli.qb.file_filter`）
+- [清理丢失文件种子](#清理丢失文件种子)（`apps.cli.qb.purge_missing_files`）
 - [种子质量证据](#种子质量证据)（`apps.cli.qb.quality_evidence`）
 - [PikPak Bridge](#pikpak-bridge)（`apps.cli.pikpak.bridge`）
 - [Migration CLI](#migration-cli)（`apps.cli.db.migration`）
@@ -331,6 +332,41 @@ python3 -m apps.cli.qb.file_filter --use-proxy
 
 # 删除已下载的小文件
 python3 -m apps.cli.qb.file_filter --delete-local-files
+```
+
+---
+
+## 清理丢失文件种子
+
+**模块：** `apps.cli.qb.purge_missing_files`
+
+清理卡在 qBittorrent `missingFiles` 状态的种子，覆盖主 qB 和 adhoc qB 的**所有分类**。种子进入 `missingFiles` 通常是内容上传到云端后本地文件被删除的正常归宿。
+
+qB 不提供「当前磁盘文件夹大小」的 API，且对每个 `missingFiles` 种子一律报 `progress=0`。因此命令对每个种子先 **stop**，再强制 **recheck**（qB 重新核对磁盘），然后读取核对后的 per-file progress。仅当内容已缩小到原始大小的 50% 以下、**且**磁盘上还在的文件都不超过 `QB_FILE_FILTER_MIN_SIZE_MB` 阈值（100MB）时，才连同文件一起删除条目；磁盘上大文件确实还在的种子会原样保留（停止、文件完好）。只处理完成时间至少在 `--min-age-hours` 之前的种子。
+
+recheck 前先 stop 是为了防止 qB 把文件其实还在的种子重新做种。注意即使 `--dry-run` 也会执行 stop+recheck（决策就是这么算出来的），种子会从 `missingFiles` 变为 `stopped`；这是无损且可逆的。
+
+### 参数
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--min-age-hours` | 只处理完成时间至少在这么多小时之前的种子 | `22` |
+| `--dry-run` | 只列出决策不删除（仍会 stop + recheck） | `False` |
+| `--json` | 以 JSON 输出每个实例的汇总 | `False` |
+
+qB 采用直连（不走代理），与 reconcile 轮次的连接方式一致。当配置了 `QB_URL_ADHOC` 时会一并处理 adhoc 实例；adhoc qB 连不上会被跳过、不影响整个运行。
+
+### 示例
+
+```bash
+# 预览决策但不删除（仍会 stop + recheck）
+python3 -m apps.cli.qb.purge_missing_files --dry-run --json
+
+# 执行清理（删除条目；仅对内容确实丢失的连文件一起删）
+python3 -m apps.cli.qb.purge_missing_files
+
+# 把完成时间门槛放宽到 7 天
+python3 -m apps.cli.qb.purge_missing_files --min-age-hours 168
 ```
 
 ---
