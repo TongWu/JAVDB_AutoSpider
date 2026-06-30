@@ -324,6 +324,7 @@ openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
 | Workflow | Trigger | Purpose |
 |---|---|---|
 | `QBFileFilter.yml` | Cron (2h after daily ingestion) | Filter small files from recently added torrents |
+| `PurgeMissingFiles.yml` | Daily cron / manual dispatch | Delete `missingFiles` torrents from both qB instances: stop + recheck each, then delete the entry (with files only when content shrank past 50% and residue ≤ 100MB). Inputs: `dry_run`, `min_age_hours` (default 22) |
 | `ReconcileLibrary.yml` | Hourly cron / manual dispatch | Run ADR-033 closed-loop passes: acquisition outcomes against live qB state + ownership ledger (gdrive/qb/pikpak/nas) + consumption signal from media servers |
 | `SubscriptionMonitor.yml` | Daily cron / manual dispatch | Scrape followed actors through the AdHoc path and write the New Works feed |
 | `WeeklyDedup.yml` | Weekly cron | Rclone deduplication |

@@ -537,6 +537,51 @@ class QBittorrentClient:
         )
         return True
 
+    def get_torrents_by_hashes(self, hashes: Iterable[str]) -> list:
+        """Return the info rows for the given hashes (qB v4.1+ ``hashes`` filter)."""
+        hash_list = [h for h in hashes if h]
+        if not hash_list:
+            return []
+        resp = self.session.get(
+            f"{self.base_url}/api/v2/torrents/info",
+            params={"hashes": "|".join(hash_list)},
+            **self._request_kwargs(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def stop_torrents(self, hashes: Iterable[str]) -> None:
+        """Stop (pause) the given torrents.
+
+        Used before a recheck so qB does not auto-resume seeding a torrent
+        whose files turn out to still be on disk. qB v5 renamed the endpoint
+        to ``/torrents/stop``; fall back to the v4.x ``/torrents/pause`` on 404.
+        """
+        hash_list = [h for h in hashes if h]
+        if not hash_list:
+            return
+        data = {"hashes": "|".join(hash_list)}
+        resp = self.session.post(
+            f"{self.base_url}/api/v2/torrents/stop", data=data, **self._request_kwargs()
+        )
+        if resp.status_code == 404:
+            resp = self.session.post(
+                f"{self.base_url}/api/v2/torrents/pause", data=data, **self._request_kwargs()
+            )
+        resp.raise_for_status()
+
+    def recheck_torrents(self, hashes: Iterable[str]) -> None:
+        """Force qB to re-verify the given torrents against on-disk data."""
+        hash_list = [h for h in hashes if h]
+        if not hash_list:
+            return
+        resp = self.session.post(
+            f"{self.base_url}/api/v2/torrents/recheck",
+            data={"hashes": "|".join(hash_list)},
+            **self._request_kwargs(),
+        )
+        resp.raise_for_status()
+
 
 def remove_completed_torrents_keep_files(
     qb_client: QBittorrentClient,

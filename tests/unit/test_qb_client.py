@@ -784,3 +784,29 @@ class TestIsTorrentExists:
             "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2&dn=x"
         )
         assert is_torrent_exists(magnet, existing) is True
+
+
+class TestStopTorrentsEndpointFallback:
+    def test_uses_v5_stop_endpoint(self):
+        resp = MagicMock(status_code=200)
+        resp.raise_for_status = MagicMock()
+        client, session = _make_client(resp_sequence_post=[resp])
+        client.stop_torrents(["abc"])
+        url = session.post.call_args_list[0].args[0]
+        assert url.endswith("/api/v2/torrents/stop")
+        assert session.post.call_count == 1
+
+    def test_falls_back_to_pause_on_404(self):
+        not_found = MagicMock(status_code=404)
+        ok = MagicMock(status_code=200)
+        ok.raise_for_status = MagicMock()
+        client, session = _make_client(resp_sequence_post=[not_found, ok])
+        client.stop_torrents(["abc"])
+        urls = [c.args[0] for c in session.post.call_args_list]
+        assert urls[0].endswith("/api/v2/torrents/stop")
+        assert urls[1].endswith("/api/v2/torrents/pause")
+
+    def test_noop_on_empty_hashes(self):
+        client, session = _make_client(resp_sequence_post=[])
+        client.stop_torrents([])
+        assert session.post.call_count == 0

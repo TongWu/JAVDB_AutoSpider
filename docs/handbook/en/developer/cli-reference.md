@@ -16,6 +16,7 @@ python3 -m apps.cli.<command> [options]
 - [Pipeline CLI](#pipeline-cli) (`apps.cli.pipeline`)
 - [qBittorrent Uploader](#qbittorrent-uploader) (`apps.cli.qb.uploader`)
 - [qBittorrent File Filter](#qbittorrent-file-filter) (`apps.cli.qb.file_filter`)
+- [Purge Missing Files](#purge-missing-files) (`apps.cli.qb.purge_missing_files`)
 - [Torrent Quality Evidence](#torrent-quality-evidence) (`apps.cli.qb.quality_evidence`)
 - [PikPak Bridge](#pikpak-bridge) (`apps.cli.pikpak.bridge`)
 - [Migration CLI](#migration-cli) (`apps.cli.db.migration`)
@@ -331,6 +332,41 @@ python3 -m apps.cli.qb.file_filter --use-proxy
 
 # Delete already-downloaded small files
 python3 -m apps.cli.qb.file_filter --delete-local-files
+```
+
+---
+
+## Purge Missing Files
+
+**Module:** `apps.cli.qb.purge_missing_files`
+
+Cleans up torrents stuck in qBittorrent's `missingFiles` state across **all categories** of both the primary and adhoc qB instances. A torrent reaches `missingFiles` once its files are removed from disk (the normal end state after the content is uploaded to cloud).
+
+qB exposes no live on-disk folder size and reports `progress=0` for every `missingFiles` torrent, so per torrent the command **stops** it, forces a **recheck** (qB re-verifies against disk), then reads the re-verified per-file progress. The entry is deleted **with its files** only when the content has shrunk below 50% of the original size *and* every still-present file is at most the `QB_FILE_FILTER_MIN_SIZE_MB` threshold (100MB). A torrent whose big file is actually still on disk is left alone (stopped, files intact). Only torrents that completed at least `--min-age-hours` ago are considered.
+
+Stopping before the recheck prevents qB from re-seeding a torrent whose files turn out to be present. Note that even `--dry-run` performs the stop+recheck (that is how decisions are computed), so torrents transition out of `missingFiles` to `stopped`; this is non-destructive and reversible.
+
+### Arguments
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--min-age-hours` | Only consider torrents that completed at least this many hours ago | `22` |
+| `--dry-run` | List decisions without deleting (still stops + rechecks) | `False` |
+| `--json` | Emit the per-instance summary as JSON | `False` |
+
+qB is reached directly (no proxy), the same way the reconcile pass connects. The adhoc instance is processed when `QB_URL_ADHOC` is configured; an unreachable adhoc qB is skipped without failing the run.
+
+### Examples
+
+```bash
+# Preview decisions without deleting (still stops + rechecks)
+python3 -m apps.cli.qb.purge_missing_files --dry-run --json
+
+# Purge (delete entries; delete files only for genuinely-gone content)
+python3 -m apps.cli.qb.purge_missing_files
+
+# Widen the age gate to 7 days
+python3 -m apps.cli.qb.purge_missing_files --min-age-hours 168
 ```
 
 ---
