@@ -27,11 +27,11 @@ permissions:
   contents: read
 
 on:
-  schedule:
+  # schedule: # DISABLED FOR PUBLIC REPO
     # 02:00 UTC = 10:00 Asia/Singapore.  Comfortably after Daily/AdHoc
     # ingestion windows finish so we don't accidentally race a healthy
     # in-progress session.
-    - cron: '0 2 * * *'
+    # - cron: '0 2 * * *'
   workflow_dispatch:
     inputs:
       max_age_hours:
