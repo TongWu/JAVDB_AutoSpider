@@ -34,26 +34,47 @@ GitHub Actions 工作流（git-filter-repo）
 所有发布配置集中在 `.publish-config.yml` 中：
 
 ```yaml
-# 从公开仓库中排除的文件/目录
+# 从公开仓库中排除的文件/目录（从整个历史中移除）
 exclude_paths:
   - "reports/"
   - "logs/"
-  - "Daily Report/"
-  - "Ad Hoc/"
-  - "docs/PUBLISH_TO_PUBLIC.md"
+  - "config.py"          # 已解析的 secrets — 绝不发布
+  - "CLAUDE.md"
+  - "AGENTS.md"
+  - "CONTEXT.md"
+  - "*.db"
   - ".github/workflows/block-public-sync-to-main.yml"
   - ".github/workflows/publish-to-public.yml"
   - ".publish-config.yml"
+  # 仅私有仓库使用的基础设施 workflow — 整体移除，
+  # 使其绝不会进入（或运行于）公开仓库：
+  - ".github/workflows/publish-api-image.yml"
+  - ".github/workflows/sync-docs-to-wiki.yml"
+  - ".github/workflows/publish-openapi.yml"
+  - ".github/workflows/publish-query-contract.yml"
+  - ".github/workflows/publish-sql-contract.yml"
+  # ... 完整列表见 .publish-config.yml
 
-# 工作流修改
+# 应用到公开镜像的逐个 workflow 修改
 workflow_modifications:
+  # 注释掉 `schedule:` 触发器（公开仓库不做 cron 自动运行）
   disable_schedule:
     - ".github/workflows/DailyIngestion.yml"
     - ".github/workflows/QBFileFilter.yml"
+    - ".github/workflows/WeeklyDedup.yml"
     - ".github/workflows/StaleSessionCleanup.yml"
+    - ".github/workflows/SiteContractSentinel.yml"
+    - ".github/workflows/ReconcileLibrary.yml"
+  # 取消注释公开仓库的 push 触发器
   enable_push_trigger:
     - ".github/workflows/docker-publish-ghcr.yml"
+  # 注释掉 PRIVATE_ONLY_PUSH 区块（保留文件，去掉 push 触发）
+  disable_push_trigger:
     - ".github/workflows/TestIngestion.yml"
+  # 注释掉整个 `on:` 块。当前刻意为空——仅私有使用的 workflow
+  # 改为通过 `exclude_paths` 整体移除，因为没有触发器的 workflow
+  # 文件是无效文件，每次发布都会产生空的失败 run。
+  disable_all_triggers: []
 
 # 目标分支
 branches:
@@ -107,10 +128,12 @@ push:
 - `git-filter-repo` 从每个提交中移除所有被排除的文件
 - 修剪变为空的提交
 - 保留原始时间戳
+- 仅私有仓库使用的基础设施 workflow（`publish-api-image`、`sync-docs-to-wiki`、`publish-openapi`、`publish-query-contract`、`publish-sql-contract`）已列入 `exclude_paths`，因此被整体移除——它们绝不会出现在公开仓库、也不会在其中运行
 
 ### 步骤 3：工作流修改
 - 禁用定时触发器（防止 fork 自动运行）
 - 为公开仓库启用 Docker push 触发器
+- 仅私有仓库使用的 push 触发器（如 `TestIngestion`）在原处被注释掉
 - 标记了 `# PUBLIC_RUNNER: <name>` 的 `runs-on:` 行会被重写为使用 `<name>`，使得在私有自托管 runner 上运行的任务在公开仓库中回退到 GitHub 托管的等效 runner
 
 ### 步骤 4：推送到公开仓库
