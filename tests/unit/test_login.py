@@ -14,6 +14,91 @@ from bs4 import BeautifulSoup
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
+# login.py is importable without config.py (the required-value guard lives in
+# main(), not at import time), so these tests exercise the REAL functions.
+from javdb.spider.auth import login as login_mod
+
+
+class TestSanitizeCaptchaAnswer:
+    """Real _sanitize_captcha_answer: strip wrappers, first alnum run, lower."""
+
+    def test_plain_lowercased(self):
+        assert login_mod._sanitize_captcha_answer("ABCde") == "abcde"
+
+    def test_strips_markdown_code_fence(self):
+        assert login_mod._sanitize_captcha_answer("```abcde```") == "abcde"
+
+    def test_strips_fenced_with_newlines(self):
+        assert login_mod._sanitize_captcha_answer("```\nqwert\n```") == "qwert"
+
+    def test_strips_quotes(self):
+        assert login_mod._sanitize_captcha_answer('"xY9z"') == "xy9z"
+
+    def test_strips_surrounding_whitespace(self):
+        assert login_mod._sanitize_captcha_answer("  k4m9  ") == "k4m9"
+
+    def test_keeps_digits(self):
+        assert login_mod._sanitize_captcha_answer("A1B2C3") == "a1b2c3"
+
+    def test_empty_returns_empty(self):
+        assert login_mod._sanitize_captcha_answer("") == ""
+
+    def test_none_returns_empty(self):
+        assert login_mod._sanitize_captcha_answer(None) == ""
+
+    def test_first_alnum_run_only(self):
+        # A sentence collapses to its first token (matches benchmarked
+        # behaviour; the constrained prompt keeps real models terse).
+        assert login_mod._sanitize_captcha_answer("code: kmiv") == "code"
+
+
+class TestCaptchaConfigDefaults:
+    """Pin the benchmark-chosen defaults so an accidental edit is caught."""
+
+    def test_default_model_is_qwen_vl_ocr(self):
+        assert login_mod.CAPTCHA_MODEL == "qwen-vl-ocr"
+
+    def test_default_max_tokens_high_enough_for_reasoning(self):
+        # Reasoning models burn 700-1700 tokens before output; the default
+        # must clear that so they don't return empty (finish_reason=length).
+        assert login_mod.CAPTCHA_MAX_TOKENS >= 2000
+
+    def test_default_retries_lifts_low_accuracy_solver(self):
+        assert login_mod.LOGIN_MAX_RETRIES >= 8
+
+
+class TestLoginWithRetryDefault:
+    """login_with_retry(max_retries=None) falls back to LOGIN_MAX_RETRIES."""
+
+    def test_none_uses_config_default(self, monkeypatch):
+        calls = {"n": 0}
+
+        def fake_login(u, p, proxies=None):
+            calls["n"] += 1
+            return False, None, "captcha error"
+
+        monkeypatch.setattr(login_mod, "login_javdb", fake_login)
+        monkeypatch.setattr(login_mod.time, "sleep", lambda *_: None)
+        monkeypatch.setattr(login_mod, "LOGIN_MAX_RETRIES", 8)
+
+        ok, cookie, _ = login_mod.login_with_retry("u", "p", max_retries=None)
+        assert ok is False and cookie is None
+        assert calls["n"] == 8
+
+    def test_explicit_overrides_default(self, monkeypatch):
+        calls = {"n": 0}
+
+        def fake_login(u, p, proxies=None):
+            calls["n"] += 1
+            return False, None, "captcha error"
+
+        monkeypatch.setattr(login_mod, "login_javdb", fake_login)
+        monkeypatch.setattr(login_mod.time, "sleep", lambda *_: None)
+        monkeypatch.setattr(login_mod, "LOGIN_MAX_RETRIES", 8)
+
+        login_mod.login_with_retry("u", "p", max_retries=3)
+        assert calls["n"] == 3
+
 
 class TestExtractCsrfToken:
     """Test cases for extract_csrf_token function - implemented locally."""

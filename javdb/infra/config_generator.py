@@ -385,6 +385,12 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         # GPT API Configuration (optional - for automatic captcha solving during login)
         ('GPT_API_URL', 'GPT_API_URL', get_env, '', 'JAVDB LOGIN CONFIGURATION'),
         ('GPT_API_KEY', 'GPT_API_KEY', get_env, '', 'JAVDB LOGIN CONFIGURATION'),
+        # Captcha-solving model tuning (override via VAR_CAPTCHA_MODEL etc.).
+        # Defaults must mirror javdb/spider/auth/login.py. OpenAI-endpoint users
+        # who cannot serve qwen-vl-ocr should set VAR_CAPTCHA_MODEL=gpt-4o.
+        ('CAPTCHA_MODEL', 'CAPTCHA_MODEL', get_env, 'qwen-vl-ocr', 'JAVDB LOGIN CONFIGURATION'),
+        ('CAPTCHA_MAX_TOKENS', 'CAPTCHA_MAX_TOKENS', get_env_int, 2000, 'JAVDB LOGIN CONFIGURATION'),
+        ('LOGIN_MAX_RETRIES', 'LOGIN_MAX_RETRIES', get_env_int, 8, 'JAVDB LOGIN CONFIGURATION'),
         # AI operations diagnosis assistant (ADR-026)
         ('OPS_DIAGNOSIS_AI_ENABLED', 'OPS_DIAGNOSIS_AI_ENABLED', get_env_bool, False, 'AI OPERATIONS DIAGNOSIS'),
         ('OPS_DIAGNOSIS_API_URL', 'OPS_DIAGNOSIS_API_URL', get_env, '', 'AI OPERATIONS DIAGNOSIS'),

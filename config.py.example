@@ -369,11 +369,25 @@ BASE_URL = 'https://javdb.com'
 JAVDB_USERNAME = ''  # Your JavDB email or username
 JAVDB_PASSWORD = ''  # Your JavDB password
 
-# GPT API for AI-powered captcha solving (recommended - most accurate)
-# Uses GPT-4o Vision to recognize captcha images
+# GPT API for AI-powered captcha solving (required for automatic login — no manual fallback)
+# Sends the captcha image to a vision model for recognition.
 # Compatible with OpenAI API or any OpenAI-compatible API (e.g., api.gpt.ge)
 GPT_API_URL = 'https://api.gpt.ge/v1/chat/completions'  # API endpoint
 GPT_API_KEY = ''  # Your API key (e.g., sk-xxx)
+
+# Captcha-solving model tuning (all optional; benchmark-backed defaults below).
+# A 720-attempt benchmark against JavDB's live captcha found qwen-vl-ocr to be
+# the fastest/cheapest of the top accuracy tier (~25% single-shot) with clean
+# output. Any OpenAI-compatible vision model works (e.g. gpt-4o, gpt-4o-mini).
+CAPTCHA_MODEL = 'qwen-vl-ocr'
+# max_tokens for the solve call. Reasoning models (gpt-5-*, gemini-*-thinking)
+# burn 700-1700 hidden tokens before emitting an answer, so a low budget makes
+# them return empty. 2000 is safe for every model; OCR models ignore the slack.
+CAPTCHA_MAX_TOKENS = 2000
+# Login retries. Single-shot captcha accuracy is inherently low, so login
+# retries with a fresh captcha each time: p@n = 1-(1-p)^n. 8 lifts a 25%
+# solver to ~90% login success.
+LOGIN_MAX_RETRIES = 8
 
 # AI operations diagnosis assistant (ADR-026)
 # Phase 1 remains read-only. When disabled or not configured, the assistant
