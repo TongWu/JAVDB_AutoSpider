@@ -60,14 +60,27 @@ JAVDB_USERNAME = cfg('JAVDB_USERNAME', None)
 JAVDB_PASSWORD = cfg('JAVDB_PASSWORD', None)
 BASE_URL = cfg('BASE_URL', None)
 
-if not all([JAVDB_USERNAME, JAVDB_PASSWORD, BASE_URL]):
-    logger.error("Could not import config.py or missing required values")
-    logger.error("Make sure config.py exists and contains JAVDB_USERNAME, JAVDB_PASSWORD, and BASE_URL")
-    sys.exit(1)
+# NOTE: the required-value check lives in main(), NOT at import time. Importing
+# this module (e.g. from the proxy coordinator or unit tests) must never call
+# sys.exit(); only the CLI entrypoint enforces that config is present.
 
 GPT_API_KEY = cfg('GPT_API_KEY', None)
 GPT_API_URL = cfg('GPT_API_URL', None)
 GPT_API_AVAILABLE = bool(GPT_API_KEY and GPT_API_URL)
+
+# Captcha-solving model config. Defaults chosen from a 720-attempt benchmark
+# against JavDB's live captcha (see docs/handbook/en/self-hoster/javdb-login.md):
+#   * qwen-vl-ocr — fastest + cheapest of the top accuracy tier, clean output.
+#   * max_tokens 2000 — reasoning models burn 700-1700 tokens before emitting
+#     an answer; the old value of 50 starved them and returned empty strings.
+#     Non-reasoning models ignore the extra headroom, so this is model-agnostic.
+CAPTCHA_MODEL = cfg('CAPTCHA_MODEL', 'qwen-vl-ocr')
+CAPTCHA_MAX_TOKENS = cfg('CAPTCHA_MAX_TOKENS', 2000)
+
+# Single-shot captcha accuracy is inherently low (~25% for the best models on
+# JavDB's distorted captcha), so login relies on retries: p@n = 1-(1-p)^n.
+# 8 retries lifts a 25% solver to ~90% login success.
+LOGIN_MAX_RETRIES = cfg('LOGIN_MAX_RETRIES', 8)
 
 PROXY_HTTP = cfg('PROXY_HTTP', None)
 PROXY_HTTPS = cfg('PROXY_HTTPS', None)
@@ -258,14 +271,30 @@ def save_captcha_image(image_data, filename='captcha.png'):
         return False
 
 
+def _sanitize_captcha_answer(raw):
+    """Normalise a raw model reply into a submittable captcha string.
+
+    Vision models occasionally wrap the answer in markdown code fences or
+    quotes (e.g. ``` ```abcde``` ```), add stray whitespace, or vary the
+    case. JavDB's rucaptcha comparison is case-sensitive against a
+    lowercase code, so we strip wrappers, keep the first alphanumeric run,
+    and lowercase it. Returns '' when nothing usable remains.
+    """
+    if not raw:
+        return ""
+    text = raw.strip().replace("`", "").strip().strip("'\"").strip()
+    match = re.search(r"[A-Za-z0-9]+", text)
+    return match.group(0).lower() if match else ""
+
+
 def solve_captcha_with_ai(image_data, proxies=None):
     """
-    Use GPT-4o API to solve captcha
-    
+    Solve a captcha image via the configured vision model (CAPTCHA_MODEL).
+
     Args:
         image_data: Raw image bytes
         proxies: Optional proxy dict for requests (e.g., {'http': '...', 'https': '...'})
-    
+
     Returns:
         str: Captcha code or None if failed
     """
@@ -287,14 +316,13 @@ def solve_captcha_with_ai(image_data, proxies=None):
             image_type = "image/gif"
 
         prompt = (
-            "Analyze the provided image and return the characters displayed. "
-            "Output the result as plain text only. "
-            "Do not describe the image, do not explain your reasoning, "
-            "and do not include anything except the recognized characters."
+            "This image is a CAPTCHA. Output only the characters shown in it, "
+            "as one continuous string with no spaces, no line breaks, and no "
+            "extra text."
         )
 
         payload = {
-            "model": "gpt-5-chat-latest",
+            "model": CAPTCHA_MODEL,
             "messages": [
                 {
                     "role": "user",
@@ -309,7 +337,7 @@ def solve_captcha_with_ai(image_data, proxies=None):
                     ]
                 }
             ],
-            "max_tokens": 50
+            "max_tokens": CAPTCHA_MAX_TOKENS
         }
 
         headers = {
@@ -328,7 +356,25 @@ def solve_captcha_with_ai(image_data, proxies=None):
         if response.status_code == 200:
             result = response.json()
             if 'choices' in result and len(result['choices']) > 0:
-                captcha_code = result['choices'][0]['message']['content'].strip()
+                choice = result['choices'][0]
+                raw = choice.get('message', {}).get('content') or ''
+                captcha_code = _sanitize_captcha_answer(raw)
+                # A reasoning model whose max_tokens budget is consumed by
+                # hidden reasoning returns finish_reason='length' with empty
+                # visible content. Surface it so the operator raises
+                # CAPTCHA_MAX_TOKENS instead of silently retrying forever.
+                if not captcha_code:
+                    if choice.get('finish_reason') == 'length':
+                        logger.warning(
+                            "AI returned empty content with finish_reason="
+                            "'length' (model=%s). The max_tokens budget "
+                            "(%d) was exhausted before any visible output — "
+                            "raise CAPTCHA_MAX_TOKENS for reasoning models.",
+                            CAPTCHA_MODEL, CAPTCHA_MAX_TOKENS,
+                        )
+                    else:
+                        logger.warning("AI API returned empty captcha")
+                    return None
                 # Avoid INFO-logging the full captcha string: any operator
                 # tailing logs gets a steady stream of solved-captcha tokens
                 # that, while short-lived, are still a credential the AI
@@ -678,22 +724,27 @@ def login_javdb(username, password, proxies=None):
         return False, None, f"Unexpected error: {e}"
 
 
-def login_with_retry(username, password, max_retries=5, proxies=None):
+def login_with_retry(username, password, max_retries=None, proxies=None):
     """
     Login to JavDB with retry logic for captcha failures.
-    
+
     This function wraps login_javdb() with retry logic, automatically
     retrying on captcha-related errors.
-    
+
     Args:
         username: JavDB username/email
         password: JavDB password
-        max_retries: Maximum number of retry attempts (default: 5)
+        max_retries: Maximum number of retry attempts. Defaults to
+            LOGIN_MAX_RETRIES (config key ``LOGIN_MAX_RETRIES``) when None.
+            Single-shot captcha accuracy is low (~25%), so several retries
+            are expected before a successful solve.
         proxies: Optional proxy dict for requests (e.g., {'http': '...', 'https': '...'})
-    
+
     Returns:
         tuple: (success: bool, session_cookie: str, message: str)
     """
+    if max_retries is None:
+        max_retries = LOGIN_MAX_RETRIES
     success = False
     session_cookie = None
     message = None
@@ -804,9 +855,10 @@ def main():
     logger.info("JavDB Auto Login Script (with Captcha + Cloudflare Bypass)")
     logger.info("=" * 60)
 
-    # Check credentials
-    if not JAVDB_USERNAME or not JAVDB_PASSWORD:
-        logger.error("JAVDB_USERNAME and JAVDB_PASSWORD must be set in config.py")
+    # Check required config. This guard lives here (not at import time) so that
+    # importing this module never calls sys.exit().
+    if not all([JAVDB_USERNAME, JAVDB_PASSWORD, BASE_URL]):
+        logger.error("JAVDB_USERNAME, JAVDB_PASSWORD and BASE_URL must be set in config.py")
         logger.info("To use this script:")
         logger.info("1. Open config.py")
         logger.info("2. Set JAVDB_USERNAME = 'your_email_or_username'")
@@ -821,8 +873,8 @@ def main():
 
     # Show captcha solving method
     if GPT_API_AVAILABLE:
-        logger.info("Captcha Solving: AI (GPT Vision)")
-        logger.info("   - Using AI API for automatic recognition")
+        logger.info("Captcha Solving: AI vision (model=%s, max_tokens=%d)",
+                    CAPTCHA_MODEL, CAPTCHA_MAX_TOKENS)
     else:
         logger.warning("Captcha Solving: NOT AVAILABLE")
         logger.warning("   - Configure GPT_API_KEY and GPT_API_URL in config.py for AI solving")
@@ -840,7 +892,8 @@ def main():
 
     # Perform login with retry logic
     success, session_cookie, message = login_with_retry(
-        JAVDB_USERNAME, JAVDB_PASSWORD, max_retries=5, proxies=proxies
+        JAVDB_USERNAME, JAVDB_PASSWORD, max_retries=LOGIN_MAX_RETRIES,
+        proxies=proxies,
     )
 
     logger.info("=" * 60)
