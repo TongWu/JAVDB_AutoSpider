@@ -40,11 +40,15 @@ runs:
     - name: Clean wheel staging dir
       shell: bash
       run: |
-        # Self-hosted runners are persistent: /tmp/rust-wheel survives
-        # between jobs, and stale wheels from earlier builds would make
-        # the `pip install /tmp/rust-wheel/*.whl` glob ambiguous
-        # (ResolutionImpossible on two same-version wheels).
-        rm -rf /tmp/rust-wheel
+        # Stage the wheel under $RUNNER_TEMP (runner-owned, inside _work),
+        # not /tmp: actions/cache extracts relative to the workspace, so a
+        # top-level /tmp path made restore try to recreate the root-owned
+        # /tmp dir ("mkdir: Permission denied") — turning every cache hit
+        # into a miss + full rebuild. Persistent runners may also keep a
+        # stale wheel across jobs, which would make the install glob
+        # ambiguous (ResolutionImpossible on two same-version wheels), so
+        # clear it first.
+        rm -rf "${RUNNER_TEMP}/rust-wheel"
 
     - name: Restore Rust wheel from cache
       id: wheel-cache
@@ -53,20 +57,24 @@ runs:
       # persistent runners. Saving is an explicit success-gated step below.
       uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
       with:
-        path: /tmp/rust-wheel
+        path: ${{ runner.temp }}/rust-wheel
         # The crate builds an abi3-py39 wheel (cp39-abi3 tag), so one wheel
         # per OS/arch serves every Python >= 3.9 — keying by Python version
         # would force needless rebuilds on machines without a C toolchain.
-        key: rust-wheel-${{ runner.os }}-${{ runner.arch }}-abi3-${{ hashFiles('javdb/rust_core/src/**', 'javdb/rust_core/Cargo.toml', 'javdb/rust_core/Cargo.lock') }}
+        # `-v2` salt: the pre-existing keys were archived from a /tmp path
+        # and are unusable after the move to $RUNNER_TEMP (cache keys are
+        # immutable, so the old archive would still extract toward /tmp).
+        # Bumping the salt forces a clean one-time rebuild under the new path.
+        key: rust-wheel-v2-${{ runner.os }}-${{ runner.arch }}-abi3-${{ hashFiles('javdb/rust_core/src/**', 'javdb/rust_core/Cargo.toml', 'javdb/rust_core/Cargo.lock') }}
 
     - name: Install from cached wheel
       if: steps.wheel-cache.outputs.cache-hit == 'true'
       shell: bash
       run: |
         shopt -s nullglob
-        wheels=(/tmp/rust-wheel/*.whl)
+        wheels=("${RUNNER_TEMP}/rust-wheel"/*.whl)
         if [ "${#wheels[@]}" -ne 1 ]; then
-          echo "::error::install-rust-wheel: cached entry holds ${#wheels[@]} wheels (expected exactly 1) — delete the cache key and re-run: gh cache delete 'rust-wheel-${{ runner.os }}-${{ runner.arch }}-abi3-*'"
+          echo "::error::install-rust-wheel: cached entry holds ${#wheels[@]} wheels (expected exactly 1) — delete the cache key and re-run: gh cache delete 'rust-wheel-v2-${{ runner.os }}-${{ runner.arch }}-abi3-*'"
           exit 1
         fi
         ${{ steps.pip.outputs.cmd }} install "${wheels[0]}"
@@ -102,8 +110,8 @@ runs:
         # Rebuild the output dir from scratch so it holds exactly the one
         # wheel this build produces (the leading clean step already cleared
         # any cross-job leftovers; this also covers a same-job retry).
-        rm -rf /tmp/rust-wheel
-        mkdir -p /tmp/rust-wheel
+        rm -rf "${RUNNER_TEMP}/rust-wheel"
+        mkdir -p "${RUNNER_TEMP}/rust-wheel"
         cd javdb/rust_core
         # User installs (common on self-hosted) put scripts in ~/.local/bin, which is often not on PATH.
         export PATH="${HOME}/.local/bin:${PATH}"
@@ -130,18 +138,18 @@ runs:
           export PATH="${CC_SHIM_DIR}:${PATH}"
           echo "No system cc — shimming the host linker to zig (${ZIG_NATIVE_TARGET})"
         fi
-        ${{ steps.pip.outputs.python_cmd }} -m maturin build --release --zig --out /tmp/rust-wheel
+        ${{ steps.pip.outputs.python_cmd }} -m maturin build --release --zig --out "${RUNNER_TEMP}/rust-wheel"
         echo "✓ Built Rust extension wheel:"
-        ls -lh /tmp/rust-wheel/*.whl
+        ls -lh "${RUNNER_TEMP}/rust-wheel"/*.whl
 
     - name: Install built wheel
       if: steps.wheel-cache.outputs.cache-hit != 'true'
       shell: bash
       run: |
         shopt -s nullglob
-        wheels=(/tmp/rust-wheel/*.whl)
+        wheels=("${RUNNER_TEMP}/rust-wheel"/*.whl)
         if [ "${#wheels[@]}" -ne 1 ]; then
-          echo "::error::install-rust-wheel: build produced ${#wheels[@]} wheels in /tmp/rust-wheel (expected exactly 1)"
+          echo "::error::install-rust-wheel: build produced ${#wheels[@]} wheels in ${RUNNER_TEMP}/rust-wheel (expected exactly 1)"
           exit 1
         fi
         ${{ steps.pip.outputs.cmd }} install "${wheels[0]}"
@@ -151,9 +159,9 @@ runs:
       # Explicit, success-gated save (paired with the restore-only step
       # above). Composite steps abort on first failure, so reaching here
       # means the build and install succeeded — we never persist a partial
-      # or empty /tmp/rust-wheel, which is what poisoned keys before.
+      # or empty staging dir, which is what poisoned keys before.
       if: steps.wheel-cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
       with:
-        path: /tmp/rust-wheel
+        path: ${{ runner.temp }}/rust-wheel
         key: ${{ steps.wheel-cache.outputs.cache-primary-key }}
