@@ -203,11 +203,15 @@ jobs:
           echo "Current branch: $CURRENT_BRANCH"
           echo "branch=$CURRENT_BRANCH" >> $GITHUB_OUTPUT
 
-      - name: Set up Python, venv, dependencies, Rust extension
-        uses: ./.github/actions/setup-python-env
-        with:
-          python-version: '3.11'
-
+      # No setup-python-env here on purpose. config_generator (and the pause
+      # gate above) are stdlib-only — javdb/infra/config_generator.py imports
+      # nothing but os/re/json/argparse/typing — so the system python3 is
+      # enough. Building a venv + installing requirements.txt + the Rust wheel
+      # cost 23s on ubuntu-latest and 93s on the self-hosted fleet for a step
+      # that runs in 0s, and it primed no cache for anyone: run-pipeline lands
+      # on a different machine, and the pip/wheel cache keys are scoped by
+      # runner.os/runner.arch. Keep this job dependency-free; if
+      # config_generator ever grows a third-party import, add the action back.
       - name: Generate config.py from GitHub Variables and Secrets
         env:
           # ============ SECRETS (sensitive: passwords, tokens, IPs) ============
@@ -301,28 +305,10 @@ jobs:
           VAR_RUNNER_REGISTRY_ENABLED: ${{ vars.RUNNER_REGISTRY_ENABLED || 'false' }}
         run: python3 -m apps.cli.ops.config_generator --github-actions
 
-      - name: Pull latest changes from remote
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          CURRENT_BRANCH="${{ steps.branch_check.outputs.branch }}"
-          echo "Pulling latest changes from branch: $CURRENT_BRANCH"
-          
-          REPO_URL=$(git remote get-url origin)
-          if [[ "$REPO_URL" == https://* ]]; then
-            REPO_SSH=$(echo "$REPO_URL" | sed 's|https://github.com/|git@github.com:|')
-            git remote set-url origin "$REPO_SSH"
-            echo "Updated remote URL to SSH: $REPO_SSH"
-          fi
-          
-          git fetch origin "$CURRENT_BRANCH"
-          git pull --rebase origin "$CURRENT_BRANCH" || {
-            echo "Warning: Failed to pull/rebase, attempting merge instead"
-            git pull --no-edit origin "$CURRENT_BRANCH" || {
-              echo "Error: Could not integrate remote changes"
-              exit 1
-            }
-          }
+      # (No "pull latest changes" step: this job's workspace is discarded when
+      # it ends — the only thing that leaves is config.py.enc, which is already
+      # rendered by the step above. It could not even freshen the pause marker,
+      # since the pause gate runs earlier. run-pipeline does its own pull.)
 
       - name: Encrypt config for artifact
         env:
@@ -394,7 +380,11 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
-          lfs: true
+          # The only LFS objects are reports/{history,operations,reports}.db
+          # (~60MB total), and in d1 mode nothing reads or writes them — the DB
+          # layer uses a D1Connection, and commit-results skips staging them.
+          # Pull the blobs only for the sqlite/dual backends.
+          lfs: ${{ vars.STORAGE_BACKEND != 'd1' }}
 
       - name: Set up Python, venv, dependencies, Rust extension
         uses: ./.github/actions/setup-python-env
@@ -640,17 +630,22 @@ jobs:
       - name: Step 4 - Run Rclone Dedup Executor
         id: dedup
         if: ${{ inputs.enable_dedup == true || github.event_name == 'schedule' }}
-        env:
-          DEDUP_CSV: ${{ steps.spider.outputs.dedup_csv_path }}
         run: |
           set -e
           set -o pipefail
           bash .github/scripts/install_rclone.sh
-          if [ -n "$DEDUP_CSV" ] && [ -f "$DEDUP_CSV" ]; then
-            python3 -m apps.cli.rclone.manager --execute --dedup-csv "$DEDUP_CSV"
-          else
-            python3 -m apps.cli.rclone.manager --execute
-          fi
+          # install_rclone.sh drops the binary in ~/.local/bin; $GITHUB_PATH
+          # only reaches later steps, so extend PATH for this one.
+          export PATH="$HOME/.local/bin:$PATH"
+          # No --dedup-csv: the executor drains every pending DedupRecords row
+          # from the DB, which is authoritative. dedup detection went DB-only
+          # (javdb/spider/services/dedup_store.py: append_dedup_record keeps
+          # the csv path "for API compatibility but is no longer written to"),
+          # so spider's dedup_csv_path names a file that is never created —
+          # the old `[ -f "$DEDUP_CSV" ]` branch could not fire. Passing the
+          # flag would not scope the run either: manager/service.py treats the
+          # CSV purely as a fallback source for when the DB comes back empty.
+          python3 -m apps.cli.rclone.manager --execute
         continue-on-error: true
 
       - name: Mark sessions as committed
@@ -851,12 +846,17 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
-          lfs: true
+          # See run-pipeline above: no LFS blobs are needed in d1 mode.
+          lfs: ${{ vars.STORAGE_BACKEND != 'd1' }}
 
-      - name: Set up Python, venv, dependencies, Rust extension
+      - name: Set up Python, venv, dependencies
         uses: ./.github/actions/setup-python-env
         with:
           python-version: '3.11'
+          # apps.cli.db.rollback never parses HTML, so the Rust extension
+          # (cache restore + pip install, or a full maturin build on a cold
+          # key) buys this job nothing.
+          install-rust: 'false'
 
       - name: Restore encrypted config
         uses: ./.github/actions/restore-encrypted-config
@@ -954,16 +954,47 @@ jobs:
           # pending alert fires.  No-op cost on healthy runs.
           ssh-key: ${{ secrets.DEPLOY_KEY }}
 
-      - name: Set up Python, venv, dependencies, Rust extension
+      - name: Set up Python, venv, dependencies
         uses: ./.github/actions/setup-python-env
         with:
           python-version: '3.11'
+          # notify.email / db.pending_health / ops.diagnose_run don't parse
+          # HTML — no Rust extension needed.
+          install-rust: 'false'
 
+      # Non-fatal on purpose: when setup dies before uploading the artifact
+      # (bad secret, config-generation error, missing ARTIFACT_KEY) this job
+      # still runs via `always()`, and a hard failure here meant the one run
+      # an operator most needs to hear about produced no notification at all.
       - name: Restore encrypted config
+        id: restore_config
+        continue-on-error: true
         uses: ./.github/actions/restore-encrypted-config
         with:
           artifact-name: config-encrypted
           artifact-key: ${{ secrets.ARTIFACT_KEY }}
+
+      # Degraded path for the above: render a notification-only config from
+      # the delivery secrets so the failure email/telegram still goes out.
+      # Every other setting falls back to config_generator's defaults; the
+      # stats/diagnosis steps that need more are all best-effort already.
+      - name: Render fallback notification config
+        if: steps.restore_config.outcome != 'success'
+        env:
+          VAR_SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+          VAR_SMTP_PORT: ${{ vars.SMTP_PORT }}
+          VAR_SMTP_USER: ${{ secrets.SMTP_USER }}
+          VAR_SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          VAR_EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          VAR_EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          VAR_TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          VAR_TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          VAR_NOTIFY_BACKENDS_JSON: ${{ vars.NOTIFY_BACKENDS_JSON }}
+          VAR_LOG_LEVEL: ${{ vars.LOG_LEVEL || 'INFO' }}
+        run: |
+          set -euo pipefail
+          echo "::warning::config-encrypted was unavailable (setup likely failed) — rendering a notification-only config.py so the alert still goes out. Stats and diagnosis sections will be degraded."
+          python3 -m apps.cli.ops.config_generator --github-actions
 
       - name: Download encrypted logs (if available)
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
@@ -978,12 +1009,14 @@ jobs:
         run: |
           set -eo pipefail
           
-          # Guard: fail workflow if ARTIFACT_KEY is not configured
+          # Skip rather than fail when ARTIFACT_KEY is absent. Without the
+          # key nothing upstream could have been encrypted, so there is
+          # nothing to decrypt — and exiting 1 here would skip the status /
+          # email steps that follow, silencing the very run the fallback
+          # config above exists to report on.
           if [ -z "$ARTIFACT_KEY" ]; then
-            echo "❌ ERROR: ARTIFACT_KEY secret is not configured."
-            echo "This secret is required to decrypt artifacts."
-            echo "Please configure the ARTIFACT_KEY secret in your repository settings."
-            exit 1
+            echo "::warning::ARTIFACT_KEY is not configured — skipping decrypt; the notification will have no attachments."
+            exit 0
           fi
           
           if [ -f encrypted_artifacts/logs.tar.gz.enc ]; then
@@ -1017,12 +1050,14 @@ jobs:
         run: |
           set -eo pipefail
           
-          # Guard: fail workflow if ARTIFACT_KEY is not configured
+          # Skip rather than fail when ARTIFACT_KEY is absent. Without the
+          # key nothing upstream could have been encrypted, so there is
+          # nothing to decrypt — and exiting 1 here would skip the status /
+          # email steps that follow, silencing the very run the fallback
+          # config above exists to report on.
           if [ -z "$ARTIFACT_KEY" ]; then
-            echo "❌ ERROR: ARTIFACT_KEY secret is not configured."
-            echo "This secret is required to decrypt artifacts."
-            echo "Please configure the ARTIFACT_KEY secret in your repository settings."
-            exit 1
+            echo "::warning::ARTIFACT_KEY is not configured — skipping decrypt; the notification will have no attachments."
+            exit 0
           fi
           
           if [ -f encrypted_artifacts/reports.tar.gz.enc ]; then
@@ -1042,24 +1077,27 @@ jobs:
 
       - name: Determine pipeline status
         id: status
+        # Values reach the script through env rather than ${{ }} splicing, so
+        # a value containing shell metacharacters can never become code.
+        # (AdHocIngestion was hardened this way already.)
+        env:
+          SETUP_STATUS: ${{ needs.setup.result }}
+          HEALTH_STATUS: ${{ needs.run-pipeline.outputs.health_check_outcome }}
+          PIPELINE_STATUS: ${{ needs.run-pipeline.result }}
+          PIPELINE_CSV_PATH: ${{ needs.run-pipeline.outputs.csv_filename }}
         run: |
-          # Check the status of all previous jobs
-          SETUP_STATUS="${{ needs.setup.result }}"
-          HEALTH_STATUS="${{ needs.run-pipeline.outputs.health_check_outcome }}"
-          PIPELINE_STATUS="${{ needs.run-pipeline.result }}"
-          
           echo "Setup: $SETUP_STATUS"
           echo "Health Check: $HEALTH_STATUS"
           echo "Pipeline: $PIPELINE_STATUS"
-          
+
           # Ensure logs directory exists
           mkdir -p logs
-          
+
           # Create a status file for email notification to read
-          echo "SETUP_STATUS=$SETUP_STATUS" >> logs/job_status.txt
-          echo "HEALTH_CHECK_STATUS=$HEALTH_STATUS" >> logs/job_status.txt
-          echo "PIPELINE_STATUS=$PIPELINE_STATUS" >> logs/job_status.txt
-          
+          printf 'SETUP_STATUS=%s\n' "$SETUP_STATUS" >> logs/job_status.txt
+          printf 'HEALTH_CHECK_STATUS=%s\n' "$HEALTH_STATUS" >> logs/job_status.txt
+          printf 'PIPELINE_STATUS=%s\n' "$PIPELINE_STATUS" >> logs/job_status.txt
+
           if [[ "$SETUP_STATUS" == "failure" ]] || [[ "$HEALTH_STATUS" == "failure" ]] || [[ "$PIPELINE_STATUS" == "failure" ]] || [[ "$PIPELINE_STATUS" == "cancelled" ]]; then
             echo "has_failure=true" >> $GITHUB_OUTPUT
             echo "Pipeline had failures"
@@ -1069,7 +1107,7 @@ jobs:
           fi
           
           # Capture CSV filename from pipeline output
-          CSV_PATH="${{ needs.run-pipeline.outputs.csv_filename }}"
+          CSV_PATH="$PIPELINE_CSV_PATH"
           echo "csv_path=$CSV_PATH" >> $GITHUB_OUTPUT
 
       # Phase 3 — produce reports/D1/pending_health_24h.json so the
@@ -1122,22 +1160,23 @@ jobs:
       - name: Run Email Notification
         env:
           PIPELINE_HAS_FAILURE: ${{ steps.status.outputs.has_failure }}
+          CSV_PATH: ${{ steps.status.outputs.csv_path }}
+          PIPELINE_SESSION_ID: ${{ needs.run-pipeline.outputs.session_id }}
           OPS_DIAGNOSIS_JSON: ${{ steps.ops_diagnosis.outputs.json_path }}
         run: |
           set -e  # Exit on error
           set -o pipefail  # Exit on error in pipeline
-          
+
           CMD_ARGS=(python3 -m apps.cli.notify.email --mode daily)
-          
+
           # Pass the CSV path if available
-          CSV_PATH="${{ steps.status.outputs.csv_path }}"
           if [ -n "$CSV_PATH" ] && [ -f "$CSV_PATH" ]; then
             CMD_ARGS+=(--csv-path "$CSV_PATH")
             echo "Using CSV file: $CSV_PATH"
           fi
-          
-          # Pass session_id for SQLite stats
-          SESSION_ID="${{ needs.run-pipeline.outputs.session_id }}"
+
+          # Pass session_id for run stats
+          SESSION_ID="$PIPELINE_SESSION_ID"
           if [ -n "$SESSION_ID" ]; then
             if ! echo "$SESSION_ID" | grep -qE '^[a-zA-Z0-9._-]+$'; then
               echo "::error::Invalid SESSION_ID format: $SESSION_ID"
@@ -1198,7 +1237,12 @@ jobs:
     runs-on: ubuntu-latest
     environment: Production
     needs: [setup, run-pipeline]
-    if: ${{ !cancelled() && needs.setup.outputs.paused != 'true' && needs.run-pipeline.result == 'success' && needs.run-pipeline.outputs.spider_success == 'true' && needs.run-pipeline.outputs.uploader_success == 'true' }}
+    # `result == 'success'` already implies the spider and uploader steps
+    # passed (neither is continue-on-error), so the old spider_success /
+    # uploader_success clauses were redundant — and their `!cancelled()`
+    # companion only suppressed the implicit success() they duplicated.
+    # Same gate as AdHocIngestion.
+    if: ${{ needs.setup.outputs.paused != 'true' && needs.run-pipeline.result == 'success' }}
     permissions:
       contents: write
       pull-requests: write
@@ -1223,7 +1267,8 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
-          lfs: true
+          # See run-pipeline above: no LFS blobs are needed in d1 mode.
+          lfs: ${{ vars.STORAGE_BACKEND != 'd1' }}
 
       - name: Download encrypted reports
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
@@ -1259,19 +1304,16 @@ jobs:
 
       - name: Commit and Push Results
         env:
-          SPIDER_SUCCESS: ${{ needs.run-pipeline.outputs.spider_success }}
-          UPLOADER_SUCCESS: ${{ needs.run-pipeline.outputs.uploader_success }}
           REPORTS_DIR: ${{ vars.REPORTS_DIR || 'reports' }}
           DAILY_REPORT_DIR: ${{ vars.DAILY_REPORT_DIR || 'reports/DailyReport' }}
           AD_HOC_DIR: ${{ vars.AD_HOC_DIR || 'reports/AdHoc' }}
+          CURRENT_BRANCH: ${{ needs.setup.outputs.branch }}
         run: |
           set -e
-          
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          CURRENT_BRANCH="${{ needs.setup.outputs.branch }}"
-          
+
           # Setup SSH URL if needed
           REPO_URL=$(git remote get-url origin)
           if [[ "$REPO_URL" == https://* ]]; then
@@ -1300,19 +1342,15 @@ jobs:
             git add "$REPORTS_DIR/reports.db" 2>/dev/null || true
             git add "$REPORTS_DIR/operations.db" 2>/dev/null || true
           }
-          if [[ "$SPIDER_SUCCESS" == "true" && "$UPLOADER_SUCCESS" == "true" ]]; then
-            echo "Spider and Uploader both succeeded - staging all data files"
-            git add "$REPORTS_DIR/parsed_movies_history.csv" 2>/dev/null || true
-            git add "$REPORTS_DIR/pikpak_bridge_history.csv" 2>/dev/null || true
-            stage_db_mirrors
-            git add "$REPORTS_DIR/rclone_inventory.csv" 2>/dev/null || true
-            git add "$REPORTS_DIR/dedup_history.csv" 2>/dev/null || true
-            find "$REPORTS_DIR/Dedup" -name "*.csv" -exec git add {} \; 2>/dev/null || true
-            find "$DAILY_REPORT_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
-          else
-            echo "Spider or Uploader failed/cancelled - skipping history files commit"
-            find "$DAILY_REPORT_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
-          fi
+          # The job gate guarantees a successful run-pipeline, so the old
+          # "spider or uploader failed" branch was unreachable.
+          git add "$REPORTS_DIR/parsed_movies_history.csv" 2>/dev/null || true
+          git add "$REPORTS_DIR/pikpak_bridge_history.csv" 2>/dev/null || true
+          stage_db_mirrors
+          git add "$REPORTS_DIR/rclone_inventory.csv" 2>/dev/null || true
+          git add "$REPORTS_DIR/dedup_history.csv" 2>/dev/null || true
+          find "$REPORTS_DIR/Dedup" -name "*.csv" -exec git add {} \; 2>/dev/null || true
+          find "$DAILY_REPORT_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
           # D1 state logs are staged unconditionally — they record D1/SQLite
           # divergence and recovery state and must survive failed runs.
           for D1_STATE_FILE in \

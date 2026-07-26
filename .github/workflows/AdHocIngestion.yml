@@ -215,11 +215,11 @@ jobs:
           echo "Current branch: $CURRENT_BRANCH"
           echo "branch=$CURRENT_BRANCH" >> $GITHUB_OUTPUT
 
-      - name: Set up Python, venv, dependencies, Rust extension
-        uses: ./.github/actions/setup-python-env
-        with:
-          python-version: '3.11'
-
+      # No setup-python-env here on purpose — see DailyIngestion.yml for the
+      # rationale. config_generator is stdlib-only, so the system python3 is
+      # enough; the venv + requirements + Rust wheel cost 93s on the fleet for
+      # a step that runs in 0s and primed no cache for run-pipeline (different
+      # machine, arch-scoped cache keys).
       - name: Generate config.py from GitHub Variables and Secrets
         env:
           # ============ SECRETS (sensitive: passwords, tokens, IPs) ============
@@ -309,28 +309,9 @@ jobs:
           VAR_RUNNER_REGISTRY_ENABLED: ${{ vars.RUNNER_REGISTRY_ENABLED || 'false' }}
         run: python3 -m apps.cli.ops.config_generator --github-actions
 
-      - name: Pull latest changes from remote
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          CURRENT_BRANCH="${{ steps.branch_check.outputs.branch }}"
-          echo "Pulling latest changes from branch: $CURRENT_BRANCH"
-          
-          REPO_URL=$(git remote get-url origin)
-          if [[ "$REPO_URL" == https://* ]]; then
-            REPO_SSH=$(echo "$REPO_URL" | sed 's|https://github.com/|git@github.com:|')
-            git remote set-url origin "$REPO_SSH"
-            echo "Updated remote URL to SSH: $REPO_SSH"
-          fi
-          
-          git fetch origin "$CURRENT_BRANCH"
-          git pull --rebase origin "$CURRENT_BRANCH" || {
-            echo "Warning: Failed to pull/rebase, attempting merge instead"
-            git pull --no-edit origin "$CURRENT_BRANCH" || {
-              echo "Error: Could not integrate remote changes"
-              exit 1
-            }
-          }
+      # (No "pull latest changes" step: this job's workspace is discarded when
+      # it ends — only config.py.enc leaves, and it is already rendered above.
+      # run-pipeline does its own pull.)
 
       - name: Encrypt config for artifact
         env:
@@ -381,15 +362,20 @@ jobs:
       D1_CIRCUIT_BREAKER_ENABLED: ${{ vars.D1_CIRCUIT_BREAKER_ENABLED || 'true' }}
       D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
       D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
+      # Surfaced (as in DailyIngestion.yml) so the reports-artifact step can
+      # skip the SQLite mirrors when D1 is the source of truth.
+      STORAGE_BACKEND: ${{ vars.STORAGE_BACKEND || 'sqlite' }}
       # Ingestion Perfect Rollback (Phase 3): default WriteMode='pending'.
       JAVDB_HISTORY_WRITE_MODE: ${{ needs.setup.outputs.effective_write_mode }}
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
-          lfs: true
+          # ~60MB of reports/*.db LFS blobs that d1 mode never touches.
+          # See DailyIngestion.yml for the full rationale.
+          lfs: ${{ vars.STORAGE_BACKEND != 'd1' }}
 
       - name: Set up Python, venv, dependencies, Rust extension
         uses: ./.github/actions/setup-python-env
@@ -734,6 +720,14 @@ jobs:
           set -e
           set -o pipefail
           bash .github/scripts/install_rclone.sh
+          # install_rclone.sh drops the binary in ~/.local/bin; $GITHUB_PATH
+          # only reaches later steps, so extend PATH for this one.
+          export PATH="$HOME/.local/bin:$PATH"
+          # Drains every pending DedupRecords row from the DB — see the same
+          # step in DailyIngestion.yml for why --dedup-csv cannot scope this
+          # to one run. NOTE: enable_dedup defaults to true here, so an ad-hoc
+          # dispatch executes the whole pending queue, not just deletions
+          # implied by the URL it scraped.
           python3 -m apps.cli.rclone.manager --execute
         continue-on-error: true
 
@@ -815,6 +809,7 @@ jobs:
         env:
           ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
           REPORTS_DIR: ${{ vars.REPORTS_DIR || 'reports' }}
+          DEDUP_CSV_PATH: ${{ steps.spider.outputs.dedup_csv_path }}
         run: |
           # Guard: fail workflow if ARTIFACT_KEY is not configured (prevent unencrypted artifacts)
           if [ -z "$ARTIFACT_KEY" ]; then
@@ -838,8 +833,24 @@ jobs:
             echo "Including CSV: $CSV_PATH"
           fi
           
-          # Add history files and database if they exist
-          for HIST_FILE in "$REPORTS_DIR/parsed_movies_history.csv" "$REPORTS_DIR/pikpak_bridge_history.csv" "$REPORTS_DIR/rclone_inventory.csv" "$REPORTS_DIR/history.db" "$REPORTS_DIR/reports.db" "$REPORTS_DIR/operations.db"; do
+          # Add history files and database if they exist. In D1 mode the
+          # SQLite mirrors and legacy parsed history CSV are rebuildable
+          # outputs, so keep them out of the encrypted report bundle
+          # (~60MB that would be gzipped, encrypted, uploaded, then
+          # downloaded and decrypted again by email + commit-results).
+          HISTORY_FILES=(
+            "$REPORTS_DIR/pikpak_bridge_history.csv"
+            "$REPORTS_DIR/rclone_inventory.csv"
+          )
+          if [ "$STORAGE_BACKEND" != "d1" ]; then
+            HISTORY_FILES+=(
+              "$REPORTS_DIR/parsed_movies_history.csv"
+              "$REPORTS_DIR/history.db"
+              "$REPORTS_DIR/reports.db"
+              "$REPORTS_DIR/operations.db"
+            )
+          fi
+          for HIST_FILE in "${HISTORY_FILES[@]}"; do
             if [ -f "$HIST_FILE" ]; then
               FILES_TO_ARCHIVE="$FILES_TO_ARCHIVE $HIST_FILE"
               echo "Including: $HIST_FILE"
@@ -860,12 +871,12 @@ jobs:
               echo "Including: $D1_STATE_FILE"
             fi
           done
-          # Add dedup reports (reports/Dedup/YYYY/MM/*.csv)
-          if [ -d "$REPORTS_DIR/Dedup" ]; then
-            while IFS= read -r f; do
-              FILES_TO_ARCHIVE="$FILES_TO_ARCHIVE $f"
-              echo "Including: $f"
-            done < <(find "$REPORTS_DIR/Dedup" -name "*.csv" -type f 2>/dev/null || true)
+          # Add only the current run's dedup report, when one was produced.
+          # (Globbing all of reports/Dedup/YYYY/MM/*.csv re-shipped every
+          # historical report on every dispatch.)
+          if [ -n "$DEDUP_CSV_PATH" ] && [ -f "$DEDUP_CSV_PATH" ]; then
+            FILES_TO_ARCHIVE="$FILES_TO_ARCHIVE $DEDUP_CSV_PATH"
+            echo "Including: $DEDUP_CSV_PATH"
           fi
           
           if [ -n "$FILES_TO_ARCHIVE" ]; then
@@ -916,12 +927,16 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
-          lfs: true
+          # ~60MB of reports/*.db LFS blobs that d1 mode never touches.
+          # See DailyIngestion.yml for the full rationale.
+          lfs: ${{ vars.STORAGE_BACKEND != 'd1' }}
 
-      - name: Set up Python, venv, dependencies, Rust extension
+      - name: Set up Python, venv, dependencies
         uses: ./.github/actions/setup-python-env
         with:
           python-version: '3.11'
+          # apps.cli.db.rollback never parses HTML — skip the Rust extension.
+          install-rust: 'false'
 
       - name: Restore encrypted config
         uses: ./.github/actions/restore-encrypted-config
@@ -1013,16 +1028,42 @@ jobs:
           # healthy runs.
           ssh-key: ${{ secrets.DEPLOY_KEY }}
 
-      - name: Set up Python, venv, dependencies, Rust extension
+      - name: Set up Python, venv, dependencies
         uses: ./.github/actions/setup-python-env
         with:
           python-version: '3.11'
+          # notify.email / db.pending_health / ops.diagnose_run don't parse
+          # HTML — no Rust extension needed.
+          install-rust: 'false'
 
+      # Non-fatal on purpose — see DailyIngestion.yml: a setup failure means
+      # no config-encrypted artifact, and hard-failing here silenced the very
+      # run an operator needs to hear about.
       - name: Restore encrypted config
+        id: restore_config
+        continue-on-error: true
         uses: ./.github/actions/restore-encrypted-config
         with:
           artifact-name: config-encrypted
           artifact-key: ${{ secrets.ARTIFACT_KEY }}
+
+      - name: Render fallback notification config
+        if: steps.restore_config.outcome != 'success'
+        env:
+          VAR_SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+          VAR_SMTP_PORT: ${{ vars.SMTP_PORT }}
+          VAR_SMTP_USER: ${{ secrets.SMTP_USER }}
+          VAR_SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          VAR_EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          VAR_EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          VAR_TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          VAR_TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          VAR_NOTIFY_BACKENDS_JSON: ${{ vars.NOTIFY_BACKENDS_JSON }}
+          VAR_LOG_LEVEL: ${{ vars.LOG_LEVEL || 'INFO' }}
+        run: |
+          set -euo pipefail
+          echo "::warning::config-encrypted was unavailable (setup likely failed) — rendering a notification-only config.py so the alert still goes out. Stats and diagnosis sections will be degraded."
+          python3 -m apps.cli.ops.config_generator --github-actions
 
       - name: Download encrypted logs (if available)
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
@@ -1037,12 +1078,14 @@ jobs:
         run: |
           set -eo pipefail
           
-          # Guard: fail workflow if ARTIFACT_KEY is not configured
+          # Skip rather than fail when ARTIFACT_KEY is absent. Without the
+          # key nothing upstream could have been encrypted, so there is
+          # nothing to decrypt — and exiting 1 here would skip the status /
+          # email steps that follow, silencing the very run the fallback
+          # config above exists to report on.
           if [ -z "$ARTIFACT_KEY" ]; then
-            echo "❌ ERROR: ARTIFACT_KEY secret is not configured."
-            echo "This secret is required to decrypt artifacts."
-            echo "Please configure the ARTIFACT_KEY secret in your repository settings."
-            exit 1
+            echo "::warning::ARTIFACT_KEY is not configured — skipping decrypt; the notification will have no attachments."
+            exit 0
           fi
           
           if [ -f encrypted_artifacts/logs.tar.gz.enc ]; then
@@ -1076,12 +1119,14 @@ jobs:
         run: |
           set -eo pipefail
           
-          # Guard: fail workflow if ARTIFACT_KEY is not configured
+          # Skip rather than fail when ARTIFACT_KEY is absent. Without the
+          # key nothing upstream could have been encrypted, so there is
+          # nothing to decrypt — and exiting 1 here would skip the status /
+          # email steps that follow, silencing the very run the fallback
+          # config above exists to report on.
           if [ -z "$ARTIFACT_KEY" ]; then
-            echo "❌ ERROR: ARTIFACT_KEY secret is not configured."
-            echo "This secret is required to decrypt artifacts."
-            echo "Please configure the ARTIFACT_KEY secret in your repository settings."
-            exit 1
+            echo "::warning::ARTIFACT_KEY is not configured — skipping decrypt; the notification will have no attachments."
+            exit 0
           fi
           
           if [ -f encrypted_artifacts/reports.tar.gz.enc ]; then
@@ -1279,7 +1324,9 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
-          lfs: true
+          # ~60MB of reports/*.db LFS blobs that d1 mode never touches.
+          # See DailyIngestion.yml for the full rationale.
+          lfs: ${{ vars.STORAGE_BACKEND != 'd1' }}
 
       - name: Download encrypted reports
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
@@ -1314,20 +1361,17 @@ jobs:
 
       - name: Commit and Push Results
         env:
-          SPIDER_SUCCESS: ${{ needs.run-pipeline.outputs.spider_success }}
-          UPLOADER_SUCCESS: ${{ needs.run-pipeline.outputs.uploader_success }}
           REPORTS_DIR: ${{ vars.REPORTS_DIR || 'reports' }}
           DAILY_REPORT_DIR: ${{ vars.DAILY_REPORT_DIR || 'reports/DailyReport' }}
           AD_HOC_DIR: ${{ vars.AD_HOC_DIR || 'reports/AdHoc' }}
           ADHOC_URL: ${{ inputs.url }}
+          CURRENT_BRANCH: ${{ needs.setup.outputs.branch }}
         run: |
           set -e
-          
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          CURRENT_BRANCH="${{ needs.setup.outputs.branch }}"
-          
+
           # Setup SSH URL if needed
           REPO_URL=$(git remote get-url origin)
           if [[ "$REPO_URL" == https://* ]]; then
@@ -1356,19 +1400,17 @@ jobs:
             git add "$REPORTS_DIR/reports.db" 2>/dev/null || true
             git add "$REPORTS_DIR/operations.db" 2>/dev/null || true
           }
-          if [[ "$SPIDER_SUCCESS" == "true" && "$UPLOADER_SUCCESS" == "true" ]]; then
-            echo "Spider and Uploader both succeeded - staging all data files"
-            git add "$REPORTS_DIR/parsed_movies_history.csv" 2>/dev/null || true
-            git add "$REPORTS_DIR/pikpak_bridge_history.csv" 2>/dev/null || true
-            stage_db_mirrors
-            git add "$REPORTS_DIR/dedup_history.csv" 2>/dev/null || true
-            find "$AD_HOC_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
-            find "$DAILY_REPORT_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
-          else
-            echo "Spider or Uploader failed/cancelled - skipping history files commit"
-            find "$AD_HOC_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
-            find "$DAILY_REPORT_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
-          fi
+          # The job gate guarantees a successful run-pipeline, so the old
+          # "spider or uploader failed" branch was unreachable.
+          git add "$REPORTS_DIR/parsed_movies_history.csv" 2>/dev/null || true
+          git add "$REPORTS_DIR/pikpak_bridge_history.csv" 2>/dev/null || true
+          stage_db_mirrors
+          git add "$REPORTS_DIR/dedup_history.csv" 2>/dev/null || true
+          # Match DailyIngestion: the run's dedup report is shipped in the
+          # artifact, so stage it too instead of leaving it uncommitted.
+          find "$REPORTS_DIR/Dedup" -name "*.csv" -exec git add {} \; 2>/dev/null || true
+          find "$AD_HOC_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
+          find "$DAILY_REPORT_DIR" -name "*.csv" -exec git add {} \; 2>/dev/null || true
           # D1 state logs are staged unconditionally — they record D1/SQLite
           # divergence and recovery state and must survive failed runs.
           for D1_STATE_FILE in \

@@ -163,6 +163,9 @@ jobs:
         if: inputs.runner != 'self-hosted'
         run: |
           bash .github/scripts/install_rclone.sh
+          # install_rclone.sh drops the binary in ~/.local/bin; $GITHUB_PATH
+          # only reaches later steps, so extend PATH for this one.
+          export PATH="$HOME/.local/bin:$PATH"
           rclone version
 
       - name: Configure rclone
