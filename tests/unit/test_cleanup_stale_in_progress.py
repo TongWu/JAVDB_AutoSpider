@@ -245,3 +245,81 @@ class TestStaleCleanupRoutesThroughRepos:
 
         assert result["sessions_found"] == 2
         assert result["sessions_failed"] == 0
+
+    def test_empty_result_has_the_same_keys_as_the_busy_path(self, monkeypatch):
+        """The no-work early return must not drop keys the busy path returns."""
+        from unittest.mock import MagicMock
+
+        monkeypatch.setattr(cleanup_cli, "_sync_db_migration_paths", lambda: None)
+        monkeypatch.setattr(cleanup_cli._db_mig, "init_db", lambda: None)
+        monkeypatch.setattr(cleanup_cli, "close_db", lambda: None)
+
+        empty_repo = MagicMock()
+        empty_repo.find_stale_pending_sessions.return_value = []
+        busy_repo = MagicMock()
+        busy_repo.find_stale_pending_sessions.return_value = [
+            ("S-INPROG", "in_progress", "pending"),
+        ]
+        busy_repo.rollback_session.return_value = {"history": {}}
+        monkeypatch.setattr(cleanup_cli, "_read_session_meta", lambda sid: {"Id": sid})
+
+        monkeypatch.setattr(
+            cleanup_cli, "SessionLifecycleRepo", lambda *a, **k: empty_repo,
+        )
+        empty = cleanup_cli.run_stale_cleanup(dry_run=False)
+
+        monkeypatch.setattr(
+            cleanup_cli, "SessionLifecycleRepo", lambda *a, **k: busy_repo,
+        )
+        busy = cleanup_cli.run_stale_cleanup(dry_run=False)
+
+        assert set(empty) == set(busy)
+        assert empty["sessions_manual_review"] == 0
+
+    def test_no_resume_finalizing_leaves_replay_to_a_human(self, monkeypatch):
+        """The cron must not replay a >=max_age_hours-old payload unattended.
+
+        Rolling back an `in_progress` session only discards writes that never
+        landed. Resuming a `finalizing` one re-UPSERTs its staged payload over
+        the live tables, so if a later run re-scraped the same Href the replay
+        overwrites it. `--no-resume-finalizing` reports instead of resuming;
+        the in_progress rollback still runs.
+        """
+        from unittest.mock import MagicMock
+
+        monkeypatch.setattr(cleanup_cli, "_sync_db_migration_paths", lambda: None)
+        monkeypatch.setattr(cleanup_cli._db_mig, "init_db", lambda: None)
+        monkeypatch.setattr(cleanup_cli, "close_db", lambda: None)
+        monkeypatch.setattr(cleanup_cli, "_read_session_meta", lambda sid: {"Id": sid})
+
+        session_repo = MagicMock()
+        session_repo.find_stale_pending_sessions.return_value = [
+            ("S-INPROG", "in_progress", "pending"),
+            ("S-FINAL", "finalizing", "pending"),
+        ]
+        session_repo.rollback_session.return_value = {"history": {}}
+        history_repo = MagicMock()
+
+        monkeypatch.setattr(
+            cleanup_cli, "SessionLifecycleRepo", lambda *a, **k: session_repo,
+        )
+        monkeypatch.setattr(
+            cleanup_cli, "HistoryRepo", lambda *a, **k: history_repo,
+        )
+
+        result = cleanup_cli.run_stale_cleanup(
+            max_age_hours=48.0, dry_run=False, resume_finalizing=False,
+        )
+
+        history_repo.resume_finalizing_session.assert_not_called()
+        session_repo.rollback_session.assert_called_once()
+        actions = {d["session_id"]: d["action"] for d in result["details"]}
+        assert actions["S-FINAL"] == "needs_manual_review"
+
+        # A session left for a human is neither cleaned nor failed. Deriving
+        # the cleaned count as found-minus-failed would report it as cleaned
+        # and the cron would claim success for work it declined to do.
+        assert result["sessions_found"] == 2
+        assert result["sessions_cleaned"] == 1
+        assert result["sessions_failed"] == 0
+        assert result["sessions_manual_review"] == 1

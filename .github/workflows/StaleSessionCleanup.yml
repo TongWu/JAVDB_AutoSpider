@@ -42,10 +42,10 @@ on:
       apply:
         description: 'Apply cleanup. Default false (dry-run).'
         required: false
-        # cron triggers leave inputs.apply unset → bash sees empty → dry-run.
         # workflow_dispatch must explicitly tick this to apply, matching the
         # description (avoid the foot-gun where an operator accepts the
-        # default and runs apply by accident).
+        # default and runs apply by accident).  This input governs manual
+        # dispatches only — the daily cron always applies, see INPUT_APPLY.
         default: false
         type: boolean
       scope:
@@ -96,7 +96,15 @@ jobs:
       D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
       D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
       INPUT_MAX_AGE_HOURS: ${{ inputs.max_age_hours || '48' }}
-      INPUT_APPLY: ${{ inputs.apply }}
+      # The scheduled run applies; only workflow_dispatch defaults to
+      # dry-run (see the `apply` input's foot-gun note above).  Before
+      # 2026-07-26 this read `${{ inputs.apply }}` alone — cron leaves
+      # `inputs` unset, so the daily safety net had been running dry-run
+      # only and never cleaned anything: three `alignment` sessions sat
+      # in `finalizing` from 2026-07-05 onward with 2185 undrained
+      # pending rows between them.
+      INPUT_APPLY: ${{ github.event_name == 'schedule' || inputs.apply }}
+      INPUT_IS_SCHEDULED: ${{ github.event_name == 'schedule' }}
       INPUT_SCOPE: ${{ inputs.scope || 'all' }}
       INPUT_LOG_LEVEL: ${{ inputs.log_level || 'INFO' }}
       ROLLBACK_REASON: 'stale_timeout'
@@ -201,6 +209,16 @@ jobs:
             CMD+=(--apply)
           else
             CMD+=(--dry-run)
+          fi
+
+          # Rolling back an in_progress session only discards writes that
+          # never landed — safe unattended. Resuming a finalizing session
+          # replays a >=48h-old payload over the live tables and can
+          # overwrite rows a later run has since updated, so the cron
+          # reports those for review instead. A human dispatching this
+          # workflow gets the default (resume) behaviour.
+          if [ "$INPUT_IS_SCHEDULED" = "true" ]; then
+            CMD+=(--no-resume-finalizing)
           fi
 
           mkdir -p logs reports

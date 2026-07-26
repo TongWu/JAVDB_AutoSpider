@@ -11,9 +11,21 @@ Two lookup modes:
 * ``--session-id <id>``: highest priority; flips that one row.
 * ``--run-started-at <ISO>`` (the workflow's setup-job output): flips
   every ``Status='in_progress'`` session created on or after that
-  timestamp. This catches the (rare) case where the spider finishes a
-  Phase but the surrounding job records the session id in a way that
-  isn't visible to this step (e.g. Phase 2 creates additional sessions).
+  timestamp **and stamped with this workflow run's identity**. This
+  catches the (rare) case where the spider finishes a Phase but the
+  surrounding job records the session id in a way that isn't visible to
+  this step (e.g. Phase 2 creates additional sessions).
+
+  The ``RunId`` restriction is load-bearing: AdHocIngestion deliberately
+  carries no ``concurrency:`` group, so two ingestions overlap routinely.
+  A bare time-window scan makes whichever run finishes first commit the
+  *other* run's still-live session mid-spider — everything staged after
+  that point never drains, and the owning run's own commit step reports
+  a harmless-looking ``already_committed`` while the rows rot in
+  ``PendingMovie/TorrentHistoryWrites``. Seen in production on
+  2026-07-26 (run 30195210787 committed run 30195386608's session,
+  255 residual rows). Local runs leave ``RunId`` NULL and have no
+  concurrent peers, so the scan stays unrestricted there.
 
 Both flags are accepted simultaneously; the union of the two sets is
 committed.
@@ -291,6 +303,34 @@ def _append_commit_pending_verify_record(
     return record
 
 
+def _own_run_sessions() -> Optional[Set[str]]:
+    """Session ids stamped with *this* workflow run's identity.
+
+    Returns ``None`` when no run identity is available (local dev —
+    sessions are created with ``RunId`` NULL and there are no concurrent
+    peer runs to defend against), which callers read as "don't restrict".
+
+    Lookup failures **propagate**. An empty set means "this run genuinely
+    owns no other session" and legitimately skips the whole window; a
+    failed lookup means we don't know, and silently collapsing the two
+    would drop this run's own sibling sessions on the floor — they'd sit
+    ``in_progress`` until the 48h stale sweep rolled them back. The
+    caller decides how loud that is.
+    """
+    run_id = os.environ.get("GITHUB_RUN_ID") or None
+    if not run_id:
+        return None
+    raw_attempt = os.environ.get("GITHUB_RUN_ATTEMPT")
+    try:
+        attempt = int(raw_attempt) if raw_attempt else None
+    except ValueError:
+        attempt = None
+    return {
+        str(sid)
+        for sid in SessionLifecycleRepo().find_sessions_by_run(run_id, attempt)
+    }
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     args = _parse_args(argv)
     setup_logging(log_level=args.log_level)
@@ -307,11 +347,40 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 1
 
     targets: Set[int] = set()
+    ownership_lookup_failed = False
     if args.session_id is not None:
         targets.add(args.session_id)
 
     since = normalize_run_started_at(args.run_started_at)
     if since:
+        # Resolve run ownership FIRST: it answers "which sessions are
+        # this run's" directly, by identity, where the window scan only
+        # approximates it by creation time. That ordering also gives the
+        # window scan something to fall back on.
+        #
+        # A failed ownership lookup always ends in a non-zero exit — an
+        # ERROR line inside a green run protects nothing, and the sibling
+        # sessions we could not identify stay ``in_progress`` until the
+        # (now genuinely applying) 48h stale sweep rolls them back. With an
+        # explicit ``--session-id`` we still commit that one first: a
+        # ``committed`` session is shielded from the failure cleanup, so
+        # its writes land even though the step goes red.
+        try:
+            own = _own_run_sessions()
+        except Exception as e:
+            logger.error(
+                "Failed to look up this run's sessions (RunId=%s): %s. "
+                "Cannot tell which in-window sessions belong to this run; "
+                "any sibling session is left in_progress and will be rolled "
+                "back by the 48h stale sweep unless committed manually.",
+                os.environ.get("GITHUB_RUN_ID"), e,
+            )
+            if args.session_id is None:
+                close_db()
+                return 1
+            ownership_lookup_failed = True
+            own = set()
+
         # commit_session has stricter window-scan semantics than the
         # shared session helper: a DB hiccup with no
         # explicit ``--session-id`` is a hard error (exit 1) so an
@@ -325,12 +394,18 @@ def main(argv: Optional[List[str]] = None) -> int:
             )
         except Exception as e:
             if args.session_id is not None:
+                # Don't fall back to the explicit session alone: this run's
+                # other sessions would be left in_progress for the 48h stale
+                # sweep to roll back, losing their staged writes. Ownership
+                # already told us exactly which sessions those are, and the
+                # per-session logic below no-ops on the committed ones.
+                window_sessions = sorted(own) if own else []
                 logger.warning(
                     "Failed to look up in-progress sessions since %s: %s; "
-                    "continuing with explicit session_id=%s",
-                    since, e, args.session_id,
+                    "falling back to this run's %d session(s) by RunId "
+                    "(explicit session_id=%s)",
+                    since, e, len(window_sessions), args.session_id,
                 )
-                window_sessions = []
             else:
                 logger.error(
                     "Failed to look up in-progress sessions since %s: %s",
@@ -339,6 +414,15 @@ def main(argv: Optional[List[str]] = None) -> int:
                 close_db()
                 return 1
         for sid in window_sessions:
+            if own is not None and str(sid) not in own:
+                logger.info(
+                    "Skipping session %s found in the --run-started-at "
+                    "window: it belongs to another workflow run "
+                    "(GITHUB_RUN_ID=%s). Committing another run's live "
+                    "session strands everything it stages afterwards.",
+                    sid, os.environ.get("GITHUB_RUN_ID"),
+                )
+                continue
             targets.add(sid)
 
     if not targets:
@@ -513,6 +597,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "failed_commits": failed_commits,
         "movie_claim_commits": claim_commit_summaries,
         "pending_session_drains": pending_drains,
+        "ownership_lookup_failed": ownership_lookup_failed,
     }
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     logger.info(
@@ -524,6 +609,12 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     close_db()
     if failed_commits:
+        return 1
+    if ownership_lookup_failed:
+        # The explicit session is committed (and thus shielded from the
+        # failure cleanup), but we never established which other sessions
+        # this run owns. Go red so an operator looks before the stale
+        # sweep silently rolls the unidentified ones back.
         return 1
     return 0
 
