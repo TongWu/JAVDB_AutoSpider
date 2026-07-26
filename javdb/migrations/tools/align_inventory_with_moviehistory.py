@@ -765,15 +765,33 @@ def _finalize_alignment_session(session_id: Optional[str], rc: int) -> int:
     ``MovieHistory`` INSERT that D1 accepts) fails again and leaves the row in
     ``finalizing`` with its pending writes undrained for the 48h stale-session
     sweep — so name that state instead of logging a bare "rollback failed".
+
+    A session that already reached ``committed`` is left alone: the commit
+    boundary sits mid-``_run_alignment_core``, so the CSV writes and the qB
+    enqueue that follow it can still fail. ``rollback_session`` rightly refuses
+    a committed session, and reporting that refusal as "pending writes left
+    undrained" sends the operator to re-commit a session that drained cleanly.
     """
     if not session_id:
         return 0
     if rc != 0:
-        logger.warning(
-            "Alignment did not complete cleanly (rc=%s); rolling back session %s",
-            rc, session_id,
-        )
+        from javdb.storage.db._db_reports import db_get_session_status
+
         try:
+            state = db_get_session_status(session_id)
+            if state and state[1] == 'committed':
+                logger.info(
+                    "Alignment session %s is already committed; its history "
+                    "drained cleanly and rc=%s comes from a post-commit step "
+                    "(CSV / qB enqueue). Nothing to roll back.",
+                    session_id, rc,
+                )
+                return 0
+            logger.warning(
+                "Alignment did not complete cleanly (rc=%s); rolling back "
+                "session %s",
+                rc, session_id,
+            )
             SessionLifecycleRepo().rollback_session(
                 session_id, failure_reason=f'alignment rc={rc}',
             )
@@ -871,7 +889,7 @@ def run_alignment(args: argparse.Namespace) -> int:
     except BaseException:
         if not args.dry_run and session_id:
             logger.error(
-                "Alignment aborted; rolling back session %s", session_id,
+                "Alignment aborted; finalizing session %s", session_id,
                 exc_info=True,
             )
             _finalize_alignment_session(session_id, 1)
