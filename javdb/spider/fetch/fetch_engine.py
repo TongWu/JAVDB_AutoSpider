@@ -201,6 +201,11 @@ class EngineTask:
     different proxy) instead of triggering yet another login attempt — the
     cookie is provably valid against fixed login-required pages, so the
     failure must be specific to this URL or this proxy IP.
+
+    ``login_only`` marks a task that only the logged-in worker can serve
+    (the session cookie lives on that worker alone).  It excludes the task
+    from speculative execution — every other proxy would just hit the login
+    wall.  Set by ``ParallelFetchBackend.submit(login_only=True)``.
     """
 
     url: str
@@ -210,6 +215,7 @@ class EngineTask:
     meta: dict = field(default_factory=dict)
     priority: int = 0
     login_verified_after_refresh: bool = False
+    login_only: bool = False
     _deadline: Optional[float] = field(default=None, repr=False, compare=False)
     _speculative: bool = field(default=False, repr=False, compare=False)
 
@@ -420,8 +426,10 @@ class WorkerContext:
 
         # Skip expensive CF bypass when queue pressure is low, UNLESS
         # this task has already exhausted most proxies via direct path
-        # (tail-task scenario where CF bypass may be the only way).
-        if self.queue_pressure == 'low':
+        # (tail-task scenario where CF bypass may be the only way), or is
+        # login-only — the shortcut exists to hand the task to a different
+        # proxy, and no other proxy holds the cookie this one needs.
+        if self.queue_pressure == 'low' and not self._current_task.login_only:
             active = worker._active_workers
             if len(self._current_task.failed_proxies) < max(1, active - 1):
                 return None
@@ -757,6 +765,10 @@ class _EngineWorker(threading.Thread):
                         continue
                 if self.proxy_name in task.failed_proxies:
                     continue
+                # Only the logged-in worker holds the cookie this task
+                # needs — racing it on our proxy buys a login wall.
+                if task.login_only:
+                    continue
                 spec = EngineTask(
                     url=task.url,
                     entry_index=task.entry_index,
@@ -815,8 +827,15 @@ class _EngineWorker(threading.Thread):
                 am_logged_in = self._coordinator.is_login_worker(
                     self.proxy_name, self.worker_id,
                 )
+                # Nobody owns the login session right now (a stale-cookie
+                # wall or an exhausted budget just cleared the designation).
+                # Whatever is parked in ``login_queue`` would otherwise sit
+                # there forever — only the designated worker drains it. Let
+                # any worker take it: the login wall it hits re-enters the
+                # login flow and designates a new owner.
+                login_queue_orphaned = not self._coordinator.has_login_owner()
 
-            if am_logged_in:
+            if am_logged_in or login_queue_orphaned:
                 try:
                     return self.login_queue.get_nowait()
                 except queue_module.Empty:
@@ -1586,6 +1605,25 @@ class ParallelFetchBackend(FetchBackend):
 
     # -- task submission -----------------------------------------------------
 
+    @property
+    def has_login_worker(self) -> bool:
+        """True when a worker owns the login session and drains ``login_queue``.
+
+        Callers use this to decide whether ``submit(login_only=True)`` is
+        safe — see :meth:`LoginCoordinator.has_login_owner`.
+
+        Read without the coordinator lock on purpose: a worker holds that
+        lock for the whole login + fixed-page verification (5–30 s), and the
+        submitting thread must not stall behind it.  The answer is advisory
+        and both races are benign — a designation that appears right after
+        the read just costs one more login wall (today's behaviour), and one
+        that is cleared right after is caught by the orphaned-queue drain in
+        :meth:`_EngineWorker._get_next_task`.
+        """
+        if self._coordinator is None:
+            return False
+        return self._coordinator.has_login_owner()
+
     def submit(
         self,
         url: str,
@@ -1593,25 +1631,46 @@ class ParallelFetchBackend(FetchBackend):
         meta: Optional[dict] = None,
         entry_index: str = '',
         priority: int = 0,
+        login_only: bool = False,
     ) -> None:
-        """Submit a URL for processing.  Thread-safe."""
+        """Submit a URL for processing.  Thread-safe.
+
+        ``login_only=True`` routes the task straight to ``login_queue`` so
+        only the logged-in worker picks it up.  Use it for URLs that are
+        known to need the session cookie (which lives on that one worker
+        only) — it skips the wasted fetch + login-wall round-trip every
+        other worker would otherwise pay.  Only safe while
+        :attr:`has_login_worker` is ``True``.
+        """
         if self._done:
             raise RuntimeError("Cannot submit after mark_done()")
-        task = EngineTask(
+        self._enqueue(EngineTask(
             url=url, entry_index=entry_index, meta=meta or {},
-            priority=priority,
-        )
+            priority=priority, login_only=login_only,
+        ))
+
+    def _enqueue(self, task: EngineTask) -> None:
+        """Count *task* and put it on the queue its flags demand.
+
+        Both submission doors route through here so a ``login_only`` task
+        can never land on the shared queue, where any proxy would pick it
+        up and buy a login wall.
+        """
         with self._count_lock:
             self._submitted += 1
-        self._task_queue.put(task)
+        if task.login_only:
+            self._login_queue.put(task)
+        else:
+            self._task_queue.put(task)
 
     def submit_task(self, task: EngineTask) -> None:
-        """Submit a pre-built :class:`EngineTask`.  Thread-safe."""
+        """Submit a pre-built :class:`EngineTask`.  Thread-safe.
+
+        Honours ``task.login_only`` — see :meth:`_enqueue`.
+        """
         if self._done:
             raise RuntimeError("Cannot submit after mark_done()")
-        with self._count_lock:
-            self._submitted += 1
-        self._task_queue.put(task)
+        self._enqueue(task)
 
     def mark_done(self) -> None:
         """Signal that no more tasks will be submitted.
@@ -1860,8 +1919,9 @@ class ParallelFetchBackend(FetchBackend):
             # expensive CF bypass cascade and re-queue immediately so
             # another worker can attempt the direct path with a different
             # proxy — unless this task has already exhausted most proxies
-            # via direct path (tail-task scenario).
-            if ctx.queue_pressure == 'low':
+            # via direct path (tail-task scenario), or is login-only, where
+            # no other proxy holds the cookie it needs.
+            if ctx.queue_pressure == 'low' and not task.login_only:
                 active = ctx._worker._active_workers
                 if len(task.failed_proxies) < max(1, active - 1):
                     logger.debug(
@@ -1942,8 +2002,12 @@ class FetchEngine:
         meta: Optional[dict] = None,
         entry_index: str = '',
         priority: int = 0,
+        login_only: bool = False,
     ) -> None:
-        self._backend.submit(url, meta=meta, entry_index=entry_index, priority=priority)
+        self._backend.submit(
+            url, meta=meta, entry_index=entry_index, priority=priority,
+            login_only=login_only,
+        )
 
     def submit_task(self, task: EngineTask) -> None:
         self._backend.submit_task(task)

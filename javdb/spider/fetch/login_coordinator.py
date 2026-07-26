@@ -955,6 +955,35 @@ class LoginCoordinator:
             self.logged_in_worker_id, worker_id,
         )
 
+    def has_login_owner(self) -> bool:
+        """True when some worker is guaranteed to drain ``login_queue``.
+
+        Answered by asking :func:`use_login_queue_priority` — the very
+        predicate the workers use — about every worker in the pool, so it
+        cannot disagree with :meth:`is_login_worker`.  A bare
+        ``logged_in_worker_id is not None or bool(self._login_proxy_name)``
+        would: ``ParallelFetchBackend.start()`` filters pre-banned proxies
+        out of the pool but still passes ``LOGIN_PROXY_NAME`` in, so a
+        configured-but-absent login proxy would claim ownership that no
+        live worker honours, and ``login_queue`` would stall forever.
+
+        When this is ``False`` nothing matches, so tasks already sitting in
+        ``login_queue`` would starve until the next login wall designates an
+        owner.  Callers use it to keep the queue drained (workers) and to
+        decide whether login-only routing is safe (index submission).
+
+        Call while holding :attr:`lock` when the answer must be consistent
+        with a decision made under it (the worker path does).  The lock-free
+        read is a plain scan and is safe as an advisory hint.
+        """
+        return any(
+            use_login_queue_priority(
+                self._login_proxy_name, worker.proxy_name,
+                self.logged_in_worker_id, worker.worker_id,
+            )
+            for worker in self._all_workers
+        )
+
     def handle_login_required(
         self,
         worker,
