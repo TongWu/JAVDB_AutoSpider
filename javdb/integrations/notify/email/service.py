@@ -1,7 +1,8 @@
 """Email notification orchestration.
 
 Owns the end-to-end ``run_email_notification`` flow: analyse logs, load stats
-from the SQLite-local mirror, build the report subject / body, send (or dry-run
+from the canonical backend (see :func:`_load_run_stats`), build the report
+subject / body, send (or dry-run
 fingerprint) the email, clean up temporary attachments, commit the pipeline log,
 and return an :class:`EmailNotificationResult` whose ``exit_code`` mirrors the
 SMTP contract (2 on send failure outside dry-run, else 0).
@@ -25,6 +26,7 @@ from __future__ import annotations
 import os
 import zipfile
 from datetime import datetime
+from typing import NamedTuple
 
 from javdb.infra.logging import get_logger
 from javdb.infra.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
@@ -93,6 +95,115 @@ from javdb.integrations.notify.email.delivery import (
 )
 
 logger = get_logger(__name__)
+
+
+class _RunStats(NamedTuple):
+    """Per-run stats rows, as loaded by :func:`_load_run_stats`."""
+
+    session_id: str | None = None
+    spider: dict | None = None
+    uploader: dict | None = None
+    pikpak: dict | None = None
+    backend_label: str = 'sqlite-local'
+
+
+def _load_run_stats(session_id: str | None) -> _RunStats:
+    """Load this run's stats rows from the side that received its writes.
+
+    ``d1`` → D1, which is the source of truth. Since the d1-only cutover the
+    pipeline no longer writes the SQLite mirror at all (``get_db()`` hands out
+    a ``D1Connection``), so a forced-local read could only miss this run's
+    SessionId and fall through to the CSV/log-derived numbers.
+
+    ``sqlite`` → local SQLite; it is the only backend in play.
+
+    ``dual`` → local SQLite, as a deliberate **observability exception**, not
+    an authority claim. D1 remains the source of truth and drift always
+    resolves toward D1 (see CLAUDE.md, "D1 is the canonical source of truth").
+    Dual exists to validate the D1 write path, and the email is a report on
+    what this run actually did: reading the side that definitely received the
+    write is what makes a D1 shortfall *visible* rather than silently
+    understating the run, which is how the 2026-05 ReportSessions/SpiderStats
+    -1 drift went unnoticed. Never treat this read as evidence that a D1 write
+    succeeded, and never reconcile from it.
+
+    Never raises, and degrades per metric: stats are best-effort decoration on
+    top of the log/CSV numbers the caller already has, so one failing query
+    must not discard the others.
+    """
+    label = 'sqlite-local'
+    try:
+        from javdb.infra.config import use_sqlite
+        from javdb.storage.db import current_backend
+
+        # Pure config read — safe before init_db().
+        backend = current_backend()
+        from_d1 = backend == 'd1'
+        if not (from_d1 or use_sqlite()):
+            return _RunStats()
+
+        from javdb.storage.db import init_db
+        from javdb.storage.repos.stats_repo import StatsRepo
+
+        init_db()
+        source = 'stats from D1' if from_d1 else 'stats forced sqlite-local'
+        label = f"{backend} ({source})"
+        sid = session_id
+        if sid is None:
+            if from_d1:
+                # SessionsRepo takes a connection positionally. get_latest_session
+                # routes to the backend itself and ignores it, but the ctor does
+                # not — instantiating bare raises TypeError, which the outer
+                # except would swallow into empty stats.
+                from javdb.storage.db import REPORTS_DB_PATH, get_db
+                from javdb.storage.repos.sessions_repo import SessionsRepo
+                with get_db(REPORTS_DB_PATH) as _conn:
+                    latest = SessionsRepo(_conn).get_latest_session()
+            else:
+                from javdb.storage.repos.session_lifecycle_repo import (
+                    SessionLifecycleRepo,
+                )
+                latest = SessionLifecycleRepo().get_latest_session_local()
+            if latest:
+                sid = latest.get('Id', latest.get('id'))
+                logger.debug(
+                    "No --session-id provided, falling back to latest session: %s",
+                    sid,
+                )
+        if sid is None:
+            return _RunStats(backend_label=label)
+
+        repo = StatsRepo()
+        if from_d1:
+            fetch_spider = repo.get_spider_stats
+            fetch_uploader = repo.get_uploader_stats
+            fetch_pikpak = repo.get_pikpak_stats
+        else:
+            fetch_spider = repo.get_spider_stats_local
+            fetch_uploader = repo.get_uploader_stats_local
+            fetch_pikpak = repo.get_pikpak_stats_local
+
+        # Per-metric tolerance: these are three independent queries (three
+        # round trips under d1), so a transient failure on one must not throw
+        # away the two that succeeded and drop the whole email back to log
+        # estimates.
+        def fetch(get):
+            try:
+                return get(sid)
+            except Exception as exc:
+                logger.debug("%s failed: %s", getattr(get, '__name__', get), exc)
+                return None
+
+        return _RunStats(
+            session_id=sid,
+            spider=fetch(fetch_spider),
+            uploader=fetch(fetch_uploader),
+            pikpak=fetch(fetch_pikpak),
+            backend_label=label,
+        )
+    except Exception as e:
+        logger.debug("DB stats not available: %s", e)
+        return _RunStats(backend_label=label)
 
 
 def _build_notify_summary(
@@ -221,48 +332,14 @@ def run_email_notification(
     # Determine if we have critical errors (from logs OR from workflow job status)
     has_critical_errors = len(pipeline_errors) > 0 or has_job_failure
 
-    # P0-6: stats MUST come from the canonical SQLite mirror, never from
-    # D1, even in STORAGE_BACKEND=dual. The dual read-path proves that D1
-    # can serve queries before cutover, but the email is a *report on
-    # what this run actually did* — if D1 is behind by N rows because a
-    # dual-write was asymmetric, the email would understate the result
-    # and operators would never notice the drift (this is exactly the
-    # 2026-05 ReportSessions/SpiderStats -1 incident). The dedicated
-    # `_local` variants always open a raw sqlite3 connection regardless
-    # of backend.
-    _sid = None
-    _db_spider_stats = None
-    _db_uploader_stats = None
-    _db_pikpak_stats = None
-    _stats_backend_label = 'sqlite-local'
-    try:
-        from javdb.infra.config import use_sqlite as _use_sqlite
-        if _use_sqlite():
-            from javdb.storage.db import (
-                init_db,
-                current_backend as _cur_be,
-            )
-            from javdb.storage.repos.stats_repo import StatsRepo
-            from javdb.storage.repos.session_lifecycle_repo import (
-                SessionLifecycleRepo,
-            )
-            init_db()
-            _stats_backend_label = f"{_cur_be()} (stats forced sqlite-local)"
-            _sid = options.session_id
-            if _sid is None:
-                latest = SessionLifecycleRepo().get_latest_session_local()
-                if latest:
-                    _sid = latest.get('Id', latest.get('id'))
-                    logger.debug(
-                        "No --session-id provided, falling back to latest session: %s",
-                        _sid,
-                    )
-            if _sid is not None:
-                _db_spider_stats = StatsRepo().get_spider_stats_local(_sid)
-                _db_uploader_stats = StatsRepo().get_uploader_stats_local(_sid)
-                _db_pikpak_stats = StatsRepo().get_pikpak_stats_local(_sid)
-    except Exception as e:
-        logger.debug("SQLite stats not available: %s", e)
+    # Stats come from whichever backend actually received THIS run's writes —
+    # see _load_run_stats for the sqlite/dual vs d1 rule.
+    _stats = _load_run_stats(options.session_id)
+    _sid = _stats.session_id
+    _db_spider_stats = _stats.spider
+    _db_uploader_stats = _stats.uploader
+    _db_pikpak_stats = _stats.pikpak
+    _stats_backend_label = _stats.backend_label
 
     if _db_spider_stats:
         spider_stats = {
@@ -297,7 +374,7 @@ def run_email_notification(
                 spider_stats['failed_movies'] = []
         else:
             spider_stats['failed_movies'] = []
-        logger.info(f"Spider stats loaded from {_cur_be()} backend")
+        logger.info("Spider stats loaded from %s", _stats_backend_label)
     else:
         spider_stats = extract_spider_statistics(SPIDER_LOG_FILE) if spider_log_exists else None
 
@@ -312,7 +389,7 @@ def run_email_notification(
             'no_subtitle': _db_uploader_stats.get('NoSubtitleCount', _db_uploader_stats.get('no_subtitle_count', 0)),
             'success_rate': _db_uploader_stats.get('SuccessRate', _db_uploader_stats.get('success_rate', 0.0)),
         }
-        logger.info(f"Uploader stats loaded from {_cur_be()} backend")
+        logger.info("Uploader stats loaded from %s", _stats_backend_label)
     else:
         uploader_stats = extract_uploader_statistics(UPLOADER_LOG_FILE) if uploader_log_exists else None
 
@@ -325,7 +402,7 @@ def run_email_notification(
             'failed': _db_pikpak_stats.get('FailedCount', _db_pikpak_stats.get('failed_count', 0)),
             'threshold_days': _db_pikpak_stats.get('ThresholdDays', _db_pikpak_stats.get('threshold_days', 3)),
         }
-        logger.info(f"PikPak stats loaded from {_cur_be()} backend")
+        logger.info("PikPak stats loaded from %s", _stats_backend_label)
     else:
         pikpak_stats = extract_pikpak_statistics(PIKPAK_LOG_FILE) if pikpak_log_exists else None
     ban_summary = get_proxy_ban_summary()
