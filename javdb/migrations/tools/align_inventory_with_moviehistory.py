@@ -495,7 +495,7 @@ def _write_consolidated_result_csv(output_dir: str, rows: List[dict]) -> str:
 
 
 def _enqueue_qb_from_csv(csv_path: str, use_proxy: bool, category_override: str = '') -> bool:
-    from scripts import qb_uploader
+    from javdb.integrations.qb.uploader import service as qb_uploader
 
     qb_uploader.initialize_proxy_helper(use_proxy)
     if not qb_uploader.test_qbittorrent_connection(use_proxy):
