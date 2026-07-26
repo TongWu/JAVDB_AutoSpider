@@ -128,21 +128,33 @@ def _bootstrap_storage_backend_for_align(paths: list[str]) -> str:
 
     Honours the user's explicit ``STORAGE_BACKEND`` env var if it's
     already set — operators who set ``d1`` or ``dual`` deliberately
-    should not be silently downgraded.
+    should not be silently downgraded. For an explicit ``dual`` /
+    ``sqlite`` the local mirror has to be usable, so missing or LFS-pointer
+    files trigger a ``git lfs pull`` and (for ``dual``) a downgrade to
+    ``d1`` when that does not recover them.
 
-    Otherwise: if local SQLite files are intact use ``dual`` (with
-    ``STRICT_DUAL_WRITE=1`` so D1 write failures abort the batch); if
-    any are missing or LFS pointers, attempt ``git lfs pull`` and fall
-    back to ``d1`` when that doesn't recover them. ``d1`` mode skips
-    local SQLite writes entirely so a missing mirror is not a blocker.
+    With nothing set the default is ``d1``, which skips local SQLite writes
+    entirely. Alignment derives its work list from a D1 read, so it
+    re-scrapes precisely the hrefs where D1 and the local mirror disagree.
+    Mirroring its commit into a stale mirror therefore lets the mirror veto
+    a row D1 accepts: the drain dies with ``UNIQUE constraint failed:
+    MovieHistory.Href`` *after* the session has crossed into ``finalizing``,
+    leaving its pending writes undrained, and the status-aware guard's
+    resume only re-runs the same failing drain (BFR-023). D1 is canonical,
+    nothing in this run reads the mirror, and the mirror is only committed
+    back on success — so ``dual`` buys no validation here and costs the
+    drain.
 
     Returns the effective backend ("sqlite", "dual", or "d1").
     """
     explicit = (os.environ.get("STORAGE_BACKEND") or "").strip().lower()
-    bad = _local_sqlite_needs_recovery(paths)
 
     if explicit in ("sqlite", "dual", "d1"):
-        if explicit in ("dual", "sqlite") and bad:
+        bad = (
+            _local_sqlite_needs_recovery(paths)
+            if explicit in ("dual", "sqlite") else []
+        )
+        if bad:
             logger.warning(
                 "STORAGE_BACKEND=%s is set explicitly but %d local DB file(s) "
                 "are missing or LFS pointers: %s. Attempting LFS pull …",
@@ -172,31 +184,14 @@ def _bootstrap_storage_backend_for_align(paths: list[str]) -> str:
             os.environ.setdefault("STRICT_DUAL_WRITE", "1")
         return explicit
 
-    if not bad:
-        os.environ["STORAGE_BACKEND"] = "dual"
-        os.environ.setdefault("STRICT_DUAL_WRITE", "1")
-        logger.info(
-            "STORAGE_BACKEND=dual selected for alignment (D1 + local SQLite, "
-            "STRICT_DUAL_WRITE=1: D1 write failures abort the batch).",
-        )
-        return "dual"
-
-    logger.warning(
-        "Local SQLite mirror is incomplete (%d file(s) missing/pointers): %s",
-        len(bad), ", ".join(bad),
-    )
-    if _try_lfs_pull(bad):
-        os.environ["STORAGE_BACKEND"] = "dual"
-        os.environ.setdefault("STRICT_DUAL_WRITE", "1")
-        logger.info("STORAGE_BACKEND=dual after successful LFS pull")
-        return "dual"
-
     os.environ["STORAGE_BACKEND"] = "d1"
-    logger.warning(
-        "Falling back to STORAGE_BACKEND=d1 — local SQLite writes will be "
-        "SKIPPED for this run. D1 remains the source of truth; rebuild the "
-        "local mirror later with `python3 -m apps.cli.db.sync_d1_to_sqlite "
-        "--apply --force-overwrite-all`.",
+    logger.info(
+        "STORAGE_BACKEND=d1 selected for alignment — local SQLite writes are "
+        "SKIPPED so a stale mirror row cannot abort the session drain "
+        "(BFR-023). D1 is the source of truth; set STORAGE_BACKEND=dual "
+        "explicitly to mirror writes, and rebuild the local mirror with "
+        "`python3 -m apps.cli.db.sync_d1_to_sqlite --apply "
+        "--force-overwrite-all`.",
     )
     return "d1"
 
