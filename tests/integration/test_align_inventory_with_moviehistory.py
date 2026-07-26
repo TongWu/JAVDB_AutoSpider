@@ -950,3 +950,36 @@ def test_run_alignment_non_dry_run_opens_stages_and_commits(monkeypatch, temp_di
     assert _FakeHistoryRepo.committed == [SID]
     # run_alignment stamped the resolved session back onto args.
     assert args.session_id == SID
+
+
+def test_enqueue_qb_from_csv_import_target_is_live(monkeypatch):
+    """The qB helpers are imported lazily, so only a real call proves the path.
+
+    ADR-007 Phase 3 retired ``scripts/qb_uploader.py``; this function-local
+    import kept pointing at it and only blew up in production, after the
+    alignment session had already committed.
+    """
+    from javdb.integrations.qb.uploader import service as qb_service
+    from javdb.migrations.tools import align_inventory_with_moviehistory as mod
+
+    calls = []
+    monkeypatch.setattr(
+        qb_service, 'initialize_proxy_helper', lambda override: calls.append(override)
+    )
+    # Bail out right after the import so the test touches no network.
+    monkeypatch.setattr(qb_service, 'test_qbittorrent_connection', lambda _p: False)
+
+    assert mod._enqueue_qb_from_csv('missing.csv', use_proxy=False) is False
+    assert calls == [False]
+
+    # Every attribute the function reaches for must exist on the target module.
+    for name in (
+        'initialize_proxy_helper',
+        'test_qbittorrent_connection',
+        'login_to_qbittorrent',
+        'read_csv_file',
+        'get_existing_torrents',
+        'is_torrent_exists',
+        'add_torrent_to_qbittorrent',
+    ):
+        assert callable(getattr(qb_service, name)), name
