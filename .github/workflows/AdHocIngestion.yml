@@ -1270,7 +1270,15 @@ jobs:
         run: |
           set -e
           set -o pipefail
-          DECISION=$(python3 -m apps.cli.db.pending_alert_decision)
+          # Detection stays best-effort — a transient failure reading the
+          # verify records must not fail the run. Everything after a
+          # positive decision is enforcement and IS fatal (BFR-023): a
+          # pause that never reaches the branch is the exact failure this
+          # mechanism exists to prevent, so it must not pass as a warning.
+          if ! DECISION=$(python3 -m apps.cli.db.pending_alert_decision); then
+            echo "::warning::pending_alert_decision failed — pause NOT evaluated."
+            exit 0
+          fi
           if [ -z "$DECISION" ]; then
             echo "No critical pending-mode alert — pause NOT engaged."
             exit 0
@@ -1280,16 +1288,68 @@ jobs:
           python3 -m apps.cli.db.pending_alert \
             --hours 24 \
             --reason "AdHocIngestion run ${{ github.run_id }}: $DECISION"
-          if [ -n "${GH_TOKEN:-}" ] || [ -n "${GITHUB_TOKEN:-}" ]; then
-            git config user.name "github-actions[bot]" || true
-            git config user.email "github-actions[bot]@users.noreply.github.com" || true
-            git add .publish-config.yml || true
-            git commit -m "ci(pipeline): pause for 24h — $DECISION" || true
-            git push || echo "::warning::pause commit push failed"
-          else
-            echo "::warning::No GH_TOKEN — leaving .publish-config.yml uncommitted; operator must commit manually."
+          if [ -z "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ]; then
+            echo "::error::No GH_TOKEN — pause marker written on the runner but cannot be pushed; the next run will NOT be paused. Commit .publish-config.yml manually."
+            exit 1
           fi
-        continue-on-error: true
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .publish-config.yml
+          git commit -m "ci(pipeline): pause for 24h — $DECISION" || true
+          # BFR-023: ingestion runs are deliberately concurrent and all
+          # auto-commit to this branch, so a bare push loses the race
+          # ("! [rejected] (fetch first)") and the pause silently never
+          # engages. Rebase and retry. --autostash because the email job
+          # untars the reports artifact over tracked files, leaving the
+          # tree dirty; a conflicting autostash re-apply is harmless here
+          # since the pushed commit is already made.
+          for attempt in 1 2 3; do
+            git push origin "HEAD:$GITHUB_REF_NAME" && break
+            echo "Push attempt $attempt rejected — rebasing onto origin/$GITHUB_REF_NAME"
+            git pull --rebase --autostash origin "$GITHUB_REF_NAME" || git rebase --abort || true
+            sleep 5
+          done
+          # A green push is not proof (`git commit || true` can commit
+          # nothing), so read the branch back. The success condition is
+          # the one the next run's pause gate applies: SOME marker on the
+          # branch is still in the future. Deliberately not "our exact
+          # line" — when Daily and AdHoc alert together the loser's
+          # rebase conflicts on these very lines and aborts, yet the
+          # winner's marker already pauses us just as well. Deliberately
+          # not a bare grep either: an expired leftover marker pauses
+          # nothing and must fail.
+          git fetch origin "$GITHUB_REF_NAME"
+          git show "origin/$GITHUB_REF_NAME:.publish-config.yml" \
+            > "${RUNNER_TEMP:-/tmp}/remote-publish-config.yml" || true
+          if ! python3 - "${RUNNER_TEMP:-/tmp}/remote-publish-config.yml" <<'PY'
+          import datetime, re, sys
+          try:
+              text = open(sys.argv[1], encoding='utf-8').read()
+          except OSError:
+              sys.exit(1)
+          m = re.search(
+              r"^\s*pipeline_paused_until:\s*['\"]?([0-9T:\-+Z.]+)",
+              text, re.M,
+          )
+          if not m:
+              sys.exit(1)
+          try:
+              until = datetime.datetime.fromisoformat(
+                  m.group(1).replace('Z', '+00:00')
+              )
+          except ValueError:
+              sys.exit(1)
+          if until.tzinfo is None:
+              until = until.replace(tzinfo=datetime.timezone.utc)
+          if datetime.datetime.now(tz=datetime.timezone.utc) >= until:
+              sys.exit(1)
+          print(until.isoformat())
+          PY
+          then
+            echo "::error::No future ADR-006 pause marker on $GITHUB_REF_NAME — the pipeline is NOT paused. Commit .publish-config.yml manually."
+            exit 1
+          fi
+          echo "✓ ADR-006 pause in effect on $GITHUB_REF_NAME"
 
   # =============================================================================
   # Job 4: Commit Results - Commit CSV files only (no logs)
