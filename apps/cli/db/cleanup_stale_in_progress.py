@@ -13,6 +13,14 @@ and whose ``DateTimeCreated`` is older than ``--max-age-hours``
   sessions must NEVER lose their already-half-applied writes — they
   are idempotent and resume cleanly.
 
+  "Idempotent" is not "harmless": the resume **replays** the session's
+  staged payload over the live tables, and by construction that payload
+  is at least ``--max-age-hours`` old.  If a later run has re-scraped the
+  same ``Href`` in the meantime, the replay overwrites its row (and can
+  delete torrent variants missing from the stale set).  ``--no-resume-
+  finalizing`` reports these for manual review instead; the daily cron
+  passes it so the replay is never unattended.
+
 Default mode is dry-run; the cron passes ``--apply`` after a manual
 review of the first run's output.
 
@@ -116,6 +124,19 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
             "Default false to avoid sweeping pre-run-identity history."
         ),
     )
+    p.add_argument(
+        "--no-resume-finalizing",
+        dest="resume_finalizing",
+        action="store_false",
+        default=True,
+        help=(
+            "Report finalizing pending sessions as needing manual review "
+            "instead of resuming them. Resuming replays a payload that is "
+            "at least --max-age-hours old over the live tables, which can "
+            "overwrite rows a later session has since updated; the daily "
+            "cron passes this so that replay is never unattended."
+        ),
+    )
     return p.parse_args(argv)
 
 
@@ -132,6 +153,7 @@ def run_stale_cleanup(
     scope: str = "all",
     dry_run: bool = True,
     include_legacy: bool = False,
+    resume_finalizing: bool = True,
 ) -> dict:
     """Programmatic entry point for stale-session cleanup.
 
@@ -163,10 +185,14 @@ def run_stale_cleanup(
 
     if not rows:
         close_db()
+        # Same keys as the normal return — a caller indexing a field that
+        # only exists on the busy path would KeyError precisely when there
+        # was no work to do.
         return {
             "sessions_found": 0,
             "sessions_cleaned": 0,
             "sessions_failed": 0,
+            "sessions_manual_review": 0,
             "dry_run": dry_run,
             "details": [],
         }
@@ -194,8 +220,11 @@ def run_stale_cleanup(
             continue
         if dry_run:
             if status == 'finalizing' and write_mode == 'pending':
-                action = "resume_commit"
-                would_apply = True
+                action = (
+                    "resume_commit" if resume_finalizing
+                    else "needs_manual_review"
+                )
+                would_apply = resume_finalizing
             elif status == 'finalizing':
                 action = "skipped"
                 would_apply = False
@@ -213,6 +242,29 @@ def run_stale_cleanup(
             continue
 
         if status == 'finalizing' and write_mode == 'pending':
+            if not resume_finalizing:
+                # Resuming replays the session's staged payload over the
+                # live tables. For a session this old (>= max_age_hours)
+                # a later run has likely re-scraped the same Hrefs, and
+                # the replay would overwrite those newer rows — including
+                # variant deletes derived from the stale torrent set.
+                # Safe enough when a human is driving; not something to
+                # do unattended, so the cron leaves these for review.
+                logger.warning(
+                    "Session %s is finalizing with staged writes; skipping "
+                    "unattended resume (replaying a %.0fh-old payload can "
+                    "overwrite rows a later session has since updated). "
+                    "Resume it manually after checking for conflicts.",
+                    sid, max_age_hours,
+                )
+                summaries.append({
+                    "session_id": sid,
+                    "status": status,
+                    "write_mode": write_mode,
+                    "meta": meta,
+                    "action": "needs_manual_review",
+                })
+                continue
             try:
                 counts = HistoryRepo().resume_finalizing_session(sid)
                 summaries.append({
@@ -279,12 +331,25 @@ def run_stale_cleanup(
 
     sessions_found = len(rows)
     sessions_failed = len(failed)
-    sessions_cleaned = sessions_found - sessions_failed if not dry_run else 0
+    # Count what was actually acted on rather than deriving it from
+    # found-minus-failed: a session left for a human ('needs_manual_review',
+    # 'skipped') is neither cleaned nor failed, and folding it into the
+    # cleaned total would have the cron report success for work it
+    # deliberately did not do.
+    sessions_manual_review = sum(
+        1 for s in summaries if s.get("action") == "needs_manual_review"
+    )
+    sessions_cleaned = 0 if dry_run else sum(
+        1 for s in summaries
+        if s.get("action") in ("rollback", "resume_commit")
+        and "error" not in s
+    )
 
     return {
         "sessions_found": sessions_found,
         "sessions_cleaned": sessions_cleaned,
         "sessions_failed": sessions_failed,
+        "sessions_manual_review": sessions_manual_review,
         "dry_run": dry_run,
         "details": summaries,
     }
@@ -296,8 +361,9 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     logger.info(
         "StaleSessionCleanup invoked: max_age_hours=%s scope=%s dry_run=%s "
-        "include_legacy=%s",
+        "include_legacy=%s resume_finalizing=%s",
         args.max_age_hours, args.scope, args.dry_run, args.include_legacy,
+        args.resume_finalizing,
     )
 
     try:
@@ -306,6 +372,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             scope=args.scope,
             dry_run=args.dry_run,
             include_legacy=args.include_legacy,
+            resume_finalizing=args.resume_finalizing,
         )
     except RuntimeError as e:
         logger.error("%s", e)
@@ -361,6 +428,14 @@ def main(argv: Optional[List[str]] = None) -> int:
                 "WriteMode=%s; manual investigation required.",
                 s.get("session_id"), s.get("write_mode"),
             )
+        elif s.get("action") == "needs_manual_review":
+            logger.warning(
+                "Session %s left for manual review — resuming it would "
+                "replay a >=%sh-old payload over the live tables. Check for "
+                "conflicts, then resume with "
+                "'python3 -m apps.cli.db.commit_session --session-id %s'.",
+                s.get("session_id"), args.max_age_hours, s.get("session_id"),
+            )
         elif s.get("action") == "resume_commit":
             logger.info(
                 "Resumed finalizing session %s: %s",
@@ -374,12 +449,26 @@ def main(argv: Optional[List[str]] = None) -> int:
                 json.dumps(s.get("counts", {}), ensure_ascii=False),
             )
 
+    manual_review_count = result.get("sessions_manual_review", 0)
+
     if sessions_found > 0:
         logger.info(
             "Found %d stale session(s) (older than %sh): "
-            "in_progress=%d finalizing=%d",
+            "in_progress=%d finalizing=%d cleaned=%d manual_review=%d",
             sessions_found, args.max_age_hours,
             in_progress_count, finalizing_count,
+            result.get("sessions_cleaned", 0), manual_review_count,
+        )
+    if manual_review_count:
+        # Deliberately still exit 0: these sessions accumulate (one per
+        # weekly alignment run while that leak is open), and a cron that
+        # goes red every day until a human acts is a cron whose result
+        # stops being read. The WARNING lines above plus this count in the
+        # JSON summary are the signal; escalation belongs with the
+        # conflict-aware resume follow-up.
+        logger.warning(
+            "%d session(s) need manual review and were NOT cleaned up.",
+            manual_review_count,
         )
 
     summary = {
@@ -393,6 +482,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         "finalizing_count": finalizing_count,
         "stale_resume_successes": resume_successes,
         "stale_resume_failures": resume_failures,
+        "sessions_cleaned": result.get("sessions_cleaned", 0),
+        "manual_review_count": manual_review_count,
         "drift_total": drift_total,
         "orphan_pruned_total": orphan_pruned_total,
         "failed_sessions": failed_sessions,
