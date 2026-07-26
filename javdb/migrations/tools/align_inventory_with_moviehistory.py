@@ -758,8 +758,13 @@ def _finalize_alignment_session(session_id: Optional[str], rc: int) -> int:
     raises is **re-raised** so the caller's outer guard runs the status-aware
     cleanup: ``rollback_session`` resumes a ``finalizing`` session (whose drain
     started, so rolling it back would lose applied rows) and rolls back one
-    still ``in_progress`` — neither is left orphaned for the 48h stale-session
-    sweep.
+    still ``in_progress``.
+
+    That resume re-runs the *same* drain, so it only recovers a transient
+    failure. A deterministic one (BFR-023: a stale local-SQLite row vetoing a
+    ``MovieHistory`` INSERT that D1 accepts) fails again and leaves the row in
+    ``finalizing`` with its pending writes undrained for the 48h stale-session
+    sweep — so name that state instead of logging a bare "rollback failed".
     """
     if not session_id:
         return 0
@@ -774,7 +779,10 @@ def _finalize_alignment_session(session_id: Optional[str], rc: int) -> int:
             )
         except Exception as exc:
             logger.error(
-                "Rollback of alignment session %s failed: %s", session_id, exc,
+                "Could not clean up alignment session %s: %s. Its pending "
+                "writes are left undrained — resume it with `python3 -m "
+                "apps.cli.db.commit_session --session-id %s`",
+                session_id, exc, session_id,
             )
         return 0
     drain = HistoryRepo().commit_session(session_id)

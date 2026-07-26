@@ -565,6 +565,46 @@ def test_finalize_alignment_session_rolls_back_on_failure(monkeypatch):
     assert rolled_back[0][0] == 'SID-1'
 
 
+def test_finalize_alignment_session_reports_unrecoverable_cleanup(
+    monkeypatch, caplog,
+):
+    """A failed cleanup must name the stuck session, not just "rollback failed".
+
+    BFR-023: ``rollback_session`` recovers a ``finalizing`` session by
+    re-running the same drain, so a deterministic drain failure fails again
+    and leaves the pending writes undrained. This log line is the only
+    signal the operator gets before the 48h stale-session sweep.
+    """
+    import logging
+
+    from javdb.migrations.tools import align_inventory_with_moviehistory as mod
+
+    class _FakeHistoryRepo:
+        def __init__(self, **_kw):
+            pass
+
+        def commit_session(self, session_id, **_kw):
+            raise AssertionError('rc != 0 must not commit')
+
+    class _FakeSessionRepo:
+        def __init__(self, **_kw):
+            pass
+
+        def rollback_session(self, session_id, **_kwargs):
+            raise RuntimeError('UNIQUE constraint failed: MovieHistory.Href')
+
+    monkeypatch.setattr(mod, 'HistoryRepo', _FakeHistoryRepo)
+    monkeypatch.setattr(mod, 'SessionLifecycleRepo', _FakeSessionRepo)
+
+    with caplog.at_level(logging.ERROR, logger=mod.logger.name):
+        rc = mod._finalize_alignment_session('SID-1', 1)
+
+    assert rc == 0  # finalize returns 0; caller keeps its own non-zero rc
+    assert 'SID-1' in caplog.text
+    assert 'undrained' in caplog.text
+    assert 'apps.cli.db.commit_session --session-id SID-1' in caplog.text
+
+
 def test_blank_actor_field_to_none():
     """Blank / placeholder actor values become None; real values pass through."""
     from javdb.migrations.tools import align_inventory_with_moviehistory as mod
