@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import os
+import queue as queue_module
 import sys
 import threading
 import time
+from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -1247,3 +1249,148 @@ class TestRunLifecycle:
 
         engine._backend.run.assert_called_once_with(tasks)
         assert out == ['r1', 'r2']
+
+
+# ---------------------------------------------------------------------------
+# login-only routing — pages that only the logged-in worker can serve
+# ---------------------------------------------------------------------------
+
+class TestLoginOnlyRouting:
+    """Ad-hoc index pages need the session cookie, which lives on exactly one
+    worker.  Handing them to any other proxy costs a fetch, a login wall and a
+    coordinator round-trip before they get re-routed there anyway."""
+
+    def test_submit_login_only_bypasses_the_shared_task_queue(self):
+        from javdb.spider.fetch.fetch_engine import ParallelFetchBackend
+
+        backend = ParallelFetchBackend.__new__(ParallelFetchBackend)
+        backend._done = False
+        backend._count_lock = threading.Lock()
+        backend._submitted = 0
+        backend._task_queue = queue_module.Queue()
+        backend._login_queue = queue_module.Queue()
+
+        backend.submit('https://javdb.com/actors/X?page=3', login_only=True)
+
+        assert backend._task_queue.empty()
+        task = backend._login_queue.get_nowait()
+        assert task.login_only is True
+
+    def test_submit_task_honours_login_only_on_prebuilt_tasks(self):
+        """``run(tasks)`` submits pre-built tasks through this door — it must
+        route them like submit() does, not dump them on the shared queue."""
+        from javdb.spider.fetch.fetch_engine import EngineTask, ParallelFetchBackend
+
+        backend = ParallelFetchBackend.__new__(ParallelFetchBackend)
+        backend._done = False
+        backend._count_lock = threading.Lock()
+        backend._submitted = 0
+        backend._task_queue = queue_module.Queue()
+        backend._login_queue = queue_module.Queue()
+
+        backend.submit_task(EngineTask(url='u', login_only=True))
+        backend.submit_task(EngineTask(url='u2'))
+
+        assert backend._login_queue.get_nowait().url == 'u'
+        assert backend._task_queue.get_nowait().url == 'u2'
+
+    def test_has_login_worker_is_false_before_start(self):
+        from javdb.spider.fetch.fetch_engine import ParallelFetchBackend
+
+        backend = ParallelFetchBackend.__new__(ParallelFetchBackend)
+        backend._coordinator = None
+        assert backend.has_login_worker is False
+
+    def test_low_queue_pressure_shortcut_is_skipped_for_login_only_tasks(self):
+        """That shortcut drops CF bypass so a *different* proxy can retry —
+        pointless for a login-only task, since no other proxy has the cookie."""
+        from javdb.spider.fetch.fetch_engine import EngineTask, WorkerContext
+
+        def _fetch(task):
+            ctx = WorkerContext.__new__(WorkerContext)
+            ctx._current_task = task
+            ctx._last_used_cf = False
+            worker = MagicMock()
+            worker._should_shortcircuit_cf.return_value = False
+            worker._fetch_html.return_value = None      # direct attempt fails
+            worker._active_workers = 8
+            ctx._worker = worker
+            with patch.object(
+                WorkerContext, 'queue_pressure',
+                new_callable=lambda: property(lambda _self: 'low'),
+            ), patch.object(
+                WorkerContext, 'is_expired',
+                new_callable=lambda: property(lambda _self: False),
+            ):
+                return ctx.fetch('https://javdb.com/actors/X?page=3'), worker
+
+        # Ordinary task: bail out early, let another proxy have it.
+        _, worker = _fetch(EngineTask(url='u'))
+        assert worker._fetch_html.call_count == 1
+
+        # Login-only task: stay on it and try the CF bypass.
+        _, worker = _fetch(EngineTask(url='u', login_only=True))
+        assert worker._fetch_html.call_count > 1
+
+    def test_configured_login_proxy_absent_from_pool_is_not_an_owner(self):
+        """start() filters pre-banned proxies out of the pool but still passes
+        LOGIN_PROXY_NAME in.  Claiming ownership no live worker honours would
+        strand login_queue forever."""
+        from javdb.spider.fetch.login_coordinator import LoginCoordinator
+
+        workers = [SimpleNamespace(proxy_name='proxy-a', worker_id=0)]
+        coord = LoginCoordinator(workers, login_proxy_name='proxy-banned')
+        assert coord.has_login_owner() is False
+
+        coord._login_proxy_name = 'proxy-a'
+        assert coord.has_login_owner() is True
+
+    def test_designated_worker_id_absent_from_pool_is_not_an_owner(self):
+        from javdb.spider.fetch.login_coordinator import LoginCoordinator
+
+        workers = [SimpleNamespace(proxy_name='proxy-a', worker_id=0)]
+        coord = LoginCoordinator(workers)
+        coord.logged_in_worker_id = 7
+        assert coord.has_login_owner() is False
+
+        coord.logged_in_worker_id = 0
+        assert coord.has_login_owner() is True
+
+    def test_speculation_skips_login_only_tasks(self):
+        """Idle workers racing a login-only task would each buy a login wall."""
+        from javdb.spider.fetch.fetch_engine import EngineTask, _EngineWorker
+
+        worker = MagicMock(spec=_EngineWorker)
+        worker.proxy_name = 'proxy-b'
+        worker._in_flight_lock = threading.Lock()
+        worker._completed_lock = threading.Lock()
+        worker._completed_entries = set()
+        worker._in_flight = {
+            'page-3': EngineTask(url='u', entry_index='page-3', login_only=True),
+        }
+
+        assert _EngineWorker._try_speculative_task(worker) is None
+
+        worker._in_flight['page-3'].login_only = False
+        spec = _EngineWorker._try_speculative_task(worker)
+        assert spec is not None and spec._speculative is True
+
+    def test_unowned_login_queue_is_drained_by_any_worker(self):
+        """When no worker owns the login session, whatever is parked in
+        login_queue would starve — only the owner drains it."""
+        from javdb.spider.fetch.fetch_engine import EngineTask, _EngineWorker
+
+        parked = EngineTask(url='u', entry_index='page-3', login_only=True)
+        worker = MagicMock(spec=_EngineWorker)
+        worker.proxy_name = 'proxy-b'
+        worker.worker_id = 1
+        worker._stop_event = threading.Event()
+        worker.login_queue = queue_module.Queue()
+        worker.login_queue.put(parked)
+        worker.task_queue = queue_module.Queue()
+        worker._coordinator = MagicMock()
+        worker._coordinator.lock = threading.Lock()
+        worker._coordinator.is_login_worker.return_value = False
+        worker._coordinator.has_login_owner.return_value = False
+
+        assert _EngineWorker._get_next_task(worker) is parked

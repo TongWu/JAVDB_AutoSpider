@@ -53,10 +53,15 @@ runs:
         # entry, but a partial/broken seed (e.g. missing libpython*.so) leaves
         # the marker while failing at runtime. Verify the interpreter actually
         # runs before trusting it; drop and re-seed any broken entry.
+        #
+        # `--version` is NOT that check: CPython handles it and exits before
+        # initialising the filesystem codec, so it passes on a tree whose
+        # lib/python*/ is missing -- precisely the tree this loop must catch.
+        # Import a stdlib module instead, which forces a full init.
         for marker in "${TOOL_CACHE}/Python/${REQUESTED}."*"/${ARCH_DIR}.complete"; do
           [ -e "$marker" ] || continue
           py="${marker%.complete}/bin/python3"
-          if "$py" --version > /dev/null 2>&1; then
+          if "$py" -c 'import encodings' > /dev/null 2>&1; then
             echo "✓ Python ${REQUESTED} already in tool cache ($("$py" --version 2>&1))"
             exit 0
           fi
@@ -94,9 +99,14 @@ runs:
         #   <cache>/Python/<full-version>/<arch>/...  +  <arch>.complete marker
         DEST="${TOOL_CACHE}/Python/${FULL}/${ARCH_DIR}"
         mkdir -p "$(dirname "$DEST")"
-        if [ ! -d "$DEST" ]; then
-          mv "${WORK}/python" "$DEST"
-        fi
+        # Reaching here means the cache had no usable entry, so replace
+        # whatever is at DEST rather than keeping it. A tree left by a run
+        # interrupted between this mv and the touch below carries no
+        # `.complete` marker, so the health check above never inspects it --
+        # keeping it would stamp a broken interpreter as valid.
+        rm -rf "$DEST" "${DEST}.complete"
+        mv "${WORK}/python" "$DEST"
         touch "${DEST}.complete"
+        "${DEST}/bin/python" -c 'import encodings'
         "${DEST}/bin/python" --version
         echo "✓ Seeded ${DEST}"

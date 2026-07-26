@@ -27,6 +27,7 @@ from __future__ import annotations
 from typing import Optional
 
 import requests
+from requests.adapters import HTTPAdapter
 
 from javdb.infra.logging import get_logger
 
@@ -35,6 +36,13 @@ logger = get_logger(__name__)
 
 _DEFAULT_TIMEOUT_SEC = 5.0
 _DEFAULT_USER_AGENT = "javdb-do-client/1.0"
+# The spider runs one worker thread per configured proxy (~30 in production)
+# and they all share a single client instance on the hot path
+# (``lease`` per request, ``claim`` per movie).  urllib3's default
+# ``pool_maxsize=10`` discards every connection past the tenth, so each
+# surplus call pays a fresh TLS handshake and logs "Connection pool is
+# full".  Size the pool above any realistic proxy-pool size instead.
+_POOL_MAXSIZE = 64
 
 
 class DOClientUnavailable(Exception):
@@ -75,6 +83,9 @@ class BaseDOClient:
         self._token = token
         self._timeout = float(timeout)
         self._session = requests.Session()
+        adapter = HTTPAdapter(pool_maxsize=_POOL_MAXSIZE)
+        self._session.mount("https://", adapter)
+        self._session.mount("http://", adapter)
         self._session.headers.update({
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",

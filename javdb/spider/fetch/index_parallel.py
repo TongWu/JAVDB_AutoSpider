@@ -144,18 +144,36 @@ def fetch_all_index_pages_parallel(
             logger.info("Parallel index fetch cancelled before submission")
             raise SystemExit(124)
 
+        # Cookie mode (ad-hoc URLs) is served by whichever worker holds the
+        # session cookie, so submit a single page first and let its result
+        # settle whether one is needed.  If the pages want a login, the wall
+        # that page hits designates the owner and every page released after
+        # it is pinned to that worker — without the probe a cold start (no
+        # login state inherited from the DO) would submit the whole window
+        # or the whole range before any owner exists, and each of those
+        # pages would pay its own login wall.  If the cookie works on every
+        # proxy no owner appears and the rest go out with the usual
+        # fan-out, so nothing is serialised needlessly.
+        probe_first = custom_url is not None
+        pending_pages: List[int] = []
+
         if parse_all:
             window_size = max(len(PROXY_POOL) * 2, 4) if PROXY_POOL else 4
             next_page = start_page
             in_flight = 0
-            for _ in range(window_size):
+            for _ in range(1 if probe_first else window_size):
                 _submit_page(backend, next_page, custom_url)
                 next_page += 1
                 in_flight += 1
         else:
-            for p in range(start_page, end_page + 1):
-                _submit_page(backend, p, custom_url)
-            backend.mark_done()
+            all_pages = list(range(start_page, end_page + 1))
+            if probe_first and len(all_pages) > 1:
+                _submit_page(backend, all_pages[0], custom_url)
+                pending_pages = all_pages[1:]
+            else:
+                for p in all_pages:
+                    _submit_page(backend, p, custom_url)
+                backend.mark_done()
 
         # -- collect results (may arrive out of order) ----------------------
 
@@ -212,6 +230,14 @@ def fetch_all_index_pages_parallel(
             if not result.success:
                 if result.error == 'all_proxies_banned':
                     any_proxy_banned = True
+
+            # -- probe answered: release the rest of a fixed range ----------
+
+            if pending_pages:
+                for p in pending_pages:
+                    _submit_page(backend, p, custom_url)
+                pending_pages = []
+                backend.mark_done()
 
             # -- sliding window: advance or stop ----------------------------
 
@@ -352,12 +378,25 @@ def _submit_page(
     page_num: int,
     custom_url: Optional[str],
 ) -> None:
+    """Submit one index page, pinning it to the logged-in worker when needed.
+
+    Ad-hoc URLs (``custom_url``) need the session cookie, and the cookie is
+    injected into the single worker whose proxy performed the login — every
+    other worker carries a stale one and is guaranteed to hit the login wall,
+    burn a fetch, and hand the page back via ``login_queue`` anyway. Submit
+    those pages straight to that worker (sequentially, in page order) instead.
+
+    Before a login owner exists the page goes to the shared queue as usual —
+    that first login wall is what designates the owner.
+    """
     url = get_page_url(page_num, custom_url=custom_url)
+    login_only = custom_url is not None and backend.has_login_worker
     backend.submit(
         url,
         meta={'page_num': page_num},
         entry_index=f'page-{page_num}',
         priority=page_num,
+        login_only=login_only,
     )
 
 
