@@ -20,6 +20,10 @@ Common issues and their solutions for JAVDB AutoSpider.
 - In `--dry-run` mode, CSV files are intentionally not written.
 - Review spider logs (`logs/spider.log`) for errors during the run.
 
+**CSV contains only a header row**
+- Expected when every index entry was filtered out (already in history, already in rclone inventory, or a release-date skip). The run reports `parsed 0` and is not a failure.
+- The spider always materialises the CSV it reports downstream, so the uploader sees an empty-but-valid file and exits cleanly with "No torrent links found in CSV file".
+
 ## qBittorrent Issues
 
 **Cannot connect to qBittorrent**

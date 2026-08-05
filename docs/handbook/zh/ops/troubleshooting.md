@@ -20,6 +20,10 @@ JAVDB AutoSpider 的常见问题及解决方案。
 - 在 `--dry-run` 模式下，CSV 文件故意不写入。
 - 查看爬虫日志（`logs/spider.log`）中运行期间的错误。
 
+**CSV 只有表头行**
+- 当所有索引条目都被过滤掉（已在历史记录中、已在 rclone 清单中，或被发行日期规则跳过）时属于预期行为。该次运行报告 `parsed 0`，不算失败。
+- 爬虫始终会实际生成它向下游上报的那个 CSV，因此上传器会读到一个内容为空但格式合法的文件，并以"No torrent links found in CSV file"正常退出。
+
 ## qBittorrent 问题
 
 **无法连接到 qBittorrent**

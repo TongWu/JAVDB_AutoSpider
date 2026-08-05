@@ -21,7 +21,7 @@ from javdb.pipeline.events import emit as _emit_event  # ADR-036 event spine
 from javdb.infra.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
 from javdb.spider.filename_helper import generate_output_csv_name
 from javdb.infra.paths import ensure_dated_dir
-from javdb.infra.csv_writer import set_active_session
+from javdb.infra.csv_writer import ensure_csv_exists, set_active_session
 from javdb.proxy.policy import (
     describe_proxy_override,
     resolve_proxy_override,
@@ -797,6 +797,7 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
             sys.exit(124)
 
     if not dry_run:
+        ensure_csv_exists(csv_path, fieldnames)
         logger.info(f"CSV file written incrementally to: {csv_path}")
 
     generate_summary_report(
