@@ -31,6 +31,11 @@ class ProxyRunState:
     cf_bypass_lock: threading.Lock = field(default_factory=threading.Lock)
     signal_banned_proxies: set[str] = field(default_factory=set)
     signal_lock: threading.Lock = field(default_factory=threading.Lock)
+    # Set when a fetch failed because the target site served a Cloudflare
+    # challenge to every proxy. Such a run is no longer banned-out, so the
+    # summary report needs this to tell "the site walled us off" apart from
+    # "there was genuinely nothing new today".
+    site_challenge_seen: bool = False
 
 
 @dataclass

@@ -176,3 +176,18 @@ def generate_summary_report(
     if len(rows) == 0 and use_proxy:
         log_section(logger, "WARNING: No entries found while using proxy", emoji='⚠', level=logging.WARNING)
         logger.warning("This might indicate proxy issues or CF bypass service problems.")
+
+        site_challenge_seen = (
+            runtime.proxy.site_challenge_seen if runtime is not None else False
+        )
+        if site_challenge_seen and total_discovered == 0:
+            # A site-wide Cloudflare challenge no longer bans the pool, so the
+            # ban branch above cannot catch this. Without an explicit failure
+            # the run would exit 0 with a header-only CSV and look like a
+            # legitimately empty day.
+            logger.error(
+                "Spider discovered ZERO entries and every fetch hit a Cloudflare "
+                "challenge — the site walled off all proxies. Failing the run so "
+                "this is not mistaken for an empty day."
+            )
+            sys.exit(2)

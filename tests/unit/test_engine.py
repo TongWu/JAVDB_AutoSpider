@@ -68,6 +68,9 @@ def _make_handler_stub(*_args, **_kwargs):
     handler.get_page = MagicMock(return_value=None)
     handler.config = MagicMock()
     handler.config.javdb_session_cookie = None
+    # Real RequestHandler exposes this as a bool; leaving it a MagicMock would
+    # read as "site-wide CF challenge" and suppress the soft-ban path.
+    handler.last_site_challenge = False
     return handler
 
 
@@ -162,6 +165,48 @@ class TestEngineSimpleMode:
             '2 consecutive None returns',
         )
         assert any(result.error == 'all_proxies_banned' for result in results)
+
+    def test_site_wide_cf_challenge_does_not_soft_ban_worker(self):
+        """BFR-024: a challenge every proxy sees must not burn the pool.
+
+        Same shape as the soft-ban test above, except the handler reports the
+        failure as a site-wide Cloudflare challenge — no ban, and the task
+        ends as all_proxies_failed once the pool is exhausted.
+        """
+        from javdb.spider.fetch.fetch_engine import FetchEngine
+
+        ban_mgr = _make_ban_manager_stub()
+
+        def _challenged_handler_stub(*args, **kwargs):
+            handler = _make_handler_stub(*args, **kwargs)
+            handler.last_site_challenge = True
+            return handler
+
+        with patch('javdb.spider.fetch.fetch_engine.RequestHandler', side_effect=_challenged_handler_stub), \
+                patch('javdb.spider.fetch.fetch_engine.create_proxy_pool_from_config', return_value=MagicMock()), \
+                patch('javdb.spider.fetch.fetch_engine.get_ban_manager', return_value=ban_mgr), \
+                patch('javdb.spider.fetch.fetch_engine.PROXY_POOL', [
+                    {'name': 'proxy-a', 'http': 'http://a:1', 'https': 'http://a:1'},
+                ]), \
+                patch('javdb.spider.fetch.fetch_engine.LOGIN_PROXY_NAME', None):
+            engine = FetchEngine(
+                process_fn=lambda _ctx, _task: None,
+                use_cookie=False,
+                sleep_min=0.01,
+                sleep_max=0.02,
+            )
+            engine.start()
+            _patch_workers(engine, lambda url, _cf: '<html></html>')
+
+            engine.submit('https://javdb.com/v/none-1', entry_index='none-1')
+            engine.submit('https://javdb.com/v/none-2', entry_index='none-2')
+            engine.mark_done()
+            results = list(engine.results())
+            engine.shutdown()
+
+        ban_mgr.add_ban.assert_not_called()
+        assert results
+        assert all(result.error == 'all_proxies_failed' for result in results)
 
     @_engine_patches
     def test_parse_failure_retries_on_other_proxy(self, *_mocks):

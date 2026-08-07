@@ -1054,6 +1054,22 @@ class _EngineWorker(threading.Thread):
                         continue
                     task.failed_proxies.add(self.proxy_name)
                     task.retry_count += 1
+                    # A site-wide Cloudflare challenge hits every proxy alike,
+                    # so counting it toward the soft-ban just burns the pool —
+                    # 28 proxies "banned" for something none of them caused.
+                    # The task still accumulates failed_proxies and ends as
+                    # all_proxies_failed once the pool is exhausted.
+                    if getattr(self._handler, 'last_site_challenge', False):
+                        if self._runtime is not None:
+                            self._runtime.proxy.site_challenge_seen = True
+                        logger.info(
+                            "%s Site-wide Cloudflare challenge — re-queued "
+                            "without counting toward soft-ban (%d/%d proxies)",
+                            _task_worker_ctx(task.entry_index, self.proxy_name),
+                            len(task.failed_proxies), self._active_workers,
+                        )
+                        requeue_front(self.task_queue, task)
+                        continue
                     self._consecutive_none_count += 1
                     logger.info(
                         "%s Process returned None, re-queued "
