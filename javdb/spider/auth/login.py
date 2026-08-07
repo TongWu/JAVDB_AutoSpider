@@ -96,7 +96,13 @@ PROXY_MODULES = cfg('PROXY_MODULES', ['spider'])
 
 
 # Import RequestHandler for Cloudflare bypass via curl_cffi TLS fingerprint
-from javdb.infra.request import RequestHandler, RequestConfig
+from javdb.infra.request import (
+    BYPASS_CONNECT_TIMEOUT,
+    BYPASS_READ_TIMEOUT,
+    RequestConfig,
+    RequestHandler,
+)
+from javdb.spider.html_validators import is_cf_challenge_page
 
 
 # ---------------------------------------------------------------------------
@@ -106,8 +112,9 @@ from javdb.infra.request import RequestHandler, RequestConfig
 def _is_cloudflare_challenge(response):
     """
     Check if an HTTP response is a Cloudflare challenge page.
-    
-    Detects both Turnstile interactive challenges and 403 blocks.
+
+    Detects the managed-challenge interstitial, Turnstile interactive
+    challenges, and 403 blocks.
     """
     if response.status_code == 403:
         server = ''
@@ -119,10 +126,11 @@ def _is_cloudflare_challenge(response):
         if any(kw in text.lower() for kw in ['cloudflare', 'cf-browser-verification', 'turnstile']):
             return True
 
-    text = getattr(response, 'text', '')
-    if 'Security Verification' in text and 'turnstile' in text.lower():
-        return True
-    return False
+    # Share the fetch layer's predicate rather than keeping a second copy: the
+    # local one required 'Security Verification' AND 'turnstile', which the
+    # managed-challenge page javdb switched to in 2026-08 carries neither of
+    # (see BFR-024), so login could not see the wall the spider was hitting.
+    return is_cf_challenge_page(getattr(response, 'text', ''))
 
 
 def _create_handler():
@@ -166,9 +174,19 @@ def _attempt_cf_warmup(handler, url, proxies=None):
     encoded_url = quote(url, safe='')
     bypass_url = f"{bypass_base_url}/html?url={encoded_url}"
 
+    # Under CF_BYPASS_VIA_PROXY the URL above is http://127.0.0.1:<port>, which
+    # only resolves to the bypass service when the request is tunnelled through
+    # the proxy. Dialling it directly reaches the runner's own loopback, where
+    # nothing listens — so the warmup always failed once that flag was turned
+    # on, and blocked for the full timeout doing it.
+    bypass_proxies = handler._build_bypass_proxies(proxies, proxy_ip)
+
     try:
         logger.info("Attempting CF bypass warmup via bypass service...")
-        warmup_resp = requests.get(bypass_url, timeout=120)
+        warmup_resp = requests.get(
+            bypass_url, proxies=bypass_proxies,
+            timeout=(BYPASS_CONNECT_TIMEOUT, BYPASS_READ_TIMEOUT),
+        )
         if warmup_resp.status_code == 200 and len(warmup_resp.content) > 1000:
             logger.info(f"CF bypass warmup successful ({len(warmup_resp.content)} bytes)")
             return True

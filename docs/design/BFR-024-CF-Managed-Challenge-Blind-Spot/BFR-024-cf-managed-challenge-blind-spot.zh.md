@@ -5,6 +5,7 @@
 **Severity**: Critical
 **Affected**: `javdb/infra/request.py`, `javdb/spider/html_validators.py`, `javdb/spider/fetch/fetch_engine.py`
 **Related**: [ADR-043](../_archive/ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.zh.md), runs [31106061181](https://github.com/TongWu/JAVDB_AutoSpider_CICD/actions/runs/31106061181) / [31124515791](https://github.com/TongWu/JAVDB_AutoSpider_CICD/actions/runs/31124515791)
+**Follow-on**: [BFR-025](../BFR-025-Site-Wide-Challenge-Bans-Pool-Via-Coordinator/BFR-025-site-wide-challenge-bans-pool-via-coordinator.zh.md) —— 本次修复事后证明并不完整
 
 ---
 
@@ -134,6 +135,12 @@ workflow 从未设置过 `CF_BYPASS_VIA_PROXY`，导致 runner 默认直拨
   触发的，去掉 ban 也就顺带去掉了失败信号。本修复的第一次验证 run 就以 0 退出并写出了
   只有表头的 CSV —— 放到 DailyIngestion 上就意味着在全站被墙的情况下自动 commit 并发出
   一封"成功"邮件。
+
+**本次修复并不完整。** 它只把本地软 ban 这一层从全站挑战中豁免了，却没有豁免
+coordinator 上报，`_record_cf_event` 仍然把每一次挑战发布到该代理的 Durable Object
+—— 而后者自己就能把整个代理池 ban 光。它也没有动级联的先后顺序，因此每一页在够到
+bypass 层之前，仍然会在每个代理上各产生一次挑战。两者的分析与修复见
+[BFR-025](../BFR-025-Site-Wide-Challenge-Bans-Pool-Via-Coordinator/BFR-025-site-wide-challenge-bans-pool-via-coordinator.zh.md)。
 
 ## Side Effects
 

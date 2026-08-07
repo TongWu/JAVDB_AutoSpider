@@ -260,7 +260,7 @@ jobs:
           VAR_PROXY_QBITTORRENT_ENABLED: ${{ (inputs.proxy_qbittorrent || inputs.proxy_uploader) && 'true' || 'false' }}
           VAR_PROXY_PIKPAK_ENABLED: ${{ inputs.proxy_pikpak && 'true' || 'false' }}
           VAR_LOGIN_PROXY_NAME: ${{ vars.LOGIN_PROXY_NAME || '' }}
-          VAR_CF_BYPASS_SERVICE_PORT: ${{ vars.CF_BYPASS_SERVICE_PORT }}
+          VAR_CF_BYPASS_SERVICE_PORT: ${{ vars.CF_BYPASS_SERVICE_PORT || '8000' }}
           VAR_CF_BYPASS_ENABLED: ${{ vars.CF_BYPASS_ENABLED || 'True' }}
           # BFR-024: every proxy's bypass service binds to loopback only
           # (never exposed on the proxy's public IP), so the runner must
@@ -268,6 +268,7 @@ jobs:
           # instead of dialling {proxy_ip}:{port} directly — otherwise every
           # bypass call times out against a port nothing public listens on.
           VAR_CF_BYPASS_VIA_PROXY: ${{ vars.CF_BYPASS_VIA_PROXY || 'False' }}
+          VAR_CF_BYPASS_PORT_MAP_JSON: ${{ vars.CF_BYPASS_PORT_MAP_JSON || '{}' }}
           VAR_PAGE_START: ${{ vars.PAGE_START }}
           VAR_PAGE_END: ${{ vars.PAGE_END }}
           VAR_PHASE2_MIN_RATE: ${{ vars.PHASE2_MIN_RATE }}

@@ -236,7 +236,13 @@ PROXY_POOL = [
 
 ## 5. CloudFlare 绕过
 
-[CloudflareBypassForScraping](https://github.com/sarperavci/CloudflareBypassForScraping) 服务的配置。该服务必须使用相同端口部署在每台 proxy 服务器上。
+[CloudflareBypassForScraping](https://github.com/sarperavci/CloudflareBypassForScraping) 服务的配置。该服务必须部署在每台 proxy 服务器上。所有 proxy 默认使用
+`CF_BYPASS_SERVICE_PORT`，除非 `CF_BYPASS_PORT_MAP` 为该 proxy 覆盖了端口 ——
+因此各主机并不需要都监听同一个端口。
+
+请求使用 CloudflareBypassForScraping 的 URL 参数接口 ——
+`GET {service_url}/html?url={urlencoded_target}` —— 且不携带任何自定义请求头。完整协议
+见 [CloudFlare 绕过](cloudflare-bypass.md#请求协议)。
 
 完整的服务 URL 在运行时动态构建：
 - 无 proxy：`http://localhost:{CF_BYPASS_SERVICE_PORT}`
@@ -244,10 +250,15 @@ PROXY_POOL = [
 - 使用 proxy 池**且** `CF_BYPASS_VIA_PROXY=True`：经由当前 proxy 转发到
   `http://127.0.0.1:{CF_BYPASS_SERVICE_PORT}` —— 使绕过服务可仅绑定回环地址。
 
+以上三种情况使用的端口都是 `CF_BYPASS_SERVICE_PORT`，除非该 proxy 的 IP 出现在
+`CF_BYPASS_PORT_MAP` 中 —— 此时以映射值为准，且只影响该 proxy。
+
 | 变量 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `CF_BYPASS_SERVICE_PORT` | `int` | `8000` | CloudFlare 绕过服务监听的端口。必须与服务 `docker-compose.yml` 中配置的端口一致。 |
+| `CF_BYPASS_ENABLED` | `bool` | `True` | 绕过层的总开关。为 `False` 时跳过所有绕过尝试，受验证保护的页面会直接在直连路径上失败。由 GH 变量 `CF_BYPASS_ENABLED` 提供。 |
 | `CF_BYPASS_VIA_PROXY` | `bool` | `False` | 为 `True` 时，通过当前 proxy 隧道转发到 `127.0.0.1:{port}` 来访问该 proxy 的绕过服务，而非直接拨号 `{proxy_ip}:{port}`。这样无需防火墙或 VPN 即可让每个绕过服务仅绑定回环地址（脱离公网）。要求 proxy 软件允许转发到 `127.0.0.1`（Clash/mihomo 默认允许；Squid 需放行 `to_localhost`）。 |
+| `CF_BYPASS_PORT_MAP` | `dict` | `{}` | 以 proxy IP 为键的按 proxy 端口覆盖，例如 `{'10.0.0.5': 9001}`。只有列出的 proxy 会偏离 `CF_BYPASS_SERVICE_PORT`；主要用于灰度上线，即部分主机上的 solver 监听不同端口。由 GH 变量 `CF_BYPASS_PORT_MAP_JSON` 提供，目前没有任何工作流设置它。 |
 
 ---
 
