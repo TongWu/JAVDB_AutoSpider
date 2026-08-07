@@ -2,6 +2,19 @@
 
 Common issues and their solutions for JAVDB AutoSpider.
 
+## Table of Contents
+
+- [Spider Issues](#spider-issues)
+- [qBittorrent Issues](#qbittorrent-issues)
+- [Git Issues](#git-issues)
+- [Proxy Issues](#proxy-issues)
+- [JavDB Login Issues](#javdb-login-issues)
+- [CloudFlare Bypass Issues](#cloudflare-bypass-issues)
+- [Downloaded Indicator Issues](#downloaded-indicator-issues)
+- [Debug Mode](#debug-mode)
+- [GitHub Actions Specific Issues](#github-actions-specific-issues)
+- [AI Operations Diagnosis](#ai-operations-diagnosis)
+
 ## Spider Issues
 
 **No entries found / "No movie list found"**
@@ -140,13 +153,53 @@ For detailed login troubleshooting and manual cookie extraction, see the [JavDB 
 
 **"No movie list found" with CF bypass**
 - Check CF bypass service logs for errors.
-- Verify the `x-hostname` header is being sent correctly.
+- Confirm the host speaks the dialect the spider uses — `GET /html?url=`
+  (CloudflareBypassForScraping), not `POST /v1` (FlareSolverr). A host running
+  the wrong service answers 404 and the failure is only visible at `DEBUG`.
 - Try restarting the CF bypass service.
 
 **Proxy + CF bypass not working**
 - The CF bypass service must be running on the same server as the proxy.
 - Verify proxy IP extraction is correct (check spider logs).
-- Test directly: `curl http://proxy_ip:8000/`
+- Test with the command that matches your topology. The port is
+  `CF_BYPASS_SERVICE_PORT` unless `CF_BYPASS_PORT_MAP` overrides it for that
+  proxy — dialling the wrong one reports a healthy setup as broken:
+
+  ```bash
+  # CF_BYPASS_VIA_PROXY=False — service listens on the proxy's public IP
+  curl "http://proxy_ip:8000/html?url=https%3A%2F%2Fjavdb.com%2F"
+
+  # CF_BYPASS_VIA_PROXY=True — service is loopback-bound, reached
+  # by tunnelling through the proxy
+  curl -x http://proxy_ip:7890 "http://127.0.0.1:8000/html?url=https%3A%2F%2Fjavdb.com%2F"
+  ```
+
+- Or let the probe resolve the topology and port for you:
+  `python3 -m apps.cli.ops.cf_bypass_probe --proxy <name> --verbose`
+
+**Sweeping the whole bypass tier**
+
+Run the probe to see, per proxy, whether JavDB is walled off and what each
+bypass service actually answers:
+
+```bash
+python3 -m apps.cli.ops.cf_bypass_probe
+```
+
+Or dispatch `CFBypassProbe.yml` from the Actions tab. See the
+[CLI Reference](../developer/cli-reference.md#cf-bypass-probe-cli).
+
+**"Site-wide Cloudflare challenge detected" in the log**
+
+JavDB is serving a challenge to every egress IP. No proxy is reported to the
+coordinator for it, so the pool stays intact regardless of configuration.
+
+The run also switches to bypass-first — but only when `CF_BYPASS_ENABLED` is
+true. With the bypass tier disabled the message still appears while every
+request stays on the direct path, so challenge-protected pages keep failing
+until the wall comes down. It reverts to direct-first on the first direct fetch
+that succeeds. See
+[CloudFlare Bypass](../self-hoster/cloudflare-bypass.md#bypass-first-ordering).
 
 ## Downloaded Indicator Issues
 

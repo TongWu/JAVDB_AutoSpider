@@ -324,8 +324,20 @@ MEDIA_SERVERS = [
 #   - With proxy pool: http://{PROXY_IP}:{CF_BYPASS_SERVICE_PORT}
 #     (uses the IP from current proxy in the pool)
 #
+# The spider only ever speaks CloudflareBypassForScraping's URL-parameter API:
+#   GET {service_url}/html?url={urlencoded_target}
+# Cache refreshes reuse that same endpoint with the header `x-bypass-cache: true`.
+# The upstream project's request-mirroring mode (gated on an `x-hostname` header)
+# is NOT used, so no `x-hostname` is ever sent.
+#
 # IMPORTANT: Deploy the CF bypass service on each proxy server using the same port
 CF_BYPASS_SERVICE_PORT = 8000
+
+# Master switch for the CF bypass tier. When False, every bypass attempt is
+# skipped and the spider only ever fetches directly -- Cloudflare-challenged
+# pages then simply fail. Leave True unless you are deliberately isolating a
+# problem to the direct path.
+CF_BYPASS_ENABLED = True
 
 # Reach each proxy's CF bypass service by tunnelling THROUGH that proxy to
 # 127.0.0.1:{port}, instead of dialling {proxy_ip}:{port} directly. This lets
@@ -338,6 +350,17 @@ CF_BYPASS_SERVICE_PORT = 8000
 # Requires the proxy software to allow forwarding to 127.0.0.1 (Clash/mihomo:
 # OK by default; Squid: add `acl bypass dst 127.0.0.1` + allow to_localhost).
 CF_BYPASS_VIA_PROXY = False
+
+# Per-proxy port overrides for the bypass service, keyed by proxy IP. Only the
+# listed proxies deviate; everything else keeps CF_BYPASS_SERVICE_PORT. Useful
+# during a staged rollout where some hosts run a solver on a different port
+# than the rest.
+#   CF_BYPASS_PORT_MAP = {'10.0.0.5': 9001}
+# makes that one proxy's bypass URL http://10.0.0.5:9001 (or, with
+# CF_BYPASS_VIA_PROXY = True, http://127.0.0.1:9001 through that proxy).
+# In GitHub Actions this comes from the CF_BYPASS_PORT_MAP_JSON variable, which
+# no workflow currently sets.
+CF_BYPASS_PORT_MAP = {}
 
 # =============================================================================
 # SPIDER CONFIGURATION

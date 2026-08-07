@@ -207,6 +207,14 @@ _VALID_REPORT_KINDS = (
     # the latency EMA on the Worker side, but does NOT touch the cf-event
     # bucket / penalty factor (kept distinct from "cf" on purpose).
     "success",
+    # BFR-025 — a Cloudflare challenge every egress IP receives. Deliberately
+    # inert on the proxy's own DO: it touches no cfEvents / successEvents
+    # counter and can never trigger the auto-ban, because the wall is javdb's
+    # WAF rather than anything the proxy did. Its only consumer is the
+    # RunnerRegistry circuit breaker, which counts *distinct* proxies that saw
+    # a wall inside its window — the signal that tells a site-wide outage
+    # apart from one unlucky IP (ADR-043 D7).
+    "site_challenge",
 )
 
 

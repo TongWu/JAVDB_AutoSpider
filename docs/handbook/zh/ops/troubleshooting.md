@@ -2,6 +2,19 @@
 
 JAVDB AutoSpider 的常见问题及解决方案。
 
+## 目录
+
+- [爬虫问题](#爬虫问题)
+- [qBittorrent 问题](#qbittorrent-问题)
+- [Git 问题](#git-问题)
+- [代理问题](#代理问题)
+- [JavDB 登录问题](#javdb-登录问题)
+- [CloudFlare 绕过问题](#cloudflare-绕过问题)
+- [下载指示器问题](#下载指示器问题)
+- [调试模式](#调试模式)
+- [GitHub Actions 特有问题](#github-actions-特有问题)
+- [AI 运维诊断](#ai-运维诊断)
+
 ## 爬虫问题
 
 **未找到条目 / "No movie list found"**
@@ -140,13 +153,49 @@ JAVDB AutoSpider 的常见问题及解决方案。
 
 **使用 CF 绕过时 "No movie list found"**
 - 查看 CF 绕过服务日志中的错误。
-- 验证 `x-hostname` 请求头是否正确发送。
+- 确认该主机使用的是爬虫所用的协议方言 —— `GET /html?url=`
+  （CloudflareBypassForScraping），而不是 `POST /v1`（FlareSolverr）。运行了错误
+  服务的主机会返回 404，而这个失败只在 `DEBUG` 级别可见。
 - 尝试重启 CF 绕过服务。
 
 **代理 + CF 绕过不工作**
 - CF 绕过服务必须与代理运行在同一台服务器上。
 - 验证代理 IP 提取是否正确（查看爬虫日志）。
-- 直接测试：`curl http://proxy_ip:8000/`
+- 使用与你的拓扑相符的命令测试。端口是 `CF_BYPASS_SERVICE_PORT`，除非
+  `CF_BYPASS_PORT_MAP` 为该 proxy 覆盖了端口 —— 拨错端口会把健康的部署误判为故障：
+
+  ```bash
+  # CF_BYPASS_VIA_PROXY=False —— 服务监听在 proxy 的公网 IP 上
+  curl "http://proxy_ip:8000/html?url=https%3A%2F%2Fjavdb.com%2F"
+
+  # CF_BYPASS_VIA_PROXY=True —— 服务仅绑定回环地址，
+  # 需经由 proxy 隧道访问
+  curl -x http://proxy_ip:7890 "http://127.0.0.1:8000/html?url=https%3A%2F%2Fjavdb.com%2F"
+  ```
+
+- 也可以让探测工具自行解析拓扑与端口：
+  `python3 -m apps.cli.ops.cf_bypass_probe --proxy <name> --verbose`
+
+**扫描整个绕过层**
+
+运行探测工具，按 proxy 查看 JavDB 是否被墙、以及每个绕过服务实际返回了什么：
+
+```bash
+python3 -m apps.cli.ops.cf_bypass_probe
+```
+
+也可以在 Actions 页面手动触发 `CFBypassProbe.yml`。参见
+[CLI 参考手册](../developer/cli-reference.md#cf-bypass-probe-cli)。
+
+**日志中出现 "Site-wide Cloudflare challenge detected"**
+
+JavDB 正在对每个出口 IP 都返回验证页。不会因此向 coordinator 上报任何 proxy，因此
+无论如何配置，代理池都保持完好。
+
+该 run 还会切换为绕过优先 —— 但仅在 `CF_BYPASS_ENABLED` 为真时才真正生效。若绕过层
+被关闭，这条日志照样会出现，而所有请求仍然走直连路径，因此在这堵墙撤下之前，受验证
+保护的页面会持续失败。第一次成功的直连抓取后就会恢复为直连优先。参见
+[CloudFlare 绕过](../self-hoster/cloudflare-bypass.md#绕过优先的顺序)。
 
 ## 下载指示器问题
 

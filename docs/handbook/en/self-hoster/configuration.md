@@ -259,7 +259,13 @@ Per-day mutex that prevents duplicate work across concurrent runners.
 ## 5. CloudFlare Bypass
 
 Configuration for the [CloudflareBypassForScraping](https://github.com/sarperavci/CloudflareBypassForScraping)
-service. The service must be deployed on each proxy server using the same port.
+service. The service must be deployed on each proxy server. Every proxy uses
+`CF_BYPASS_SERVICE_PORT` unless `CF_BYPASS_PORT_MAP` overrides the port for
+that proxy — so hosts do not all have to listen on the same port.
+
+Requests use CloudflareBypassForScraping's URL-parameter API —
+`GET {service_url}/html?url={urlencoded_target}` — with no custom headers. See
+[CloudFlare Bypass](cloudflare-bypass.md#request-protocol) for the full protocol.
 
 The full service URL is built dynamically at runtime:
 - Without proxy: `http://localhost:{CF_BYPASS_SERVICE_PORT}`
@@ -269,10 +275,15 @@ The full service URL is built dynamically at runtime:
   `http://127.0.0.1:{CF_BYPASS_SERVICE_PORT}` reached *through* the current
   proxy — lets the bypass service bind to loopback only.
 
+In all three cases the port is `CF_BYPASS_SERVICE_PORT` unless the proxy's IP
+appears in `CF_BYPASS_PORT_MAP`, which wins for that proxy alone.
+
 | Variable | Type | Default | Description |
 |---|---|---|---|
 | `CF_BYPASS_SERVICE_PORT` | `int` | `8000` | Port the CloudFlare bypass service listens on. Must match the port configured in the service's `docker-compose.yml`. |
+| `CF_BYPASS_ENABLED` | `bool` | `True` | Master switch for the bypass tier. When `False`, every bypass attempt is skipped and challenge-protected pages simply fail on the direct path. Fed by GH Variable `CF_BYPASS_ENABLED`. |
 | `CF_BYPASS_VIA_PROXY` | `bool` | `False` | When `True`, reach each proxy's bypass service by tunnelling through that proxy to `127.0.0.1:{port}` instead of dialling `{proxy_ip}:{port}` directly. Lets every bypass service bind to loopback only (off the public internet) without a firewall or VPN. Requires the proxy software to allow forwarding to `127.0.0.1` (Clash/mihomo: OK by default; Squid: allow `to_localhost`). |
+| `CF_BYPASS_PORT_MAP` | `dict` | `{}` | Per-proxy port overrides keyed by proxy IP, e.g. `{'10.0.0.5': 9001}`. Only the listed proxies deviate from `CF_BYPASS_SERVICE_PORT`; useful during a staged rollout where some hosts run a solver on a different port. Fed by GH Variable `CF_BYPASS_PORT_MAP_JSON`, which no workflow currently sets. |
 
 ---
 

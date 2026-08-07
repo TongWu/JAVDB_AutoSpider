@@ -5,6 +5,7 @@
 **Severity**: Critical
 **Affected**: `javdb/infra/request.py`, `javdb/spider/html_validators.py`, `javdb/spider/fetch/fetch_engine.py`
 **Related**: [ADR-043](../_archive/ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.md), runs [31106061181](https://github.com/TongWu/JAVDB_AutoSpider_CICD/actions/runs/31106061181) / [31124515791](https://github.com/TongWu/JAVDB_AutoSpider_CICD/actions/runs/31124515791)
+**Follow-on**: [BFR-025](../BFR-025-Site-Wide-Challenge-Bans-Pool-Via-Coordinator/BFR-025-site-wide-challenge-bans-pool-via-coordinator.md) — this fix turned out to be incomplete
 
 ---
 
@@ -161,6 +162,14 @@ a proxy's bypass service is genuinely unreachable for some other reason:
   The first verification run of this fix exited 0 with a header-only CSV,
   which for DailyIngestion would mean an auto-commit and a success email while
   the site was fully walled off.
+
+**This fix was incomplete.** It exempted the local soft-ban tier from a
+site-wide challenge but not the coordinator report, so `_record_cf_event`
+kept publishing every challenge to the proxy's Durable Object — which bans the
+whole pool on its own. It also left the cascade ordering untouched, so each
+page still generated one challenge per proxy before reaching the bypass tier.
+Both are analysed and fixed in
+[BFR-025](../BFR-025-Site-Wide-Challenge-Bans-Pool-Via-Coordinator/BFR-025-site-wide-challenge-bans-pool-via-coordinator.md).
 
 ## Side Effects
 

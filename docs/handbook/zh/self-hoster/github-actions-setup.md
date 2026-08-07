@@ -169,6 +169,8 @@ GitHub Actions 部署提供：
 | `PROXY_POOL_MAX_FAILURES` | `3` | 当前会话中封禁 proxy 前的最大连续失败次数 |
 | `CF_BYPASS_SERVICE_PORT` | `8000` | CloudFlare 绕过服务端口 |
 | `CF_BYPASS_ENABLED` | `True` | 启用/禁用 CF 绕过回退 |
+| `CF_BYPASS_VIA_PROXY` | `False` | 经由各自的 proxy 隧道转发到 `127.0.0.1:{port}` 来访问绕过服务 |
+| `CF_BYPASS_PORT_MAP_JSON` | `{}` | 按 proxy 覆盖端口的 JSON，例如 `{"10.0.0.5": 9001}`。目前没有任何工作流设置它 |
 | `LOGIN_PROXY_NAME` | （空） | 将登录绑定到特定 proxy 名称 |
 
 ### Proxy Coordinator Variables
@@ -325,6 +327,7 @@ openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
 | `RollbackD1.yml` | 手动触发 | 手动会话回滚 |
 | `StaleSessionCleanup.yml` | 每日定时 | 自动清理超过 48 小时的卡住会话 |
 | `AuditArchive.yml` | 每周定时 | 清理超过 30 天的 audit 行 |
+| `CFBypassProbe.yml` | 手动触发 / 指定分支 push | 对代理池的 CloudFlare 绕过层做只读诊断扫描。输入：`proxies`、`limit`、`target`、`verbose`、`bench`、`ports`、`runner` |
 | `Migration.yml` | 手动触发 | 数据库迁移运行器 |
 | `TestIngestion.yml` | Push / PR / 手动触发 | 烟雾测试完整摄取路径；清理阶段执行回滚 |
 | `build-rust-extension.yml` | 推送/PR 时 | 为 CI 构建 Rust wheel |
@@ -375,6 +378,38 @@ STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --pass all --json
 |---|---|---|
 | `stalled_after_days` | `7` | 正整数。活跃 outcome 超过该天数未被观测到会变为 `stalled`；超过 2 倍窗口会变为 `failed`。 |
 | `dry_run` | `false` | 只计算状态迁移并输出 JSON，不写入数据行。 |
+
+### CFBypassProbe 工作流
+
+`CFBypassProbe.yml` 针对代理池运行 `apps.cli.ops.cf_bypass_probe`。它回答三个普通摄取
+run 无法回答的问题 —— 因为绕过层上的失败只在 `DEBUG` 级别可见：
+
+1. 按 proxy 看，JavDB 当前是否正在返回全站验证页？
+2. 每个 proxy 的绕过服务实际使用什么协议 ——
+   CloudflareBypassForScraping（`GET /html?url=`）还是 FlareSolverr（`POST /v1`）？
+3. 当 solver 确实有响应时，返回的是真实页面，还是伪装成功的验证页？
+
+它是只读的：不访问数据库、不写历史、不提交任何内容。探测日志会作为
+`cf-bypass-probe-log` artifact 上传。
+
+手动触发输入：
+
+| 输入 | 默认值 | 用途 |
+|---|---|---|
+| `proxies` | `''` | 逗号分隔的 proxy 名称。留空 = `PROXY_POOL` 中的每个 proxy。 |
+| `limit` | `0` | 最多探测 N 个 proxy（`0` = 不限）。在名称筛选之后生效。 |
+| `target` | `https://javdb.com/` | 要求绕过服务抓取的 URL。必须是 `javdb.com` 或其子域名上的 `https://` 地址；其他取值会让该步骤失败。 |
+| `verbose` | `true` | 打印每个响应正文的前 300 个字符。仅协议探测模式有效。 |
+| `bench` | `0` | 基准测试模式：每个 proxy 每个端口做 N 次串行试探（`0` = 改为协议探测）。 |
+| `ports` | `''` | 逗号分隔的待测绕过端口，例如 `8000,8002`。留空 = 按 proxy 从 `CF_BYPASS_PORT_MAP` / `CF_BYPASS_SERVICE_PORT` 解析出的端口。 |
+| `runner` | `ubuntu-latest` | Runner 类型：`ubuntu-latest` 或 `self-hosted`。 |
+
+该工作流也会在推送到 `claude/ingestion-cloudflare-bypass-debug-**` 分支且改动探测脚本
+或工作流文件时运行。推送不携带触发输入，因此这条路径使用的是工作流内部自己的默认值，
+而不是上表中的值。
+
+各模式分别报告什么，参见
+[CLI 参考手册](../developer/cli-reference.md#cf-bypass-probe-cli)。
 
 ### 媒体服务器 secret {#media-servers-secret}
 

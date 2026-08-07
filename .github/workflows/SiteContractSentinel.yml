@@ -65,8 +65,14 @@ jobs:
           VAR_PROXY_POOL_MAX_FAILURES: ${{ vars.PROXY_POOL_MAX_FAILURES || 3 }}
           VAR_LOGIN_PROXY_NAME: ${{ vars.LOGIN_PROXY_NAME || '' }}
           # Cloudflare bypass (canary uses use_cf_bypass=True, matching DailyIngestion).
-          VAR_CF_BYPASS_SERVICE_PORT: ${{ vars.CF_BYPASS_SERVICE_PORT }}
+          VAR_CF_BYPASS_SERVICE_PORT: ${{ vars.CF_BYPASS_SERVICE_PORT || '8000' }}
           VAR_CF_BYPASS_ENABLED: ${{ vars.CF_BYPASS_ENABLED || 'True' }}
+          # BFR-024: the bypass service binds to loopback on each proxy host, so
+          # the runner must tunnel through the proxy to 127.0.0.1:{port} instead
+          # of dialling {proxy_ip}:{port}. Without this the canary's every fetch
+          # times out and it reports a fetch failure rather than real site drift.
+          VAR_CF_BYPASS_VIA_PROXY: ${{ vars.CF_BYPASS_VIA_PROXY || 'False' }}
+          VAR_CF_BYPASS_PORT_MAP_JSON: ${{ vars.CF_BYPASS_PORT_MAP_JSON || '{}' }}
           # JavDB login (cookie-based fetch, matches DailyIngestion).
           VAR_JAVDB_USERNAME: ${{ secrets.JAVDB_USERNAME }}
           VAR_JAVDB_PASSWORD: ${{ secrets.JAVDB_PASSWORD }}
