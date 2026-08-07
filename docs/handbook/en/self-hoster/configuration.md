@@ -289,6 +289,22 @@ Controls page range and filtering thresholds for the scraping phases.
 | `DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST` | `list[str]` | `['western_studio_date']` | Daily-only family blacklist applied after index parsing and sentinel accounting. The parser still recognizes these families, and ad-hoc ingestion bypasses this blacklist. In GitHub Actions, set repo Variable `DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST_JSON` to a JSON array such as `[]` to opt out of the static default. |
 | `BASE_URL` | `str` | `'https://javdb.com'` | Base URL for JavDB. Change only if using a mirror. |
 
+### Hardcoded Blacklists
+
+Two additional blacklists are hardcoded as plain Python constants — no env
+var or `config.py` override, edit the source directly to change them:
+
+- `BLACKLIST_CODE_KEYWORDS` in
+  [`javdb/spider/runtime/config.py`](../../../../javdb/spider/runtime/config.py) —
+  studio/label code prefixes (e.g. `IDBD` matches `IDBD-123`). Applied at
+  index-parsing time, daily runs only (bypassed by ad-hoc/custom-URL
+  ingestion, same as `DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST` above).
+- `BLACKLIST_ACTOR_NAMES` in the same file — actor names to exclude.
+  Applied as synthetic `actor` / `exclude` content-filter rules merged on
+  top of the operator-managed rules in `ContentFilterRule` (see
+  `apps/cli/ops/content_filter.py`), so it runs for every detail-page
+  fetch (daily and ad-hoc alike) regardless of DB availability.
+
 ---
 
 ## 7. JavDB Login

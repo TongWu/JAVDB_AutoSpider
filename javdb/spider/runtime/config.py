@@ -49,6 +49,32 @@ DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST = [
     for item in DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST
     if (stripped := str(item).strip())
 ]
+
+# Hardcoded studio/label code-prefix blacklist (video_code leading letters, e.g.
+# "IDBD" matches "IDBD-123"). No cfg()/env var by design — edit this list directly.
+BLACKLIST_CODE_KEYWORDS = frozenset({
+    "IDBD", "OFJE", "MIZD", "REBDB", "SIVR", "OVVR", "RBB", "THU", "JUMS", "PRX",
+    "HEO", "TABF", "FTKTABF", "MDBK", "UMSO", "DAZD", "SODS", "MBDD", "KCKC",
+    "JUSD", "ATKD", "KTRA", "MMPB", "CADV", "KWBD", "BOMNVD", "HNDB", "NSFS",
+    "MQNC", "MBF", "BBSS", "HDKA", "CJOB", "LZFB", "MUCD", "ETQR", "PKGF",
+    "OSCO", "IMO", "FCDSS", "PCB", "FIG", "YRK", "ICE", "MKCK", "ATAD", "SDAM",
+    "SDTH", "BMW", "PBD", "SDNM", "GMEM", "RROY", "KIBD", "DVAJ", "ROE", "PPX",
+    "HHF", "STOL", "MDVR", "PWIFE", "DJCY", "TMRD", "OEM", "CMA", "STBD",
+    "LUNS", "SMOM", "BJD", "TPI", "TSSR", "GML", "JUYU", "PYM", "BKD", "RD",
+    "UGH", "PARATHD",
+})
+
+# Hardcoded actor-name blacklist. No cfg()/env var by design — edit this list
+# directly to add or remove names.
+BLACKLIST_ACTOR_NAMES = frozenset({
+    "長谷川律子", "富岡よし子", "瀬川志穂", "如月千鶴", "内原美智子", "海江田弘菜",
+    "上島美都子", "筒美かえで", "折原ゆかり", "伊織涼子", "北村敏世", "宝田もなみ",
+    "城眞紀", "真矢織江", "藤木静子", "翔田千里", "白鳥寿美礼", "松沢ゆかり",
+    "岩崎千鶴", "高杉美穂", "桐島美奈子", "青井マリ", "浅井舞香", "服部圭子",
+    "赤坂ルナ", "宮前幸恵", "音羽文子", "北川礼子", "杉岡恵美子", "柊もみじ",
+    "花園もあ", "西村妮娜",
+})
+
 PROXY_HTTP = cfg('PROXY_HTTP', None)
 PROXY_HTTPS = cfg('PROXY_HTTPS', None)
 PROXY_MODULES = cfg('PROXY_MODULES', ['spider'])
