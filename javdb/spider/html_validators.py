@@ -49,6 +49,20 @@ _MAINTENANCE_MARKERS = (
     "暫時無法使用",
 )
 
+# Cloudflare interstitials. ``challenge-platform`` was tried as a marker but
+# reverted: Cloudflare injects that script path into every response on a zone
+# with bot management enabled, challenge or not, so it false-positived on
+# genuine successful fetches (verified 2026-08-07 against a live CF-Bypass
+# response — real javdb.com content, movie-list and all, that still 404'd
+# through this check because the beacon script was present). The two
+# remaining markers are copy that only appears on an actual interstitial:
+# "Just a moment..." = managed challenge / IUAM, "Security Verification" =
+# the older Turnstile page javdb served until 2026-08.
+_CF_CHALLENGE_MARKERS = (
+    "just a moment...",
+    "security verification",
+)
+
 
 def _has_login_required_text(html: str) -> bool:
     lower_html = html.lower()
@@ -67,6 +81,24 @@ def is_maintenance_page(html: str) -> bool:
             if "503" in html or "502" in html or "maintenance" in lower_html:
                 return True
     return False
+
+
+def is_cf_challenge_page(html: str) -> bool:
+    """Detect a Cloudflare challenge interstitial of any kind.
+
+    Covers the managed-challenge / "Just a moment..." page javdb switched to
+    in 2026-08 as well as the older Turnstile "Security Verification" page.
+    A challenge is a *site-wide* condition — every egress IP sees it — so
+    callers must not charge it to the proxy that happened to fetch it.
+
+    Note this is deliberately NOT a Cloudflare *block* (error 1020,
+    "Sorry, you have been blocked"): a block IS IP-specific and should keep
+    counting against the proxy.
+    """
+    if not html:
+        return False
+    lowered = html.lower()
+    return any(marker in lowered for marker in _CF_CHALLENGE_MARKERS)
 
 
 def result_to_dict(result: Any) -> dict:

@@ -110,6 +110,31 @@ http_access allow to_localhost
 用 `CF_BYPASS_PORT_MAP`（`{proxy_ip: 本地端口}`）按 proxy 指定，使隧道 URL 指向正确的
 本地端口——例如 `{'10.0.0.5': 9001}` 会让该 proxy 的绕过 URL 变为 `http://127.0.0.1:9001`。
 
+## 绕过服务不可达时
+
+spider 拨号绕过服务时使用 **5 秒 connect timeout**。若 TCP 连接失败（服务未运行，
+或 8000 端口被防火墙拦截），该 proxy 的绕过会被标记为不可达，并在本次 run 剩余时间内跳过：
+
+```
+[CF Bypass] Proxy=Jeddah-ARM1: service unreachable at http://144.xxx.xxx.88:8000
+  (ConnectTimeout) — bypass disabled for this proxy for the rest of the run
+```
+
+该 proxy 本身仍会用于直连请求——只是跳过它的绕过服务。这个标记在一次 run 内不会过期，
+因此 run 中途重启的绕过服务要到下一次 run 才会被重新使用。
+
+若每个 proxy 都出现这条警告，说明整个绕过层都挂了；先修好入站规则或服务，再期待受
+验证保护的页面能被解析。相关事故记录见 [BFR-024](https://github.com/TongWu/JAVDB_AutoSpider_CICD/blob/main/docs/design/BFR-024-CF-Managed-Challenge-Blind-Spot/BFR-024-cf-managed-challenge-blind-spot.zh.md)。
+
+## 全站验证不会 ban 代理
+
+Cloudflare 验证页（`Just a moment...`，或旧版的 `Security Verification` 页）对每个出口
+IP 一视同仁，因此**不会**算到抓取它的那个 proxy 头上：不软 ban，也不会把失败记入该 proxy
+在 coordinator 的健康评分。这类 run 以 `all_proxies_failed` 结束，代理池保持完好。
+
+Cloudflare 的 *block* 页（error 1020，"Sorry, you have been blocked"）是 IP 特定的，
+仍然会算到该 proxy 头上。
+
 ## 性能
 
 - **首次请求**：较慢（需要解决 CF 验证）

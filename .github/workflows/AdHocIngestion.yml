@@ -262,6 +262,12 @@ jobs:
           VAR_LOGIN_PROXY_NAME: ${{ vars.LOGIN_PROXY_NAME || '' }}
           VAR_CF_BYPASS_SERVICE_PORT: ${{ vars.CF_BYPASS_SERVICE_PORT }}
           VAR_CF_BYPASS_ENABLED: ${{ vars.CF_BYPASS_ENABLED || 'True' }}
+          # BFR-024: every proxy's bypass service binds to loopback only
+          # (never exposed on the proxy's public IP), so the runner must
+          # tunnel the bypass request *through* the proxy to 127.0.0.1
+          # instead of dialling {proxy_ip}:{port} directly — otherwise every
+          # bypass call times out against a port nothing public listens on.
+          VAR_CF_BYPASS_VIA_PROXY: ${{ vars.CF_BYPASS_VIA_PROXY || 'False' }}
           VAR_PAGE_START: ${{ vars.PAGE_START }}
           VAR_PAGE_END: ${{ vars.PAGE_END }}
           VAR_PHASE2_MIN_RATE: ${{ vars.PHASE2_MIN_RATE }}

@@ -122,6 +122,37 @@ http_access allow to_localhost
 (`{proxy_ip: local_port}`) so the tunnelled URL targets the right local port —
 e.g. `{'10.0.0.5': 9001}` makes that proxy's bypass URL `http://127.0.0.1:9001`.
 
+## When the bypass service is unreachable
+
+The spider dials the bypass service with a **5-second connect timeout**. If the
+TCP connect fails (service down, or port 8000 firewalled off), that proxy's
+bypass is marked unreachable and skipped for the rest of the run:
+
+```
+[CF Bypass] Proxy=Jeddah-ARM1: service unreachable at http://144.xxx.xxx.88:8000
+  (ConnectTimeout) — bypass disabled for this proxy for the rest of the run
+```
+
+The proxy itself keeps being used for direct requests — only its bypass is
+skipped. The mark never expires within a run, so a bypass service restarted
+mid-run is picked up on the next run.
+
+Seeing this warning for every proxy means the bypass tier is entirely down; fix
+the ingress rule or the service before expecting challenge-protected pages to
+parse. See [BFR-024](https://github.com/TongWu/JAVDB_AutoSpider_CICD/blob/main/docs/design/BFR-024-CF-Managed-Challenge-Blind-Spot/BFR-024-cf-managed-challenge-blind-spot.md)
+for the incident where this failed silently.
+
+## Site-wide challenges do not ban proxies
+
+A Cloudflare challenge (`Just a moment...`, or the older
+`Security Verification` page) is served to every egress IP alike, so it is
+**not** counted against the proxy that fetched it: no soft-ban, and no health
+failure recorded against the proxy's coordinator score. Such a run ends with
+`all_proxies_failed` and an intact pool.
+
+A Cloudflare *block* page (error 1020, "Sorry, you have been blocked") is
+IP-specific and does still count against the proxy.
+
 ## Performance
 
 - **First request**: Slower (CF challenge solving)
