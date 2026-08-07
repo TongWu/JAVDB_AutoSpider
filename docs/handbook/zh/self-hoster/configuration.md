@@ -264,6 +264,19 @@ PROXY_POOL = [
 | `DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST` | `list[str]` | `['western_studio_date']` | 仅用于每日模式的 family 黑名单，在索引解析和 sentinel 计数之后应用。解析器仍会识别这些 family，而临时抓取会绕过此黑名单。在 GitHub Actions 中，将仓库 Variable `DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST_JSON` 设为 JSON 数组（例如 `[]`）即可退出静态默认值。 |
 | `BASE_URL` | `str` | `'https://javdb.com'` | JavDB 基础 URL。仅在使用镜像站时更改。 |
 
+### 硬编码黑名单
+
+另外两个黑名单以纯 Python 常量的形式硬编码——没有环境变量或 `config.py`
+覆盖项，需要修改时直接编辑源码：
+
+- [`javdb/spider/runtime/config.py`](../../../../javdb/spider/runtime/config.py)
+  中的 `BLACKLIST_CODE_KEYWORDS` —— 番号厂牌前缀（例如 `IDBD` 会匹配
+  `IDBD-123`）。在索引解析阶段应用，仅限每日模式（临时/自定义 URL 抓取会绕过，
+  与上方的 `DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST` 规则相同）。
+- 同一文件中的 `BLACKLIST_ACTOR_NAMES` —— 需要排除的演员名字。以合成的
+  `actor` / `exclude` 内容过滤规则形式，叠加在 `ContentFilterRule` 中运营者维护的规则之上
+  （参见 `apps/cli/ops/content_filter.py`），因此每日模式和临时抓取的每次详情页请求都会生效，且不依赖数据库是否可用。
+
 ---
 
 ## 7. JavDB 登录

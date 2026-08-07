@@ -115,7 +115,10 @@ def test_load_content_filter_rules_delegates_private_loader(monkeypatch) -> None
         lambda: calls.append(True) or sentinel_rules,
     )
 
-    assert runner.load_content_filter_rules() == sentinel_rules
+    loaded = runner.load_content_filter_rules()
+
+    assert loaded[: len(sentinel_rules)] == sentinel_rules
+    assert loaded[len(sentinel_rules):] == runner._hardcoded_actor_blacklist_rules()
     assert calls == [True]
 
 
@@ -126,4 +129,55 @@ def test_load_content_filter_rules_fails_open_when_private_loader_errors(monkeyp
         lambda: (_ for _ in ()).throw(RuntimeError("rules unavailable")),
     )
 
-    assert runner.load_content_filter_rules() == []
+    assert runner.load_content_filter_rules() == runner._hardcoded_actor_blacklist_rules()
+
+
+def test_load_content_filter_rules_always_includes_hardcoded_actor_blacklist(monkeypatch) -> None:
+    monkeypatch.setattr(runner, "_load_content_filter_rules", lambda: [])
+    monkeypatch.setattr(
+        runner,
+        "BLACKLIST_ACTOR_NAMES",
+        frozenset({"Blocked Actor"}),
+    )
+
+    rules = runner.load_content_filter_rules()
+
+    assert len(rules) == 1
+    assert rules[0].dimension == "actor"
+    assert rules[0].mode == "exclude"
+    assert rules[0].value == "Blocked Actor"
+    assert rules[0].enabled is True
+    assert rules[0].id < 0
+
+
+def test_hardcoded_actor_blacklist_drops_movie_end_to_end(monkeypatch) -> None:
+    """Real evaluate() + real load_content_filter_rules(), no mocked filtering."""
+    monkeypatch.setattr(state, "global_movie_claim_client", None, raising=False)
+    monkeypatch.setattr(state, "global_work_distributor_client", None, raising=False)
+    monkeypatch.setattr(runner, "_load_content_filter_rules", lambda: [])
+    monkeypatch.setattr(runner, "BLACKLIST_ACTOR_NAMES", frozenset({"長谷川律子"}))
+    monkeypatch.setattr(
+        runner,
+        "persist_parsed_detail_result",
+        lambda **_kwargs: pytest.fail("blacklisted actor must not persist"),
+    )
+
+    actor = SimpleNamespace(name="長谷川律子", href="/actors/xyz")
+    movie_detail = SimpleNamespace(actors=[actor], tags=[], video_code="XYZ-999")
+
+    backend = _Backend(movie_detail)
+    result = process_detail_entries(
+        backend=backend,
+        entries=[_entry(video_code="XYZ-999", href="/v/xyz999")],
+        phase=1,
+        history_data={},
+        history_file="history.csv",
+        csv_path="report.csv",
+        fieldnames=["href"],
+        dry_run=True,
+        use_history_for_saving=False,
+        is_adhoc_mode=False,
+    )
+
+    assert result["rows"] == []
+    assert backend.ack_calls == [("content_filtered", False)]

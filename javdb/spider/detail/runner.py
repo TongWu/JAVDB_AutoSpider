@@ -40,7 +40,7 @@ from javdb.spider.services.dedup_store import append_dedup_record
 from javdb.spider.services.dedup_types import DedupRecord
 from javdb.spider.fetch.backend import FetchBackend
 from javdb.spider.fetch.fetch_engine import EngineTask
-from javdb.spider.runtime.config import BASE_URL
+from javdb.spider.runtime.config import BASE_URL, BLACKLIST_ACTOR_NAMES
 from javdb.pipeline.events import emit as _emit_event  # ADR-036 Phase 2
 from javdb.quality.probe_queue import maybe_capture_runner_ups
 
@@ -113,16 +113,34 @@ def _load_content_filter_rules() -> list[Rule]:
         return ContentFilterRepo(conn).load_rules()
 
 
+def _hardcoded_actor_blacklist_rules() -> list[Rule]:
+    """Synthetic exclude rules for the hardcoded actor-name blacklist.
+
+    No DB/env var — negative ids keep these out of the ContentFilterRule id
+    space so they never collide with operator-authored rules.
+    """
+    return [
+        Rule(id=-(index + 1), dimension='actor', mode='exclude', value=name, enabled=True)
+        for index, name in enumerate(sorted(BLACKLIST_ACTOR_NAMES))
+    ]
+
+
 def load_content_filter_rules() -> list[Rule]:
-    """Load content filter rules for public callers."""
+    """Load content filter rules for public callers.
+
+    Always includes the hardcoded actor-name blacklist on top of whatever
+    DB-backed rules load (or an empty list if the DB is unavailable), so the
+    blacklist applies even when content-filter storage fails.
+    """
     try:
-        return _load_content_filter_rules()
+        rules = _load_content_filter_rules()
     except Exception:
         logger.info(
             "Content filter rules unavailable; continuing without filtering",
             exc_info=True,
         )
-        return []
+        rules = []
+    return rules + _hardcoded_actor_blacklist_rules()
 
 
 def _resolve_runtime(runtime=None):
