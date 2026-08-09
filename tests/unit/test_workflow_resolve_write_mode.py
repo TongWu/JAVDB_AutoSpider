@@ -780,7 +780,13 @@ def test_qb_file_filter_collects_torrent_quality_evidence_in_shadow_mode():
 
 
 def test_public_publish_refuses_recovery_payloads():
-    text = _workflow_text(REPO_ROOT / ".github" / "workflows" / "publish-to-public.yml")
+    workflow = REPO_ROOT / ".github" / "workflows" / "publish-to-public.yml"
+    if not workflow.exists():
+        pytest.skip(
+            "publish-to-public.yml is private-only "
+            "(.publish-config.yml exclude_paths); absent on the public mirror"
+        )
+    text = _workflow_text(workflow)
 
     assert "d1_recovery_outbox.jsonl" in text
     assert "d1_recovery_outbox.processed.jsonl" in text

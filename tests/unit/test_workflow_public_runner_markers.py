@@ -38,10 +38,46 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
+
+_PUBLISH_WORKFLOW = WORKFLOWS_DIR / "publish-to-public.yml"
+_PUBLISH_CONFIG = REPO_ROOT / ".publish-config.yml"
+
+# Both files are stripped from the mirror by the ``exclude_paths`` list in
+# ``.publish-config.yml``, so "both absent" identifies a public-mirror
+# checkout and "both present" a private one. Exactly one missing is neither
+# — that is a private checkout someone has half-deleted, and silently
+# downgrading the runner contract below to a skip is the one outcome that
+# must not happen there, so fail loudly instead of guessing.
+if _PUBLISH_WORKFLOW.exists() != _PUBLISH_CONFIG.exists():
+    raise RuntimeError(
+        "inconsistent public-mirror markers: "
+        f".github/workflows/publish-to-public.yml={_PUBLISH_WORKFLOW.exists()}, "
+        f".publish-config.yml={_PUBLISH_CONFIG.exists()}. "
+        "Both are excluded from the public mirror and present in the private "
+        "repo, so exactly one missing means this checkout is broken."
+    )
+
+IS_PUBLIC_MIRROR = not _PUBLISH_WORKFLOW.exists()
+
+# On the mirror the publish run has already rewritten each wheel-build
+# ``runs-on`` to the GitHub-hosted replacement named by its
+# ``# PUBLIC_RUNNER`` marker, so assert those values there rather than
+# skipping the arch contract. The marker is a YAML comment — invisible to
+# ``yaml.safe_load`` — and
+# ``test_literal_self_hosted_runners_carry_public_runner_marker`` accepts any
+# non-self-hosted token, so a ``# PUBLIC_RUNNER: ubuntu-latest`` typo on
+# ``build-arm`` is caught here or nowhere, and it would build an x64 wheel
+# under the ``*-arm-*`` artifact name.
+EXPECTED_WHEEL_RUNNERS = (
+    {"build-x64": "ubuntu-latest", "build-arm": "ubuntu-24.04-arm"}
+    if IS_PUBLIC_MIRROR
+    else {"build-x64": ["self-hosted", "X64"], "build-arm": ["self-hosted", "ARM64"]}
+)
 
 # Mirror of the rewrite pattern in publish-to-public.yml ("Replace private
 # runners for public repo" step). Both must stay in sync. The private value is
@@ -87,6 +123,10 @@ def test_literal_self_hosted_runners_carry_public_runner_marker():
     assert not violations, "\n".join(violations)
 
 
+@pytest.mark.skipif(
+    IS_PUBLIC_MIRROR,
+    reason="public mirror rewrites the self-hosted runners to GitHub-hosted",
+)
 def test_unit_tests_jobs_run_self_hosted():
     workflow = yaml.safe_load(
         (WORKFLOWS_DIR / "unit-tests.yml").read_text(encoding="utf-8")
@@ -187,9 +227,10 @@ def test_build_rust_extension_jobs_pin_runner_arch():
     ``[self-hosted, <arch>]`` (the bare ``self-hosted`` label is unsafe — see
     the module docstring). Pointing both jobs at the same arch would build an
     x64 wheel under the ``*-arm-*`` artifact name (and warm the wrong per-arch
-    cache), so build-x64 pins ``X64`` and build-arm pins ``ARM64``. The public
-    mirror rewrites each line via its ``# PUBLIC_RUNNER:`` marker (asserted by
-    ``test_literal_self_hosted_runners_carry_public_runner_marker``).
+    cache), so build-x64 pins ``X64`` and build-arm pins ``ARM64``. On the
+    public mirror the equivalent contract is the rewritten GitHub-hosted pair —
+    see ``EXPECTED_WHEEL_RUNNERS`` for why that side is asserted rather than
+    skipped.
     """
     workflow = yaml.safe_load(
         (WORKFLOWS_DIR / "build-rust-extension.yml").read_text(encoding="utf-8")
@@ -197,5 +238,5 @@ def test_build_rust_extension_jobs_pin_runner_arch():
     runners = {
         job_id: job.get("runs-on") for job_id, job in workflow["jobs"].items()
     }
-    assert runners.get("build-x64") == ["self-hosted", "X64"], runners
-    assert runners.get("build-arm") == ["self-hosted", "ARM64"], runners
+    assert runners.get("build-x64") == EXPECTED_WHEEL_RUNNERS["build-x64"], runners
+    assert runners.get("build-arm") == EXPECTED_WHEEL_RUNNERS["build-arm"], runners
