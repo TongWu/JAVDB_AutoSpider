@@ -17,8 +17,8 @@ permissions:
   contents: read
 
 on:
-  schedule:
-    - cron: '0 * * * *'
+  # schedule: # DISABLED FOR PUBLIC REPO
+    # - cron: '0 * * * *'
   workflow_dispatch:
     inputs:
       stalled_after_days:
@@ -39,7 +39,7 @@ concurrency:
 jobs:
   reconcile:
     name: Reconcile
-    runs-on: self-hosted  # PUBLIC_RUNNER: ubuntu-latest
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: Production
     env:
