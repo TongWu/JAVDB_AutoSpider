@@ -138,7 +138,10 @@ GitHub Actions 部署提供：
 | Variable | 默认值 | 用途 |
 |---|---|---|
 | `PAGE_START` | `1` | 起始抓取页码 |
-| `PAGE_END` | `20` | 结束抓取页码 |
+| `PAGE_END` | `10` | 结束抓取页码（每日模式下为下限——见 `PAGE_SCAN_DYNAMIC`） |
+| `PAGE_SCAN_DYNAMIC` | `True` | 页面仍有今日/昨日新种时继续扫过 `PAGE_END` |
+| `PAGE_SCAN_MAX` | `30` | 该延伸的硬页码上限 |
+| `PAGE_SCAN_STOP_AFTER` | `2` | 连续多少页无新种即结束扫描 |
 | `PHASE2_MIN_RATE` | `4.0` | Phase 2 质量过滤的最低评分 |
 | `PHASE2_MIN_COMMENTS` | `100` | Phase 2 质量过滤的最低评论数 |
 | `BASE_URL` | `https://javdb.com` | JavDB 基础 URL |

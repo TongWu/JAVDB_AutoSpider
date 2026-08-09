@@ -366,9 +366,25 @@ CF_BYPASS_PORT_MAP = {}
 # SPIDER CONFIGURATION
 # =============================================================================
 
-# Page range for spider
+# Page range for spider. In daily mode PAGE_END is a floor, not a ceiling —
+# see the dynamic page scan below.
 PAGE_START = 1
-PAGE_END = 20
+PAGE_END = 10
+
+# Dynamic page scan (ADR-057). Daily mode treats PAGE_START..PAGE_END as a
+# FLOOR: those pages are always scanned, and the scan then keeps going while
+# pages still carry today/yesterday new-torrent badges, so a day whose new
+# torrents run past PAGE_END is no longer truncated.
+#   - PAGE_SCAN_DYNAMIC:    False restores the plain fixed range
+#   - PAGE_SCAN_MAX:        hard ceiling; reaching it logs a warning because
+#                           the fresh block may have been cut short
+#   - PAGE_SCAN_STOP_AFTER: how many consecutive pages with no fresh entries
+#                           end the scan (pages that fail to fetch don't count)
+# Inert for ad-hoc URLs, --all, --ignore-release-date and
+# IGNORE_RELEASE_DATE_FILTER: those have no freshness signal to steer on.
+PAGE_SCAN_DYNAMIC = True
+PAGE_SCAN_MAX = 30
+PAGE_SCAN_STOP_AFTER = 2
 
 # Phase 2 config
 PHASE2_MIN_RATE = 4.0

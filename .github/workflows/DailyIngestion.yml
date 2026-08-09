@@ -261,6 +261,11 @@ jobs:
           VAR_CF_BYPASS_PORT_MAP_JSON: ${{ vars.CF_BYPASS_PORT_MAP_JSON || '{}' }}
           VAR_PAGE_START: ${{ vars.PAGE_START }}
           VAR_PAGE_END: ${{ vars.PAGE_END }}
+          # ADR-057: PAGE_END is a floor — the scan keeps going while pages
+          # still carry today/yesterday badges, up to PAGE_SCAN_MAX.
+          VAR_PAGE_SCAN_DYNAMIC: ${{ vars.PAGE_SCAN_DYNAMIC || 'True' }}
+          VAR_PAGE_SCAN_MAX: ${{ vars.PAGE_SCAN_MAX || '30' }}
+          VAR_PAGE_SCAN_STOP_AFTER: ${{ vars.PAGE_SCAN_STOP_AFTER || '2' }}
           VAR_PHASE2_MIN_RATE: ${{ vars.PHASE2_MIN_RATE }}
           VAR_PHASE2_MIN_COMMENTS: ${{ vars.PHASE2_MIN_COMMENTS }}
           VAR_DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST_JSON: ${{ vars.DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST_JSON || '["western_studio_date"]' }}

@@ -1091,7 +1091,7 @@ All arguments accepted by `apps.cli.spider`:
 | `--dry-run` | flag | Print items without writing CSV | `False` | `--dry-run` |
 | `--output-file` | string | Custom CSV filename (without changing directory) | Auto-generated | `--output-file results.csv` |
 | `--start-page` | int | Starting page number | `1` | `--start-page 5` |
-| `--end-page` | int | Ending page number | `20` | `--end-page 10` |
+| `--end-page` | int | Last page number. In daily mode a **floor**, not a limit — with `PAGE_SCAN_DYNAMIC` on the scan continues past it while pages carry today/yesterday badges, up to `PAGE_SCAN_MAX`. To cap a daily run, lower `PAGE_SCAN_MAX` or set `PAGE_SCAN_DYNAMIC=False` | `10` | `--end-page 10` |
 | `--all` | flag | Parse until empty page (ignores `--end-page`) | `False` | `--all` |
 | `--ignore-history` | flag | Ignore history for READING (scrape all pages) but still SAVE to history. Ad-hoc mode already ignores history for reading by default | `False` | `--ignore-history` |
 | `--use-history` | flag | Enable history filter in ad-hoc mode (ad-hoc ignores history for reading by default) | `False` | `--use-history` |

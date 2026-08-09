@@ -139,7 +139,10 @@ Python API or call external indexer aggregation.
 | Variable | Default | Purpose |
 |---|---|---|
 | `PAGE_START` | `1` | First page to scrape |
-| `PAGE_END` | `20` | Last page to scrape |
+| `PAGE_END` | `10` | Last page to scrape (a floor in daily mode — see `PAGE_SCAN_DYNAMIC`) |
+| `PAGE_SCAN_DYNAMIC` | `True` | Keep scanning past `PAGE_END` while pages still have today/yesterday new torrents |
+| `PAGE_SCAN_MAX` | `30` | Hard page ceiling for that extension |
+| `PAGE_SCAN_STOP_AFTER` | `2` | Consecutive pages with no new torrents that end the scan |
 | `PHASE2_MIN_RATE` | `4.0` | Minimum rating for Phase 2 quality filter |
 | `PHASE2_MIN_COMMENTS` | `100` | Minimum comment count for Phase 2 quality filter |
 | `BASE_URL` | `https://javdb.com` | JavDB base URL |

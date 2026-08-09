@@ -31,7 +31,10 @@ from javdb.pipeline.index_code_blacklist import (
     load_daily_code_keyword_blacklist,
     log_code_keyword_blacklist_summary,
 )
-from javdb.pipeline.index_selection import select_index_entries
+from javdb.pipeline.index_selection import (
+    count_new_release_entries,
+    select_index_entries,
+)
 from javdb.spider.url_helper import detect_url_type
 from javdb.spider.filename_helper import generate_output_csv_name_from_html
 
@@ -40,6 +43,13 @@ from javdb.spider.fetch.fallback import (
     validate_index_html,
 )
 from javdb.spider.fetch.backend import FetchRuntimeState
+from javdb.spider.fetch.page_scan import STOP_END_OF_CONTENT, STOP_PROXIES_EXHAUSTED
+# Both fetch paths share one scan policy (ADR-057 D8). ``index`` imports this
+# module lazily, inside the function, so importing back at module level is safe.
+from javdb.spider.fetch.index import (
+    build_page_scan_policy,
+    _log_page_scan_outcome,
+)
 from javdb.spider.fetch.fetch_engine import (
     EngineTask,
     EngineResult,
@@ -60,6 +70,11 @@ def _index_parse_fn(html: str, task: EngineTask) -> Optional[dict]:
 
     Returns ``None`` when validation fails (page is a login wall, CF
     challenge, etc.) so the engine re-queues the task to another proxy.
+
+    The page is parsed here, in the worker, and the result is carried on the
+    dict: the collection loop needs its freshness count to steer the ADR-057
+    scan, and the post-loop selection needs the entries. Parsing once keeps the
+    dynamic scan from doubling the parse cost of every page.
     """
     page_num = task.meta.get('page_num', 0)
     result_html, has_movie_list, is_valid_empty = validate_index_html(
@@ -67,11 +82,30 @@ def _index_parse_fn(html: str, task: EngineTask) -> Optional[dict]:
     )
     if result_html is None:
         return None
+    page_result = parse_index_page(html, page_num) if has_movie_list else None
     return {
         'html': html,
         'has_movie_list': has_movie_list,
         'is_valid_empty': is_valid_empty,
+        'page_result': page_result,
+        'fresh': count_new_release_entries(page_result),
     }
+
+
+def _page_freshness(result) -> tuple:
+    """``(fresh, end_of_content)`` for one engine result, for the scan policy.
+
+    ``fresh`` is ``None`` whenever the page could not be read — ADR-057 D5 keeps
+    those from being mistaken for "no new torrents here".
+    """
+    if not result.success or not result.data:
+        return None, False
+    data = result.data
+    if data.get('is_valid_empty'):
+        return None, True
+    if not data.get('has_movie_list'):
+        return None, False
+    return data.get('fresh'), False
 
 
 # ---------------------------------------------------------------------------
@@ -135,6 +169,16 @@ def fetch_all_index_pages_parallel(
         last_valid_page
     """
 
+    policy = build_page_scan_policy(
+        end_page=end_page, parse_all=parse_all, custom_url=custom_url,
+        ignore_release_date=ignore_release_date,
+    )
+    if policy.enabled:
+        logger.info(
+            "Dynamic page scan: floor=%d, cap=%d, stop after %d fresh-free pages",
+            policy.floor_page, policy.max_page, policy.stop_after,
+        )
+
     backend = build_parallel_index_backend(
         runtime=runtime,
         use_cookie=custom_url is not None,
@@ -178,11 +222,22 @@ def fetch_all_index_pages_parallel(
             else:
                 for p in all_pages:
                     _submit_page(backend, p, custom_url)
-                backend.mark_done()
+                # ADR-057: with the dynamic scan on, end_page is only a floor —
+                # hold the queue open so the collection loop can extend it.
+                # An empty range (start_page > end_page) has nothing to extend
+                # from and would never reach the loop body, so close the queue
+                # immediately: results() only returns once mark_done() is in.
+                if not policy.enabled or not all_pages:
+                    backend.mark_done()
 
         # -- collect results (may arrive out of order) ----------------------
 
-        total_expected = end_page - start_page + 1 if not parse_all else 0
+        # With the dynamic scan the page count is not known up front, so the
+        # progress line shows a running count instead of a wrong denominator.
+        total_expected = (
+            end_page - start_page + 1
+            if not parse_all and not policy.enabled else 0
+        )
         results_by_page: Dict[int, EngineResult] = {}
         any_proxy_banned = False
         csv_name_resolved = False
@@ -190,6 +245,16 @@ def fetch_all_index_pages_parallel(
         all_index_results_phase2: List[dict] = []
         last_valid_page = 0
         stop_collecting = False
+        # ADR-057 dynamic scan bookkeeping: results arrive out of order, so the
+        # policy is fed the contiguous prefix and extends one page at a time.
+        next_observe_page = start_page
+        next_submit_page = end_page + 1
+        extension_closed = False
+        # The page the policy actually stopped on. Pages submitted for the floor
+        # keep landing after an early stop, so the highest result is not the
+        # place the scan ended — e.g. page 1 reporting end-of-content while
+        # pages 2-3 were already in flight.
+        scan_end_page = 0
 
         for result in backend.results():
             if cancel_event is not None and cancel_event.is_set():
@@ -235,6 +300,30 @@ def fetch_all_index_pages_parallel(
             if not result.success:
                 if result.error == 'all_proxies_banned':
                     any_proxy_banned = True
+                    # The engine drains the queue as it stands and its workers
+                    # exit, so a page submitted after this point has nobody to
+                    # fetch it and never produces a result — and the stalled-task
+                    # flush only runs once the backend is done. Submitting
+                    # anything more hangs the run outright, so everything still
+                    # unsent is abandoned here. That covers the rest of a fixed
+                    # range as well as the extension: an ad-hoc URL disables the
+                    # policy but still holds pending_pages.
+                    if not extension_closed:
+                        extension_closed = True
+                        # Without this the reported end page stays 0 when the ban
+                        # lands before the first observation.
+                        scan_end_page = max(scan_end_page, page_num)
+                        # D9: without a reason, a run cut short by a dead proxy
+                        # pool reports none at all and reads as a clean scan.
+                        policy.force_stop(STOP_PROXIES_EXHAUSTED)
+                        dropped = pending_pages
+                        pending_pages = []
+                        backend.mark_done()
+                        logger.warning(
+                            "All proxies banned — ending the page scan at page "
+                            "%d; %d queued page(s) abandoned",
+                            scan_end_page, len(dropped),
+                        )
 
             # -- probe answered: release the rest of a fixed range ----------
 
@@ -244,9 +333,47 @@ def fetch_all_index_pages_parallel(
                 pending_pages = []
                 backend.mark_done()
 
+            # -- dynamic scan: extend the fixed range while pages are fresh --
+
+            if policy.enabled and not extension_closed:
+                while next_observe_page in results_by_page:
+                    fresh, end_of_content = _page_freshness(
+                        results_by_page[next_observe_page],
+                    )
+                    policy.observe(
+                        next_observe_page, fresh=fresh,
+                        end_of_content=end_of_content,
+                    )
+                    scan_end_page = next_observe_page
+                    next_observe_page += 1
+                    if policy.stop_reason == STOP_END_OF_CONTENT:
+                        break
+                highest_observed = next_observe_page - 1
+
+                # One page at a time, gated on the page before it: prefetching a
+                # window would burn a guaranteed extra fetch on every quiet day
+                # (the scan already pays one confirmation page at the floor) to
+                # save latency only on the rarer days that actually extend.
+                while (
+                    next_submit_page <= highest_observed + 1
+                    and policy.should_continue_after(highest_observed)
+                ):
+                    _submit_page(backend, next_submit_page, custom_url)
+                    next_submit_page += 1
+
+                if not policy.should_continue_after(highest_observed):
+                    extension_closed = True
+                    backend.mark_done()
+
             # -- sliding window: advance or stop ----------------------------
 
             if parse_all and not stop_collecting:
+                # A dead proxy pool already marked the backend done, and the
+                # engine rejects a submit after that. The window has to stop
+                # feeding it rather than crash the run on its way out.
+                if extension_closed:
+                    stop_collecting = True
+                    break
                 should_stop = _check_stop_condition(
                     results_by_page, start_page, max_consecutive_empty,
                 )
@@ -312,7 +439,10 @@ def fetch_all_index_pages_parallel(
 
         p1_count = 0
         p2_count = 0
-        page_result = parse_index_page(html, page_num)
+        # Parsed once already, in the worker (see _index_parse_fn).
+        page_result = data.get('page_result')
+        if page_result is None:
+            page_result = parse_index_page(html, page_num)
         _acc = _sentinel_field_health.current()
         if _acc is not None and page_result is not None:
             _acc.observe("index", page_result.movies)  # ADR-035 piggyback
@@ -362,6 +492,7 @@ def fetch_all_index_pages_parallel(
         elif phase_mode == '2':
             logger.info("[Page %2d] Found %3d entries for phase 2", page_num, p2_count)
 
+    _log_page_scan_outcome(policy, scan_end_page, end_page)
     logger.info(
         "Fetched and parsed %d pages (parallel)",
         last_valid_page - start_page + 1 if last_valid_page >= start_page else 0,
@@ -374,6 +505,8 @@ def fetch_all_index_pages_parallel(
     # accumulator stays in the process-global _CURRENT; run_service persists it
     # once the active session id is set. (Persisting here would no-op.)
     return {
+        'effective_end_page': scan_end_page if policy.enabled else None,
+        'page_scan_stop_reason': policy.stop_reason,
         'all_index_results_phase1': all_index_results_phase1,
         'all_index_results_phase2': all_index_results_phase2,
         'any_proxy_banned': any_proxy_banned,

@@ -143,6 +143,9 @@ jobs:
           VAR_BASE_URL: 'https://javdb.com'
           VAR_PAGE_START: '1'
           VAR_PAGE_END: '20'
+          # ADR-057: keep the mock run on a plain fixed range so its page count
+          # stays predictable regardless of how fresh the live index is.
+          VAR_PAGE_SCAN_DYNAMIC: 'False'
           VAR_PHASE2_MIN_RATE: '4.0'
           VAR_PHASE2_MIN_COMMENTS: '85'
           VAR_DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST_JSON: ${{ vars.DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST_JSON || '["western_studio_date"]' }}

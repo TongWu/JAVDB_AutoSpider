@@ -36,6 +36,20 @@ def _has_release_date(tags: Iterable[str]) -> bool:
     return bool(_RELEASE_DATE_TAGS.intersection(tags))
 
 
+def count_new_release_entries(page_result) -> int:
+    """Count entries on *page_result* carrying a today/yesterday badge.
+
+    This is the site's own freshness signal, and it is deliberately not the
+    selection count: the phase gates drop entries for reasons unrelated to how
+    fresh the page is (a page can be 100% new torrents yet select nothing
+    because none carry Chinese subtitles). ADR-057 D1 steers the dynamic page
+    scan on this number instead.
+    """
+    if page_result is None or not page_result.has_movie_list:
+        return 0
+    return sum(1 for entry in page_result.movies if _has_release_date(entry.tags))
+
+
 def _is_today_release(tags: Iterable[str]) -> bool:
     return bool(_TODAY_TAGS.intersection(tags))
 

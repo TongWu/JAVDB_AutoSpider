@@ -24,7 +24,15 @@ from javdb.infra.config import cfg
 BASE_URL = cfg('BASE_URL', 'https://javdb.com')
 # Prefer PAGE_START / PAGE_END; fall back to legacy START_PAGE / END_PAGE if unset
 PAGE_START = cfg('PAGE_START', cfg('START_PAGE', 1))
-PAGE_END = cfg('PAGE_END', cfg('END_PAGE', 20))
+# 10 matches what config_generator writes for GitHub Actions when the PAGE_END
+# variable is unset. Under ADR-057 this value is the scan *floor*, so a mismatch
+# would silently give local runs a deeper base scan than production.
+PAGE_END = cfg('PAGE_END', cfg('END_PAGE', 10))
+# ADR-057: treat PAGE_START..PAGE_END as a floor and keep scanning past it while
+# the pages still carry today/yesterday badges, so a heavy day is not truncated.
+PAGE_SCAN_DYNAMIC = cfg('PAGE_SCAN_DYNAMIC', True)
+PAGE_SCAN_MAX = cfg('PAGE_SCAN_MAX', 30)
+PAGE_SCAN_STOP_AFTER = cfg('PAGE_SCAN_STOP_AFTER', 2)
 REPORTS_DIR = cfg('REPORTS_DIR', 'reports')
 DAILY_REPORT_DIR = cfg('DAILY_REPORT_DIR', 'reports/DailyReport')
 AD_HOC_DIR = cfg('AD_HOC_DIR', 'reports/AdHoc')
