@@ -294,7 +294,10 @@ Controls page range and filtering thresholds for the scraping phases.
 | Variable | Type | Default | Description |
 |---|---|---|---|
 | `PAGE_START` | `int` | `1` | First page number to scrape. |
-| `PAGE_END` | `int` | `20` | Last page number to scrape (inclusive). |
+| `PAGE_END` | `int` | `10` | Last page number to scrape (inclusive). In daily mode this is a **floor**, not a ceiling — see `PAGE_SCAN_DYNAMIC`. |
+| `PAGE_SCAN_DYNAMIC` | `bool` | `True` | Keep scanning past `PAGE_END` while pages still carry today/yesterday new-torrent badges, so a heavy day is not truncated ([ADR-057](https://github.com/TongWu/JAVDB_AutoSpider_CICD/blob/main/docs/design/ADR-057-Dynamic-Daily-Index-Pagination/ADR-057-dynamic-daily-index-pagination.md)). Set `False` for a plain fixed range. Inert for ad-hoc URLs, `--all`, `--ignore-release-date` and `IGNORE_RELEASE_DATE_FILTER`. |
+| `PAGE_SCAN_MAX` | `int` | `30` | Hard ceiling for the dynamic scan. Reaching it logs a warning, because the day's new torrents may have been cut short. |
+| `PAGE_SCAN_STOP_AFTER` | `int` | `2` | How many consecutive pages with no new-torrent badges end the scan. Pages that fail to load don't count as empty, but the same number of consecutive unreadable pages also ends it. |
 | `PHASE2_MIN_RATE` | `float` | `4.0` | Minimum user rating for a movie to qualify in Phase 2 (high-rated non-subtitle entries). |
 | `PHASE2_MIN_COMMENTS` | `int` | `100` | Minimum comment count for a movie to qualify in Phase 2. |
 | `DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST` | `list[str]` | `['western_studio_date']` | Daily-only family blacklist applied after index parsing and sentinel accounting. The parser still recognizes these families, and ad-hoc ingestion bypasses this blacklist. In GitHub Actions, set repo Variable `DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST_JSON` to a JSON array such as `[]` to opt out of the static default. |

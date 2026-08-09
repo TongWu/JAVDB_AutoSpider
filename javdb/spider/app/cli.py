@@ -22,7 +22,11 @@ def parse_arguments():
     parser.add_argument('--start-page', type=int, default=PAGE_START,
                         help=f'Starting page number (default: {PAGE_START})')
     parser.add_argument('--end-page', type=int, default=PAGE_END,
-                        help=f'Ending page number (default: {PAGE_END})')
+                        help=f'Last page number (default: {PAGE_END}). In daily mode this is a '
+                             'FLOOR, not a limit: with PAGE_SCAN_DYNAMIC on (the default) the '
+                             'scan keeps going past it while pages still carry today/yesterday '
+                             'badges, up to PAGE_SCAN_MAX. To cap the volume of a daily run, '
+                             'lower PAGE_SCAN_MAX or set PAGE_SCAN_DYNAMIC=False')
     parser.add_argument('--all', action='store_true',
                         help='Parse all pages until an empty page is found (ignores --end-page)')
     parser.add_argument('--ignore-history', action='store_true',

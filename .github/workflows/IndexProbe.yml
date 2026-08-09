@@ -1,0 +1,173 @@
+# .github/workflows/IndexProbe.yml
+name: Index Freshness Probe
+
+# Design-support probe for dynamic daily pagination. Fetches N daily index
+# pages and reports how deep the "today / yesterday new torrent" entries reach,
+# whether they are contiguous, and what a "stop after K fresh-free pages" rule
+# would have missed. Read-only: no detail fetches, no DB writes, no git commit.
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: 'Runner type. Use the same tier DailyIngestion uses to reach javdb.'
+        required: false
+        default: 'ubuntu-latest'
+        type: choice
+        options:
+          - 'ubuntu-latest'
+          - 'self-hosted'
+      pages:
+        description: 'How many index pages to scan'
+        required: false
+        default: '30'
+        type: string
+      delay:
+        description: 'Seconds between page fetches'
+        required: false
+        default: '2.0'
+        type: string
+      proxy_spider:
+        description: 'Fetch through the proxy pool'
+        required: false
+        default: true
+        type: boolean
+      use_cookie:
+        description: 'Send the JavDB session cookie. Off by default so the probe sees what the daily spider sees (its index fetch is anonymous too).'
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: index-freshness-probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    name: Probe
+    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    environment: Production
+    env:
+      TZ: Asia/Singapore
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Python, venv, dependencies, Rust extension
+        uses: ./.github/actions/setup-python-env
+        with:
+          python-version: '3.11'
+
+      - name: Generate config.py from GitHub Variables and Secrets
+        env:
+          # Proxy (the probe fetches javdb through the spider's proxy pool).
+          VAR_PROXY_MODE: ${{ vars.PROXY_MODE }}
+          VAR_PROXY_POOL_JSON: ${{ secrets.PROXY_POOL_JSON }}
+          VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}
+          VAR_PROXY_POOL_MAX_FAILURES: ${{ vars.PROXY_POOL_MAX_FAILURES || 3 }}
+          VAR_PROXY_SPIDER_ENABLED: ${{ inputs.proxy_spider && 'true' || 'false' }}
+          VAR_LOGIN_PROXY_NAME: ${{ vars.LOGIN_PROXY_NAME || '' }}
+          # Cloudflare bypass (matches DailyIngestion).
+          VAR_CF_BYPASS_SERVICE_PORT: ${{ vars.CF_BYPASS_SERVICE_PORT || '8000' }}
+          VAR_CF_BYPASS_ENABLED: ${{ vars.CF_BYPASS_ENABLED || 'True' }}
+          # BFR-024: tunnel to the bypass service through the proxy (it binds to
+          # loopback on the proxy host), otherwise every fetch pays the fallback
+          # cascade before it succeeds.
+          VAR_CF_BYPASS_VIA_PROXY: ${{ vars.CF_BYPASS_VIA_PROXY || 'False' }}
+          VAR_CF_BYPASS_PORT_MAP_JSON: ${{ vars.CF_BYPASS_PORT_MAP_JSON || '{}' }}
+          # JavDB login, for the optional use_cookie run. The badges do NOT
+          # require a session — a 2026-08-08 anonymous probe saw 193 of them.
+          # An earlier probe that saw none had simply run at 03:00 local, before
+          # the day's torrents landed.
+          VAR_JAVDB_USERNAME: ${{ secrets.JAVDB_USERNAME }}
+          VAR_JAVDB_PASSWORD: ${{ secrets.JAVDB_PASSWORD }}
+          VAR_JAVDB_SESSION_COOKIE: ${{ secrets.JAVDB_SESSION_COOKIE }}
+          # Base URL, request timeout and the selection gates the probe simulates.
+          VAR_BASE_URL: ${{ vars.BASE_URL || 'https://javdb.com' }}
+          VAR_REQUEST_TIMEOUT: ${{ vars.REQUEST_TIMEOUT || '30' }}
+          VAR_PHASE2_MIN_RATE: ${{ vars.PHASE2_MIN_RATE }}
+          VAR_PHASE2_MIN_COMMENTS: ${{ vars.PHASE2_MIN_COMMENTS }}
+          VAR_IGNORE_RELEASE_DATE_FILTER: ${{ vars.IGNORE_RELEASE_DATE_FILTER || 'False' }}
+          # The bounds the probe's stop-rule simulation runs the real
+          # PageScanPolicy against, plus the switch that says whether the live
+          # daily scan uses that rule at all. They must match DailyIngestion or
+          # the simulated stop page and missed counts describe a scan nobody
+          # runs. PAGE_START matters too: starting earlier than production would
+          # charge pages it never fetches against the consecutive budgets.
+          VAR_PAGE_START: ${{ vars.PAGE_START }}
+          VAR_PAGE_END: ${{ vars.PAGE_END }}
+          VAR_PAGE_SCAN_DYNAMIC: ${{ vars.PAGE_SCAN_DYNAMIC || 'True' }}
+          VAR_PAGE_SCAN_MAX: ${{ vars.PAGE_SCAN_MAX || '30' }}
+          VAR_PAGE_SCAN_STOP_AFTER: ${{ vars.PAGE_SCAN_STOP_AFTER || '2' }}
+          VAR_REPORTS_DIR: ${{ vars.REPORTS_DIR || 'reports' }}
+          VAR_LOG_LEVEL: ${{ vars.LOG_LEVEL || 'INFO' }}
+        run: python3 -m apps.cli.ops.config_generator --github-actions
+
+      - name: Run index freshness probe
+        id: probe
+        env:
+          INPUT_PAGES: ${{ inputs.pages }}
+          INPUT_DELAY: ${{ inputs.delay }}
+          INPUT_PROXY_SPIDER: ${{ inputs.proxy_spider }}
+          INPUT_USE_COOKIE: ${{ inputs.use_cookie }}
+        run: |
+          set -o pipefail
+          mkdir -p logs
+          # proxy_spider already reaches the probe through PROXY_MODULES in the
+          # rendered config, which the probe now defaults to. The flag is kept
+          # so the dispatch input is visible at the call site and still holds if
+          # the generator's mapping ever drifts. use_cookie has no config path,
+          # so it must be a flag.
+          MODE_ARGS=()
+          if [ "$INPUT_PROXY_SPIDER" = "false" ]; then MODE_ARGS+=(--no-proxy); fi
+          if [ "$INPUT_USE_COOKIE" = "true" ]; then MODE_ARGS+=(--use-cookie); fi
+          python3 -m apps.cli.ops.index_probe \
+            "${MODE_ARGS[@]}" \
+            --pages "${INPUT_PAGES:-30}" \
+            --delay "${INPUT_DELAY:-2.0}" \
+            --max-seconds 1500 \
+            --save-html logs/probe-html \
+            --json logs/index_probe.json 2>&1 | tee logs/index_probe.log
+
+      - name: Upload probe results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: index-freshness-probe
+          path: |
+            logs/index_probe.json
+            logs/index_probe.log
+            logs/probe-html/
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Summary
+        if: always()
+        env:
+          # Never interpolate dispatch inputs straight into the shell: the
+          # expression is expanded before parsing, so a value like $(cmd) would
+          # execute inside a job that carries Production secrets.
+          INPUT_PAGES: ${{ inputs.pages }}
+          INPUT_PROXY_SPIDER: ${{ inputs.proxy_spider }}
+          INPUT_USE_COOKIE: ${{ inputs.use_cookie }}
+        run: |
+          {
+            echo "## Index Freshness Probe"
+            echo ""
+            echo "- Pages requested: $INPUT_PAGES"
+            echo "- Proxy pool: $INPUT_PROXY_SPIDER"
+            echo "- Session cookie: $INPUT_USE_COOKIE"
+            echo ""
+            if [ -f logs/index_probe.json ]; then
+              echo '```json'
+              python3 -c "import json;print(json.dumps(json.load(open('logs/index_probe.json'))['summary'], indent=2, ensure_ascii=False))"
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -366,6 +366,10 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         # Fall back to legacy START_PAGE / END_PAGE env vars for backward compatibility
         ('PAGE_START', 'PAGE_START', get_env_int, get_env_int('START_PAGE', 1), 'SPIDER CONFIGURATION'),
         ('PAGE_END', 'PAGE_END', get_env_int, get_env_int('END_PAGE', 10), 'SPIDER CONFIGURATION'),
+        # ADR-057: dynamic page scan — PAGE_END is a floor, not a ceiling.
+        ('PAGE_SCAN_DYNAMIC', 'PAGE_SCAN_DYNAMIC', get_env_bool, True, 'SPIDER CONFIGURATION'),
+        ('PAGE_SCAN_MAX', 'PAGE_SCAN_MAX', get_env_int, 30, 'SPIDER CONFIGURATION'),
+        ('PAGE_SCAN_STOP_AFTER', 'PAGE_SCAN_STOP_AFTER', get_env_int, 2, 'SPIDER CONFIGURATION'),
         ('PHASE2_MIN_RATE', 'PHASE2_MIN_RATE', get_env_float, 4.0, 'SPIDER CONFIGURATION'),
         ('PHASE2_MIN_COMMENTS', 'PHASE2_MIN_COMMENTS', get_env_int, 85, 'SPIDER CONFIGURATION'),
         (

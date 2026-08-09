@@ -269,7 +269,10 @@ PROXY_POOL = [
 | 变量 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `PAGE_START` | `int` | `1` | 起始抓取页码。 |
-| `PAGE_END` | `int` | `20` | 结束抓取页码（含）。 |
+| `PAGE_END` | `int` | `10` | 结束抓取页码（含）。每日模式下这是**下限**而非上限——见 `PAGE_SCAN_DYNAMIC`。 |
+| `PAGE_SCAN_DYNAMIC` | `bool` | `True` | 只要页面仍带有今日/昨日新种徽章，就继续扫过 `PAGE_END`，避免集中放种的日子被截断（[ADR-057](https://github.com/TongWu/JAVDB_AutoSpider_CICD/blob/main/docs/design/ADR-057-Dynamic-Daily-Index-Pagination/ADR-057-dynamic-daily-index-pagination.zh.md)）。设为 `False` 则退回固定区间。自定义 URL、`--all`、`--ignore-release-date` 和 `IGNORE_RELEASE_DATE_FILTER` 下不生效。 |
+| `PAGE_SCAN_MAX` | `int` | `30` | 动态扫描的硬上限。触顶会打 WARNING，因为当天新种可能已被截断。 |
+| `PAGE_SCAN_STOP_AFTER` | `int` | `2` | 连续多少页没有新种徽章即结束扫描。抓取失败的页面不算作「无新种」，但连续同样页数读不出来也会结束扫描。 |
 | `PHASE2_MIN_RATE` | `float` | `4.0` | Phase 2（高评分非字幕条目）中影片的最低用户评分。 |
 | `PHASE2_MIN_COMMENTS` | `int` | `100` | Phase 2 中影片的最低评论数。 |
 | `DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST` | `list[str]` | `['western_studio_date']` | 仅用于每日模式的 family 黑名单，在索引解析和 sentinel 计数之后应用。解析器仍会识别这些 family，而临时抓取会绕过此黑名单。在 GitHub Actions 中，将仓库 Variable `DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST_JSON` 设为 JSON 数组（例如 `[]`）即可退出静态默认值。 |

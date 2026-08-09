@@ -1056,7 +1056,7 @@ python3 -m apps.cli.ops.config_generator --github-actions
 | `--dry-run` | 标志 | 打印条目但不写入 CSV | `False` | `--dry-run` |
 | `--output-file` | 字符串 | 自定义 CSV 文件名（不改变目录） | 自动生成 | `--output-file results.csv` |
 | `--start-page` | 整数 | 起始页码 | `1` | `--start-page 5` |
-| `--end-page` | 整数 | 结束页码 | `20` | `--end-page 10` |
+| `--end-page` | 整数 | 结束页码。每日模式下是**下限**而非上限——`PAGE_SCAN_DYNAMIC` 开启时，只要页面还带今日/昨日徽章，扫描就会继续越过它，直到 `PAGE_SCAN_MAX`。要限制每日运行的量级，请调低 `PAGE_SCAN_MAX` 或设 `PAGE_SCAN_DYNAMIC=False` | `10` | `--end-page 10` |
 | `--all` | 标志 | 解析直到空页面（忽略 `--end-page`） | `False` | `--all` |
 | `--ignore-history` | 标志 | 读取时忽略历史记录（抓取所有页面）但仍保存到历史记录。Ad-hoc 模式默认已忽略读取历史记录 | `False` | `--ignore-history` |
 | `--use-history` | 标志 | 在 ad-hoc 模式中启用历史记录过滤（ad-hoc 默认忽略读取历史记录） | `False` | `--use-history` |
