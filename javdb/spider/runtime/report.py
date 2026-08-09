@@ -200,14 +200,22 @@ def generate_summary_report(
         site_challenge_seen = (
             runtime.proxy.site_challenge_seen if runtime is not None else False
         )
-        if site_challenge_seen and total_discovered == 0:
+        # Entries that failed are not evidence the run produced anything: a
+        # healthy index fetch followed by wall-to-wall challenged detail
+        # fetches leaves ``failed_count`` positive, which would keep
+        # ``total_discovered`` non-zero and wave the run through. Only rows,
+        # history skips and no-new-torrent hits count as real work.
+        legitimate_discovered = total_discovered - failed_count
+        if site_challenge_seen and legitimate_discovered == 0:
             # A site-wide Cloudflare challenge no longer bans the pool, so the
             # ban branch above cannot catch this. Without an explicit failure
             # the run would exit 0 with a header-only CSV and look like a
             # legitimately empty day.
             logger.error(
-                "Spider discovered ZERO entries and every fetch hit a Cloudflare "
-                "challenge — the site walled off all proxies. Failing the run so "
-                "this is not mistaken for an empty day."
+                "Spider produced ZERO usable entries (%d discovered entries all "
+                "failed) and every fetch hit a Cloudflare challenge — the site "
+                "walled off all proxies. Failing the run so this is not mistaken "
+                "for an empty day.",
+                failed_count,
             )
             sys.exit(2)

@@ -227,7 +227,7 @@ class TestChallengeIsNotChargedToProxy:
 class TestZeroEntriesUnderChallengeFailsTheRun:
     """Without the ban, the run must still fail loudly instead of exiting 0."""
 
-    def _report(self, *, rows, site_challenge_seen, skipped=0):
+    def _report(self, *, rows, site_challenge_seen, skipped=0, failed=0):
         import pytest
 
         from javdb.spider.runtime import report as report_mod
@@ -241,7 +241,7 @@ class TestZeroEntriesUnderChallengeFailsTheRun:
             start_page=1, end_page=10, max_consecutive_empty=3,
             phase1_rows=[], phase2_rows=[], rows=rows,
             use_history_for_loading=True, ignore_history=False,
-            skipped_history_count=skipped, failed_count=0,
+            skipped_history_count=skipped, failed_count=failed,
             no_new_torrents_count=0, csv_path='out.csv', dry_run=True,
             use_history_for_saving=False, use_proxy=True,
             any_proxy_banned=False, any_proxy_banned_phase2=False,
@@ -271,6 +271,44 @@ class TestZeroEntriesUnderChallengeFailsTheRun:
         }
         _pytest, report_mod, kwargs = self._report(
             rows=[row], site_challenge_seen=True,
+        )
+
+        report_mod.generate_summary_report(**kwargs)  # must not raise
+
+    def test_all_discovered_entries_failed_under_challenge_exits_2(self):
+        """The index fetch survived but every detail fetch hit the wall.
+
+        ``failed_count`` counts toward ``total_discovered``, so a guard keyed
+        on that total waves this run through despite it producing nothing —
+        and a site-wide challenge deliberately bans no proxy, so the ban
+        branch cannot catch it either. Failed entries are not evidence of a
+        legitimate result.
+        """
+        pytest, report_mod, kwargs = self._report(
+            rows=[], site_challenge_seen=True, failed=40,
+        )
+
+        with pytest.raises(SystemExit) as exc:
+            report_mod.generate_summary_report(**kwargs)
+
+        assert exc.value.code == 2
+
+    def test_all_entries_failed_without_challenge_is_not_this_guard(self):
+        """Failures with no challenge are someone else's problem.
+
+        This guard only speaks to the Cloudflare wall; ordinary per-entry
+        failures must not be turned into a run-level exit by it.
+        """
+        _pytest, report_mod, kwargs = self._report(
+            rows=[], site_challenge_seen=False, failed=40,
+        )
+
+        report_mod.generate_summary_report(**kwargs)  # must not raise
+
+    def test_history_skips_under_challenge_are_legitimate_work(self):
+        """A skipped-history entry proves the index fetch really landed."""
+        _pytest, report_mod, kwargs = self._report(
+            rows=[], site_challenge_seen=True, skipped=30, failed=10,
         )
 
         report_mod.generate_summary_report(**kwargs)  # must not raise

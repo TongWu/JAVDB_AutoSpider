@@ -128,6 +128,19 @@ proxy 上烧掉大约一次失败的直连尝试，级联才会真正走到绕�
 若 `CF_BYPASS_ENABLED = False`，这条检测日志仍会打印，但根本没有绕过层可以优先使用 ——
 所有请求依旧走直连路径。
 
+### 当这堵墙赢了
+
+全站验证不会 ban 任何代理 —— 这不是任何一个代理的错 —— 所以被这堵墙彻底挡在外面的
+run，无法靠 ban 记账来捕获。改由摘要报告让它失败，退出码为 `2`：
+
+```text
+Spider produced ZERO usable entries (40 discovered entries all failed) and every fetch hit a Cloudflare challenge — the site walled off all proxies. Failing the run so this is not mistaken for an empty day.
+```
+
+触发条件是：见到了验证，且本次 run 没有产出任何可用结果 —— 无论是索引抓取本身被墙，
+还是索引挺过去了而每一次详情抓取都被墙。失败的条目不算结果；被历史跳过的条目算，
+因此部分恢复的 run 仍然算成功。
+
 ## 配置
 
 ```python
