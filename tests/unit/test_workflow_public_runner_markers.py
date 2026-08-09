@@ -37,10 +37,19 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
+
+# ``publish-to-public.yml`` is stripped from the mirror by the
+# ``exclude_paths`` list in ``.publish-config.yml``, so its absence marks a
+# public-mirror checkout. There the same publish run has already rewritten
+# every ``# PUBLIC_RUNNER``-marked ``runs-on`` to its GitHub-hosted
+# replacement, so the private-runner expectations below no longer describe
+# the tree under test.
+IS_PUBLIC_MIRROR = not (WORKFLOWS_DIR / "publish-to-public.yml").exists()
 
 # Mirror of the rewrite pattern in publish-to-public.yml ("Replace private
 # runners for public repo" step). Both must stay in sync. The private value is
@@ -86,6 +95,10 @@ def test_literal_self_hosted_runners_carry_public_runner_marker():
     assert not violations, "\n".join(violations)
 
 
+@pytest.mark.skipif(
+    IS_PUBLIC_MIRROR,
+    reason="public mirror rewrites the self-hosted runners to GitHub-hosted",
+)
 def test_unit_tests_jobs_run_self_hosted():
     workflow = yaml.safe_load(
         (WORKFLOWS_DIR / "unit-tests.yml").read_text(encoding="utf-8")
