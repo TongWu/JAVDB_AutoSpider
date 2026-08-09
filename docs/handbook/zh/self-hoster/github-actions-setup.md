@@ -349,8 +349,10 @@ STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --pass all --json
 1. **采集轮次（acquisition pass）** — 读取实时 qBittorrent 状态，将
    `AcquisitionOutcome` 行从 `queued` / `downloading` 推进到 `downloading`、
    `completed`、`stalled` 或 `failed`。若某个种子在 qB 中处于 `missingFiles`
-   状态（下载完成后文件被从磁盘删除），则将其视作 `completed`；记录 outcome
-   后，该残留种子会连同其剩余文件一起从 qB 删除。
+   状态（下载完成后文件被从磁盘删除），则将其视作 `completed`。本轮次**不会**
+   从 qB 删除任何东西：`missingFiles` 无法区分「文件确实没了」和「磁盘临时不可
+   用」，仅凭状态快照删除有可能销毁仍在磁盘上的内容。删除职责属于
+   `PurgeMissingFiles.yml`，它会先停止种子并强制 recheck。
 2. **所有权轮次（ownership pass）** — 从四个来源收集所有权观测结果并 upsert
    到 `OwnershipLedger`：
    - `gdrive` — 投影现有 `RcloneInventory` 表（无需额外 rclone 调用；由

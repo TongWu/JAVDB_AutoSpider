@@ -148,8 +148,6 @@ def run(options: ReconcileOptions, *, repo=None, qb_client=None) -> ReconcileRes
         return result
 
     now = utc_now_iso()
-    _client = None  # saved for post-loop missingFiles deletion
-    missing_files_hashes: set = set()
 
     with _repo_ctx(repo) as r:
         active = {rec.qb_hash: rec for rec in r.list_active()}
@@ -159,9 +157,6 @@ def run(options: ReconcileOptions, *, repo=None, qb_client=None) -> ReconcileRes
             try:
                 _client = qb_client or _build_qb_client()
                 torrents = _fetch_qb_torrents(_client, options.categories)
-                for t in torrents:
-                    if t.get("state") == "missingFiles" and t.get("hash"):
-                        missing_files_hashes.add(t["hash"])
                 for obs in QbCollector().collect(torrents):
                     observations[obs.qb_hash] = obs
             except Exception as exc:
@@ -229,24 +224,16 @@ def run(options: ReconcileOptions, *, repo=None, qb_client=None) -> ReconcileRes
                 logger.warning("run: upsert failed for %s", qb_hash, exc_info=True)
                 result.errors.append(str(exc))
 
-    # Delete missingFiles torrents from qB after all DB writes are committed.
-    # Only act on hashes that were actively tracked (present in AcquisitionOutcome)
-    # and only when this is a real run (not dry_run).
-    if _client is not None and missing_files_hashes and not options.dry_run:
-        for qb_hash in missing_files_hashes:
-            if qb_hash not in active:
-                continue
-            try:
-                _client.delete_torrents([qb_hash], delete_files=True)
-                result.missing_files_deleted += 1
-                logger.info("Deleted missingFiles torrent from qB: %s", qb_hash)
-            except Exception as exc:
-                logger.warning(
-                    "run: failed to delete missingFiles torrent %s from qB: %s",
-                    qb_hash, exc,
-                )
-                result.errors.append(str(exc))
-
+    # This pass deliberately does NOT delete from qB. `missingFiles` is
+    # ambiguous — qB cannot distinguish "files genuinely gone" from "disk
+    # temporarily unavailable" — so deleting on the strength of a state
+    # snapshot can destroy content that is still on disk once the mount
+    # returns. Deletion is owned solely by
+    # `javdb.integrations.qb.purge_missing_files`, which stops each torrent,
+    # forces a recheck, inspects per-file presence, keeps anything it cannot
+    # verify, and only considers torrents that completed >= min_age_hours ago.
+    # It runs daily via PurgeMissingFiles.yml over every missingFiles torrent,
+    # a superset of the AcquisitionOutcome-tracked ones seen here.
     return result
 
 

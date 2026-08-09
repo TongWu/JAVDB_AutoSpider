@@ -357,8 +357,11 @@ STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --pass all --json
    `AcquisitionOutcome` rows (`queued` / `downloading` → `downloading`,
    `completed`, `stalled`, or `failed`). A torrent reported in qB's
    `missingFiles` state (its files were deleted from disk after the download
-   completed) is treated as `completed`; once the outcome is recorded, the
-   stale torrent is deleted from qB along with any remaining files.
+   completed) is treated as `completed`. This pass does **not** delete
+   anything from qB: `missingFiles` cannot distinguish "files genuinely gone"
+   from "disk temporarily unavailable", so deleting on the strength of a state
+   snapshot risks destroying content that is still on disk. Deletion belongs to
+   `PurgeMissingFiles.yml`, which stops and rechecks each torrent first.
 2. **Ownership pass** — collects ownership observations from four sources and
    upserts them into `OwnershipLedger`:
    - `gdrive` — projects the existing `RcloneInventory` table (no extra rclone
