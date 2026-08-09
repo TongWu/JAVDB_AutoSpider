@@ -379,7 +379,18 @@ PAGE_END = 10
 #   - PAGE_SCAN_MAX:        hard ceiling; reaching it logs a warning because
 #                           the fresh block may have been cut short
 #   - PAGE_SCAN_STOP_AFTER: how many consecutive pages with no fresh entries
-#                           end the scan (pages that fail to fetch don't count)
+#                           end the scan. A page that fails to fetch or
+#                           validate is NOT counted as fresh-free — one proxy
+#                           blip must not truncate the day — but it spends its
+#                           own budget of the same size: this many consecutive
+#                           unreadable pages also end the scan, with reason
+#                           `unreadable`. So under a proxy outage the scan
+#                           stops this many pages past where it started
+#                           failing, not at PAGE_SCAN_MAX. Must be >= 1; a
+#                           lower value is floored to 1, since both counters
+#                           start at 0 and 0 would stop the scan on its first
+#                           page past PAGE_END even if that page were full of
+#                           new torrents.
 # Inert for ad-hoc URLs, --all, --ignore-release-date and
 # IGNORE_RELEASE_DATE_FILTER: those have no freshness signal to steer on.
 PAGE_SCAN_DYNAMIC = True
