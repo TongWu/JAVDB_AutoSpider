@@ -17,7 +17,7 @@
 - **P3 (D6 — email integration)** — subprocess invocation of `drift_diagnose --since 1 --json` in the email notification job, `[DRIFT-FIX-READY]`/`[DRIFT-ESCALATE]` subject prefix tagging, 60s timeout with fallback. Covered by `tests/unit/test_email_drift_integration.py` (20 unit tests). ✅ Done.
 
 **Deciders**: Bake-period drift response (succeeds the manual forensic fix recorded as `kind: drift_resolution` in `reports/D1/d1_drift.jsonl` at 2026-05-17T14:00 UTC)
-**Prerequisites**: None — bake-safe per [ADR-006](../_archive/ADR-006-Pending-Mode-Rollout/ADR-006-pending-mode-default-rollout.md) amendment 3. The "bake-safe" claim is precise: **no effect on the D10 gate inputs** (no writes to D1/SQLite, no schema change, no `WriteMode` resolution change, no `.publish-config.yml` pause-mechanism change, no `pending_session_verify` emission). Layer 1 D6 *does* modify the `email-notification` job, but the modification is a read-only subprocess call with a 60-second timeout to a tool that itself only touches D10-monitored state via the operator-gated `--apply` path (which is **never** invoked from the workflow).
+**Prerequisites**: None — bake-safe per [ADR-006](../ADR-006-Pending-Mode-Rollout/ADR-006-pending-mode-default-rollout.md) amendment 3. The "bake-safe" claim is precise: **no effect on the D10 gate inputs** (no writes to D1/SQLite, no schema change, no `WriteMode` resolution change, no `.publish-config.yml` pause-mechanism change, no `pending_session_verify` emission). Layer 1 D6 *does* modify the `email-notification` job, but the modification is a read-only subprocess call with a 60-second timeout to a tool that itself only touches D10-monitored state via the operator-gated `--apply` path (which is **never** invoked from the workflow).
 
 ---
 
@@ -214,8 +214,8 @@ Stay with the existing process: drift advisory + manual investigation per incide
 
 ## Related Decisions
 
-- **[ADR-006](../_archive/ADR-006-Pending-Mode-Rollout/ADR-006-pending-mode-default-rollout.md) amendment 3** — bake-safe carve-out logic. Layer 0 has no workflow effect at all. Layer 1 D6 modifies the `email-notification` job but only via a read-only subprocess with strict timeout; it does not change any D10 gate input (no writes to D1/SQLite, no schema change, no Pause-mechanism change). Both fall on the bake-safe side under the corrected framing above.
-- **[ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md) PR-2 (deferred)** — should explicitly consider L2a (idempotent bookkeeping) as a candidate inclusion when its design is revisited post-bake.
+- **[ADR-006](../ADR-006-Pending-Mode-Rollout/ADR-006-pending-mode-default-rollout.md) amendment 3** — bake-safe carve-out logic. Layer 0 has no workflow effect at all. Layer 1 D6 modifies the `email-notification` job but only via a read-only subprocess with strict timeout; it does not change any D10 gate input (no writes to D1/SQLite, no schema change, no Pause-mechanism change). Both fall on the bake-safe side under the corrected framing above.
+- **[ADR-005](../ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md) PR-2 (deferred)** — should explicitly consider L2a (idempotent bookkeeping) as a candidate inclusion when its design is revisited post-bake.
 - **PR #50** (BakeCheck.yml) — orthogonal monitoring layer; drift_diagnose is a *diagnosis* layer that complements but does not replace the gate.
 
 ---

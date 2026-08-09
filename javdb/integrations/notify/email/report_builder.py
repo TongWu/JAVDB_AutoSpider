@@ -24,6 +24,29 @@ from javdb.infra.logging import get_logger
 from javdb.infra.paths import find_latest_report_in_dated_dirs
 
 from javdb.integrations.notify.email._config import _EMAIL_REPORTS_DIR
+from javdb.storage.sessions.pending_verify import (
+    F_CLEANUP_PATH_MISMATCH_COUNT,
+    F_COMMIT_ATTEMPTS,
+    F_COMMIT_DURATION_MS,
+    F_DERIVED_DRIFT_SAMPLES,
+    F_DERIVED_RECOMPUTE_DRIFT,
+    F_ERROR,
+    F_FINAL_STATUS,
+    F_HREFS_PROCESSED,
+    F_MOVIES_UPSERTED,
+    F_PENDING_APPLIED_COUNT,
+    F_PENDING_RESIDUAL_COUNT,
+    F_PENDING_STAGED_COUNT,
+    F_SESSION_ID,
+    F_SHADOW_AUDIT_ENABLED,
+    F_SOURCE,
+    F_STAGED_CLAIM_ORPHAN_COUNT,
+    F_STATS_READ_ERROR,
+    F_TORRENTS_DELETED,
+    F_TORRENTS_UPSERTED,
+    F_WORKER_STAGE_ROLLBACK_FAILED,
+    F_WRITE_MODE,
+)
 
 logger = get_logger(__name__)
 
@@ -233,14 +256,14 @@ def _format_pending_verify_section(records, alerts):
         return ''
     alerted_keys_per_record = {}
     for key, value, limit, severity, rec in alerts:
-        sid = rec.get('session_id')
+        sid = rec.get(F_SESSION_ID)
         alerted_keys_per_record.setdefault(sid, []).append((key, severity))
 
     lines = ['', '───────────────────────────────',
              '🧪 PENDING MODE VERIFICATION',
              '───────────────────────────────', '']
     for rec in records:
-        sid = rec.get('session_id')
+        sid = rec.get(F_SESSION_ID)
         flagged = alerted_keys_per_record.get(sid, [])
         flagged_str = ''
         if flagged:
@@ -253,44 +276,46 @@ def _format_pending_verify_section(records, alerts):
                 tag_parts.append('[ALERT] ' + ', '.join(soft))
             flagged_str = '   ⚠️  ' + ' | '.join(tag_parts)
         lines.append(
-            f"Session {sid}  mode={rec.get('write_mode')}  "
-            f"status={rec.get('final_status')}  "
-            f"source={rec.get('source')}{flagged_str}"
+            f"Session {sid}  mode={rec.get(F_WRITE_MODE)}  "
+            f"status={rec.get(F_FINAL_STATUS)}  "
+            f"source={rec.get(F_SOURCE)}{flagged_str}"
         )
         lines.append(
-            f"  staged={rec.get('pending_staged_count')}  "
-            f"applied={rec.get('pending_applied_count')}  "
-            f"residual={rec.get('pending_residual_count')}"
+            f"  staged={rec.get(F_PENDING_STAGED_COUNT)}  "
+            f"applied={rec.get(F_PENDING_APPLIED_COUNT)}  "
+            f"residual={rec.get(F_PENDING_RESIDUAL_COUNT)}"
         )
         lines.append(
-            f"  commit_attempts={rec.get('commit_attempts')}  "
-            f"commit_duration_ms={rec.get('commit_duration_ms')}  "
-            f"hrefs={rec.get('hrefs_processed')}"
+            f"  commit_attempts={rec.get(F_COMMIT_ATTEMPTS)}  "
+            f"commit_duration_ms={rec.get(F_COMMIT_DURATION_MS)}  "
+            f"hrefs={rec.get(F_HREFS_PROCESSED)}"
         )
-        movies = rec.get('movies_upserted', 0)
-        torr_up = rec.get('torrents_upserted', 0)
-        torr_del = rec.get('torrents_deleted', 0)
+        movies = rec.get(F_MOVIES_UPSERTED, 0)
+        torr_up = rec.get(F_TORRENTS_UPSERTED, 0)
+        torr_del = rec.get(F_TORRENTS_DELETED, 0)
         lines.append(
             f"  movies_upserted={movies}  torrents_upserted={torr_up}  "
             f"torrents_deleted={torr_del}"
         )
-        if rec.get('shadow_audit_enabled'):
+        if rec.get(F_SHADOW_AUDIT_ENABLED):
             lines.append(
                 f"  derived_recompute_drift="
-                f"{rec.get('derived_recompute_drift', 0)}  "
-                f"samples={rec.get('derived_drift_samples') or []}"
+                f"{rec.get(F_DERIVED_RECOMPUTE_DRIFT, 0)}  "
+                f"samples={rec.get(F_DERIVED_DRIFT_SAMPLES) or []}"
             )
-        wsf = int(rec.get('worker_stage_rollback_failed', 0) or 0)
-        cpm = int(rec.get('cleanup_path_mismatch_count', 0) or 0)
-        soc = int(rec.get('staged_claim_orphan_count', 0) or 0)
-        if wsf or cpm or soc:
+        wsf = int(rec.get(F_WORKER_STAGE_ROLLBACK_FAILED, 0) or 0)
+        cpm = int(rec.get(F_CLEANUP_PATH_MISMATCH_COUNT, 0) or 0)
+        soc = int(rec.get(F_STAGED_CLAIM_ORPHAN_COUNT, 0) or 0)
+        sre = bool(rec.get(F_STATS_READ_ERROR))
+        if wsf or cpm or soc or sre:
             lines.append(
                 f"  worker_stage_rollback_failed={wsf}  "
                 f"cleanup_path_mismatch_count={cpm}  "
-                f"staged_claim_orphan_count={soc}"
+                f"staged_claim_orphan_count={soc}  "
+                f"stats_read_error={sre}"
             )
-        if rec.get('error'):
-            lines.append(f"  error={rec.get('error')}")
+        if rec.get(F_ERROR):
+            lines.append(f"  error={rec.get(F_ERROR)}")
         lines.append('')
     if not alerts:
         lines.append('All pending-mode metrics within Phase 3 thresholds.')
@@ -350,6 +375,10 @@ def _format_health_snapshot_section(snapshot_path):
     lines.append(
         f"Σ worker_stage_rollback_failed: "
         f"{snap.get('total_worker_stage_rollback_failed', 0)}"
+    )
+    lines.append(
+        f"Σ stats_read_error:          "
+        f"{snap.get('total_stats_read_error', 0)}"
     )
     lines.append(
         f"Σ stale resume successes:   "
@@ -556,7 +585,7 @@ def _build_pending_subject_prefix(records, alerts, has_critical, mode):
         return ''
     first = alerts[0]
     field, value, limit, severity, rec = first
-    sid = rec.get('session_id')
+    sid = rec.get(F_SESSION_ID)
     summary = f"{field}={value:g} > {limit:g} session={sid}"
     if has_critical:
         return f"[PENDING-PAUSE] ({summary}) "

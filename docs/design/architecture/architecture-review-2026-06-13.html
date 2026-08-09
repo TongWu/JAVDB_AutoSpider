@@ -1,0 +1,578 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Architecture review — JAVDB AutoSpider</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose", flowchart: { curve: "basis" } });
+    </script>
+    <style>
+      .seam { stroke-dasharray: 5 5; }
+      .leak { stroke: #dc2626; }
+      .deep { background: linear-gradient(135deg, #0f172a, #1e293b); }
+      .shallow-zone { background-image: repeating-linear-gradient(45deg, transparent, transparent 6px, rgba(148,163,184,.18) 6px, rgba(148,163,184,.18) 12px); }
+      .font-serif { font-family: ui-serif, Georgia, Cambria, "Times New Roman", serif; }
+      .mermaid { display:flex; justify-content:center; }
+      .arrow-line { stroke:#64748b; stroke-width:1.5; }
+      .dup { fill:#fee2e2; stroke:#dc2626; }
+      .entry { fill:#dcfce7; stroke:#16a34a; }
+    </style>
+  </head>
+  <body class="bg-stone-50 text-slate-900 font-sans">
+    <main class="max-w-5xl mx-auto px-6 py-12 space-y-12">
+
+      <!-- ======================= HEADER ======================= -->
+      <header class="border-b border-slate-200 pb-8">
+        <div class="flex items-baseline justify-between flex-wrap gap-2">
+          <h1 class="text-4xl font-serif tracking-tight">Architecture review</h1>
+          <span class="text-sm text-slate-500 font-mono">JAVDB_AutoSpider_CICD · 2026-06-13 · branch <code>claude/vibrant-kilby-16fd7f</code></span>
+        </div>
+        <p class="mt-3 text-slate-600 max-w-3xl">Deepening opportunities — turning shallow modules into deep ones for <span class="font-medium">locality</span> and AI-navigability. 10 子系统并行探索 → 合并去重 → 对抗性验证（核实证据 + 删除测试 + ADR 覆盖比对）。每个候选都已确认<span class="font-medium">不与现有 47 个 ADR / 17 个 BFR 重合</span>。</p>
+
+        <div class="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-xs text-slate-500">
+          <span class="inline-flex items-center gap-1.5"><span class="inline-block w-4 h-3 border border-slate-400 bg-white"></span>module</span>
+          <span class="inline-flex items-center gap-1.5"><span class="inline-block w-4 h-3 deep"></span>deep module</span>
+          <span class="inline-flex items-center gap-1.5"><span class="inline-block w-4 h-3 shallow-zone border border-slate-300"></span>shallow zone</span>
+          <span class="inline-flex items-center gap-1.5"><svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" class="arrow-line seam"/></svg>seam</span>
+          <span class="inline-flex items-center gap-1.5"><svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" class="leak" stroke-width="2"/></svg>duplication / leak</span>
+        </div>
+
+        <div class="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+          <div class="rounded-lg bg-white border border-slate-200 py-3"><div class="text-2xl font-serif text-emerald-700">6</div><div class="text-xs text-slate-500 uppercase tracking-wider">confirmed</div></div>
+          <div class="rounded-lg bg-white border border-slate-200 py-3"><div class="text-2xl font-serif text-slate-800">4</div><div class="text-xs text-slate-500 uppercase tracking-wider">Strong</div></div>
+          <div class="rounded-lg bg-white border border-slate-200 py-3"><div class="text-2xl font-serif text-slate-800">4</div><div class="text-xs text-slate-500 uppercase tracking-wider">rejected (ADR)</div></div>
+          <div class="rounded-lg bg-white border border-slate-200 py-3"><div class="text-2xl font-serif text-slate-800">22</div><div class="text-xs text-slate-500 uppercase tracking-wider">dropped at synth</div></div>
+        </div>
+      </header>
+
+      <section id="candidates" class="space-y-12">
+
+        <!-- ================= CANDIDATE 0 — rclone/helper.py ================= -->
+        <article id="c0" class="scroll-mt-6">
+          <div class="flex items-center gap-3 flex-wrap">
+            <span class="text-xs font-mono text-slate-400">#1</span>
+            <h2 class="text-2xl font-serif">拆分 <code class="text-xl">rclone/helper.py</code> — 1438 行的扁平 grab-bag 拆成三个深模块</h2>
+          </div>
+          <div class="mt-2 flex gap-2 flex-wrap">
+            <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">Strong</span>
+            <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">in-process · 拆分</span>
+            <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700">整合 · 为 Rust 重写铺路</span>
+          </div>
+          <p class="mt-2 font-mono text-sm text-slate-500">javdb/integrations/rclone/helper.py · javdb/integrations/rclone/manager/service.py</p>
+
+          <!-- diagram -->
+          <div class="mt-5 grid md:grid-cols-2 gap-4">
+            <!-- BEFORE -->
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <div class="text-xs uppercase tracking-wider text-slate-400 mb-3">Before — shallow</div>
+              <svg viewBox="0 0 320 300" class="w-full" style="max-height:300px">
+                <!-- caller -->
+                <rect x="10" y="10" width="120" height="34" rx="4" fill="#f1f5f9" stroke="#94a3b8"/>
+                <text x="70" y="31" text-anchor="middle" font-size="11" font-family="monospace">service.py</text>
+                <!-- 27 import bracket -->
+                <text x="155" y="26" font-size="10" fill="#dc2626" font-family="monospace">imports 27 symbols</text>
+                <path d="M130 27 C 175 27, 175 150, 210 150" fill="none" class="leak" stroke-width="1.5"/>
+                <!-- big flat module -->
+                <rect x="150" y="50" width="160" height="230" rx="5" fill="#1e293b"/>
+                <text x="230" y="68" text-anchor="middle" font-size="11" fill="#e2e8f0" font-family="monospace">helper.py · 1438 L</text>
+                <!-- shaded zones -->
+                <rect x="160" y="80" width="140" height="40" rx="3" fill="#334155"/>
+                <text x="230" y="104" text-anchor="middle" font-size="9.5" fill="#cbd5e1" font-family="monospace">path utils (8)</text>
+                <rect x="160" y="126" width="140" height="44" rx="3" fill="#334155"/>
+                <text x="230" y="146" text-anchor="middle" font-size="9.5" fill="#cbd5e1" font-family="monospace">scan prereq +</text>
+                <text x="230" y="160" text-anchor="middle" font-size="9.5" fill="#cbd5e1" font-family="monospace">scan engine (15)</text>
+                <rect x="160" y="176" width="140" height="44" rx="3" fill="#3f2d2d" stroke="#dc2626" stroke-dasharray="3 3"/>
+                <text x="230" y="195" text-anchor="middle" font-size="9.5" fill="#fca5a5" font-family="monospace">dedup engine (5)</text>
+                <text x="230" y="209" text-anchor="middle" font-size="8.5" fill="#fca5a5" font-family="monospace">→ rclone purge</text>
+                <rect x="160" y="226" width="140" height="44" rx="3" fill="#334155"/>
+                <text x="230" y="246" text-anchor="middle" font-size="9" fill="#94a3b8" font-family="monospace">Rust parse_lsjson</text>
+                <text x="230" y="259" text-anchor="middle" font-size="8.5" fill="#fbbf24" font-family="monospace">debt buried @754</text>
+              </svg>
+            </div>
+            <!-- AFTER -->
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <div class="text-xs uppercase tracking-wider text-slate-400 mb-3">After — three deep modules</div>
+              <svg viewBox="0 0 320 300" class="w-full" style="max-height:300px">
+                <rect x="10" y="10" width="120" height="34" rx="4" fill="#f1f5f9" stroke="#94a3b8"/>
+                <text x="70" y="31" text-anchor="middle" font-size="11" font-family="monospace">service.py</text>
+                <!-- three narrow imports -->
+                <line x1="130" y1="27" x2="200" y2="60" class="arrow-line"/>
+                <line x1="130" y1="27" x2="200" y2="150" class="arrow-line"/>
+                <line x1="130" y1="27" x2="200" y2="240" class="arrow-line"/>
+                <!-- path_utils -->
+                <rect x="200" y="48" width="110" height="48" rx="5" fill="#0f172a"/>
+                <text x="255" y="68" text-anchor="middle" font-size="10" fill="#e2e8f0" font-family="monospace">path_utils.py</text>
+                <text x="255" y="84" text-anchor="middle" font-size="8.5" fill="#86efac" font-family="monospace">pure, stdlib-only</text>
+                <!-- scan.py -->
+                <rect x="200" y="126" width="110" height="58" rx="5" fill="#0f172a"/>
+                <text x="255" y="146" text-anchor="middle" font-size="10" fill="#e2e8f0" font-family="monospace">scan.py</text>
+                <rect x="210" y="152" width="90" height="24" rx="3" class="entry"/>
+                <text x="255" y="168" text-anchor="middle" font-size="8.5" font-family="monospace">scan_folder_structure()</text>
+                <!-- dedup.py -->
+                <rect x="200" y="214" width="110" height="58" rx="5" fill="#0f172a"/>
+                <text x="255" y="234" text-anchor="middle" font-size="10" fill="#e2e8f0" font-family="monospace">dedup.py</text>
+                <rect x="210" y="240" width="90" height="24" rx="3" class="entry"/>
+                <text x="255" y="256" text-anchor="middle" font-size="8.5" font-family="monospace">analyze_all_duplicates()</text>
+              </svg>
+            </div>
+          </div>
+
+          <div class="mt-5 grid md:grid-cols-2 gap-x-8 gap-y-4">
+            <div>
+              <div class="text-xs uppercase tracking-wider text-slate-400">Problem</div>
+              <p class="mt-1 text-sm text-slate-700">一个 1438 行的扁平模块，55 个函数的接口逼着 <code>service.py</code> 按名导入 27 个符号，跨三个结构无关的 concern：路径处理（8 个纯函数）、子进程扫描引擎（15 个函数，本可只暴露 <code>scan_folder_structure</code> 一个入口）、和驱动 Google Drive <em>永久删除</em>（<code>rclone purge</code>）的去重引擎（5 个函数）。一处 Rust <code>parse_lsjson_for_year</code> 的迁移欠债埋在 754 行——因为拥有它的 seam 没被隔离而不可见。</p>
+            </div>
+            <div>
+              <div class="text-xs uppercase tracking-wider text-slate-400">Solution</div>
+              <p class="mt-1 text-sm text-slate-700">拆成 <code>path_utils.py</code>、<code>scan.py</code>（扫描前置 + <code>FolderCache</code> + <code>parse_folder_name</code> 及其 ADR-041 纯 Python 回退，暴露单一深入口）、<code>dedup.py</code>（<code>DedupResult</code> + <code>analyze_all_duplicates</code> + <code>execute_deletions</code>）。一旦 <code>scan.py</code> 独占该 seam，Rust 迁移欠债自然浮现；被隔离后的删除级联是干净的 Rust 重写目标。</p>
+            </div>
+          </div>
+
+          <div class="mt-4">
+            <div class="text-xs uppercase tracking-wider text-slate-400 mb-2">Wins</div>
+            <div class="grid sm:grid-cols-2 gap-2 text-sm">
+              <div class="flex gap-2"><span class="text-emerald-600">▪</span>Locality：去重改动只触 dedup.py，Rust 迁移 seam 只现于 scan.py</div>
+              <div class="flex gap-2"><span class="text-emerald-600">▪</span>Interface shrinks：scan.py 暴露 1 入口非 15</div>
+              <div class="flex gap-2"><span class="text-emerald-600">▪</span>Tests hit one seam per concern，非 55 函数模块</div>
+              <div class="flex gap-2"><span class="text-emerald-600">▪</span>Leverage：删除级联成为带编译期不变量的 Rust 目标</div>
+            </div>
+          </div>
+
+          <div class="mt-4 rounded-md bg-emerald-50 border border-emerald-200 px-4 py-2 text-sm text-emerald-900">
+            <span class="font-medium">无 ADR 重合 ✓</span> — rclone 区域 ADR 未覆盖；split 保持 <code>parse_folder_name</code> + 回退同处、不引入新 Rust-Required 模块，符合 ADR-041。验证修正：实际导入 27 个符号（非 28），并补入第 4 段（健康检查前置）归入 scan.py。
+          </div>
+        </article>
+
+        <!-- ================= CANDIDATE 1 — dedup.py ================= -->
+        <article id="c1" class="scroll-mt-6 border-t border-slate-200 pt-10">
+          <div class="flex items-center gap-3 flex-wrap">
+            <span class="text-xs font-mono text-slate-400">#2</span>
+            <h2 class="text-2xl font-serif">拆分 <code class="text-xl">spider/services/dedup.py</code> — 纯查询 / 持久化 / 类型分家，归位 <code>_normalise_code</code></h2>
+          </div>
+          <div class="mt-2 flex gap-2 flex-wrap">
+            <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">Strong</span>
+            <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">in-process · 拆分 + 精简</span>
+            <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-rose-50 text-rose-700">消除跨包私有导入</span>
+          </div>
+          <p class="mt-2 font-mono text-sm text-slate-500">spider/services/dedup.py · ops/reconcile/code_resolver.py · pipeline/models.py · pipeline/planner.py · ops/reconcile/service.py</p>
+
+          <div class="mt-5 rounded-lg border border-slate-200 bg-white p-4">
+            <div class="text-xs uppercase tracking-wider text-slate-400 mb-2">Before / After — caller fan-in</div>
+            <pre class="mermaid">
+flowchart LR
+  subgraph BEFORE
+    direction LR
+    pm1[pipeline/models] --> D
+    pp1[pipeline/planner] --> D
+    rs1[ops/reconcile/service] -. private import _normalise_code .-> D
+    cr1[code_resolver] -. verbatim copy .-> CR1[_normalise_code copy]
+    D["dedup.py<br/>query · store · types<br/>+ 2 process-globals"]
+  end
+  subgraph AFTER
+    direction LR
+    pm2[pipeline/models] --> T[contracts.py<br/>DedupRecord]
+    pp2[pipeline/planner] --> Q[dedup_query.py<br/>pure, no I/O]
+    rs2[ops/reconcile/service] --> S[dedup_store.py<br/>globals isolated]
+    Q --> N[parsing/common.py<br/>normalise_code]
+    cr2[code_resolver] --> N
+  end
+  classDef leak fill:#fee2e2,stroke:#dc2626,stroke-width:2px;
+  classDef deep fill:#0f172a,color:#e2e8f0,stroke:#0f172a;
+  classDef good fill:#dcfce7,stroke:#16a34a;
+  class D,CR1 leak
+  class N good
+  class T,Q,S deep
+            </pre>
+          </div>
+
+          <div class="mt-5 grid md:grid-cols-2 gap-x-8 gap-y-4">
+            <div>
+              <div class="text-xs uppercase tracking-wider text-slate-400">Problem</div>
+              <p class="mt-1 text-sm text-slate-700">dedup.py 把三个深度不同的 concern 塞进一个导入 seam：无 I/O 的纯查询升级逻辑、从 OwnershipLedger/OperationsRepo 加载库存、和持有两个进程全局（须由 autouse fixture 重置）的 <code>DedupRecord</code> 持久化。私有 <code>_normalise_code</code> 被逐字复制进 <code>code_resolver.py</code>（docstring 自承认），而 <code>ops/reconcile</code> 跨兄弟包导入这个私有符号；<code>pipeline/models.py</code> 仅为导 <code>DedupRecord</code>（纯 NamedTuple）就强制每个 importer 加载 Rust bridge 和 OperationsRepo。</p>
+            </div>
+            <div>
+              <div class="text-xs uppercase tracking-wider text-slate-400">Solution</div>
+              <p class="mt-1 text-sm text-slate-700">把 <code>DedupRecord</code>/<code>RcloneEntry</code>/<code>DEDUP_FIELDNAMES</code> 提到 <code>spider/contracts.py</code>；将 <code>_normalise_code</code> 升为 <code>parsing/common.py</code> 的公开函数（那里已内联 NFKC 且已被 code_resolver 导入）；dedup.py 拆为纯查询模块与 store 模块（库存加载 + 持久化，两个进程全局藏在清晰 I/O 接口后），给 autouse fixture 一个集中靶点，并移除 ops→spider 私有符号的分层拉扯。</p>
+            </div>
+          </div>
+
+          <div class="mt-4">
+            <div class="text-xs uppercase tracking-wider text-slate-400 mb-2">Wins</div>
+            <div class="grid sm:grid-cols-2 gap-2 text-sm">
+              <div class="flex gap-2"><span class="text-emerald-600">▪</span>Locality：进程全局只困在 dedup_store，污染不进纯查询测试</div>
+              <div class="flex gap-2"><span class="text-emerald-600">▪</span>Deletion test passes：删 dedup_query 暴露调用方，重复 normalizer 消失</div>
+              <div class="flex gap-2"><span class="text-emerald-600">▪</span>Interface shrinks：pipeline/models 不再传递性加载 Rust bridge</div>
+              <div class="flex gap-2"><span class="text-emerald-600">▪</span>Leverage：消除 ops→spider 分层违例，一个 normalizer 守所有调用方</div>
+            </div>
+          </div>
+
+          <div class="mt-4 rounded-md bg-emerald-50 border border-emerald-200 px-4 py-2 text-sm text-emerald-900">
+            <span class="font-medium">无 ADR 重合 ✓</span> — ADR-040（内容过滤）/ADR-033（媒体闭环）拥有 dedup 的<em>业务规则</em>，本候选只动模块切分与符号归位，不改去重判定语义。修复一处真实分层违例（ops 跨包导私有 <code>_normalise_code</code>）。
+          </div>
+        </article>
+
+        <!-- ================= CANDIDATE 2 — pending_verify builder ================= -->
+        <article id="c2" class="scroll-mt-6 border-t border-slate-200 pt-10">
+          <div class="flex items-center gap-3 flex-wrap">
+            <span class="text-xs font-mono text-slate-400">#3</span>
+            <h2 class="text-2xl font-serif">整合三处重复的 <code class="text-xl">pending_session_verify</code> 记录构建器</h2>
+          </div>
+          <div class="mt-2 flex gap-2 flex-wrap">
+            <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">Strong</span>
+            <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">in-process · 整合 + 精简</span>
+            <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">schema 已在漂移</span>
+          </div>
+          <p class="mt-2 font-mono text-sm text-slate-500">apps/cli/db/commit_session.py · storage/sessions/commit.py · storage/rollback/core.py · integrations/notify/email/service.py</p>
+
+          <div class="mt-5 grid md:grid-cols-2 gap-4">
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <div class="text-xs uppercase tracking-wider text-slate-400 mb-3">Before — 3 个独立 builder 写同一份 JSONL</div>
+              <svg viewBox="0 0 320 230" class="w-full" style="max-height:230px">
+                <rect x="10" y="10" width="120" height="38" rx="4" class="dup"/>
+                <text x="70" y="28" text-anchor="middle" font-size="9.5" font-family="monospace">CLI commit</text>
+                <text x="70" y="41" text-anchor="middle" font-size="8" fill="#991b1b" font-family="monospace">builder #1</text>
+                <rect x="10" y="92" width="120" height="38" rx="4" class="dup"/>
+                <text x="70" y="110" text-anchor="middle" font-size="9.5" font-family="monospace">lib commit</text>
+                <text x="70" y="123" text-anchor="middle" font-size="8" fill="#991b1b" font-family="monospace">"Simplified version"</text>
+                <rect x="10" y="174" width="120" height="38" rx="4" class="dup"/>
+                <text x="70" y="192" text-anchor="middle" font-size="9.5" font-family="monospace">rollback</text>
+                <text x="70" y="205" text-anchor="middle" font-size="8" fill="#991b1b" font-family="monospace">builder #3</text>
+                <!-- jsonl -->
+                <line x1="130" y1="29" x2="220" y2="100" class="arrow-line"/>
+                <line x1="130" y1="111" x2="220" y2="110" class="arrow-line"/>
+                <line x1="130" y1="193" x2="220" y2="120" class="arrow-line"/>
+                <rect x="220" y="86" width="90" height="48" rx="4" fill="#f1f5f9" stroke="#94a3b8"/>
+                <text x="265" y="106" text-anchor="middle" font-size="9" font-family="monospace">pending_</text>
+                <text x="265" y="118" text-anchor="middle" font-size="9" font-family="monospace">verify.jsonl</text>
+                <!-- parser couples -->
+                <path d="M265 134 C 265 175, 70 175, 70 174" fill="none" class="leak seam" stroke-width="1.3"/>
+                <text x="160" y="170" font-size="8" fill="#dc2626" font-family="monospace">parser couples 13 fields ×3</text>
+              </svg>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <div class="text-xs uppercase tracking-wider text-slate-400 mb-3">After — 1 builder + 3 thin delegates</div>
+              <svg viewBox="0 0 320 230" class="w-full" style="max-height:230px">
+                <rect x="10" y="14" width="110" height="30" rx="4" fill="#f1f5f9" stroke="#94a3b8"/>
+                <text x="65" y="33" text-anchor="middle" font-size="9" font-family="monospace">CLI commit</text>
+                <rect x="10" y="100" width="110" height="30" rx="4" fill="#f1f5f9" stroke="#94a3b8"/>
+                <text x="65" y="119" text-anchor="middle" font-size="9" font-family="monospace">lib commit</text>
+                <rect x="10" y="186" width="110" height="30" rx="4" fill="#f1f5f9" stroke="#94a3b8"/>
+                <text x="65" y="205" text-anchor="middle" font-size="9" font-family="monospace">rollback</text>
+                <line x1="120" y1="29" x2="200" y2="105" class="arrow-line"/>
+                <line x1="120" y1="115" x2="200" y2="115" class="arrow-line"/>
+                <line x1="120" y1="201" x2="200" y2="125" class="arrow-line"/>
+                <rect x="200" y="92" width="110" height="48" rx="5" fill="#0f172a"/>
+                <text x="255" y="110" text-anchor="middle" font-size="9.5" fill="#e2e8f0" font-family="monospace">pending_verify.py</text>
+                <rect x="208" y="116" width="94" height="18" rx="3" class="entry"/>
+                <text x="255" y="129" text-anchor="middle" font-size="8" font-family="monospace">build_..._record()</text>
+                <!-- email imports constants -->
+                <line x1="255" y1="140" x2="255" y2="170" class="arrow-line seam"/>
+                <rect x="205" y="170" width="100" height="30" rx="4" fill="#dcfce7" stroke="#16a34a"/>
+                <text x="255" y="189" text-anchor="middle" font-size="8.5" font-family="monospace">email imports consts</text>
+              </svg>
+            </div>
+          </div>
+
+          <div class="mt-5 grid md:grid-cols-2 gap-x-8 gap-y-4">
+            <div>
+              <div class="text-xs uppercase tracking-wider text-slate-400">Problem</div>
+              <p class="mt-1 text-sm text-slate-700">三个模块各自构建同一份 <code>pending_session_verify</code> JSONL 记录（一个诊断旁路，非 DB 写），共享 13 字段核心 schema 加各自的扩展。<code>storage/sessions/commit.py</code> 的 <code>_emit_commit_metrics</code> 已被注释为 CLI emitter 的 “Simplified version”——schema 正在漂移。记录解析器 <code>log_analysis._evaluate_pending_alerts</code> 耦合全部三个来源的字段名，无编译期强制。</p>
+            </div>
+            <div>
+              <div class="text-xs uppercase tracking-wider text-slate-400">Solution</div>
+              <p class="mt-1 text-sm text-slate-700">抽出纯函数 <code>build_pending_verify_record(...) -&gt; dict</code> 到 <code>storage/sessions/pending_verify.py</code>；三个调用点只供给各自来源专属输入并委托。<code>GITHUB_OUTPUT</code> 写入留在 CLI 作为 post-emit 副作用（确实仅 CLI）；<code>log_analysis</code> 从同一模块导入字段名常量，消除隐式 schema 耦合。</p>
+            </div>
+          </div>
+
+          <div class="mt-4">
+            <div class="text-xs uppercase tracking-wider text-slate-400 mb-2">Wins</div>
+            <div class="grid sm:grid-cols-2 gap-2 text-sm">
+              <div class="flex gap-2"><span class="text-emerald-600">▪</span>Locality：schema bug 一处修，不再三文件分叉</div>
+              <div class="flex gap-2"><span class="text-emerald-600">▪</span>Interface shrinks：一个签名替三个私有实现</div>
+              <div class="flex gap-2"><span class="text-emerald-600">▪</span>Tests hit one seam：builder 不需 CLI/rollback 管线即可测</div>
+              <div class="flex gap-2"><span class="text-emerald-600">▪</span>Leverage：email 解析器与 builder 由构造共享同一 schema</div>
+            </div>
+          </div>
+
+          <div class="mt-4 rounded-md bg-emerald-50 border border-emerald-200 px-4 py-2 text-sm text-emerald-900">
+            <span class="font-medium">无 ADR 重合 ✓</span> — 诊断旁路记录，非 ADR-042 权威/增量/诊断写入边界所定义的 DB 写；纯函数抽取不改任何提交语义。ADR-018 契约 golden 守的是 SQL builder，与此 JSONL 无关。
+          </div>
+        </article>
+
+        <!-- ================= CANDIDATE 3 — ProxyCoordinatorClient ================= -->
+        <article id="c3" class="scroll-mt-6 border-t border-slate-200 pt-10">
+          <div class="flex items-center gap-3 flex-wrap">
+            <span class="text-xs font-mono text-slate-400">#4</span>
+            <h2 class="text-2xl font-serif">让 <code class="text-xl">ProxyCoordinatorClient.lease()/report()</code> 走 <code>BaseDOClient._do_request</code>，删死代码</h2>
+          </div>
+          <div class="mt-2 flex gap-2 flex-wrap">
+            <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">Strong</span>
+            <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">ports &amp; adapters · 整合 + 精简</span>
+          </div>
+          <p class="mt-2 font-mono text-sm text-slate-500">javdb/proxy/coordinator/proxy_coordinator_client.py · javdb/proxy/coordinator/do_client_base.py</p>
+
+          <div class="mt-5 grid md:grid-cols-2 gap-4">
+            <!-- before cross-section -->
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <div class="text-xs uppercase tracking-wider text-slate-400 mb-3">Before — 深接口被最热调用方绕过</div>
+              <div class="space-y-2 text-xs font-mono">
+                <div class="rounded bg-slate-100 border border-slate-300 px-2 py-1 text-center text-slate-500">BaseDOClient._do_request  · 深 · 0 leverage @ hottest</div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div class="rounded border border-rose-300 bg-rose-50 p-2">
+                    <div class="font-semibold mb-1">lease()</div>
+                    <div class="h-3 bg-rose-200 rounded mb-1"></div><div class="h-3 bg-rose-200 rounded mb-1"></div>
+                    <div class="h-3 bg-rose-200 rounded mb-1"></div><div class="h-3 bg-rose-200 rounded"></div>
+                    <div class="text-[10px] text-rose-700 mt-1">inline HTTP block ×</div>
+                  </div>
+                  <div class="rounded border border-rose-300 bg-rose-50 p-2">
+                    <div class="font-semibold mb-1">report()</div>
+                    <div class="h-3 bg-rose-200 rounded mb-1"></div><div class="h-3 bg-rose-200 rounded mb-1"></div>
+                    <div class="h-3 bg-rose-200 rounded mb-1"></div><div class="h-3 bg-rose-200 rounded"></div>
+                    <div class="text-[10px] text-rose-700 mt-1">inline HTTP block ×</div>
+                  </div>
+                </div>
+                <div class="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-center text-amber-700 text-[10px]">_async_report_loop · 死的 2/4-tuple 兼容守卫</div>
+              </div>
+            </div>
+            <!-- after -->
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <div class="text-xs uppercase tracking-wider text-slate-400 mb-3">After — 深度抵达最热调用方</div>
+              <div class="space-y-2 text-xs font-mono">
+                <div class="rounded deep text-slate-100 px-2 py-2 text-center">BaseDOClient._do_request · 统一错误处理 + dict 守卫</div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div class="rounded border border-emerald-300 bg-emerald-50 p-2">
+                    <div class="font-semibold mb-1">lease()</div>
+                    <div class="h-3 bg-emerald-200 rounded mb-1"></div>
+                    <div class="text-[10px] text-emerald-700 mt-1">→ _do_request<br/>+ 仅留字段提取</div>
+                  </div>
+                  <div class="rounded border border-emerald-300 bg-emerald-50 p-2">
+                    <div class="font-semibold mb-1">report()</div>
+                    <div class="h-3 bg-emerald-200 rounded mb-1"></div>
+                    <div class="text-[10px] text-emerald-700 mt-1">→ _do_request<br/>+ 仅留字段提取</div>
+                  </div>
+                </div>
+                <div class="rounded border border-emerald-300 bg-emerald-50 px-2 py-1 text-center text-emerald-700 text-[10px]">AsyncReportEvent dataclass · 单一 sentinel 身份测试</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-5 grid md:grid-cols-2 gap-x-8 gap-y-4">
+            <div>
+              <div class="text-xs uppercase tracking-wider text-slate-400">Problem</div>
+              <p class="mt-1 text-sm text-slate-700"><code>lease()</code> 与 <code>report()</code>——整个 DO-client 子系统最高频的两个调用点——内联了 <code>BaseDOClient._do_request</code> 已作为深接口拥有的 HTTP 传输块（超时/连接错 → <code>CoordinatorUnavailable</code>，非 2xx，非法 JSON），彻底绕过 seam，使它在最热处零 leverage。此外 <code>_async_report_loop</code> 还带着死的变长 tuple 解包守卫（2/4-tuple 推送点已在生产与测试中不复存在）。</p>
+            </div>
+            <div>
+              <div class="text-xs uppercase tracking-wider text-slate-400">Solution</div>
+              <p class="mt-1 text-sm text-slate-700">让两个方法走 <code>self._do_request('POST', path, body)</code>，再各自做方法专属后处理（lease 的 health-cache 写入 / <code>ProxyHealthSnapshot</code> / <code>banned_until</code> 解析；report 的 <code>penalty_factor</code> 提取）——顺带补上目前缺失的 <code>isinstance(parsed, dict)</code> 守卫。把变长 queue tuple 换成固定 <code>AsyncReportEvent</code> dataclass，双 sentinel 检查收为单一身份测试。</p>
+            </div>
+          </div>
+
+          <div class="mt-4">
+            <div class="text-xs uppercase tracking-wider text-slate-400 mb-2">Wins</div>
+            <div class="grid sm:grid-cols-2 gap-2 text-sm">
+              <div class="flex gap-2"><span class="text-emerald-600">▪</span>Locality：HTTP 错误路径收于一个 seam</div>
+              <div class="flex gap-2"><span class="text-emerald-600">▪</span>Interface shrinks：lease/report 各减 ~40 行重复</div>
+              <div class="flex gap-2"><span class="text-emerald-600">▪</span>Leverage：BaseDOClient 深度终于抵达最热调用点</div>
+              <div class="flex gap-2"><span class="text-emerald-600">▪</span>Tests hit one seam：mock _do_request 而非 _session.post</div>
+            </div>
+          </div>
+
+          <div class="mt-4 rounded-md bg-emerald-50 border border-emerald-200 px-4 py-2 text-sm text-emerald-900">
+            <span class="font-medium">无 ADR 重合 ✓</span> — ADR-023（代理推荐策略）拥有 score 语义，本候选只动 HTTP 传输的去重；ADR-041 只把 <code>ProxyPool</code>/<code>ProxyBanManager</code> 列为 Rust-Required，HTTP client 是纯 Python，不受影响。
+          </div>
+        </article>
+
+        <!-- ================= CANDIDATE 4 — drift_io ================= -->
+        <article id="c4" class="scroll-mt-6 border-t border-slate-200 pt-10">
+          <div class="flex items-center gap-3 flex-wrap">
+            <span class="text-xs font-mono text-slate-400">#5</span>
+            <h2 class="text-2xl font-serif">整合三处 drift-cell helper + 重复的 drift-log writer 到一个 <code class="text-xl">drift_io</code> 模块</h2>
+          </div>
+          <div class="mt-2 flex gap-2 flex-wrap">
+            <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">Worth exploring</span>
+            <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">in-process · 整合 + 精简</span>
+          </div>
+          <p class="mt-2 font-mono text-sm text-slate-500">storage/drift_diagnose.py · migrations/tools/reconcile_d1_drift.py · storage/dual_connection.py · storage/sessions/lifecycle_helpers.py</p>
+
+          <div class="mt-5 rounded-lg border border-slate-200 bg-white p-4">
+            <div class="text-xs uppercase tracking-wider text-slate-400 mb-2">Before / After — helper fan-in</div>
+            <pre class="mermaid">
+flowchart LR
+  subgraph BEFORE
+    direction TB
+    A1["drift_diagnose<br/>copy: _values_equal,_row_to_dict"]:::dup
+    A2["reconcile_d1_drift<br/>copy: _values_equal,_row_to_dict"]:::dup
+    A3["pending_health<br/>copy: jsonl reader"]:::dup
+    A4["dual_connection<br/>_append_drift_record + lock"]:::dup
+    A5["lifecycle_helpers<br/>append_jsonl_record"]:::dup
+    A1 -.- L1[2 path consts · 2 locks · 2 pytest seams]:::leak
+    A4 -.- L1
+  end
+  subgraph AFTER
+    direction TB
+    B["drift_io.py<br/>_values_equal · _row_to_dict · _read_jsonl<br/>append_drift_record(lock, REPORTS_DIR guard)"]:::deep
+    C1[drift_diagnose] --> B
+    C2[reconcile_d1_drift] --> B
+    C3[dual_connection] --> B
+    C4[lifecycle_helpers] --> B
+  end
+  classDef dup fill:#fee2e2,stroke:#dc2626;
+  classDef leak fill:#fff7ed,stroke:#f59e0b,color:#92400e;
+  classDef deep fill:#0f172a,color:#e2e8f0,stroke:#0f172a;
+            </pre>
+          </div>
+
+          <div class="mt-5 grid md:grid-cols-2 gap-x-8 gap-y-4">
+            <div>
+              <div class="text-xs uppercase tracking-wider text-slate-400">Problem</div>
+              <p class="mt-1 text-sm text-slate-700">三个 stdlib-only 的 helper（<code>_values_equal</code>、<code>_row_to_dict</code>、JSONL 行读取）以独立副本散落三处，无共享 seam；另外 <code>dual_connection._append_drift_record</code> 重复了 <code>lifecycle_helpers.append_jsonl_record</code> 的 JSONL 追加行为，还各带模块级锁与不同的测试隔离常量，逼测试 monkeypatch 两个不同 path seam（<code>_DRIFT_LOG_PATH</code> vs <code>REPORTS_DIR</code>）才能隔离 drift log。</p>
+            </div>
+            <div>
+              <div class="text-xs uppercase tracking-wider text-slate-400">Solution</div>
+              <p class="mt-1 text-sm text-slate-700">把三个 helper 与单一 <code>_read_jsonl</code> 抽到 <code>storage/drift_io.py</code>（stdlib-only、零 javdb 依赖），并在同模块加线程安全的 <code>append_drift_record(record, *, reports_dir=None, ...)</code>，把锁与 pytest 守卫一并收纳；四个调用方全委托给 <code>drift_io</code>，测试只剩一个 <code>REPORTS_DIR</code> 隔离 seam，浮点比较或 JSONL 格式 bug 一处修复。</p>
+            </div>
+          </div>
+
+          <div class="mt-4">
+            <div class="text-xs uppercase tracking-wider text-slate-400 mb-2">Wins</div>
+            <div class="grid sm:grid-cols-2 gap-2 text-sm">
+              <div class="flex gap-2"><span class="text-emerald-600">▪</span>Locality：一处修 <code>_values_equal</code> 浮点比较，全调用方受益</div>
+              <div class="flex gap-2"><span class="text-emerald-600">▪</span>Interface shrinks：一个 path 常量、一把锁、一个 pytest 守卫</div>
+              <div class="flex gap-2"><span class="text-emerald-600">▪</span>Deletion test passes：删 ~30 行冗余 writer + 三份 helper</div>
+              <div class="flex gap-2"><span class="text-emerald-600">▪</span>Tests hit one seam for all drift tooling</div>
+            </div>
+          </div>
+
+          <div class="mt-4 rounded-md bg-emerald-50 border border-emerald-200 px-4 py-2 text-sm text-emerald-900">
+            <span class="font-medium">无 ADR 重合 ✓</span> — ADR-009（drift 分类）/ADR-047（drift 对账）拥有 drift 的<em>语义与策略</em>；本候选只整合 stdlib 工具函数与 JSONL writer 的物理重复，不改任何 drift 判定或对账流程。
+          </div>
+        </article>
+
+        <!-- ================= CANDIDATE 5 — D1TransientError ================= -->
+        <article id="c5" class="scroll-mt-6 border-t border-slate-200 pt-10">
+          <div class="flex items-center gap-3 flex-wrap">
+            <span class="text-xs font-mono text-slate-400">#6</span>
+            <h2 class="text-2xl font-serif">把 <code class="text-xl">D1TransientError</code> 的 5 个 monkey-patch 恢复属性提升为声明式 typed interface</h2>
+          </div>
+          <div class="mt-2 flex gap-2 flex-wrap">
+            <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">Worth exploring</span>
+            <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">in-process · 类型安全</span>
+            <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-rose-50 text-rose-700">隐形契约 → 编译期错误</span>
+          </div>
+          <p class="mt-2 font-mono text-sm text-slate-500">javdb/storage/d1_client.py · javdb/storage/d1_port.py · javdb/storage/dual_connection.py</p>
+
+          <div class="mt-5 grid md:grid-cols-2 gap-4">
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <div class="text-xs uppercase tracking-wider text-slate-400 mb-3">Before — 隐形 monkey-patch 契约</div>
+              <svg viewBox="0 0 320 220" class="w-full" style="max-height:220px">
+                <rect x="100" y="14" width="120" height="40" rx="4" fill="#fee2e2" stroke="#dc2626" stroke-dasharray="3 3"/>
+                <text x="160" y="32" text-anchor="middle" font-size="10" font-family="monospace">D1TransientError</text>
+                <text x="160" y="46" text-anchor="middle" font-size="9" fill="#991b1b" font-family="monospace">class body = pass</text>
+                <!-- d1_port writes -->
+                <rect x="10" y="120" width="120" height="40" rx="4" fill="#f1f5f9" stroke="#94a3b8"/>
+                <text x="70" y="138" text-anchor="middle" font-size="9" font-family="monospace">d1_port.py</text>
+                <text x="70" y="151" text-anchor="middle" font-size="8" fill="#dc2626" font-family="monospace">6× monkey-patch</text>
+                <path d="M70 120 C 70 80, 130 70, 140 54" fill="none" class="leak seam" stroke-width="1.3"/>
+                <!-- dual_connection reads -->
+                <rect x="190" y="120" width="120" height="40" rx="4" fill="#f1f5f9" stroke="#94a3b8"/>
+                <text x="250" y="138" text-anchor="middle" font-size="9" font-family="monospace">dual_connection</text>
+                <text x="250" y="151" text-anchor="middle" font-size="8" fill="#dc2626" font-family="monospace">3× getattr fallback</text>
+                <path d="M250 120 C 250 80, 190 70, 180 54" fill="none" class="leak seam" stroke-width="1.3"/>
+                <text x="160" y="195" text-anchor="middle" font-size="9" fill="#991b1b" font-family="monospace">typo → silently False → recovery disabled</text>
+              </svg>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <div class="text-xs uppercase tracking-wider text-slate-400 mb-3">After — 声明式 typed 契约</div>
+              <svg viewBox="0 0 320 220" class="w-full" style="max-height:220px">
+                <rect x="90" y="10" width="140" height="70" rx="4" fill="#0f172a"/>
+                <text x="160" y="28" text-anchor="middle" font-size="10" fill="#e2e8f0" font-family="monospace">D1TransientError</text>
+                <text x="160" y="44" text-anchor="middle" font-size="8" fill="#86efac" font-family="monospace">outbox_required: bool</text>
+                <text x="160" y="56" text-anchor="middle" font-size="8" fill="#86efac" font-family="monospace">durable: bool</text>
+                <text x="160" y="68" text-anchor="middle" font-size="8" fill="#86efac" font-family="monospace">+ D1RecoveryBlockerError</text>
+                <rect x="10" y="130" width="120" height="40" rx="4" fill="#dcfce7" stroke="#16a34a"/>
+                <text x="70" y="148" text-anchor="middle" font-size="9" font-family="monospace">d1_port.py</text>
+                <text x="70" y="161" text-anchor="middle" font-size="8" fill="#166534" font-family="monospace">6× direct assign</text>
+                <line x1="70" y1="130" x2="130" y2="80" class="arrow-line"/>
+                <rect x="190" y="130" width="120" height="40" rx="4" fill="#dcfce7" stroke="#16a34a"/>
+                <text x="250" y="148" text-anchor="middle" font-size="9" font-family="monospace">dual_connection</text>
+                <text x="250" y="161" text-anchor="middle" font-size="8" fill="#166534" font-family="monospace">isinstance + .field</text>
+                <line x1="250" y1="130" x2="190" y2="80" class="arrow-line"/>
+                <text x="160" y="200" text-anchor="middle" font-size="9" fill="#166534" font-family="monospace">typo → type error, not silent disable</text>
+              </svg>
+            </div>
+          </div>
+
+          <div class="mt-5 grid md:grid-cols-2 gap-x-8 gap-y-4">
+            <div>
+              <div class="text-xs uppercase tracking-wider text-slate-400">Problem</div>
+              <p class="mt-1 text-sm text-slate-700"><code>D1TransientError</code> 类体为空，但其实例携带跨模块恢复信号（<code>d1_recovery_outbox_required</code>、<code>d1_recovery_durable</code> 在 d1_port.py 设置，<code>d1_recovery_blocker</code> 设在兄弟 <code>RuntimeError</code>），由 <code>dual_connection.py</code> 用防御性 <code>getattr</code> 回退读取——一个隐形接口：拼错会静默默认 <code>False</code>、关掉 outbox recovery 且无可观测失败。</p>
+            </div>
+            <div>
+              <div class="text-xs uppercase tracking-wider text-slate-400">Solution</div>
+              <p class="mt-1 text-sm text-slate-700">把三个跨模块恢复信号提升为 <code>D1TransientError</code> 上声明的 typed 字段（移除那 6 处 <code>type: ignore</code> 抑制），并为单一 blocker 赋值点引入 typed <code>D1RecoveryBlockerError(RuntimeError)</code> 子类；<code>dual_connection.py</code> 改为直接读 <code>.d1_recovery_*</code> 并用 <code>isinstance</code> 判定。<code>retry_after</code>/<code>is_export_lock</code> 留作 d1_port 内部低优清理。</p>
+            </div>
+          </div>
+
+          <div class="mt-4">
+            <div class="text-xs uppercase tracking-wider text-slate-400 mb-2">Wins</div>
+            <div class="grid sm:grid-cols-2 gap-2 text-sm">
+              <div class="flex gap-2"><span class="text-emerald-600">▪</span>Interface：可见的 typed 契约取代隐形 monkey-patch</div>
+              <div class="flex gap-2"><span class="text-emerald-600">▪</span>Locality：所有 recovery-signal 语义住在 error 类上</div>
+              <div class="flex gap-2"><span class="text-emerald-600">▪</span>Correctness：拼错变成类型错误，非静默关恢复</div>
+              <div class="flex gap-2"><span class="text-emerald-600">▪</span>Tests hit the real seam：构造带恢复字段的 error 即可</div>
+            </div>
+          </div>
+
+          <div class="mt-4 rounded-md bg-emerald-50 border border-emerald-200 px-4 py-2 text-sm text-emerald-900">
+            <span class="font-medium">无 ADR 重合 ✓</span> — ADR-010（D1 access port）/ADR-042（原子提交边界）拥有 D1 写入<em>策略</em>；本候选只把已存在的恢复信号从 monkey-patch 变成声明式类型，不改恢复行为本身。一个真实的静默失败风险（typo → recovery 被关）被消除。
+          </div>
+        </article>
+
+      </section>
+
+      <!-- ======================= TOP RECOMMENDATION ======================= -->
+      <section id="top-recommendation" class="border-t-2 border-slate-800 pt-8">
+        <div class="text-xs uppercase tracking-widest text-slate-400 mb-3">Top recommendation</div>
+        <div class="rounded-xl deep text-slate-100 p-7">
+          <h3 class="text-2xl font-serif">先做 #1 — 拆分 <code class="text-xl bg-slate-700/60 px-1.5 rounded">rclone/helper.py</code></h3>
+          <p class="mt-3 text-slate-300 max-w-3xl">它在一个候选里同时命中你的三个诉求：<span class="text-white font-medium">拆分</span>（1438 行最大的扁平 grab-bag，54 个 ADR 都没碰过的处女地）、<span class="text-white font-medium">精简</span>（service.py 从一次 27 符号宽导入收窄为三次窄导入），以及<span class="text-white font-medium">为 Rust 重写铺路</span>——一旦驱动 Google Drive 永久删除的去重级联被隔离进 <code class="bg-slate-700/60 px-1 rounded">dedup.py</code>，它就成了带编译期不变量的干净 Rust 目标，且 754 行那处 <code class="bg-slate-700/60 px-1 rounded">parse_lsjson_for_year</code> 迁移欠债会自然浮现。风险最低（纯内部分解、单一主调用方、已有正交测试施压），回报最高。</p>
+          <div class="mt-4 flex gap-3 flex-wrap text-sm">
+            <a href="#c0" class="px-3 py-1.5 rounded-md bg-emerald-500 text-slate-900 font-medium">→ 跳到 #1</a>
+            <span class="px-3 py-1.5 rounded-md bg-slate-700/60">次选：#2 dedup.py 拆分（同区域、修真实分层违例）</span>
+            <span class="px-3 py-1.5 rounded-md bg-slate-700/60">快赢：#4 / #6（精简 + 类型安全，单 PR 可done）</span>
+          </div>
+        </div>
+
+        <!-- rejected appendix -->
+        <details class="mt-8 text-sm">
+          <summary class="cursor-pointer text-slate-500 hover:text-slate-700">附录：4 个因 ADR 重合被拒 + 22 个合并阶段丢弃（点开）</summary>
+          <div class="mt-3 space-y-2 text-slate-600">
+            <div class="font-medium text-slate-700">因与现有 ADR 重合而拒绝（验证阶段）：</div>
+            <ul class="list-disc pl-5 space-y-1">
+              <li>删 <code>legacy/_spider_legacy.py</code> + 15 个一次性迁移脚本 — ADR-007 deletion-manifest 已规划，不重复提</li>
+              <li>删 state.py 38 个死 <code>_legacy</code> 函数体 — ADR-013 IMP-04 已计划 freeze/remove</li>
+              <li>从 process_detail_entries 抽 MovieClaimLedger — 误引 ADR-032（D5 明确拒绝构造期注入）</li>
+              <li>抽 QbSessionContext 消除三处 proxy-init — ADR-039 Phase 2 已显式 defer run_uploader re-route</li>
+            </ul>
+            <div class="font-medium text-slate-700 mt-3">合并阶段丢弃的高频项（节选）：</div>
+            <ul class="list-disc pl-5 space-y-1">
+              <li>RequestHandler(1645行)拆分 / HttpTransport 抽取 — Worth-exploring，未进 top-10 多样性切分</li>
+              <li>PenaltyTracker/TripleWindowThrottle 改 Rust — 投机性能声明，无热路径实测证据</li>
+              <li>_db_migrations.py 拆分 — 触及 active ADR-042 schema-init 面</li>
+              <li>SpiderRunSession / PipelineOrchestrator 抽取 — 与 active ADR-036（事件主线接线）协调风险</li>
+              <li>SSRF-safe fetch adapter — 真实安全顾虑但零测试、范围更窄</li>
+              <li>删 pipeline/engine.py 兼容 shim、spider_jobs 线程注册表 — 合法微删除，单文件偏小</li>
+            </ul>
+          </div>
+        </details>
+      </section>
+
+      <footer class="pt-6 text-xs text-slate-400 text-center">
+        生成于 2 轮多 agent 工作流（22 个子 agent · 10 子系统探索 → 合并 → 对抗性验证）· 词汇遵循 LANGUAGE.md（module/interface/depth/seam/adapter/leverage/locality）与 CONTEXT.md 领域语言
+      </footer>
+    </main>
+  </body>
+</html>

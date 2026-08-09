@@ -105,6 +105,24 @@ class TestQbTorrents:
         body = resp.json()
         assert body["detail"]["error"]["code"] == "ops.qb.unreachable"
 
+    def test_qb_auth_failure_returns_502(self, admin_client):
+        """Upstream qB credential rejection → 502 (gateway), not 401.
+
+        The API caller is already authenticated; it is the server's own login
+        to qBittorrent that failed, which is an upstream failure. This must
+        mirror qb_filter_small's 502 so the frontend does not mistake it for
+        the caller's own session expiring.
+        """
+        with patch(
+            "javdb.integrations.qb.client.QBittorrentClient",
+            side_effect=Exception("Login failed: incorrect credentials"),
+        ):
+            resp = admin_client.get("/api/ops/qb/torrents")
+
+        assert resp.status_code == 502
+        body = resp.json()
+        assert body["detail"]["error"]["code"] == "ops.qb.auth_failed"
+
     def test_readonly_user_can_read(self, readonly_client):
         """Readonly users can access GET /api/ops/qb/torrents."""
         mock_qb = MagicMock()

@@ -16,9 +16,6 @@ If a future refactor reintroduces the slicing form, the
 
 from __future__ import annotations
 
-import json
-import os
-from pathlib import Path
 from typing import Any, Dict
 
 import pytest
@@ -67,42 +64,6 @@ def test_normalize_converts_negative_offset_to_utc():
         helpers.normalize_run_started_at("2026-05-04T19:30:00-04:00")
         == "2026-05-04 23:30:00"
     )
-
-
-# ── append_jsonl_record ────────────────────────────────────────────────
-
-
-def test_append_jsonl_record_creates_directory_and_writes_one_line(
-    tmp_path, monkeypatch,
-):
-    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
-    helpers.append_jsonl_record({"a": 1, "b": "x"})
-    helpers.append_jsonl_record({"a": 2})
-
-    path = tmp_path / "D1" / "d1_drift.jsonl"
-    assert path.exists()
-    lines = [json.loads(line) for line in path.read_text().splitlines()]
-    assert lines == [{"a": 1, "b": "x"}, {"a": 2}]
-
-
-def test_append_jsonl_record_honours_explicit_reports_dir(tmp_path):
-    helpers.append_jsonl_record(
-        {"k": "v"}, reports_dir=str(tmp_path), filename="custom.jsonl",
-    )
-    path = tmp_path / "D1" / "custom.jsonl"
-    assert path.exists()
-    assert json.loads(path.read_text().strip()) == {"k": "v"}
-
-
-def test_append_jsonl_record_swallows_exceptions(monkeypatch):
-    """Best-effort: a write failure must NOT raise (callers rely on
-    metric emission never blocking the primary operation)."""
-    def boom(*_a, **_kw):
-        raise OSError("simulated FS failure")
-
-    monkeypatch.setattr(helpers.os, "makedirs", boom)
-    # Should NOT raise.
-    helpers.append_jsonl_record({"k": "v"})
 
 
 # ── write_github_output ────────────────────────────────────────────────

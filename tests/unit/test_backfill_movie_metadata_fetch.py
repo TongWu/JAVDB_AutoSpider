@@ -211,6 +211,12 @@ def test_run_backfill_parse_failed_is_fatal(monkeypatch):
     assert _run_backfill_with_statuses(monkeypatch, ['parse_failed']) == 1
 
 
+def test_run_backfill_partial_failure_is_non_fatal(monkeypatch):
+    """A bounded backfill batch may complete with some unparseable pages.
+    Successful rows should be kept and the migration step should continue."""
+    assert _run_backfill_with_statuses(monkeypatch, ['ok', 'parse_failed']) == 0
+
+
 def test_run_backfill_login_required_does_not_mask_real_failure(monkeypatch):
     """A login_required alongside a real failure must not rescue the exit code:
     login_gated is counted apart, but the failed href still returns 1."""
@@ -239,3 +245,347 @@ def test_detail_url_relative_href_prefixed():
         bm._detail_url('v/abc', 'https://javdb.com')
         == 'https://javdb.com/v/abc'
     )
+
+
+def test_backfill_metadata_parse_returns_detail_when_video_code_present(monkeypatch):
+    detail = types.SimpleNamespace(video_code='ABC-123', title='')
+    monkeypatch.setattr(bm, 'parse_detail_page', lambda _html: detail)
+
+    result = bm._backfill_metadata_parse('<html></html>', types.SimpleNamespace())
+
+    assert result is detail
+
+
+def test_backfill_metadata_parse_returns_detail_when_title_only(monkeypatch):
+    detail = types.SimpleNamespace(video_code='', title='A Title')
+    monkeypatch.setattr(bm, 'parse_detail_page', lambda _html: detail)
+
+    result = bm._backfill_metadata_parse('<html></html>', types.SimpleNamespace())
+
+    assert result is detail
+
+
+def test_backfill_metadata_parse_returns_none_when_metadata_missing(monkeypatch):
+    detail = types.SimpleNamespace(video_code='', title='')
+    monkeypatch.setattr(bm, 'parse_detail_page', lambda _html: detail)
+
+    result = bm._backfill_metadata_parse('<html></html>', types.SimpleNamespace())
+
+    assert result is None
+
+
+def test_parallel_backfill_engine_receives_base_sleep_range(monkeypatch):
+    """Parallel workers receive the unscaled base range; each worker scales it."""
+    import javdb.spider.fetch.fetch_engine as fetch_engine_module
+    import javdb.spider.runtime.config as runtime_config
+
+    monkeypatch.setattr(bm, '_load_hrefs_without_metadata', lambda only=None: ['/v/abc'])
+    monkeypatch.setattr(
+        runtime_config,
+        'PROXY_POOL',
+        [{'name': 'proxy-a'}, {'name': 'proxy-b'}],
+    )
+    monkeypatch.setattr(bm.spider_state, 'setup_proxy_pool', lambda **_kw: None)
+    monkeypatch.setattr(bm.spider_state, 'initialize_request_handler', lambda: None)
+    monkeypatch.setattr(bm.movie_sleep_mgr, 'base_min', 7.0)
+    monkeypatch.setattr(bm.movie_sleep_mgr, 'base_max', 17.0)
+    monkeypatch.setattr(bm.movie_sleep_mgr, 'sleep_min', 77.0)
+    monkeypatch.setattr(bm.movie_sleep_mgr, 'sleep_max', 177.0)
+
+    def _fake_apply_volume_multiplier(total, num_workers=1, **_kw):
+        assert total == 1
+        assert num_workers == 2
+        bm.movie_sleep_mgr.sleep_min = 77.0
+        bm.movie_sleep_mgr.sleep_max = 177.0
+
+    monkeypatch.setattr(
+        bm.movie_sleep_mgr,
+        'apply_volume_multiplier',
+        _fake_apply_volume_multiplier,
+    )
+
+    captured = {}
+
+    class _FakeEngine:
+        def start(self):
+            pass
+
+        def submit(self, url, *, entry_index='', meta=None, priority=0):
+            captured['submitted'] = {
+                'url': url,
+                'entry_index': entry_index,
+                'meta': meta,
+                'priority': priority,
+            }
+
+        def mark_done(self):
+            pass
+
+        def results(self):
+            yield types.SimpleNamespace(
+                task=types.SimpleNamespace(
+                    meta={'href': '/v/abc'},
+                    entry_index='meta-1/1',
+                    url='https://javdb.com/v/abc',
+                ),
+                success=True,
+                data=types.SimpleNamespace(video_code='ABC-123', title='A Title'),
+                error='',
+            )
+
+        def shutdown(self, *, timeout=10):
+            captured['shutdown_timeout'] = timeout
+            return []
+
+    def _fake_simple(**kwargs):
+        captured['simple_kwargs'] = kwargs
+        return _FakeEngine()
+
+    monkeypatch.setattr(fetch_engine_module.FetchEngine, 'simple', _fake_simple)
+
+    args = types.SimpleNamespace(
+        hrefs='',
+        shuffle=False,
+        limit=0,
+        limit_per_worker=0,
+        use_proxy=True,
+        dry_run=True,
+    )
+
+    assert bm.run_backfill_metadata(args) == 0
+
+    assert captured['simple_kwargs']['sleep_min'] == 7.0
+    assert captured['simple_kwargs']['sleep_max'] == 17.0
+    assert captured['submitted']['url'] == 'https://javdb.com/v/abc'
+
+
+def test_parallel_backfill_submit_interrupt_drains_remaining(monkeypatch):
+    import javdb.spider.fetch.fetch_engine as fetch_engine_module
+    import javdb.spider.runtime.config as runtime_config
+
+    monkeypatch.setattr(bm, '_load_hrefs_without_metadata', lambda only=None: ['/v/abc'])
+    monkeypatch.setattr(runtime_config, 'PROXY_POOL', [{'name': 'proxy-a'}])
+    monkeypatch.setattr(bm.spider_state, 'setup_proxy_pool', lambda **_kw: None)
+    monkeypatch.setattr(bm.spider_state, 'initialize_request_handler', lambda: None)
+    monkeypatch.setattr(bm.movie_sleep_mgr, 'apply_volume_multiplier',
+                        lambda *args, **kwargs: None)
+    monkeypatch.setattr(bm.movie_sleep_mgr, 'base_min', 7.0)
+    monkeypatch.setattr(bm.movie_sleep_mgr, 'base_max', 17.0)
+
+    captured = {'calls': []}
+
+    class _FakeEngine:
+        def start(self):
+            captured['calls'].append('start')
+
+        def submit(self, url, *, entry_index='', meta=None, priority=0):
+            captured['calls'].append(('submit', url, entry_index, meta))
+            raise KeyboardInterrupt()
+
+        def mark_done(self):
+            captured['calls'].append('mark_done')
+
+        def results(self):
+            captured['calls'].append('results')
+            return iter([])
+
+        def shutdown(self, *, timeout=10):
+            captured['calls'].append(('shutdown', timeout))
+            return [types.SimpleNamespace(url='orphaned')]
+
+        def drain_remaining(self):
+            captured['calls'].append('drain_remaining')
+            yield types.SimpleNamespace(
+                task=types.SimpleNamespace(
+                    meta={'href': '/v/drained'},
+                    entry_index='meta-1/1',
+                    url='https://javdb.com/v/drained',
+                ),
+                success=True,
+                data=types.SimpleNamespace(video_code='ABC-123', title='A Title'),
+                error='',
+            )
+
+    monkeypatch.setattr(
+        fetch_engine_module.FetchEngine,
+        'simple',
+        lambda **_kwargs: _FakeEngine(),
+    )
+    upserts = {}
+    monkeypatch.setattr(
+        bm.MetadataRepo,
+        'upsert',
+        lambda self, href, detail: upserts.update(href=href, detail=detail),
+    )
+
+    args = types.SimpleNamespace(
+        hrefs='',
+        shuffle=False,
+        limit=0,
+        limit_per_worker=0,
+        use_proxy=True,
+        dry_run=False,
+    )
+
+    assert bm.run_backfill_metadata(args) == 130
+
+    assert ('shutdown', 30) in captured['calls']
+    assert 'drain_remaining' in captured['calls']
+    assert 'mark_done' not in captured['calls']
+    assert 'results' not in captured['calls']
+    assert upserts['href'] == '/v/drained'
+
+
+def test_parallel_backfill_limit_per_worker_overrides_limit(monkeypatch):
+    """In parallel mode --limit-per-worker is an engine-level cap: --limit is
+    ignored (no pre-truncation, ADR-045 D6), every href is submitted, and
+    per_worker_task_limit is forwarded to FetchEngine.simple."""
+    import javdb.spider.fetch.fetch_engine as fetch_engine_module
+    import javdb.spider.runtime.config as runtime_config
+
+    hrefs = [f'/v/{i}' for i in range(5)]
+    monkeypatch.setattr(bm, '_load_hrefs_without_metadata', lambda only=None: list(hrefs))
+    monkeypatch.setattr(
+        runtime_config,
+        'PROXY_POOL',
+        [{'name': 'proxy-a'}, {'name': 'proxy-b'}],
+    )
+    monkeypatch.setattr(bm.spider_state, 'setup_proxy_pool', lambda **_kw: None)
+    monkeypatch.setattr(bm.spider_state, 'initialize_request_handler', lambda: None)
+    monkeypatch.setattr(bm.movie_sleep_mgr, 'apply_volume_multiplier',
+                        lambda *args, **kwargs: None)
+    monkeypatch.setattr(bm.movie_sleep_mgr, 'base_min', 1.0)
+    monkeypatch.setattr(bm.movie_sleep_mgr, 'base_max', 2.0)
+
+    captured = {'submitted': [], 'simple_kwargs': None}
+
+    class _FakeEngine:
+        def start(self):
+            pass
+
+        def submit(self, url, *, entry_index='', meta=None, priority=0):
+            captured['submitted'].append(url)
+
+        def mark_done(self):
+            pass
+
+        def results(self):
+            return iter([])
+
+        def shutdown(self, *, timeout=10):
+            return []
+
+    def _fake_simple(**kwargs):
+        captured['simple_kwargs'] = kwargs
+        return _FakeEngine()
+
+    monkeypatch.setattr(fetch_engine_module.FetchEngine, 'simple', _fake_simple)
+
+    # Both flags set: per the CLI contract --limit is ignored when
+    # --limit-per-worker > 0, so the smaller --limit must NOT pre-truncate.
+    args = types.SimpleNamespace(
+        hrefs='',
+        shuffle=False,
+        limit=2,
+        limit_per_worker=3,
+        use_proxy=True,
+        dry_run=True,
+    )
+
+    assert bm.run_backfill_metadata(args) == 0
+
+    # --limit=2 ignored: all 5 hrefs submitted in order (no pre-truncation).
+    assert [u.rsplit('/', 1)[-1] for u in captured['submitted']] == ['0', '1', '2', '3', '4']
+    # The per-worker cap is forwarded to the engine.
+    assert captured['simple_kwargs']['per_worker_task_limit'] == 3
+
+
+def _make_metadata_result(*, href='/v/abc', success=True, detail=None,
+                          error='', worker_name='proxy-1'):
+    if detail is None:
+        detail = types.SimpleNamespace(video_code='ABC-123', title='A Title')
+    return types.SimpleNamespace(
+        task=types.SimpleNamespace(meta={'href': href}, entry_index='meta-1/1'),
+        success=success,
+        data=detail,
+        error=error,
+        worker_name=worker_name,
+        used_cf=False,
+    )
+
+
+def test_apply_metadata_result_success_writes_via_metadata_repo_upsert(monkeypatch):
+    detail = types.SimpleNamespace(video_code='ABC-123', title='A Title')
+    result = _make_metadata_result(detail=detail)
+    recorded = {}
+
+    def _fake_upsert(self, href, parsed_detail):
+        recorded['href'] = href
+        recorded['detail'] = parsed_detail
+
+    monkeypatch.setattr(bm.MetadataRepo, 'upsert', _fake_upsert)
+
+    ok, failed = bm._apply_metadata_result(result, dry_run=False)
+
+    assert (ok, failed) == (1, 0)
+    assert recorded['href'] == '/v/abc'
+    assert recorded['detail'] is detail
+
+
+def test_apply_metadata_result_dry_run_skips_writes(monkeypatch):
+    result = _make_metadata_result()
+
+    def _boom(*_args, **_kwargs):
+        raise AssertionError('MetadataRepo.upsert must not run in dry-run mode')
+
+    monkeypatch.setattr(bm.MetadataRepo, 'upsert', _boom)
+
+    ok, failed = bm._apply_metadata_result(result, dry_run=True)
+
+    assert (ok, failed) == (1, 0)
+
+
+def test_apply_metadata_result_failed_result_counts_as_failed(monkeypatch):
+    result = _make_metadata_result(success=False, detail=None, error='boom')
+
+    def _boom(*_args, **_kwargs):
+        raise AssertionError('MetadataRepo.upsert must not run for failures')
+
+    monkeypatch.setattr(bm.MetadataRepo, 'upsert', _boom)
+
+    ok, failed = bm._apply_metadata_result(result, dry_run=False)
+
+    assert (ok, failed) == (0, 1)
+
+
+def test_apply_metadata_result_per_worker_cap_is_not_failure(monkeypatch):
+    from javdb.spider.fetch.fetch_engine import PER_WORKER_TASK_CAP_ERROR
+
+    result = _make_metadata_result(
+        success=False,
+        detail=None,
+        error=PER_WORKER_TASK_CAP_ERROR,
+        worker_name='engine',
+    )
+
+    def _boom(*_args, **_kwargs):
+        raise AssertionError('MetadataRepo.upsert must not run for cap flushes')
+
+    monkeypatch.setattr(bm.MetadataRepo, 'upsert', _boom)
+
+    ok, failed = bm._apply_metadata_result(result, dry_run=False)
+
+    assert (ok, failed) == (0, 0)
+
+
+def test_apply_metadata_result_write_failure_counts_as_failed(monkeypatch):
+    result = _make_metadata_result()
+
+    def _boom(*_args, **_kwargs):
+        raise RuntimeError('write failed')
+
+    monkeypatch.setattr(bm.MetadataRepo, 'upsert', _boom)
+
+    ok, failed = bm._apply_metadata_result(result, dry_run=False)
+
+    assert (ok, failed) == (0, 1)

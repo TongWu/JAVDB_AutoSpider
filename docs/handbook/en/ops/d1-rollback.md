@@ -22,6 +22,7 @@ This document is the operator's reference for rolling back partial Cloudflare D1
 
 - [TL;DR](#tldr)
 - [D1 Recovery Outbox](#d1-recovery-outbox)
+- [Transient D1 outage handling (circuit breaker)](#transient-d1-outage-handling-circuit-breaker)
 - [Strategy summary (Pending only)](#strategy-summary-pending-only)
   - [Why audit tables for history? *(legacy — kept for context, see Appendix A)*](#why-audit-tables-for-history-legacy--kept-for-context-see-appendix-a)
   - [SessionId generation (2026-05-08+)](#sessionid-generation-2026-05-08)
@@ -71,11 +72,15 @@ python3 -m apps.cli.ops.diagnose_run --run-id <run_id> --attempt <attempt> --ses
 
 The assistant is read-only and does not replace the rollback safety matrix.
 
+ADR-026 remediation proposals may point to this rollback SOP, but they do not replace the safety matrix. An `approved` proposal means an operator accepted the recommendation; it does not mean rollback has run or that the rollback CLI can skip its own checks.
+
 ---
 
 ## D1 Recovery Outbox
 
 ADR-010 adds `reports/D1/d1_recovery_outbox.jsonl` for safe, recoverable D1 write failures. In `STORAGE_BACKEND=d1`, queued outbox work is diagnostic only: the write still fails. In `STORAGE_BACKEND=dual`, safe operations may queue for recovery, but the related session cannot be committed until its `history:SESSION_ID` ordering key drains. If the outbox entry itself cannot be written durably, the write or commit still fails. Dead-lettered work also blocks its ordering key.
+
+This diagnostic-only-but-commit-gating behavior is the operator-facing form of ADR-042's write-class boundary: a recovery record can **block** an authoritative commit, but it never **upgrades** a failed write into a success. See [ADR-042](../../../design/_archive/ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md).
 
 Inspect pending work:
 
@@ -111,17 +116,54 @@ python3 -m apps.cli.db.d1_recovery startup-drain
 
 Startup replay is opt-in and bounded by the recovery outbox state. If replay sends an event to `dead_lettered`, leave the workflow stopped, inspect the ordering key, and repair or abandon that event before retrying the session commit.
 
+## Transient D1 outage handling (circuit breaker)
+
+ADR-056 wraps every D1 database connection in a per-endpoint circuit breaker. The breaker absorbs transient 5xx brownouts without crashing a run and fails fast when D1 does not recover within the configured window.
+
+**How it trips:**
+- Each D1 database (keyed by endpoint URL) has its own breaker.
+- `D1_BREAKER_TRIP_THRESHOLD` (default `3`) consecutive transient 5xx responses trip the breaker **OPEN**.
+- Permanent errors (non-retriable status codes) are not counted — they pass through immediately.
+
+**While OPEN — pause, probe, resume:**
+- All D1 callers for that database pause and wait.
+- One elected prober issues a `SELECT 1` health check every `D1_BREAKER_PROBE_INTERVAL_SEC` (default `5.0` s).
+- After `D1_BREAKER_HALF_OPEN_SUCCESSES` (default `1`) successful probes the breaker closes and all waiting callers resume automatically.
+
+**Fail-fast after timeout:**
+- If D1 does not recover within `D1_BREAKER_MAX_OPEN_SEC` (default `900` s / 15 min), the breaker raises a terminal `D1CircuitOpenError`.
+- This error crashes the run into the existing `cleanup-on-failure` rollback — same terminal semantics as before, just resilient to short brownouts.
+- `D1CircuitOpenError` is deliberately **not** a `D1TransientError`, so it bypasses the recovery outbox and does not worsen [BFR-020](../../../design/BFR-020-D1-Recovery-Outbox-Replay-After-Rollback/BFR-020-d1-recovery-outbox-replay-after-rollback.md).
+- A one-shot run (spider / CLI / Actions) exits on the terminal raise, so the breaker is effectively permanent there. A long-lived process (e.g. the `apps/api` backend on D1) survives the raise: its cached breaker re-arms to CLOSED automatically after one more `D1_BREAKER_MAX_OPEN_SEC` cooldown, so a recovered D1 is retried instead of the process self-locking until restart.
+
+**Operational note — recovery/cleanup workflows:**
+`RollbackD1.yml`, `StaleSessionCleanup.yml`, and the DailyIngestion `cleanup-on-failure` step set `D1_BREAKER_MAX_OPEN_SEC_RECOVERY` to `120` s via a repository variable so a failed run surfaces quickly. Ingestion jobs keep the 900 s default (they have a 6-hour headroom window).
+
+**Environment variables:**
+
+| Env var | Type | Default | Description |
+|---|---|---|---|
+| `D1_CIRCUIT_BREAKER_ENABLED` | `bool` | `true` | Master on/off switch (parsed by `_env_bool`; accepts `1`/`true`/`yes`/`on`). Read at breaker construction time; set `false` to disable entirely. |
+| `D1_BREAKER_TRIP_THRESHOLD` | `int` | `3` | Consecutive transient 5xx responses required to trip the breaker OPEN. |
+| `D1_BREAKER_PROBE_INTERVAL_SEC` | `float` | `5.0` | Interval in seconds between `SELECT 1` health-check probes while OPEN. |
+| `D1_BREAKER_MAX_OPEN_SEC` | `int` | `900` | Maximum seconds the breaker stays OPEN before raising `D1CircuitOpenError` (15 min). Recovery/cleanup workflows override this to `120` via `D1_BREAKER_MAX_OPEN_SEC_RECOVERY`. |
+| `D1_BREAKER_HALF_OPEN_SUCCESSES` | `int` | `1` | Number of successful probes required to close the breaker and resume normal traffic. |
+| `D1_INTERNAL_ERROR_FLOOR_SEC` | `float` | `2.0` | Minimum backoff floor (seconds) for inner-retry delays on D1 code-7500 internal errors. |
+
+See [ADR-056](../../../design/ADR-056-D1-Transport-Circuit-Breaker/ADR-056-d1-transport-circuit-breaker.md) for design rationale and [BFR-020](../../../design/BFR-020-D1-Recovery-Outbox-Replay-After-Rollback/BFR-020-d1-recovery-outbox-replay-after-rollback.md) for the recovery-outbox interaction.
+
 ## Strategy summary (Pending only)
 
 The original X3 audit hybrid plan in `.cursor/plans/d1_workflow_rollback_plan_*.plan.md` is preserved for reference; Phase 3 (`.cursor/plans/ingestion_perfect_rollback_2152bae2.plan.md`) layered the Pending write path on top — that path is now the **default** for `MovieHistory` / `TorrentHistory`.  Each table is rolled back the way that's cheapest for it:
 
 | Table family | Rollback technique | Schema additions |
 |---|---|---|
-| `ReportMovies`, `ReportTorrents`, `ReportSessions`, `SpiderStats`, `UploaderStats`, `PikpakStats` | Cascade-delete by `SessionId`; refuse to delete `ReportSessions` rows whose `Status='committed'` | `ReportSessions.Status TEXT DEFAULT 'in_progress'`; Phase 3 added `WriteMode` and the `finalizing` value to `Status` |
+| `ReportMovies`, `ReportTorrents`, `ReportSessions`, `SpiderStats`, `UploaderStats`, `PikpakStats` | Cascade-delete by `SessionId` (these four FK children declare `REFERENCES ReportSessions(Id)`); refuse to delete `ReportSessions` rows whose `Status='committed'` | `ReportSessions.Status TEXT DEFAULT 'in_progress'`; `CommittedAt TEXT` is stamped on successful commit; Phase 3 added `WriteMode` and the `finalizing` value to `Status` |
 | `MovieHistory`, `TorrentHistory` (Pending mode — Phase 3 default) | All writes stage into `PendingMovie/TorrentHistoryWrites` first; commit recomputes derived fields once and UPSERTs live in one pass; rollback `DELETE`s the staged rows for `Status='in_progress'` and `db_resume_finalizing_session` for `Status='finalizing'`. No audit replay needed. | `PendingMovieHistoryWrites` and `PendingTorrentHistoryWrites` tables (each with explicit application-generated snowflake `Seq`, `ApplyState`, `SessionId` / `RunId` / `RunAttempt`) |
 | `MovieHistory`, `TorrentHistory` (retired audit fallback) | Retired by ADR-005. `JAVDB_HISTORY_WRITE_MODE=audit` no longer enables audit replay; it falls back to pending. | Audit tables and archive/cleanup tooling removed. |
-| `PikpakHistory`, `DedupRecords`, `InventoryAlignNoExactMatch` | Delete session-scoped rows. `DedupRecords` soft-delete/orphan updates first snapshot their pre-image into `DedupRecordsRollback_<session_id>`, so rollback restores pre-existing rows and deletes rows created by the failed session | `SessionId INTEGER` on each table; per-session `DedupRecordsRollback_<session_id>` backup table |
+| `PikpakHistory`, `DedupRecords`, `InventoryAlignNoExactMatch` | Delete session-scoped rows. `DedupRecords` soft-delete/orphan updates first snapshot their pre-image into `DedupRecordsRollback_<session_id>`, so rollback restores pre-existing rows and deletes rows created by the failed session | `SessionId` on each table; per-session `DedupRecordsRollback_<session_id>` backup table |
 | `RcloneInventory` | Per-session staging table → atomic D1 batch swap. A failed scan drops staging; the live table never sees a half-written scan | `RcloneInventoryStaging_<session_id>` (created/dropped per run) |
+| `PipelineEvent`, `RunEventSummary`, `ParseRunFieldFill`, `OpsIncidents`, `AcquisitionOutcome`, `EmailNotificationHistory` | **NOT rolled back** — their session id is *provenance*, not an ownership pointer. Cascading a rollback into these would be a bug: it would drop the failed run's own record or orphan a live external resource from its tracker. `PipelineEvent` (ADR-036) records the `SessionFailed` event itself; `RunEventSummary` is its projection; `ParseRunFieldFill` is ADR-035 enrichment off the Pending→Commit path; `OpsIncidents` is the run's own failure diagnosis; `AcquisitionOutcome` (ADR-033 D10 — *bypasses session/rollback*) is keyed by `qb_hash`, so the torrent really sits in qB and the reconcile loop must keep tracking it; `EmailNotificationHistory` logs emails actually sent. None carry an FK to `ReportSessions`, so they never violate `foreign_key_check`. The coverage guard `tests/unit/test_rollback_table_coverage.py` forces every new session-tagged table into either this row or a cascade row | `*.session_id` / `*.SessionId` (provenance only) |
 
 ### Why audit tables for history? *(historical only)*
 
@@ -170,7 +212,7 @@ Cross-day sanity filter: every candidate session's `DateTimeCreated` is checked 
 
 ### Pending cleanup on commit
 
-Once `db_mark_session_committed` flips a session to `Status='committed'`, the rollback CLI refuses to roll it back (without `--force`). If a crash leaves pending-table rows behind after the status flip, the committed-session branch only deletes pending-table residue and does not re-run live-table upserts.
+Once `db_mark_session_committed` or `db_finish_commit_session` flips a session to `Status='committed'`, it also stamps `CommittedAt` for duration reporting, and the rollback CLI refuses to roll it back (without `--force`). If a crash leaves pending-table rows behind after the status flip, the committed-session branch only deletes pending-table residue and does not re-run live-table upserts.
 
 ### Smoke-test cleanup strategy
 
@@ -503,6 +545,7 @@ Both `apps.cli.commit_session` (every pending-mode commit) and `apps.cli.rollbac
 - `commit_duration_ms`, `hrefs_processed`, `movies_upserted`, `torrents_upserted`, `torrents_deleted`.
 - `derived_recompute_drift` + `derived_drift_samples` (only populated when `JAVDB_PENDING_SHADOW_AUDIT=1` — Phase 2 toggle, kept gated in Phase 3 so the comparison can be ramped down once a clean week is on file).
 - `worker_stage_rollback_failed`, `cleanup_path_mismatch_count`, `staged_claim_orphan_count`.
+- `stats_read_error` (true when the commit / rollback verifier could not read pending-table stats; treated as data unavailable, not as confirmed zero residue).
 
 The same file also receives `stale_session_cleanup` and `rollback_summary` records; downstream consumers filter by `kind`.
 
@@ -511,7 +554,7 @@ The same file also receives `stale_session_cleanup` and `rollback_summary` recor
 The email step ([`javdb/integrations/notify/email.py`](../../../../javdb/integrations/notify/email.py)) now reads `reports/D1/d1_drift.jsonl`, restricts to `pending_session_verify` records owned by `$GITHUB_RUN_ID` / `$GITHUB_RUN_ATTEMPT`, and renders a **Pending Mode Verification** body block listing every pending session's counts. Any threshold violation flags the row inline (`[CRITICAL]` / `[ALERT]`) and prefixes the email subject:
 
 - **Soft alert** (subject `[PENDING-ALERT] (...)`) — `commit_attempts > Phase3_max`, `worker_stage_rollback_failed > 0`, `staged_claim_orphan_count > 0`, `d1_request_count_audit_baseline_ratio > 1.8`, or `final_status='finalizing'`.
-- **Critical alert** (subject `[PENDING-PAUSE] (...)`, was `[PENDING-ROLLBACK-AUTO]` pre-ADR-006) — `pending_residual_count > 0`, `derived_recompute_drift > 0`, or `cleanup_path_mismatch_count > 0`. Also engages the [alert + pause](#alert--pause-publish-configyml--adr-006-pr-d) below.
+- **Critical alert** (subject `[PENDING-PAUSE] (...)`, was `[PENDING-ROLLBACK-AUTO]` pre-ADR-006) — `pending_residual_count > 0`, `derived_recompute_drift > 0`, `cleanup_path_mismatch_count > 0`, or `stats_read_error=true`. Also engages the [alert + pause](#alert--pause-publish-configyml--adr-006-pr-d) below.
 
 A **Health Snapshot** block follows the per-session table when [`apps/cli/db/pending_health.py`](../../../../apps/cli/db/pending_health.py) has produced `reports/D1/pending_health_24h.json`. Both DailyIngestion and AdHocIngestion call this aggregator before `Run Email Notification` so the snapshot covers the trailing 24h of pending sessions, plus stale-cron resume successes / failures.
 
@@ -545,7 +588,7 @@ If left untouched, the marker auto-expires after 24h and the pipeline resumes �
 | Symptom | Look for | Fix |
 |---|---|---|
 | Email subject `[PENDING-ALERT]` only | `commit_attempts`, ratio, or finalizing flag in body | Inspect `reports/D1/d1_drift.jsonl`; usually transient (Worker lease timeout). No automatic action. |
-| Email subject `[PENDING-PAUSE]` (was `[PENDING-ROLLBACK-AUTO]` pre-ADR-006) | `pending_residual_count`, `derived_recompute_drift`, `cleanup_path_mismatch_count` | Pipeline paused for 24h via `pipeline_paused_until` in `.publish-config.yml`. Investigate the root cause in `reports/D1/d1_drift.jsonl`, fix it, then delete the pause marker (or `git revert` the auto-commit). Letting the marker expire without fixing the bug just queues the same alert for the next run. |
+| Email subject `[PENDING-PAUSE]` (was `[PENDING-ROLLBACK-AUTO]` pre-ADR-006) | `pending_residual_count`, `derived_recompute_drift`, `cleanup_path_mismatch_count`, `stats_read_error` | Pipeline paused for 24h via `pipeline_paused_until` in `.publish-config.yml`. Investigate the root cause in `reports/D1/d1_drift.jsonl`, fix it, then delete the pause marker (or `git revert` the auto-commit). Letting the marker expire without fixing the bug just queues the same alert for the next run. |
 | `final_status='finalizing'` two cron cycles in a row | StaleSessionCleanup unable to drive session to `committed` | `python3 -m apps.cli.commit_session --session-id <id> --shadow-audit --log-level DEBUG`; if 3 attempts still fail, `python3 -m apps.cli.rollback --session-id <id> --no-auto-resume-finalizing --apply` to mark `failed`. |
 | `worker_stage_rollback_failed > 0` | Rollback CLI couldn't reach MovieClaim coordinator | Check coordinator health; orphan sweep cron will reconcile within 4h. |
 | `pending_residual_count > 0` on a `committed` session | Half-applied commit, residual pending-table rows | Live tables are already correct (the `committed` flip is the source of truth); the residual rows just need clearing. Safe options, in order of preference: (1) manual `DELETE FROM PendingMovieHistoryWrites WHERE SessionId=? AND ApplyState IN ('pending','applied')` plus the same on `PendingTorrentHistoryWrites` after asserting `SELECT Status FROM ReportSessions WHERE Id=?` returns `'committed'` — these tables never feed live reads, so the DELETE is non-destructive; (2) one-shot Python: `python3 -c "from javdb.storage.db import db_commit_session_history; print(db_commit_session_history(<id>))"` — clears pending-table residue without re-running live-table upserts. (`apps.cli.commit_session` skips cleanup when the session row is already `committed`, so the direct helper route is preferred.) |
@@ -588,7 +631,7 @@ If any of these six steps deviates from the expected outcome, **do not** promote
 
 - CLI: [`apps/cli/db/rollback.py`](../../../../apps/cli/db/rollback.py), [`apps/cli/db/commit_session.py`](../../../../apps/cli/db/commit_session.py), [`apps/cli/db/cleanup_stale_in_progress.py`](../../../../apps/cli/db/cleanup_stale_in_progress.py)
 - Core helpers: [`javdb/storage/db/__init__.py`](../../../../javdb/storage/db/__init__.py), [`_db_history_write.py`](../../../../javdb/storage/db/_db_history_write.py), [`_db_rollback.py`](../../../../javdb/storage/db/_db_rollback.py), [`_db_reports.py`](../../../../javdb/storage/db/_db_reports.py), [`_db_session.py`](../../../../javdb/storage/db/_db_session.py)
-- Phase 3 scripts: [`apps/cli/db/pending_health.py`](../../../../apps/cli/db/pending_health.py), [`apps/cli/db/pending_alert.py`](../../../../apps/cli/db/pending_alert.py) *(replaced the retired `pending_mode_auto_fallback.py` in ADR-006 PR-D)*
+- Phase 3 scripts: [`apps/cli/db/pending_health.py`](../../../../apps/cli/db/pending_health.py), [`apps/cli/db/pending_alert_decision.py`](../../../../apps/cli/db/pending_alert_decision.py), [`apps/cli/db/pending_alert.py`](../../../../apps/cli/db/pending_alert.py) *(replaced the retired `pending_mode_auto_fallback.py` in ADR-006 PR-D)*
 - Email integration: [`javdb/integrations/notify/email.py`](../../../../javdb/integrations/notify/email.py) (`_format_pending_verify_section`, `_evaluate_pending_alerts`, `_format_health_snapshot_section`)
 - Workflows: [`.github/workflows/DailyIngestion.yml`](../../../../.github/workflows/DailyIngestion.yml), [`.github/workflows/AdHocIngestion.yml`](../../../../.github/workflows/AdHocIngestion.yml), [`.github/workflows/RollbackD1.yml`](../../../../.github/workflows/RollbackD1.yml), [`.github/workflows/StaleSessionCleanup.yml`](../../../../.github/workflows/StaleSessionCleanup.yml)
 - Migrations: [`javdb/migrations/d1/2026_05_04_add_rollback_columns_*.sql`](../../../../javdb/migrations/d1/), [`javdb/migrations/d1/2026_05_09_add_pending_history_tables.sql`](../../../../javdb/migrations/d1/)

@@ -166,6 +166,7 @@ fn rust_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // --- Dedup Ops ---
     m.add_function(wrap_pyfunction!(dedup_ops::should_skip_from_rclone, m)?)?;
     m.add_function(wrap_pyfunction!(dedup_ops::check_dedup_upgrade, m)?)?;
+    m.add_function(wrap_pyfunction!(dedup_ops::analyze_folder_dedup, m)?)?;
 
     Ok(())
 }

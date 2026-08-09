@@ -14,7 +14,7 @@ PR-1（Repo 类）✅ 已交付：`HistoryRepo`、`OperationsRepo`、`StatsRepo`
 - **PR-2** ✅ 已交付（#70, 2026-05-21）：`db.py` 内部转发到 Repo（双写阶段）。
 - **PR-3** ✅ 已交付（#71, 2026-05-21）：spider/history_manager 调用方迁移完成。
 - **PR-4** ✅ 已交付（2026-05-22）：删除 Audit Mode 表并移除 audit 写入 / rollback 分支。
-- **PR-5** ✅ 已交付（2026-05-22）：删除 `javdb/storage/db/db.py`；ADR-001 拆出的模块已成为 canonical implementation modules，不再是空壳 facade。
+- **PR-5** ✅ 已交付（2026-05-22）：删除 `javdb/storage/db/db.py`；ADR-001 拆出的模块已成为 canonical implementation modules，不再是空壳 facade。（一个被推迟的 caller 迁移项——inventory-alignment 迁移工具的 history 写路径——被 PR-4/PR-5 留作 stub，直到 2026-06-15 才完成；见 amendment 9。）
 - **PR-6** ✅ 已交付（2026-05-22）：9 个 shell 模块重命名为 `_db_*.py`；`__init__.py` 再导出 65 个公共符号；254 条导入语句迁移至包级导入。
 - **Parser helper relocation** 仍在 ADR-005 之外，由 [ADR-011](../ADR-011-Parsing-Module/ADR-011-javdb-parsing-module.md) 追踪。ADR-005 已无剩余实施工作。
 
@@ -63,7 +63,11 @@ PR-1（Repo 类）✅ 已交付：`HistoryRepo`、`OperationsRepo`、`StatsRepo`
 
 - **2026-05-22 amendment 7**：**PR-4 与 PR-5 已交付。** Audit Mode 已完全退役：audit 表、audit archive/cleanup 工具、audit 写入/rollback 分支均已移除。`javdb/storage/db/db.py` 已删除。原 ADR-001 拆出的模块（`db_history_read.py`、`db_history_write.py`、`db_stats.py` 等）已不再是空壳模块；它们现在承载 low-level implementation，并通过 `javdb/storage/db/__init__.py` 的包级 public API 暴露。
 
-- **2026-05-29 amendment 8**：**amendment-2 的"全局已消除"声明不完整；补完工作记于 [ADR-032](../../ADR-032-Mandatory-Session-Binding/ADR-032-mandatory-session-binding.md)。** amendment-2 断言 D5 目标（消除 `db_session._active` 全局）已由 per-method `session_id` 满足。实际上 `_SESSION_ID_SENTINEL` 全局回退仍存活于 `_db_operations.py`（~10 个函数）与两个 `_db_history_write.py` batch 函数，故部分写入仍无声回退到全局。ADR-032 补完该目标（使 `session_id` 必填）并整合 `db_*` / Repo 双接口。per-method 绑定保留；构造时绑定仍被拒。
+- **2026-05-29 amendment 8**：**amendment-2 的"全局已消除"声明不完整；补完工作记于 [ADR-032](../ADR-032-Mandatory-Session-Binding/ADR-032-mandatory-session-binding.md)。** amendment-2 断言 D5 目标（消除 `db_session._active` 全局）已由 per-method `session_id` 满足。实际上 `_SESSION_ID_SENTINEL` 全局回退仍存活于 `_db_operations.py`（~10 个函数）与两个 `_db_history_write.py` batch 函数，故部分写入仍无声回退到全局。ADR-032 补完该目标（使 `session_id` 必填）并整合 `db_*` / Repo 双接口。per-method 绑定保留；构造时绑定仍被拒。
+
+- 2026-06-02：方向由 [ADR-046](../ADR-046-Retire-Db-Facade/ADR-046-retire-db-facade.zh.md) 延续——Repo 成为存储深接缝、`db_*` 分阶段退役；Phase 1 让 History 写绑定 session（不再读进程级全局）。
+
+- **2026-06-15 amendment 9**：**被推迟的 PR-4/PR-5 遗留项已关闭——inventory-alignment 迁移工具改写为 staging+commit。** PR-4 移除 `db_upsert_history` 时，`javdb/migrations/tools/align_inventory_with_moviehistory.py` 仍在导入它。PR-4 的验证步骤把这处残留标记为「known PR-5 scope」（[IMP-ADR005-01](IMP-ADR005-01-drop-audit-mode.md)），但 PR-5（[IMP-ADR005-02](IMP-ADR005-02-delete-db-facade.md)）只改写了该工具的**导入**——标记所要求的写路径改写从未执行。工具被留下一个 `_audit_retired_stub` 加一道 fail-fast 守卫，任何非 dry-run 运行都会被中止。由于没有任何东西追踪这次推迟，它一直无人察觉，直到 WeeklyDedup → Migration 的 `align_inventory_history` job（以 `dry_run=false` 运行）每周都因 `db_upsert_history was removed by ADR-005 PR-4` 而失败。现在该工具会自行开启一个 pending `ReportSessions` 行，通过 `HistoryRepo.stage_movie` / `stage_torrent` 暂存每条对齐的 movie/torrent，并在运行结束时提交该 session（失败则回滚）——与 spider 使用的 staging+commit 路径一致。stub 与守卫均已移除，运行它不再需要 `--dry-run`。根因与修复记录于 [BFR-019](../../BFR-019-Align-Tool-Stuck-Dry-Run/BFR-019-align-tool-stuck-dry-run.zh.md)。
 
 ---
 

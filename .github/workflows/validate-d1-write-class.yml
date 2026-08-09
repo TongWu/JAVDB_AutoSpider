@@ -1,0 +1,35 @@
+name: Validate D1 Write-Class
+
+# ADR-042 (D6): every new D1 write surface (a CREATE TABLE migration) must
+# declare its write class. This gate runs on all PRs; when no new
+# javdb/migrations/d1/*.sql files are added it no-ops and exits 0, so it is safe
+# to configure as a required status check.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: validate-d1-write-class-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: '3.x'
+      - name: Validate Write-Class headers on new D1 migrations
+        run: |
+          python3 scripts/ci/validate_d1_write_class.py \
+            --base "${{ github.event.pull_request.base.sha }}"

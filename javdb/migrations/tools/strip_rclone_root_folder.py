@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """One-shot migration: strip the configured rclone root folder prefix from
 stored paths so CSV/SQLite only store **relative paths**.
 
@@ -25,18 +26,22 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 # NB: previously this module also called ``os.chdir(REPO_ROOT)`` at import
 # time, which made ``parse_args`` unsafe to import from another script (it
 # would silently change that script's CWD). The chdir is now performed only
 # inside :func:`main` after argparse has run. ``sys.path`` insertion is kept
-# at import time because the ``from packages.python...`` imports below need
+# at import time because the ``from javdb...`` imports below need
 # the repo root to be importable as soon as this module loads.
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from javdb.infra.logging import setup_logging, get_logger
-from javdb.integrations.rclone.helper import strip_drive_name, strip_root_folder, get_configured_root_folder
+from javdb.integrations.rclone.path_utils import (
+    get_configured_root_folder,
+    strip_drive_name,
+    strip_root_folder,
+)
 
 setup_logging()
 logger = get_logger(__name__)
@@ -189,4 +194,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

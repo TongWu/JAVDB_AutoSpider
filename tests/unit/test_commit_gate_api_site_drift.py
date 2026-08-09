@@ -22,7 +22,7 @@ import pytest
 import javdb.storage.db as _db
 from javdb.ops.sentinel import service as sentinel_service
 from javdb.ops.sentinel.models import DriftFinding, SentinelVerdict
-from javdb.storage.db import db_create_report_session
+from javdb.storage.db._db_reports import db_create_report_session
 from javdb.storage.sessions import CommitRequest, commit_session
 
 

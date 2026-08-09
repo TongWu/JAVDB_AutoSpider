@@ -85,14 +85,6 @@ on:
         required: false
         default: ''
         type: string
-      runner:
-        description: 'Runner type for run-pipeline (includes health checks)'
-        required: false
-        default: 'ubuntu-latest'
-        type: choice
-        options:
-          - 'ubuntu-latest'
-          - 'self-hosted'
       enable_rclone_filter:
         description: 'Enable rclone inventory filter (skip entries already in rclone inventory with 中字)'
         required: false
@@ -142,6 +134,7 @@ jobs:
     env:
       TZ: Asia/Singapore
       D1_RECOVERY_OUTBOX_ENABLED: ${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}
+      D1_CIRCUIT_BREAKER_ENABLED: ${{ vars.D1_CIRCUIT_BREAKER_ENABLED || 'true' }}
       D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
       D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
 
@@ -255,6 +248,11 @@ jobs:
           VAR_SMTP_USER: ${{ secrets.SMTP_USER }}
           VAR_EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
           VAR_EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          # Notification backends (ADR-039). Bot token / chat id are secrets;
+          # NOTIFY_BACKENDS is a non-sensitive JSON variable (default ['email']).
+          VAR_TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          VAR_TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          VAR_NOTIFY_BACKENDS_JSON: ${{ vars.NOTIFY_BACKENDS_JSON }}
           VAR_PROXY_MODE: ${{ vars.PROXY_MODE }}
           VAR_PROXY_POOL_MAX_FAILURES: ${{ vars.PROXY_POOL_MAX_FAILURES || 3 }}
           VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}
@@ -364,7 +362,7 @@ jobs:
   # Job 2: Run Pipeline - Health checks, then spider, uploader, and pikpak bridge
   # =============================================================================
   run-pipeline:
-    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     environment: Production
     permissions:
       contents: read
@@ -380,6 +378,7 @@ jobs:
     env:
       TZ: Asia/Singapore
       D1_RECOVERY_OUTBOX_ENABLED: ${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}
+      D1_CIRCUIT_BREAKER_ENABLED: ${{ vars.D1_CIRCUIT_BREAKER_ENABLED || 'true' }}
       D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
       D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
       # Ingestion Perfect Rollback (Phase 3): default WriteMode='pending'.
@@ -903,6 +902,7 @@ jobs:
     env:
       TZ: Asia/Singapore
       D1_RECOVERY_OUTBOX_ENABLED: ${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}
+      D1_CIRCUIT_BREAKER_ENABLED: ${{ vars.D1_CIRCUIT_BREAKER_ENABLED || 'true' }}
       D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
       D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
       STORAGE_BACKEND: ${{ vars.STORAGE_BACKEND || 'sqlite' }}
@@ -983,7 +983,7 @@ jobs:
 
   # =============================================================================
   # Job 4: Email Notification - Always runs (success, failure, or cancel)
-  # (Runs in parallel with commit-results on GitHub-hosted runner)
+  # (Runs in parallel with commit-results on a self-hosted runner)
   # =============================================================================
   email-notification:
     runs-on: ubuntu-latest
@@ -998,6 +998,7 @@ jobs:
     env:
       TZ: Asia/Singapore
       D1_RECOVERY_OUTBOX_ENABLED: ${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}
+      D1_CIRCUIT_BREAKER_ENABLED: ${{ vars.D1_CIRCUIT_BREAKER_ENABLED || 'true' }}
       D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
       D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
       PIPELINE_WORKFLOW_RUN_STARTED_AT: ${{ needs.setup.outputs.pipeline_workflow_run_started_at }}
@@ -1224,42 +1225,7 @@ jobs:
         run: |
           set -e
           set -o pipefail
-          DECISION=$(python3 - <<'PY'
-          import json, os, sys
-          path = os.path.join(os.environ.get("REPORTS_DIR", "reports"),
-                              "D1", "d1_drift.jsonl")
-          if not os.path.exists(path):
-              sys.exit(0)
-          run_id = os.environ.get("GITHUB_RUN_ID", "")
-          attempt = os.environ.get("GITHUB_RUN_ATTEMPT", "")
-          critical_fields = (
-              "pending_residual_count",
-              "derived_recompute_drift",
-              "cleanup_path_mismatch_count",
-          )
-          for line in open(path, "r", encoding="utf-8"):
-              line = line.strip()
-              if not line:
-                  continue
-              try:
-                  rec = json.loads(line)
-              except Exception:
-                  continue
-              if rec.get("kind") != "pending_session_verify":
-                  continue
-              if str(rec.get("run_id") or "") != run_id:
-                  continue
-              if str(rec.get("run_attempt") or "") != attempt:
-                  continue
-              for k in critical_fields:
-                  try:
-                      if int(rec.get(k) or 0) > 0:
-                          print(f"{k}={rec.get(k)} session={rec.get('session_id')}")
-                          sys.exit(0)
-                  except (TypeError, ValueError):
-                      continue
-          PY
-          )
+          DECISION=$(python3 -m apps.cli.db.pending_alert_decision)
           if [ -z "$DECISION" ]; then
             echo "No critical pending-mode alert — pause NOT engaged."
             exit 0
@@ -1282,7 +1248,7 @@ jobs:
 
   # =============================================================================
   # Job 4: Commit Results - Commit CSV files only (no logs)
-  # (Runs in parallel with email-notification on GitHub-hosted runner)
+  # (Runs in parallel with email-notification on a self-hosted runner)
   # =============================================================================
   commit-results:
     runs-on: ubuntu-latest
@@ -1295,6 +1261,7 @@ jobs:
     env:
       TZ: Asia/Singapore
       D1_RECOVERY_OUTBOX_ENABLED: ${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}
+      D1_CIRCUIT_BREAKER_ENABLED: ${{ vars.D1_CIRCUIT_BREAKER_ENABLED || 'true' }}
       D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
       D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
       GH_TOKEN: ${{ github.token }}

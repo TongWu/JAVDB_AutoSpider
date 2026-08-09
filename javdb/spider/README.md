@@ -20,7 +20,7 @@ JavDB scraping runtime: fetches index/detail pages, parses HTML, runs parallel/s
 - `runtime/` — Per-run runtime helpers: config, state, proxy state, report, sleep.
 - `fetch/` — Index/backend/fallback/session/login fetch coordinator and engine.
 - `detail/` — Parallel and sequential detail-page extraction modes.
-- `services/` — Domain services (`dedup.py`).
+- `services/` — Domain services (`dedup_types.py`, `dedup_query.py`, `dedup_store.py`).
 - `auth/` — JavDB login session refresh.
 - `compat/` — Explicit backwards-compatibility helpers (`csv_builder.py`).
 

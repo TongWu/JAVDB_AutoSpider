@@ -195,7 +195,7 @@ export async function findUser(env: Env, db: D1Database): Promise<User | undefin
 
 ### 能力诚实性：GitHub Actions 覆盖与 `INGESTION_MODE`
 
-并入自 [ADR-028](../../ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md) 的工作流 WS-A（P0）。两个对等缺口损害了*能力诚实性*——平台宣称了它无法追踪或执行的工作。
+并入自 [ADR-028](../ADR-028-Web-Platform-Completeness-Roadmap/ADR-028-web-platform-completeness-roadmap.md) 的工作流 WS-A（P0）。两个对等缺口损害了*能力诚实性*——平台宣称了它无法追踪或执行的工作。
 
 **Cloudflare — 未追踪的 GitHub Actions workflow。** `Migration.yml`、`WeeklyDedup.yml`、`TestIngestion.yml` 没有类型化调度端点。它们只能通过通用的 `POST /api/gh-actions/runs`（要求 `GH_ACTIONS_TIER=admin` 且已知 workflow 文件名）触达，且**不会**写入 `job_runs`，因此永不出现在 Tasks 列表或统计里。为这三个 workflow 补类型化调度端点 + `job_runs` 追踪，沿用 `DailyIngestion` / `QBFileFilter` / `RcloneManager` / `StaleSessionCleanup` 的现有模式。
 

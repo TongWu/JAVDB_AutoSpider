@@ -107,12 +107,12 @@ python3 -m apps.cli.pipeline                                  # 完整工作流
 python3 -m apps.cli.pipeline --use-proxy                      # 带代理覆盖
 
 # 上传
-python3 -m apps.cli.qb_uploader                               # 上传到 qBittorrent
-python3 -m apps.cli.qb_file_filter --min-size 100 --dry-run   # 过滤小文件
+python3 -m apps.cli.qb.uploader                               # 上传到 qBittorrent
+python3 -m apps.cli.qb.file_filter --min-size 100 --dry-run   # 过滤小文件
 
 # 维护
-python3 -m apps.cli.migration --help                           # 数据库迁移
-python3 -m apps.cli.rollback --session-id 332                  # 回滚会话
+python3 -m apps.cli.db.migration --help                        # 数据库迁移
+python3 -m apps.cli.db.rollback --session-id 20250601T143012.123456Z-0001-0001  # 回滚会话
 python3 -m apps.cli.login                                      # 刷新 JavDB 登录 cookie
 ```
 
@@ -133,7 +133,8 @@ python3 -m apps.cli.login                                      # 刷新 JavDB �
 |--------|----------|------|
 | `DailyIngestion.yml` | Cron 12:00 UTC + 手动 | 日常抓取流水线 |
 | `AdHocIngestion.yml` | 手动 | 自定义 URL 抓取 |
-| `QBFileFilter.yml` | Cron 16:00 UTC + 手动 | 过滤小文件（日常摄取后 4 小时）|
+| `SubscriptionMonitor.yml` | Cron 14:00 UTC + 手动 | 抓取已关注演员并写入 New Works feed |
+| `QBFileFilter.yml` | Cron 16:00 UTC + 手动 | 过滤小文件（日常摄取后 4 小时）+ 可选质量证据 |
 | `WeeklyDedup.yml` | Cron 周日 + 手动 | Rclone 去重 |
 | `RollbackD1.yml` | 手动 | 会话回滚 |
 | `StaleSessionCleanup.yml` | Cron 每日 02:00 UTC | 清理卡住的会话（>48h）|
@@ -176,6 +177,7 @@ python3 -m apps.cli.login                                      # 刷新 JavDB �
 - [故障排查](docs/handbook/zh/ops/troubleshooting.md) — 常见问题和解决方案
 - [日志配置](docs/handbook/zh/ops/logging.md) — 日志配置和格式
 - [迁移脚本](docs/handbook/zh/ops/migration-scripts.md) — 数据库迁移工具
+- [种子质量证据](docs/handbook/zh/ops/torrent-quality-evidence.md) — ADR-024 影子证据采集
 
 ### 其他资源
 - [CONTEXT.md](CONTEXT.md) — 领域术语词汇表

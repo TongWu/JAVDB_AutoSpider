@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import unicodedata
 from typing import Optional, Tuple
 from urllib.parse import urlparse
 
@@ -16,6 +17,18 @@ from bs4.element import Tag
 from javdb.parsing.models import MovieLink
 
 logger = logging.getLogger(__name__)
+
+
+def normalise_code(code: str) -> str:
+    """Normalise a video code key for inventory lookup.
+
+    NFKC folds compatibility codepoints to their canonical ASCII equivalents
+    before the strip + upper-case step, so full-width and ASCII code variants
+    share one key.
+    """
+    if not code:
+        return ''
+    return unicodedata.normalize('NFKC', code).strip().upper()
 
 
 # ---------------------------------------------------------------------------
@@ -151,38 +164,77 @@ def extract_all_movie_links(parent_tag: Tag) -> list:
 
 
 # ---------------------------------------------------------------------------
-# Video-code extraction (ported from utils/parser.py)
+# Video-code extraction (ported from the legacy parser module)
 # ---------------------------------------------------------------------------
 
-_HYPHENATED_CODE_RE = re.compile(r'^[A-Za-z0-9]+-[A-Za-z0-9]+$')
+WESTERN_STUDIO_DATE_RE = re.compile(
+    r"^[A-Za-z0-9]*[A-Za-z][A-Za-z0-9]*\.(?:\d{4}|\d{2})\.\d{2}\.\d{2}$"
+)
+
+_VIDEO_CODE_FAMILY_PATTERNS = (
+    ("western_studio_date", WESTERN_STUDIO_DATE_RE),
+    ("multi_hyphen", re.compile(r"^[A-Za-z0-9]+(?:-[A-Za-z0-9]+){2,}$")),
+    ("numeric_date_hyphen", re.compile(r"^\d{6}-\d+$")),
+    ("numeric_date_underscore", re.compile(r"^\d{6}_\d+$")),
+    ("classic_hyphenated", re.compile(r"^[A-Za-z]+-\d+[A-Za-z0-9]*$")),
+    ("hyphenless_studio", re.compile(r"^[A-Za-z]+\d+$")),
+)
+
+VIDEO_CODE_FAMILIES = tuple(family for family, _pattern in _VIDEO_CODE_FAMILY_PATTERNS)
+
+
+def classify_video_code_family(raw: str) -> str:
+    """Return the recognized index-card video-code family label, or ''.
+
+    This is a read-only labeller. It MUST NOT be used to decide whether a token
+    is a valid video_code (see ``_is_plausible_video_code``): many real codes
+    (e.g. ``259LUXU-1234``) match no family but are still valid.
+    """
+    s = (raw or "").strip()
+    if len(s) < 2:
+        return ""
+    for family, pattern in _VIDEO_CODE_FAMILY_PATTERNS:
+        if pattern.fullmatch(s):
+            return family
+    return ""
 
 
 def _is_plausible_video_code(raw: str) -> bool:
-    """Heuristic: accept classic ``ABC-123`` codes and hyphen-less studio codes (e.g. ``n0656``).
+    """Heuristic: accept classic ``ABC-123`` codes, multi-hyphen codes
+    (``FC2-PPV-1234567``), numeric date-style uncensored codes whether hyphen-
+    or underscore-separated (``062216-179`` / ``062216_001``), dotted western
+    studio-date tokens (``Wifey.2026.05.30``), and hyphen-less studio codes
+    (``n0656``).
 
-    Rejects empty strings, bare letter-only blobs (e.g. a mistaken title fragment),
-    and hyphenated strings that look like natural-language titles (contain spaces or
-    non-alphanumeric characters beyond ``-``).
+    Rejects empty strings, digit-less blobs, and title text (any character
+    outside ``[A-Za-z0-9_-]``, notably whitespace).
     """
     s = (raw or '').strip()
     if len(s) < 2:
         return False
-    has_letter = any(c.isalpha() for c in s)
-    has_digit = any(c.isdigit() for c in s)
-    if '-' in s:
-        return bool(_HYPHENATED_CODE_RE.match(s)) and has_letter and has_digit
-    return has_letter and has_digit
+    if WESTERN_STUDIO_DATE_RE.fullmatch(s):
+        return True
+    # A code is a compact token: ASCII alphanumerics with '-'/'_' separators
+    # only. The ASCII guard matches the Rust core's is_ascii_alphanumeric so the
+    # two engines agree (str.isalnum() is True for CJK/full-width, which would
+    # otherwise let "CODE標題" through here but not in Rust).
+    if not all((c.isascii() and c.isalnum()) or c in '-_' for c in s):
+        return False
+    if not any(c.isdigit() for c in s):
+        return False
+    # Accept hyphen-less studio codes (``n0656``) via the letter, and numeric
+    # date-style uncensored codes (``062216-179`` / ``062216_001``) via the separator.
+    return any(c.isalpha() for c in s) or '-' in s or '_' in s
 
 
 def extract_video_code(a_tag: Tag) -> str:
     """Extract the video code from a movie-card ``<a class="box">`` tag.
 
     Accepts standard hyphenated codes and hyphen-less codes when they contain
-    both letters and digits (e.g. ``n0656``). Other values return an empty string.
+    both letters and digits (e.g. ``n0656``), plus dotted western studio-date
+    tokens (e.g. ``Wifey.2026.05.30``). Other values return an empty string.
     Full-width characters are normalized to ASCII via NFKC.
     """
-    import unicodedata
-
     if not a_tag or not isinstance(a_tag, Tag):
         logger.debug("No valid <a> tag provided")
         return ''
@@ -193,7 +245,10 @@ def extract_video_code(a_tag: Tag) -> str:
         if strong_tag:
             video_code = strong_tag.get_text(strip=True)
         else:
-            video_code = video_title_div.get_text(strip=True)
+            # No <strong>: the div reads "CODE Title…" — the code is the first
+            # whitespace-delimited token; the rest is the title.
+            parts = video_title_div.get_text(strip=True).split()
+            video_code = parts[0] if parts else ''
 
         video_code = unicodedata.normalize('NFKC', video_code)
 
@@ -287,6 +342,8 @@ def extract_category_name(soup: BeautifulSoup) -> Tuple[str, str]:
 
 __all__ = [
     'MovieLink',
+    'VIDEO_CODE_FAMILIES',
+    'normalise_code',
     'extract_rate_and_comments',
     'normalize_javdb_href_path',
     'javdb_absolute_url',
@@ -295,6 +352,7 @@ __all__ = [
     'extract_movie_link',
     'extract_all_movie_links',
     'extract_video_code',
+    'classify_video_code_family',
     'detect_page_type',
     'extract_category_name',
 ]

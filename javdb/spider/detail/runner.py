@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
+import json as _json
 from threading import Event
 from typing import List, Optional, Set, Tuple
 from urllib.parse import urljoin
 
 from javdb.infra.logging import get_logger
-from javdb.infra.config import use_sqlite
-from javdb.storage.db import get_active_session_id, get_db, REPORTS_DB_PATH
+from javdb.infra.config import cfg, use_sqlite
+from javdb.storage import db as _db
+from javdb.storage.db import get_db
 from javdb.storage.history_manager import (
     save_parsed_movie_to_history,
     batch_update_last_visited,
@@ -32,16 +35,52 @@ from javdb.pipeline.policies import (
     should_skip_recent_yesterday_release,
 )
 from javdb.spider.services.content_filter import Rule, evaluate
-from javdb.spider.services.dedup import (
-    DedupRecord,
-    should_skip_from_rclone,
-    append_dedup_record,
-)
+from javdb.spider.services.dedup_query import should_skip_from_rclone
+from javdb.spider.services.dedup_store import append_dedup_record
+from javdb.spider.services.dedup_types import DedupRecord
 from javdb.spider.fetch.backend import FetchBackend
 from javdb.spider.fetch.fetch_engine import EngineTask
 from javdb.spider.runtime.config import BASE_URL
+from javdb.pipeline.events import emit as _emit_event  # ADR-036 Phase 2
+from javdb.quality.probe_queue import maybe_capture_runner_ups
 
 logger = get_logger(__name__)
+
+
+def _capture_runner_ups_for_result(
+    result: dict,
+    *,
+    href: str,
+    video_code,
+    repo,
+    enabled: bool,
+    k: int,
+    global_cap: int,
+    enqueued_at: str,
+) -> int:
+    """ADR-024 IMP-10: additively enqueue Top-K runner-ups for a parsed result.
+
+    Reads the raw magnet list from ``result['movie_detail']`` (the production
+    selection result is untouched). Safe no-op when capture is disabled or the
+    detail object is missing/odd. Never raises into the persistence path.
+    """
+    if not enabled:
+        return 0
+    detail = result.get("movie_detail")
+    getter = getattr(detail, "get_magnets_as_legacy", None)
+    if getter is None:
+        return 0
+    try:
+        magnets = getter() or []
+        return maybe_capture_runner_ups(
+            magnets,
+            context={"movie_href": href, "video_code": video_code},
+            repo=repo, enabled=True, k=k, global_cap=global_cap,
+            enqueued_at=enqueued_at,
+        )
+    except Exception:  # noqa: BLE001 - shadow capture must never break ingestion
+        logger.warning("Runner-up capture failed for %s", href, exc_info=True)
+        return 0
 
 
 def _dedup_record_field(record: object, *names: str) -> str:
@@ -68,7 +107,9 @@ def _dedup_log_variant_label(record: DedupRecord | object) -> str:
 
 
 def _load_content_filter_rules() -> list[Rule]:
-    with get_db(REPORTS_DB_PATH) as conn:
+    # Resolve REPORTS_DB_PATH at call time so pytest's path monkeypatch is
+    # honoured (BFR-016).
+    with get_db(_db.REPORTS_DB_PATH) as conn:
         return ContentFilterRepo(conn).load_rules()
 
 
@@ -120,6 +161,7 @@ def _claim_detail_candidates(
     candidates: List["DetailEntryCandidate"],
     *,
     runtime=None,
+    session_id: Optional[str] = None,
 ) -> Tuple[List["DetailEntryCandidate"], int, int, Optional[str], Set[str]]:
     """Acquire MovieClaim leases for *candidates* before submitting fetches.
 
@@ -170,8 +212,7 @@ def _claim_detail_candidates(
     # session.  Falls back to an empty string when the session context
     # is not yet set (e.g. legacy callers, dry-runs, or test harnesses);
     # the Worker treats that as "legacy claim with no session affinity".
-    session_id_int = get_active_session_id()
-    session_id_str = str(session_id_int) if session_id_int is not None else ""
+    session_id_str = str(session_id) if session_id is not None else ""
     kept: List["DetailEntryCandidate"] = []
     leased: Set[str] = set()
     skipped_completed = 0
@@ -445,10 +486,34 @@ def process_detail_entries(
     log_duplicate_skips: bool = False,
     cancel_event: Event | None = None,
     content_filter_rules: Optional[list[Rule]] = None,
+    session_id: Optional[str] = None,
 ) -> dict:
-    """Run the shared detail pipeline against a concrete fetch backend."""
+    """Run the shared detail pipeline against a concrete fetch backend.
+
+    *session_id* is the explicit run session (ADR-046 D2 — never ambient). It
+    is threaded into the MovieClaim affinity, the ``stage_complete`` calls, and
+    the history write path. ``None`` keeps the legacy no-session-affinity
+    behaviour (dry-runs, tests).
+    """
     runtime = _resolve_runtime(runtime)
     holder_id = _holder_id(runtime)
+
+    # ADR-024 IMP-10: runner-up capture config. Only parse the int knobs when the
+    # feature is ON, and fail safe (disable capture) on a bad value — a malformed
+    # QUALITY_PROBE_* setting must never crash the core ingestion run.
+    _capture_enabled = bool(cfg("TORRENT_QUALITY_EVIDENCE_ENABLED", False))
+    _capture_topk = 2
+    _capture_cap = 50
+    if _capture_enabled:
+        try:
+            _capture_topk = int(cfg("QUALITY_PROBE_TOPK", 2) or 2)
+            _capture_cap = int(cfg("QUALITY_PROBE_GLOBAL_CAP", 50) or 50)
+        except (TypeError, ValueError):
+            logger.warning(
+                "Invalid QUALITY_PROBE_TOPK / QUALITY_PROBE_GLOBAL_CAP; "
+                "disabling runner-up capture for this run"
+            )
+            _capture_enabled = False
 
     total_entries = len(entries)
     if cancel_event is not None and cancel_event.is_set():
@@ -469,6 +534,21 @@ def process_detail_entries(
     )
     if content_filter_rules is None:
         content_filter_rules = load_content_filter_rules()
+    actor_age_resolver = None
+    has_enabled_age_rule = any(
+        getattr(r, 'enabled', False) and getattr(r, 'dimension', '') == 'age'
+        for r in (content_filter_rules or [])
+    )
+    if has_enabled_age_rule:
+        try:
+            from javdb.spider.services.actor_age import build_default_resolver
+            actor_age_resolver = build_default_resolver()
+        except Exception:
+            logger.info(
+                "Actor-age resolver unavailable; age rules will be skipped",
+                exc_info=True,
+            )
+            actor_age_resolver = None
 
     # P1-B: filter through the cross-runner MovieClaim mutex.  Returns the
     # candidates this runner won the lease on; peer-completed and
@@ -481,14 +561,29 @@ def process_detail_entries(
         skipped_contention,
         shard_date,
         leased_hrefs,
-    ) = _claim_detail_candidates(prepared_entries, runtime=runtime)
-    # Phase-1 — capture the active ReportSessions.Id once at the top so
-    # every ``stage_complete`` call below carries the same session
+    ) = _claim_detail_candidates(
+        prepared_entries, runtime=runtime, session_id=session_id,
+    )
+    # Phase-1 — the explicit ReportSessions.Id (ADR-046 D2) is carried into
+    # every ``stage_complete`` call below so they share the same session
     # affinity.  Empty string when no DB session is active (dry-runs,
     # tests, etc.); ``_stage_complete_movie_claim`` falls back to legacy
     # ``complete_movie`` semantics in that case.
-    _active_session_id = get_active_session_id()
-    _session_id_str = str(_active_session_id) if _active_session_id is not None else ""
+    _session_id_str = str(session_id) if session_id is not None else ""
+    # ADR-036 Phase 2: emit MovieSelected for each candidate entering detail fetch.
+    # Best-effort — never raises; dry-run and no-session paths return None silently.
+    for _candidate in prepared_entries:
+        _emit_event(
+            "MovieSelected",
+            session_id=_session_id_str,
+            entity_type="movie",
+            entity_id=getattr(_candidate, "href", None),
+            payload=_json.dumps({
+                "video_code": (getattr(_candidate, "entry", None) or {}).get("video_code"),
+                "phase": phase,
+                "page_num": getattr(_candidate, "page_num", None),
+            }),
+        )
     skipped_history += skipped_completed
     if skipped_contention:
         logger.info(
@@ -649,6 +744,24 @@ def process_detail_entries(
     no_new_torrents = 0
     previous_runtime_state = runtime_state
 
+    # ADR-024 IMP-10: open ONE probe repo for the run (gated; no-op when disabled).
+    # ExitStack lets us conditionally enter the get_db context manager without
+    # restructuring the existing try/finally below.
+    import contextlib
+    from javdb.storage.repos.torrent_probe_repo import TorrentProbeRepo
+    _probe_repo = None
+    _probe_enqueued_at = datetime.now(timezone.utc).isoformat()
+    _captured_total = 0  # run-wide running count, enforces _capture_cap across all movies
+    _probe_stack = contextlib.ExitStack()
+    if _capture_enabled:
+        try:
+            _probe_conn = _probe_stack.enter_context(get_db(_db.REPORTS_DB_PATH))
+            _probe_repo = TorrentProbeRepo(_probe_conn)
+        except Exception:  # noqa: BLE001 — capture setup must never break ingestion
+            logger.warning("Runner-up probe repo setup failed; capture disabled for this run", exc_info=True)
+            _capture_enabled = False
+            _probe_stack.close()
+
     try:
         for result in backend.results():
             if cancel_event is not None and cancel_event.is_set():
@@ -720,7 +833,17 @@ def process_detail_entries(
             data = result.data or {}
             movie_detail = data.get('movie_detail')
             if content_filter_rules and movie_detail is not None:
-                decision = evaluate(movie_detail, content_filter_rules)
+                actor_ages = None
+                if actor_age_resolver is not None:
+                    try:
+                        actor_ages = actor_age_resolver.ages_for(movie_detail)
+                    except Exception:
+                        logger.debug(
+                            "actor-age resolution failed for %s",
+                            entry.get('video_code', '?'), exc_info=True,
+                        )
+                        actor_ages = None
+                decision = evaluate(movie_detail, content_filter_rules, actor_ages)
                 if not decision.keep:
                     logger.info(
                         "[%s] %s filtered by content rules: %s",
@@ -774,6 +897,7 @@ def process_detail_entries(
                 supporting_actors=data['supporting'],
                 magnet_links=magnet_links,
                 movie_detail=movie_detail,
+                session_id=session_id,
             )
             skipped_history += outcome.skipped_history
             no_new_torrents += outcome.no_new_torrents
@@ -784,6 +908,18 @@ def process_detail_entries(
                 actor_updates.append(outcome.actor_update)
             if outcome.row is not None:
                 phase_rows.append(outcome.row)
+
+            # ADR-024 IMP-10: additive runner-up capture (gated; never raises into ingestion path).
+            # global_cap is a RUN-WIDE budget: pass the remaining headroom each movie
+            # and accumulate, so the cap bounds the whole run rather than per-movie.
+            if _capture_enabled and _probe_repo is not None and _captured_total < _capture_cap:
+                _captured_total += _capture_runner_ups_for_result(
+                    data, href=href,
+                    video_code=entry.get('video_code', ''),
+                    repo=_probe_repo, enabled=True,
+                    k=_capture_topk, global_cap=_capture_cap - _captured_total,
+                    enqueued_at=_probe_enqueued_at,
+                )
 
             # Phase-1 success path — stage the claim instead of jumping
             # straight to ``completed_committed``.  Subsequent claim
@@ -854,6 +990,8 @@ def process_detail_entries(
                     exc_info=True,
                 )
             queue_held_hrefs.clear()
+        # ADR-024 IMP-10: close the probe DB connection (no-op when disabled).
+        _probe_stack.close()
         backend.shutdown()
 
     finalize_detail_phase(
@@ -862,6 +1000,7 @@ def process_detail_entries(
         history_file=history_file,
         visited_hrefs=visited_hrefs,
         actor_updates=actor_updates,
+        session_id=_session_id_str or None,
     )
 
     logger.info(
@@ -1033,8 +1172,14 @@ def persist_parsed_detail_result(
     supporting_actors: str = '',
     magnet_links: Optional[dict] = None,
     movie_detail: Optional[object] = None,
+    session_id: Optional[str] = None,
 ) -> DetailPersistOutcome:
-    """Build ingestion plan, write outputs, and return outcome metadata."""
+    """Build ingestion plan, write outputs, and return outcome metadata.
+
+    *session_id* is the explicit run session (ADR-046 D2 — never ambient),
+    forwarded to the history write so the staged rows are tagged with the
+    owning session.
+    """
 
     href = entry['href']
     video_code = entry['video_code']
@@ -1096,7 +1241,7 @@ def persist_parsed_detail_result(
     worker_tag = f"[{worker_name}] " if worker_name else ""
     for rec in plan.dedup_records:
         if not dry_run and dedup_csv_path:
-            append_dedup_record(dedup_csv_path, rec)
+            append_dedup_record(dedup_csv_path, rec, session_id=session_id)
         if entry_index:
             variant = _dedup_log_variant_label(rec)
             logger.info(
@@ -1113,6 +1258,29 @@ def persist_parsed_detail_result(
     if plan.should_include_in_report:
         write_csv([row], csv_path, fieldnames, dry_run, append_mode=True)
         outcome.row = row
+        # ADR-036 Phase 2: emit TorrentSelected for each new magnet link.
+        # Best-effort — any extraction failure falls back to href; _emit_event never raises.
+        if plan.new_magnet_links and session_id:
+            _emit_session_id = str(session_id)
+            for _torrent_href, _magnet in plan.new_magnet_links.items():
+                try:
+                    from javdb.integrations.qb.client import (
+                        extract_hash_from_magnet as _extract_hash,
+                    )
+                    _qb_hash = _extract_hash(_magnet)
+                except Exception:
+                    _qb_hash = None
+                _emit_event(
+                    "TorrentSelected",
+                    session_id=_emit_session_id,
+                    entity_type="torrent",
+                    entity_id=_qb_hash if _qb_hash else _torrent_href,
+                    payload=_json.dumps({
+                        "category": getattr(plan, "category", None),
+                        "href": href,
+                        "video_code": video_code,
+                    }),
+                )
         if (
             use_history_for_saving
             and not dry_run
@@ -1132,6 +1300,7 @@ def persist_parsed_detail_result(
                 actor_gender=actor_gender,
                 actor_link=actor_link,
                 supporting_actors=supporting_actors,
+                session_id=session_id,
             )
         # ADR-022: persist rich metadata outside the session flow
         if movie_detail is not None and not dry_run:
@@ -1157,10 +1326,15 @@ def finalize_detail_phase(
     history_file: str,
     visited_hrefs: set,
     actor_updates: list,
+    session_id: Optional[str],
 ) -> None:
-    """Flush shared per-phase side effects after detail processing completes."""
+    """Flush shared per-phase side effects after detail processing completes.
+
+    ``session_id`` is the explicit run session (ADR-046 D2); it is bound onto
+    the write repo rather than read from a process-global.
+    """
 
     if use_history_for_saving and not dry_run and visited_hrefs:
         if use_sqlite() and actor_updates:
-            HistoryRepo().batch_update_movie_actors(actor_updates)
-        batch_update_last_visited(history_file, visited_hrefs)
+            HistoryRepo(session_id=session_id).batch_update_movie_actors(actor_updates)
+        batch_update_last_visited(history_file, visited_hrefs, session_id=session_id)

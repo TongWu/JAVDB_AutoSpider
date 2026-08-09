@@ -2,10 +2,10 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Proposed — umbrella; Phase 1 implemented and verified; execution delegated to per-phase IMPs |
+| **Status**  | Proposed — umbrella; Phases 1 & 2 implemented & verified; Phase 2 (additive emit + shadow consumer) landed 2026-06-10; Phase 3 (strangler) optional/deferred; execution delegated to per-phase IMPs |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-012](../_archive/ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md), [ADR-019](../ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md), [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md) |
+| **Related** | [ADR-012](../_archive/ADR-012-Pipeline-Run-Boundary/ADR-012-pipeline-run-structured-boundary.md), [ADR-019](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md), [ADR-005](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md), [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-033](../_archive/ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md), [ADR-035](../_archive/ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md) |
 
 > Originated from a 2026-05-29 brainstorming session on net-new directions
 > (Direction 3 — a replayable pipeline core).
@@ -18,10 +18,10 @@ result sidecars ([ADR-012](../_archive/ADR-012-Pipeline-Run-Boundary/ADR-012-pip
 Adding a new cross-cutting capability means **pipeline surgery** — the two most
 recent designs prove it:
 
-- [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) (media
+- [ADR-033](../_archive/ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) (media
   closed-loop) had to **instrument the uploader** (queue-time write) and **push
   from the cleanup step** (completed) to learn a torrent's fate.
-- [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)
+- [ADR-035](../_archive/ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)
   (drift sentinel) had to **hook the index parse boundary** and **gate the commit
   path**.
 
@@ -112,12 +112,7 @@ consumer's cursor to 0 and re-run → its projection rebuilds from the log. This
 the headline value (replayable / auditable), and it is nearly free with the
 cursor model.
 
-**D6. Strangler path for the existing hooks.** Phase 2 re-points
-[ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)'s
-`AcquisitionOutcome` and [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)'s
-sentinel to **consume events** instead of hooking the pipeline — retroactively
-de-invasifying them. Making `pending→commit`/history a projection of the log is
-Phase 3+, deferred and high-care.
+**D6. Strangler path for the existing hooks — additive first, cutover gated.** Phase 2 makes the spine *carry* the per-entity lifecycle events and proves the consume path with a **shadow** projection, but does **not** rip out the existing direct-write hooks. Concretely: emit `MovieDiscovered` / `MovieSelected` / `TorrentSelected` / `TorrentQueued` / `TorrentCompleted` at the natural pipeline points (additive, best-effort per D4); add a consumer that rebuilds an `AcquisitionOutcome`-shaped projection from those events for **cross-validation** against [ADR-033](../_archive/ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)'s authoritative direct-write path (the shadow projection is never read by production decisions). The [ADR-035](../_archive/ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md) sentinel is re-pointed onto the event stream **only where it maps cleanly** to per-entity events; if its per-field fill computation does not, it stays on its current piggyback hook. **The actual cutover of ADR-033's data-critical `AcquisitionOutcome` — which feeds the ADR-024/025 quality/preference data clock — is deferred** until the in-run events prove reliable in production (or the outcome-determining events are promoted to commit-class per D4). Rationale: `AcquisitionOutcome`'s current hook is a synchronous direct write; replacing it with a *best-effort* in-run emit + async projection would risk silently dropping acquisition rows under emit failure, regressing a freshly-landed critical path. Making `pending→commit` / history a projection of the log remains Phase 3+, deferred and high-care.
 
 **D7. Module shape mirrors the repo's conventions.** `javdb/pipeline/events/`
 holds `models.py` (event types), `store.py` (`emit` + read-since-cursor),
@@ -153,11 +148,14 @@ is the D1 access. Emit call sites live at the existing pipeline points.
 | Phase | IMP | Ships | Deferred |
 | --- | --- | --- | --- |
 | Phase 1 — Spine + demonstrator | [IMP-ADR036-01](IMP-ADR036-01-event-spine.md) | `PipelineEvent` + `EventConsumerCursor` tables; `events` module (`emit`, read-since-cursor, base consumer); emit at the pipeline points; one demonstrator consumer (`RunEventSummary` per-session counts) proving emit→consume→replay | Re-pointing ADR-033/035; history-as-projection |
-| Phase 2 — Adopt consumers | IMP-ADR036-02 (stub) | Re-point ADR-033 `AcquisitionOutcome` and ADR-035 sentinel to consume events | — |
-| Phase 3 — Strangler (optional) | IMP-ADR036-03 (stub) | Make `pending→commit`/history a projection of the log | — |
+| Phase 2 — Adopt consumers | [IMP-ADR036-02](IMP-ADR036-02-adopt-consumers.md) ✅ | Emit the 5 per-entity events (`MovieDiscovered`, `MovieSelected`, `TorrentSelected`, `TorrentQueued`, `TorrentCompleted`) at the natural pipeline points (best-effort/additive); `AcquisitionOutcomeShadow` projection table + `AcquisitionOutcomeShadowRepo` + `AcquisitionOutcomeShadowConsumer`; cross-validation `compare_shadow_to_authoritative()` + CLI; import-cycle fix; sentinel left on piggyback (not-clean mapping, as designed) | Cutover of ADR-033's direct-write `AcquisitionOutcome` (gated on shadow proving reliable in production); history-as-projection |
+| Phase 3 — Strangler (optional) | IMP-ADR036-03 (deferred) | Make `pending→commit`/history a projection of the log | — |
+| Phase 4 — Operator audit log | [IMP-ADR036-04](IMP-ADR036-04-operator-action-audit-log.md) | Sibling `OperatorAuditEvent` append-only table (actor/action/target/source); best-effort emit at web/worker/CLI mutation points; admin read API + Web Audit Log view | mutating PipelineEvent; pipeline entity-lifecycle events |
 
 Phase 1 stands alone and touches nothing authoritative. Phase 2 depends on
-ADR-033/035 having landed. Phase 3 is an optional, high-care authority migration.
+ADR-033/035 having landed; the Phase 2 AcquisitionOutcome cutover is additionally
+gated on in-run events proving reliable in production. Phase 3 is an optional,
+high-care authority migration.
 
 ### Explicit non-goals (YAGNI)
 
@@ -198,8 +196,8 @@ ADR-033/035 having landed. Phase 3 is an optional, high-care authority migration
 - [ADR-019 — Session Lifecycle Authority](../_archive/ADR-019-Session-Lifecycle-Authority/ADR-019-session-lifecycle-authority.md)
 - [ADR-005 — db.py Retirement & Repo Pattern](../_archive/ADR-005-Db-Py-Retirement/ADR-005-db-py-retirement-and-repo-pattern.md)
 - [ADR-010 — D1 Access Port](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md)
-- [ADR-033 — Media Closed-Loop](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
-- [ADR-035 — Site-Contract Drift Sentinel](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)
+- [ADR-033 — Media Closed-Loop](../_archive/ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
+- [ADR-035 — Site-Contract Drift Sentinel](../_archive/ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md)
 
 ## Status Log
 
@@ -213,3 +211,6 @@ ADR-033/035 having landed. Phase 3 is an optional, high-care authority migration
   commit boundaries; demonstrator `apps.cli.ops.events` consumer/replay CLI;
   GitHub full unit tests passed with no failures. Umbrella stays **Proposed**
   pending Phase 2 (adopt consumers) and Phase 3 (optional strangler).
+- 2026-06-10 (re-scope): Phase 2 re-scoped to conservative additive phasing via design-feedback-loop review (owner decision). WHY: D4 makes in-run events (`Discovered`/`Selected`/`Queued`) best-effort; replacing `AcquisitionOutcome`'s synchronous direct-write hook with a best-effort emit + async projection would risk silently dropping acquisition rows under emit failure, regressing a freshly-landed path that feeds the ADR-024/025 quality/preference data clock. WHAT Phase 2 now ships: emit the 5 per-entity events (`MovieDiscovered`, `MovieSelected`, `TorrentSelected`, `TorrentQueued`, `TorrentCompleted`) at the natural pipeline points (additive); a shadow `AcquisitionOutcome`-projection consumer for cross-validation against ADR-033's authoritative direct-write (never read by production); re-point the ADR-035 sentinel onto the event stream only where it maps cleanly. DEFERRED/GATED: the full cutover of ADR-033's data-critical `AcquisitionOutcome` is deferred until in-run events prove reliable in production (or the outcome-determining events are promoted to commit-class per D4).
+- 2026-06-13: Added Phase 4 (IMP-ADR036-04, operator/web-console action audit log) to cover the gap where the spine records only pipeline entity-lifecycle events with no actor dimension. Operator mutations land in a sibling append-only `OperatorAuditEvent` table (best-effort), leaving PipelineEvent and the reserved Phase-3 strangler untouched.
+- 2026-06-10 (implemented): Phase 2 implemented and verified (branch `claude/adr036-p2-event-consumers`; 9 tasks, subagent-driven with implementer + spec/code review per task; ~44 Phase-2 unit tests green). Emit points: `MovieDiscovered` in `javdb/spider/app/run_service.py` (after `RunStarted`, loops `all_index_results_phase1 + all_index_results_phase2`); `MovieSelected` in `javdb/spider/detail/runner.py` `process_detail_entries` (after `prepare_detail_entries`); `TorrentSelected` in `javdb/spider/detail/runner.py` `persist_parsed_detail_result` (inside `if plan.should_include_in_report:`, per magnet link); `TorrentQueued` in `javdb/integrations/qb/uploader/service.py` `run_uploader` (after `_record_queued_acquisition` succeeds); `TorrentCompleted` in `javdb/ops/reconcile/service.py` `apply_cleanup_completed` (after `mark_state`, `session_id` recovered from `AcquisitionOutcome` row). All emits are best-effort — the pipeline step still succeeds if the emit raises. Shadow projection: new reports-DB table `AcquisitionOutcomeShadow` (D1 migration `2026_06_10_add_acquisition_outcome_shadow.sql` + SQLite `_REPORTS_DDL` mirror), `AcquisitionOutcomeShadowRepo`, `AcquisitionOutcomeShadowConsumer` (consumes `TorrentQueued` + `TorrentCompleted`, skips events with no `entity_id`); wired into `apps/cli/ops/events.py` via `--consumer {run_event_summary,acquisition_outcome_shadow}`. Cross-validation: `compare_shadow_to_authoritative()` in `javdb/ops/reconcile/shadow_validate.py` + CLI `apps/cli/ops/shadow_validate.py` — read-only, compares shadow vs authoritative `AcquisitionOutcome` (operations DB), coarse-maps authoritative richer states to `queued`/`completed` so downstream states like `in_library` are not false-positives. Sentinel NOT re-pointed — confirmed not-clean (needs raw per-record `MovieEntry` field access at parse time; event payload cannot carry that granularity; stays on piggyback in `javdb/spider/fetch/index.py` / `index_parallel.py`, as per D6 amendment). `AcquisitionOutcome` cutover deferred/gated on shadow proving reliable in production. Also fixed a latent storage↔events import cycle (`pipeline_event_repo` no longer imports `javdb.pipeline.events` at module load; uses a local `_utc_now_iso` + lazy `PipelineEventRecord` import). Verification: all Phase-2 unit tests green; existing event-spine + reconcile + pipeline tests pass; full unit+integration suite shows no facade/pipeline regressions (remaining failures are pre-existing environmental ones — 401 auth in the credential-less worktree, missing local Rust wheel `ImportError`).

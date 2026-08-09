@@ -22,6 +22,11 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    - name: Ensure Python in runner tool cache
+      uses: ./.github/actions/ensure-python
+      with:
+        python-version: ${{ inputs.python-version }}
+
     - name: Set up Python
       uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
       with:
@@ -32,10 +37,12 @@ runs:
       with:
         path: ~/.cache/pip
         # hashFiles() requires a literal glob or format(); input refs alone are invalid.
-        key: ${{ runner.os }}-pip-py${{ inputs.python-version }}-${{ hashFiles(format('{0}', inputs['requirements-file'])) }}
+        # runner.arch keeps x64/arm64 self-hosted runners from sharing one
+        # immutable cache key (first arch to save would win forever).
+        key: ${{ runner.os }}-${{ runner.arch }}-pip-py${{ inputs.python-version }}-${{ hashFiles(format('{0}', inputs['requirements-file'])) }}
         restore-keys: |
-          ${{ runner.os }}-pip-py${{ inputs.python-version }}-
-          ${{ runner.os }}-pip-
+          ${{ runner.os }}-${{ runner.arch }}-pip-py${{ inputs.python-version }}-
+          ${{ runner.os }}-${{ runner.arch }}-pip-
 
     - name: Install dependencies (venv + pip)
       shell: bash

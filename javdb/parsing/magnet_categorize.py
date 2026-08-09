@@ -10,7 +10,21 @@ Layer note: this module lives in ``javdb.parsing`` and, like the parsers in
 frozen pure-Python implementation when the Rust extension is unavailable. It
 imports only ``javdb.infra.logging`` and ``javdb.rust_core`` — never anything
 from ``javdb.spider`` or ``javdb.pipeline``.
+
+Public API (ADR-024):
+    categorize          — Rust-first dispatch; production entry point.
+    collect_runner_ups  — Pure-Python runner-up extraction (never alters selection).
 """
+
+__all__ = [
+    'categorize',
+    'collect_runner_ups',
+    'infer_resolution',
+    '_parse_size',
+    '_sort_key',
+    '_python_categorize',
+    'RUST_MAGNET_AVAILABLE',
+]
 
 from javdb.infra.logging import get_logger
 
@@ -106,6 +120,102 @@ def _parse_size(size_str):
 
 def _sort_key(m):
     return (m.get('timestamp', ''), _parse_size(m.get('size', '')))
+
+
+# ADR-024 IMP-10: the four production categories, in a stable order.
+_QUALITY_CATEGORIES = (
+    "hacked_subtitle",
+    "hacked_no_subtitle",
+    "subtitle",
+    "no_subtitle",
+)
+
+# Hacked-content name patterns (mirrors _python_categorize exactly).
+_HACKED_SUBTITLE_PATTERNS = ('-UC', '-CU', '-C.无码破解', '-U-C', '-C-U')
+_HACKED_PATTERNS_ALL = ('-UC', '-CU', '-C.无码破解', '-U-C', '-C-U', '-U', '.无码破解')
+
+
+def _bucket_magnets(magnets, index=None):
+    """Return per-category candidate lists, each sorted best-first.
+
+    Single source of truth for which magnets fall into each production category
+    and in what order. ``_python_categorize`` consumes ``bucket[cat][0]`` (the
+    production pick); ``collect_runner_ups`` consumes ``bucket[cat][1:]``. The
+    filter predicates and ``_sort_key`` ordering are identical between the two
+    consumers, guaranteeing runner-ups are categorised exactly as production
+    would categorise them.
+
+    Predicates mirror ``_python_categorize`` verbatim:
+    - subtitle: has 字幕/Subtitle tag AND .无码破解 not in name
+    - hacked_subtitle: name contains any of -UC/-CU/-C.无码破解/-U-C/-C-U
+    - hacked_no_subtitle: name contains -U or .无码破解 (but not hacked_subtitle)
+    - no_subtitle: not subtitle and not any hacked pattern; 4K (4k in name) first
+    """
+    # --- subtitle (mirrors _python_categorize: exclude only .无码破解) ---
+    subtitle = [
+        m for m in magnets
+        if any('字幕' in tag or 'Subtitle' in tag for tag in m['tags'])
+        and '.无码破解' not in m['name']
+    ]
+    subtitle.sort(key=_sort_key, reverse=True)
+
+    # --- hacked (mirrors _python_categorize predicate exactly) ---
+    hacked_subtitle = []
+    hacked_no_subtitle = []
+    for m in magnets:
+        name = m['name']
+        if any(p in name for p in _HACKED_SUBTITLE_PATTERNS):
+            hacked_subtitle.append(m)
+        elif '-U' in name or '.无码破解' in name:
+            hacked_no_subtitle.append(m)
+    hacked_subtitle.sort(key=_sort_key, reverse=True)
+    hacked_no_subtitle.sort(key=_sort_key, reverse=True)
+
+    # --- no_subtitle (prefer 4K via '4k' in name.lower(); mirrors _python_categorize) ---
+    k4 = []
+    normal = []
+    for m in magnets:
+        name = m['name']
+        is_subtitle = any('字幕' in tag for tag in m['tags']) and '.无码破解' not in name
+        is_hacked = any(p in name for p in _HACKED_PATTERNS_ALL)
+        if not is_subtitle and not is_hacked:
+            if '4k' in name.lower():
+                k4.append(m)
+            else:
+                normal.append(m)
+    k4.sort(key=_sort_key, reverse=True)
+    normal.sort(key=_sort_key, reverse=True)
+    no_subtitle = k4 + normal
+
+    return {
+        "subtitle": subtitle,
+        "hacked_subtitle": hacked_subtitle,
+        "hacked_no_subtitle": hacked_no_subtitle,
+        "no_subtitle": no_subtitle,
+    }
+
+
+def collect_runner_ups(magnets, index=None, k=2):
+    """Return up to ``k`` runner-up magnets per production category.
+
+    Additive and read-only: never alters production selection. Runner-ups are
+    the candidates ranked 2nd through (k+1)th in each category bucket —
+    everything except the production pick (position 0), capped at ``k``.
+    Returns a dict keyed by all four production categories.
+
+    Mirrors ``_python_categorize``'s hacked-category exclusivity: production
+    selects ``hacked_no_subtitle`` only in the ``elif`` branch, so when a
+    ``hacked_subtitle`` pick exists production leaves ``hacked_no_subtitle``
+    empty. In that case ``hacked_no_subtitle`` has no production pick to find
+    runner-ups against, so we suppress it — otherwise we would wrongly treat
+    ``hacked_no_subtitle[0]`` as a pick and queue the rest as runner-ups for a
+    category production never chose.
+    """
+    buckets = _bucket_magnets(magnets, index)
+    result = {cat: buckets[cat][1:k + 1] for cat in _QUALITY_CATEGORIES}
+    if buckets["hacked_subtitle"]:
+        result["hacked_no_subtitle"] = []
+    return result
 
 
 def _python_categorize(magnets, index=None):

@@ -204,6 +204,37 @@ class TestAnalyzePikpakLog:
         assert 'qBittorrent' in error_msg
         assert log_exists is True
 
+    def test_adhoc_failure_is_not_critical(self, temp_dir):
+        """Adhoc qB is optional: its connection failure (bridge logs WARNING and
+        continues on primary, exit 0) must NOT mark the pipeline as failed even
+        though the line carries 'Failed to login qBittorrent' / 'Connection refused'."""
+        log_path = os.path.join(temp_dir, 'pikpak.log')
+        with open(log_path, 'w') as f:
+            f.write("Found 122 torrents across categories (primary QB)\n")
+            f.write(
+                "Failed to connect to adhoc qBittorrent: Failed to login qBittorrent: "
+                "HTTPConnectionPool(host='65.0.0.1', port=1230): Max retries exceeded "
+                "(Caused by NewConnectionError('Connection refused'))\n"
+            )
+            f.write("Continuing with primary QB only\n")
+            f.write("Batch upload completed: 1 successful, 0 failed\n")
+
+        is_critical, error_msg, log_exists = analyze_pikpak_log(log_path)
+        assert is_critical is False
+        assert error_msg is None
+        assert log_exists is True
+
+    def test_primary_failure_still_critical(self, temp_dir):
+        """A primary-QB outage (no 'adhoc' tag on the line) must still be critical."""
+        log_path = os.path.join(temp_dir, 'pikpak.log')
+        with open(log_path, 'w') as f:
+            f.write("Failed to login qBittorrent at http://10.0.0.1:8080\n")
+
+        is_critical, error_msg, log_exists = analyze_pikpak_log(log_path)
+        assert is_critical is True
+        assert 'qBittorrent' in error_msg
+        assert log_exists is True
+
 
 class TestAnalyzePipelineLog:
     """Test cases for analyze_pipeline_log function."""

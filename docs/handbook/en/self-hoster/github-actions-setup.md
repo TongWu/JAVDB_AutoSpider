@@ -28,7 +28,7 @@ Both the `DailyIngestion` and `AdHocIngestion` workflows reference `environment:
 
 Go to **Settings > Secrets and variables > Actions > Secrets** (or scope them to the `Production` environment).
 
-The `config_generator` CLI (`python3 -m apps.cli.config_generator --github-actions`) reads these from environment variables prefixed with `VAR_` and writes a `config.py` at the start of each workflow run. Every secret listed below maps to a `VAR_*` env var in the workflow YAML.
+The `config_generator` CLI (`python3 -m apps.cli.ops.config_generator --github-actions`) reads these from environment variables prefixed with `VAR_` and writes a `config.py` at the start of each workflow run. Every secret listed below maps to a `VAR_*` env var in the workflow YAML.
 
 ### Required Secrets
 
@@ -89,6 +89,15 @@ When set, the ad-hoc workflow uses a separate qBittorrent instance. PikPak bridg
 |---|---|
 | `RCLONE_CONFIG_BASE64` | Base64-encoded `rclone.conf` content (for Google Drive inventory and dedup) |
 
+### Optional Secrets (Telegram Notifications, ADR-039)
+
+Only needed when `NOTIFY_BACKENDS_JSON` includes `"telegram"`.
+
+| Secret | Purpose |
+|---|---|
+| `TELEGRAM_BOT_TOKEN` | Bot token from [@BotFather](https://t.me/BotFather), e.g. `123456:ABC-DEF...` |
+| `TELEGRAM_CHAT_ID` | Target chat/channel id, e.g. `-1001234567890` |
+
 ## Step 4 -- Configure Repository Variables
 
 Go to **Settings > Secrets and variables > Actions > Variables**.
@@ -101,13 +110,29 @@ These are non-sensitive values. The `config_generator` reads them via `VAR_*` en
 |---|---|---|
 | `GIT_REPO_URL` | -- | Repository HTTPS URL (e.g. `https://github.com/you/JAVDB_AutoSpider.git`) |
 | `GIT_BRANCH` | `main` | Branch for git push |
+| `NOTIFY_BACKENDS_JSON` | `["email"]` | JSON array of active notify backends (ADR-039). Add `"telegram"` for a Telegram run summary, or set `["telegram"]` to disable the email report. Requires the `TELEGRAM_*` secrets when telegram is active. |
 | `PROXY_MODE` | `pool` | `pool`, `single`, or `None` |
 | `PROXY_MODULES_JSON` | `["spider"]` | JSON array of modules that use proxy: `spider`, `qbittorrent`, `pikpak`, `all` |
+| `DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST_JSON` | `["western_studio_date"]` | JSON array of video-code families excluded from daily ingestion, default `["western_studio_date"]`. Set to `[]` to stop excluding the western studio/date family. |
 | `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 | `STORAGE_BACKEND` | `sqlite` | `sqlite`, `d1`, or `dual` |
 | `D1_RECOVERY_OUTBOX_ENABLED` | `false` | Enable ADR-010 recovery outbox handling for safe D1 write failures. Accepted truthy values include `1`, `true`, `yes`, and `on`. |
 | `D1_BATCHING_ENABLED` | `false` | Enable ADR-010 safe-path D1 micro-batching. Accepted truthy values include `1`, `true`, `yes`, and `on`. |
 | `D1_STARTUP_REPLAY_ENABLED` | `false` | Enable ADR-010 startup replay before the first D1/Dual operation. Accepted truthy values include `1`, `true`, `yes`, and `on`. |
+
+### Optional Magnet Aggregation Variables (Python API)
+
+These variables are only useful for custom GitHub Actions jobs that generate a
+`config.py` for the Python API. The stock ingestion workflows do not serve the
+Python API or call external indexer aggregation.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `MAGNET_SOURCES_JSON` | `[]` | JSON array of active external magnet indexers, e.g. `["javbus", "sukebei"]`. Empty keeps the `magnet_aggregation` capability false. |
+| `JAVBUS_BASE_URL` | `https://www.javbus.com` | JAVBUS indexer base URL. |
+| `SUKEBEI_BASE_URL` | `https://sukebei.nyaa.si` | Sukebei indexer base URL. |
+| `MAGNET_SOURCES_USE_PROXY` | `true` | Route external indexer fetches through the proxy pool. |
+| `MAGNET_SOURCE_TIMEOUT_SECONDS` | `10.0` | Per-source wall-clock budget for external indexer fan-out. |
 
 ### Spider Tuning Variables
 
@@ -134,6 +159,9 @@ These are non-sensitive values. The `config_generator` reads them via `VAR_*` en
 | `REQUEST_TIMEOUT` | `30` | API request timeout in seconds |
 | `DELAY_BETWEEN_ADDITIONS` | `1` | Delay in seconds between torrent additions |
 | `QB_FILE_FILTER_MIN_SIZE_MB` | `100` | Minimum file size threshold for the file filter |
+| `TORRENT_QUALITY_EVIDENCE_ENABLED` | `false` | Run ADR-024 shadow evidence collection after the file filter |
+| `TORRENT_QUALITY_POLICY_MODE` | `shadow` | Reserved rollout mode; Phase 1 remains shadow-only |
+| `TORRENT_QUALITY_CATEGORIES` | (empty) | Optional JSON array used when the workflow dispatch `categories` input is omitted |
 
 ### Proxy Variables
 
@@ -190,7 +218,7 @@ These are non-sensitive values. The `config_generator` reads them via `VAR_*` en
 In CI, there is no persistent `config.py` file. Instead, the **setup job** in each workflow runs:
 
 ```bash
-python3 -m apps.cli.config_generator --github-actions
+python3 -m apps.cli.ops.config_generator --github-actions
 ```
 
 This script reads every `VAR_*` environment variable (populated from Secrets and Variables above) and writes a complete `config.py`. The file is then encrypted with `ARTIFACT_KEY` and passed between jobs as an encrypted artifact.
@@ -222,7 +250,7 @@ To verify:
 | `setup` | Checkout, install dependencies, generate + encrypt config.py |
 | `run-pipeline` | Health check, spider, qBittorrent uploader, file filter, PikPak bridge, rclone dedup, session commit |
 | `cleanup-on-failure` | Rolls back uncommitted D1/pending writes on failure |
-| `email-notification` | Sends result email, runs auto-fallback on critical pending alerts |
+| `email-notification` | Sends result email, runs alert-and-pause on critical pending alerts |
 | `commit-results` | Commits CSV reports and database files back to the repo |
 
 ### AdHocIngestion Workflow
@@ -237,6 +265,25 @@ Go to **Actions > JavDB Ad-Hoc Ingestion Pipeline > Run workflow** and fill in:
 - **history_filter**: Check history before processing
 - **date_filter**: Filter by release date
 - **qb_category**: Custom qBittorrent category (empty = default "Ad Hoc"; `顶级` uses the daily qB credentials)
+
+### SubscriptionMonitor Workflow
+
+`SubscriptionMonitor.yml` runs daily at **14:00 UTC** and can also be triggered
+manually. It reads active `ActorSubscription` rows from D1, scrapes each actor
+through the existing AdHoc spider path, and writes genuinely new releases into
+the `NewWorks` feed.
+
+Manual inputs:
+
+- **proxy_spider**: Enable proxy use for actor-page scrapes.
+- **dry_run**: List active subscriptions without scraping.
+- **runner**: Choose `ubuntu-latest` or `self-hosted`.
+- **log_level**: CLI log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`).
+
+The workflow uses the same `Production` environment secrets and variables as
+the ingestion workflows, including the D1 credentials, JavDB login credentials,
+proxy settings, and `DEPLOY_KEY`. It does not use `ARTIFACT_KEY` — logs are
+uploaded as plaintext artifacts.
 
 ## Step 7 -- Monitoring
 
@@ -277,7 +324,9 @@ openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
 | Workflow | Trigger | Purpose |
 |---|---|---|
 | `QBFileFilter.yml` | Cron (2h after daily ingestion) | Filter small files from recently added torrents |
-| `ReconcileLibrary.yml` | Hourly cron / manual dispatch | Reconcile ADR-033 acquisition outcomes against live qB state |
+| `PurgeMissingFiles.yml` | Daily cron / manual dispatch | Delete `missingFiles` torrents from both qB instances: stop + recheck each, then delete the entry (with files only when content shrank past 50% and residue ≤ 100MB). Inputs: `dry_run`, `min_age_hours` (default 22) |
+| `ReconcileLibrary.yml` | Hourly cron / manual dispatch | Run ADR-033 closed-loop passes: acquisition outcomes against live qB state + ownership ledger (gdrive/qb/pikpak/nas) + consumption signal from media servers |
+| `SubscriptionMonitor.yml` | Daily cron / manual dispatch | Scrape followed actors through the AdHoc path and write the New Works feed |
 | `WeeklyDedup.yml` | Weekly cron | Rclone deduplication |
 | `RollbackD1.yml` | Manual dispatch | Manual session rollback |
 | `StaleSessionCleanup.yml` | Daily cron | Auto-cleanup sessions stuck > 48h |
@@ -289,16 +338,46 @@ openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
 
 ### ReconcileLibrary Workflow
 
-`ReconcileLibrary.yml` is the ADR-033 Phase 1 reconciliation pass. It runs every
-hour and invokes:
+`ReconcileLibrary.yml` runs the ADR-033 Phase 1+2+3 reconciliation passes. It
+runs every hour and invokes:
 
 ```bash
-STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --json
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --pass all --json
 ```
 
-The workflow defaults to the `self-hosted` runner because qBittorrent is often
-reachable only from the operator's network. It still exposes a manual `runner`
-input for test runs on `ubuntu-latest` when qB is publicly reachable or mocked.
+`--pass all` runs all three passes in sequence:
+
+1. **Acquisition pass** — reads live qBittorrent state and updates
+   `AcquisitionOutcome` rows (`queued` / `downloading` → `downloading`,
+   `completed`, `stalled`, or `failed`). A torrent reported in qB's
+   `missingFiles` state (its files were deleted from disk after the download
+   completed) is treated as `completed`; once the outcome is recorded, the
+   stale torrent is deleted from qB along with any remaining files.
+2. **Ownership pass** — collects ownership observations from four sources and
+   upserts them into `OwnershipLedger`:
+   - `gdrive` — projects the existing `RcloneInventory` table (no extra rclone
+     call required; populated by `WeeklyDedup.yml`).
+   - `qb` — bridges completed `AcquisitionOutcome` rows as ownership evidence.
+   - `pikpak` — reads `PikpakHistory` success rows.
+   - `nas` — a forward-compat stub that currently always logs and yields nothing,
+     regardless of any configuration. `RCLONE_NAS_REMOTE` in `config.py` is a
+     placeholder for when NAS collection is implemented; setting it has no effect
+     today. Leaving `nas` in the source list is harmless.
+
+   After collecting, the ownership pass runs a **present sweep**: for each
+   source, rows present in a previous snapshot but absent from the current one
+   have their `present` flag set to `0` (audit-preserving; rows are never
+   deleted). Finally, `AcquisitionOutcome` rows whose `video_code` now appears in
+   a persistent (`gdrive` or `nas`) Ledger source are advanced to `in_library`.
+3. **Consumption pass** — polls each media server in `MEDIA_SERVERS` (supplied
+   via the `MEDIA_SERVERS_JSON` secret; see
+   [Media Servers Setup](media-servers.md)), resolves item titles to
+   `video_code` values via the join-key confidence ladder, and writes
+   `ConsumptionSignal` and `UnresolvedMediaItem` rows. If `MEDIA_SERVERS_JSON`
+   is not set, this pass is a no-op.
+
+The whole workflow always runs on the `self-hosted` runner because qBittorrent
+is typically reachable only from the operator's network.
 The generated `config.py` reads `TORRENT_CATEGORY` and `TORRENT_CATEGORY_ADHOC`
 from repository variables, so the default scan follows the same qB categories
 used by the uploader.
@@ -307,9 +386,30 @@ Manual dispatch inputs:
 
 | Input | Default | Purpose |
 |---|---|---|
-| `runner` | `self-hosted` | Runner label for the job. Use `self-hosted` for local qB access. |
 | `stalled_after_days` | `7` | Positive integer. Active outcomes unseen for this many days become `stalled`; after 2x this window they become `failed`. |
 | `dry_run` | `false` | Compute transitions and print JSON without writing rows. |
+
+### Media Servers secret {#media-servers-secret}
+
+The consumption pass reads `MEDIA_SERVERS` from `config.py`, which is generated
+at runtime from the encrypted `config.py.enc` plus repository secrets. To enable
+the consumption pass in `ReconcileLibrary.yml`, add the `MEDIA_SERVERS_JSON`
+repository secret:
+
+1. Go to **Settings → Secrets and variables → Actions → New repository secret**.
+2. Name: `MEDIA_SERVERS_JSON`.
+3. Value: the `MEDIA_SERVERS` list serialized as JSON, for example:
+
+   ```json
+   [{"type":"emby","instance":"emby-nas","base_url":"http://192.168.1.50:8096","token":"your_emby_api_key","libraries":["JAV"]}]
+   ```
+
+4. Save. The `config_generator` reads `VAR_MEDIA_SERVERS_JSON` and injects it as
+   `MEDIA_SERVERS = <value>` in the generated `config.py`.
+
+If the secret is absent or empty, `MEDIA_SERVERS` defaults to `[]` and the
+consumption pass is a no-op. See [Media Servers Setup](media-servers.md) for
+the full field reference and credential setup instructions.
 
 ## Troubleshooting
 

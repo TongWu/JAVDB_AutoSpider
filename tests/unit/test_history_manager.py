@@ -24,24 +24,25 @@ from javdb.storage.history_manager import (
     check_torrent_in_history,
     is_downloaded_torrent,
 )
-from javdb.storage.db import db_create_report_session, db_stage_history_write, db_commit_session_history, db_load_history
-import javdb.storage.db._db_session as _db_session
+from javdb.storage.db._db_reports import db_create_report_session
+from javdb.storage.db._db_history_write import db_stage_history_write, db_commit_session_history
+from javdb.storage.db._db_history_read import db_load_history
 from contextlib import contextmanager
 
 
 @contextmanager
 def _active_session():
-    """Set up an active pending session for tests that call save_parsed_movie_to_history."""
+    """Create a pending ReportSession and yield its id.
+
+    Callers thread the yielded ``sid`` into the history helpers via an explicit
+    ``session_id=`` argument (ADR-046 P5: no ambient session global).
+    """
     sid = db_create_report_session(
         report_type="DailyReport",
         report_date="2026-01-01",
         csv_filename="test-session.csv",
     )
-    _db_session.set_active_session_id(sid)
-    try:
-        yield sid
-    finally:
-        _db_session.set_active_session_id(None)
+    yield sid
 
 
 def _seed_history_sqlite(records):
@@ -72,6 +73,45 @@ def _seed_history_sqlite(records):
                  "DateTimeVisited": "2026-01-01 00:00:00"},
             )
     db_commit_session_history(sid)
+
+
+class TestSaveParsedMovieExplicitSession:
+    """ADR-046 P5: ``save_parsed_movie_to_history`` resolves the session from an
+    explicit ``session_id`` param, never the ambient process-global."""
+
+    def test_explicit_session_id_stages_under_session(self, temp_dir):
+        """A passed ``session_id`` stages the movie/torrent rows under that id."""
+        hf = os.path.join(temp_dir, 'explicit.csv')
+        sid = db_create_report_session(
+            report_type="DailyReport",
+            report_date="2026-01-01",
+            csv_filename="explicit.csv",
+        )
+        save_parsed_movie_to_history(
+            hf, '/v/EXP-001', 1, 'EXP-001',
+            {'no_subtitle': 'magnet:?xt=urn:btih:exp1'},
+            session_id=sid,
+        )
+        db_commit_session_history(sid)
+
+        history = load_parsed_movies_history(hf)
+        assert '/v/EXP-001' in history
+
+    def test_none_session_id_warns_and_skips(self, temp_dir, caplog):
+        """``session_id=None`` warns and skips the SQLite write (no row staged)."""
+        import logging
+
+        hf = os.path.join(temp_dir, 'skip.csv')
+        with caplog.at_level(logging.WARNING):
+            save_parsed_movie_to_history(
+                hf, '/v/SKIP-001', 1, 'SKIP-001',
+                {'no_subtitle': 'magnet:?xt=urn:btih:skip1'},
+                session_id=None,
+            )
+
+        assert any('No active session id' in r.message for r in caplog.records)
+        # Nothing was staged/committed, so the href must not appear in history.
+        assert '/v/SKIP-001' not in load_parsed_movies_history(hf)
 
 
 _RECENT_RELEASE_SKIP_FUNCS = [
@@ -519,7 +559,8 @@ class TestMarkTorrentAsDownloaded:
 
         with _active_session() as sid:
             result = mark_torrent_as_downloaded(
-                history_file, '/v/NEW-001', 'NEW-001', 'subtitle'
+                history_file, '/v/NEW-001', 'NEW-001', 'subtitle',
+                session_id=sid,
             )
         db_commit_session_history(sid)
 
@@ -735,7 +776,8 @@ class TestSaveAndLoadIntegration:
 
         magnet_links = {'subtitle': 'magnet:?xt=urn:btih:test123'}
         with _active_session() as sid:
-            save_parsed_movie_to_history(history_file, '/v/INT-001', 1, 'INT-001', magnet_links)
+            save_parsed_movie_to_history(history_file, '/v/INT-001', 1, 'INT-001', magnet_links,
+                                         session_id=sid)
         db_commit_session_history(sid)
 
         result = load_parsed_movies_history(history_file)
@@ -762,7 +804,7 @@ class TestBatchUpdateLastVisited:
         before = db_load_history()['/v/ABC-123']['DateTimeVisited']
 
         with _active_session() as sid:
-            batch_update_last_visited(history_file, {'/v/ABC-123'})
+            batch_update_last_visited(history_file, {'/v/ABC-123'}, session_id=sid)
         db_commit_session_history(sid)
 
         history = db_load_history()
@@ -776,7 +818,9 @@ class TestBatchUpdateLastVisited:
             f.write('href,phase,video_code,create_datetime,update_datetime,last_visited_datetime,hacked_subtitle,hacked_no_subtitle,subtitle,no_subtitle\n')
             f.write('/v/ABC-123,1,ABC-123,2024-01-01 10:00:00,2024-01-01 10:00:00,2024-01-01 10:00:00,,,,\n')
 
-        batch_update_last_visited(history_file, set())
+        with _active_session() as sid:
+            batch_update_last_visited(history_file, set(), session_id=sid)
+        db_commit_session_history(sid)
 
         with open(history_file, 'r', encoding='utf-8-sig') as f:
             reader = csv.DictReader(f)
@@ -789,7 +833,7 @@ class TestBatchUpdateLastVisited:
         ignores it). Runs inside a session per the ADR-032 pending contract."""
         history_file = os.path.join(temp_dir, 'nonexistent.csv')
         with _active_session() as sid:
-            batch_update_last_visited(history_file, {'/v/ABC-123'})
+            batch_update_last_visited(history_file, {'/v/ABC-123'}, session_id=sid)
         db_commit_session_history(sid)
 
     def test_unknown_hrefs_ignored(self, temp_dir):
@@ -807,7 +851,7 @@ class TestBatchUpdateLastVisited:
         before = db_load_history()['/v/ABC-123']['DateTimeVisited']
 
         with _active_session() as sid:
-            batch_update_last_visited(history_file, {'/v/UNKNOWN'})
+            batch_update_last_visited(history_file, {'/v/UNKNOWN'}, session_id=sid)
         db_commit_session_history(sid)
 
         history = db_load_history()
@@ -824,7 +868,8 @@ class TestStorageModeDb:
         hf = os.path.join(temp_dir, 'history.csv')
         with _active_session() as sid:
             save_parsed_movie_to_history(hf, '/v/SM-001', 1, 'SM-001',
-                                         {'no_subtitle': 'magnet:?xt=urn:btih:sm1'})
+                                         {'no_subtitle': 'magnet:?xt=urn:btih:sm1'},
+                                         session_id=sid)
         db_commit_session_history(sid)
         history = load_parsed_movies_history(hf)
         assert '/v/SM-001' in history
@@ -832,8 +877,8 @@ class TestStorageModeDb:
 
     def test_batch_update_sqlite_only(self, temp_dir, storage_mode_db):
         with _active_session() as sid:
-            save_parsed_movie_to_history('', '/v/SM-002', 1, 'SM-002')
-            batch_update_last_visited('', {'/v/SM-002'})
+            save_parsed_movie_to_history('', '/v/SM-002', 1, 'SM-002', session_id=sid)
+            batch_update_last_visited('', {'/v/SM-002'}, session_id=sid)
         db_commit_session_history(sid)
         history = load_parsed_movies_history('')
         assert history['/v/SM-002']['DateTimeVisited'] != ''
@@ -864,19 +909,15 @@ class TestStorageModeDuo:
     """In duo mode, both SQLite and CSV are written."""
 
     def test_save_writes_both(self, temp_dir, storage_mode_duo):
-        import javdb.storage.db._db_session as db_session
         hf = os.path.join(temp_dir, 'history.csv')
         sid = db_create_report_session(
             report_type="DailyReport",
             report_date="2026-01-01",
             csv_filename="duo-test.csv",
         )
-        db_session.set_active_session_id(sid)
-        try:
-            save_parsed_movie_to_history(hf, '/v/DUO-001', 1, 'DUO-001',
-                                         {'no_subtitle': 'magnet:?xt=urn:btih:d1'})
-        finally:
-            db_session.set_active_session_id(None)
+        save_parsed_movie_to_history(hf, '/v/DUO-001', 1, 'DUO-001',
+                                     {'no_subtitle': 'magnet:?xt=urn:btih:d1'},
+                                     session_id=sid)
         db_commit_session_history(sid)
         history_sqlite = db_load_history()
         assert '/v/DUO-001' in history_sqlite

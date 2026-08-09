@@ -5,7 +5,9 @@ from __future__ import annotations
 import os
 import queue as queue_module
 import sys
-from dataclasses import dataclass, field
+from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any, Dict, Optional
 
 import pytest
@@ -13,12 +15,15 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
+from javdb.pipeline.index_family_blacklist import filter_blacklisted_families
 from javdb.spider.fetch.index_parallel import _check_stop_condition
+from javdb.spider.fetch import index_parallel
 from javdb.spider.fetch.fetch_engine import (
     EngineTask,
     _PriorityTaskQueue,
 )
 from javdb.spider.fetch.login_coordinator import requeue_front
+from tests.unit.index_blacklist_helpers import _page_result, spy_filter, spy_select
 
 
 # ---------------------------------------------------------------------------
@@ -49,6 +54,43 @@ def _empty_no_flag_result() -> _FakeResult:
 
 def _failed_result(error: str = 'timeout') -> _FakeResult:
     return _FakeResult(success=False, error=error)
+
+
+class _FakeBackend:
+    def __init__(self, results: Iterable[Any]) -> None:
+        self._results: list[Any] = list(results)
+        self.submitted: list[tuple[str, dict[str, Any], str, int]] = []
+        self.marked_done: bool = False
+        self.started: bool = False
+        self.shutdown_called: bool = False
+        self.export_called: bool = False
+
+    def start(self) -> None:
+        self.started = True
+
+    def submit(self, url: str, meta: dict[str, Any], entry_index: str, priority: int) -> None:
+        self.submitted.append((url, meta, entry_index, priority))
+
+    def mark_done(self) -> None:
+        self.marked_done = True
+
+    def results(self) -> Iterator[Any]:
+        yield from self._results
+
+    def shutdown(self) -> None:
+        self.shutdown_called = True
+
+    def export_login_state(self) -> None:
+        self.export_called = True
+
+
+def _fake_result(page_num: int, html: str) -> _FakeResult:
+    return _FakeResult(
+        success=True,
+        data={"has_movie_list": True, "html": html, "is_valid_empty": False},
+        worker_name=f"w{page_num}",
+        task=SimpleNamespace(meta={"page_num": page_num}),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -256,6 +298,84 @@ class TestPriorityTaskQueue:
 
         urls = [t.url for t in out]
         assert urls == [f'page-{p}' for p in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]]
+
+
+def test_parallel_multi_page_applies_blacklist_once_per_page_and_preserves_page_order(monkeypatch, tmp_path):
+    backend = _FakeBackend([
+        _fake_result(2, "html-2"),
+        _fake_result(1, "html-1"),
+    ])
+    monkeypatch.setattr(index_parallel, "build_parallel_index_backend", lambda **_kwargs: backend)
+    monkeypatch.setattr(index_parallel, "parse_index_page", lambda _html, _page_num: _page_result())
+    monkeypatch.setattr(
+        index_parallel,
+        "_sentinel_field_health",
+        SimpleNamespace(start_run=lambda: None, current=lambda: None),
+    )
+    monkeypatch.setattr(index_parallel, "_check_stop_condition", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(index_parallel, "detect_url_type", lambda *_args, **_kwargs: "actors")
+    monkeypatch.setattr(index_parallel, "generate_output_csv_name_from_html", lambda *_args, **_kwargs: "resolved.csv")
+    summary_calls = []
+    monkeypatch.setattr(
+        index_parallel,
+        "log_family_blacklist_summary",
+        lambda _logger, counts: summary_calls.append(
+            ("INDEX FAMILY BLACKLIST SUMMARY", [("total", sum(counts.values())), *sorted(counts.items())])
+        )
+        if counts
+        else None,
+    )
+
+    filter_calls = []
+    original_filter = filter_blacklisted_families
+
+    phase_calls = []
+
+    monkeypatch.setattr(index_parallel, "filter_blacklisted_families", spy_filter(filter_calls, original_filter))
+    monkeypatch.setattr(index_parallel, "select_index_entries", spy_select(phase_calls, include_page_num=True))
+    monkeypatch.setattr(
+        index_parallel,
+        "load_daily_family_blacklist",
+        lambda custom_url: {"western_studio_date"} if custom_url is None else set(),
+    )
+
+    result = index_parallel.fetch_all_index_pages_parallel(
+        runtime=None,
+        start_page=1,
+        end_page=2,
+        parse_all=False,
+        phase_mode="all",
+        custom_url=None,
+        ignore_release_date=False,
+        use_proxy=False,
+        use_cf_bypass=False,
+        max_consecutive_empty=1,
+        output_csv="out.csv",
+        output_dated_dir=str(tmp_path),
+        csv_path=str(tmp_path / "out.csv"),
+        user_specified_output=True,
+        cancel_event=None,
+    )
+
+    assert backend.started is True
+    assert backend.marked_done is True
+    assert backend.shutdown_called is True
+    assert backend.export_called is True
+    assert filter_calls == [
+        (["Wifey.2026.05.30", "ABC-123"], {"western_studio_date"}),
+        (["Wifey.2026.05.30", "ABC-123"], {"western_studio_date"}),
+    ]
+    assert summary_calls == [
+        ("INDEX FAMILY BLACKLIST SUMMARY", [("total", 2), ("western_studio_date", 2)])
+    ]
+    assert phase_calls == [
+        (1, 1, ["ABC-123"]),
+        (1, 2, ["ABC-123"]),
+        (2, 1, ["ABC-123"]),
+        (2, 2, ["ABC-123"]),
+    ]
+    assert [entry["href"] for entry in result["all_index_results_phase1"]] == ["/v/ABC-123", "/v/ABC-123"]
+    assert [entry["href"] for entry in result["all_index_results_phase2"]] == ["/v/ABC-123", "/v/ABC-123"]
 
 
 # ---------------------------------------------------------------------------

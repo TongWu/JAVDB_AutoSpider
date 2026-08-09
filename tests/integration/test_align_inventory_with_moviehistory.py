@@ -241,12 +241,27 @@ def test_run_alignment_skips_empty_auxiliary_reports(monkeypatch, temp_dir):
         def get_supporting_actors_json(self):
             return '[]'
 
-    monkeypatch.setattr(mod, 'db_load_history', lambda: {})
-    monkeypatch.setattr(mod, 'db_load_rclone_inventory', lambda: {
-        'ABC-123': [{'VideoCode': 'ABC-123'}],
-    })
+    class _FakeHistoryRepo:
+        def __init__(self, **_kw):
+            pass
+        def load_history(self, **_kw):
+            return {}
+
+    class _FakeOperationsRepo:
+        def __init__(self, **_kw):
+            pass
+        def load_rclone_inventory(self):
+            return {'ABC-123': [{'VideoCode': 'ABC-123'}]}
+        def load_align_no_exact_match_codes(self):
+            return set()
+        def upsert_align_no_exact_match(self, *args, **kwargs):
+            pass
+        def delete_align_no_exact_match(self, *args, **kwargs):
+            pass
+
+    monkeypatch.setattr(mod, 'HistoryRepo', _FakeHistoryRepo)
+    monkeypatch.setattr(mod, 'OperationsRepo', _FakeOperationsRepo)
     monkeypatch.setattr(mod, 'init_db', lambda *args, **kwargs: None)
-    monkeypatch.setattr(mod, 'db_load_align_no_exact_match_codes', lambda: set())
     monkeypatch.setattr(mod.spider_state, 'setup_proxy_pool', lambda **kwargs: None)
     monkeypatch.setattr(mod.spider_state, 'initialize_request_handler', lambda: None)
     monkeypatch.setattr(mod, 'cfg', lambda key, default=None: temp_dir if key == 'REPORTS_DIR' else default)
@@ -276,6 +291,7 @@ def test_run_alignment_skips_empty_auxiliary_reports(monkeypatch, temp_dir):
 
     args = SimpleNamespace(
         dry_run=True,
+        session_id=None,
         limit=0,
         codes='',
         output_dir=temp_dir,
@@ -346,11 +362,11 @@ def test_compute_missing_codes_skip_and_only_codes_combined():
 
 def test_db_align_no_exact_match_roundtrip(temp_dir):
     import sqlite3
-    from javdb.storage.db import (
+    from javdb.storage.db._db_migrations import _OPERATIONS_DDL
+    from javdb.storage.db._db_operations import (
         db_upsert_align_no_exact_match,
         db_load_align_no_exact_match_codes,
         db_delete_align_no_exact_match,
-        _OPERATIONS_DDL,
     )
 
     db_path = os.path.join(temp_dir, 'ops_test.db')
@@ -419,3 +435,478 @@ def test_shuffle_changes_order_before_limit():
     rng = random.Random(42)
     rng.shuffle(shuffled)
     assert shuffled != sorted_codes
+
+
+# ── staging+commit rewrite (ADR-005 PR-4 follow-up) ───────────────────────
+
+
+def test_stage_aligned_movie_stages_all_nonempty_categories():
+    """The staging helper records the movie plus every non-empty torrent
+    bucket (pre-ADR-005 behaviour), skipping empty categories."""
+    from javdb.migrations.tools import align_inventory_with_moviehistory as mod
+
+    class _Repo:
+        def __init__(self):
+            self.movies = []
+            self.torrents = []
+
+        def stage_movie(self, session_id, payload):
+            self.movies.append((session_id, payload))
+            return 'm-seq'
+
+        def stage_torrent(self, session_id, payload):
+            self.torrents.append((session_id, payload))
+            return 't-seq'
+
+    repo = _Repo()
+    kwargs = mod._build_db_upsert_kwargs(
+        'https://javdb.com/v/abc', 'ABC-123',
+        {
+            'hacked_subtitle': 'magnet:?xt=urn:btih:A',
+            'no_subtitle': 'magnet:?xt=urn:btih:B',
+            'subtitle': '',  # explicitly empty → must be skipped
+            # 'hacked_no_subtitle' absent → defaults to '' → must be skipped
+            'size_hacked_subtitle': '1.2GB',
+            'size_no_subtitle': '900MB',
+            'file_count_hacked_subtitle': 3,
+            'file_count_no_subtitle': 1,
+            'resolution_hacked_subtitle': 1080,
+            'resolution_no_subtitle': 720,
+        },
+        'Actor A', 'female', '/actors/x', '[]',
+    )
+    mod._stage_aligned_movie(repo, 'SID-1', kwargs)
+
+    assert repo.movies == [
+        ('SID-1', {
+            'Href': 'https://javdb.com/v/abc',
+            'VideoCode': 'ABC-123',
+            'ActorName': 'Actor A',
+            'ActorGender': 'female',
+            'ActorLink': '/actors/x',
+            # '[]' is coerced to None so an empty supporting-actor parse does
+            # not clobber existing data at commit (see _blank_actor_field_to_none).
+            'SupportingActors': None,
+        }),
+    ]
+    # Only the two non-empty buckets are staged; empty ones are skipped.
+    staged_cats = sorted(p['Category'] for _sid, p in repo.torrents)
+    assert staged_cats == ['hacked_subtitle', 'no_subtitle']
+    by_cat = {p['Category']: p for _sid, p in repo.torrents}
+    assert by_cat['hacked_subtitle']['MagnetUri'] == 'magnet:?xt=urn:btih:A'
+    assert by_cat['hacked_subtitle']['FileCount'] == 3
+    assert by_cat['hacked_subtitle']['ResolutionType'] == 1080
+    assert by_cat['no_subtitle']['Size'] == '900MB'
+
+
+def test_finalize_alignment_session_commits_on_success(monkeypatch):
+    from javdb.migrations.tools import align_inventory_with_moviehistory as mod
+
+    committed = []
+    rolled_back = []
+
+    class _FakeHistoryRepo:
+        def __init__(self, **_kw):
+            pass
+
+        def commit_session(self, session_id, **_kw):
+            committed.append(session_id)
+            return {'movies_upserted': 1, 'torrents_upserted': 2}
+
+    class _FakeSessionRepo:
+        def __init__(self, **_kw):
+            pass
+
+        def rollback_session(self, session_id, **kwargs):
+            rolled_back.append((session_id, kwargs))
+            return {}
+
+    monkeypatch.setattr(mod, 'HistoryRepo', _FakeHistoryRepo)
+    monkeypatch.setattr(mod, 'SessionLifecycleRepo', _FakeSessionRepo)
+
+    rc = mod._finalize_alignment_session('SID-1', 0)
+
+    assert rc == 0
+    assert committed == ['SID-1']
+    assert rolled_back == []
+
+
+def test_finalize_alignment_session_rolls_back_on_failure(monkeypatch):
+    from javdb.migrations.tools import align_inventory_with_moviehistory as mod
+
+    committed = []
+    rolled_back = []
+
+    class _FakeHistoryRepo:
+        def __init__(self, **_kw):
+            pass
+
+        def commit_session(self, session_id, **_kw):
+            committed.append(session_id)
+            return {}
+
+    class _FakeSessionRepo:
+        def __init__(self, **_kw):
+            pass
+
+        def rollback_session(self, session_id, **kwargs):
+            rolled_back.append((session_id, kwargs))
+            return {}
+
+    monkeypatch.setattr(mod, 'HistoryRepo', _FakeHistoryRepo)
+    monkeypatch.setattr(mod, 'SessionLifecycleRepo', _FakeSessionRepo)
+
+    # rc != 0 (e.g. parallel interrupt): roll back, never commit, preserve rc.
+    rc = mod._finalize_alignment_session('SID-1', 130)
+
+    assert rc == 0  # finalize returns 0; caller keeps its own non-zero rc
+    assert committed == []
+    assert len(rolled_back) == 1
+    assert rolled_back[0][0] == 'SID-1'
+
+
+def test_blank_actor_field_to_none():
+    """Blank / placeholder actor values become None; real values pass through."""
+    from javdb.migrations.tools import align_inventory_with_moviehistory as mod
+
+    assert mod._blank_actor_field_to_none(None) is None
+    assert mod._blank_actor_field_to_none('') is None
+    assert mod._blank_actor_field_to_none('   ') is None
+    assert mod._blank_actor_field_to_none('[]') is None
+    assert mod._blank_actor_field_to_none('Jane Doe') == 'Jane Doe'
+    assert mod._blank_actor_field_to_none('[{"name": "X"}]') == '[{"name": "X"}]'
+
+
+def test_stage_aligned_movie_nulls_empty_actor_data_to_preserve_existing():
+    """An empty-actor parse stages None for every actor field so the commit
+    path leaves existing MovieHistory actor data untouched."""
+    from javdb.migrations.tools import align_inventory_with_moviehistory as mod
+
+    class _Repo:
+        def __init__(self):
+            self.movies = []
+
+        def stage_movie(self, session_id, payload):
+            self.movies.append(payload)
+            return 'm'
+
+        def stage_torrent(self, *a, **k):
+            return 't'
+
+    repo = _Repo()
+    kwargs = mod._build_db_upsert_kwargs(
+        'https://javdb.com/v/abc', 'ABC-123',
+        {'no_subtitle': 'magnet:?xt=urn:btih:Z'},
+        '', '', '', '[]',  # empty actor fields + empty supporting-actors JSON
+    )
+    mod._stage_aligned_movie(repo, 'SID-1', kwargs)
+
+    payload = repo.movies[0]
+    assert payload['ActorName'] is None
+    assert payload['ActorGender'] is None
+    assert payload['ActorLink'] is None
+    assert payload['SupportingActors'] is None
+
+
+def test_finalize_alignment_session_reraises_on_commit_failure(monkeypatch):
+    """A commit that raises propagates (it is NOT swallowed) so the caller's
+    outer guard can run the status-aware rollback/resume."""
+    from javdb.migrations.tools import align_inventory_with_moviehistory as mod
+
+    class _FakeHistoryRepo:
+        def __init__(self, **_kw):
+            pass
+
+        def commit_session(self, session_id, **_kw):
+            raise RuntimeError('D1 drain failed')
+
+    monkeypatch.setattr(mod, 'HistoryRepo', _FakeHistoryRepo)
+
+    with pytest.raises(RuntimeError, match='D1 drain failed'):
+        mod._finalize_alignment_session('SID-1', 0)
+
+
+def test_verify_adoptable_session_rejects_missing_and_non_pending(monkeypatch):
+    """An adopted --session-id must exist, be pending, and be in_progress."""
+    from javdb.migrations.tools import align_inventory_with_moviehistory as mod
+    import javdb.storage.db._db_reports as reports_mod
+
+    # Missing session → SystemExit.
+    monkeypatch.setattr(reports_mod, 'db_get_session_status', lambda *a, **k: None)
+    with pytest.raises(SystemExit, match='does not exist'):
+        mod._verify_adoptable_session('20260615T120000.000000Z-0001-0001')
+
+    # Already committed → SystemExit.
+    monkeypatch.setattr(reports_mod, 'db_get_session_status', lambda *a, **k: ('pending', 'committed'))
+    with pytest.raises(SystemExit, match='not adoptable'):
+        mod._verify_adoptable_session('20260615T120000.000000Z-0001-0001')
+
+    # Valid pending / in_progress → no raise.
+    monkeypatch.setattr(reports_mod, 'db_get_session_status', lambda *a, **k: ('pending', 'in_progress'))
+    mod._verify_adoptable_session('20260615T120000.000000Z-0001-0001')
+
+
+def test_run_alignment_empty_missing_codes_opens_no_session(monkeypatch, temp_dir):
+    """Nothing to align → return early WITHOUT opening a session (no orphan)."""
+    from javdb.migrations.tools import align_inventory_with_moviehistory as mod
+
+    class _FakeHistoryRepo:
+        def __init__(self, **_kw):
+            pass
+
+        def load_history(self, **_kw):
+            return {}
+
+    class _FakeOperationsRepo:
+        def __init__(self, **_kw):
+            pass
+
+        def load_rclone_inventory(self):
+            return {}  # nothing in inventory → no missing codes
+
+        def load_align_no_exact_match_codes(self):
+            return set()
+
+    opened = []
+
+    class _FakeSessionRepo:
+        def __init__(self, **_kw):
+            pass
+
+        def create_report_session(self, **kwargs):  # pragma: no cover
+            opened.append(kwargs)
+            return 'SID-SHOULD-NOT-EXIST'
+
+    monkeypatch.setattr(mod, 'HistoryRepo', _FakeHistoryRepo)
+    monkeypatch.setattr(mod, 'OperationsRepo', _FakeOperationsRepo)
+    monkeypatch.setattr(mod, 'SessionLifecycleRepo', _FakeSessionRepo)
+    monkeypatch.setattr(mod, 'init_db', lambda *a, **k: None)
+
+    args = SimpleNamespace(
+        dry_run=False, session_id=None, limit=0, codes='', output_dir=temp_dir,
+        enqueue_qb=False, qb_category='', execute_delete=False,
+        no_proxy=True, use_proxy=False, no_login=False, shuffle=False,
+    )
+
+    rc = run_alignment(args)
+
+    assert rc == 0
+    assert opened == []  # no session created when there is no work
+
+
+def test_run_alignment_rolls_back_session_on_core_error(monkeypatch, temp_dir):
+    """An exception in the staging/commit body rolls the opened session back
+    (instead of orphaning an in_progress row) and re-raises."""
+    from javdb.migrations.tools import align_inventory_with_moviehistory as mod
+
+    class _FakeHistoryRepo:
+        def __init__(self, **_kw):
+            pass
+
+        def load_history(self, **_kw):
+            return {}
+
+    class _FakeOperationsRepo:
+        def __init__(self, **_kw):
+            pass
+
+        def load_rclone_inventory(self):
+            return {'ABC-123': [{'VideoCode': 'ABC-123'}]}
+
+        def load_align_no_exact_match_codes(self):
+            return set()
+
+    SID = '20260615T120000.000000Z-0001-0001'
+    rolled_back = []
+
+    class _FakeSessionRepo:
+        def __init__(self, **_kw):
+            pass
+
+        def create_report_session(self, **kwargs):
+            return SID
+
+        def rollback_session(self, session_id, **kwargs):
+            rolled_back.append((session_id, kwargs))
+            return {}
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError('staging blew up mid-run')
+
+    monkeypatch.setattr(mod, 'HistoryRepo', _FakeHistoryRepo)
+    monkeypatch.setattr(mod, 'OperationsRepo', _FakeOperationsRepo)
+    monkeypatch.setattr(mod, 'SessionLifecycleRepo', _FakeSessionRepo)
+    monkeypatch.setattr(mod, 'set_active_run_identity', lambda *a, **k: None)
+    monkeypatch.setattr(mod, 'init_db', lambda *a, **k: None)
+    monkeypatch.setattr(mod.spider_state, 'setup_proxy_pool', lambda **k: None)
+    monkeypatch.setattr(mod.spider_state, 'initialize_request_handler', lambda: None)
+    monkeypatch.setattr(mod, 'cfg', lambda key, default=None: temp_dir if key == 'REPORTS_DIR' else (default or 'https://javdb.com'))
+    monkeypatch.setattr(mod, '_run_alignment_core', _boom)
+
+    args = SimpleNamespace(
+        dry_run=False, session_id=None, limit=0, codes='', output_dir=temp_dir,
+        enqueue_qb=False, qb_category='', execute_delete=False,
+        no_proxy=True, use_proxy=False, no_login=False, shuffle=False,
+    )
+
+    with pytest.raises(RuntimeError, match='staging blew up'):
+        run_alignment(args)
+
+    # The opened session was rolled back, not left in_progress.
+    assert len(rolled_back) == 1
+    assert rolled_back[0][0] == SID
+
+
+def test_run_alignment_non_dry_run_opens_stages_and_commits(monkeypatch, temp_dir):
+    """End-to-end (sequential path): a non-dry-run alignment opens a pending
+    session, stages the matched movie + torrents, and commits the session."""
+    from javdb.migrations.tools import align_inventory_with_moviehistory as mod
+
+    class FakeDetail:
+        parse_success = True
+        magnets = []
+
+        def get_first_actor_name(self):
+            return 'Actor A'
+
+        def get_first_actor_gender(self):
+            return 'female'
+
+        def get_first_actor_href(self):
+            return '/actors/x'
+
+        def get_supporting_actors_json(self):
+            return '[]'
+
+    class _FakeHistoryRepo:
+        staged_movies = []
+        staged_torrents = []
+        committed = []
+
+        def __init__(self, **_kw):
+            pass
+
+        def load_history(self, **_kw):
+            return {}
+
+        def stage_movie(self, session_id, payload):
+            _FakeHistoryRepo.staged_movies.append((session_id, payload))
+            return 'm-seq'
+
+        def stage_torrent(self, session_id, payload):
+            _FakeHistoryRepo.staged_torrents.append((session_id, payload))
+            return 't-seq'
+
+        def commit_session(self, session_id, **_kw):
+            _FakeHistoryRepo.committed.append(session_id)
+            return {'movies_upserted': 1, 'torrents_upserted': 2}
+
+    class _FakeOperationsRepo:
+        def __init__(self, **_kw):
+            pass
+
+        def load_rclone_inventory(self):
+            return {'ABC-123': [{'VideoCode': 'ABC-123'}]}
+
+        def load_align_no_exact_match_codes(self):
+            return set()
+
+        def upsert_align_no_exact_match(self, *args, **kwargs):
+            pass
+
+        def delete_align_no_exact_match(self, *args, **kwargs):
+            pass
+
+    SID = '20260615T120000.000000Z-0001-0001'
+
+    class _FakeSessionRepo:
+        created = []
+
+        def __init__(self, **_kw):
+            pass
+
+        def create_report_session(self, **kwargs):
+            _FakeSessionRepo.created.append(kwargs)
+            return SID
+
+        def rollback_session(self, *args, **kwargs):  # pragma: no cover
+            raise AssertionError('rollback must not run on a clean commit')
+
+    monkeypatch.setattr(mod, 'HistoryRepo', _FakeHistoryRepo)
+    monkeypatch.setattr(mod, 'OperationsRepo', _FakeOperationsRepo)
+    monkeypatch.setattr(mod, 'SessionLifecycleRepo', _FakeSessionRepo)
+    monkeypatch.setattr(mod, 'set_active_run_identity', lambda *a, **k: None)
+    monkeypatch.setattr(mod, 'init_db', lambda *args, **kwargs: None)
+    monkeypatch.setattr(mod.spider_state, 'setup_proxy_pool', lambda **kwargs: None)
+    monkeypatch.setattr(mod.spider_state, 'initialize_request_handler', lambda: None)
+    monkeypatch.setattr(mod, 'cfg', lambda key, default=None: temp_dir if key == 'REPORTS_DIR' else default)
+    monkeypatch.setattr(mod, 'get_page_url', lambda page_num, custom_url=None: custom_url or 'https://javdb.com/search')
+    monkeypatch.setattr(mod, '_fetch_html', lambda session, url, use_proxy: '<html></html>')
+    monkeypatch.setattr(
+        mod,
+        'parse_index_page',
+        lambda html, page_num=1: SimpleNamespace(
+            has_movie_list=True,
+            movies=[SimpleNamespace(href='/v/abc', video_code='ABC-123')],
+        ),
+    )
+    monkeypatch.setattr(mod, 'find_exact_video_code_match', lambda movies, code: movies[0])
+    monkeypatch.setattr(mod, 'find_exact_entry_first_search_page', lambda movies, code: movies[0] if movies else None)
+    monkeypatch.setattr(mod, 'parse_detail_page', lambda html: FakeDetail())
+    monkeypatch.setattr(
+        mod, 'extract_magnets',
+        lambda payload, index='': {
+            'hacked_subtitle': 'magnet:?xt=urn:btih:A',
+            'no_subtitle': 'magnet:?xt=urn:btih:B',
+        },
+    )
+    monkeypatch.setattr(
+        mod,
+        'build_alignment_upgrade_plan',
+        lambda detail_href, video_code, magnet_links, inventory_entries: SimpleNamespace(
+            qb_rows=[],
+            purge_plan_rows=[],
+            chosen_upgrade_category='',
+        ),
+    )
+
+    args = SimpleNamespace(
+        dry_run=False,
+        session_id=None,
+        limit=0,
+        codes='',
+        output_dir=temp_dir,
+        enqueue_qb=False,
+        qb_category='',
+        execute_delete=False,
+        no_proxy=True,
+        use_proxy=False,
+        no_login=False,
+        shuffle=False,
+    )
+
+    rc = run_alignment(args)
+
+    assert rc == 0
+    # A pending alignment session was opened.
+    assert len(_FakeSessionRepo.created) == 1
+    assert _FakeSessionRepo.created[0]['report_type'] == 'alignment'
+    assert _FakeSessionRepo.created[0]['write_mode'] == 'pending'
+    # The matched movie was staged into that session and committed.
+    assert _FakeHistoryRepo.staged_movies == [
+        (SID, {
+            'Href': '/v/abc',
+            'VideoCode': 'ABC-123',
+            'ActorName': 'Actor A',
+            'ActorGender': 'female',
+            'ActorLink': '/actors/x',
+            'SupportingActors': None,  # '[]' coerced — see _blank_actor_field_to_none
+        }),
+    ]
+    assert sorted(p['Category'] for _sid, p in _FakeHistoryRepo.staged_torrents) == [
+        'hacked_subtitle', 'no_subtitle',
+    ]
+    assert all(sid == SID for sid, _p in _FakeHistoryRepo.staged_torrents)
+    assert _FakeHistoryRepo.committed == [SID]
+    # run_alignment stamped the resolved session back onto args.
+    assert args.session_id == SID

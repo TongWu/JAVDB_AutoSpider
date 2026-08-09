@@ -20,7 +20,9 @@ import re
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+# This file lives at javdb/infra/fetch_page.py, so the repo root is two
+# levels up (parents[2]). parents[3] would land on the repo's parent dir.
+REPO_ROOT = Path(__file__).resolve().parents[2]
 os.chdir(REPO_ROOT)
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))

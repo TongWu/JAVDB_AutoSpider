@@ -24,12 +24,51 @@ These endpoints were added in 2026-05 to support the new web console (`javdb-aut
 - `GET /api/system/state?key=...` — reads a KV pair from `system_state`.
 - `PUT /api/system/state` — admin-only; writes a KV pair.
 
+### Torrent quality
+
+- `GET /api/quality/evaluations?limit=&movie_href=` — authenticated, read-only list of ADR-024 shadow quality evaluations. When `movie_href` is omitted, returns recent evaluations.
+- `GET /api/quality/evidence/{info_hash}` — authenticated, read-only torrent-level evidence for the `production_download` role.
+
+The following three endpoints are added by ADR-024 IMP-08 (assist mode, 2026-06-19). They are active only when `TORRENT_QUALITY_POLICY_MODE=assist`; the underlying evaluation rows are populated by the gated assist evaluator.
+
+- `GET /api/quality/recommendations?movie_href=` — authenticated, read-only. Per category, returns the current production choice and the `shadow_rank=1` recommended candidate with a reason-code diff. Response shape: `{items: [{javdb_category, current, recommended, reason_diff}]}`.
+- `GET /api/quality/needs-review?limit=` — authenticated, read-only. Returns evaluations where `decision='needs_review'` or `would_replace_current_choice=true`. `limit` defaults to 50, capped at 200; `limit<=0` → 400.
+- `POST /api/quality/review-labels` — admin-only. Body: `{info_hash, movie_href, scoring_version, label, note?}` where `label ∈ accept | reject | skip`. Records an operator decision via `TorrentQualityReviewRepo` (the labelled dataset Phase 3 tunes thresholds against). Returns `{status: "recorded"}`. Invalid `label` → 422. `reviewed_at` is stamped server-side; `reviewer` is read from the JWT subject.
+
+### User intent and discovery
+
+These endpoints are dual-backend: the Python FastAPI surface and the
+Cloudflare Worker mirror expose the same shapes. UI rendering is gated by
+`capabilities.features.watch_intent` and `capabilities.features.subscriptions`.
+
+- `GET /api/subscriptions?active_only=&limit=&offset=` — authenticated list of followed actors (`ActorSubscription`).
+- `PUT /api/subscriptions/{actor_href}` — admin-only; follow or reactivate an actor with body `{actor_name?, active}`. The stored key is the normalized `/actors/<id>` href.
+- `GET /api/subscriptions/{actor_href}` — authenticated detail for one followed actor.
+- `DELETE /api/subscriptions/{actor_href}` — admin-only; unfollow an actor.
+- `GET /api/new-works?actor_href=&include_dismissed=&limit=&offset=` — authenticated feed of newly discovered works from followed actors.
+- `POST /api/new-works/{video_code}/dismiss` — admin-only; hide a discovered work from the default feed.
+
 ### Sessions
 
 - `GET /api/sessions?state=&cursor=&limit=` — cursor-paginated list of ReportSessions.
 - `GET /api/sessions/{session_id}` — full session detail incl. writes.
 - `POST /api/sessions/{session_id}/rollback` — admin-only; body `{dry_run, include_pending, restore_from_audit}`.
 - `POST /api/sessions/{session_id}/commit` — admin-only; body `{force, drop_pending, fanout_claims, emit_metrics}`. `fanout_claims` and `emit_metrics` default to `true` so the HTTP path matches the CLI's full-parity commit (MovieClaim coordinator fanout + `pending_session_verify` JSONL emission); pass `false` to opt into a DB-only commit.
+
+### Diagnostics — site-contract drift (ADR-035)
+
+Read-only surface over the site-contract drift sentinel. Gated by `capabilities.features.site_drift_sentinel` (the frontend hides the drift panel when it is `false`).
+
+- `GET /api/diag/ops-incidents?incident_type=site_drift` — filter persisted ops incidents by type; `incident_type=site_drift` returns drift incidents specifically (also accepts `status`, `run_id`, `session_id`, `confidence`, `limit`).
+- `GET /api/diag/parse-field-health` — latest committed per-field parse health. Response:
+
+  ```json
+  { "items": [ { "page_type": "index", "field": "href", "severity": "critical",
+                 "fill_rate": 0.99, "sample_count": 120, "observed_at": "...",
+                 "baseline": null, "threshold": 0.99, "status": "ok" } ] }
+  ```
+
+  `status ∈ ok | critical_drift | soft_drift | no_baseline | insufficient_sample`.
 
 ### Test mode (E2E only)
 

@@ -28,24 +28,45 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
+from javdb.storage.drift_io import append_jsonl_record
 from javdb.storage.sessions.lifecycle_helpers import (
-    append_jsonl_record,
     attach_run_identity,
-    fanout_movie_claim,
+    fanout_movie_claim,  # noqa: F401 - module-level monkeypatch seam via _self
     find_run_sessions,
     find_window_sessions,
-    normalize_run_started_at,
-    read_session_pre_state,
+    normalize_run_started_at,  # noqa: F401 - module-level monkeypatch seam via _self
+    read_session_pre_state,  # noqa: F401 - module-level monkeypatch seam via _self
     write_github_output,
+)
+from javdb.storage.sessions.pending_verify import (
+    F_CLEANUP_PATH_MISMATCH_COUNT,
+    F_ERROR,
+    F_ROLLBACK_MODE,
+    build_pending_verify_record,
 )
 import javdb.storage.db as _db_pkg
 from javdb.storage.db import get_db
-from javdb.storage.db._db_reports import db_pending_session_stats
-from javdb.storage.db._db_rollback import db_rollback_session
 from javdb.infra.logging import get_logger
 
 
 logger = get_logger(__name__)
+
+
+def db_rollback_session(session_id, **kwargs: object):
+    """ADR-046 P3: module-level seam that routes rollback through the repo.
+
+    Kept as a module-level name so the ``_self.db_rollback_session`` call site
+    (and the existing test monkeypatch surface) resolve unchanged, while the
+    actual work now goes through ``SessionLifecycleRepo``.
+    """
+    from javdb.storage.repos.session_lifecycle_repo import SessionLifecycleRepo
+    return SessionLifecycleRepo().rollback_session(session_id, **kwargs)
+
+
+def db_pending_session_stats(session_id, **kwargs: object):
+    """ADR-046 P3: route pending-stats through the repo (module-level seam)."""
+    from javdb.storage.repos.history_repo import HistoryRepo
+    return HistoryRepo().pending_session_stats(session_id, **kwargs)
 
 _CROSS_DAY_REJECT_HOURS = 1
 
@@ -164,31 +185,42 @@ def _resolve_failure_reason(args: argparse.Namespace) -> Optional[str]:
     return None
 
 
-def _emit_pending_verify_for_session(
+def _rollback_verify_final_status(
+    *,
+    mode: Optional[str],
+    pre_status: Optional[str],
+    error: Optional[str],
+) -> Optional[str]:
+    # ``error`` describes a rollback operation failure, not the original
+    # session failure that made rollback necessary.
+    if mode == "resume_commit":
+        return "committed" if not error else "finalizing"
+    if mode == "rollback_pending":
+        return "failed" if not error else pre_status or "finalizing"
+    if mode == "audit_replay":
+        return pre_status or "failed"
+    return pre_status or "in_progress"
+
+
+def _append_rollback_pending_verify_record(
     session_id: str,
     *,
     pre_status: Optional[str],
-    pre_write_mode: Optional[str],
-    counts: Optional[dict],
+    pre_write_mode: str,
+    counts: Optional[Dict[str, Any]],
     duration_ms: Optional[int],
     error: Optional[str] = None,
     cleanup_path_mismatch: bool = False,
     worker_stage_rollback_failed: int = 0,
 ) -> None:
-    """Emit one ``pending_session_verify`` JSONL line for a rollback session."""
-    if pre_write_mode != "pending":
-        return
     counts = counts or {}
     mode = counts.get("mode")
-    if mode == "resume_commit":
-        final_status = "committed" if not error else "finalizing"
-    elif mode == "rollback_pending":
-        final_status = "failed" if not error else pre_status or "finalizing"
-    elif mode == "audit_replay":
-        final_status = pre_status or "failed"
-    else:
-        final_status = pre_status or "in_progress"
-
+    final_status = _rollback_verify_final_status(
+        mode=mode,
+        pre_status=pre_status,
+        error=error,
+    )
+    stats_read_error = False
     try:
         stats = db_pending_session_stats(session_id)
     except Exception as exc:  # noqa: BLE001
@@ -198,40 +230,28 @@ def _emit_pending_verify_for_session(
             session_id, exc,
         )
         stats = {}
-    pending_applied = int(counts.get("pending_marked_applied", 0) or 0)
-    pending_staged = (
-        pending_applied
-        + int(stats.get("pending_residual_count", 0) or 0)
-        + int(counts.get("PendingMovieHistoryWrites", 0) or 0)
-        + int(counts.get("PendingTorrentHistoryWrites", 0) or 0)
-    )
-    record = {
-        "kind": "pending_session_verify",
-        "ts": datetime.now(timezone.utc).isoformat(),
-        "source": "rollback",
-        "session_id": session_id,
-        "write_mode": pre_write_mode,
-        "final_status": final_status,
-        "rollback_mode": mode,
-        "pending_staged_count": pending_staged,
-        "pending_applied_count": pending_applied,
-        "pending_residual_count": int(
-            stats.get("pending_residual_count", 0) or 0,
-        ),
-        "commit_attempts": 2 if mode == "resume_commit" else 0,
-        "commit_duration_ms": duration_ms,
-        "hrefs_processed": int(counts.get("hrefs_processed", 0) or 0),
-        "torrents_upserted": int(counts.get("torrents_upserted", 0) or 0),
-        "torrents_deleted": int(counts.get("torrents_deleted", 0) or 0),
-        "movies_upserted": int(counts.get("movies_upserted", 0) or 0),
-        "worker_stage_rollback_failed": int(worker_stage_rollback_failed),
-        "cleanup_path_mismatch_count": 1 if cleanup_path_mismatch else 0,
-        "shadow_audit_enabled": False,
-        "derived_recompute_drift": 0,
-        "derived_drift_samples": [],
+        stats_read_error = True
+    rollback_extras = {
+        F_ROLLBACK_MODE: mode,
+        F_CLEANUP_PATH_MISMATCH_COUNT: 1 if cleanup_path_mismatch else 0,
     }
     if error is not None:
-        record["error"] = error
+        rollback_extras[F_ERROR] = error
+    record = build_pending_verify_record(
+        session_id,
+        source="rollback",
+        write_mode=pre_write_mode,
+        final_status=final_status,
+        drain=counts,
+        stats=stats,
+        commit_attempts=2 if mode == "resume_commit" else 0,
+        commit_duration_ms=duration_ms,
+        shadow_audit_enabled=False,
+        shadow_audit_result=None,
+        rollback_extras=rollback_extras,
+        worker_stage_rollback_failed=worker_stage_rollback_failed,
+        stats_read_error=stats_read_error,
+    )
     attach_run_identity(record, session_id)
     append_jsonl_record(record)
 
@@ -375,7 +395,7 @@ def _drive_rollback(args: argparse.Namespace) -> tuple[dict, int]:
             summaries.append({"session_id": sid, "error": str(e)})
             if pre_write_mode == "pending" and not args.dry_run:
                 duration_ms = int((time.monotonic() - rollback_started) * 1000)
-                _self._emit_pending_verify_for_session(
+                _self._append_rollback_pending_verify_record(
                     sid,
                     pre_status=pre_status,
                     pre_write_mode=pre_write_mode,
@@ -390,7 +410,7 @@ def _drive_rollback(args: argparse.Namespace) -> tuple[dict, int]:
             summaries.append({"session_id": sid, "error": str(e)})
             if pre_write_mode == "pending" and not args.dry_run:
                 duration_ms = int((time.monotonic() - rollback_started) * 1000)
-                _self._emit_pending_verify_for_session(
+                _self._append_rollback_pending_verify_record(
                     sid,
                     pre_status=pre_status,
                     pre_write_mode=pre_write_mode,
@@ -413,7 +433,7 @@ def _drive_rollback(args: argparse.Namespace) -> tuple[dict, int]:
         )
         if pre_write_mode == "pending" and not args.dry_run:
             duration_ms = int((time.monotonic() - rollback_started) * 1000)
-            _self._emit_pending_verify_for_session(
+            _self._append_rollback_pending_verify_record(
                 sid,
                 pre_status=pre_status,
                 pre_write_mode=pre_write_mode,

@@ -19,12 +19,32 @@ from apps.api.schemas.diagnostics import (
     JavdbSessionRefreshRequest,
     JavdbSessionRefreshResponse,
     JavdbSessionStatus,
+    OpsAlertEventListResponse,
+    OpsAlertEventSchema,
+    OpsAlertPolicyListResponse,
+    OpsAlertPolicySchema,
+    OpsAlertPolicyUpsertRequest,
+    OpsIncidentAnalyticsResponse,
     OpsIncidentListResponse,
     OpsIncidentSchema,
+    OpsIncidentSimilarityResponse,
+    OpsRemediationDecisionRequest,
+    OpsRemediationProposalListResponse,
+    OpsRemediationProposalSchema,
+    ParseFieldHealthItem,
+    ParseFieldHealthResponse,
+    SimilarIncidentSchema,
 )
 from javdb.infra.config import cfg
+from javdb.ops.diagnosis.analytics import summarize_incidents
+from javdb.ops.diagnosis.models import OpsAlertEvent, OpsAlertPolicy, OpsRemediationProposal
+from javdb.ops.diagnosis.similarity import rank_similar_incidents
+from javdb.ops.sentinel.health import compute_field_health
 from javdb.storage.db import OPERATIONS_DB_PATH, REPORTS_DB_PATH, get_db
+from javdb.storage.repos.ops_alert_repo import OpsAlertRepo
 from javdb.storage.repos.ops_incident_repo import OpsIncidentRepo
+from javdb.storage.repos.ops_remediation_repo import OpsRemediationRepo
+from javdb.storage.repos.parse_run_field_fill_repo import ParseRunFieldFillRepo
 from javdb.storage.repos.system_state_repo import SystemStateRepo
 
 router = APIRouter(prefix="/api/diag", tags=["diagnostics"])
@@ -32,6 +52,12 @@ router = APIRouter(prefix="/api/diag", tags=["diagnostics"])
 logger = logging.getLogger(__name__)
 
 _KEY_LAST_REFRESH = "last_javdb_refresh"
+
+# Analytics and similarity use a wider candidate window than the public list
+# endpoint (which caps at 100) so that aggregations reflect the full incident
+# history rather than being silently truncated.
+_ANALYTICS_WINDOW = 500
+_SIMILARITY_CANDIDATE_LIMIT = 500
 
 
 def _get_last_refresh_time() -> str | None:
@@ -73,6 +99,8 @@ def _list_ops_incident_records(
     status: str | None = None,
     run_id: str | None = None,
     session_id: str | None = None,
+    incident_type: str | None = None,
+    confidence: str | None = None,
     limit: int = 50,
 ):
     with get_db(REPORTS_DB_PATH) as conn:
@@ -80,6 +108,8 @@ def _list_ops_incident_records(
             status=status,
             run_id=run_id,
             session_id=session_id,
+            incident_type=incident_type,
+            confidence=confidence,
             limit=limit,
         )
 
@@ -136,6 +166,140 @@ def _ops_record_to_schema(record) -> OpsIncidentSchema:
     )
 
 
+def _field_health_to_schema(h) -> ParseFieldHealthItem:
+    return ParseFieldHealthItem(
+        page_type=h.page_type,
+        field=h.field,
+        severity=h.severity,
+        fill_rate=h.fill_rate,
+        sample_count=h.sample_count,
+        observed_at=h.observed_at,
+        baseline=h.baseline,
+        threshold=h.threshold,
+        status=h.status,
+    )
+
+
+def _field_health_items(repo, min_sample: int, window: int) -> list[ParseFieldHealthItem]:
+    rows = repo.latest_committed_fills()
+    # Exclude each displayed row from its own baseline (via `before=observed_at`) so
+    # the status mirrors the gate detector's pure-historical baseline — the run being
+    # judged is not part of the history it is compared against. Without this, a lone
+    # committed run reads as `ok` instead of `no_baseline`, and a short history lets
+    # the current outlier drag down its own threshold and mask `soft_drift`.
+    latest_at = {(pt, f): observed_at for (pt, f, _rate, _n, observed_at) in rows}
+    health = compute_field_health(
+        rows, min_sample=min_sample,
+        baseline_fn=lambda pt, f: repo.baseline(
+            pt, f, window=window, before=latest_at.get((pt, f))),
+    )
+    return [_field_health_to_schema(h) for h in health]
+
+
+def _compute_parse_field_health(*, repo=None) -> list[ParseFieldHealthItem]:
+    min_sample = int(cfg("SENTINEL_MIN_SAMPLE", 30))
+    window = int(cfg("SENTINEL_BASELINE_WINDOW", 14))
+    if repo is not None:
+        return _field_health_items(repo, min_sample, window)
+    with get_db(REPORTS_DB_PATH) as conn:
+        return _field_health_items(ParseRunFieldFillRepo(conn), min_sample, window)
+
+
+def _proposal_to_schema(proposal: OpsRemediationProposal) -> OpsRemediationProposalSchema:
+    return OpsRemediationProposalSchema(
+        proposal_id=proposal.proposal_id,
+        incident_id=proposal.incident_id,
+        action_type=proposal.action_type,
+        status=proposal.status,
+        safety_level=proposal.safety_level,
+        title=proposal.title,
+        rationale=proposal.rationale,
+        command_preview=proposal.command_preview,
+        runbook_ref=proposal.runbook_ref,
+        evidence_refs=_evidence_refs_field(proposal.evidence_refs_json),
+        required_checks=_json_list_field(proposal.required_checks_json),
+        blocked_reasons=_json_list_field(proposal.blocked_reasons_json),
+        proposed_by=proposal.proposed_by,
+        decided_by=proposal.decided_by,
+        decision_note=proposal.decision_note,
+        created_at=proposal.created_at,
+        updated_at=proposal.updated_at,
+        decided_at=proposal.decided_at,
+    )
+
+
+def _policy_to_schema(policy: OpsAlertPolicy) -> OpsAlertPolicySchema:
+    return OpsAlertPolicySchema(
+        policy_id=policy.policy_id,
+        incident_type=policy.incident_type,
+        min_confidence=policy.min_confidence,
+        enabled=policy.enabled,
+        channels=[
+            item for item in _json_list_field(policy.channels_json)
+            if isinstance(item, str)
+        ],
+        updated_by=policy.updated_by,
+        created_at=policy.created_at,
+        updated_at=policy.updated_at,
+    )
+
+
+def _event_to_schema(event: OpsAlertEvent) -> OpsAlertEventSchema:
+    return OpsAlertEventSchema(
+        alert_id=event.alert_id,
+        incident_id=event.incident_id,
+        policy_id=event.policy_id,
+        status=event.status,
+        reason=event.reason,
+        fired_at=event.fired_at,
+    )
+
+
+def _list_remediation_proposals(incident_id: str) -> list[OpsRemediationProposal]:
+    with get_db(REPORTS_DB_PATH) as conn:
+        return OpsRemediationRepo(conn).list_for_incident(incident_id)
+
+
+def _list_alert_policies() -> list[OpsAlertPolicy]:
+    with get_db(REPORTS_DB_PATH) as conn:
+        return OpsAlertRepo(conn).list_policies()
+
+
+def _upsert_alert_policy(
+    incident_type: str,
+    *,
+    min_confidence: str,
+    enabled: bool,
+    channels: list[str],
+    updated_by: str | None,
+) -> OpsAlertPolicy | None:
+    with get_db(REPORTS_DB_PATH) as conn:
+        repo = OpsAlertRepo(conn)
+        policy = OpsAlertPolicy.create(
+            incident_type=incident_type,
+            min_confidence=min_confidence,
+            enabled=enabled,
+            channels=channels,
+            updated_by=updated_by,
+        )
+        repo.upsert_policy(policy)
+        return repo.get_policy(incident_type)
+
+
+def _list_alert_events(incident_id: str) -> list[OpsAlertEvent]:
+    with get_db(REPORTS_DB_PATH) as conn:
+        return OpsAlertRepo(conn).list_events_for_incident(incident_id)
+
+
+def _record_remediation_decision(
+    proposal_id: str, *, status: str, decided_by: str, decision_note: str | None
+) -> OpsRemediationProposal | None:
+    with get_db(REPORTS_DB_PATH) as conn:
+        return OpsRemediationRepo(conn).record_decision(
+            proposal_id, status=status, decided_by=decided_by, decision_note=decision_note,
+        )
+
+
 @router.get("/javdb-session", response_model=JavdbSessionStatus)
 def get_javdb_session_status(
     _user: Dict[str, Any] = Depends(_require_auth),
@@ -156,11 +320,34 @@ def get_javdb_session_status(
     )
 
 
-@router.get("/ops-incidents", response_model=OpsIncidentListResponse)
+_ERROR_DETAIL_SCHEMA = {
+    "type": "object",
+    "properties": {"detail": {"type": "string"}},
+    "required": ["detail"],
+}
+
+_400_LIMIT_RESPONSE = {
+    400: {
+        "description": "limit must be a positive integer",
+        "content": {"application/json": {"schema": _ERROR_DETAIL_SCHEMA}},
+    }
+}
+
+_404_FEATURES_RESPONSE = {
+    404: {
+        "description": "Incident features not found",
+        "content": {"application/json": {"schema": _ERROR_DETAIL_SCHEMA}},
+    }
+}
+
+
+@router.get("/ops-incidents", response_model=OpsIncidentListResponse, responses=_400_LIMIT_RESPONSE)
 def list_ops_incidents(
     status: str | None = None,
     run_id: str | None = None,
     session_id: str | None = None,
+    incident_type: str | None = None,
+    confidence: str | None = None,
     limit: int = 50,
     _user: Dict[str, Any] = Depends(_require_auth),
 ) -> OpsIncidentListResponse:
@@ -172,11 +359,149 @@ def list_ops_incidents(
         status=status,
         run_id=run_id,
         session_id=session_id,
+        incident_type=incident_type,
+        confidence=confidence,
         limit=min(limit, 100),
     )
     return OpsIncidentListResponse(
         items=[_ops_record_to_schema(item) for item in items]
     )
+
+
+@router.get("/ops-incidents/analytics", response_model=OpsIncidentAnalyticsResponse)
+def get_ops_incident_analytics(
+    _user: Dict[str, Any] = Depends(_require_auth),
+) -> OpsIncidentAnalyticsResponse:
+    """Return aggregated analytics over persisted operations incidents."""
+    records = _list_ops_incident_records(limit=_ANALYTICS_WINDOW)
+    return OpsIncidentAnalyticsResponse(**summarize_incidents(records))
+
+
+@router.get("/parse-field-health", response_model=ParseFieldHealthResponse)
+def get_parse_field_health(
+    _user: Dict[str, Any] = Depends(_require_auth),
+) -> ParseFieldHealthResponse:
+    """Latest committed per-field parse health (ADR-035 site-contract sentinel)."""
+    return ParseFieldHealthResponse(items=_compute_parse_field_health())
+
+
+def _similar_ops_incident_records(incident_id: str, *, limit: int = 5):
+    with get_db(REPORTS_DB_PATH) as conn:
+        repo = OpsIncidentRepo(conn)
+        target = repo.get_features(incident_id)
+        if target is None:
+            return None
+        candidates = repo.list_features(limit=_SIMILARITY_CANDIDATE_LIMIT)
+        return rank_similar_incidents(target, candidates, limit=limit)
+
+
+@router.get(
+    "/ops-incidents/{incident_id}/similar",
+    response_model=OpsIncidentSimilarityResponse,
+    responses={**_400_LIMIT_RESPONSE, **_404_FEATURES_RESPONSE},
+)
+def get_similar_ops_incidents(
+    incident_id: str,
+    limit: int = 5,
+    _user: Dict[str, Any] = Depends(_require_auth),
+) -> OpsIncidentSimilarityResponse:
+    """Return incidents most similar to the given incident, ranked by feature overlap."""
+    if limit <= 0:
+        raise HTTPException(status_code=400, detail="limit must be a positive integer")
+    items = _similar_ops_incident_records(incident_id, limit=min(limit, 20))
+    if items is None:
+        raise HTTPException(status_code=404, detail="Incident features not found")
+    return OpsIncidentSimilarityResponse(
+        incident_id=incident_id,
+        items=[
+            SimilarIncidentSchema(
+                incident_id=item.incident_id,
+                score=item.score,
+                matched_reasons=item.matched_reasons,
+            )
+            for item in items
+        ],
+    )
+
+
+@router.get("/alert-policies", response_model=OpsAlertPolicyListResponse)
+def list_alert_policies(
+    _user: Dict[str, Any] = Depends(_require_auth),
+) -> OpsAlertPolicyListResponse:
+    return OpsAlertPolicyListResponse(
+        items=[_policy_to_schema(item) for item in _list_alert_policies()]
+    )
+
+
+@router.put("/alert-policies/{incident_type}", response_model=OpsAlertPolicySchema)
+def upsert_alert_policy(
+    incident_type: str,
+    body: OpsAlertPolicyUpsertRequest,
+    current: Dict[str, Any] = Depends(require_role("admin")),
+) -> OpsAlertPolicySchema:
+    """Upsert alert policy for an incident type (admin only)."""
+    policy = _upsert_alert_policy(
+        incident_type,
+        min_confidence=body.min_confidence,
+        enabled=body.enabled,
+        channels=body.channels,
+        updated_by=str(current.get("sub") or "unknown"),
+    )
+    if policy is None:
+        raise HTTPException(status_code=500, detail="Failed to persist alert policy")
+    return _policy_to_schema(policy)
+
+
+@router.get(
+    "/ops-incidents/{incident_id}/alert-events",
+    response_model=OpsAlertEventListResponse,
+)
+def list_alert_events(
+    incident_id: str,
+    _user: Dict[str, Any] = Depends(_require_auth),
+) -> OpsAlertEventListResponse:
+    return OpsAlertEventListResponse(
+        items=[_event_to_schema(item) for item in _list_alert_events(incident_id)]
+    )
+
+
+@router.get(
+    "/ops-incidents/{incident_id}/remediation-proposals",
+    response_model=OpsRemediationProposalListResponse,
+)
+def list_ops_remediation_proposals(
+    incident_id: str,
+    _user: Dict[str, Any] = Depends(_require_auth),
+) -> OpsRemediationProposalListResponse:
+    return OpsRemediationProposalListResponse(
+        items=[_proposal_to_schema(item) for item in _list_remediation_proposals(incident_id)]
+    )
+
+
+@router.post(
+    "/remediation-proposals/{proposal_id}/decision",
+    response_model=OpsRemediationProposalSchema,
+)
+def decide_ops_remediation_proposal(
+    proposal_id: str,
+    body: OpsRemediationDecisionRequest,
+    current: Dict[str, Any] = Depends(require_role("admin")),
+) -> OpsRemediationProposalSchema:
+    # Records the human decision ONLY — does not call rollback, rerun,
+    # drift-apply, qB, or any recovery mutation code.
+    try:
+        proposal = _record_remediation_decision(
+            proposal_id,
+            status=body.status,
+            decided_by=str(current.get("sub") or "unknown"),
+            decision_note=body.decision_note,
+        )
+    except ValueError as exc:
+        # e.g. attempting to approve a proposal the safety policy has blocked.
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if proposal is None:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    return _proposal_to_schema(proposal)
 
 
 @router.get("/ops-incidents/{incident_id}", response_model=OpsIncidentSchema)
@@ -284,9 +609,17 @@ async def refresh_javdb_session_diag(
 
 
 __all__ = [
+    "decide_ops_remediation_proposal",
     "get_javdb_session_status",
     "get_ops_incident",
+    "get_ops_incident_analytics",
+    "get_parse_field_health",
+    "get_similar_ops_incidents",
+    "list_alert_events",
+    "list_alert_policies",
     "list_ops_incidents",
+    "list_ops_remediation_proposals",
     "refresh_javdb_session_diag",
     "router",
+    "upsert_alert_policy",
 ]

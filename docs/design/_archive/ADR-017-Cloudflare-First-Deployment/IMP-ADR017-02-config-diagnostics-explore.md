@@ -14,7 +14,7 @@
 
 **Tech Stack:** Hono 4, cheerio (DOM parsing), D1 native bindings, Web Crypto API (AES-GCM for config encryption), Vitest + `@cloudflare/vitest-pool-workers`
 
-**Working Directory:** All paths are relative to `JAVDB_AutoSpider_Web/` (`/Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web/`).
+**Working Directory:** All paths are relative to `JAVDB_AutoSpider_Web/` (`/Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web/`).
 
 ---
 
@@ -1117,7 +1117,7 @@ git commit -m "feat: add diagnostics routes (javdb session status + cookie paste
 - [ ] **Step 1: Install cheerio**
 
 ```bash
-cd /Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web
+cd /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web
 npm install cheerio
 ```
 

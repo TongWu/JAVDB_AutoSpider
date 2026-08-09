@@ -16,7 +16,7 @@ import os
 import re
 import sqlite3
 import threading
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from javdb.infra.logging import get_logger
 
@@ -184,6 +184,17 @@ CREATE TABLE IF NOT EXISTS MovieMetadata (
 CREATE INDEX IF NOT EXISTS idx_movie_metadata_video_code
     ON MovieMetadata(video_code);
 
+CREATE TABLE IF NOT EXISTS ActorMetadata (
+    actor_href  TEXT PRIMARY KEY,
+    actor_name  TEXT,
+    birthdate   TEXT,
+    source      TEXT,
+    source_url  TEXT,
+    resolved    INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
 CREATE TABLE IF NOT EXISTS MovieRatings (
     href        TEXT PRIMARY KEY,
     video_code  TEXT NOT NULL,
@@ -206,15 +217,53 @@ CREATE TABLE IF NOT EXISTS ContentPreferences (
 );
 CREATE INDEX IF NOT EXISTS idx_content_prefs_hearted
     ON ContentPreferences(content_type, hearted);
+
+CREATE TABLE IF NOT EXISTS WatchIntent (
+    video_code  TEXT PRIMARY KEY,
+    href        TEXT NOT NULL,
+    status      TEXT NOT NULL CHECK (status IN ('want','viewed')),
+    notes       TEXT,
+    status_at   TEXT,
+    updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_watch_intent_status ON WatchIntent(status);
+CREATE TABLE IF NOT EXISTS ActorSubscription (
+    actor_href      TEXT PRIMARY KEY,
+    actor_name      TEXT,
+    active          INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1)),
+    last_seen_href  TEXT,
+    last_checked_at TEXT,
+    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_actor_subscription_active ON ActorSubscription(active);
+CREATE TABLE IF NOT EXISTS NewWorks (
+    video_code    TEXT NOT NULL,
+    href          TEXT NOT NULL,
+    actor_href    TEXT NOT NULL,
+    title         TEXT,
+    release_date  TEXT,
+    discovered_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    dismissed     INTEGER NOT NULL DEFAULT 0 CHECK (dismissed IN (0,1)),
+    PRIMARY KEY (actor_href, video_code)
+);
+CREATE INDEX IF NOT EXISTS idx_new_works_actor      ON NewWorks(actor_href);
+CREATE INDEX IF NOT EXISTS idx_new_works_dismissed  ON NewWorks(dismissed);
+-- video_code alone is not a left-prefix of the composite PK (actor_href,
+-- video_code), so dismiss()'s `WHERE video_code = ?` needs its own index.
+CREATE INDEX IF NOT EXISTS idx_new_works_video_code ON NewWorks(video_code);
 """
 
 _REPORTS_DDL = _SCHEMA_VERSION_DDL + """
--- Dynamic content-filter rules (ADR-040 Phase 1).  Rules live in the
--- reports DB and are applied after detail parse; no rows means no
--- behavior change.
--- dimension: actor | tag | gender
--- mode: exclude | include | require_lead | exclude_all_male
--- value: actor name/href | tag | gender value
+-- Dynamic content-filter rules (ADR-040).  Rules live in the reports DB
+-- and are applied after detail parse; no rows means no behavior change.
+-- The (dimension, mode, value) triple is generic; new dimensions/modes
+-- reuse it without a schema change (age = Phase 2; regex/release_date = WS4a).
+-- dimension: actor | tag | gender | age | release_date
+-- mode: exclude | include | require_lead | exclude_all_male | min_age | max_age
+--       | regex_exclude | regex_include | before | after
+-- value: actor name/href | tag | gender | integer age | ISO date (YYYY-MM-DD)
+--        | regex pattern
 CREATE TABLE IF NOT EXISTS ContentFilterRule (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     dimension  TEXT NOT NULL,
@@ -250,6 +299,7 @@ CREATE TABLE IF NOT EXISTS ReportSessions (
     CsvFilename TEXT NOT NULL,
     DateTimeCreated TEXT NOT NULL,
     Status TEXT DEFAULT 'in_progress',
+    CommittedAt TEXT,
     RunId TEXT,
     RunAttempt INTEGER,
     FailureReason TEXT,
@@ -403,6 +453,112 @@ CREATE INDEX IF NOT EXISTS idx_ops_incidents_session
 CREATE INDEX IF NOT EXISTS idx_ops_incidents_status_type
     ON OpsIncidents(status, incident_type);
 
+-- Derived feature read-model (ADR-026 Phase 2). Mirrors
+-- javdb/migrations/d1/2026_05_27_add_ops_incident_features.sql so a fresh
+-- local init_db() builds it too. Stores compact, explainable similarity
+-- metadata derived from OpsIncidents; never stores full raw logs.
+CREATE TABLE IF NOT EXISTS OpsIncidentFeatures (
+    incident_id TEXT PRIMARY KEY,
+    incident_type TEXT NOT NULL,
+    status TEXT NOT NULL,
+    confidence TEXT NOT NULL,
+    workflow_name TEXT,
+    run_id TEXT,
+    run_attempt INTEGER,
+    session_id TEXT,
+    feature_version TEXT NOT NULL,
+    categorical_features_json TEXT NOT NULL DEFAULT '{}',
+    text_tokens_json TEXT NOT NULL DEFAULT '[]',
+    unsafe_action_tokens_json TEXT NOT NULL DEFAULT '[]',
+    evidence_kinds_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    FOREIGN KEY (incident_id) REFERENCES OpsIncidents(incident_id)
+);
+CREATE INDEX IF NOT EXISTS idx_ops_incident_features_type_status
+    ON OpsIncidentFeatures(incident_type, status);
+CREATE INDEX IF NOT EXISTS idx_ops_incident_features_workflow
+    ON OpsIncidentFeatures(workflow_name);
+CREATE INDEX IF NOT EXISTS idx_ops_incident_features_run
+    ON OpsIncidentFeatures(run_id, run_attempt);
+CREATE INDEX IF NOT EXISTS idx_ops_incident_features_session
+    ON OpsIncidentFeatures(session_id);
+
+-- Gated remediation proposal ledger (ADR-026 Phase 3). Mirrors
+-- javdb/migrations/d1/2026_05_27_add_ops_remediation_proposals.sql so a fresh
+-- local init_db() builds it too. Stores suggestions and human decisions;
+-- never executes rollback, rerun, drift apply, qB cleanup, or recovery mutation.
+CREATE TABLE IF NOT EXISTS OpsRemediationProposals (
+    proposal_id TEXT PRIMARY KEY,
+    incident_id TEXT NOT NULL,
+    action_type TEXT NOT NULL
+        CHECK (action_type IN (
+            'open_runbook',
+            'prepare_rollback_workflow',
+            'prepare_rerun_workflow',
+            'prepare_drift_apply_command',
+            'inspect_qb_side_effects',
+            'inspect_recovery_outbox'
+        )),
+    status TEXT NOT NULL DEFAULT 'proposed'
+        CHECK (status IN ('proposed', 'approved', 'rejected', 'expired')),
+    safety_level TEXT NOT NULL
+        CHECK (safety_level IN ('safe_to_prepare', 'requires_review', 'blocked')),
+    title TEXT NOT NULL,
+    rationale TEXT NOT NULL,
+    command_preview TEXT,
+    runbook_ref TEXT,
+    evidence_refs_json TEXT NOT NULL DEFAULT '[]',
+    required_checks_json TEXT NOT NULL DEFAULT '[]',
+    blocked_reasons_json TEXT NOT NULL DEFAULT '[]',
+    proposed_by TEXT NOT NULL DEFAULT 'adr026-policy-v1',
+    decided_by TEXT,
+    decision_note TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    decided_at TEXT,
+    FOREIGN KEY (incident_id) REFERENCES OpsIncidents(incident_id)
+);
+CREATE INDEX IF NOT EXISTS idx_ops_remediation_incident
+    ON OpsRemediationProposals(incident_id);
+CREATE INDEX IF NOT EXISTS idx_ops_remediation_status
+    ON OpsRemediationProposals(status);
+CREATE INDEX IF NOT EXISTS idx_ops_remediation_action_type
+    ON OpsRemediationProposals(action_type);
+
+-- Proactive alerting policy and event ledger (ADR-026 Phase 4). Mirrors
+-- javdb/migrations/d1/2026_06_13_add_ops_alert_tables.sql so a fresh local
+-- init_db() builds it too. Alert delivery remains in ADR-039 NotifyPlugin
+-- dispatch; these tables only store policy and dedupe/audit decisions.
+CREATE TABLE IF NOT EXISTS OpsAlertPolicy (
+    policy_id TEXT PRIMARY KEY,
+    incident_type TEXT NOT NULL,
+    min_confidence TEXT NOT NULL DEFAULT 'medium'
+        CHECK (min_confidence IN ('low', 'medium', 'high')),
+    enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+    channels_json TEXT NOT NULL DEFAULT '[]',
+    updated_by TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ops_alert_policy_incident_type
+    ON OpsAlertPolicy(incident_type);
+
+CREATE TABLE IF NOT EXISTS OpsAlertEvent (
+    alert_id TEXT PRIMARY KEY,
+    incident_id TEXT NOT NULL,
+    policy_id TEXT,
+    status TEXT NOT NULL DEFAULT 'fired'
+        CHECK (status IN ('fired', 'suppressed', 'skipped')),
+    reason TEXT,
+    fired_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    FOREIGN KEY (incident_id) REFERENCES OpsIncidents(incident_id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ops_alert_event_incident
+    ON OpsAlertEvent(incident_id);
+CREATE INDEX IF NOT EXISTS idx_ops_alert_event_status
+    ON OpsAlertEvent(status);
+
 -- Event-spine tables (ADR-036 Phase 1). Mirrors
 -- javdb/migrations/d1/2026_05_29_add_pipeline_event.sql so a fresh local
 -- init_db() builds them too (not just the remote D1 migration). Additive,
@@ -453,6 +609,128 @@ CREATE TABLE IF NOT EXISTS ParseRunFieldFill (
 CREATE INDEX IF NOT EXISTS idx_prff_field_committed
     ON ParseRunFieldFill(page_type, field, committed, observed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_prff_session ON ParseRunFieldFill(session_id);
+
+-- AcquisitionOutcomeShadow projection (ADR-036 Phase 2). Mirrors
+-- javdb/migrations/d1/2026_06_10_add_acquisition_outcome_shadow.sql.
+-- Cross-validation only; never read by production decisions.
+CREATE TABLE IF NOT EXISTS AcquisitionOutcomeShadow (
+    qb_hash      TEXT PRIMARY KEY NOT NULL,
+    href         TEXT NOT NULL DEFAULT '',
+    video_code   TEXT,
+    category     TEXT,
+    state        TEXT NOT NULL DEFAULT 'queued'
+        CHECK (state IN ('queued','completed')),
+    queued_at    TEXT,
+    completed_at TEXT,
+    session_id   TEXT,
+    updated_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_acq_shadow_state
+    ON AcquisitionOutcomeShadow(state);
+CREATE INDEX IF NOT EXISTS idx_acq_shadow_session
+    ON AcquisitionOutcomeShadow(session_id);
+
+-- ADR-024 Phase 1: torrent quality evidence + shadow evaluation.
+CREATE TABLE IF NOT EXISTS TorrentQualityEvidence (
+    info_hash             TEXT NOT NULL,
+    probe_schema_version  TEXT NOT NULL,
+    target_role           TEXT NOT NULL,
+    probe_target_name     TEXT,
+    metadata_status       TEXT,
+    metadata_started_at   TEXT,
+    metadata_completed_at TEXT,
+    total_size_bytes      INTEGER,
+    main_video_size_bytes INTEGER,
+    main_video_ratio      REAL,
+    video_file_count      INTEGER,
+    subtitle_file_count   INTEGER,
+    non_video_file_count  INTEGER,
+    junk_size_bytes       INTEGER,
+    junk_size_ratio       REAL,
+    suspicious_file_count INTEGER,
+    features_json         TEXT,
+    reasons_json          TEXT,
+    source_fingerprint    TEXT,
+    created_at            TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at            TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (info_hash, probe_schema_version, target_role)
+);
+
+CREATE INDEX IF NOT EXISTS idx_torrent_quality_evidence_created_at
+    ON TorrentQualityEvidence(created_at);
+
+CREATE TABLE IF NOT EXISTS TorrentQualityEvaluation (
+    info_hash                   TEXT NOT NULL,
+    movie_href                  TEXT NOT NULL,
+    scoring_version             TEXT NOT NULL,
+    video_code                  TEXT,
+    javdb_category              TEXT,
+    magnet_name                 TEXT,
+    javdb_tags_json             TEXT,
+    javdb_size_text             TEXT,
+    inferred_category           TEXT,
+    category_consistent         INTEGER,
+    subtitle_evidence           TEXT,
+    resolution_consistent       INTEGER,
+    source_trust                TEXT,
+    score                       REAL,
+    shadow_rank                 INTEGER,
+    would_replace_current_choice INTEGER,
+    policy_mode                 TEXT,
+    decision                    TEXT,
+    reasons_json                TEXT,
+    created_at                  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at                  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (info_hash, movie_href, scoring_version)
+);
+
+CREATE INDEX IF NOT EXISTS idx_torrent_quality_eval_movie_href
+    ON TorrentQualityEvaluation(movie_href);
+
+CREATE INDEX IF NOT EXISTS idx_torrent_quality_eval_video_code
+    ON TorrentQualityEvaluation(video_code);
+
+CREATE INDEX IF NOT EXISTS idx_torrent_quality_eval_created_at
+    ON TorrentQualityEvaluation(created_at);
+
+-- ADR-024 IMP-10: runner-up probe queue. Mirrors the D1 migration
+-- 2026_06_19_add_torrent_probe_candidate.sql verbatim (same columns) so the
+-- D1<->local schema-parity contract (test_rollback_full_fidelity) holds.
+CREATE TABLE IF NOT EXISTS TorrentProbeCandidate (
+    info_hash        TEXT NOT NULL,
+    movie_href       TEXT NOT NULL,
+    video_code       TEXT,
+    javdb_category   TEXT,
+    magnet_uri       TEXT NOT NULL,
+    magnet_name      TEXT,
+    javdb_tags_json  TEXT,
+    javdb_size_text  TEXT,
+    status           TEXT NOT NULL DEFAULT 'pending'
+                         CHECK (status IN ('pending', 'probed', 'failed')),
+    enqueued_at      TEXT NOT NULL,
+    probed_at        TEXT,
+    PRIMARY KEY (info_hash, movie_href)
+);
+
+CREATE INDEX IF NOT EXISTS idx_torrent_probe_candidate_status
+    ON TorrentProbeCandidate(status);
+
+-- ADR-024 IMP-08: operator accept/reject labels over shadow quality evaluations.
+-- Labelled dataset Phase 3 tunes thresholds against. Diagnostic only.
+CREATE TABLE IF NOT EXISTS TorrentQualityReviewLabel (
+    info_hash        TEXT NOT NULL,
+    movie_href       TEXT NOT NULL,
+    scoring_version  TEXT NOT NULL,
+    label            TEXT NOT NULL
+                         CHECK (label IN ('accept', 'reject', 'skip')),
+    reviewer         TEXT,
+    note             TEXT,
+    reviewed_at      TEXT NOT NULL,
+    PRIMARY KEY (info_hash, movie_href, scoring_version)
+);
+
+CREATE INDEX IF NOT EXISTS idx_quality_review_label_movie
+    ON TorrentQualityReviewLabel(movie_href);
 """
 
 _OPERATIONS_DDL = _SCHEMA_VERSION_DDL + """
@@ -550,6 +828,51 @@ CREATE INDEX IF NOT EXISTS idx_acq_outcome_state ON AcquisitionOutcome(state);
 CREATE INDEX IF NOT EXISTS idx_acq_outcome_video_code ON AcquisitionOutcome(video_code);
 CREATE INDEX IF NOT EXISTS idx_acq_outcome_session ON AcquisitionOutcome(session_id);
 CREATE INDEX IF NOT EXISTS idx_acq_outcome_last_seen ON AcquisitionOutcome(last_seen_at);
+
+CREATE TABLE IF NOT EXISTS OwnershipLedger (
+  video_code  TEXT NOT NULL,
+  source      TEXT NOT NULL CHECK (source IN ('qb','nas','gdrive','pikpak')),
+  category    TEXT NOT NULL DEFAULT '',
+  path        TEXT,
+  size        INTEGER,
+  present     INTEGER NOT NULL DEFAULT 1,
+  observed_at TEXT,
+  PRIMARY KEY (video_code, source, category)
+);
+CREATE INDEX IF NOT EXISTS idx_ownership_ledger_video_code ON OwnershipLedger(video_code);
+CREATE INDEX IF NOT EXISTS idx_ownership_ledger_source ON OwnershipLedger(source);
+CREATE INDEX IF NOT EXISTS idx_ownership_ledger_source_present ON OwnershipLedger(source, present);
+
+CREATE TABLE IF NOT EXISTS ConsumptionSignal (
+  video_code          TEXT NOT NULL,
+  source_type         TEXT NOT NULL,
+  instance            TEXT NOT NULL,
+  library_id          TEXT NOT NULL,
+  library_name        TEXT,
+  watched             INTEGER,
+  progress_pct        INTEGER,
+  play_count          INTEGER,
+  rating              REAL,
+  watched_at          TEXT,
+  resolved_confidence TEXT,
+  observed_at         TEXT,
+  PRIMARY KEY (video_code, instance, library_id)
+);
+CREATE INDEX IF NOT EXISTS idx_consumption_video_code ON ConsumptionSignal(video_code);
+CREATE INDEX IF NOT EXISTS idx_consumption_instance_library ON ConsumptionSignal(instance, library_id);
+
+CREATE TABLE IF NOT EXISTS UnresolvedMediaItem (
+  instance     TEXT NOT NULL,
+  source_type  TEXT,
+  library_id   TEXT NOT NULL,
+  library_name TEXT,
+  item_id      TEXT NOT NULL,
+  raw_title    TEXT,
+  file_path    TEXT,
+  observed_at  TEXT,
+  PRIMARY KEY (instance, library_id, item_id)
+);
+CREATE INDEX IF NOT EXISTS idx_unresolved_instance ON UnresolvedMediaItem(instance);
 """
 
 # Combined DDL for single-DB mode (backward compat, csv_to_sqlite, testing)
@@ -867,6 +1190,50 @@ def _ensure_moviehistory_actor_columns(conn: sqlite3.Connection) -> None:
         pass
 
 
+def _ensure_newworks_composite_pk(conn: sqlite3.Connection) -> None:
+    """Rebuild NewWorks with a composite (actor_href, video_code) primary key.
+
+    The original table (2026_06_14) declared ``video_code TEXT PRIMARY KEY``
+    (single column), which silently dropped a release that surfaced under a
+    second followed actor (issue #223). ``CREATE TABLE IF NOT EXISTS`` never
+    rebuilds an existing table, so an already-initialised SQLite mirror keeps
+    the old key and the composite write contract cannot take effect. This
+    idempotently rebuilds the table (copy -> drop -> rename) only when the PK is
+    still the old single column; on a fresh DB (already composite) it no-ops.
+    Mirrors the D1 forward migration 2026_06_16_newworks_composite_pk.sql.
+    """
+    if not _has_table(conn, 'NewWorks'):
+        return
+    cols = conn.execute("PRAGMA table_info(NewWorks)").fetchall()
+    pk_cols = [r[1] for r in sorted((c for c in cols if c[5] > 0), key=lambda c: c[5])]
+    if pk_cols == ['actor_href', 'video_code']:
+        return
+    logger.info("Rebuilding NewWorks with composite primary key (issue #223)")
+    conn.executescript(
+        """
+        CREATE TABLE NewWorks__pkfix (
+            video_code    TEXT NOT NULL,
+            href          TEXT NOT NULL,
+            actor_href    TEXT NOT NULL,
+            title         TEXT,
+            release_date  TEXT,
+            discovered_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            dismissed     INTEGER NOT NULL DEFAULT 0 CHECK (dismissed IN (0,1)),
+            PRIMARY KEY (actor_href, video_code)
+        );
+        INSERT OR IGNORE INTO NewWorks__pkfix
+            (video_code, href, actor_href, title, release_date, discovered_at, dismissed)
+        SELECT video_code, href, actor_href, title, release_date, discovered_at, dismissed
+        FROM NewWorks;
+        DROP TABLE NewWorks;
+        ALTER TABLE NewWorks__pkfix RENAME TO NewWorks;
+        CREATE INDEX IF NOT EXISTS idx_new_works_actor      ON NewWorks(actor_href);
+        CREATE INDEX IF NOT EXISTS idx_new_works_dismissed  ON NewWorks(dismissed);
+        CREATE INDEX IF NOT EXISTS idx_new_works_video_code ON NewWorks(video_code);
+        """
+    )
+
+
 def _moviehistory_actor_column_names(conn: sqlite3.Connection) -> List[str]:
     rows = conn.execute("PRAGMA table_info(MovieHistory)").fetchall()
     return [r[1] for r in rows]
@@ -892,11 +1259,77 @@ def _moviehistory_actor_columns_physical_order_ok(names: List[str]) -> bool:
     )
 
 
+# Columns the pending-write / session-rollback machinery depends on, applied
+# to pre-existing databases via idempotent ALTERs.  Kept as a module-level
+# constant so two consumers share a single source of truth:
+#   * ``_ensure_rollback_columns`` applies them to local SQLite at init.
+#   * ``find_missing_rollback_columns`` audits a live connection — notably
+#     remote D1, which is migrated out-of-band via ``javdb/migrations/d1/
+#     *.sql`` and can drift when a migration ships in code but is never
+#     executed against D1 (see BFR-017).
+ROLLBACK_COLUMN_SPECS: List[Tuple[str, str, str]] = [
+    ('ReportSessions', 'Status', "TEXT DEFAULT 'in_progress'"),
+    ('ReportSessions', 'CommittedAt', 'TEXT'),
+    ('ReportSessions', 'RunId', 'TEXT'),
+    ('ReportSessions', 'RunAttempt', 'INTEGER'),
+    ('ReportSessions', 'FailureReason', 'TEXT'),
+    ('MovieHistory', 'SessionId', 'TEXT'),
+    ('TorrentHistory', 'SessionId', 'TEXT'),
+    ('PikpakHistory', 'SessionId', 'TEXT'),
+    ('DedupRecords', 'SessionId', 'TEXT'),
+    ('InventoryAlignNoExactMatch', 'SessionId', 'TEXT'),
+    # Ingestion Perfect Rollback (Phase 0): WriteMode column on
+    # ReportSessions, gating the pending dispatch.
+    ('ReportSessions', 'WriteMode', "TEXT DEFAULT 'pending'"),
+]
+
+
+def _column_names(conn, table: str) -> List[str]:
+    """Column names for ``table``, tolerant of the row shapes returned by
+    sqlite3 (tuple, or ``sqlite3.Row`` when a row_factory is set) and the
+    D1 client (``dict``)."""
+    names: List[str] = []
+    for row in conn.execute(f"PRAGMA table_info('{table}')").fetchall():
+        if isinstance(row, dict):
+            names.append(row.get("name"))
+        elif isinstance(row, sqlite3.Row):
+            names.append(row["name"])
+        else:  # plain tuple: (cid, name, type, notnull, dflt_value, pk)
+            names.append(row[1])
+    return names
+
+
+def find_missing_rollback_columns(conn) -> List[Tuple[str, str]]:
+    """Return ``[(table, column)]`` from :data:`ROLLBACK_COLUMN_SPECS` that are
+    absent on ``conn``.
+
+    Only tables that actually exist on the connection are inspected, so a
+    connection that legitimately lacks a table (the reports DB has no
+    ``MovieHistory``, etc.) produces no false positives.  Works against both
+    sqlite3 and D1 connections — both speak ``sqlite_master`` and
+    ``PRAGMA table_info``.
+
+    This is the read-only audit counterpart to the local-SQLite ALTERs in
+    :func:`_ensure_rollback_columns`.  A pre-flight health check uses it to
+    catch D1 schema drift — a ``javdb/migrations/d1/*.sql`` migration merged
+    in code but never executed against remote D1 — before the spider runs,
+    instead of failing at commit time with ``no such column`` (BFR-017).
+    """
+    missing: List[Tuple[str, str]] = []
+    for table, column, _ddl in ROLLBACK_COLUMN_SPECS:
+        if not _has_table(conn, table):
+            continue
+        if column not in _column_names(conn, table):
+            missing.append((table, column))
+    return missing
+
+
 def _ensure_rollback_columns(conn: sqlite3.Connection) -> None:
     """Add Status/SessionId columns and pending tables for rollback (idempotent).
 
     Adds:
       - ReportSessions.Status TEXT DEFAULT 'in_progress'
+      - ReportSessions.CommittedAt TEXT
       - ReportSessions.RunId, ReportSessions.RunAttempt,
         ReportSessions.FailureReason  (added 2026-05-08; identifies the
         owning GitHub Actions workflow run and stores rollback context)
@@ -909,21 +1342,7 @@ def _ensure_rollback_columns(conn: sqlite3.Connection) -> None:
     constants in ``_HISTORY_DDL`` / ``_REPORTS_DDL`` / ``_OPERATIONS_DDL``,
     so the ALTER calls below silently no-op.
     """
-    add_column_specs = [
-        ('ReportSessions', 'Status', "TEXT DEFAULT 'in_progress'"),
-        ('ReportSessions', 'RunId', 'TEXT'),
-        ('ReportSessions', 'RunAttempt', 'INTEGER'),
-        ('ReportSessions', 'FailureReason', 'TEXT'),
-        ('MovieHistory', 'SessionId', 'TEXT'),
-        ('TorrentHistory', 'SessionId', 'TEXT'),
-        ('PikpakHistory', 'SessionId', 'TEXT'),
-        ('DedupRecords', 'SessionId', 'TEXT'),
-        ('InventoryAlignNoExactMatch', 'SessionId', 'TEXT'),
-        # Ingestion Perfect Rollback (Phase 0): WriteMode column on
-        # ReportSessions, gating the pending dispatch.
-        ('ReportSessions', 'WriteMode', "TEXT DEFAULT 'pending'"),
-    ]
-    for table, column, ddl in add_column_specs:
+    for table, column, ddl in ROLLBACK_COLUMN_SPECS:
         if not _has_table(conn, table):
             continue
         try:
@@ -1691,6 +2110,7 @@ def _init_single_db(db_path: str, ddl: str, *, force: bool = False):
             pass
 
         _ensure_moviehistory_actor_columns(conn)
+        _ensure_newworks_composite_pk(conn)
         _normalize_moviehistory_actor_column_order(conn)
         _ensure_rollback_columns(conn)
         _materialize_report_session_status_default(conn)
@@ -1742,6 +2162,7 @@ def _init_single_legacy_db(db_path: str, *, force: bool = False):
             pass
 
         _ensure_moviehistory_actor_columns(conn)
+        _ensure_newworks_composite_pk(conn)
         _normalize_moviehistory_actor_column_order(conn)
         _ensure_rollback_columns(conn)
         _materialize_report_session_status_default(conn)

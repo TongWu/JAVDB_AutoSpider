@@ -1,0 +1,135 @@
+# .github/workflows/SiteContractSentinel.yml
+name: Site Contract Sentinel
+
+# ADR-035 Phase 2: independent canary. Fetches a small fixed set of pinned
+# javdb pages between daily runs and raises a site_drift OpsIncident on drift,
+# giving lead time before the next DailyIngestion run gates.
+
+permissions:
+  contents: read
+
+on:
+  # Scheduled canary disabled — run manually via workflow_dispatch only.
+  # schedule:
+  #   # Every 6h (00/06/12/18 UTC). The 06:00 run lands well before the 12:00 UTC
+  #   # DailyIngestion, so drift is flagged with lead time.
+  #   - cron: '0 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: 'Runner type. Use the same tier DailyIngestion uses to reach javdb.'
+        required: false
+        default: 'self-hosted'
+        type: choice
+        options:
+          - 'ubuntu-latest'
+          - 'self-hosted'
+
+concurrency:
+  group: site-contract-sentinel
+  cancel-in-progress: false
+
+jobs:
+  canary:
+    name: Canary
+    runs-on: ${{ inputs.runner || 'self-hosted' }}
+    timeout-minutes: 20
+    environment: Production
+    env:
+      TZ: Asia/Singapore
+      STORAGE_BACKEND: d1
+      D1_RECOVERY_OUTBOX_ENABLED: ${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}
+      D1_CIRCUIT_BREAKER_ENABLED: ${{ vars.D1_CIRCUIT_BREAKER_ENABLED || 'true' }}
+      D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
+      D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+          persist-credentials: false
+          lfs: true
+
+      - name: Set up Python, venv, dependencies, Rust extension
+        uses: ./.github/actions/setup-python-env
+        with:
+          python-version: '3.11'
+
+      - name: Generate config.py from GitHub Variables and Secrets
+        env:
+          # Proxy (the canary fetches javdb through the spider's proxy pool).
+          VAR_PROXY_MODE: ${{ vars.PROXY_MODE }}
+          VAR_PROXY_POOL_JSON: ${{ secrets.PROXY_POOL_JSON }}
+          VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}
+          VAR_PROXY_POOL_MAX_FAILURES: ${{ vars.PROXY_POOL_MAX_FAILURES || 3 }}
+          VAR_LOGIN_PROXY_NAME: ${{ vars.LOGIN_PROXY_NAME || '' }}
+          # Cloudflare bypass (canary uses use_cf_bypass=True, matching DailyIngestion).
+          VAR_CF_BYPASS_SERVICE_PORT: ${{ vars.CF_BYPASS_SERVICE_PORT }}
+          VAR_CF_BYPASS_ENABLED: ${{ vars.CF_BYPASS_ENABLED || 'True' }}
+          # JavDB login (cookie-based fetch, matches DailyIngestion).
+          VAR_JAVDB_USERNAME: ${{ secrets.JAVDB_USERNAME }}
+          VAR_JAVDB_PASSWORD: ${{ secrets.JAVDB_PASSWORD }}
+          VAR_JAVDB_SESSION_COOKIE: ${{ secrets.JAVDB_SESSION_COOKIE }}
+          # Base URL and request timeout for javdb fetches.
+          VAR_BASE_URL: ${{ vars.BASE_URL || 'https://javdb.com' }}
+          VAR_REQUEST_TIMEOUT: ${{ vars.REQUEST_TIMEOUT || '30' }}
+          # Optional canary tuning (pinned index URL + golden anchors JSON).
+          VAR_SENTINEL_CANARY_INDEX_URL: ${{ vars.SENTINEL_CANARY_INDEX_URL || '' }}
+          VAR_SENTINEL_CANARY_ANCHORS_JSON: ${{ vars.SENTINEL_CANARY_ANCHORS_JSON || '' }}
+          # D1 / Cloudflare — baseline read + incident write land in the reports DB.
+          VAR_STORAGE_BACKEND: d1
+          VAR_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VAR_CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          VAR_D1_HISTORY_DB_ID: ${{ secrets.D1_HISTORY_DB_ID }}
+          VAR_D1_REPORTS_DB_ID: ${{ secrets.D1_REPORTS_DB_ID }}
+          VAR_D1_OPERATIONS_DB_ID: ${{ secrets.D1_OPERATIONS_DB_ID }}
+          VAR_REPORTS_DIR: ${{ vars.REPORTS_DIR || 'reports' }}
+          VAR_LOG_LEVEL: ${{ vars.LOG_LEVEL || 'INFO' }}
+        run: python3 -m apps.cli.ops.config_generator --github-actions
+
+      - name: Run site-contract canary
+        id: canary
+        run: |
+          set -o pipefail
+          mkdir -p logs
+          # Do NOT `set -e`: exit 4 (critical drift) is an expected outcome we
+          # want to record, not a step crash. Capture the code explicitly.
+          STORAGE_BACKEND=d1 python3 -m apps.cli.ops.sentinel \
+            --canary --json --run-id "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            2>&1 | tee logs/sentinel_canary.jsonl
+          CODE=${PIPESTATUS[0]}
+          echo "exit_code=$CODE" >> "$GITHUB_OUTPUT"
+          # 0 = clean, 4 = critical drift (recorded as a site_drift incident); both
+          # are "ran ok". Anything else FAILS the step so the operator is alerted:
+          #   3 = canary could not do its job (fetched nothing, or the incident
+          #       write failed — drift would otherwise be lost silently)
+          #   1 = unexpected internal error.
+          if [ "$CODE" = "0" ] || [ "$CODE" = "4" ]; then exit 0; fi
+          exit "$CODE"
+
+      - name: Upload canary log
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: site-contract-sentinel-log
+          path: logs/sentinel_canary.jsonl
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Site Contract Sentinel (canary)"
+            echo ""
+            echo "- Storage backend: d1"
+            echo "- Sentinel exit code: ${{ steps.canary.outputs.exit_code }} (0=clean, 4=critical drift, 3=canary fetch/write failure, 1=internal error)"
+            echo ""
+            if [ -f logs/sentinel_canary.jsonl ]; then
+              echo "Last output line:"
+              echo '```json'
+              tail -n 1 logs/sentinel_canary.jsonl
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

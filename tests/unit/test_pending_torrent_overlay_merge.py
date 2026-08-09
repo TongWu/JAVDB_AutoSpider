@@ -23,9 +23,12 @@ from __future__ import annotations
 import pytest
 
 from javdb.storage.db import (
-    get_db, db_create_report_session,
-    db_stage_history_write, _pending_torrent_overlay, _commit_one_movie,
+    get_db,
+    _pending_torrent_overlay,
+    _commit_one_movie,
 )
+from javdb.storage.db._db_reports import db_create_report_session
+from javdb.storage.db._db_history_write import db_stage_history_write
 
 
 @pytest.fixture

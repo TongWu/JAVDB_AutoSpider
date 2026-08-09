@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import argparse
+import logging
 import os
 import sys
 
@@ -21,6 +22,10 @@ os.chdir(REPO_ROOT)
 
 from javdb.integrations.notify.email.options import EmailNotificationOptions
 from javdb.integrations.notify.email.service import run_email_notification
+from javdb.integrations.notify import dispatch
+from javdb.integrations.notify.plugin import NotifyMessage
+
+logger = logging.getLogger(__name__)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -48,7 +53,43 @@ def options_from_args(args: argparse.Namespace) -> EmailNotificationOptions:
 
 
 def main(argv: list[str] | None = None) -> int:
-    return run_email_notification(options_from_args(parse_args(argv))).exit_code
+    """Run the pipeline notification step, fanning out to all active backends.
+
+    ADR-039 D4 wiring: ``email`` keeps its rich HTML report via
+    ``run_email_notification``; every other active ``NOTIFY_BACKENDS`` entry
+    (e.g. ``telegram``) receives a condensed ``NotifyMessage`` summary through
+    the dispatcher, with per-backend failure isolation. When ``email`` is not
+    an active backend, the rich report is computed (for the summary) but not
+    delivered, and the exit code reflects the secondary fan-out rather than SMTP.
+    """
+    opts = options_from_args(parse_args(argv))
+    active = dispatch.active_names()
+    email_active = "email" in active
+    secondary = [name for name in active if name != "email"]
+
+    result = None
+    if email_active or secondary:
+        result = run_email_notification(opts, deliver=email_active)
+
+    if secondary and result is not None:
+        message = NotifyMessage(
+            subject=result.subject,
+            body=result.summary or result.subject,
+            level="error" if result.has_critical_errors else "info",
+        )
+        for outcome in dispatch.send(message, exclude={"email"}):
+            if outcome.ok:
+                logger.info("Notify backend '%s' delivered run summary.", outcome.plugin)
+            else:
+                logger.warning(
+                    "Notify backend '%s' failed: %s", outcome.plugin, outcome.detail
+                )
+
+    # Exit code is gated by the email channel's SMTP delivery. A telegram-only
+    # run uses deliver=False, so result.exit_code is 0 there (a skipped send is
+    # not a failure); secondary-backend failures are isolated (logged above),
+    # never fatal — consistent with the dispatch fan-out contract.
+    return result.exit_code if result is not None else 0
 
 
 if __name__ == "__main__":

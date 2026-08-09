@@ -28,7 +28,7 @@ GitHub Actions 部署提供：
 
 进入 **Settings > Secrets and variables > Actions > Secrets**（或将其范围限定到 `Production` 环境）。
 
-`config_generator` CLI（`python3 -m apps.cli.config_generator --github-actions`）从以 `VAR_` 为前缀的环境变量中读取这些值，并在每次工作流运行开始时写入 `config.py`。下面列出的每个 Secret 对应工作流 YAML 中的一个 `VAR_*` 环境变量。
+`config_generator` CLI（`python3 -m apps.cli.ops.config_generator --github-actions`）从以 `VAR_` 为前缀的环境变量中读取这些值，并在每次工作流运行开始时写入 `config.py`。下面列出的每个 Secret 对应工作流 YAML 中的一个 `VAR_*` 环境变量。
 
 ### 必需 Secrets
 
@@ -89,6 +89,15 @@ GitHub Actions 部署提供：
 |---|---|
 | `RCLONE_CONFIG_BASE64` | Base64 编码的 `rclone.conf` 内容（用于 Google Drive 库存和去重） |
 
+### 可选 Secrets（Telegram 通知，ADR-039）
+
+仅当 `NOTIFY_BACKENDS_JSON` 包含 `"telegram"` 时需要。
+
+| Secret | 用途 |
+|---|---|
+| `TELEGRAM_BOT_TOKEN` | 来自 [@BotFather](https://t.me/BotFather) 的 bot token，例如 `123456:ABC-DEF...` |
+| `TELEGRAM_CHAT_ID` | 目标 chat/channel id，例如 `-1001234567890` |
+
 ## 步骤 4 —— 配置仓库 Variables
 
 进入 **Settings > Secrets and variables > Actions > Variables**。
@@ -101,13 +110,28 @@ GitHub Actions 部署提供：
 |---|---|---|
 | `GIT_REPO_URL` | -- | 仓库 HTTPS URL（例如 `https://github.com/you/JAVDB_AutoSpider.git`） |
 | `GIT_BRANCH` | `main` | git push 的分支 |
+| `NOTIFY_BACKENDS_JSON` | `["email"]` | active 通知后端的 JSON 数组（ADR-039）。加 `"telegram"` 可收到 Telegram 运行摘要;设为 `["telegram"]` 则禁用邮件报告。telegram active 时需配套 `TELEGRAM_*` secrets。 |
 | `PROXY_MODE` | `pool` | `pool`、`single` 或 `None` |
 | `PROXY_MODULES_JSON` | `["spider"]` | 使用 proxy 的模块 JSON 数组：`spider`、`qbittorrent`、`pikpak`、`all` |
+| `DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST_JSON` | `["western_studio_date"]` | 排除每日抓取的 video-code family 的 JSON 数组，默认 `["western_studio_date"]`。设为 `[]` 可停止排除 western studio/date family。 |
 | `LOG_LEVEL` | `INFO` | `DEBUG`、`INFO`、`WARNING`、`ERROR` |
 | `STORAGE_BACKEND` | `sqlite` | `sqlite`、`d1` 或 `dual` |
 | `D1_RECOVERY_OUTBOX_ENABLED` | `false` | 启用 ADR-010 recovery outbox，处理安全 D1 写入失败。可识别的真值包括 `1`、`true`、`yes`、`on`。 |
 | `D1_BATCHING_ENABLED` | `false` | 启用 ADR-010 safe-path D1 micro-batching。可识别的真值包括 `1`、`true`、`yes`、`on`。 |
 | `D1_STARTUP_REPLAY_ENABLED` | `false` | 在首次 D1/Dual 操作前启用 ADR-010 startup replay。可识别的真值包括 `1`、`true`、`yes`、`on`。 |
+
+### 可选磁力聚合 Variables（Python API）
+
+这些变量只适用于会为 Python API 生成 `config.py` 的自定义 GitHub Actions
+任务。现有抓取工作流不会启动 Python API，也不会调用外部索引器聚合。
+
+| Variable | 默认值 | 用途 |
+|---|---|---|
+| `MAGNET_SOURCES_JSON` | `[]` | active 外部磁力索引器的 JSON 数组，例如 `["javbus", "sukebei"]`。为空时 `magnet_aggregation` capability 保持 false。 |
+| `JAVBUS_BASE_URL` | `https://www.javbus.com` | JAVBUS 索引器 base URL。 |
+| `SUKEBEI_BASE_URL` | `https://sukebei.nyaa.si` | Sukebei 索引器 base URL。 |
+| `MAGNET_SOURCES_USE_PROXY` | `true` | 让外部索引器请求走 proxy pool。 |
+| `MAGNET_SOURCE_TIMEOUT_SECONDS` | `10.0` | 外部索引器 fan-out 中每个 source 的 wall-clock 时间预算。 |
 
 ### 爬虫调优 Variables
 
@@ -134,6 +158,9 @@ GitHub Actions 部署提供：
 | `REQUEST_TIMEOUT` | `30` | API 请求超时时间（秒） |
 | `DELAY_BETWEEN_ADDITIONS` | `1` | 种子添加间隔（秒） |
 | `QB_FILE_FILTER_MIN_SIZE_MB` | `100` | 文件过滤器的最小文件大小阈值 |
+| `TORRENT_QUALITY_EVIDENCE_ENABLED` | `false` | 在文件过滤器之后运行 ADR-024 影子证据采集 |
+| `TORRENT_QUALITY_POLICY_MODE` | `shadow` | 预留的 rollout 模式；Phase 1 仍为 shadow-only |
+| `TORRENT_QUALITY_CATEGORIES` | （空） | 可选：当 workflow dispatch 未提供 `categories` 输入时使用的 JSON 数组 |
 
 ### Proxy Variables
 
@@ -190,7 +217,7 @@ GitHub Actions 部署提供：
 在 CI 中没有持久化的 `config.py` 文件。每个工作流的 **setup 任务**会运行：
 
 ```bash
-python3 -m apps.cli.config_generator --github-actions
+python3 -m apps.cli.ops.config_generator --github-actions
 ```
 
 该脚本读取所有 `VAR_*` 环境变量（由上述 Secrets 和 Variables 填充）并写入完整的 `config.py`。然后使用 `ARTIFACT_KEY` 加密该文件，并作为加密产物在任务之间传递。
@@ -222,7 +249,7 @@ GitHub Actions 的 cron 在高负载时可能延迟最多 15 分钟。cron 仅�
 | `setup` | 检出代码、安装依赖、生成并加密 config.py |
 | `run-pipeline` | 健康检查、爬虫、qBittorrent 上传、文件过滤、PikPak 桥接、Rclone 去重、会话提交 |
 | `cleanup-on-failure` | 失败时回滚未提交的 D1/pending 写入 |
-| `email-notification` | 发送结果邮件，对关键 pending 警报运行自动回退 |
+| `email-notification` | 发送结果邮件，对关键 pending 警报运行告警并暂停 |
 | `commit-results` | 将 CSV 报告和数据库文件提交回仓库 |
 
 ### AdHocIngestion 工作流
@@ -237,6 +264,20 @@ GitHub Actions 的 cron 在高负载时可能延迟最多 15 分钟。cron 仅�
 - **history_filter**：处理前检查历史记录
 - **date_filter**：按发布日期过滤
 - **qb_category**：自定义 qBittorrent 分类（空 = 默认 "Ad Hoc"；`顶级` 使用每日 qB 凭据）
+
+### SubscriptionMonitor 工作流
+
+`SubscriptionMonitor.yml` 每天 **14:00 UTC** 运行，也可以手动触发。它从 D1
+读取 active 的 `ActorSubscription` 行，通过现有 AdHoc spider 路径抓取每个演员，并将真正的新作写入 `NewWorks` feed。
+
+手动输入：
+
+- **proxy_spider**：为演员页抓取启用代理。
+- **dry_run**：只列出 active subscriptions，不执行抓取。
+- **runner**：选择 `ubuntu-latest` 或 `self-hosted`。
+- **log_level**：CLI 日志级别（`DEBUG`、`INFO`、`WARNING`、`ERROR`）。
+
+该工作流复用摄取工作流所在的 `Production` environment secrets 和 variables，包括 D1 凭据、JavDB 登录凭据、代理设置和 `DEPLOY_KEY`。不使用 `ARTIFACT_KEY`——日志以明文形式上传为 artifact。
 
 ## 步骤 7 —— 监控
 
@@ -277,7 +318,9 @@ openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
 | 工作流 | 触发方式 | 用途 |
 |---|---|---|
 | `QBFileFilter.yml` | 定时（每日抓取后 2 小时） | 过滤最近添加种子中的小文件 |
-| `ReconcileLibrary.yml` | 每小时定时 / 手动触发 | 使用实时 qB 状态对 ADR-033 采集结果做对账 |
+| `PurgeMissingFiles.yml` | 每日定时 / 手动触发 | 清理两个 qB 实例的 `missingFiles` 种子：逐个 stop + recheck，然后删除条目（仅当内容缩小超过 50% 且残留 ≤ 100MB 时连文件一起删）。输入：`dry_run`、`min_age_hours`（默认 22） |
+| `ReconcileLibrary.yml` | 每小时定时 / 手动触发 | 运行 ADR-033 闭环轮次：采集结果对账（实时 qB 状态）+ 所有权账本（gdrive/qb/pikpak/nas）+ 消费信号（媒体服务器） |
+| `SubscriptionMonitor.yml` | 每日定时 / 手动触发 | 通过 AdHoc 路径抓取已关注演员并写入 New Works feed |
 | `WeeklyDedup.yml` | 每周定时 | Rclone 去重 |
 | `RollbackD1.yml` | 手动触发 | 手动会话回滚 |
 | `StaleSessionCleanup.yml` | 每日定时 | 自动清理超过 48 小时的卡住会话 |
@@ -289,13 +332,40 @@ openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
 
 ### ReconcileLibrary 工作流
 
-`ReconcileLibrary.yml` 是 ADR-033 Phase 1 的对账轮次。它每小时运行一次，并调用：
+`ReconcileLibrary.yml` 运行 ADR-033 Phase 1+2+3 对账轮次。它每小时运行一次，并调用：
 
 ```bash
-STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --json
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --pass all --json
 ```
 
-该工作流默认使用 `self-hosted` runner，因为 qBittorrent 通常只在操作者内网可达。如果 qB 可从公网访问或已被测试替身替代，也可以通过手动触发的 `runner` 输入改用 `ubuntu-latest`。
+`--pass all` 按顺序运行全部三个轮次：
+
+1. **采集轮次（acquisition pass）** — 读取实时 qBittorrent 状态，将
+   `AcquisitionOutcome` 行从 `queued` / `downloading` 推进到 `downloading`、
+   `completed`、`stalled` 或 `failed`。若某个种子在 qB 中处于 `missingFiles`
+   状态（下载完成后文件被从磁盘删除），则将其视作 `completed`；记录 outcome
+   后，该残留种子会连同其剩余文件一起从 qB 删除。
+2. **所有权轮次（ownership pass）** — 从四个来源收集所有权观测结果并 upsert
+   到 `OwnershipLedger`：
+   - `gdrive` — 投影现有 `RcloneInventory` 表（无需额外 rclone 调用；由
+     `WeeklyDedup.yml` 填充）。
+   - `qb` — 将已完成的 `AcquisitionOutcome` 行桥接为所有权证据。
+   - `pikpak` — 读取 `PikpakHistory` success 行。
+   - `nas` — 前向兼容 stub，当前无论如何配置都始终只记录日志、不产生观测结果。
+     `config.py` 中的 `RCLONE_NAS_REMOTE` 是为未来 NAS 采集功能预留的占位符；
+     今天设置该值不会产生任何效果。将 `nas` 保留在来源列表中不会有副作用。
+
+   收集完成后，ownership pass 执行 **present sweep**：对每个来源，将前次快照
+   存在但本次快照缺失的行的 `present` 标志置为 `0`（审计保留式，从不删行）。
+   最后，对于 `video_code` 已出现在持久 Ledger 来源（`gdrive` 或 `nas`）的
+   `AcquisitionOutcome` 行，将其推进到 `in_library`。
+3. **消费轮次（consumption pass）** — 轮询 `MEDIA_SERVERS` 中的每个媒体服务器
+   （通过 `MEDIA_SERVERS_JSON` secret 提供，详见
+   [媒体服务器设置](media-servers.md)），通过 join-key 置信度阶梯将条目标题解析
+   为 `video_code`，写入 `ConsumptionSignal` 和 `UnresolvedMediaItem` 行。若
+   `MEDIA_SERVERS_JSON` 未设置，此轮次为 no-op。
+
+整个工作流始终在 `self-hosted` runner 上运行，因为 qBittorrent 通常只在操作者内网可达。
 生成的 `config.py` 会从仓库 Variables 读取 `TORRENT_CATEGORY` 和
 `TORRENT_CATEGORY_ADHOC`，因此默认扫描会跟随上传器使用的同一组 qB 分类。
 
@@ -303,9 +373,28 @@ STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --json
 
 | 输入 | 默认值 | 用途 |
 |---|---|---|
-| `runner` | `self-hosted` | 任务使用的 runner 标签。访问本地 qB 时使用 `self-hosted`。 |
 | `stalled_after_days` | `7` | 正整数。活跃 outcome 超过该天数未被观测到会变为 `stalled`；超过 2 倍窗口会变为 `failed`。 |
 | `dry_run` | `false` | 只计算状态迁移并输出 JSON，不写入数据行。 |
+
+### 媒体服务器 secret {#media-servers-secret}
+
+消费轮次通过运行时生成的 `config.py` 读取 `MEDIA_SERVERS`（由加密的 `config.py.enc`
+与仓库 secrets 合并生成）。要在 `ReconcileLibrary.yml` 中启用消费轮次，需添加
+`MEDIA_SERVERS_JSON` 仓库 secret：
+
+1. 进入 **Settings → Secrets and variables → Actions → New repository secret**。
+2. 名称：`MEDIA_SERVERS_JSON`。
+3. 值：将 `MEDIA_SERVERS` 列表序列化为 JSON，例如：
+
+   ```json
+   [{"type":"emby","instance":"emby-nas","base_url":"http://192.168.1.50:8096","token":"your_emby_api_key","libraries":["JAV"]}]
+   ```
+
+4. 保存。`config_generator` 会读取 `VAR_MEDIA_SERVERS_JSON` 并将其注入生成的
+   `config.py` 中，格式为 `MEDIA_SERVERS = <value>`。
+
+若 secret 不存在或为空，`MEDIA_SERVERS` 默认为 `[]`，消费轮次为 no-op。字段说明及
+凭据获取步骤参见 [媒体服务器设置](media-servers.md)。
 
 ## 故障排查
 

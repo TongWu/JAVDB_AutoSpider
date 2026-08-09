@@ -8,13 +8,9 @@ Href the commit path produces.
 
 import json
 
-from javdb.storage.db import (
-    db_create_report_session,
-    db_stage_history_write,
-    db_commit_session_history,
-    get_db,
-)
-import javdb.storage.db._db_session as _db_session
+from javdb.storage.db import get_db
+from javdb.storage.db._db_reports import db_create_report_session
+from javdb.storage.db._db_history_write import db_stage_history_write, db_commit_session_history
 
 
 def test_committed_actor_links_are_absolute():
@@ -23,26 +19,22 @@ def test_committed_actor_links_are_absolute():
         report_date="2026-01-01",
         csv_filename="t.csv",
     )
-    _db_session.set_active_session_id(sid)
-    try:
-        db_stage_history_write(
-            sid,
-            "movie",
-            {
-                "Href": "/v/abc",
-                "VideoCode": "ABC-001",
-                "ActorName": "Foo",
-                "ActorGender": "female",
-                "ActorLink": "/actors/xyz",
-                "SupportingActors": json.dumps(
-                    [{"name": "Bar", "gender": "male", "link": "/actors/qqq"}]
-                ),
-                "DateTimeVisited": "2026-01-01 00:00:00",
-            },
-        )
-        db_commit_session_history(sid)
-    finally:
-        _db_session.set_active_session_id(None)
+    db_stage_history_write(
+        sid,
+        "movie",
+        {
+            "Href": "/v/abc",
+            "VideoCode": "ABC-001",
+            "ActorName": "Foo",
+            "ActorGender": "female",
+            "ActorLink": "/actors/xyz",
+            "SupportingActors": json.dumps(
+                [{"name": "Bar", "gender": "male", "link": "/actors/qqq"}]
+            ),
+            "DateTimeVisited": "2026-01-01 00:00:00",
+        },
+    )
+    db_commit_session_history(sid)
 
     with get_db() as conn:
         row = conn.execute(
@@ -66,21 +58,17 @@ def test_committed_absolute_actor_link_is_idempotent():
         report_date="2026-01-01",
         csv_filename="t2.csv",
     )
-    _db_session.set_active_session_id(sid)
-    try:
-        db_stage_history_write(
-            sid,
-            "movie",
-            {
-                "Href": "https://javdb.com/v/def",
-                "VideoCode": "DEF-002",
-                "ActorLink": "https://javdb.com/actors/keep",
-                "DateTimeVisited": "2026-01-01 00:00:00",
-            },
-        )
-        db_commit_session_history(sid)
-    finally:
-        _db_session.set_active_session_id(None)
+    db_stage_history_write(
+        sid,
+        "movie",
+        {
+            "Href": "https://javdb.com/v/def",
+            "VideoCode": "DEF-002",
+            "ActorLink": "https://javdb.com/actors/keep",
+            "DateTimeVisited": "2026-01-01 00:00:00",
+        },
+    )
+    db_commit_session_history(sid)
 
     with get_db() as conn:
         row = conn.execute(

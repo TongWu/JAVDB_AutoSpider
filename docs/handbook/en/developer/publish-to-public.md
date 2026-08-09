@@ -34,26 +34,48 @@ The publishing process uses `git-filter-repo` to:
 All publishing configuration is centralized in `.publish-config.yml`:
 
 ```yaml
-# Files/directories to exclude from public repo
+# Files/directories to exclude from the public repo (removed from ALL history)
 exclude_paths:
   - "reports/"
   - "logs/"
-  - "Daily Report/"
-  - "Ad Hoc/"
-  - "docs/PUBLISH_TO_PUBLIC.md"
+  - "config.py"          # resolved secrets — never publish
+  - "CLAUDE.md"
+  - "AGENTS.md"
+  - "CONTEXT.md"
+  - "*.db"
   - ".github/workflows/block-public-sync-to-main.yml"
   - ".github/workflows/publish-to-public.yml"
   - ".publish-config.yml"
+  # Private-only infrastructure workflows — removed entirely so they
+  # never ship to (or run on) the public repo:
+  - ".github/workflows/publish-api-image.yml"
+  - ".github/workflows/sync-docs-to-wiki.yml"
+  - ".github/workflows/publish-openapi.yml"
+  - ".github/workflows/publish-query-contract.yml"
+  - ".github/workflows/publish-sql-contract.yml"
+  # ... see .publish-config.yml for the complete list
 
-# Workflow modifications
+# Per-workflow modifications applied to the public mirror
 workflow_modifications:
+  # Comment out `schedule:` triggers (no cron auto-runs on the public repo)
   disable_schedule:
     - ".github/workflows/DailyIngestion.yml"
     - ".github/workflows/QBFileFilter.yml"
+    - ".github/workflows/WeeklyDedup.yml"
     - ".github/workflows/StaleSessionCleanup.yml"
+    - ".github/workflows/SiteContractSentinel.yml"
+    - ".github/workflows/ReconcileLibrary.yml"
+  # Uncomment the public push trigger
   enable_push_trigger:
     - ".github/workflows/docker-publish-ghcr.yml"
+  # Comment out the PRIVATE_ONLY_PUSH block (keep the file, drop the push)
+  disable_push_trigger:
     - ".github/workflows/TestIngestion.yml"
+  # Comment out the whole `on:` block. Empty by design — private-only
+  # workflows are removed via `exclude_paths` instead, because a
+  # triggerless workflow file is invalid and produces empty failing runs
+  # on every publish.
+  disable_all_triggers: []
 
 # Target branches
 branches:
@@ -107,10 +129,12 @@ Configure these in GitHub repository settings → Secrets and variables → Acti
 - `git-filter-repo` removes all excluded files from every commit
 - Commits that become empty are pruned
 - Original timestamps are preserved
+- Private-only infrastructure workflows (`publish-api-image`, `sync-docs-to-wiki`, `publish-openapi`, `publish-query-contract`, `publish-sql-contract`) are in `exclude_paths`, so they are removed entirely — they never appear in, or run on, the public repo
 
 ### Step 3: Workflow Modifications
 - Scheduled triggers are disabled (prevents forks from auto-running)
 - Docker push triggers are enabled for the public repo
+- Private-only push triggers (e.g. `TestIngestion`) are commented out in place
 - `runs-on:` lines tagged with `# PUBLIC_RUNNER: <name>` are rewritten to use
   `<name>` so jobs that run on private self-hosted runners fall back to a
   GitHub-hosted equivalent in the public repo
@@ -152,7 +176,7 @@ repo to use:
 
 ```yaml
 build-arm:
-  runs-on: self-hosted  # PUBLIC_RUNNER: ubuntu-24.04-arm
+  runs-on: [self-hosted, ARM64]  # PUBLIC_RUNNER: ubuntu-24.04-arm
 ```
 
 During publish, `publish-to-public.yml` rewrites every line matching this
@@ -160,10 +184,13 @@ pattern to `runs-on: <public-runner>` (here `ubuntu-24.04-arm`). The marker
 is scanned across all `.github/workflows/*.yml` files, so no extra entry in
 `.publish-config.yml` is required.
 
-Limitations: only single-token `runs-on` values are supported (e.g.
-`self-hosted`, `ubuntu-latest`). Array forms like `[self-hosted, linux]` or
-expressions like `${{ matrix.runner }}` are intentionally out of scope and
-would need a richer marker scheme.
+Both the single-token form (`runs-on: self-hosted`) and the arch-pinned array
+form (`runs-on: [self-hosted, ARM64]`) are supported — the array form is needed
+when a self-hosted job must target one architecture, because the fleet tags
+boxes only with the default `self-hosted` / `Linux` / `X64` / `ARM64` labels.
+The replacement runner (after `PUBLIC_RUNNER:`) is still a single token; the
+GitHub-hosted fallback never needs an array. Expression forms like
+`${{ matrix.runner }}` carry no marker and are left untouched.
 
 ### Q: How do I change the target branch?
 

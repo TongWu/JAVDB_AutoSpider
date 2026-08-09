@@ -33,6 +33,22 @@ from javdb.integrations.qb.config import (
 
 logger = get_logger(__name__)
 
+# ADR-024 IMP-10: stopCondition=MetadataReceived requires qB Web API >= 2.8.3
+# (qBittorrent >= 4.4.0).
+WEBAPI_MIN_FOR_STOP_CONDITION = (2, 8, 3)
+
+
+def webapi_supports_metadata_only(webapi_version: str) -> bool:
+    """True iff the qB Web API version supports stopCondition. Fail-closed."""
+    parts = (webapi_version or "").strip().split(".")
+    try:
+        parsed = tuple(int(p) for p in parts[:3])
+    except (TypeError, ValueError):
+        return False
+    if len(parsed) < 3:
+        parsed = parsed + (0,) * (3 - len(parsed))
+    return parsed >= WEBAPI_MIN_FOR_STOP_CONDITION
+
 
 # ---------------------------------------------------------------------------
 # Module-level login / ping helpers
@@ -401,6 +417,7 @@ class QBittorrentClient:
         content_layout: str = "Original",
         ratio_limit: str = "-2",
         seeding_time_limit: str = "-2",
+        stop_condition: Optional[str] = None,
         paused: bool = False,
     ) -> bool:
         """Add a torrent via qB's ``/api/v2/torrents/add`` endpoint.
@@ -433,6 +450,9 @@ class QBittorrentClient:
             data["rename"] = name
         if category is not None:
             data["category"] = category
+        if stop_condition is not None:
+            # qB /api/v2/torrents/add: "stopCondition" (e.g. MetadataReceived).
+            data["stopCondition"] = stop_condition
 
         resp = self.session.post(
             f"{self.base_url}/api/v2/torrents/add",
@@ -446,6 +466,32 @@ class QBittorrentClient:
             f"status {resp.status_code}"
         )
         return False
+
+    def get_torrent_files(self, info_hash: str):
+        """Return the torrent's file list (or None on failure). Read-only."""
+        from javdb.integrations.qb import readonly
+        kwargs = {"proxies": self.proxies, "verify": self.session.verify}
+        if self.request_timeout is not None:
+            kwargs["timeout"] = self.request_timeout
+        return readonly.get_torrent_files(
+            self.session, self.base_url, info_hash, **kwargs
+        )
+
+    def get_webapi_version(self) -> str:
+        """Return the qB Web API version string, or '' on failure (fail-closed)."""
+        try:
+            resp = self.session.get(
+                f"{self.base_url}/api/v2/app/webapiVersion",
+                **self._request_kwargs(),
+            )
+            if resp.status_code == 200:
+                return (resp.text or "").strip()
+        except Exception as exc:  # noqa: BLE001 - capability probe is best-effort
+            logger.warning("qB webapiVersion probe failed: %s", exc)
+        return ""
+
+    def supports_metadata_only_probe(self) -> bool:
+        return webapi_supports_metadata_only(self.get_webapi_version())
 
     def get_torrents_multiple_categories(
         self, categories: Iterable[str], torrent_filter: str = "downloading"
@@ -490,6 +536,51 @@ class QBittorrentClient:
             f"(delete_files={delete_files})."
         )
         return True
+
+    def get_torrents_by_hashes(self, hashes: Iterable[str]) -> list:
+        """Return the info rows for the given hashes (qB v4.1+ ``hashes`` filter)."""
+        hash_list = [h for h in hashes if h]
+        if not hash_list:
+            return []
+        resp = self.session.get(
+            f"{self.base_url}/api/v2/torrents/info",
+            params={"hashes": "|".join(hash_list)},
+            **self._request_kwargs(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def stop_torrents(self, hashes: Iterable[str]) -> None:
+        """Stop (pause) the given torrents.
+
+        Used before a recheck so qB does not auto-resume seeding a torrent
+        whose files turn out to still be on disk. qB v5 renamed the endpoint
+        to ``/torrents/stop``; fall back to the v4.x ``/torrents/pause`` on 404.
+        """
+        hash_list = [h for h in hashes if h]
+        if not hash_list:
+            return
+        data = {"hashes": "|".join(hash_list)}
+        resp = self.session.post(
+            f"{self.base_url}/api/v2/torrents/stop", data=data, **self._request_kwargs()
+        )
+        if resp.status_code == 404:
+            resp = self.session.post(
+                f"{self.base_url}/api/v2/torrents/pause", data=data, **self._request_kwargs()
+            )
+        resp.raise_for_status()
+
+    def recheck_torrents(self, hashes: Iterable[str]) -> None:
+        """Force qB to re-verify the given torrents against on-disk data."""
+        hash_list = [h for h in hashes if h]
+        if not hash_list:
+            return
+        resp = self.session.post(
+            f"{self.base_url}/api/v2/torrents/recheck",
+            data={"hashes": "|".join(hash_list)},
+            **self._request_kwargs(),
+        )
+        resp.raise_for_status()
 
 
 def remove_completed_torrents_keep_files(

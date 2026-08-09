@@ -15,7 +15,8 @@ from types import ModuleType
 from typing import Any, Dict, Optional
 
 import jwt
-from fastapi import HTTPException, Request
+from fastapi import Depends, HTTPException, Request, Security
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from passlib.context import CryptContext
 
 from apps.api.services import context
@@ -289,7 +290,26 @@ def _rate_limit(
         RATE_BUCKETS[key] = records
 
 
-def _require_auth(request: Request) -> Dict[str, Any]:
+# Shared bearer-token security scheme. Wiring it as a FastAPI dependency on
+# _require_auth makes FastAPI advertise `security: [{"BearerAuth": []}]` on every
+# operation guarded by this dependency, matching the BearerAuth entry in
+# components.securitySchemes (registered in runtime._custom_openapi).
+# auto_error=False keeps runtime auth behavior unchanged: the scheme never raises
+# on a missing/invalid header, so _access_token_from_request still owns the 401
+# and the access_token cookie fallback. scheme_name pins the OpenAPI key.
+_BEARER_SCHEME = HTTPBearer(
+    scheme_name="BearerAuth", bearerFormat="JWT", auto_error=False
+)
+
+
+def _require_auth(
+    request: Request,
+    _credentials: Optional[HTTPAuthorizationCredentials] = Security(_BEARER_SCHEME),
+) -> Dict[str, Any]:
+    # _credentials is intentionally unused at runtime; it exists solely so
+    # FastAPI records the BearerAuth security requirement in the OpenAPI schema.
+    # Token extraction (header or access_token cookie) stays in
+    # _access_token_from_request to preserve the existing 401 behavior.
     token = _access_token_from_request(request)
     payload = _jwt_decode(token)
     if payload.get("typ") != "access":
@@ -298,13 +318,20 @@ def _require_auth(request: Request) -> Dict[str, Any]:
     return payload
 
 
-def _require_auth_or_token(request: Request) -> Dict[str, Any]:
-    return _require_auth(request)
+def _require_auth_or_token(
+    payload: Dict[str, Any] = Depends(_require_auth),
+) -> Dict[str, Any]:
+    # Depend on _require_auth (instead of calling it directly) so the BearerAuth
+    # security requirement propagates into the OpenAPI schema for routes using
+    # this dependency.
+    return payload
 
 
 def require_role(role: str):
-    def _dep(request: Request) -> Dict[str, Any]:
-        payload = _require_auth(request)
+    def _dep(payload: Dict[str, Any] = Depends(_require_auth)) -> Dict[str, Any]:
+        # Depend on _require_auth (instead of calling it directly) so the
+        # BearerAuth security requirement propagates into the OpenAPI schema for
+        # role-guarded routes.
         if role == "admin" and payload.get("role") != "admin":
             raise HTTPException(status_code=403, detail="Admin role required")
         return payload

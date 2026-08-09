@@ -14,18 +14,20 @@ python3 -m apps.cli.<command> [options]
 
 - [Spider CLI](#spider-cli) (`apps.cli.spider`)
 - [Pipeline CLI](#pipeline-cli) (`apps.cli.pipeline`)
-- [qBittorrent Uploader](#qbittorrent-uploader) (`apps.cli.qb_uploader`)
-- [qBittorrent File Filter](#qbittorrent-file-filter) (`apps.cli.qb_file_filter`)
-- [PikPak Bridge](#pikpak-bridge) (`apps.cli.pikpak_bridge`)
-- [Migration CLI](#migration-cli) (`apps.cli.migration`)
+- [qBittorrent Uploader](#qbittorrent-uploader) (`apps.cli.qb.uploader`)
+- [qBittorrent File Filter](#qbittorrent-file-filter) (`apps.cli.qb.file_filter`)
+- [Purge Missing Files](#purge-missing-files) (`apps.cli.qb.purge_missing_files`)
+- [Torrent Quality Evidence](#torrent-quality-evidence) (`apps.cli.qb.quality_evidence`)
+- [PikPak Bridge](#pikpak-bridge) (`apps.cli.pikpak.bridge`)
+- [Migration CLI](#migration-cli) (`apps.cli.db.migration`)
 - [Login CLI](#login-cli) (`apps.cli.login`)
-- [Rollback CLI](#rollback-cli) (`apps.cli.rollback`)
+- [Rollback CLI](#rollback-cli) (`apps.cli.db.rollback`)
 - [Operations Diagnosis CLI](#operations-diagnosis-cli) (`apps.cli.ops.diagnose_run`)
 - [Acquisition Reconcile CLI](#acquisition-reconcile-cli) (`apps.cli.ops.reconcile`)
 - [Content Filter CLI](#content-filter-cli) (`apps.cli.ops.content_filter`)
 - [Event Spine Consumer CLI](#event-spine-consumer-cli) (`apps.cli.ops.events`)
 - [Site-Contract Sentinel CLI](#site-contract-sentinel-cli) (`apps.cli.ops.sentinel`)
-- [Config Generator CLI](#config-generator-cli) (`apps.cli.config_generator`)
+- [Config Generator CLI](#config-generator-cli) (`apps.cli.ops.config_generator`)
 - [Complete Spider Argument Reference](#complete-spider-argument-reference)
 
 ---
@@ -250,7 +252,7 @@ The pipeline executes these steps in order:
 
 ## qBittorrent Uploader
 
-**Module:** `apps.cli.qb_uploader`
+**Module:** `apps.cli.qb.uploader`
 
 Uploads torrent magnet links from spider CSV output to qBittorrent.
 
@@ -270,26 +272,26 @@ Uploads torrent magnet links from spider CSV output to qBittorrent.
 
 ```bash
 # Daily mode (default)
-python3 -m apps.cli.qb_uploader
+python3 -m apps.cli.qb.uploader
 
 # Ad-hoc mode (for custom URL scraping results)
-python3 -m apps.cli.qb_uploader --mode adhoc
+python3 -m apps.cli.qb.uploader --mode adhoc
 
 # Specify input file
-python3 -m apps.cli.qb_uploader --input-file my_results.csv
+python3 -m apps.cli.qb.uploader --input-file my_results.csv
 
 # Use proxy for qBittorrent API
-python3 -m apps.cli.qb_uploader --use-proxy
+python3 -m apps.cli.qb.uploader --use-proxy
 
 # Override category
-python3 -m apps.cli.qb_uploader --mode adhoc --category "Custom Category"
+python3 -m apps.cli.qb.uploader --mode adhoc --category "Custom Category"
 ```
 
 ---
 
 ## qBittorrent File Filter
 
-**Module:** `apps.cli.qb_file_filter`
+**Module:** `apps.cli.qb.file_filter`
 
 Filters out small files from recently added torrents in qBittorrent. Sets unwanted files (below the size threshold) to "do not download" priority. For newly added torrents, the filter waits up to 90 seconds for qBittorrent metadata before processing so small files can be filtered before they download.
 
@@ -310,33 +312,96 @@ Filters out small files from recently added torrents in qBittorrent. Sets unwant
 
 ```bash
 # Default: use threshold from config
-python3 -m apps.cli.qb_file_filter
+python3 -m apps.cli.qb.file_filter
 
 # Override threshold (e.g. 50MB) and days
-python3 -m apps.cli.qb_file_filter --min-size 50
-python3 -m apps.cli.qb_file_filter --min-size 100 --days 3
+python3 -m apps.cli.qb.file_filter --min-size 50
+python3 -m apps.cli.qb.file_filter --min-size 100 --days 3
 
 # Dry run (preview without changes)
-python3 -m apps.cli.qb_file_filter --dry-run
+python3 -m apps.cli.qb.file_filter --dry-run
 
 # Filter specific category only
-python3 -m apps.cli.qb_file_filter --category JavDB
+python3 -m apps.cli.qb.file_filter --category JavDB
 
 # Filter multiple categories
-python3 -m apps.cli.qb_file_filter --categories '["Ad Hoc", "Daily Ingestion"]'
+python3 -m apps.cli.qb.file_filter --categories '["Ad Hoc", "Daily Ingestion"]'
 
 # With proxy
-python3 -m apps.cli.qb_file_filter --use-proxy
+python3 -m apps.cli.qb.file_filter --use-proxy
 
 # Delete already-downloaded small files
-python3 -m apps.cli.qb_file_filter --delete-local-files
+python3 -m apps.cli.qb.file_filter --delete-local-files
+```
+
+---
+
+## Purge Missing Files
+
+**Module:** `apps.cli.qb.purge_missing_files`
+
+Cleans up torrents stuck in qBittorrent's `missingFiles` state across **all categories** of both the primary and adhoc qB instances. A torrent reaches `missingFiles` once its files are removed from disk (the normal end state after the content is uploaded to cloud).
+
+qB exposes no live on-disk folder size and reports `progress=0` for every `missingFiles` torrent, so per torrent the command **stops** it, forces a **recheck** (qB re-verifies against disk), then reads the re-verified per-file progress. The entry is deleted **with its files** only when the content has shrunk below 50% of the original size *and* every still-present file is at most the `QB_FILE_FILTER_MIN_SIZE_MB` threshold (100MB). A torrent whose big file is actually still on disk is left alone (stopped, files intact). Only torrents that completed at least `--min-age-hours` ago are considered.
+
+Stopping before the recheck prevents qB from re-seeding a torrent whose files turn out to be present. Note that even `--dry-run` performs the stop+recheck (that is how decisions are computed), so torrents transition out of `missingFiles` to `stopped`; this is non-destructive and reversible.
+
+### Arguments
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--min-age-hours` | Only consider torrents that completed at least this many hours ago | `22` |
+| `--dry-run` | List decisions without deleting (still stops + rechecks) | `False` |
+| `--json` | Emit the per-instance summary as JSON | `False` |
+
+qB is reached directly (no proxy), the same way the reconcile pass connects. The adhoc instance is processed when `QB_URL_ADHOC` is configured; an unreachable adhoc qB is skipped without failing the run.
+
+### Examples
+
+```bash
+# Preview decisions without deleting (still stops + rechecks)
+python3 -m apps.cli.qb.purge_missing_files --dry-run --json
+
+# Purge (delete entries; delete files only for genuinely-gone content)
+python3 -m apps.cli.qb.purge_missing_files
+
+# Widen the age gate to 7 days
+python3 -m apps.cli.qb.purge_missing_files --min-age-hours 168
+```
+
+---
+
+## Torrent Quality Evidence
+
+**Module:** `apps.cli.qb.quality_evidence`
+
+Collects ADR-024 Phase 1 shadow evidence for production-selected/recently added
+torrents whose qBittorrent metadata is available. The collector is read-only
+against qBittorrent and exits without running unless
+`TORRENT_QUALITY_EVIDENCE_ENABLED=True` or `--force` is provided.
+
+### Arguments
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--days` | Number of days to look back for production torrents | `2` |
+| `--categories` | JSON array of qBittorrent categories to scan | `TORRENT_QUALITY_CATEGORIES` |
+| `--force` | Run even when evidence collection is disabled in config | `False` |
+| `--use-proxy` | Force-enable proxy for qBittorrent API requests | Auto |
+| `--no-proxy` | Force-disable proxy for qBittorrent API requests | Auto |
+
+### Examples
+
+```bash
+python3 -m apps.cli.qb.quality_evidence --days 2 --categories '["Daily Ingestion"]'
+python3 -m apps.cli.qb.quality_evidence --force --categories '["Daily Ingestion"]'
 ```
 
 ---
 
 ## PikPak Bridge
 
-**Module:** `apps.cli.pikpak_bridge`
+**Module:** `apps.cli.pikpak.bridge`
 
 Transfers old torrents from qBittorrent to PikPak cloud storage.
 
@@ -357,32 +422,32 @@ Transfers old torrents from qBittorrent to PikPak cloud storage.
 
 ```bash
 # Default: process torrents older than 3 days in batch mode
-python3 -m apps.cli.pikpak_bridge
+python3 -m apps.cli.pikpak.bridge
 
 # Custom days threshold
-python3 -m apps.cli.pikpak_bridge --days 7
+python3 -m apps.cli.pikpak.bridge --days 7
 
 # Dry run mode
-python3 -m apps.cli.pikpak_bridge --dry-run
+python3 -m apps.cli.pikpak.bridge --dry-run
 
 # Individual mode (one by one instead of batch)
-python3 -m apps.cli.pikpak_bridge --individual
+python3 -m apps.cli.pikpak.bridge --individual
 
 # With proxy
-python3 -m apps.cli.pikpak_bridge --use-proxy
+python3 -m apps.cli.pikpak.bridge --use-proxy
 
 # Custom root folder
-python3 -m apps.cli.pikpak_bridge --root-folder "/My Videos"
+python3 -m apps.cli.pikpak.bridge --root-folder "/My Videos"
 
 # Combine options
-python3 -m apps.cli.pikpak_bridge --days 5 --dry-run --use-proxy
+python3 -m apps.cli.pikpak.bridge --days 5 --dry-run --use-proxy
 ```
 
 ---
 
 ## Migration CLI
 
-**Module:** `apps.cli.migration`
+**Module:** `apps.cli.db.migration`
 
 Migrates SQLite databases to the current schema version. Also provides backfill and alignment sub-commands.
 
@@ -423,31 +488,31 @@ These arguments control the `--align-inventory-history` sub-command, which align
 
 ```bash
 # Run schema migration
-python3 -m apps.cli.migration
+python3 -m apps.cli.db.migration
 
 # Preview migration without changes
-python3 -m apps.cli.migration --dry-run
+python3 -m apps.cli.db.migration --dry-run
 
 # Backup before migration
-python3 -m apps.cli.migration --backup
+python3 -m apps.cli.db.migration --backup
 
 # Verify current schema version
-python3 -m apps.cli.migration --verify
+python3 -m apps.cli.db.migration --verify
 
 # Backfill actor names from JavDB (with limit)
-python3 -m apps.cli.migration --backfill-actors --limit 100
+python3 -m apps.cli.db.migration --backfill-actors --limit 100
 
 # Backfill with CF bypass
-python3 -m apps.cli.migration --backfill-actors --use-cf-bypass
+python3 -m apps.cli.db.migration --backfill-actors --use-cf-bypass
 
 # Normalize datetime columns
-python3 -m apps.cli.migration --normalize-datetimes
+python3 -m apps.cli.db.migration --normalize-datetimes
 
 # Align inventory with history
-python3 -m apps.cli.migration --align-inventory-history --align-limit 50
+python3 -m apps.cli.db.migration --align-inventory-history --align-limit 50
 
 # Align with shuffled queue and per-worker limit
-python3 -m apps.cli.migration --align-inventory-history --align-shuffle --align-limit-per-worker 20
+python3 -m apps.cli.db.migration --align-inventory-history --align-shuffle --align-limit-per-worker 20
 ```
 
 ---
@@ -482,7 +547,7 @@ The script will:
 
 ## Rollback CLI
 
-**Module:** `apps.cli.rollback`
+**Module:** `apps.cli.db.rollback`
 
 Undoes D1/SQLite writes from an in-progress or failed workflow run. Supports both automated cleanup-on-failure and manual targeted rollback.
 
@@ -522,27 +587,27 @@ Undoes D1/SQLite writes from an in-progress or failed workflow run. Supports bot
 
 ```bash
 # Dry-run targeted rollback
-python3 -m apps.cli.rollback --session-id 42
+python3 -m apps.cli.db.rollback --session-id 42
 
 # Apply targeted rollback
-python3 -m apps.cli.rollback --session-id 42 --apply
+python3 -m apps.cli.db.rollback --session-id 42 --apply
 
 # Rollback by GitHub run identity
-python3 -m apps.cli.rollback --run-id 12345 --attempt 1
+python3 -m apps.cli.db.rollback --run-id 12345 --attempt 1
 
 # Cleanup-on-failure (automated, no specific session known)
-python3 -m apps.cli.rollback \
+python3 -m apps.cli.db.rollback \
   --run-id 12345 --attempt 1 \
   --run-started-at 2026-05-04T19:30:00Z
 
 # Partial scope
-python3 -m apps.cli.rollback --session-id 42 --scope history
+python3 -m apps.cli.db.rollback --session-id 42 --scope history
 
 # Force rollback of committed session
-python3 -m apps.cli.rollback --session-id 42 --apply --force
+python3 -m apps.cli.db.rollback --session-id 42 --apply --force
 
 # Legacy sweep (include orphaned sessions in window)
-python3 -m apps.cli.rollback --session-id 42 \
+python3 -m apps.cli.db.rollback --session-id 42 \
   --run-started-at 2026-05-04T19:30:00Z --include-orphaned
 ```
 
@@ -605,45 +670,79 @@ python3 -m apps.cli.ops.diagnose_run \
 
 **Module:** `apps.cli.ops.reconcile`
 
-Reconciles ADR-033 `AcquisitionOutcome` rows against live source state. Phase 1
-uses qBittorrent as the only collector and updates active outcomes from
-`queued` / `downloading` to `downloading`, `completed`, `stalled`, or `failed`.
-Run it with `STORAGE_BACKEND=d1` in production because `AcquisitionOutcome` is
+Runs the ADR-033 media closed-loop reconcile passes (Phase 1+2+3). By default it
+runs all three passes in sequence (`--pass all`):
+
+- **acquisition pass** — reads qBittorrent state and updates `AcquisitionOutcome`
+  rows from `queued` / `downloading` to `downloading`, `completed`, `stalled`, or
+  `failed`.
+- **ownership pass** — collects ownership observations from four sources
+  (`gdrive` via `RcloneInventory`, `qb` via `AcquisitionOutcome` bridge, `pikpak`
+  via `PikpakHistory` success rows, `nas` a forward-compat stub that is currently
+  always a no-op regardless of `RCLONE_NAS_REMOTE`), upserts them into
+  `OwnershipLedger`, runs a present sweep to flip
+  absent rows to `present=0`, and advances matching `AcquisitionOutcome` rows
+  from `completed` to `in_library`.
+- **consumption pass** — polls each media server configured in `MEDIA_SERVERS`
+  (see [Media Servers Setup](../self-hoster/media-servers.md)), resolves each
+  item's title to a `video_code` via the high/medium/low confidence join-key
+  ladder, and writes `ConsumptionSignal` rows (resolved items) and
+  `UnresolvedMediaItem` rows (items whose `video_code` could not be resolved).
+  If `MEDIA_SERVERS` is empty, this pass is a no-op. If `MEDIA_SERVERS` is
+  malformed, the pass exits with code `1`.
+
+When `--pass all` outputs JSON with `--json`, the payload is wrapped:
+`{"acquisition": {...}, "ownership": {...}, "consumption": {...}}`.
+
+Run with `STORAGE_BACKEND=d1` in production because `AcquisitionOutcome`,
+`OwnershipLedger`, `ConsumptionSignal`, and `UnresolvedMediaItem` are all
 D1-canonical in the operations database.
 
 ### Arguments
 
 | Argument | Description | Default |
 |----------|-------------|---------|
-| `--source` | Source to reconcile. Repeatable. Phase 1 only accepts `qb`. | `qb` |
-| `--category` | qB category to scan. Repeatable. | `TORRENT_CATEGORY`, `TORRENT_CATEGORY_ADHOC` |
+| `--pass` | Which reconcile pass to run: `acquisition`, `ownership`, `consumption`, or `all` (all three in sequence). | `all` |
+| `--source` | Source to reconcile (acquisition pass). Repeatable. Accepts `qb`. | `qb` |
+| `--category` | qB category to scan (acquisition pass). Repeatable. | `TORRENT_CATEGORY`, `TORRENT_CATEGORY_ADHOC` |
 | `--stalled-after-days` | Positive integer. Active outcomes unseen for this many days become `stalled`; after 2x this window they become `failed`. | `RECONCILE_STALLED_DAYS` or `7` |
 | `--dry-run` | Compute transitions but write nothing. | `False` |
-| `--json` | Print a JSON result payload. | `False` |
+| `--json` | Print a JSON result payload. Under `--pass all` the payload is `{"acquisition": {...}, "ownership": {...}, "consumption": {...}}`. | `False` |
 | `--log-level` | Logging level. Choices: `DEBUG`, `INFO`, `WARNING`, `ERROR`. | `INFO` |
 
-Exit code `0` means the reconcile pass completed without source or write errors.
-Exit code `2` means the pass completed with recorded errors, and `1` means an
+Exit code `0` means all requested passes completed without source or write errors.
+Exit code `2` means a pass completed with recorded errors, and `1` means an
 unexpected CLI failure occurred.
 
-When `--category` is supplied, the run is treated as a partial scan: observed
-hashes can still advance to `downloading` / `completed`, but outcomes absent
-from that subset are not marked `stalled` or `failed`.
+When `--category` is supplied (acquisition pass), the run is treated as a partial
+scan: observed hashes can still advance to `downloading` / `completed`, but
+outcomes absent from that subset are not marked `stalled` or `failed`.
 
 ### Examples
 
 ```bash
-# Production cron path: reconcile D1 using qB observations and print JSON
-STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --json
+# Production cron path: run all three passes against D1 and print JSON
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --pass all --json
 
-# Preview stalled/failed transitions with a wider threshold
+# Run only the acquisition pass
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --pass acquisition --json
+
+# Run only the ownership pass
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --pass ownership --json
+
+# Run only the consumption pass (requires MEDIA_SERVERS in config.py)
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --pass consumption --json
+
+# Preview stalled/failed transitions with a wider threshold (acquisition only)
 STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile \
+  --pass acquisition \
   --stalled-after-days 14 \
   --dry-run \
   --json
 
-# Reconcile only one qB category; absent-state inference is disabled
+# Reconcile only one qB category (acquisition pass); absent-state inference disabled
 STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile \
+  --pass acquisition \
   --category "Daily Ingestion"
 ```
 
@@ -675,14 +774,16 @@ them after detail parsing, before CSV/report persistence and qBittorrent upload.
 | `tag` | `include` | Required: tag name. At least one include tag must match when include rules exist. |
 | `gender` | `require_lead` | Required: `female` or `male`. |
 | `gender` | `exclude_all_male` | No value; `--value` is rejected. |
+| `age` | `min_age` | Required: non-negative integer (drop if any known actor is younger). |
+| `age` | `max_age` | Required: non-negative integer (drop if any known actor is older). |
 
 ### Arguments
 
 | Argument | Description | Default |
 |----------|-------------|---------|
-| `--dimension` | Rule dimension for `add`. Choices: `actor`, `tag`, `gender`. | Required |
-| `--mode` | Rule mode for `add`. Choices: `exclude`, `include`, `require_lead`, `exclude_all_male`. | Required |
-| `--value` | Rule value for `add`: actor name/href, tag name, or lead gender depending on the rule. Required except for `gender exclude_all_male`. | `""` |
+| `--dimension` | Rule dimension for `add`. Choices: `actor`, `tag`, `gender`, `age`. | Required |
+| `--mode` | Rule mode for `add`. Choices: `exclude`, `include`, `require_lead`, `exclude_all_male`, `min_age`, `max_age`. | Required |
+| `--value` | Rule value for `add`: actor name/href, tag name, lead gender, or non-negative integer (age modes) depending on the rule. Required except for `gender exclude_all_male`. | `""` |
 | `--id` | Rule id for `remove` and `enable`. | Required |
 | `--off` | Disable the rule in `enable` instead of enabling it. | `False` |
 | `--log-level` | Logging level. Choices: `DEBUG`, `INFO`, `WARNING`, `ERROR`. | `INFO` |
@@ -718,6 +819,26 @@ python3 -m apps.cli.ops.content_filter list
 python3 -m apps.cli.ops.content_filter enable --id 3 --off
 python3 -m apps.cli.ops.content_filter enable --id 3
 python3 -m apps.cli.ops.content_filter remove --id 3
+```
+
+#### Age rules (ADR-040 Phase 2, best-effort)
+
+```bash
+# Drop any movie featuring an actor known to be under 18 at the release date
+python3 -m apps.cli.ops.content_filter add --dimension age --mode min_age --value 18
+
+# Drop any movie featuring an actor known to be over 40
+python3 -m apps.cli.ops.content_filter add --dimension age --mode max_age --value 40
+```
+
+Ages are resolved best-effort from minnano-av by actor name, cached in
+`ActorMetadata`, and computed at the movie's release date. Actors with no resolved
+birthdate have unknown age and never cause a drop.
+
+```bash
+python3 -m apps.cli.ops.actor_age list                       # inspect the cache
+python3 -m apps.cli.ops.actor_age refresh --href /actors/EvkJ --name "<name>"  # force re-lookup
+python3 -m apps.cli.ops.actor_age clear --href /actors/EvkJ   # drop a cached row
 ```
 
 ---
@@ -792,11 +913,61 @@ python3 -m apps.cli.ops.sentinel \
   --json
 ```
 
+### Canary Mode (Phase 2)
+
+Independent between-run fetch+parse over pinned pages (`SiteContractSentinel.yml`).
+Configure `SENTINEL_CANARY_INDEX_URL` and `SENTINEL_CANARY_ANCHORS` in `config.py`.
+
+```bash
+# Phase 1: evaluate a run's fills (gate)
+python3 -m apps.cli.ops.sentinel --session-id <id>
+
+# Phase 2: independent canary over pinned pages
+python3 -m apps.cli.ops.sentinel --canary
+
+# Print current parsed anchor values as JSON (use output to populate SENTINEL_CANARY_ANCHORS)
+python3 -m apps.cli.ops.sentinel --capture-anchors --url <detail-url> [--url ...]
+```
+
+Flags applicable to canary mode: `--run-id`, `--attempt`, `--json`, `--log-level`. Exit codes: `0` = clean; `4` = critical drift (recorded as a `site_drift` incident); `3` = the canary could not complete (it fetched/parsed nothing, or it detected drift but failed to persist the incident — the run fails so drift is never silently lost); `1` = internal error.
+
+---
+
+## Subscription Monitor CLI
+
+**Module:** `apps.cli.ops.subscription_monitor`
+
+Scrapes every active `ActorSubscription` through the existing AdHoc spider path
+and writes genuinely new releases into the `NewWorks` feed (ADR-054 WS2). It
+does not add a new rating-threshold bypass path; AdHoc index selection already
+ignores the phase-2 rating and comment gates.
+
+### Arguments
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--use-proxy` | Route actor scrapes through the configured proxy pool. | `False` |
+| `--dry-run` | List active subscriptions without scraping. | `False` |
+| `--log-level` | Logging level. Choices: `DEBUG`, `INFO`, `WARNING`, `ERROR`. | `INFO` |
+
+### Examples
+
+```bash
+# List active subscriptions without scraping
+python3 -m apps.cli.ops.subscription_monitor --dry-run
+
+# Production-style run against D1, with spider proxying enabled
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.subscription_monitor --use-proxy
+```
+
+The scheduled production entrypoint is `SubscriptionMonitor.yml`, which runs
+daily after the main ingestion window and can also be dispatched manually.
+
 ---
 
 ## Config Generator CLI
 
-**Module:** `apps.cli.config_generator`
+**Module:** `apps.cli.ops.config_generator`
 
 Generates `config.py` from environment variables. Used by GitHub Actions workflows to materialize a runtime config from `VAR_*` env vars (which in turn come from repository secrets / variables). Not typically run manually except for debugging the GH Actions setup locally.
 
@@ -804,7 +975,7 @@ Generates `config.py` from environment variables. Used by GitHub Actions workflo
 
 ```bash
 # GitHub Actions mode — reads VAR_* env vars and writes config.py
-python3 -m apps.cli.config_generator --github-actions
+python3 -m apps.cli.ops.config_generator --github-actions
 ```
 
 ### Behavior

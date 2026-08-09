@@ -14,18 +14,20 @@ python3 -m apps.cli.<command> [options]
 
 - [Spider CLI](#spider-cli)（`apps.cli.spider`）
 - [Pipeline CLI](#pipeline-cli)（`apps.cli.pipeline`）
-- [qBittorrent 上传器](#qbittorrent-上传器)（`apps.cli.qb_uploader`）
-- [qBittorrent 文件过滤器](#qbittorrent-文件过滤器)（`apps.cli.qb_file_filter`）
-- [PikPak Bridge](#pikpak-bridge)（`apps.cli.pikpak_bridge`）
-- [Migration CLI](#migration-cli)（`apps.cli.migration`）
+- [qBittorrent 上传器](#qbittorrent-上传器)（`apps.cli.qb.uploader`）
+- [qBittorrent 文件过滤器](#qbittorrent-文件过滤器)（`apps.cli.qb.file_filter`）
+- [清理丢失文件种子](#清理丢失文件种子)（`apps.cli.qb.purge_missing_files`）
+- [种子质量证据](#种子质量证据)（`apps.cli.qb.quality_evidence`）
+- [PikPak Bridge](#pikpak-bridge)（`apps.cli.pikpak.bridge`）
+- [Migration CLI](#migration-cli)（`apps.cli.db.migration`）
 - [Login CLI](#login-cli)（`apps.cli.login`）
-- [Rollback CLI](#rollback-cli)（`apps.cli.rollback`）
+- [Rollback CLI](#rollback-cli)（`apps.cli.db.rollback`）
 - [运维诊断 CLI](#运维诊断-cli)（`apps.cli.ops.diagnose_run`）
 - [采集结果对账 CLI](#采集结果对账-cli)（`apps.cli.ops.reconcile`）
 - [内容过滤 CLI](#内容过滤-cli)（`apps.cli.ops.content_filter`）
 - [事件主线消费者 CLI](#事件主线消费者-cli)（`apps.cli.ops.events`）
 - [站点契约哨兵 CLI](#站点契约哨兵-cli)（`apps.cli.ops.sentinel`）
-- [Config Generator CLI](#config-generator-cli)（`apps.cli.config_generator`）
+- [Config Generator CLI](#config-generator-cli)（`apps.cli.ops.config_generator`）
 - [Spider 完整参数参考](#spider-完整参数参考)
 
 ---
@@ -250,7 +252,7 @@ Pipeline 按以下顺序执行这些步骤：
 
 ## qBittorrent 上传器
 
-**模块：** `apps.cli.qb_uploader`
+**模块：** `apps.cli.qb.uploader`
 
 将 spider CSV 输出中的种子磁力链接上传到 qBittorrent。
 
@@ -270,26 +272,26 @@ Pipeline 按以下顺序执行这些步骤：
 
 ```bash
 # 每日模式（默认）
-python3 -m apps.cli.qb_uploader
+python3 -m apps.cli.qb.uploader
 
 # Ad-hoc 模式（用于自定义 URL 抓取结果）
-python3 -m apps.cli.qb_uploader --mode adhoc
+python3 -m apps.cli.qb.uploader --mode adhoc
 
 # 指定输入文件
-python3 -m apps.cli.qb_uploader --input-file my_results.csv
+python3 -m apps.cli.qb.uploader --input-file my_results.csv
 
 # 为 qBittorrent API 使用代理
-python3 -m apps.cli.qb_uploader --use-proxy
+python3 -m apps.cli.qb.uploader --use-proxy
 
 # 覆盖分类
-python3 -m apps.cli.qb_uploader --mode adhoc --category "Custom Category"
+python3 -m apps.cli.qb.uploader --mode adhoc --category "Custom Category"
 ```
 
 ---
 
 ## qBittorrent 文件过滤器
 
-**模块：** `apps.cli.qb_file_filter`
+**模块：** `apps.cli.qb.file_filter`
 
 过滤 qBittorrent 中最近添加的种子中的小文件。将低于大小阈值的不需要的文件设置为"不下载"优先级。对于刚添加的种子，过滤器会最多等待 90 秒让 qBittorrent metadata 就绪，以便小文件在开始下载前就被过滤。
 
@@ -310,33 +312,95 @@ python3 -m apps.cli.qb_uploader --mode adhoc --category "Custom Category"
 
 ```bash
 # 默认：使用 config 中的阈值
-python3 -m apps.cli.qb_file_filter
+python3 -m apps.cli.qb.file_filter
 
 # 覆盖阈值（例如 50MB）和天数
-python3 -m apps.cli.qb_file_filter --min-size 50
-python3 -m apps.cli.qb_file_filter --min-size 100 --days 3
+python3 -m apps.cli.qb.file_filter --min-size 50
+python3 -m apps.cli.qb.file_filter --min-size 100 --days 3
 
 # 试运行（预览但不更改）
-python3 -m apps.cli.qb_file_filter --dry-run
+python3 -m apps.cli.qb.file_filter --dry-run
 
 # 仅过滤特定分类
-python3 -m apps.cli.qb_file_filter --category JavDB
+python3 -m apps.cli.qb.file_filter --category JavDB
 
 # 过滤多个分类
-python3 -m apps.cli.qb_file_filter --categories '["Ad Hoc", "Daily Ingestion"]'
+python3 -m apps.cli.qb.file_filter --categories '["Ad Hoc", "Daily Ingestion"]'
 
 # 使用代理
-python3 -m apps.cli.qb_file_filter --use-proxy
+python3 -m apps.cli.qb.file_filter --use-proxy
 
 # 删除已下载的小文件
-python3 -m apps.cli.qb_file_filter --delete-local-files
+python3 -m apps.cli.qb.file_filter --delete-local-files
+```
+
+---
+
+## 清理丢失文件种子
+
+**模块：** `apps.cli.qb.purge_missing_files`
+
+清理卡在 qBittorrent `missingFiles` 状态的种子，覆盖主 qB 和 adhoc qB 的**所有分类**。种子进入 `missingFiles` 通常是内容上传到云端后本地文件被删除的正常归宿。
+
+qB 不提供「当前磁盘文件夹大小」的 API，且对每个 `missingFiles` 种子一律报 `progress=0`。因此命令对每个种子先 **stop**，再强制 **recheck**（qB 重新核对磁盘），然后读取核对后的 per-file progress。仅当内容已缩小到原始大小的 50% 以下、**且**磁盘上还在的文件都不超过 `QB_FILE_FILTER_MIN_SIZE_MB` 阈值（100MB）时，才连同文件一起删除条目；磁盘上大文件确实还在的种子会原样保留（停止、文件完好）。只处理完成时间至少在 `--min-age-hours` 之前的种子。
+
+recheck 前先 stop 是为了防止 qB 把文件其实还在的种子重新做种。注意即使 `--dry-run` 也会执行 stop+recheck（决策就是这么算出来的），种子会从 `missingFiles` 变为 `stopped`；这是无损且可逆的。
+
+### 参数
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--min-age-hours` | 只处理完成时间至少在这么多小时之前的种子 | `22` |
+| `--dry-run` | 只列出决策不删除（仍会 stop + recheck） | `False` |
+| `--json` | 以 JSON 输出每个实例的汇总 | `False` |
+
+qB 采用直连（不走代理），与 reconcile 轮次的连接方式一致。当配置了 `QB_URL_ADHOC` 时会一并处理 adhoc 实例；adhoc qB 连不上会被跳过、不影响整个运行。
+
+### 示例
+
+```bash
+# 预览决策但不删除（仍会 stop + recheck）
+python3 -m apps.cli.qb.purge_missing_files --dry-run --json
+
+# 执行清理（删除条目；仅对内容确实丢失的连文件一起删）
+python3 -m apps.cli.qb.purge_missing_files
+
+# 把完成时间门槛放宽到 7 天
+python3 -m apps.cli.qb.purge_missing_files --min-age-hours 168
+```
+
+---
+
+## 种子质量证据
+
+**模块：** `apps.cli.qb.quality_evidence`
+
+为生产选中/最近添加且 qBittorrent metadata 可用的种子采集 ADR-024 Phase 1
+影子证据。采集器对 qBittorrent 只读，且只有在
+`TORRENT_QUALITY_EVIDENCE_ENABLED=True` 或提供 `--force` 时才会运行。
+
+### 参数
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--days` | 向前查找生产种子的天数 | `2` |
+| `--categories` | 要扫描的 qBittorrent 分类 JSON 数组 | `TORRENT_QUALITY_CATEGORIES` |
+| `--force` | 即使配置中禁用了证据采集也运行 | `False` |
+| `--use-proxy` | 强制启用代理用于 qBittorrent API 请求 | 自动 |
+| `--no-proxy` | 强制禁用代理用于 qBittorrent API 请求 | 自动 |
+
+### 示例
+
+```bash
+python3 -m apps.cli.qb.quality_evidence --days 2 --categories '["Daily Ingestion"]'
+python3 -m apps.cli.qb.quality_evidence --force --categories '["Daily Ingestion"]'
 ```
 
 ---
 
 ## PikPak Bridge
 
-**模块：** `apps.cli.pikpak_bridge`
+**模块：** `apps.cli.pikpak.bridge`
 
 将旧种子从 qBittorrent 转移到 PikPak 云存储。
 
@@ -357,32 +421,32 @@ python3 -m apps.cli.qb_file_filter --delete-local-files
 
 ```bash
 # 默认：批量模式处理超过 3 天的种子
-python3 -m apps.cli.pikpak_bridge
+python3 -m apps.cli.pikpak.bridge
 
 # 自定义天数阈值
-python3 -m apps.cli.pikpak_bridge --days 7
+python3 -m apps.cli.pikpak.bridge --days 7
 
 # 试运行模式
-python3 -m apps.cli.pikpak_bridge --dry-run
+python3 -m apps.cli.pikpak.bridge --dry-run
 
 # 单个模式（逐个处理而非批量）
-python3 -m apps.cli.pikpak_bridge --individual
+python3 -m apps.cli.pikpak.bridge --individual
 
 # 使用代理
-python3 -m apps.cli.pikpak_bridge --use-proxy
+python3 -m apps.cli.pikpak.bridge --use-proxy
 
 # 自定义根文件夹
-python3 -m apps.cli.pikpak_bridge --root-folder "/My Videos"
+python3 -m apps.cli.pikpak.bridge --root-folder "/My Videos"
 
 # 组合选项
-python3 -m apps.cli.pikpak_bridge --days 5 --dry-run --use-proxy
+python3 -m apps.cli.pikpak.bridge --days 5 --dry-run --use-proxy
 ```
 
 ---
 
 ## Migration CLI
 
-**模块：** `apps.cli.migration`
+**模块：** `apps.cli.db.migration`
 
 将 SQLite 数据库迁移到当前 schema 版本。还提供回填和对齐子命令。
 
@@ -423,31 +487,31 @@ python3 -m apps.cli.pikpak_bridge --days 5 --dry-run --use-proxy
 
 ```bash
 # 运行 schema 迁移
-python3 -m apps.cli.migration
+python3 -m apps.cli.db.migration
 
 # 预览迁移但不实际更改
-python3 -m apps.cli.migration --dry-run
+python3 -m apps.cli.db.migration --dry-run
 
 # 迁移前备份
-python3 -m apps.cli.migration --backup
+python3 -m apps.cli.db.migration --backup
 
 # 验证当前 schema 版本
-python3 -m apps.cli.migration --verify
+python3 -m apps.cli.db.migration --verify
 
 # 从 JavDB 回填演员名称（带限制）
-python3 -m apps.cli.migration --backfill-actors --limit 100
+python3 -m apps.cli.db.migration --backfill-actors --limit 100
 
 # 使用 CF 绕过回填
-python3 -m apps.cli.migration --backfill-actors --use-cf-bypass
+python3 -m apps.cli.db.migration --backfill-actors --use-cf-bypass
 
 # 规范化日期时间列
-python3 -m apps.cli.migration --normalize-datetimes
+python3 -m apps.cli.db.migration --normalize-datetimes
 
 # 对齐库存与历史记录
-python3 -m apps.cli.migration --align-inventory-history --align-limit 50
+python3 -m apps.cli.db.migration --align-inventory-history --align-limit 50
 
 # 使用随机队列和每 worker 限制进行对齐
-python3 -m apps.cli.migration --align-inventory-history --align-shuffle --align-limit-per-worker 20
+python3 -m apps.cli.db.migration --align-inventory-history --align-shuffle --align-limit-per-worker 20
 ```
 
 ---
@@ -482,7 +546,7 @@ python3 -m apps.cli.login
 
 ## Rollback CLI
 
-**模块：** `apps.cli.rollback`
+**模块：** `apps.cli.db.rollback`
 
 撤销来自进行中或失败的工作流运行的 D1/SQLite 写入。支持自动的失败清理和手动的定向回滚。
 
@@ -522,27 +586,27 @@ python3 -m apps.cli.login
 
 ```bash
 # 试运行定向回滚
-python3 -m apps.cli.rollback --session-id 42
+python3 -m apps.cli.db.rollback --session-id 42
 
 # 实际执行定向回滚
-python3 -m apps.cli.rollback --session-id 42 --apply
+python3 -m apps.cli.db.rollback --session-id 42 --apply
 
 # 按 GitHub 运行标识回滚
-python3 -m apps.cli.rollback --run-id 12345 --attempt 1
+python3 -m apps.cli.db.rollback --run-id 12345 --attempt 1
 
 # 失败时自动清理（自动化场景，不知道具体 session）
-python3 -m apps.cli.rollback \
+python3 -m apps.cli.db.rollback \
   --run-id 12345 --attempt 1 \
   --run-started-at 2026-05-04T19:30:00Z
 
 # 限定范围
-python3 -m apps.cli.rollback --session-id 42 --scope history
+python3 -m apps.cli.db.rollback --session-id 42 --scope history
 
 # 强制回滚已提交的 session
-python3 -m apps.cli.rollback --session-id 42 --apply --force
+python3 -m apps.cli.db.rollback --session-id 42 --apply --force
 
 # 遗留清扫（包含时间窗口内的孤立 session）
-python3 -m apps.cli.rollback --session-id 42 \
+python3 -m apps.cli.db.rollback --session-id 42 \
   --run-started-at 2026-05-04T19:30:00Z --include-orphaned
 ```
 
@@ -599,43 +663,72 @@ python3 -m apps.cli.ops.diagnose_run \
 
 **模块：** `apps.cli.ops.reconcile`
 
-将 ADR-033 的 `AcquisitionOutcome` 行与实时来源状态对账。Phase 1 只使用
-qBittorrent collector，并把活跃 outcome 从 `queued` / `downloading` 推进到
-`downloading`、`completed`、`stalled` 或 `failed`。生产环境应使用
-`STORAGE_BACKEND=d1`，因为 `AcquisitionOutcome` 是 operations 数据库中的
-D1 canonical 表。
+运行 ADR-033 媒体闭环对账轮次（Phase 1+2+3）。默认运行全部三个轮次（`--pass all`）：
+
+- **acquisition pass（采集轮次）** — 读取 qBittorrent 实时状态，将活跃
+  `AcquisitionOutcome` 从 `queued` / `downloading` 推进到 `downloading`、
+  `completed`、`stalled` 或 `failed`。
+- **ownership pass（所有权轮次）** — 从四个来源收集所有权观测结果
+  （`gdrive` 通过 `RcloneInventory` 投影、`qb` 通过 `AcquisitionOutcome`
+  bridge、`pikpak` 通过 `PikpakHistory` success 行、`nas` 为前向兼容 stub，当前
+  无论是否配置 `RCLONE_NAS_REMOTE` 都始终 no-op），upsert 到 `OwnershipLedger`，执行
+  present sweep 将缺失行的 `present` 置 `0`，并将符合条件的
+  `AcquisitionOutcome` 从 `completed` 推进到 `in_library`。
+- **consumption pass（消费轮次）** — 轮询 `MEDIA_SERVERS` 中配置的每个媒体服务器
+  实例（详见 [媒体服务器设置](../self-hoster/media-servers.md)），通过高/中/低
+  置信度 join-key 阶梯将每个条目的标题解析为 `video_code`，将已解析条目写入
+  `ConsumptionSignal`，将无法解析的条目写入 `UnresolvedMediaItem`。若
+  `MEDIA_SERVERS` 为空，此轮次为 no-op；若 `MEDIA_SERVERS` 格式有误，退出码为 `1`。
+
+使用 `--pass all` 并加 `--json` 时，输出 payload 格式为：
+`{"acquisition": {...}, "ownership": {...}, "consumption": {...}}`。
+
+生产环境应使用 `STORAGE_BACKEND=d1`，因为 `AcquisitionOutcome`、`OwnershipLedger`、
+`ConsumptionSignal` 和 `UnresolvedMediaItem` 均是 operations 数据库中的 D1 canonical 表。
 
 ### 参数
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `--source` | 要对账的来源，可重复传入。Phase 1 只接受 `qb`。 | `qb` |
-| `--category` | 要扫描的 qB 分类，可重复传入。 | `TORRENT_CATEGORY`、`TORRENT_CATEGORY_ADHOC` |
+| `--pass` | 要运行的对账轮次：`acquisition`、`ownership`、`consumption` 或 `all`（全部三个轮次顺序执行）。 | `all` |
+| `--source` | 要对账的来源（acquisition pass），可重复传入。接受 `qb`。 | `qb` |
+| `--category` | 要扫描的 qB 分类（acquisition pass），可重复传入。 | `TORRENT_CATEGORY`、`TORRENT_CATEGORY_ADHOC` |
 | `--stalled-after-days` | 正整数。活跃 outcome 超过该天数未被观测到会变为 `stalled`；超过 2 倍窗口会变为 `failed`。 | `RECONCILE_STALLED_DAYS` 或 `7` |
 | `--dry-run` | 只计算状态迁移，不写入数据库。 | `False` |
-| `--json` | 输出 JSON result payload。 | `False` |
+| `--json` | 输出 JSON result payload。`--pass all` 时格式为 `{"acquisition": {...}, "ownership": {...}, "consumption": {...}}`。 | `False` |
 | `--log-level` | 日志级别。可选：`DEBUG`、`INFO`、`WARNING`、`ERROR`。 | `INFO` |
 
-退出码 `0` 表示对账完成且没有来源或写入错误。退出码 `2` 表示对账完成但记录了错误，`1` 表示 CLI 发生意外失败。
+退出码 `0` 表示所有请求的轮次均完成且没有来源或写入错误。退出码 `2` 表示对账完成但记录了错误，`1` 表示 CLI 发生意外失败。
 
-传入 `--category` 时，本次运行会被视为部分扫描：已观测到的 hash 仍可推进到
-`downloading` / `completed`，但不会把该子集里缺失的 outcome 标记为
-`stalled` 或 `failed`。
+传入 `--category` 时（acquisition pass），本次运行会被视为部分扫描：已观测到的
+hash 仍可推进到 `downloading` / `completed`，但不会把该子集里缺失的 outcome
+标记为 `stalled` 或 `failed`。
 
 ### 示例
 
 ```bash
-# 生产 cron 路径：使用 qB 观测结果对 D1 做对账，并输出 JSON
-STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --json
+# 生产 cron 路径：运行三个轮次，对 D1 做对账，并输出 JSON
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --pass all --json
 
-# 使用更宽的阈值预览 stalled/failed 状态迁移
+# 只运行 acquisition pass
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --pass acquisition --json
+
+# 只运行 ownership pass
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --pass ownership --json
+
+# 只运行 consumption pass（需在 config.py 中配置 MEDIA_SERVERS）
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --pass consumption --json
+
+# 使用更宽阈值预览 stalled/failed 状态迁移（仅 acquisition pass）
 STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile \
+  --pass acquisition \
   --stalled-after-days 14 \
   --dry-run \
   --json
 
-# 只对一个 qB 分类做对账；此时禁用缺失状态推断
+# 只对一个 qB 分类做对账（acquisition pass）；此时禁用缺失状态推断
 STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile \
+  --pass acquisition \
   --category "Daily Ingestion"
 ```
 
@@ -667,14 +760,16 @@ qBittorrent 前进行判定。
 | `tag` | `include` | 必填：tag 名；存在 include 规则时，至少要命中一个 include tag。 |
 | `gender` | `require_lead` | 必填：`female` 或 `male`。 |
 | `gender` | `exclude_all_male` | 不需要值；传入 `--value` 会被拒绝。 |
+| `age` | `min_age` | 必填：非负整数（若有已知演员年龄更小则丢弃该影片）。 |
+| `age` | `max_age` | 必填：非负整数（若有已知演员年龄更大则丢弃该影片）。 |
 
 ### 参数
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `--dimension` | `add` 使用的规则维度。可选：`actor`、`tag`、`gender`。 | 必填 |
-| `--mode` | `add` 使用的规则模式。可选：`exclude`、`include`、`require_lead`、`exclude_all_male`。 | 必填 |
-| `--value` | `add` 使用的规则值：根据规则可为演员名/href、tag 名或 lead gender。除 `gender exclude_all_male` 外均必填。 | `""` |
+| `--dimension` | `add` 使用的规则维度。可选：`actor`、`tag`、`gender`、`age`。 | 必填 |
+| `--mode` | `add` 使用的规则模式。可选：`exclude`、`include`、`require_lead`、`exclude_all_male`、`min_age`、`max_age`。 | 必填 |
+| `--value` | `add` 使用的规则值：根据规则可为演员名/href、tag 名、lead gender 或非负整数（age 模式）。除 `gender exclude_all_male` 外均必填。 | `""` |
 | `--id` | `remove` 和 `enable` 使用的规则 id。 | 必填 |
 | `--off` | 在 `enable` 命令中禁用规则，而不是启用规则。 | `False` |
 | `--log-level` | 日志级别。可选：`DEBUG`、`INFO`、`WARNING`、`ERROR`。 | `INFO` |
@@ -710,6 +805,25 @@ python3 -m apps.cli.ops.content_filter list
 python3 -m apps.cli.ops.content_filter enable --id 3 --off
 python3 -m apps.cli.ops.content_filter enable --id 3
 python3 -m apps.cli.ops.content_filter remove --id 3
+```
+
+#### 年龄规则（ADR-040 Phase 2，尽力而为）
+
+```bash
+# 丢弃包含发行日期时年龄已知且未满 18 岁演员的影片
+python3 -m apps.cli.ops.content_filter add --dimension age --mode min_age --value 18
+
+# 丢弃包含发行日期时年龄已知且超过 40 岁演员的影片
+python3 -m apps.cli.ops.content_filter add --dimension age --mode max_age --value 40
+```
+
+年龄通过演员名从 minnano-av 尽力而为地解析，缓存在 `ActorMetadata` 中，并按影片发行日期计算。
+未能解析生日的演员年龄未知，不会导致影片被丢弃。
+
+```bash
+python3 -m apps.cli.ops.actor_age list                       # 查看缓存
+python3 -m apps.cli.ops.actor_age refresh --href /actors/EvkJ --name "<name>"  # 强制重新查询
+python3 -m apps.cli.ops.actor_age clear --href /actors/EvkJ   # 删除缓存行
 ```
 
 ---
@@ -777,11 +891,57 @@ python3 -m apps.cli.ops.sentinel \
   --json
 ```
 
+### 金丝雀模式（Phase 2）
+
+对固定页面执行独立的两次 run 之间抓取+解析（`SiteContractSentinel.yml`）。
+在 `config.py` 中配置 `SENTINEL_CANARY_INDEX_URL` 和 `SENTINEL_CANARY_ANCHORS`。
+
+```bash
+# Phase 1：评估某个 run 的字段填充率（门控）
+python3 -m apps.cli.ops.sentinel --session-id <id>
+
+# Phase 2：对固定页面执行独立金丝雀探测
+python3 -m apps.cli.ops.sentinel --canary
+
+# 以 JSON 格式输出当前锚点解析值（将结果填入 SENTINEL_CANARY_ANCHORS）
+python3 -m apps.cli.ops.sentinel --capture-anchors --url <detail-url> [--url ...]
+```
+
+金丝雀模式适用的 flag：`--run-id`、`--attempt`、`--json`、`--log-level`。退出码：`0` 表示干净;`4` 表示检测到关键漂移(已记录为 `site_drift` incident);`3` 表示金丝雀无法完成(未抓取/解析到任何页面,或检测到漂移但 incident 写入失败——此时该 run 会失败,从而避免漂移被静默丢失);`1` 表示内部错误。
+
+---
+
+## Subscription Monitor CLI
+
+**模块：** `apps.cli.ops.subscription_monitor`
+
+抓取每个 active 的 `ActorSubscription`，复用现有 AdHoc spider 路径，并将真正的新作写入 `NewWorks` feed（ADR-054 WS2）。它不新增评分阈值绕过路径；AdHoc 索引选择本来就会忽略 phase-2 评分与评论数门槛。
+
+### 参数
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--use-proxy` | 使用已配置的代理池抓取演员页。 | `False` |
+| `--dry-run` | 只列出 active subscriptions，不执行抓取。 | `False` |
+| `--log-level` | 日志级别。可选：`DEBUG`、`INFO`、`WARNING`、`ERROR`。 | `INFO` |
+
+### 示例
+
+```bash
+# 只列出 active subscriptions，不抓取
+python3 -m apps.cli.ops.subscription_monitor --dry-run
+
+# 生产风格：对 D1 运行，并启用 spider 代理
+STORAGE_BACKEND=d1 python3 -m apps.cli.ops.subscription_monitor --use-proxy
+```
+
+计划任务入口是 `SubscriptionMonitor.yml`，它在主摄取窗口之后每日运行，也可以手动触发。
+
 ---
 
 ## Config Generator CLI
 
-**模块：** `apps.cli.config_generator`
+**模块：** `apps.cli.ops.config_generator`
 
 从环境变量生成 `config.py`。GitHub Actions 工作流使用此工具，根据 `VAR_*` 环境变量（来自仓库 secrets / variables）在运行时物化配置文件。通常不需要手动运行，除非在本地调试 GH Actions 配置。
 
@@ -789,7 +949,7 @@ python3 -m apps.cli.ops.sentinel \
 
 ```bash
 # GitHub Actions 模式 —— 读取 VAR_* 环境变量并写入 config.py
-python3 -m apps.cli.config_generator --github-actions
+python3 -m apps.cli.ops.config_generator --github-actions
 ```
 
 ### 行为

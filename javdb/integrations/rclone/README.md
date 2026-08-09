@@ -6,7 +6,10 @@ Rclone integration: shared scan/parse/health-check primitives plus the unified s
 
 | File | Purpose |
 |---|---|
-| `helper.py` | Shared rclone data models, parsing logic, health-check routines, and dedup analysis used by the manager service. Still a large internal helper awaiting a follow-up ADR; not deep-split in ADR-015 Phase 5. |
+| `types.py` | Shared rclone data classes, category constants, and scan/dedup tuning constants. |
+| `path_utils.py` | Pure rclone drive/root/path normalization helpers. |
+| `scan.py` | Rclone health checks, folder parsing, folder cache, and scan engine. |
+| `dedup.py` | Cleanup-time folder dedup cascade, deletion execution, CSV report, and summary helpers. |
 
 ## Subdirectories
 

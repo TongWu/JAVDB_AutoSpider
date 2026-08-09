@@ -67,6 +67,54 @@ EMAIL_FROM = 'your_email@gmail.com'
 EMAIL_TO = 'your_email@gmail.com'
 
 # =============================================================================
+# NOTIFICATION BACKENDS (ADR-039)
+# =============================================================================
+
+# Active notify backends, tried in order; defaults to email only so existing
+# setups are unchanged. Accepts a list or a CSV string, e.g. ['email', 'telegram'].
+NOTIFY_BACKENDS = ['email']
+
+# Telegram backend -- only used when 'telegram' is in NOTIFY_BACKENDS.
+TELEGRAM_BOT_TOKEN = ''   # from @BotFather
+TELEGRAM_CHAT_ID = ''     # target chat/channel id
+
+# =============================================================================
+# DOWNLOADER BACKENDS (ADR-039)
+# =============================================================================
+
+# Active downloader backend — single-select (mutually exclusive).
+# Defaults to 'qb'. Set to 'transmission' to route add-torrent calls to Transmission.
+DOWNLOADER_BACKEND = 'qb'
+
+# Transmission backend -- only used when DOWNLOADER_BACKEND = 'transmission'.
+TRANSMISSION_HOST = '192.168.1.10'       # Transmission daemon host
+TRANSMISSION_PORT = 9091                  # Transmission RPC port (default 9091)
+TRANSMISSION_USERNAME = ''               # leave empty if no auth configured
+TRANSMISSION_PASSWORD = ''
+TRANSMISSION_DOWNLOAD_DIR = '/downloads' # default save directory
+
+# =============================================================================
+# MAGNET SOURCES / INDEXERS (ADR-054 WS3)
+# =============================================================================
+
+# Active external magnet indexers, queried in a fan-out (every active source).
+# Default empty = feature OFF (no aggregation, capability flag false). Accepts a
+# list or a CSV string, e.g. ['javbus', 'sukebei']. Aggregation runs server-side
+# in the Python backend only; the Cloudflare Worker cannot reach external hosts.
+MAGNET_SOURCES = []
+
+# Per-source base URLs (override only if you use a mirror).
+JAVBUS_BASE_URL = 'https://www.javbus.com'
+SUKEBEI_BASE_URL = 'https://sukebei.nyaa.si'
+
+# Whether indexer fetches go through the proxy pool (recommended for ban safety).
+MAGNET_SOURCES_USE_PROXY = True
+
+# Per-source wall-clock budget for external indexer fan-out. Slow sources return
+# a timeout result without blocking faster sources.
+MAGNET_SOURCE_TIMEOUT_SECONDS = 10.0
+
+# =============================================================================
 # PROXY CONFIGURATION
 # =============================================================================
 
@@ -175,6 +223,10 @@ PROXY_MODULES = ['spider']
 # PROXY_COORDINATOR_TOKEN; config_generator writes them into config.py.
 PROXY_COORDINATOR_URL = ''
 PROXY_COORDINATOR_TOKEN = ''
+# Name of the proxy to use for the login CLI (must match a PROXY_POOL entry so
+# the published cookie binds to a specific worker on CI runners).  Leave empty
+# to use the first pool proxy or the configured single PROXY_HTTP/HTTPS proxy.
+LOGIN_PROXY_NAME = ''
 
 # MovieClaim per-day mutex activation (P1-B / P2-E auto-toggle).
 # Three-state semantics; case-insensitive, leading/trailing whitespace ignored:
@@ -211,6 +263,47 @@ RUNNER_REGISTRY_ENABLED = 'false'
 # Must be a positive integer.
 RECONCILE_STALLED_DAYS = 7
 
+# ADR-033 Phase 2 (ownership truth): informational only — the reconcile pass reads the
+# source list from javdb.ops.reconcile.models.OWNERSHIP_SOURCES (a hardcoded constant),
+# NOT from this config entry. Editing this value here has no runtime effect today.
+# Shown here for documentation purposes: gdrive (RcloneInventory projection),
+# qb (AcquisitionOutcome bridge), and pikpak (PikpakHistory success rows) are active
+# collectors. 'nas' is a forward-compat stub that always collects nothing.
+OWNERSHIP_SOURCES = ['gdrive', 'qb', 'pikpak', 'nas']
+
+# Forward-compat placeholder for a future NAS ownership collector. The current NAS
+# collector is a stub that always logs "nas ownership not collected" and returns [].
+# Setting this value has no runtime effect today — the stub does not read it.
+RCLONE_NAS_REMOTE = ''
+
+# ADR-033 media closed-loop (Phase 3): media servers polled for watch signal.
+# A list of dicts, one per server instance. Multiple servers of the same type
+# are first-class (e.g. two Plex). Tokens are inline (config.py is encrypted at
+# rest as config.py.enc) and are masked in all logs.
+#
+#   type      : 'emby' | 'plex'
+#   instance  : a unique connection id; flows into ConsumptionSignal.instance
+#   base_url  : http(s)://host:port (no trailing slash needed)
+#   token     : Emby API key (X-Emby-Token) / Plex token (X-Plex-Token)
+#   libraries : OPTIONAL list of human-readable library NAMES to scan;
+#               omit to scan ALL libraries on that server.
+MEDIA_SERVERS = [
+    # {
+    #     'type': 'emby',
+    #     'instance': 'emby-nas',
+    #     'base_url': 'http://192.168.1.50:8096',
+    #     'token': 'your_emby_api_key',
+    #     'libraries': ['JAV'],
+    # },
+    # {
+    #     'type': 'plex',
+    #     'instance': 'plex-home',
+    #     'base_url': 'http://192.168.1.51:32400',
+    #     'token': 'your_plex_token',
+    #     # 'libraries' omitted -> scan all libraries
+    # },
+]
+
 # Example configurations:
 # PROXY_MODULES = ['spider']  # Default: only spider (including login), not qBittorrent/PikPak
 # PROXY_MODULES = ['all']  # Enable proxy for all modules
@@ -234,6 +327,18 @@ RECONCILE_STALLED_DAYS = 7
 # IMPORTANT: Deploy the CF bypass service on each proxy server using the same port
 CF_BYPASS_SERVICE_PORT = 8000
 
+# Reach each proxy's CF bypass service by tunnelling THROUGH that proxy to
+# 127.0.0.1:{port}, instead of dialling {proxy_ip}:{port} directly. This lets
+# you bind every bypass service to loopback only (off the public internet)
+# without a firewall or VPN.
+#   - False (default): runner connects directly to {proxy_ip}:{port}
+#                       -> bypass must be reachable at the proxy's IP
+#   - True:            runner sends the request through the proxy to
+#                       127.0.0.1:{port} -> bypass can bind to loopback only
+# Requires the proxy software to allow forwarding to 127.0.0.1 (Clash/mihomo:
+# OK by default; Squid: add `acl bypass dst 127.0.0.1` + allow to_localhost).
+CF_BYPASS_VIA_PROXY = False
+
 # =============================================================================
 # SPIDER CONFIGURATION
 # =============================================================================
@@ -245,6 +350,12 @@ PAGE_END = 20
 # Phase 2 config
 PHASE2_MIN_RATE = 4.0
 PHASE2_MIN_COMMENTS = 100
+
+# Daily-only index video-code-family blacklist.
+# Defaults to excluding western studio/date cards from daily ingestion while
+# the parser still recognizes them and ad-hoc ingestion still uses them.
+# Set to [] to opt out of the western default.
+DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST = ['western_studio_date']
 
 # Base URL for JavDB
 BASE_URL = 'https://javdb.com'
@@ -276,6 +387,16 @@ OPS_DIAGNOSIS_MAX_LOG_SNIPPETS = 20
 # ADR-035 site-contract drift sentinel.
 SENTINEL_MIN_SAMPLE = 30      # skip drift evaluation when a run parsed fewer items
 SENTINEL_BASELINE_WINDOW = 14 # soft-field baseline = median over this many committed runs
+# ADR-035 Phase 2 — independent canary (apps.cli.ops.sentinel --canary).
+# Override the pinned index page (defaults to the homepage):
+SENTINEL_CANARY_INDEX_URL = 'https://javdb.com/'
+# Golden anchors: known-stable detail pages with expected parsed values. Capture
+# with `python -m apps.cli.ops.sentinel --capture-anchors --url <detail-url>`,
+# then paste the values here. Empty = fill-rate-only canary (still useful).
+SENTINEL_CANARY_ANCHORS = [
+    # {'url': 'https://javdb.com/v/XXXXX', 'video_code': 'ABC-123',
+    #  'title_contains': 'Some Stable Title', 'min_magnets': 3},
+]
 
 # JavDB session cookie (can be auto-updated by scripts/login.py)
 # Manual method: Get from browser → Developer Tools → Application → Cookies → _jdb_session
@@ -440,6 +561,41 @@ QB_FILE_FILTER_MIN_SIZE_MB = 100
 
 # Log file for the file filter script
 QB_FILE_FILTER_LOG_FILE = 'logs/qb_file_filter.log'
+
+# =============================================================================
+# TORRENT QUALITY EVIDENCE
+# =============================================================================
+
+# ADR-024 Phase 1 is read-only and shadow-only: collect quality evidence without
+# changing torrent selection or download behaviour.
+TORRENT_QUALITY_EVIDENCE_ENABLED = False
+
+# Controls the active phase of ADR-024 torrent quality evaluation:
+#   'shadow'  — Phase 1 (default): collect evidence only; never changes downloads.
+#   'assist'  — Phase 2 (ADR-024 IMP-08): rank probe vs production evidence and
+#               surface recommendations via the /api/quality API. Still no
+#               production-path change — writes shadow evaluations + review labels
+#               only. Requires TORRENT_QUALITY_EVIDENCE_ENABLED and
+#               QUALITY_PROBE_ENABLED to also be True.
+#   'enforce' — Phase 3 (ADR-024 IMP-09, reserved): not yet implemented.
+TORRENT_QUALITY_POLICY_MODE = 'shadow'
+
+# Optional JSON array of qBittorrent categories, e.g. '["Daily Ingestion"]'.
+# Empty means no category filter is configured; direct collection skips rather
+# than scanning every qBittorrent category.
+TORRENT_QUALITY_CATEGORIES = ''
+
+# --- ADR-024 Phase 2 prerequisite: remote quality_probe endpoint (IMP-10) ---
+# Runner-up shadow probing. Capture (Top-K runner-up enqueue) is gated by
+# TORRENT_QUALITY_EVIDENCE_ENABLED above. Probing the runner-ups on a dedicated
+# REMOTE qBittorrent requires QUALITY_PROBE_ENABLED *and* a configured endpoint.
+# Both default off: a fresh deploy captures nothing and probes nothing.
+QUALITY_PROBE_ENABLED = False
+QUALITY_PROBE_QB_URL = ''          # Dedicated remote qB; never the production NAS qB
+QUALITY_PROBE_QB_USERNAME = ''     # Falls back to QB_USERNAME when empty
+QUALITY_PROBE_QB_PASSWORD = ''     # Falls back to QB_PASSWORD when empty
+QUALITY_PROBE_TOPK = 2             # Runner-up magnets captured per category
+QUALITY_PROBE_GLOBAL_CAP = 50      # Max runner-ups enqueued per ingestion run
 
 # =============================================================================
 # API CONSOLE / BACKEND SERVICE

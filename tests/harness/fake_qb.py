@@ -66,3 +66,10 @@ class FakeQB:
 
     def all_hashes(self) -> set:
         return set(self._torrents.keys())
+
+    def categories(self) -> set:
+        """The set of qB categories across current torrents (ADR-037 Phase 2).
+
+        Lets a closed-loop scenario drive the reconciler with the exact
+        categories the uploader actually assigned, independent of config."""
+        return {t["category"] for t in self._torrents.values()}

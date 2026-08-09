@@ -6,6 +6,7 @@ import os
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 
 from apps.api.infra.auth import (
@@ -43,6 +44,7 @@ from apps.api.routers.auth import login, logout, refresh_token, router as auth_r
 from apps.api.routers.capabilities import router as capabilities_router
 from apps.api.routers.onboarding import router as onboarding_router
 from apps.api.routers.history import router as history_router
+from apps.api.routers.library import router as library_router
 from apps.api.routers.sessions import router as sessions_router
 from apps.api.routers.diagnostics import router as diagnostics_router
 from apps.api.routers.gh_actions import router as gh_actions_router
@@ -52,6 +54,10 @@ from apps.api.routers.operations import router as operations_router
 from apps.api.routers.stats import router as stats_router
 from apps.api.routers.system_state import router as system_state_router
 from apps.api.routers.preferences import router as preferences_router
+from apps.api.routers.watchlist import router as watchlist_router
+from apps.api.routers.content_filter import router as content_filter_router
+from apps.api.routers.subscriptions import new_works_router, subscriptions_router
+from apps.api.routers.quality import router as quality_router
 from apps.api.routers.config import (
     get_config,
     get_config_meta,
@@ -178,6 +184,7 @@ for router in (
     onboarding_router,
     sessions_router,
     history_router,
+    library_router,
     operations_router,
     diagnostics_router,
     gh_actions_router,
@@ -185,6 +192,11 @@ for router in (
     logs_router,
     stats_router,
     preferences_router,
+    watchlist_router,
+    content_filter_router,
+    subscriptions_router,
+    new_works_router,
+    quality_router,
 ):
     app.include_router(router)
 
@@ -193,11 +205,88 @@ if os.getenv("TEST_MODE") == "1":
     app.include_router(test_mode_router)
 
 
+# Shared {"detail": "<string>"} error body, matching FastAPI's HTTPException
+# serialization. Used to backfill the 401/403 responses on JWT-guarded
+# operations so OpenAPI consumers (Swagger UI, SDK generators) see the auth
+# failure contract, not just the security requirement.
+_DETAIL_STRING_RESPONSE = {
+    "content": {
+        "application/json": {
+            "schema": {
+                "type": "object",
+                "required": ["detail"],
+                "properties": {"detail": {"type": "string"}},
+            }
+        }
+    }
+}
+_AUTH_FAILURE_RESPONSES = {
+    "401": {"description": "Unauthorized", **_DETAIL_STRING_RESPONSE},
+    "403": {"description": "Forbidden", **_DETAIL_STRING_RESPONSE},
+}
+_BEARER_REQUIREMENT = [{"BearerAuth": []}]
+
+
+def _backfill_auth_failure_responses(schema: dict) -> None:
+    """Add 401/403 response defs to every BearerAuth-guarded operation.
+
+    The shared ``_require_auth`` dependency emits ``security: [{"BearerAuth":
+    []}]`` (see apps/api/infra/auth.py) but FastAPI does not auto-document the
+    401/403 bodies those guards return at runtime. Backfilling here — the one
+    place that already post-processes the schema — keeps the contract accurate
+    for all current and future guarded routes without annotating each route by
+    hand. ``setdefault`` makes this idempotent: routes that already declare a
+    401/403 (e.g. the quality router) keep their own definition untouched.
+    """
+    for methods in schema.get("paths", {}).values():
+        for op in methods.values():
+            if not isinstance(op, dict):
+                continue
+            if op.get("security") != _BEARER_REQUIREMENT:
+                continue
+            responses = op.setdefault("responses", {})
+            for status, definition in _AUTH_FAILURE_RESPONSES.items():
+                responses.setdefault(status, definition)
+
+
+def _custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    security_schemes = schema.setdefault("components", {}).setdefault(
+        "securitySchemes", {}
+    )
+    security_schemes["BearerAuth"] = {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+    }
+    _backfill_auth_failure_responses(schema)
+    app.openapi_schema = schema
+    return app.openapi_schema
+
+
+app.openapi = _custom_openapi
+
+
 __all__ = [
     "ACCESS_TOKEN_EXPIRE_SECONDS",
     "ACTIVE_TOKENS",
     "ALLOWED_HOSTS",
     "API_SECRET_KEY",
+    "MAX_SESSIONS_PER_USER",
+    "PASSWORD_CTX",
+    "READONLY_USERNAME",
+    "REFRESH_TOKEN_EXPIRE_SECONDS",
+    "REVOKED_JTI",
+    "RUST_CORE_AVAILABLE",
+    "USERS",
+    "_AUTH_LOCK",
     "AdhocTaskPayload",
     "CrawlIndexPayload",
     "DailyTaskPayload",
@@ -210,17 +299,9 @@ __all__ = [
     "HealthResponse",
     "HtmlPayload",
     "LoginPayload",
-    "MAX_SESSIONS_PER_USER",
-    "PASSWORD_CTX",
-    "READONLY_USERNAME",
-    "REFRESH_TOKEN_EXPIRE_SECONDS",
-    "REVOKED_JTI",
-    "RUST_CORE_AVAILABLE",
     "SpiderJobPayload",
-    "USERS",
     "UrlPayload",
     "VideoCodeSearchPayload",
-    "_AUTH_LOCK",
     "_access_token_from_request",
     "_bearer_token",
     "_is_valid_javdb_host",
@@ -250,6 +331,7 @@ __all__ = [
     "auth_csrf_middleware",
     "config_service",
     "create_gateway",
+    "diagnostics_router",
     "explore_download_magnet",
     "explore_index_status",
     "explore_one_click",
@@ -262,23 +344,23 @@ __all__ = [
     "get_config_meta",
     "get_task",
     "get_task_stream",
+    "gh_actions_router",
     "global_exception_handler",
     "health_check",
     "history_router",
-    "operations_router",
-    "diagnostics_router",
-    "gh_actions_router",
-    "logs_router",
-    "migrations_router",
-    "stats_router",
+    "library_router",
     "list_tasks",
     "login",
     "logout",
+    "logs_router",
+    "migrations_router",
+    "operations_router",
     "refresh_javdb_session",
     "refresh_token",
     "require_role",
     "run_health_check",
     "spider_jobs",
+    "stats_router",
     "task_service",
     "task_stats",
     "trigger_adhoc",

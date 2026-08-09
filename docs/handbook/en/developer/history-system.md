@@ -28,6 +28,15 @@ History is stored in two places:
 
 When using `STORAGE_BACKEND=d1` or `dual`, history is also stored in Cloudflare D1 databases.
 
+### D1 Write Boundary
+
+`MovieHistory` and `TorrentHistory` are **authoritative** session-scoped writes: they stage into pending tables and only become true at commit time (session-level atomic commit). The other D1 write classes stay outside that commit boundary:
+
+- **additive** tables may be replayable or rebuildable, but must not decide whether a session commits.
+- **diagnostic** records (drift logs, recovery outbox entries) are observability aids, not user truth.
+
+See [ADR-042](../../../design/_archive/ADR-042-D1-Atomic-Commit-Boundaries/ADR-042-d1-atomic-commit-boundaries.md) for the classification rule.
+
 ---
 
 ## Processing Rules

@@ -2,10 +2,10 @@
 
 | 字段       | 值                                                                    |
 | ---------- | --------------------------------------------------------------------- |
-| **状态**   | Proposed — 伞型;执行下放给各期 IMP                                    |
+| **状态**   | Proposed — 伞型；Phase 1 & 2 已实现并验证；Phase 2（entry-point 发现 + downloader 类别，示例）已于 2026-06-10 落地；Phase 3（生态）可选/推迟 |
 | **日期**   | 2026-05-29                                                            |
 | **作者**   | Ted                                                                   |
-| **关联**   | [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md), [ADR-038](../ADR-038-Agentic-Operator-MCP/ADR-038-agentic-operator-mcp-surface.md), [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) |
+| **关联**   | [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md), [ADR-038](../ADR-038-Agentic-Operator-MCP/ADR-038-agentic-operator-mcp-surface.md), [ADR-033](../_archive/ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) |
 
 > 源自 2026-05-29 一次关于全新方向(方向六——可插拔扩展平台)的头脑风暴。
 
@@ -36,7 +36,15 @@ class NotifyPlugin(Protocol):
 
 **D3. 现有 email 包装成内置插件——不重写。** `EmailNotifyPlugin` 是对现有 `notify/email/service.py` 的薄 `name='email'` adapter（其内部不动）。新增 `TelegramNotifyPlugin`（`name='telegram'`）调 Telegram Bot API。每个插件读自己的 config（email → `SMTP_*`;telegram → `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID`）。`NOTIFY_BACKENDS` 选 active 列表,且**默认 `['email']`**,所以现有行为保持不变;加 `'telegram'` 即启用第二路。
 
-**D4. 分发扇出 + 失败隔离。** `notify.send(message)` 遍历 active 插件,逐个调 `.send()`,收集 `NotifyResult`;某后端失败（如 Telegram 宕）不阻断其它（如 email）。现有调用方（管道邮件摘要）经 `notify.send` 路由,照常工作。
+**D4. 分发扇出 + 失败隔离。** `notify.send(message)` 遍历 active 插件,逐个调 `.send()`,收集 `NotifyResult`;某后端失败（如 Telegram 宕）不阻断其它（如 email）。`send(message, exclude=…)` 让调用方跳过自己已用别的路径处理过的后端。
+
+**D4 后续——管道接线（IMP-ADR039-01）。** 富邮件报告（`run_email_notification`:日志分析、统计、附件）无法用通用的 `NotifyMessage(subject, body)` 表达,故保留在自己的路径上。管道通知步骤（`apps.cli.notify.email`,由管道 service 子进程与 GitHub Actions 工作流运行）因此:
+
+1. 为 `email` 后端运行**富报告**（不变——无回归），并额外产出该次运行的精简纯文本 `summary`;
+2. 经 `notify.send(message, exclude={'email'})` 把该 `summary` 作为通用 `NotifyMessage` 扇出给**其它每个 active 后端**,逐后端失败隔离,因此 `email` 绝不会被重复通知;
+3. 当 `email` **不在** `NOTIFY_BACKENDS` 时,计算报告以产出 summary 但抑制投递（`run_email_notification(..., deliver=False)`),使仅用 telegram 的运营者不会收到邮件。
+
+这既遵守 D3（email 内部不动），又让第二后端真正收到运行通知。
 
 **D5. 模块形态。**
 
@@ -73,8 +81,9 @@ javdb/integrations/notify/telegram/plugin.py # TelegramNotifyPlugin（新）
 | 阶段 | IMP | 交付内容 | 推迟内容 |
 | --- | --- | --- | --- |
 | Phase 1 — 注册表 + notify | [IMP-ADR039-01](IMP-ADR039-01-notify-plugins.md) | `plugins/registry`;`NotifyPlugin` 契约;`EmailNotifyPlugin`（包现有）;`TelegramNotifyPlugin`（新）;`NOTIFY_BACKENDS` config;`notify.send` 扇出 | entry-point 发现;其它类别 |
-| Phase 2 — Entry points + downloader | IMP-ADR039-02（占位） | `discover_entry_points`（第三方）;`downloader` 类别（qB + Transmission） | — |
-| Phase 3 — 生态（可选） | IMP-ADR039-03（占位） | media-server/destination 类别;插件作 ADR-036 消费者 / ADR-038 工具 | — |
+| Phase 2 — Entry points + downloader | [IMP-ADR039-02](IMP-ADR039-02-entry-points-downloader.md) ✅ 2026-06-10 | `discover_entry_points`（第三方）;`downloader` 类别（qB + Transmission）;示例 CLI | `run_uploader` 重路由推迟（qB 耦合深——见 D3） |
+| Phase 3 — 生态（可选） | IMP-ADR039-03（已推迟） | media-server/destination 类别;插件作 ADR-036 消费者 / ADR-038 工具 | — |
+| Phase 4 — 告警投递 + 路由 | [IMP-ADR039-04](IMP-ADR039-04-alerting-delivery-routing.md) | `WebhookNotifyPlugin`;D1 路由规则（`(level, source) → backends`，保留默认扇出）；digest 队列 + `flush_digest`；运营者 API/Worker/Web 配置 + test-send | 各后端模板化；incident 检测（ADR-026） |
 
 Phase 1 独立成立且向后兼容。Phase 2/3 拓宽平台。
 
@@ -92,6 +101,8 @@ Phase 1 独立成立且向后兼容。Phase 2/3 拓宽平台。
 - **Plugin contract（插件契约）**——插件满足的每类别 `Protocol`。
 - **Built-in plugin（内置插件）**——仓内自带的插件（如 `EmailNotifyPlugin`）。
 - **Notify backend（通知后端）**——经 `NOTIFY_BACKENDS` 选中的 active notify 插件。
+- **Downloader plugin（下载器插件）**——已注册的 `DownloaderPlugin` 后端（如 qB、Transmission）。
+- **Downloader backend（下载器后端）**——经 `DOWNLOADER_BACKEND` 选中的唯一 active 下载器（单选互斥；默认 `'qb'`）。
 
 ## 备选方案 (Alternatives Considered)
 
@@ -104,8 +115,18 @@ Phase 1 独立成立且向后兼容。Phase 2/3 拓宽平台。
 - [ADR-015 — Integrations Interface Boundary](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md)
 - [ADR-036 — Event-Sourced Pipeline Spine](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md)
 - [ADR-038 — Agentic Operator MCP Surface](../ADR-038-Agentic-Operator-MCP/ADR-038-agentic-operator-mcp-surface.md)
-- [ADR-033 — Media Closed-Loop](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
+- [ADR-033 — Media Closed-Loop](../_archive/ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
 
 ## 状态日志 (Status Log)
 
 - 2026-05-29: Proposed(伞型;三期已划定,IMP 待出)。
+- 2026-06-06: Phase 1（IMP-ADR039-01）实现**并接线**——注册表、`NotifyPlugin`
+  契约、email/telegram 内置插件与 `notify.dispatch` 交付,且管道通知步骤现已把
+  运行摘要扇出给次级后端。D4 已补充接线后续说明。
+- 2026-06-10: Phase 2（IMP-ADR039-02）实现——`discover_entry_points` 已接线至
+  notify 与 downloader dispatch；`downloader` 类别交付 `QbDownloaderPlugin`（对
+  现有 qB client 的薄 adapter）与 `TransmissionDownloaderPlugin`（全新
+  Transmission JSON-RPC client）；示例 CLI `apps.cli.download.add` 端到端行使完
+  整下载器类别栈；~45 条新单元测试通过；`run_uploader` 重路由刻意推迟（qB 耦合
+  深）。Subagent 驱动（8 个任务，每任务实现者 + 审查者各一）。
+- 2026-06-13: 新增 Phase 4（IMP-ADR039-04，告警投递 + 路由 + digest + webhook + web 配置），以补上 notify 注册表只能向所有后端扇出、缺少路由/digest/webhook/运营者控制的空缺。`NotifyPlugin` 契约不变；路由/digest 位于 `notify.send` 之上。Incident 检测仍归 ADR-026；预留的 Phase 3（生态）保持不动。

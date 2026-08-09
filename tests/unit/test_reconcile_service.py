@@ -18,9 +18,16 @@ def repo(acquisition_outcome_repo):
 class _FakeQb:
     def __init__(self, torrents):
         self._t = torrents
+        self.deleted = []
 
     def get_torrents_multiple_categories(self, categories, torrent_filter="downloading"):
         return self._t
+
+    def get_torrents(self, category, torrent_filter="downloading"):
+        return self._t
+
+    def delete_torrents(self, hashes, delete_files=True):
+        self.deleted.extend(hashes)
 
 
 class _CategoryQb:
@@ -84,6 +91,35 @@ def test_record_queued_writes_queued_row(repo):
 def test_record_queued_ignores_unparseable_magnet(repo):
     service.record_queued({"magnet": "not-a-magnet"}, session_id="S1", repo=repo)
     assert repo.list_active() == []
+
+
+def test_record_queued_honours_monkeypatched_operations_db_path(tmp_path, monkeypatch):
+    """Regression (BFR-016): with no injected repo, record_queued must resolve
+    OPERATIONS_DB_PATH at call time so a monkeypatched path is honoured.
+
+    Before the fix ``reconcile.persistence`` bound OPERATIONS_DB_PATH at import,
+    so the queued row landed in the real operations DB and was invisible to the
+    test path — this asserts it now lands in the patched temp DB. Note: no
+    ``repo=`` is passed, so the write goes through ``open_outcome_repo`` ->
+    ``get_db(OPERATIONS_DB_PATH)`` (the path that used to be import-bound).
+    """
+    from javdb.storage import db as _db
+    from javdb.storage.db import get_db
+
+    ops_db = tmp_path / "ops_runtime.db"
+    _db.init_db(str(ops_db))  # full schema incl. AcquisitionOutcome
+    monkeypatch.setattr(_db, "OPERATIONS_DB_PATH", str(ops_db))
+
+    qb_hash = "a" * 40
+    service.record_queued({"magnet": "magnet:?xt=urn:btih:" + qb_hash}, "sess-1")
+
+    with get_db(str(ops_db)) as conn:
+        rows = conn.execute(
+            "SELECT qb_hash, state, session_id FROM AcquisitionOutcome"
+        ).fetchall()
+    assert [(r["qb_hash"], r["state"], r["session_id"]) for r in rows] == [
+        (qb_hash, "queued", "sess-1")
+    ]
 
 
 def test_apply_cleanup_completed_marks_hashes(repo):
@@ -286,6 +322,35 @@ def test_run_rejects_nonpositive_stalled_threshold_without_transitions(repo):
     assert got.state == "queued"
     assert got.last_seen_at == old_ts
     assert res.errors == ["stalled_after_days must be >= 1"]
+
+
+def test_run_treats_missing_files_as_completed_and_deletes_from_qb(repo):
+    repo.upsert(AcquisitionOutcomeRecord(qb_hash="m1", href="/v/1", state="queued",
+                                         last_seen_at=_old_iso(0)))
+    qb = _FakeQb([{"hash": "m1", "progress": 0.0, "state": "missingFiles"}])
+    res = service.run(ReconcileOptions(), repo=repo, qb_client=qb)
+    assert repo.get("m1").state == "completed"
+    assert res.marked_completed == 1
+    assert res.missing_files_deleted == 1
+    assert "m1" in qb.deleted
+
+
+def test_run_missing_files_does_not_delete_when_dry_run(repo):
+    repo.upsert(AcquisitionOutcomeRecord(qb_hash="m2", href="/v/1", state="queued",
+                                         last_seen_at=_old_iso(0)))
+    qb = _FakeQb([{"hash": "m2", "progress": 0.0, "state": "missingFiles"}])
+    res = service.run(ReconcileOptions(dry_run=True), repo=repo, qb_client=qb)
+    assert repo.get("m2").state == "queued"  # no write in dry_run
+    assert res.missing_files_deleted == 0
+    assert qb.deleted == []
+
+
+def test_run_missing_files_skips_untracked_hashes(repo):
+    # "m3" has missingFiles in qB but no AcquisitionOutcome row — must not be deleted.
+    qb = _FakeQb([{"hash": "m3", "progress": 0.0, "state": "missingFiles"}])
+    res = service.run(ReconcileOptions(), repo=repo, qb_client=qb)
+    assert res.missing_files_deleted == 0
+    assert qb.deleted == []
 
 
 def test_run_counts_marked_only_after_successful_upsert(repo):

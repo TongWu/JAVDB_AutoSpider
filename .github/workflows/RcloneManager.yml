@@ -64,7 +64,7 @@ on:
       runner:
         description: 'Runner type for the job'
         required: false
-        default: 'ubuntu-latest'
+        default: 'self-hosted'
         type: choice
         options:
           - 'ubuntu-latest'
@@ -77,6 +77,7 @@ jobs:
     env:
       TZ: Asia/Singapore
       D1_RECOVERY_OUTBOX_ENABLED: ${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}
+      D1_CIRCUIT_BREAKER_ENABLED: ${{ vars.D1_CIRCUIT_BREAKER_ENABLED || 'true' }}
       D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
       D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
       GH_TOKEN: ${{ github.token }}

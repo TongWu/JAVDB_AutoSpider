@@ -165,7 +165,7 @@ def test_persist_parsed_detail_result_writes_report_dedup_and_history(monkeypatc
     monkeypatch.setattr(
         dc,
         'append_dedup_record',
-        lambda csv_path, record: dedup_appends.append((csv_path, record)),
+        lambda csv_path, record, session_id=None: dedup_appends.append((csv_path, record)),
     )
 
     outcome = persist_parsed_detail_result(
@@ -812,15 +812,15 @@ class _FakeClaimClient:
 
 
 def test_claim_detail_candidates_threads_session_id_through_claim(monkeypatch):
-    """``_claim_detail_candidates`` must pass the active session id to ``client.claim``."""
+    """``_claim_detail_candidates`` must pass the explicit session id to ``client.claim``."""
     import javdb.spider.detail.runner as dc
 
     fake = _FakeClaimClient()
     monkeypatch.setattr(dc.state, 'global_movie_claim_client', fake)
     monkeypatch.setattr(dc.state, 'runtime_holder_id', 'runner-test')
     monkeypatch.setattr(dc, 'current_shard_date', lambda: '2026-05-09')
-    monkeypatch.setattr(dc, 'get_active_session_id', lambda: 4242)
 
+    sid = '20260509T120000.000000Z-0001-0001'
     candidates = [
         dc.DetailEntryCandidate(
             entry=make_entry('ABC-123'),
@@ -831,6 +831,7 @@ def test_claim_detail_candidates_threads_session_id_through_claim(monkeypatch):
     ]
     kept, skipped_done, skipped_busy, shard_date, leased = dc._claim_detail_candidates(
         candidates,
+        session_id=sid,
     )
 
     assert len(kept) == 1
@@ -843,19 +844,18 @@ def test_claim_detail_candidates_threads_session_id_through_claim(monkeypatch):
         'holder': 'runner-test',
         'ttl_ms': dc.DEFAULT_CLAIM_TTL_MS,
         'date': '2026-05-09',
-        'session_id': '4242',
+        'session_id': sid,
     }]
 
 
 def test_claim_detail_candidates_passes_none_session_when_no_active_session(monkeypatch):
-    """Empty-string session ids are normalised to ``None`` for the client API."""
+    """A ``None``/empty session id is normalised to ``None`` for the client API."""
     import javdb.spider.detail.runner as dc
 
     fake = _FakeClaimClient()
     monkeypatch.setattr(dc.state, 'global_movie_claim_client', fake)
     monkeypatch.setattr(dc.state, 'runtime_holder_id', 'runner-test')
     monkeypatch.setattr(dc, 'current_shard_date', lambda: '2026-05-09')
-    monkeypatch.setattr(dc, 'get_active_session_id', lambda: None)
 
     candidates = [
         dc.DetailEntryCandidate(
@@ -865,7 +865,7 @@ def test_claim_detail_candidates_passes_none_session_when_no_active_session(monk
             entry_index='1/1',
         ),
     ]
-    dc._claim_detail_candidates(candidates)
+    dc._claim_detail_candidates(candidates, session_id=None)
 
     assert fake.claim_calls and fake.claim_calls[0]['session_id'] is None
 

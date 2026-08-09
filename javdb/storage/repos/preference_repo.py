@@ -5,15 +5,28 @@ from __future__ import annotations
 import json
 import re
 from typing import List, Optional, Tuple
+from urllib.parse import unquote, urlparse
 
-from javdb.storage.db import get_db, HISTORY_DB_PATH
+from javdb.storage import db as _db
+from javdb.storage.db import get_db
+
+
+def _derive_rating_video_code(href: str) -> str:
+    decoded_href = unquote((href or '').strip())
+    path = urlparse(decoded_href).path
+    for prefix in ('/v/', '/video/'):
+        if path.startswith(prefix):
+            return path[len(prefix):].strip('/').split('/')[0]
+    return re.sub(r'^/video/', '', decoded_href).strip('/')
 
 
 class PreferenceRepo:
     """Typed wrapper over MovieRatings and ContentPreferences in history.db."""
 
     def __init__(self, *, db_path: Optional[str] = None) -> None:
-        self._db_path = db_path or HISTORY_DB_PATH
+        # Resolve HISTORY_DB_PATH at construction via ``_db`` (not bound at
+        # import) so pytest's path monkeypatch is honoured (BFR-016).
+        self._db_path = db_path or _db.HISTORY_DB_PATH
 
     # ------------------------------------------------------------------
     # MovieRatings
@@ -28,7 +41,7 @@ class PreferenceRepo:
         notes: Optional[str],
     ) -> dict:
         """UPSERT a movie rating. Returns the updated row as a dict."""
-        video_code = re.sub(r'^/video/', '', href).strip('/')
+        video_code = _derive_rating_video_code(href)
 
         sql = """
             INSERT INTO MovieRatings

@@ -8,7 +8,7 @@ sys.path.insert(0, project_root)
 
 import pytest
 from unittest.mock import patch, MagicMock
-from javdb.storage.db import _db_stats as db_stats
+import javdb.storage.db._db_stats as db_stats
 
 
 class TestDbSaveSpiderStats:

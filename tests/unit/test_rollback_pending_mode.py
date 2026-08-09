@@ -27,22 +27,25 @@ Covers the core pending-mode categories:
 from __future__ import annotations
 
 import json
-import os
 from typing import Dict, List, Tuple
 
 import pytest
 
 from javdb.storage.db import (
     get_db,
-    set_active_session_id, set_active_run_identity, set_active_write_mode,
+    set_active_run_identity, set_active_write_mode,
+)
+from javdb.storage.db._db_reports import (
     db_create_report_session, db_get_session_status, db_pending_session_stats,
     db_begin_finalize_session, db_finish_commit_session,
+)
+from javdb.storage.db._db_history_write import (
     db_stage_history_write, db_commit_session_history,
     db_batch_update_last_visited, db_batch_update_movie_actors,
     _commit_one_movie, db_resume_finalizing_session,
-    db_load_history_snapshot,
-    db_rollback_session,
 )
+from javdb.storage.db._db_history_read import db_load_history_snapshot
+from javdb.storage.db._db_rollback import db_rollback_session
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -585,7 +588,6 @@ class TestSpiderWritePathRoutesToPending:
         from javdb.storage.history_manager import (
             save_parsed_movie_to_history,
         )
-        set_active_session_id(None)
         set_active_run_identity(None, None)
         set_active_write_mode(None)
         sid = db_create_report_session(
@@ -594,7 +596,6 @@ class TestSpiderWritePathRoutesToPending:
             csv_filename="wire-pending.csv",
             write_mode="pending",
         )
-        set_active_session_id(sid)
         set_active_run_identity("rid-wire", 1)
         set_active_write_mode("pending")
         try:
@@ -614,9 +615,9 @@ class TestSpiderWritePathRoutesToPending:
                 actor_gender="female",
                 actor_link="/actors/wire",
                 supporting_actors=None,
+                session_id=sid,
             )
         finally:
-            set_active_session_id(None)
             set_active_run_identity(None, None)
             set_active_write_mode(None)
 
@@ -645,8 +646,8 @@ class TestCommitSessionCLIDrainsPending:
     def test_commit_session_promotes_pending_into_live(
         self, capsys, monkeypatch, tmp_path,
     ):
-        # Redirect REPORTS_DIR so the CLI's _emit_pending_verify writes
-        # the test's pending_session_verify record into the tmp dir
+        # Redirect REPORTS_DIR so the CLI's pending verify record is written
+        # into the tmp dir
         # rather than the git-tracked reports/D1/d1_drift.jsonl.
         monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
         from apps.cli.db import commit_session as cs_mod
@@ -728,7 +729,6 @@ class TestBatchUpdatesRouteToPending:
     """
 
     def _setup_pending_session(self) -> int:
-        set_active_session_id(None)
         set_active_run_identity(None, None)
         set_active_write_mode(None)
         sid = db_create_report_session(
@@ -737,13 +737,11 @@ class TestBatchUpdatesRouteToPending:
             csv_filename="batch-pending.csv",
             write_mode="pending",
         )
-        set_active_session_id(sid)
         set_active_run_identity("rid-batch", 1)
         set_active_write_mode("pending")
         return sid
 
     def _teardown(self):
-        set_active_session_id(None)
         set_active_run_identity(None, None)
         set_active_write_mode(None)
 
@@ -844,7 +842,9 @@ class TestBatchUpdatesRouteToPending:
 
         sid = self._setup_pending_session()
         try:
-            n = HistoryRepo().batch_update_movie_actors([
+            # ADR-046 D2: bind the active pending session explicitly; the
+            # repo no longer reads the process-global active session.
+            n = HistoryRepo(session_id=sid).batch_update_movie_actors([
                 ("/v/R-ACT-001", "Repo Actor", "female", "/actors/repo", None),
             ])
             assert n == 1

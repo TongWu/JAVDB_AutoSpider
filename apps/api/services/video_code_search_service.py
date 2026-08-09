@@ -14,7 +14,7 @@ from javdb.parsing.search_exact import (
     find_exact_video_code_match,
 )
 from apps.api.services import config_service, context
-from apps.api.services.explore_service import _fetch_javdb_html
+from apps.api.services.javdb_fetch_service import fetch_javdb_html as _fetch_javdb_html
 from javdb.spider.url_helper import build_search_url
 from javdb.spider.html_validators import (
     is_login_page,

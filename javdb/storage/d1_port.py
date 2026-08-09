@@ -28,13 +28,16 @@ from javdb.infra.logging import get_logger
 from javdb.storage.d1_client import (
     D1Cursor,
     D1PermanentError,
+    D1RecoveryBlockerError,
     D1TransientError,
     _EXPORT_LOCK_BACKOFF_FLOOR_SEC,
     _EXPORT_LOCK_KEYWORDS,
+    _INTERNAL_ERROR_BACKOFF_FLOOR_SEC,
     _TRANSIENT_ERROR_KEYWORDS,
     _matches_keyword,
     _params_for_d1_json,
 )
+from javdb.storage.d1_circuit_breaker import aggregate_metrics, get_circuit_breaker
 from javdb.storage.d1_recovery import (
     RecoveryEvent,
     append_event,
@@ -256,12 +259,10 @@ class D1AccessPort:
                 status["pending_groups"].get(key)
                 or status["dead_lettered_groups"].get(key)
             ):
-                error = RuntimeError(
+                raise D1RecoveryBlockerError(
                     f"unresolved D1 recovery work for ordering key {key}; "
                     "drain it before flushing queued writes"
                 )
-                error.d1_recovery_blocker = True  # type: ignore[attr-defined]
-                raise error
             statements = [(sql, params) for sql, params, _policy in queued]
             try:
                 cursors.extend(self.batch_execute(statements))
@@ -289,8 +290,8 @@ class D1AccessPort:
                     self._batch_queue.pop(key, None)
                     self._batch_queue_since.pop(key, None)
                 if recovery_attempted:
-                    exc.d1_recovery_outbox_required = True  # type: ignore[attr-defined]
-                    exc.d1_recovery_durable = not remaining  # type: ignore[attr-defined]
+                    exc.d1_recovery_outbox_required = True
+                    exc.d1_recovery_durable = not remaining
                 raise
             self._batch_queue.pop(key, None)
             self._batch_queue_since.pop(key, None)
@@ -385,6 +386,12 @@ class D1AccessPort:
                 aggregate[key] = _numeric_summary_value(aggregate.get(key)) + delta[key]
             aggregate = _with_derived_summary(aggregate)
 
+            # Circuit breakers are per-D1-database and NOT delta-aggregated;
+            # write the absolute SUM across all endpoints (ADR-056). Different
+            # logical DBs share this one summary file, so a per-endpoint snapshot
+            # would clobber — aggregate_metrics() sums the registry instead.
+            aggregate["circuit_breaker"] = aggregate_metrics()
+
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(
                 json.dumps(aggregate, ensure_ascii=False, indent=2, sort_keys=True)
@@ -403,11 +410,16 @@ class D1AccessPort:
                 logger.warning("Failed to close D1 port session", exc_info=True)
 
     def _post_with_retry(self, body: dict[str, Any]) -> list[D1Cursor]:
+        breaker = get_circuit_breaker(self._url)  # one breaker per D1 database
         last_exc: D1TransientError | None = None
         attempts = max(1, self._config.max_retries)
         for attempt in range(attempts):
+            # Pause here if the breaker is OPEN; raise D1CircuitOpenError if the
+            # outage outlasts the bounded max-open window (ADR-056 D4).
+            breaker.acquire(self._probe_d1)
             try:
                 result = self._post(body)
+                breaker.record_success()
                 if attempt > 0:
                     self._summary["retry_successes"] += 1
                 return result
@@ -416,6 +428,7 @@ class D1AccessPort:
                 raise
             except D1TransientError as exc:
                 self._summary["transient_errors"] += 1
+                breaker.record_failure()
                 last_exc = exc
                 if attempt >= attempts - 1:
                     break
@@ -423,6 +436,30 @@ class D1AccessPort:
                 self._sleep(self._compute_backoff(attempt, exc))
         assert last_exc is not None
         raise last_exc
+
+    def _probe_d1(self) -> bool:
+        """Health probe used by the circuit breaker (ADR-056 D8).
+
+        Issues a bare ``SELECT 1`` directly via the transport, bypassing
+        ``_post_with_retry`` / ``breaker.acquire`` so it cannot deadlock on the
+        open breaker. Applies the SAME success criterion as ``_post`` — HTTP 200
+        AND a JSON body with ``success == true`` — so an application-level D1
+        fault (HTTP 200 + ``success=false``) does NOT falsely declare recovery
+        and wake the fleet into renewed failures.
+        """
+        try:
+            response = self._post_request(
+                self._url,
+                headers=self._headers,
+                json={"sql": "SELECT 1", "params": []},
+                timeout=self._config.timeout,
+            )
+            if getattr(response, "status_code", None) != 200:
+                return False
+            payload = response.json()
+        except Exception:  # noqa: BLE001 — any error (incl. non-JSON) == still down
+            return False
+        return bool(isinstance(payload, dict) and payload.get("success"))
 
     def _post(self, body: dict[str, Any]) -> list[D1Cursor]:
         self._summary["http_posts"] += 1
@@ -443,9 +480,11 @@ class D1AccessPort:
             err = D1TransientError(
                 f"D1 API returned HTTP {status}: {response.text[:500]}"
             )
+            if "internal error" in (response.text or "").lower():
+                err.is_internal_error = True
             retry_after = response.headers.get("Retry-After")
             if retry_after:
-                err.retry_after = retry_after  # type: ignore[attr-defined]
+                err.retry_after = retry_after
             raise err
         if 400 <= status < 500:
             errors = self._extract_errors(response)
@@ -456,7 +495,7 @@ class D1AccessPort:
                         f"D1 API returned HTTP {status} (transient): {errors}"
                     )
                     if _matches_keyword(err_text, _EXPORT_LOCK_KEYWORDS):
-                        transient.is_export_lock = True  # type: ignore[attr-defined]
+                        transient.is_export_lock = True
                     raise transient
                 raise D1PermanentError(f"D1 API returned HTTP {status}: {errors}")
             raise D1PermanentError(
@@ -480,14 +519,14 @@ class D1AccessPort:
             if _matches_keyword(err_text, _TRANSIENT_ERROR_KEYWORDS):
                 transient = D1TransientError(f"D1 API transient error: {errors}")
                 if _matches_keyword(err_text, _EXPORT_LOCK_KEYWORDS):
-                    transient.is_export_lock = True  # type: ignore[attr-defined]
+                    transient.is_export_lock = True
                 raise transient
             raise D1PermanentError(f"D1 API error: {errors}")
 
         return [D1Cursor(item) for item in payload.get("result") or []]
 
     def _compute_backoff(self, attempt: int, exc: D1TransientError) -> float:
-        retry_after = getattr(exc, "retry_after", None)
+        retry_after = exc.retry_after
         if retry_after is not None:
             try:
                 return max(0.0, float(retry_after))
@@ -504,8 +543,10 @@ class D1AccessPort:
                 pass
 
         base = self._config.retry_base_sec * (2**attempt)
-        if getattr(exc, "is_export_lock", False):
+        if exc.is_export_lock:
             base = max(base, _EXPORT_LOCK_BACKOFF_FLOOR_SEC)
+        if getattr(exc, "is_internal_error", False):
+            base = max(base, _INTERNAL_ERROR_BACKOFF_FLOOR_SEC)
         return min(base, self._config.retry_max_sleep_sec) + self._jitter()
 
     @staticmethod
@@ -593,19 +634,19 @@ class D1AccessPort:
             return False
         if policy is None or not getattr(policy, "recovery_allowed", False):
             return False
-        error.d1_recovery_outbox_required = True  # type: ignore[attr-defined]
+        error.d1_recovery_outbox_required = True
         try:
             event = RecoveryEvent.queued(policy, sql, params, str(error))
             append_event(self._outbox_path, event)
         except Exception:  # noqa: BLE001 - recovery must not mask D1 failure
-            error.d1_recovery_durable = False  # type: ignore[attr-defined]
+            error.d1_recovery_durable = False
             logger.warning(
                 "Failed to append D1 recovery outbox event for %s",
                 getattr(policy, "idempotency_key", "<unknown>"),
                 exc_info=True,
             )
             return False
-        error.d1_recovery_durable = True  # type: ignore[attr-defined]
+        error.d1_recovery_durable = True
         self._summary["outbox_queued"] += 1
         return True
 

@@ -14,7 +14,7 @@
 
 **Tech Stack:** Hono 4, D1 native bindings, GitHub REST API (fetch), Vitest + `@cloudflare/vitest-pool-workers`
 
-**Working Directory:** All paths are relative to `JAVDB_AutoSpider_Web/` (`/Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web/`).
+**Working Directory:** All paths are relative to `JAVDB_AutoSpider_Web/` (`/Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web/`).
 
 ---
 
@@ -513,7 +513,7 @@ describe("JobRunsRepo", () => {
 
 - [ ] **Step 4: Run tests to verify**
 
-Run: `cd /Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts server/__tests__/services.test.ts`
+Run: `cd /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts server/__tests__/services.test.ts`
 
 Expected: All tests PASS.
 
@@ -900,7 +900,7 @@ describe("Tasks routes", () => {
 
 - [ ] **Step 5: Run tests**
 
-Run: `cd /Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts server/__tests__/tasks-routes.test.ts`
+Run: `cd /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts server/__tests__/tasks-routes.test.ts`
 
 Expected: All tests PASS.
 
@@ -1221,7 +1221,7 @@ describe("GH Actions routes", () => {
 
 - [ ] **Step 4: Run tests**
 
-Run: `cd /Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts server/__tests__/gh-actions-routes.test.ts`
+Run: `cd /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts server/__tests__/gh-actions-routes.test.ts`
 
 Expected: All tests PASS.
 
@@ -1656,7 +1656,7 @@ describe("Operations routes", () => {
 
 - [ ] **Step 4: Run tests**
 
-Run: `cd /Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts server/__tests__/operations-routes.test.ts`
+Run: `cd /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts server/__tests__/operations-routes.test.ts`
 
 Expected: All tests PASS.
 
@@ -1679,7 +1679,7 @@ git commit -m "feat(api): add operations routes — rclone/qB/cleanup dispatch +
 
 - [ ] **Step 1: Run full test suite**
 
-Run: `cd /Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts`
+Run: `cd /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx vitest run --config vitest.server.config.ts`
 
 Expected: All tests PASS (Phase 1 + Phase 2 + Phase 3 tests).
 
@@ -1720,13 +1720,13 @@ git commit -m "fix(api): resolve Phase 3 integration issues"
 
 - [ ] **Step 1: Build**
 
-Run: `cd /Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npm run build`
+Run: `cd /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npm run build`
 
 Expected: Build succeeds without errors.
 
 - [ ] **Step 2: Deploy**
 
-Run: `cd /Users/tedwu/Documents/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx wrangler deploy`
+Run: `cd /Users/tedwu/JAVDB_AutoSpider_CICD/JAVDB_AutoSpider_Web && npx wrangler deploy`
 
 Expected: Deploy succeeds. Worker URL: `https://javdb-autospider-web.wuengineer.workers.dev`
 

@@ -1,0 +1,137 @@
+name: Reconcile Library
+
+# ADR-033 Phase 1+2+3: `--pass all` runs all three closed-loop reconcile passes
+# (acquisition + ownership + consumption).
+# The acquisition pass reconciles AcquisitionOutcome rows against live qB state.
+# Torrents with missingFiles state are treated as completed and deleted from qB.
+# The ownership pass collects from gdrive (RcloneInventory), qb (AcquisitionOutcome
+# bridge), pikpak (PikpakHistory success rows), and nas (a forward-compat stub that
+# is currently always a no-op, regardless of RCLONE_NAS_REMOTE).
+# The consumption pass collects watch/rating signal from the media servers in
+# MEDIA_SERVERS (Emby/Plex); with none configured it is a no-op.
+# Runs hourly on self-hosted so the job can reach the operator's qBittorrent Web UI.
+
+permissions:
+  contents: read
+
+on:
+  # schedule: # DISABLED FOR PUBLIC REPO
+    # - cron: '0 * * * *'
+  workflow_dispatch:
+    inputs:
+      stalled_after_days:
+        description: 'Positive integer: active outcomes unseen this many days become stalled.'
+        required: false
+        default: '7'
+        type: string
+      dry_run:
+        description: 'Compute transitions but write nothing.'
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: reconcile-library
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    name: Reconcile
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: Production
+    env:
+      TZ: Asia/Singapore
+      STORAGE_BACKEND: d1
+      D1_RECOVERY_OUTBOX_ENABLED: ${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}
+      D1_CIRCUIT_BREAKER_ENABLED: ${{ vars.D1_CIRCUIT_BREAKER_ENABLED || 'true' }}
+      D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
+      D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
+      INPUT_STALLED_AFTER_DAYS: ${{ inputs.stalled_after_days || '7' }}
+      INPUT_DRY_RUN: ${{ inputs.dry_run || 'false' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+          persist-credentials: false
+          lfs: true
+
+      - name: Set up Python, venv, dependencies, Rust extension
+        uses: ./.github/actions/setup-python-env
+        with:
+          python-version: '3.11'
+
+      - name: Generate config.py from GitHub Variables and Secrets
+        env:
+          # qBittorrent: used by both acquisition and ownership passes.
+          VAR_QB_URL: ${{ secrets.QB_URL }}
+          VAR_QB_USERNAME: ${{ secrets.QB_USERNAME }}
+          VAR_QB_PASSWORD: ${{ secrets.QB_PASSWORD }}
+          VAR_TORRENT_CATEGORY: ${{ vars.TORRENT_CATEGORY }}
+          VAR_TORRENT_CATEGORY_ADHOC: ${{ vars.TORRENT_CATEGORY_ADHOC }}
+          # Rclone: ownership pass collects from gdrive via RcloneInventory
+          # (already populated by WeeklyDedup). RCLONE_NAS_REMOTE is intentionally
+          # unset here; the nas collector is a forward-compat stub that logs and
+          # yields nothing until the operator configures RCLONE_NAS_REMOTE.
+          VAR_RCLONE_CONFIG_BASE64: ${{ secrets.RCLONE_CONFIG_BASE64 }}
+          VAR_RCLONE_FOLDER_PATH: ${{ vars.RCLONE_FOLDER_PATH }}
+          # D1 / Cloudflare - AcquisitionOutcome and OwnershipLedger live in operations DB.
+          VAR_STORAGE_BACKEND: d1
+          VAR_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VAR_CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          VAR_D1_HISTORY_DB_ID: ${{ secrets.D1_HISTORY_DB_ID }}
+          VAR_D1_REPORTS_DB_ID: ${{ secrets.D1_REPORTS_DB_ID }}
+          VAR_D1_OPERATIONS_DB_ID: ${{ secrets.D1_OPERATIONS_DB_ID }}
+          VAR_REPORTS_DIR: ${{ vars.REPORTS_DIR || 'reports' }}
+          VAR_LOG_LEVEL: ${{ vars.LOG_LEVEL || 'INFO' }}
+          # ADR-033 Phase 3: media servers for the consumption pass (--pass all).
+          # JSON list of {type,instance,base_url,token,libraries?}; tokens inline.
+          VAR_MEDIA_SERVERS_JSON: ${{ secrets.MEDIA_SERVERS_JSON }}
+        run: python3 -m apps.cli.ops.config_generator --github-actions
+
+      - name: Run all closed-loop reconcile passes (acquisition + ownership + consumption)
+        run: |
+          set -e
+          set -o pipefail
+
+          CMD=(python3 -m apps.cli.ops.reconcile
+               --pass all
+               --stalled-after-days "$INPUT_STALLED_AFTER_DAYS"
+               --json)
+
+          if [ "$INPUT_DRY_RUN" = "true" ]; then
+            CMD+=(--dry-run)
+          fi
+
+          mkdir -p logs
+          echo "Executing: STORAGE_BACKEND=d1 ${CMD[*]}"
+          STORAGE_BACKEND=d1 "${CMD[@]}" > logs/reconcile_library.jsonl
+
+      - name: Upload reconcile log
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: reconcile-library-log
+          path: logs/reconcile_library.jsonl
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Reconcile Library"
+            echo ""
+            echo "- Storage backend: d1"
+            echo "- Stalled-after days: $INPUT_STALLED_AFTER_DAYS"
+            echo "- Dry run: $INPUT_DRY_RUN"
+            echo ""
+            if [ -f logs/reconcile_library.jsonl ]; then
+              echo "Last output line:"
+              echo '```json'
+              tail -n 1 logs/reconcile_library.jsonl
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

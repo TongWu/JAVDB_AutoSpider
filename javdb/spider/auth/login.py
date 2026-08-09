@@ -75,6 +75,7 @@ PROXY_HTTPS = cfg('PROXY_HTTPS', None)
 CF_BYPASS_SERVICE_PORT = cfg('CF_BYPASS_SERVICE_PORT', 8000)
 CF_BYPASS_ENABLED = cfg('CF_BYPASS_ENABLED', True)
 CF_BYPASS_PORT_MAP = cfg('CF_BYPASS_PORT_MAP', {})
+CF_BYPASS_VIA_PROXY = cfg('CF_BYPASS_VIA_PROXY', False)
 
 PROXY_MODE = cfg('PROXY_MODE', 'pool')
 PROXY_POOL = cfg('PROXY_POOL', [])
@@ -120,6 +121,7 @@ def _create_handler():
         cf_bypass_service_port=CF_BYPASS_SERVICE_PORT,
         cf_bypass_port_map=CF_BYPASS_PORT_MAP,
         cf_bypass_enabled=CF_BYPASS_ENABLED,
+        cf_bypass_via_proxy=CF_BYPASS_VIA_PROXY,
         cf_turnstile_cooldown=_cd,
         fallback_cooldown=_cd,
         proxy_http=PROXY_HTTP,
@@ -166,14 +168,31 @@ def _attempt_cf_warmup(handler, url, proxies=None):
 
 
 def _build_proxies_from_config():
-    """Build a proxies dict from config settings for standalone usage."""
+    """Build ``(proxies, proxy_name)`` from config settings for standalone usage.
+
+    ``proxy_name`` names the proxy the login runs through; it is published to
+    the GlobalLoginState DO so other runners know which proxy carried the
+    session. ``DIRECT_LOGIN_PROXY_NAME`` is used when no proxy is configured.
+    """
+    from javdb.spider.fetch.session import DIRECT_LOGIN_PROXY_NAME
+
+    # Honour modular proxy control like the rest of the system: if 'spider' is
+    # not configured to use a proxy (or proxy mode is disabled), log in direct
+    # instead of forcing PROXY_HTTP/PROXY_POOL.
+    from javdb.proxy.policy import should_proxy_module
+
+    if not should_proxy_module(
+        'spider', None, PROXY_MODULES, proxy_mode=PROXY_MODE,
+    ):
+        return None, DIRECT_LOGIN_PROXY_NAME
+
     try:
         from javdb.spider.fetch.session import resolve_login_proxy_endpoints
 
         named_proxies, named_nm = resolve_login_proxy_endpoints()
         if named_proxies:
             logger.info(f"Using LOGIN_PROXY_NAME proxy for login: {named_nm}")
-            return named_proxies
+            return named_proxies, named_nm
     except ImportError:
         pass
 
@@ -183,7 +202,9 @@ def _build_proxies_from_config():
             proxies['http'] = PROXY_HTTP
         if PROXY_HTTPS:
             proxies['https'] = PROXY_HTTPS
-        return proxies
+        # The runtime names this config "Legacy-Proxy" (state.py / context.py),
+        # so publish under that name so CI workers can match the snapshot.
+        return proxies, 'Legacy-Proxy'
 
     if PROXY_POOL and len(PROXY_POOL) > 0:
         first = PROXY_POOL[0]
@@ -193,10 +214,18 @@ def _build_proxies_from_config():
         if first.get('https'):
             proxies['https'] = first['https']
         if proxies:
-            logger.info(f"Using first proxy from pool: {first.get('name', 'unnamed')}")
-            return proxies
+            proxy_name = first.get('name') or ''
+            if not proxy_name:
+                logger.warning(
+                    "First PROXY_POOL entry has no 'name' — the published "
+                    "cookie will not bind to a CI worker. Add 'name' to the "
+                    "pool entry or set LOGIN_PROXY_NAME to a named proxy.",
+                )
+                return proxies, DIRECT_LOGIN_PROXY_NAME
+            logger.info(f"Using first proxy from pool: {proxy_name}")
+            return proxies, proxy_name
 
-    return None
+    return None, DIRECT_LOGIN_PROXY_NAME
 
 
 # ---------------------------------------------------------------------------
@@ -803,7 +832,7 @@ def main():
     logger.info(f"CF Bypass Enabled: {CF_BYPASS_ENABLED}")
 
     # Build proxy config for standalone usage
-    proxies = _build_proxies_from_config()
+    proxies, login_proxy_name = _build_proxies_from_config()
     if proxies:
         logger.info(f"Proxy: configured ({len(proxies)} endpoint(s))")
     else:
@@ -840,6 +869,19 @@ def main():
             logger.warning("Login successful but failed to update config.py")
             logger.warning(f"Please manually update JAVDB_SESSION_COOKIE in config.py with:")
             logger.warning(f"  {session_cookie[:10]}***{session_cookie[-10:]}")
+
+        # Warm the cross-runner login cache so GitHub Actions runners can adopt
+        # this session and skip their own (currently CF-blocked) login. Best
+        # effort — independent of the config.py update above and never fatal,
+        # so guard even the import against unexpected errors.
+        try:
+            from javdb.spider.auth.login_state_publish import publish_login_state
+
+            publish_login_state(session_cookie, login_proxy_name)
+        except Exception as exc:  # noqa: BLE001 — never fail a successful login
+            logger.warning(
+                "Skipping login-state publish due to unexpected error: %s", exc,
+            )
     else:
         logger.error("LOGIN FAILED")
         logger.info("=" * 60)

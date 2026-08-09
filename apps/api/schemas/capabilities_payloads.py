@@ -17,6 +17,15 @@ class Features(BaseModel):
     proxy_pool: bool
     javdb_login: bool
     proxy_preview: bool
+    closed_loop: bool
+    library_ownership: bool
+    library_consumption: bool
+    watch_intent: bool
+    content_filter: bool
+    magnet_aggregation: bool
+    subscriptions: bool
+    site_drift_sentinel: bool
+    ops_alerting: bool
 
 
 class Build(BaseModel):

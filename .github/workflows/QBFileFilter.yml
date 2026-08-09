@@ -57,6 +57,7 @@ jobs:
     env:
       TZ: Asia/Singapore
       D1_RECOVERY_OUTBOX_ENABLED: ${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}
+      D1_CIRCUIT_BREAKER_ENABLED: ${{ vars.D1_CIRCUIT_BREAKER_ENABLED || 'true' }}
       D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
       D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
 
@@ -129,6 +130,15 @@ jobs:
           VAR_PIKPAK_ROOT_FOLDER: ${{ vars.PIKPAK_ROOT_FOLDER || '/Javdb_AutoSpider' }}
           VAR_QB_FILE_FILTER_MIN_SIZE_MB: ${{ vars.QB_FILE_FILTER_MIN_SIZE_MB }}
           VAR_QB_FILE_FILTER_LOG_FILE: ${{ vars.QB_FILE_FILTER_LOG_FILE || 'logs/qb_file_filter.log' }}
+          VAR_TORRENT_QUALITY_EVIDENCE_ENABLED: ${{ vars.TORRENT_QUALITY_EVIDENCE_ENABLED || 'false' }}
+          VAR_TORRENT_QUALITY_POLICY_MODE: ${{ vars.TORRENT_QUALITY_POLICY_MODE || 'shadow' }}
+          VAR_TORRENT_QUALITY_CATEGORIES: ${{ vars.TORRENT_QUALITY_CATEGORIES || '' }}
+          VAR_QUALITY_PROBE_ENABLED: ${{ vars.QUALITY_PROBE_ENABLED || 'false' }}
+          VAR_QUALITY_PROBE_QB_URL: ${{ secrets.QUALITY_PROBE_QB_URL || '' }}
+          VAR_QUALITY_PROBE_QB_USERNAME: ${{ secrets.QUALITY_PROBE_QB_USERNAME || '' }}
+          VAR_QUALITY_PROBE_QB_PASSWORD: ${{ secrets.QUALITY_PROBE_QB_PASSWORD || '' }}
+          VAR_QUALITY_PROBE_TOPK: ${{ vars.QUALITY_PROBE_TOPK || '2' }}
+          VAR_QUALITY_PROBE_GLOBAL_CAP: ${{ vars.QUALITY_PROBE_GLOBAL_CAP || '50' }}
           VAR_STORAGE_MODE: ${{ vars.STORAGE_MODE }}
           # D1 / Cloudflare (only required when STORAGE_BACKEND in {d1,dual})
           VAR_STORAGE_BACKEND: ${{ vars.STORAGE_BACKEND || 'sqlite' }}
@@ -288,6 +298,7 @@ jobs:
     env:
       TZ: Asia/Singapore
       D1_RECOVERY_OUTBOX_ENABLED: ${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}
+      D1_CIRCUIT_BREAKER_ENABLED: ${{ vars.D1_CIRCUIT_BREAKER_ENABLED || 'true' }}
       D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
       D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
     
@@ -339,11 +350,50 @@ jobs:
           echo "Running: python3 -m apps.cli.qb.file_filter ${ARGS[*]}"
           python3 -m apps.cli.qb.file_filter "${ARGS[@]}"
 
+      - name: Collect torrent quality evidence (ADR-024, shadow)
+        if: ${{ vars.TORRENT_QUALITY_EVIDENCE_ENABLED == 'true' && github.event.inputs.dry_run != 'true' }}
+        env:
+          DAYS: ${{ github.event.inputs.days || '2' }}
+          QB_EVIDENCE_CATEGORIES: ${{ github.event.inputs.categories || vars.TORRENT_QUALITY_CATEGORIES || '["Ad Hoc", "Daily Ingestion", "顶级"]' }}
+        run: |
+          set -e
+          set -o pipefail
+          ARGS=(--days "$DAYS")
+          if [ -n "$QB_EVIDENCE_CATEGORIES" ]; then
+            ARGS+=(--categories "$QB_EVIDENCE_CATEGORIES")
+          fi
+          echo "Running: python3 -m apps.cli.qb.quality_evidence ${ARGS[*]}"
+          python3 -m apps.cli.qb.quality_evidence "${ARGS[@]}"
+
+      - name: Probe runner-up quality candidates (ADR-024, remote shadow)
+        if: ${{ vars.TORRENT_QUALITY_EVIDENCE_ENABLED == 'true' && vars.QUALITY_PROBE_ENABLED == 'true' && github.event.inputs.dry_run != 'true' }}
+        run: |
+          set -e
+          set -o pipefail
+          echo "Running: python3 -m apps.cli.qb.quality_probe"
+          python3 -m apps.cli.qb.quality_probe
+
+      - name: Rank assist candidates (ADR-024, assist mode)
+        if: ${{ vars.TORRENT_QUALITY_EVIDENCE_ENABLED == 'true' && vars.TORRENT_QUALITY_POLICY_MODE == 'assist' && vars.QUALITY_PROBE_ENABLED == 'true' && github.event.inputs.dry_run != 'true' }}
+        env:
+          DAYS: ${{ github.event.inputs.days || '2' }}
+        run: |
+          set -e
+          set -o pipefail
+          echo "Running: python3 -m apps.cli.qb.quality_assist --days $DAYS"
+          python3 -m apps.cli.qb.quality_assist --days "$DAYS"
+
   # =============================================================================
   # Job 3: Run File Filter on Adhoc qBittorrent (only when QB_URL_ADHOC is set)
   # =============================================================================
   run-file-filter-adhoc:
     runs-on: ubuntu-latest
+    # The adhoc qBittorrent instance is best-effort/secondary — the default
+    # (NAS) filter above is the gate. When the adhoc box is unreachable
+    # (server down, creds wrong, port now answering SSH instead of HTTP),
+    # this job must not turn the whole workflow red. Real code bugs still
+    # surface via run-file-filter (same code, not continue-on-error).
+    continue-on-error: true
     environment: Production
     permissions:
       contents: read
@@ -352,6 +402,7 @@ jobs:
     env:
       TZ: Asia/Singapore
       D1_RECOVERY_OUTBOX_ENABLED: ${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}
+      D1_CIRCUIT_BREAKER_ENABLED: ${{ vars.D1_CIRCUIT_BREAKER_ENABLED || 'true' }}
       D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
       D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
 

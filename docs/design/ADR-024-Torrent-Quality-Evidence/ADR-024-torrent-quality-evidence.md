@@ -2,7 +2,7 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Proposed                                                              |
+| **Status**  | Accepted — Phase 1 implemented & verified 2026-06-02; Phases 2-3 pending |
 | **Date**    | 2026-05-27                                                            |
 | **Authors** | Ted                                                                   |
 | **Related** | [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md) |
@@ -198,9 +198,20 @@ production pipeline unchanged.
 
 | Phase | IMP | Ships | Deferred |
 | --- | --- | --- | --- |
-| Phase 1 | Future IMP | D1 evidence schema, production/probe evidence collection, bounded Top-K shadow scoring, qB capability canary, logs/API report | No production download behavior change |
-| Phase 2 | Future IMP | Assist mode that can recommend per-category replacements and surface review actions in API/Web | Fully automatic enforcement |
-| Phase 3 | Future IMP | Enforce mode behind rollout gates, threshold tuning, backfill/reporting jobs | Video frame/CV inspection and heavyweight ML runtimes |
+| Phase 1 | [IMP-ADR024-01](IMP-ADR024-01-d1-schema.md) · [-02](IMP-ADR024-02-models-repo.md) · [-03](IMP-ADR024-03-feature-extraction-scoring.md) · [-04](IMP-ADR024-04-file-filter-modularize.md) · [-05](IMP-ADR024-05-evidence-collection.md) · [-06](IMP-ADR024-06-read-api.md) · [-07](IMP-ADR024-07-docs-verification.md) | D1 evidence schema, **production-download** evidence collection (reusing the QBFileFilter read helpers), explainable shadow scoring, logs + read-only API report | Remote `quality_probe` endpoint + metadata-only capability canary; bounded Top-K runner-up collection; any production download behavior change |
+| Phase 2 prerequisite | [IMP-ADR024-10](IMP-ADR024-10-remote-probe-topk.md) | Remote `quality_probe` endpoint (D4-D7) + bounded Top-K runner-up collection (D8) → `target_role=quality_probe` evidence rows. Gated off by default, fail-closed, no production-path change. | Scoring across candidates, API/Web (those are IMP-08) |
+| Phase 2 | [IMP-ADR024-08](IMP-ADR024-08-phase2-assist.md) | **Assist backend landed (2026-06-20):** per-category candidate ranking, `TorrentQualityReviewLabel` store, production+probe evidence join, gated evaluator (`TORRENT_QUALITY_POLICY_MODE=assist`), three new `/api/quality` endpoints (recommendations / needs-review / review-labels), gated CLI + workflow step. No production download change. | Web review UI (separate `javdb-autospider-web` round); fully automatic enforcement |
+| Phase 3 | [IMP-ADR024-09](IMP-ADR024-09-phase3-enforce.md) (outline) | Enforce mode behind rollout gates, threshold tuning via offline replay, backfill/reporting jobs | Video frame/CV inspection and heavyweight ML runtimes |
+
+> **Phase 1 scope note (2026-05-31, recorded during IMP planning).** The original
+> Phase 1 line bundled remote-probe evidence, bounded Top-K shadow scoring, and a
+> qB metadata-only capability canary. During IMP planning these were split out:
+> Phase 1 now collects evidence for the **production-selected torrent only** (the
+> `production_download` role) by reusing the QBFileFilter read path. The remote
+> `quality_probe` endpoint (D4-D7), the capability canary (D7), and bounded Top-K
+> runner-up collection (D8) are deferred to follow-up IMPs (likely Phase 2
+> prerequisites). This keeps the first rollout the lowest-risk, fully shadow-only
+> slice while still proving the D1 evidence → scoring → report loop.
 
 ## References
 
@@ -216,3 +227,42 @@ production pipeline unchanged.
 ## Status Log
 
 - 2026-05-27: Proposed as ADR-024.
+- 2026-05-31: Phase 1 decomposed into IMP-ADR024-01..07; Phase 2/3 outlined as
+  IMP-ADR024-08/09. Phase 1 scope narrowed to production-download evidence only —
+  remote `quality_probe` endpoint, metadata-only capability canary, and bounded
+  Top-K runner-up collection deferred to follow-up IMPs (see Phase 1 scope note).
+- 2026-06-02: Phase 1 (IMP-ADR024-01..07) implemented and verified. All seven IMPs
+  marked Completed; 66 quality unit tests + 76 regression-neighbor tests pass, the
+  D1 parity guard is green, and both tables are live on remote `javdb-reports`
+  (0 rows — shadow-only, `TORRENT_QUALITY_EVIDENCE_ENABLED` defaults False, so
+  nothing has run in production). Status advanced Proposed → Accepted. Phase 2/3
+  (assist / enforce) remain outlines; the folder is not archived until they land.
+- 2026-06-19: Phase 2/3 scope grilled. Decisions: (1) enable Phase 1
+  `production_download` collection in production first to accumulate real shadow
+  data; (2) Phase 2 assist takes the **full** form (recommend a better alternative
+  candidate), which requires the deferred remote probe + Top-K — split into a new
+  executable [IMP-ADR024-10](IMP-ADR024-10-remote-probe-topk.md) (gating
+  prerequisite); (3) the operator owns a dedicated remote qB for probing;
+  (4) Phase 3 builds the enforce *machinery* only (gate / offline replay / backfill
+  / off-switch) with enforce gated OFF — thresholds wait for assist-era labelled
+  data; (5) the Phase 2 Web review UI is deferred to a separate
+  `javdb-autospider-web` round (API-only here). IMP-10 authored and entered
+  execution; IMP-08/09 to be refined from their outlines after IMP-10 lands.
+- 2026-06-19: IMP-ADR024-10 **implemented & verified** (11 commits; 40 new unit
+  tests; 1016-pass broad regression, 0 failures). Remote `quality_probe` endpoint
+  + bounded Top-K runner-up capture land gated OFF by default. Two design slips
+  were corrected during execution (production-safe parallel `_bucket_magnets` with
+  a drift guard; probe must add `paused=False` for metadata-only). Outstanding
+  operator step: apply the `TorrentProbeCandidate` D1 migration + re-align SQLite.
+  IMP-08 (assist) / IMP-09 (enforce machinery) remain outlines for a later round.
+- 2026-06-19: IMP-ADR024-08 **assist backend implemented** (branch
+  `claude/adr024-imp08-assist`). Delivers: per-category candidate ranking
+  (`javdb/quality/assist.py`), `TorrentQualityReviewLabel` D1-first store +
+  repo, production+probe evidence join (`list_evidence_for_movie`), gated
+  evaluator (`javdb/quality/assist_evaluator.py`, no-op unless
+  `TORRENT_QUALITY_POLICY_MODE=assist`), three new `/api/quality` endpoints
+  (`GET /recommendations`, `GET /needs-review`, `POST /review-labels`), and a
+  double-gated CLI + `QBFileFilter.yml` workflow step. No production download
+  decision changes. Web review UI deferred to a separate `javdb-autospider-web`
+  round. Outstanding operator step: apply the `TorrentQualityReviewLabel` D1
+  migration to remote `javdb-reports`.

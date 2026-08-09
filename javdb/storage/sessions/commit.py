@@ -132,66 +132,6 @@ def _gate_site_contract_drift(session_id: str, logger: Any) -> None:
         )
 
 
-def _emit_commit_metrics(
-    session_id: str,
-    *,
-    drain: Optional[Dict[str, Any]],
-    final_status: str,
-    write_mode: str,
-    commit_duration_ms: Optional[int],
-) -> Dict[str, Any]:
-    """Emit a ``pending_session_verify`` JSONL record after commit.
-
-    Simplified version of the CLI's ``_emit_pending_verify``: skips
-    shadow-audit comparison and GITHUB_OUTPUT (both CI-specific).
-    """
-    from datetime import datetime, timezone
-
-    from javdb.storage.sessions.lifecycle_helpers import (
-        append_jsonl_record,
-        attach_run_identity,
-    )
-    from javdb.storage.db._db_reports import db_pending_session_stats
-
-    try:
-        stats = db_pending_session_stats(session_id)
-    except Exception:
-        stats = {}
-
-    drain = drain or {}
-    pending_applied = int(drain.get("pending_marked_applied", 0) or 0)
-    pending_staged = (
-        pending_applied
-        + int(stats.get("pending_residual_count", 0) or 0)
-    )
-    record: Dict[str, Any] = {
-        "kind": "pending_session_verify",
-        "ts": datetime.now(timezone.utc).isoformat(),
-        "source": "commit_session_lib",
-        "session_id": session_id,
-        "write_mode": write_mode,
-        "final_status": final_status,
-        "pending_staged_count": pending_staged,
-        "pending_applied_count": pending_applied,
-        "pending_residual_count": int(
-            stats.get("pending_residual_count", 0) or 0,
-        ),
-        "commit_attempts": 1,
-        "commit_duration_ms": commit_duration_ms,
-        "hrefs_processed": int(drain.get("hrefs_processed", 0) or 0),
-        "torrents_upserted": int(drain.get("torrents_upserted", 0) or 0),
-        "torrents_deleted": int(drain.get("torrents_deleted", 0) or 0),
-        "movies_upserted": int(drain.get("movies_upserted", 0) or 0),
-        "worker_stage_rollback_failed": 0,
-        "shadow_audit_enabled": False,
-        "derived_recompute_drift": 0,
-        "derived_drift_samples": [],
-    }
-    attach_run_identity(record, session_id)
-    append_jsonl_record(record)
-    return record
-
-
 def commit_session(req: CommitRequest) -> CommitResult:
     """Commit a single session identified by ``req.session_id``.
 
@@ -207,7 +147,7 @@ def commit_session(req: CommitRequest) -> CommitResult:
         get_db,
         REPORTS_DB_PATH,
     )
-    from javdb.storage.db._db_history_write import db_commit_session_history
+    from javdb.storage.repos.history_repo import HistoryRepo
     # Lazy import: lifecycle imports the _db_reports primitives at module top,
     # so importing it here (rather than at module top) avoids a circular import
     # while javdb.storage.db is still initializing.
@@ -277,7 +217,7 @@ def commit_session(req: CommitRequest) -> CommitResult:
             # Promote pending writes to live tables.
             try:
                 t0 = time.monotonic()
-                drain = db_commit_session_history(req.session_id)
+                drain = HistoryRepo().commit_session(req.session_id)
                 drained_pending_session = True
                 commit_duration_ms = int((time.monotonic() - t0) * 1000)
                 if drain.get("residual_cleanup"):
@@ -294,7 +234,7 @@ def commit_session(req: CommitRequest) -> CommitResult:
                     )
             except Exception as exc:
                 raise RuntimeError(
-                    f"db_commit_session_history failed for {req.session_id!r}: {exc}"
+                    f"HistoryRepo().commit_session failed for {req.session_id!r}: {exc}"
                 ) from exc
 
     # Flip the status row. Routing through transition refuses illegal edges
@@ -329,13 +269,33 @@ def commit_session(req: CommitRequest) -> CommitResult:
         )
 
     if req.emit_metrics and write_mode == "pending":
-        _emit_commit_metrics(
-            req.session_id,
-            drain=drain,
-            final_status="committed",
-            write_mode=write_mode,
-            commit_duration_ms=commit_duration_ms,
+        from javdb.storage.drift_io import append_jsonl_record
+        from javdb.storage.sessions.lifecycle_helpers import attach_run_identity
+        from javdb.storage.sessions.pending_verify import (
+            build_pending_verify_record,
         )
+
+        stats_read_error = False
+        try:
+            stats = HistoryRepo().pending_session_stats(req.session_id)
+        except Exception:
+            stats = {}
+            stats_read_error = True
+        record = build_pending_verify_record(
+            req.session_id,
+            source="commit_session_lib",
+            write_mode=write_mode,
+            final_status="committed",
+            drain=drain,
+            stats=stats,
+            commit_attempts=1,
+            commit_duration_ms=commit_duration_ms,
+            shadow_audit_enabled=False,
+            shadow_audit_result=None,
+            stats_read_error=stats_read_error,
+        )
+        attach_run_identity(record, req.session_id)
+        append_jsonl_record(record)
 
     return CommitResult(
         session_id=req.session_id,

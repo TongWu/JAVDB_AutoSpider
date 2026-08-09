@@ -68,6 +68,14 @@ _MAX_RETRIES = _env_int("D1_MAX_RETRIES", 5)
 _RETRY_BASE_SEC = _env_float("D1_RETRY_BASE_SEC", 1.0)
 _RETRY_MAX_SLEEP_SEC = _env_float("D1_RETRY_MAX_SLEEP_SEC", 30.0)
 
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 # JSON numbers are parsed as IEEE-754 doubles on Cloudflare's D1 /query path.
 # Integers with |x| > 2**53-1 lose precision (e.g. application snowflake session
 # ids), desynchronizing dual-write SQLite vs D1.  SQLite accepts a STRING bind
@@ -128,18 +136,39 @@ _EXPORT_LOCK_KEYWORDS = (
     "long-running export",
 )
 _EXPORT_LOCK_BACKOFF_FLOOR_SEC = _env_float("D1_EXPORT_LOCK_FLOOR_SEC", 15.0)
+_INTERNAL_ERROR_BACKOFF_FLOOR_SEC = _env_float("D1_INTERNAL_ERROR_FLOOR_SEC", 2.0)
 
 
 class D1Error(RuntimeError):
     """Raised when the D1 API returns an error response."""
 
 
+class D1RecoveryBlockerError(RuntimeError):
+    """Raised when queued D1 writes are blocked by unresolved recovery work."""
+
+
 class D1TransientError(D1Error):
     """Recoverable: 5xx, 429, network timeout/connection error, D1_RESET_DO, etc."""
+
+    d1_recovery_outbox_required: bool = False
+    d1_recovery_durable: bool = False
+    is_export_lock: bool = False
+    retry_after: Optional[str] = None
+    is_internal_error: bool = False
 
 
 class D1PermanentError(D1Error):
     """Non-recoverable: SQL syntax error, FK/unique violation, 4xx (except 429)."""
+
+
+class D1CircuitOpenError(D1Error):
+    """Terminal: D1 stayed unavailable past the circuit breaker's max-open window.
+
+    Deliberately NOT a D1TransientError (ADR-056 D5): D1AccessPort.flush()'s
+    ``except D1TransientError`` recovery-outbox handler must not capture it, so
+    the run fails fast into the existing cleanup-on-failure rollback rather than
+    durably queueing writes for a later replay (which would risk BFR-020).
+    """
 
 
 class D1Cursor:
@@ -347,7 +376,7 @@ class D1Connection:
         pending = status["pending_groups"].get(ordering_key, [])
         dead_lettered = status["dead_lettered_groups"].get(ordering_key, [])
         if pending or dead_lettered:
-            raise RuntimeError(
+            raise D1RecoveryBlockerError(
                 f"unresolved D1 recovery work for ordering key {ordering_key}; "
                 "drain it before committing the session"
             )

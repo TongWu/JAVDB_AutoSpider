@@ -44,7 +44,7 @@ import sys
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, Iterator, List, Optional, Union
+from typing import Any, Callable, Iterable, Iterator, List, Optional, Union
 from urllib.parse import urlparse
 
 from javdb.infra.logging import get_logger
@@ -76,6 +76,7 @@ from javdb.spider.runtime.config import (
     CF_BYPASS_SERVICE_PORT,
     CF_BYPASS_ENABLED,
     CF_BYPASS_PORT_MAP,
+    CF_BYPASS_VIA_PROXY,
     JAVDB_SESSION_COOKIE,
     PROXY_POOL,
     PROXY_POOL_MAX_FAILURES,
@@ -179,7 +180,7 @@ class EngineTask:
     ``url`` is the target to fetch.  ``meta`` carries arbitrary caller data
     that is round-tripped back in the corresponding :class:`EngineResult`.
     ``entry_index`` and ``failed_proxies`` satisfy the duck-typing contract
-    required by :class:`~scripts.spider.fetch.login_coordinator.LoginCoordinator`.
+    required by :class:`~javdb.spider.fetch.login_coordinator.LoginCoordinator`.
 
     ``priority`` controls dequeue order when the engine uses a priority queue
     (lower values are dequeued first).  Default ``0`` preserves FIFO behaviour
@@ -193,7 +194,7 @@ class EngineTask:
     task).  Speculative tasks are never re-queued on failure.
 
     ``login_verified_after_refresh`` is set by
-    :class:`~scripts.spider.fetch.login_coordinator.LoginCoordinator` after a
+    :class:`~javdb.spider.fetch.login_coordinator.LoginCoordinator` after a
     successful auto-login + fixed-page verification cycle.  Once set, any
     further :class:`LoginRequired` raised while the *logged-in worker* is
     processing this task is treated as a page/proxy issue (re-routed to a
@@ -255,7 +256,7 @@ class LoginRequired(Exception):
     """Raised by :meth:`WorkerContext.fetch` when a login page is detected.
 
     The engine's internal run-loop catches this and routes the task to the
-    shared :class:`~scripts.spider.fetch.login_coordinator.LoginCoordinator`.
+    shared :class:`~javdb.spider.fetch.login_coordinator.LoginCoordinator`.
     Callers should **not** catch this inside their *process_fn*.
     """
 
@@ -330,7 +331,7 @@ class WorkerContext:
     """Execution context passed to *process_fn* inside each worker thread.
 
     Provides fetch methods backed by the worker's per-proxy
-    :class:`~utils.infra.request_handler.RequestHandler`, with automatic CF bypass
+    :class:`~javdb.infra.request.RequestHandler`, with automatic CF bypass
     fallback and login-page detection.
     """
 
@@ -493,7 +494,7 @@ class _EngineWorker(threading.Thread):
     """Worker thread bound to a single proxy.
 
     Satisfies the duck-typing contract of
-    :class:`~scripts.spider.fetch.login_coordinator.LoginCoordinator`::
+    :class:`~javdb.spider.fetch.login_coordinator.LoginCoordinator`::
 
         worker_id:    int
         proxy_name:   str
@@ -645,6 +646,7 @@ class _EngineWorker(threading.Thread):
                 cf_bypass_service_port=CF_BYPASS_SERVICE_PORT,
                 cf_bypass_port_map=CF_BYPASS_PORT_MAP,
                 cf_bypass_enabled=CF_BYPASS_ENABLED,
+                cf_bypass_via_proxy=CF_BYPASS_VIA_PROXY,
                 cf_bypass_max_failures=3,
                 cf_turnstile_cooldown=_cd,
                 fallback_cooldown=_cd,
@@ -1042,10 +1044,18 @@ class _EngineWorker(threading.Thread):
                         self._consecutive_none_count,
                     )
                     if self._consecutive_none_count >= self._none_ban_threshold:
+                        ban_reason = (
+                            f"{self._consecutive_none_count} consecutive "
+                            "None returns"
+                        )
+                        # This is a local soft-ban signal, not a CF wall /
+                        # JavDB ban-page signal, so it intentionally flows
+                        # through the Worker's generic fallback TTL.
                         get_ban_manager().add_ban(
                             self.proxy_name,
                             self.proxy_config.get("http")
                             or self.proxy_config.get("https"),
+                            ban_reason,
                         )
                         logger.warning(
                             "%s Soft-banned after %d consecutive None returns",
@@ -1053,10 +1063,7 @@ class _EngineWorker(threading.Thread):
                         )
                         self._handle_proxy_banned(
                             task,
-                            reason=(
-                                f"{self._consecutive_none_count} consecutive "
-                                "None returns"
-                            ),
+                            reason=ban_reason,
                         )
                         break
                     requeue_front(self.task_queue, task)
@@ -1233,7 +1240,7 @@ class ParallelFetchBackend(FetchBackend):
     """Parallel fetch engine backed by one worker per proxy.
 
     Manages worker lifecycle, task/result queues, and
-    :class:`~scripts.spider.fetch.login_coordinator.LoginCoordinator` integration.
+    :class:`~javdb.spider.fetch.login_coordinator.LoginCoordinator` integration.
     The caller supplies a *process_fn* that receives a :class:`WorkerContext`
     and an :class:`EngineTask` and returns an arbitrary result (or ``None``
     on failure).
@@ -1718,6 +1725,46 @@ class ParallelFetchBackend(FetchBackend):
 
         return orphaned
 
+    def drain_remaining(self) -> Iterator[EngineResult]:
+        """Yield results already produced by workers, non-blocking.
+
+        Intended to be called **after** :meth:`shutdown` — once workers are
+        joined no new results can race in — to salvage results that workers
+        had produced but the caller had not yet consumed (e.g. partial
+        progress after a ``KeyboardInterrupt``). Drains only the result
+        queue; tasks that never ran are returned by :meth:`shutdown` as
+        ``orphaned`` and are **not** yielded here.
+        """
+        while True:
+            try:
+                result = self._result_queue.get_nowait()
+            except queue_module.Empty:
+                return
+            with self._count_lock:
+                self._received += 1
+            yield result
+
+    def run(self, tasks: Iterable[EngineTask]) -> Iterator[EngineResult]:
+        """Own the full lifecycle for a finite task list (happy-path helper).
+
+        Starts the engine, submits every task, marks done, yields results, and
+        shuts down in a ``finally``. This is **not** the interrupt-salvage
+        path: if ``KeyboardInterrupt`` lands in the caller's loop body Python
+        raises ``GeneratorExit`` here and the buffered results cannot be
+        re-yielded. Callers that must salvage partial progress on interrupt
+        should drive the explicit lifecycle (``start`` / ``submit_task`` /
+        ``mark_done`` / ``results``) and call :meth:`drain_remaining` in their
+        ``except`` block instead.
+        """
+        try:
+            self.start()
+            for task in tasks:
+                self.submit_task(task)
+            self.mark_done()
+            yield from self.results()
+        finally:
+            self.shutdown()
+
     def runtime_state(self) -> FetchRuntimeState:
         return FetchRuntimeState(
             use_proxy=self._runtime_state.use_proxy,
@@ -1909,6 +1956,12 @@ class FetchEngine:
 
     def shutdown(self, *, timeout: float = 10) -> List[EngineTask]:
         return self._backend.shutdown(timeout=timeout)
+
+    def drain_remaining(self) -> Iterator[EngineResult]:
+        return self._backend.drain_remaining()
+
+    def run(self, tasks: Iterable[EngineTask]) -> Iterator[EngineResult]:
+        return self._backend.run(tasks)
 
     def runtime_state(self) -> FetchRuntimeState:
         return self._backend.runtime_state()

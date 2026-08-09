@@ -73,6 +73,11 @@ jobs:
       with:
         fetch-depth: 0
 
+    - name: Ensure Python in runner tool cache
+      uses: ./.github/actions/ensure-python
+      with:
+        python-version: '3.11'
+
     - name: Set up Python
       uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
       with:
@@ -146,8 +151,9 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      with:
-        lfs: true
+
+    - name: Ensure git-lfs and pull LFS objects
+      uses: ./.github/actions/ensure-git-lfs
 
     - name: Set up Python, venv, dependencies, optional Rust extension
       uses: ./.github/actions/setup-python-env
@@ -179,8 +185,9 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      with:
-        lfs: true
+
+    - name: Ensure git-lfs and pull LFS objects
+      uses: ./.github/actions/ensure-git-lfs
 
     - name: Set up Python, venv, dependencies, optional Rust extension
       uses: ./.github/actions/setup-python-env
@@ -238,6 +245,11 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
+    - name: Ensure Python in runner tool cache
+      uses: ./.github/actions/ensure-python
+      with:
+        python-version: '3.11'
+
     - name: Set up Python
       uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
       with:
@@ -262,6 +274,11 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+    - name: Ensure Python in runner tool cache
+      uses: ./.github/actions/ensure-python
+      with:
+        python-version: '3.12'
 
     - name: Set up Python
       uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6

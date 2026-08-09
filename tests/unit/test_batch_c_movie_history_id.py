@@ -24,12 +24,10 @@ sys.path.insert(0, project_root)
 
 from javdb.storage.db import (
     get_db,
-    db_commit_session_history,
-    db_stage_history_write,
-    db_create_report_session,
     generate_integer_id as _generate_integer_id,
-    _INT_ID_EPOCH_BASE_MS,
 )
+from javdb.storage.db._db_reports import db_create_report_session
+from javdb.storage.db._db_history_write import db_stage_history_write, db_commit_session_history
 from javdb.storage.dual_connection import (
     APPLICATION_GENERATED_ID_TABLES,
     DualConnection,
@@ -326,13 +324,11 @@ def test_movie_history_without_explicit_id_raises_on_lastrowid_mismatch(
     The dual guard must catch it for MovieHistory now that the table is
     guarded.
     """
-    from javdb.storage import dual_connection as _dual_module
-
     sqlite_conn = _make_movie_history_sqlite(tmp_path)
     fake_d1 = _FakeD1Connection(d1_lastrowid=999)
 
-    drift_path = tmp_path / "drift.jsonl"
-    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    drift_path = tmp_path / "D1" / "d1_drift.jsonl"
 
     dual = DualConnection(sqlite_conn, fake_d1, logical_name="history")
 
@@ -404,8 +400,6 @@ def test_torrent_history_without_explicit_id_raises_on_mismatch(
     monkeypatch, tmp_path
 ):
     """TorrentHistory also raises on lastrowid mismatch when Id absent."""
-    from javdb.storage import dual_connection as _dual_module
-
     sqlite_conn = _make_movie_history_sqlite(tmp_path)
 
     mh_id = _generate_integer_id()
@@ -416,8 +410,8 @@ def test_torrent_history_without_explicit_id_raises_on_mismatch(
     )
     sqlite_conn.commit()
 
-    drift_path = tmp_path / "drift2.jsonl"
-    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    drift_path = tmp_path / "D1" / "d1_drift.jsonl"
 
     fake_d1 = _FakeD1Connection(d1_lastrowid=999)
     dual = DualConnection(sqlite_conn, fake_d1, logical_name="history")

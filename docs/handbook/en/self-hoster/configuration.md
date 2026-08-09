@@ -104,6 +104,79 @@ summary of new torrents found.
 | `EMAIL_FROM` | `str` | `''` | Sender address shown in notification emails. |
 | `EMAIL_TO` | `str` | `''` | Recipient address for notification emails. |
 
+### Notification Backends (ADR-039)
+
+Pipeline run notifications fan out to one or more pluggable backends selected by
+`NOTIFY_BACKENDS`, with per-backend failure isolation — one backend failing does
+not block the others. The `email` backend sends the full HTML report (above); any
+other active backend (e.g. `telegram`) receives a condensed run summary.
+
+| Variable | Type | Default | Description |
+|---|---|---|---|
+| `NOTIFY_BACKENDS` | `list[str]` \| `str` | `['email']` | Active notify backends, tried in order. Defaults to email only, so existing setups are unchanged. Accepts a list (`['email', 'telegram']`) or a CSV string (`'email, telegram'`). Set `['telegram']` to disable the email report entirely. Unknown or unconfigured backends are skipped and reported in the returned results (`NotifyResult(ok=False)`). |
+| `TELEGRAM_BOT_TOKEN` | `str` | `''` | Telegram bot token from [@BotFather](https://t.me/BotFather). Required when `'telegram'` is active. |
+| `TELEGRAM_CHAT_ID` | `str` | `''` | Target chat or channel id the bot posts to (e.g. `-1001234567890`). Required when `'telegram'` is active. |
+
+**Enabling Telegram:** create a bot via @BotFather to get a token, obtain your
+chat id (message the bot, then read `https://api.telegram.org/bot<token>/getUpdates`),
+set both values, and add `'telegram'` to `NOTIFY_BACKENDS`:
+
+```python
+NOTIFY_BACKENDS = ['email', 'telegram']
+TELEGRAM_BOT_TOKEN = '123456:ABC-DEF...'
+TELEGRAM_CHAT_ID = '987654321'
+```
+
+The pipeline notification step (`apps.cli.notify.email`) routes through this
+fan-out: the `email` backend keeps its full HTML report, while secondary backends
+(e.g. Telegram) receive the run verdict plus the condensed summary. When `email`
+is not in `NOTIFY_BACKENDS`, the report is still computed for the summary but the
+SMTP send is suppressed, and the exit code reflects the secondary fan-out rather
+than email delivery.
+
+### Downloader Backend (ADR-039)
+
+Controls which torrent client receives `add-torrent` calls from the demonstrator
+CLI (`apps.cli.download.add`). Single-select — only one backend is active at a
+time. Defaults to `'qb'`, so existing deployments are unchanged.
+
+| Variable | Type | Default | Description |
+|---|---|---|---|
+| `DOWNLOADER_BACKEND` | `str` | `'qb'` | Active downloader backend. `'qb'` routes to qBittorrent (existing client). `'transmission'` routes to Transmission via JSON-RPC. Unknown values are rejected at dispatch time with a `DownloadResult(ok=False)`. |
+| `TRANSMISSION_HOST` | `str` | `'192.168.1.10'` | Transmission daemon host. Only used when `DOWNLOADER_BACKEND = 'transmission'`. |
+| `TRANSMISSION_PORT` | `int` | `9091` | Transmission RPC port (default 9091). |
+| `TRANSMISSION_USERNAME` | `str` | `''` | Transmission RPC username. Leave empty if authentication is disabled. |
+| `TRANSMISSION_PASSWORD` | `str` | `''` | Transmission RPC password. |
+| `TRANSMISSION_DOWNLOAD_DIR` | `str` | `'/downloads'` | Default save directory passed to Transmission on each torrent-add. |
+
+**Switching to Transmission:**
+
+```python
+DOWNLOADER_BACKEND = 'transmission'
+TRANSMISSION_HOST = '192.168.1.10'
+TRANSMISSION_PORT = 9091
+TRANSMISSION_USERNAME = 'admin'
+TRANSMISSION_PASSWORD = 'secret'
+TRANSMISSION_DOWNLOAD_DIR = '/media/downloads'
+```
+
+> **Note:** `DOWNLOADER_BACKEND` controls the demonstrator CLI only. The main
+> pipeline upload path (`apps.cli.qb.uploader`) remains qB-only in Phase 2.
+
+### Magnet Sources / Indexers (ADR-054 WS3)
+
+External magnet aggregation is server-side and Python-backend only. The
+`magnet_aggregation` capability is true only when `MAGNET_SOURCES` is non-empty;
+the Cloudflare Worker backend reports it as false.
+
+| Variable | Type | Default | Description |
+|---|---|---|---|
+| `MAGNET_SOURCES` | `list[str]` \| `str` | `[]` | Active external magnet indexers, queried in fan-out. Default empty means the feature is off. Accepts a list (`['javbus', 'sukebei']`) or a CSV string (`'javbus, sukebei'`). |
+| `JAVBUS_BASE_URL` | `str` | `'https://www.javbus.com'` | JAVBUS indexer base URL. Override only for a trusted mirror. |
+| `SUKEBEI_BASE_URL` | `str` | `'https://sukebei.nyaa.si'` | Sukebei indexer base URL. Override only for a trusted mirror. |
+| `MAGNET_SOURCES_USE_PROXY` | `bool` | `True` | Route indexer fetches through the configured proxy pool. Recommended because external indexer fetches can trigger bans or legal/terms-of-service risk. Avoid aggressive crawling. |
+| `MAGNET_SOURCE_TIMEOUT_SECONDS` | `float` | `10.0` | Per-source wall-clock budget for external indexer fan-out. A slow source returns a timeout result without blocking faster sources. |
+
 ---
 
 ## 4. Proxy Configuration
@@ -192,10 +265,14 @@ The full service URL is built dynamically at runtime:
 - Without proxy: `http://localhost:{CF_BYPASS_SERVICE_PORT}`
 - With proxy pool: `http://{PROXY_IP}:{CF_BYPASS_SERVICE_PORT}` (uses the IP
   of the current proxy)
+- With proxy pool **and** `CF_BYPASS_VIA_PROXY=True`:
+  `http://127.0.0.1:{CF_BYPASS_SERVICE_PORT}` reached *through* the current
+  proxy — lets the bypass service bind to loopback only.
 
 | Variable | Type | Default | Description |
 |---|---|---|---|
 | `CF_BYPASS_SERVICE_PORT` | `int` | `8000` | Port the CloudFlare bypass service listens on. Must match the port configured in the service's `docker-compose.yml`. |
+| `CF_BYPASS_VIA_PROXY` | `bool` | `False` | When `True`, reach each proxy's bypass service by tunnelling through that proxy to `127.0.0.1:{port}` instead of dialling `{proxy_ip}:{port}` directly. Lets every bypass service bind to loopback only (off the public internet) without a firewall or VPN. Requires the proxy software to allow forwarding to `127.0.0.1` (Clash/mihomo: OK by default; Squid: allow `to_localhost`). |
 
 ---
 
@@ -209,6 +286,7 @@ Controls page range and filtering thresholds for the scraping phases.
 | `PAGE_END` | `int` | `20` | Last page number to scrape (inclusive). |
 | `PHASE2_MIN_RATE` | `float` | `4.0` | Minimum user rating for a movie to qualify in Phase 2 (high-rated non-subtitle entries). |
 | `PHASE2_MIN_COMMENTS` | `int` | `100` | Minimum comment count for a movie to qualify in Phase 2. |
+| `DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST` | `list[str]` | `['western_studio_date']` | Daily-only family blacklist applied after index parsing and sentinel accounting. The parser still recognizes these families, and ad-hoc ingestion bypasses this blacklist. In GitHub Actions, set repo Variable `DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST_JSON` to a JSON array such as `[]` to opt out of the static default. |
 | `BASE_URL` | `str` | `'https://javdb.com'` | Base URL for JavDB. Change only if using a mirror. |
 
 ---
@@ -394,6 +472,16 @@ download" priority inside torrents. For newly added torrents, it waits up to
 | `QB_FILE_FILTER_MIN_SIZE_MB` | `int` | `100` | Minimum file size in MB. Files smaller than this threshold are set to "do not download" priority. |
 | `QB_FILE_FILTER_LOG_FILE` | `str` | `'logs/qb_file_filter.log'` | Log file path for the file filter script. |
 
+### Torrent Quality Evidence (ADR-024)
+
+| Variable | Type | Default | Description |
+|---|---|---|---|
+| `TORRENT_QUALITY_EVIDENCE_ENABLED` | `bool` | `False` | Enable shadow evidence collection for production-selected/recently added torrents whose qBittorrent metadata is available. |
+| `TORRENT_QUALITY_POLICY_MODE` | `str` | `'shadow'` | Phase 1 only honours `shadow`; `assist` and `enforce` are reserved for later phases. |
+| `TORRENT_QUALITY_CATEGORIES` | `str` | `''` | Optional JSON array of qBittorrent categories to scan, e.g. `'["Daily Ingestion"]'`. Empty direct runs skip collection rather than scanning every category. |
+
+See [Torrent Quality Evidence](../ops/torrent-quality-evidence.md).
+
 ---
 
 ## 15. Media Closed Loop
@@ -489,6 +577,12 @@ runtime by various modules.
 | `COMMIT_SESSION_BULK` | `str` | enabled | Pending session commits use the bulk path by default. Set `'0'`, `'false'`, `'no'`, `'off'`, or an empty value to fall back to the per-href path. |
 | `D1_RECOVERY_OUTBOX_ENABLED` | `str` | `''` | ADR-010 Phase 2 gate. Set `'1'` to allow safe D1 write failures to queue in `reports/D1/d1_recovery_outbox.jsonl`; D1 mode still fails the write, and dual mode blocks commit until the ordering key drains. |
 | `D1_BATCHING_ENABLED` | `str` | `''` | Set `'1'` to enable ADR-010 Phase 3 safe-path micro-batching for explicitly batch-safe operations. Ordinary SQL remains synchronous. |
+| `D1_CIRCUIT_BREAKER_ENABLED` | `bool` | `true` | ADR-056 circuit breaker master switch (parsed by `_env_bool`; accepts `1`/`true`/`yes`/`on`). Set `false` to disable the per-endpoint breaker entirely. Read at breaker construction time. |
+| `D1_BREAKER_TRIP_THRESHOLD` | `int` | `3` | Consecutive transient 5xx responses required to trip the breaker OPEN. |
+| `D1_BREAKER_PROBE_INTERVAL_SEC` | `float` | `5.0` | Interval in seconds between `SELECT 1` health-check probes while the breaker is OPEN. |
+| `D1_BREAKER_MAX_OPEN_SEC` | `int` | `900` | Maximum seconds the breaker stays OPEN before raising `D1CircuitOpenError`. Recovery/cleanup workflows cap this to `120` via `D1_BREAKER_MAX_OPEN_SEC_RECOVERY`. |
+| `D1_BREAKER_HALF_OPEN_SUCCESSES` | `int` | `1` | Successful probes needed to close the breaker and resume normal traffic. |
+| `D1_INTERNAL_ERROR_FLOOR_SEC` | `float` | `2.0` | Minimum backoff floor (seconds) for inner-retry delays on D1 code-7500 internal errors. |
 | `D1_FLUSH_INTERVAL_MS` | `int` | `250` | Maximum safe-batch wait window when D1 batching is enabled. |
 | `D1_STARTUP_REPLAY_ENABLED` | `str` | `''` | ADR-010 Phase 4 gate. Set `'1'` to drain non-dead-lettered recovery work when a process first opens a D1 or Dual connection. |
 | `D1_STARTUP_REPLAY_MAX_ORDERING_KEYS` | `int` | `25` | Maximum ordering keys drained during automatic startup replay. |

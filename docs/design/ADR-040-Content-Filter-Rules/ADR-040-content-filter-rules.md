@@ -2,7 +2,7 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Accepted — Phase 1 implemented; later phases pending                  |
+| **Status**  | Accepted — Phase 1-2 implemented; Phase 3 superseded by ADR-054 WS2; later phases pending |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
 | **Related** | [ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.md), [ADR-025](../ADR-025-User-Preference-Model/ADR-025-user-preference-model.md), [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md), [ADR-038](../ADR-038-Agentic-Operator-MCP/ADR-038-agentic-operator-mcp-surface.md) |
@@ -75,10 +75,17 @@ filter — neither weakens the other.
 **D5. Phase 1 dimensions come from the existing parse.** From `MovieDetail`
 (`actors` with name/href/**gender**, `tags`): **actor blacklist** (exclude by
 name/href), **tag include/exclude**, **gender** (e.g. require a female lead,
-exclude all-male). **Age is deferred (Phase 2)** — it needs an actor-profile
-lookup the pipeline does not do today. **Subscriptions (whitelist that bypasses the
-rating threshold) are deferred (Phase 2)** — they are the include counterpart and
-a larger change.
+exclude all-male). **Age is Phase 2 (IMP-ADR040-02).** Correction to the original Context aside:
+javdb's own `/actors/<id>` page is a movie *listing* page and carries **no
+birthdate**, so age cannot come from a javdb lookup. Phase 2 instead resolves
+birthdates **best-effort from minnano-av** (matched by actor name), cached in
+`ActorMetadata`, computing age at the movie's release date. Actors with no
+resolved birthdate have unknown age and never cause a drop. (xslist was weighed as
+a fallback but deferred — it cannot match javdb's Japanese names.)
+**Subscriptions are superseded by [ADR-054 WS2](../_archive/ADR-054-User-Intent-Discovery-Layer/ADR-054-user-intent-discovery-layer.md)**:
+the rating-threshold bypass is now part of one unified Subscription domain
+(`ActorSubscription` + `NewWorks`) rather than an ADR-040-only whitelist. The
+bypass is pinned by `tests/unit/test_adhoc_bypasses_rating_gate.py`.
 
 **D6. Deterministic and explainable; orthogonal to the preference model.** The
 engine returns a `FilterDecision(keep, reasons)`; drop reasons are surfaced (stats
@@ -112,36 +119,57 @@ queueing.
 - **Attribute coverage is parser-bound** — gender/tags only; age needs the deferred
   actor-profile enrichment.
 - **Rule-management surface** — Phase 1 manages rules via CLI; web/MCP management is
-  Phase 2.
+  Phase 4.
 
 ## Implementation Roadmap
 
-| Phase | IMP | Ships | Deferred |
-| --- | --- | --- | --- |
-| Phase 1 — Exclude + attribute | [IMP-ADR040-01](IMP-ADR040-01-content-filter.md) | `ContentFilterRule` table + repo; `content_filter` engine (actor blacklist, tag include/exclude, gender); post-detail filter stage; a CLI to manage rules | age; subscriptions; web/MCP management |
-| Phase 2 — Subscriptions + age | IMP-ADR040-02 (stub) | D1 subscriptions (whitelist bypassing the rating threshold); age filter via actor-profile enrichment; web/MCP rule management | — |
-| Phase 3 — Compose (optional) | IMP-ADR040-03 (stub) | combine with the ADR-025 preference score | — |
+| Phase | IMP | Ships |
+| --- | --- | --- |
+| Phase 1 — Exclude + attribute | IMP-ADR040-01 (done) | actor/tag/gender rules |
+| Phase 2 — Age filter | IMP-ADR040-02 (done) | `age` dimension; external-source enrichment (minnano-av; xslist deferred); `ActorMetadata` cache |
+| Phase 2b — Regex + release-date | IMP-ADR040-03 (done) | `regex_exclude`/`regex_include` (actor/tag); `release_date` `before`/`after`; no schema migration (reuses the generic triple) |
+| Phase 3 — Subscriptions | Superseded by [ADR-054 WS2](../_archive/ADR-054-User-Intent-Discovery-Layer/IMP-ADR054-02-subscriptions.md) | unified actor subscriptions + new-works feed; rating threshold bypass occurs by reusing the AdHoc scrape path (no ADR-040 bypass code), pinned by `tests/unit/test_adhoc_bypasses_rating_gate.py` |
+| Phase 4 — Web/MCP rule mgmt | IMP-ADR040-04 (web CRUD done; MCP future) | dual-backend `/api/content-filter` REST CRUD + `content_filter` flag + Settings page + read-side Movies overlay; MCP still blocked on ADR-038 |
+| Phase 5 — Compose (optional) | IMP-ADR040-05 (stub) | combine with the ADR-025 preference score |
 
-Phase 1 is additive and backward-compatible (no rules → no change). Phases 2/3
-widen the include side and attribute coverage.
+Phase 1 is additive and backward-compatible (no rules → no change). Phase 2
+widens attribute coverage. The former Phase 3 is no longer an ADR-040 phase; it
+is owned by ADR-054 WS2 so "Subscription" has one domain meaning.
+
+> **IMP-number note (WS4a, 2026-06-15):** the ADR-054 User-Intent campaign
+> repurposed the IMP-ADR040-03 / -04 numbers — **IMP-ADR040-03 is now the
+> regex/release-date engine** (Phase 2b above) and **IMP-ADR040-04 is the
+> web-CRUD surface** (Phase 4). The legacy "Subscriptions" idea once sketched as
+> IMP-ADR040-03 has been **relocated to ADR-054 WS2** (the Phase 3 row above now
+> records that supersede); the `(stub)` label on Phase 5 predates this and is
+> reconciled by its new owner.
 
 ### Explicit non-goals (YAGNI)
 
 - **No streaming / frequent cron** — the pivot; the daily cadence stays.
 - **No age filter in Phase 1** — needs actor-profile enrichment (Phase 2).
-- **No subscriptions in Phase 1** — the include/whitelist side is Phase 2.
+- **No subscriptions in Phase 1** — the include/whitelist side was deferred and
+  is now superseded by ADR-054 WS2.
 - **No ML** — deterministic rules only; preference scoring is ADR-022/025.
 - **No rewrite of the rating/rater filter** — a parallel second gate (D3).
 
 ## Domain Language (additions for CONTEXT.md)
 
 - **Content filter rule** — a row in `ContentFilterRule`: a dimension (actor/tag/
-  gender), a mode (exclude/include/…), and a value.
+  gender/age/release_date), a mode (exclude/include/regex_exclude/regex_include/
+  require_lead/exclude_all_male/min_age/max_age/before/after), and a value.
+- **Regex rule** — a `regex_exclude`/`regex_include` rule whose value is a Python
+  `re.search` pattern; a bad pattern fails open (never drops, never raises).
+- **Release-date rule** — a `release_date` `before`/`after` rule comparing the
+  movie's parsed `release_date` to an ISO bound; an absent/unparseable date never
+  drops.
 - **Blacklist** — exclude-mode content filter rules (highest precedence).
 - **Attribute filter** — a rule on a parsed attribute (gender, tag).
 - **Filter decision** — the engine's `keep` + `reasons` for one movie.
-- **Subscription** — (Phase 2) a followed entity whose new releases bypass the
-  rating threshold.
+- **Subscription** — superseded by ADR-054 WS2: a followed entity whose new
+  releases surface in a New-Works feed and bypass the rating threshold through
+  the AdHoc scrape path; the bypass is a property of `is_adhoc_mode` selection,
+  not a new index-gate hook.
 
 ## Alternatives Considered
 
@@ -166,3 +194,36 @@ widen the include side and attribute coverage.
   three phases scoped, IMPs pending).
 - 2026-05-30: Phase 1 implemented via [IMP-ADR040-01](IMP-ADR040-01-content-filter.md);
   ADR remains active for Phase 2/3.
+- 2026-06-04: Phase-2 scope corrected — javdb actor pages have no birthdate; age
+  filtering uses minnano-av (best-effort, by name), age computed at release date.
+  Roadmap re-numbered (age=Phase 2; subscriptions=Phase 3; web/MCP=Phase 4).
+  Planned in [IMP-ADR040-02](IMP-ADR040-02-age-filter.md).
+- 2026-06-07: Phase 2 implemented via [IMP-ADR040-02](IMP-ADR040-02-age-filter.md)
+  (PR #180) — `age` dimension, minnano-av enrichment, `ActorMetadata` cache. ADR
+  remains active for Phases 3-5.
+- 2026-06-15: Content-filter engine extended with **regex** (`regex_exclude` /
+  `regex_include` on actor/tag) and **release-date** (`release_date` dimension,
+  `before` / `after`) modes via [IMP-ADR040-03](IMP-ADR040-03-content-filter-regex-date.md).
+  Both reuse the generic `(dimension, mode, value)` triple with **no schema
+  migration** — the Phase-2 (age) no-migration template. Engine + CLI only
+  ([MAIN]); the dual-backend web CRUD `/api/content-filter` + SPA Settings/overlay
+  surface remain [IMP-ADR040-04](IMP-ADR040-04-content-filter-web-crud.md).
+- 2026-06-15: Former Phase 3 "Subscriptions" superseded by
+  [ADR-054 WS2](../_archive/ADR-054-User-Intent-Discovery-Layer/IMP-ADR054-02-subscriptions.md).
+  WS2 defines the single Subscription domain (`ActorSubscription` + `NewWorks`)
+  and reuses the AdHoc scrape path, whose phase-2 selection bypasses the
+  rating/rater threshold by construction. ADR-040 no longer owns subscription
+  bypass code; the behavior is pinned by
+  `tests/unit/test_adhoc_bypasses_rating_gate.py`.
+- 2026-06-15: Phase 4 (web CRUD) shipped via [IMP-ADR040-04](IMP-ADR040-04-content-filter-web-crud.md):
+  a dual-backend `/api/content-filter` CRUD API (Python FastAPI router delegating to
+  `ContentFilterRepo`; TS Hono Worker re-implementing the same SQL), a `content_filter`
+  capability flag (both backends probe `ContentFilterRule` in **REPORTS_DB**), a
+  `SettingsFilterRulesPage.vue` CRUD table, and a read-side Movies overlay that dims
+  rule-matched rows (ADR-054 D6 — presentation only). **No schema migration.** The
+  `(dimension, mode)` allow-list stays canonical in the CLI, imported by the Python router,
+  hand-mirrored in TS, and pinned by a cross-backend parity golden — reconciled to the 13/12
+  pairs that include the IMP-03 regex/release_date modes. The web boundary validates
+  `release_date` (strict ISO) but **not** regex compile-ability: JS `new RegExp` and Python
+  `re` dialects diverge (inline flags like `(?i)` throw in JS), so the engine's fail-open is
+  the authoritative guard. MCP management remains future (ADR-038). ADR stays active for Phase 5.

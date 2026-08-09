@@ -4,7 +4,7 @@
 **Date**: 2026-05-31
 **Severity**: High
 **Affected**: `javdb/ops/diagnosis/persistence.py` (`persist_incident`), `apps/api/routers/diagnostics.py` (`_list_ops_incident_records`, `_get_ops_incident_record`)
-**Related**: [ADR-026](../ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md) (AI operations diagnosis — owns the `OpsIncidents` table), [ADR-035](../ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md) (site-contract sentinel — its IMP plan carries the same broken call form), `CLAUDE.md` → "Database Access" (the example that propagated the wrong form)
+**Related**: [ADR-026](../_archive/ADR-026-AI-Operations-Diagnosis/ADR-026-ai-operations-diagnosis.md) (AI operations diagnosis — owns the `OpsIncidents` table), [ADR-035](../_archive/ADR-035-Site-Contract-Sentinel/ADR-035-site-contract-drift-sentinel.md) (site-contract sentinel — its IMP plan carries the same broken call form), `CLAUDE.md` → "Database Access" (the example that propagated the wrong form)
 
 ---
 

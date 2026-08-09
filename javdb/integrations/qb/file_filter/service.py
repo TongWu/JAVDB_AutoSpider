@@ -14,8 +14,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from datetime import datetime, timedelta
-from urllib.parse import urlsplit
+from datetime import datetime
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 
@@ -65,11 +64,14 @@ from javdb.proxy.policy import (
 )
 from javdb.infra.request import create_proxy_helper_from_config
 from javdb.integrations.qb.config import (
+    activate_qb_base_url,
+    ordered_qb_base_urls,
     qb_allow_insecure_http,
     qb_base_url_candidates,
     masked_qb_base_url,
     qb_verify_tls,
 )
+from javdb.integrations.qb import readonly as _qb_readonly
 
 # Global proxy helper instance
 global_proxy_helper = None
@@ -90,24 +92,14 @@ QB_VERIFY_TLS = qb_verify_tls()
 def _set_active_qb_base_url(base_url):
     """Persist the qBittorrent endpoint that proved reachable."""
     global QB_BASE_URL, QB_MASKED_URL, QB_ALLOW_INSECURE_HTTP
-    QB_BASE_URL = base_url.rstrip('/')
-    if urlsplit(QB_BASE_URL).scheme == 'http':
-        QB_ALLOW_INSECURE_HTTP = True
-    QB_MASKED_URL = masked_qb_base_url(
-        QB_BASE_URL,
-        allow_insecure_http=QB_ALLOW_INSECURE_HTTP,
+    QB_BASE_URL, QB_MASKED_URL, QB_ALLOW_INSECURE_HTTP = activate_qb_base_url(
+        base_url, QB_ALLOW_INSECURE_HTTP,
     )
 
 
 def _ordered_qb_base_urls():
     """Try the last known-good URL first, then the remaining candidates."""
-    ordered = []
-    if QB_BASE_URL:
-        ordered.append(QB_BASE_URL)
-    for candidate in QB_BASE_URL_CANDIDATES:
-        if candidate not in ordered:
-            ordered.append(candidate)
-    return ordered
+    return ordered_qb_base_urls(QB_BASE_URL_CANDIDATES, QB_BASE_URL)
 
 
 def get_proxies_dict(module_name, use_proxy_flag):
@@ -293,28 +285,11 @@ def get_recent_torrents(session, days=2, category=None, categories=None, use_pro
 
         if response.status_code == 200:
             torrents = response.json()
-
-            # Calculate cutoff timestamp (start of the first included day)
-            # days=1 means today only, days=2 means today and yesterday, etc.
-            cutoff_date = datetime.now() - timedelta(days=days - 1)
-            cutoff_timestamp = int(cutoff_date.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
-
-            # Filter torrents by added_on timestamp and category
-            recent_torrents = []
-            for torrent in torrents:
-                added_on = torrent.get('added_on', 0)
-                torrent_category = torrent.get('category', '')
-
-                # Check time filter
-                if added_on < cutoff_timestamp:
-                    continue
-
-                # Check category filter if specified
-                if category_filter:
-                    if torrent_category not in category_filter:
-                        continue
-
-                recent_torrents.append(torrent)
+            recent_torrents = _qb_readonly.filter_recent_torrents(
+                torrents,
+                days=days,
+                categories=category_filter,
+            )
 
             if category_filter:
                 logger.info(f"Found {len(recent_torrents)} torrents in categories {category_filter} added in the last {days} day(s)")
@@ -331,39 +306,19 @@ def get_recent_torrents(session, days=2, category=None, categories=None, use_pro
 
 
 def get_torrent_files(session, torrent_hash, use_proxy=False):
+    """Get list of files in a torrent (delegates to shared readonly helper).
+
+    Returns a list on success (possibly empty if metadata not ready) or None
+    on API failure.
     """
-    Get list of files in a torrent.
-
-    Args:
-        session: Requests session with login cookies
-        torrent_hash: Hash of the torrent
-        use_proxy: Whether to use proxy
-
-    Returns:
-        list: List of file info dictionaries on success (may be empty if metadata not ready)
-        None: On API failure or exception (to distinguish from empty metadata)
-    """
-    files_url = f'{QB_BASE_URL}/api/v2/torrents/files'
-    proxies = get_proxies_dict('qbittorrent', use_proxy)
-
-    try:
-        response = session.get(
-            files_url,
-            params={'hash': torrent_hash},
-            timeout=REQUEST_TIMEOUT,
-            proxies=proxies,
-            verify=QB_VERIFY_TLS,
-        )
-
-        if response.status_code == 200:
-            return response.json()  # Returns [] if metadata not ready, or list of files
-        else:
-            logger.warning(f"Failed to get files for torrent {torrent_hash}: {response.status_code}")
-            return None  # API failure - return None to distinguish from empty metadata
-
-    except requests.RequestException as e:
-        logger.error(f"Error getting files for torrent {torrent_hash}: {e}")
-        return None  # Request exception - return None to distinguish from empty metadata
+    return _qb_readonly.get_torrent_files(
+        session,
+        QB_BASE_URL,
+        torrent_hash,
+        proxies=get_proxies_dict('qbittorrent', use_proxy),
+        verify=QB_VERIFY_TLS,
+        timeout=REQUEST_TIMEOUT,
+    )
 
 
 def set_file_priority(session, torrent_hash, file_ids, priority, use_proxy=False):
@@ -478,26 +433,6 @@ def format_size(size_bytes):
     return f"{size_bytes:.2f} PB"
 
 
-def _recent_metadata_candidates(torrents, *, now=None, window_seconds=None):
-    """Return recently added torrents worth waiting on for metadata."""
-    if now is None:
-        now = time.time()
-    if window_seconds is None:
-        window_seconds = QB_FILE_FILTER_RECENT_METADATA_WINDOW_SECONDS
-    cutoff = now - max(0, window_seconds)
-    candidates = []
-    for torrent in torrents:
-        if not torrent.get('hash'):
-            continue
-        try:
-            added_on = int(float(torrent.get('added_on') or 0))
-        except (TypeError, ValueError):
-            continue
-        if added_on >= cutoff:
-            candidates.append(torrent)
-    return candidates
-
-
 def wait_for_metadata_readiness(
     session,
     torrents,
@@ -507,68 +442,20 @@ def wait_for_metadata_readiness(
     poll_interval_seconds=QB_FILE_FILTER_METADATA_POLL_INTERVAL_SECONDS,
     recent_window_seconds=QB_FILE_FILTER_RECENT_METADATA_WINDOW_SECONDS,
 ):
-    """Poll qBittorrent until most newly added torrents expose file metadata."""
-    candidates = _recent_metadata_candidates(
+    """Poll qBittorrent until most newly added torrents expose file metadata.
+
+    Delegates to the shared readonly helper, injecting this module's
+    ``get_torrent_files`` (which honours proxy/verify/base-url and stays
+    patchable in tests).
+    """
+    return _qb_readonly.wait_for_metadata_readiness(
         torrents,
-        window_seconds=recent_window_seconds,
+        fetch_files=lambda h: get_torrent_files(session, h, use_proxy),
+        max_wait_seconds=max_wait_seconds,
+        poll_interval_seconds=poll_interval_seconds,
+        recent_window_seconds=recent_window_seconds,
+        sleep=time.sleep,
     )
-    if not candidates or max_wait_seconds <= 0:
-        return {
-            'checked': len(candidates),
-            'ready': 0,
-            'pending': 0,
-            'api_failures': 0,
-            'waited_seconds': 0,
-        }
-
-    ready_needed = (len(candidates) // 2) + 1
-    deadline = time.monotonic() + max_wait_seconds
-    waited_seconds = 0.0
-
-    while True:
-        ready = 0
-        pending = 0
-        api_failures = 0
-        for torrent in candidates:
-            files = get_torrent_files(session, torrent.get('hash', ''), use_proxy)
-            if files is None:
-                api_failures += 1
-            elif len(files) == 0:
-                pending += 1
-            else:
-                ready += 1
-
-        logger.info(
-            "Metadata readiness: ready=%d pending=%d api_failures=%d "
-            "target=%d/%d",
-            ready, pending, api_failures, ready_needed, len(candidates),
-        )
-        if pending == 0 or ready >= ready_needed:
-            return {
-                'checked': len(candidates),
-                'ready': ready,
-                'pending': pending,
-                'api_failures': api_failures,
-                'waited_seconds': int(waited_seconds),
-            }
-
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            return {
-                'checked': len(candidates),
-                'ready': ready,
-                'pending': pending,
-                'api_failures': api_failures,
-                'waited_seconds': int(waited_seconds),
-            }
-
-        sleep_for = min(max(1, poll_interval_seconds), remaining)
-        logger.info(
-            "Waiting %.0fs for qBittorrent metadata (%d/%d ready)",
-            sleep_for, ready, len(candidates),
-        )
-        time.sleep(sleep_for)
-        waited_seconds += sleep_for
 
 
 def filter_small_files(

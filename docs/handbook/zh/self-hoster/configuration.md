@@ -98,6 +98,66 @@ Web API 和 Docker 的环境变量在[第 16 节](#16-环境变量)中介绍。
 | `EMAIL_FROM` | `str` | `''` | 通知邮件中显示的发件人地址。 |
 | `EMAIL_TO` | `str` | `''` | 通知邮件的收件人地址。 |
 
+### 通知后端（Notification Backends — ADR-039）
+
+管道运行通知会扇出到一个或多个由 `NOTIFY_BACKENDS` 选择的可插拔后端，并提供按后端的故障隔离——某个后端失败不会阻塞其他后端。`email` 后端发送完整的 HTML 报告（见上）；任何其它 active 后端（如 `telegram`）收到一份精简的运行摘要。
+
+| 变量 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `NOTIFY_BACKENDS` | `list[str]` \| `str` | `['email']` | 启用的通知后端，按顺序尝试。默认仅 email，因此现有配置行为不变。接受列表（`['email', 'telegram']`）或逗号分隔字符串（`'email, telegram'`）。设为 `['telegram']` 可完全禁用邮件报告。未注册或未配置的后端会被跳过并在返回结果中标记为失败（`NotifyResult(ok=False)`）。 |
+| `TELEGRAM_BOT_TOKEN` | `str` | `''` | 来自 [@BotFather](https://t.me/BotFather) 的 Telegram bot token。当启用 `'telegram'` 时必填。 |
+| `TELEGRAM_CHAT_ID` | `str` | `''` | bot 发送消息的目标 chat 或 channel id（如 `-1001234567890`）。当启用 `'telegram'` 时必填。 |
+
+**启用 Telegram：** 通过 @BotFather 创建 bot 获取 token，获取你的 chat id（给 bot 发条消息，然后读取 `https://api.telegram.org/bot<token>/getUpdates`），设置上述两个值，并将 `'telegram'` 加入 `NOTIFY_BACKENDS`：
+
+```python
+NOTIFY_BACKENDS = ['email', 'telegram']
+TELEGRAM_BOT_TOKEN = '123456:ABC-DEF...'
+TELEGRAM_CHAT_ID = '987654321'
+```
+
+管道通知步骤（`apps.cli.notify.email`）经由该扇出路由：`email` 后端保留完整的 HTML 报告，二级后端（如 Telegram）收到运行结论加精简摘要。当 `email` 不在 `NOTIFY_BACKENDS` 中时，仍会计算报告用于生成摘要，但抑制 SMTP 发送，且退出码反映二级扇出而非邮件投递。
+
+### 下载器后端（Downloader Backend — ADR-039）
+
+控制示例 CLI（`apps.cli.download.add`）将 add-torrent 调用发往哪个 torrent 客户端。单选互斥——同一时刻只有一个后端处于 active 状态。默认 `'qb'`，现有部署行为不变。
+
+| 变量 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `DOWNLOADER_BACKEND` | `str` | `'qb'` | active 下载器后端。`'qb'` 路由至 qBittorrent（现有 client）。`'transmission'` 经 JSON-RPC 路由至 Transmission。未知值在 dispatch 时即返回 `DownloadResult(ok=False)`。 |
+| `TRANSMISSION_HOST` | `str` | `'192.168.1.10'` | Transmission 守护进程主机。仅在 `DOWNLOADER_BACKEND = 'transmission'` 时使用。 |
+| `TRANSMISSION_PORT` | `int` | `9091` | Transmission RPC 端口（默认 9091）。 |
+| `TRANSMISSION_USERNAME` | `str` | `''` | Transmission RPC 用户名。若未启用认证则留空。 |
+| `TRANSMISSION_PASSWORD` | `str` | `''` | Transmission RPC 密码。 |
+| `TRANSMISSION_DOWNLOAD_DIR` | `str` | `'/downloads'` | 每次 torrent-add 传给 Transmission 的默认保存目录。 |
+
+**切换至 Transmission：**
+
+```python
+DOWNLOADER_BACKEND = 'transmission'
+TRANSMISSION_HOST = '192.168.1.10'
+TRANSMISSION_PORT = 9091
+TRANSMISSION_USERNAME = 'admin'
+TRANSMISSION_PASSWORD = 'secret'
+TRANSMISSION_DOWNLOAD_DIR = '/media/downloads'
+```
+
+> **注意：** `DOWNLOADER_BACKEND` 仅控制示例 CLI。主管道上传路径（`apps.cli.qb.uploader`）在 Phase 2 中仍为 qB 专用。
+
+### 磁力来源 / 索引器（Magnet Sources / Indexers — ADR-054 WS3）
+
+外部磁力聚合在服务端执行，并且仅支持 Python 后端。只有当
+`MAGNET_SOURCES` 非空时，`magnet_aggregation` capability 才为 true；
+Cloudflare Worker 后端固定报告 false。
+
+| 变量 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `MAGNET_SOURCES` | `list[str]` \| `str` | `[]` | active 外部磁力索引器，按 fan-out 查询。默认空列表表示功能关闭。接受列表（`['javbus', 'sukebei']`）或逗号分隔字符串（`'javbus, sukebei'`）。 |
+| `JAVBUS_BASE_URL` | `str` | `'https://www.javbus.com'` | JAVBUS 索引器 base URL。仅在使用可信镜像时覆盖。 |
+| `SUKEBEI_BASE_URL` | `str` | `'https://sukebei.nyaa.si'` | Sukebei 索引器 base URL。仅在使用可信镜像时覆盖。 |
+| `MAGNET_SOURCES_USE_PROXY` | `bool` | `True` | 让索引器请求走已配置的 proxy pool。推荐开启，因为服务端访问外部索引器可能带来封禁或法律 / 服务条款风险。避免高频抓取。 |
+| `MAGNET_SOURCE_TIMEOUT_SECONDS` | `float` | `10.0` | 外部索引器 fan-out 中每个 source 的 wall-clock 时间预算。慢 source 会返回 timeout 结果，不阻塞更快的 source。 |
+
 ---
 
 ## 4. Proxy 配置
@@ -181,10 +241,13 @@ PROXY_POOL = [
 完整的服务 URL 在运行时动态构建：
 - 无 proxy：`http://localhost:{CF_BYPASS_SERVICE_PORT}`
 - 使用 proxy 池：`http://{PROXY_IP}:{CF_BYPASS_SERVICE_PORT}`（使用当前 proxy 的 IP）
+- 使用 proxy 池**且** `CF_BYPASS_VIA_PROXY=True`：经由当前 proxy 转发到
+  `http://127.0.0.1:{CF_BYPASS_SERVICE_PORT}` —— 使绕过服务可仅绑定回环地址。
 
 | 变量 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `CF_BYPASS_SERVICE_PORT` | `int` | `8000` | CloudFlare 绕过服务监听的端口。必须与服务 `docker-compose.yml` 中配置的端口一致。 |
+| `CF_BYPASS_VIA_PROXY` | `bool` | `False` | 为 `True` 时，通过当前 proxy 隧道转发到 `127.0.0.1:{port}` 来访问该 proxy 的绕过服务，而非直接拨号 `{proxy_ip}:{port}`。这样无需防火墙或 VPN 即可让每个绕过服务仅绑定回环地址（脱离公网）。要求 proxy 软件允许转发到 `127.0.0.1`（Clash/mihomo 默认允许；Squid 需放行 `to_localhost`）。 |
 
 ---
 
@@ -198,6 +261,7 @@ PROXY_POOL = [
 | `PAGE_END` | `int` | `20` | 结束抓取页码（含）。 |
 | `PHASE2_MIN_RATE` | `float` | `4.0` | Phase 2（高评分非字幕条目）中影片的最低用户评分。 |
 | `PHASE2_MIN_COMMENTS` | `int` | `100` | Phase 2 中影片的最低评论数。 |
+| `DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST` | `list[str]` | `['western_studio_date']` | 仅用于每日模式的 family 黑名单，在索引解析和 sentinel 计数之后应用。解析器仍会识别这些 family，而临时抓取会绕过此黑名单。在 GitHub Actions 中，将仓库 Variable `DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST_JSON` 设为 JSON 数组（例如 `[]`）即可退出静态默认值。 |
 | `BASE_URL` | `str` | `'https://javdb.com'` | JavDB 基础 URL。仅在使用镜像站时更改。 |
 
 ---
@@ -369,6 +433,16 @@ Google Drive 库存扫描和重复文件清理的设置。
 | `QB_FILE_FILTER_MIN_SIZE_MB` | `int` | `100` | 最小文件大小（MB）。小于此阈值的文件将被设为"不下载"优先级。 |
 | `QB_FILE_FILTER_LOG_FILE` | `str` | `'logs/qb_file_filter.log'` | 文件过滤器脚本的日志文件路径。 |
 
+### 种子质量证据 (ADR-024)
+
+| 变量 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `TORRENT_QUALITY_EVIDENCE_ENABLED` | `bool` | `False` | 为生产选中/最近添加且 qBittorrent metadata 可用的种子启用影子证据采集。 |
+| `TORRENT_QUALITY_POLICY_MODE` | `str` | `'shadow'` | Phase 1 只接受 `shadow` 语义；`assist` 和 `enforce` 为后续阶段保留。 |
+| `TORRENT_QUALITY_CATEGORIES` | `str` | `''` | 可选：要扫描的 qBittorrent 分类 JSON 数组，例如 `'["Daily Ingestion"]'`。直接运行时为空会跳过采集，而不是扫描所有分类。 |
+
+参见[种子质量证据](../ops/torrent-quality-evidence.md)。
+
 ---
 
 ## 15. 媒体闭环
@@ -460,6 +534,12 @@ uvicorn 之前 `export VAR=...`。
 | `COMMIT_SESSION_BULK` | `str` | 启用 | pending session commit 默认使用 bulk 路径。设为 `'0'`、`'false'`、`'no'`、`'off'` 或空值可回退到 per-href 路径。 |
 | `D1_RECOVERY_OUTBOX_ENABLED` | `str` | `''` | ADR-010 Phase 2 开关。设为 `'1'` 时，安全 D1 写失败可进入 `reports/D1/d1_recovery_outbox.jsonl`；D1 模式仍会让写入失败，dual 模式会在 ordering key 清空前阻止提交。 |
 | `D1_BATCHING_ENABLED` | `str` | `''` | 设为 `'1'` 可启用 ADR-010 Phase 3 safe-path micro-batching，仅作用于显式标记为 batch-safe 的操作。普通 SQL 仍同步执行。 |
+| `D1_CIRCUIT_BREAKER_ENABLED` | `bool` | `true` | ADR-056 熔断器总开关（由 `_env_bool` 解析；接受 `1`/`true`/`yes`/`on`）。设为 `false` 可完全禁用按端点的熔断器。在熔断器构造时读取。 |
+| `D1_BREAKER_TRIP_THRESHOLD` | `int` | `3` | 触发熔断器 OPEN 所需的连续瞬时 5xx 响应次数。 |
+| `D1_BREAKER_PROBE_INTERVAL_SEC` | `float` | `5.0` | 熔断器 OPEN 期间 `SELECT 1` 健康检查探活的间隔秒数。 |
+| `D1_BREAKER_MAX_OPEN_SEC` | `int` | `900` | 熔断器保持 OPEN 的最长秒数，超时后抛出 `D1CircuitOpenError`。recovery/cleanup 工作流通过 `D1_BREAKER_MAX_OPEN_SEC_RECOVERY` 将此值覆盖为 `120`。 |
+| `D1_BREAKER_HALF_OPEN_SUCCESSES` | `int` | `1` | 关闭熔断器并恢复正常流量所需的成功探活次数。 |
+| `D1_INTERNAL_ERROR_FLOOR_SEC` | `float` | `2.0` | D1 code-7500 内部错误内层重试退避的最小延迟（秒）。 |
 | `D1_FLUSH_INTERVAL_MS` | `int` | `250` | 启用 D1 batching 后 safe batch 的最大等待窗口。 |
 | `D1_STARTUP_REPLAY_ENABLED` | `str` | `''` | ADR-010 Phase 4 开关。设为 `'1'` 时，进程首次打开 D1 或 Dual 连接会清空非 dead-lettered 的恢复工作。 |
 | `D1_STARTUP_REPLAY_MAX_ORDERING_KEYS` | `int` | `25` | 自动 startup replay 每次最多 drain 的 ordering key 数量。 |

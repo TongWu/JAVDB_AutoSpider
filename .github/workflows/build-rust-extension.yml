@@ -3,10 +3,16 @@ name: Build Rust Extension
 # This workflow builds the Rust extension wheel and caches it.
 # It can be triggered standalone on push, manually, or called by other workflows.
 #
-# Two parallel jobs:
-#   - build-x64: always runs on ubuntu-latest (GitHub-hosted, x64)
-#   - build-arm: runs on self-hosted (ARM). Skipped gracefully if no
-#     self-hosted runner picks up the job within 5 minutes.
+# Two parallel jobs, each pinned to a self-hosted runner of its architecture.
+# The fleet tags boxes only with the default labels (self-hosted / Linux /
+# X64|ARM64), so the array form `[self-hosted, <arch>]` is required to keep an
+# ARM build off an x64 box and vice versa:
+#   - build-x64: runs on [self-hosted, X64]
+#   - build-arm: runs on [self-hosted, ARM64]; continue-on-error so a busy or
+#     unavailable ARM box never blocks the x64 build or the push status.
+# install-rust-wheel produces an abi3, zig-linked manylinux wheel, so each job
+# warms the per-arch actions/cache (keyed by runner.arch) that the ingestion
+# and test workflows restore instead of rebuilding from source.
 
 on:
   push:
@@ -19,6 +25,7 @@ on:
       - '.github/workflows/build-rust-extension.yml'
       - '.github/actions/install-rust-wheel/**'
       - '.github/actions/setup-python-env/**'
+      - '.github/actions/ensure-python/**'
       - '.github/actions/restore-encrypted-config/**'
   workflow_call:
   workflow_dispatch:
@@ -28,16 +35,26 @@ permissions:
 
 jobs:
   # =============================================================================
-  # x64 build (GitHub-hosted)
+  # x64 build (self-hosted, X64)
   # =============================================================================
   build-x64:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       TZ: Asia/Singapore
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          # No post-checkout git ops (build + upload only); don't leave
+          # GITHUB_TOKEN on disk where an artifact upload could capture it.
+          persist-credentials: false
+
+      - name: Ensure Python in runner tool cache
+        uses: ./.github/actions/ensure-python
+        with:
+          python-version: '3.11'
 
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
@@ -71,11 +88,8 @@ jobs:
       # tests/unit/test_fallback_shape.py in the unit suite.
 
   # =============================================================================
-  # ARM build (self-hosted)
-  # Timeout after 5 min if no runner picks it up; failure does not block x64.
-  # The `# PUBLIC_RUNNER:` marker is rewritten by publish-to-public.yml so the
-  # public repo (which has no self-hosted runner) falls back to GitHub-hosted
-  # ARM. Format: `runs-on: <private-runner>  # PUBLIC_RUNNER: <public-runner>`.
+  # ARM64 build (self-hosted, ARM64)
+  # continue-on-error: an unavailable ARM runner must not block x64 or the push.
   # =============================================================================
   build-arm:
     runs-on: ubuntu-24.04-arm
@@ -87,15 +101,20 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          # No post-checkout git ops (build + upload only); don't leave
+          # GITHUB_TOKEN on disk where an artifact upload could capture it.
+          persist-credentials: false
 
-      - name: Ensure Python 3 is available
-        shell: bash
-        run: |
-          if ! command -v python3 &>/dev/null; then
-            echo "::error::python3 not found on self-hosted runner"
-            exit 1
-          fi
-          python3 --version
+      - name: Ensure Python in runner tool cache
+        uses: ./.github/actions/ensure-python
+        with:
+          python-version: '3.11'
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: '3.11'
 
       - name: Build and cache Rust wheel
         uses: ./.github/actions/install-rust-wheel

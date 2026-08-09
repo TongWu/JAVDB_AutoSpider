@@ -1,4 +1,3 @@
-import json
 import sqlite3
 from pathlib import Path
 from typing import Any, Iterable, List
@@ -6,7 +5,6 @@ from typing import Any, Iterable, List
 import pytest
 
 from javdb.storage.repos.system_state_repo import SystemStateRepo
-from javdb.storage import dual_connection as _dual_module
 from javdb.storage.dual_connection import DualConnection, _is_read
 
 _SYSTEM_STATE_DDL = (
@@ -151,8 +149,7 @@ def sqlite_ops_conn(tmp_path):
 
 def test_repo_works_with_dual_connection(sqlite_ops_conn, tmp_path, monkeypatch):
     """Both SQLite and D1 backends receive writes; get() reads from D1."""
-    drift_path = tmp_path / "d1_drift.jsonl"
-    monkeypatch.setattr(_dual_module, "_DRIFT_LOG_PATH", str(drift_path))
+    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
 
     fake_d1 = FakeD1Connection(select_rows=[{"value": "dual-val"}])
     dual = DualConnection(sqlite_ops_conn, fake_d1, logical_name="operations")

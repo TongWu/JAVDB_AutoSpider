@@ -1,10 +1,10 @@
 # BFR-009: Cross-runner ban dispatch does not fire on the Rust pool/ban-manager path
 
-**Status**: Open
+**Status**: Fixed
 **Date**: 2026-05-30
 **Severity**: Medium
 **Affected**: `javdb/proxy/ban_manager.py` (`_dispatch_remote_ban`, `set_remote_ban_hook`), `javdb/proxy/pool.py` (Python `ProxyPool.ban_proxy` / drain), `javdb/spider/runtime/state.py:722`, `javdb/spider/runtime/context.py:880` (hook registration), `javdb/rust_core/src/proxy/{pool,ban_manager}.rs`
-**Related**: [ADR-041](../ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md) (surfaced this during Task 4 — removed the last Python callers of the dispatcher), [ADR-023](../ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.md) (proxy coordination), CONTEXT.md → "Signal" (`ban_proxy`)
+**Related**: [ADR-043](../_archive/ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.md) (fixes this — Approach 1, via IMP-ADR043-02), [ADR-041](../_archive/ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md) (surfaced this during Task 4 — removed the last Python callers of the dispatcher), [ADR-023](../_archive/ADR-023-Proxy-Recommendation-Policy/ADR-023-proxy-recommendation-policy.md) (proxy coordination), CONTEXT.md → "Signal" (`ban_proxy`)
 
 ---
 
@@ -24,19 +24,19 @@ Net effect: every production ban is recorded **locally only**; the `client.mark_
 
 The cross-runner ban dispatch (P1-A) was implemented as a **Python module-level hook** fired from inside the Python pool/ban-manager. When the Rust pool/ban-manager became the production default, the dispatch call sites were **not** ported into the Rust extension, and no Rust→Python ban callback was added. The Rust extension has no mechanism (no `set_ban_callback`-style setter) to notify Python when a ban is recorded.
 
-This is a latent **pre-existing** gap — it predates [ADR-041](../ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md). ADR-041 only made it **visible**: removing the Python `ProxyPool` / `ProxyBanManager` (now Rust-Required) deletes the last three callers of `_dispatch_remote_ban`, so the dispatcher and the registered hook become unambiguously dead rather than dead-only-in-production.
+This is a latent **pre-existing** gap — it predates [ADR-041](../_archive/ADR-041-Rust-Fallback-Policy/ADR-041-rust-fallback-policy.md). ADR-041 only made it **visible**: removing the Python `ProxyPool` / `ProxyBanManager` (now Rust-Required) deletes the last three callers of `_dispatch_remote_ban`, so the dispatcher and the registered hook become unambiguously dead rather than dead-only-in-production.
 
 The `remove_ban` docstring in `ban_manager.py` already half-acknowledges the asymmetry: it notes the Rust manager "can't reach the Python `_dispatch_remote_unban` hook from inside the extension" and defers unban dispatch to `ProxyPool.unban_proxy` — but the Rust pool's `ban_proxy` has the same limitation and no equivalent dispatch.
 
 ## Fix
 
-Not yet implemented — tracked here, deferred out of ADR-041 (which is a fallback-policy change, not a coordination change). Candidate approaches (decide in the follow-up):
+Implemented via [IMP-ADR043-02](../_archive/ADR-043-CF-Auto-Ban/IMP-ADR043-02-bfr009-ban-dispatch-and-hardban-ttl.md) using Approach 1:
 
 1. **Rust→Python ban callback.** Add a `set_ban_dispatch(callback)` to the Rust pool/ban manager, invoked on each *newly recorded* ban (mirroring the Python `newly_banned` dedup), wired from the same runtime setup that registers `set_remote_ban_hook`.
 2. **Python-side dispatch at the call site.** Wrap the production ban entry points (`get_ban_manager().add_ban(...)`, `pool.ban_proxy(...)`) in a thin Python helper that records via Rust *and* fires `_dispatch_remote_ban` — keeping the dispatcher Python-side and not requiring a Rust change.
 3. **Observer/delta poll.** Have the coordinator-integration layer diff the Rust ban manager's banned set against the last-dispatched set and push deltas.
 
-Approach 2 is the smallest change and keeps `_dispatch_remote_ban` / `set_remote_ban_hook` meaningful; approach 1 is the cleanest long-term but touches the Rust crate.
+**Decision (2026-06-01):** **Approach 1** chosen — see [ADR-043 D8](../_archive/ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.md). The Rust pool also records bans **internally** on auto-drain / proxy-switch (`pool.rs:485`, `:692`) that never pass through a Python entry point, so only the Rust→Python callback guarantees every ban dispatches. Implemented in [IMP-ADR043-02](../_archive/ADR-043-CF-Auto-Ban/IMP-ADR043-02-bfr009-ban-dispatch-and-hardban-ttl.md), which also threads the ban *cause* so JavDB hard bans use an 8-day DO TTL while CF-caused bans use 6 h.
 
 ## Side Effects
 
@@ -46,6 +46,10 @@ Approach 2 is the smallest change and keeps `_dispatch_remote_ban` / `set_remote
 
 ## Follow-Up
 
-- [ ] Decide the dispatch approach (1/2/3) and implement.
-- [ ] Add a test that a ban recorded through the **production** entry point (`get_ban_manager().add_ban` / `create_proxy_pool_from_config(...).ban_proxy`) fires the registered remote hook exactly once per newly-banned proxy.
-- [ ] Re-evaluate the `_dispatch_remote_ban` / `set_remote_ban_hook` / `set_remote_unban_hook` surface once the dispatch path is real (ADR-041 keeps these symbols but their only callers were the now-removed Python pool/manager).
+- [x] Decide the dispatch approach — **Approach 1** (Rust→Python callback), per [ADR-043](../_archive/ADR-043-CF-Auto-Ban/ADR-043-cf-persistent-failure-auto-ban.md); implementation tracked in [IMP-ADR043-02](../_archive/ADR-043-CF-Auto-Ban/IMP-ADR043-02-bfr009-ban-dispatch-and-hardban-ttl.md).
+- [x] Add a test that a ban recorded through the **production** entry point (`get_ban_manager().add_ban` / `create_proxy_pool_from_config(...).ban_proxy`) fires the registered remote hook exactly once per newly-banned proxy.
+- [x] Re-evaluate the `_dispatch_remote_ban` / `set_remote_ban_hook` / `set_remote_unban_hook` surface once the dispatch path is real — the production path now dispatches through the Rust callback, while the local-only mirror/unban helpers keep the remaining module-level surface intentional.
+
+## Status Log
+
+- 2026-06-01: Fixed via IMP-ADR043-02 (Approach 1).

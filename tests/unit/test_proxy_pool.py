@@ -34,6 +34,8 @@ def _clear_rust_ban_manager():
 
     def _clear():
         mgr = get_ban_manager()
+        if hasattr(mgr, "set_ban_dispatch_callback"):
+            mgr.set_ban_dispatch_callback(None)
         for name in list(mgr.get_banned_proxy_names()):
             mgr.remove_ban(name)
 
@@ -401,6 +403,24 @@ class TestProxyPool:
         assert result is True
         assert pool.proxies[0].is_available is False  # In cooldown
         assert pool.current_index == 1
+
+    def test_auto_drain_ban_never_recovers_after_cooldown(self):
+        """Internal Rust auto-drain bans must stay session-permanent."""
+        pool = ProxyPool(cooldown_seconds=1, max_failures_before_cooldown=1)
+        pool.add_proxy(http_url="http://auto-drain1:8080", name="auto-drain-1")
+        pool.add_proxy(http_url="http://auto-drain2:8080", name="auto-drain-2")
+
+        result = pool.mark_failure_and_switch()
+
+        assert result is True
+        assert pool.ban_manager.is_proxy_banned("auto-drain-1")
+        assert pool.current_index == 1
+
+        pool.proxies[0].cooldown_until = datetime.now() - timedelta(seconds=1)
+
+        live_proxy = {"http": "http://auto-drain2:8080"}
+        for _ in range(4):
+            assert pool.get_next_proxy() == live_proxy
     
     def test_mark_failure_and_switch_no_available(self):
         """Test mark_failure_and_switch returns False when no proxy available."""
@@ -575,6 +595,22 @@ class TestProxyPoolBanProxy:
         assert not pool.ban_manager.is_proxy_banned("ban-rec-1")
         pool.ban_proxy("ban-rec-1")
         assert pool.ban_manager.is_proxy_banned("ban-rec-1")
+
+    def test_ban_proxy_threads_reason_to_dispatch(self):
+        """ban_proxy should pass the cause into the Rust ban-dispatch callback."""
+        pool = ProxyPool()
+        pool.add_proxy(http_url="http://ban-reason1:8080", name="ban-reason-1")
+        pool.add_proxy(http_url="http://ban-reason2:8080", name="ban-reason-2")
+        seen: list[tuple[str, str | None]] = []
+        pool.ban_manager.set_ban_dispatch_callback(
+            lambda name, reason: seen.append((name, reason))
+        )
+
+        try:
+            pool.ban_proxy("ban-reason-1", "ban page detected")
+            assert seen == [("ban-reason-1", "ban page detected")]
+        finally:
+            pool.ban_manager.set_ban_dispatch_callback(None)
 
     def test_ban_proxy_nonexistent_name(self):
         """ban_proxy with unknown name should return False."""

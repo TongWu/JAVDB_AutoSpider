@@ -1,4 +1,5 @@
 """Tests for the unified rclone_manager script."""
+# ruff: noqa: E402
 
 import os
 import sys
@@ -9,30 +10,31 @@ from unittest.mock import patch, MagicMock
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from apps.cli.rclone.manager import main, parse_args as parse_arguments
+from apps.cli.rclone.manager import (
+    main,
+    parse_args as parse_arguments,
+    options_from_args,
+)
 from javdb.integrations.rclone.manager.service import (
     parse_root_path,
     INVENTORY_FIELDNAMES,
     resolve_rclone_root,
     load_inventory_as_folder_structure,
-    run_report_from_inventory,
     run_execute_from_csv,
     migrate_strip_drive_names,
 )
-from javdb.integrations.rclone.helper import (
-    FolderInfo,
-    rclone_purge,
-    strip_drive_name,
+from javdb.integrations.rclone.types import DedupResult, FolderInfo
+from javdb.integrations.rclone.path_utils import (
     get_configured_drive_name,
     prepend_drive_name,
+    strip_drive_name,
 )
-from javdb.spider.services.dedup import (
-    DedupRecord,
+from javdb.spider.services.dedup_store import (
     append_dedup_record,
     load_dedup_csv,
-    save_dedup_csv,
     mark_records_deleted,
 )
+from javdb.spider.services.dedup_types import DedupRecord
 
 
 # ============================================================================
@@ -88,45 +90,129 @@ def _raw_db_forbidden(name):
 
 
 def test_validate_dedup_self_heal_routes_through_operations_repo(monkeypatch):
-    """ADR-032 2a.2: the dedup self-heal must read/write via OperationsRepo,
-    never the raw ``db_*`` helpers."""
+    """ADR-032 2a.2 + ADR-046 P2 review fix: the dedup self-heal must read/write
+    via OperationsRepo (never raw ``db_*`` helpers) AND must not raise when run
+    with no active session.
+
+    This now uses a REAL OperationsRepo against the temp DB (autouse
+    ``_isolate_sqlite``) with NO active session. Previously it mocked
+    OperationsRepo and merely asserted ``session_id is None`` — that mock
+    swallowed the regression where the standalone WeeklyDedup CLI (no session)
+    hit a raising ``_require_session`` and crashed with an uncaught
+    RuntimeError. The real repo proves the self-heal completes session-less and
+    tags the orphan with SessionId NULL.
+    """
     import javdb.integrations.rclone.manager.service as rm
-    import javdb.storage.db._db_operations as ops_db
+    from javdb.storage.db import get_db, OPERATIONS_DB_PATH
+    from javdb.storage.db._db_operations import db_replace_rclone_inventory, db_append_dedup_record
 
-    repo = MagicMock()
-    repo.load_rclone_inventory.return_value = {
-        'A': [{'FolderPath': '2025/Actor/A/有码-中字'}],
-    }
-    repo.load_dedup_records.return_value = [{
-        'IsDeleted': 0,
-        'ExistingGdrivePath': '2025/Actor/ORPHAN/有码-中字',
-        'DeletionReason': 'Subtitle upgrade',
-    }]
-    repo.mark_orphan_records.return_value = 1
-    repo_cls = MagicMock(return_value=repo)
+    # No active session — the standalone WeeklyDedup CLI never sets one.
 
-    monkeypatch.setattr(rm, 'OperationsRepo', repo_cls)
-    session_repo = MagicMock()
-    session_repo.get_active_session_id.return_value = None
-    monkeypatch.setattr(rm, 'SessionLifecycleRepo', MagicMock(return_value=session_repo))
+    # Seed inventory truth-set (one surviving path) and a pending dedup record
+    # whose path is NOT in the inventory (an orphan to be self-healed).
+    db_replace_rclone_inventory(
+        [{
+            'video_code': 'A',
+            'sensor_category': '有码',
+            'subtitle_category': '中字',
+            'folder_path': '2025/Actor/A/有码-中字',
+            'folder_size': 1,
+            'file_count': 1,
+            'scan_datetime': '2026-01-01 00:00:00',
+        }],
+        session_id=None,
+    )
+    db_append_dedup_record(
+        {
+            'VideoCode': 'ORPHAN',
+            'ExistingGdrivePath': '2025/Actor/ORPHAN/有码-中字',
+            'DeletionReason': 'Subtitle upgrade',
+            'IsDeleted': 0,
+        },
+        session_id=None,
+    )
+
     monkeypatch.setattr(rm, '_write_dedup_orphan_csv', lambda *_, **__: None)
 
-    # Any raw db_* call would be a regression — fail loudly.
+    # ADR-032 2a.2: the service module must reach the DB only via OperationsRepo,
+    # never by importing raw db_* helpers (the AST test above is the structural
+    # guard; this asserts the names are simply absent from the module namespace).
     for name in (
         'db_load_rclone_inventory',
         'db_load_dedup_records',
         'db_mark_orphan_records',
     ):
-        monkeypatch.setattr(ops_db, name, _raw_db_forbidden(name))
+        assert not hasattr(rm, name), (
+            f"service module must not import {name} directly"
+        )
 
+    # Must NOT raise even though no session is active (ADR-046 P2 review fix).
     count, orphans = rm.validate_dedup_records_against_inventory()
 
     assert count == 1
     assert len(orphans) == 1
-    repo.load_rclone_inventory.assert_called_once_with()
-    repo.load_dedup_records.assert_called_once_with()
-    repo.mark_orphan_records.assert_called_once()
-    assert repo.mark_orphan_records.call_args.kwargs['session_id'] is None
+    assert orphans[0]['ExistingGdrivePath'] == '2025/Actor/ORPHAN/有码-中字'
+
+    # The orphan row is now marked deleted and tagged with SessionId NULL.
+    with get_db(OPERATIONS_DB_PATH) as conn:
+        row = conn.execute(
+            "SELECT IsDeleted, SessionId FROM DedupRecords "
+            "WHERE ExistingGdrivePath = ?",
+            ('2025/Actor/ORPHAN/有码-中字',),
+        ).fetchone()
+    assert row is not None
+    assert int(row['IsDeleted']) == 1
+    assert row['SessionId'] is None
+
+
+def test_validate_dedup_self_heal_tags_orphan_with_explicit_session(monkeypatch):
+    """ADR-046 P5: when an explicit ``session_id`` is threaded into the dedup
+    self-heal, the orphan row is tagged with it. The standalone path passes
+    ``None`` (covered above)."""
+    import javdb.integrations.rclone.manager.service as rm
+    from javdb.storage.db import get_db, OPERATIONS_DB_PATH
+    from javdb.storage.db._db_operations import db_replace_rclone_inventory, db_append_dedup_record
+
+    explicit_sid = "20260604T000000.000000Z-rclo-9999"
+
+    db_replace_rclone_inventory(
+        [{
+            'video_code': 'A',
+            'sensor_category': '有码',
+            'subtitle_category': '中字',
+            'folder_path': '2025/Actor/A/有码-中字',
+            'folder_size': 1,
+            'file_count': 1,
+            'scan_datetime': '2026-01-01 00:00:00',
+        }],
+        session_id=None,
+    )
+    db_append_dedup_record(
+        {
+            'VideoCode': 'ORPHAN',
+            'ExistingGdrivePath': '2025/Actor/ORPHAN/有码-中字',
+            'DeletionReason': 'Subtitle upgrade',
+            'IsDeleted': 0,
+        },
+        session_id=None,
+    )
+
+    monkeypatch.setattr(rm, '_write_dedup_orphan_csv', lambda *_, **__: None)
+
+    count, orphans = rm.validate_dedup_records_against_inventory(
+        session_id=explicit_sid,
+    )
+    assert count == 1
+
+    with get_db(OPERATIONS_DB_PATH) as conn:
+        row = conn.execute(
+            "SELECT IsDeleted, SessionId FROM DedupRecords "
+            "WHERE ExistingGdrivePath = ?",
+            ('2025/Actor/ORPHAN/有码-中字',),
+        ).fetchone()
+    assert row is not None
+    assert int(row['IsDeleted']) == 1
+    assert row['SessionId'] == explicit_sid
 
 
 def test_run_validate_inventory_prunes_through_operations_repo(monkeypatch):
@@ -157,7 +243,8 @@ def test_run_validate_inventory_prunes_through_operations_repo(monkeypatch):
     monkeypatch.setattr(rm, 'export_db_to_csv', lambda *_, **__: 0)
     # The chained dedup self-heal is covered by its own test; stub it out.
     monkeypatch.setattr(
-        rm, 'validate_dedup_records_against_inventory', lambda: (0, [])
+        rm, 'validate_dedup_records_against_inventory',
+        lambda session_id=None: (0, []),
     )
     monkeypatch.setattr(ops_db, 'db_delete_rclone_inventory_paths',
                         _raw_db_forbidden('db_delete_rclone_inventory_paths'))
@@ -183,11 +270,73 @@ from javdb.integrations.rclone.manager.service import run_manager
 def test_run_manager_wraps_service_exit_code(monkeypatch):
     from javdb.integrations.rclone.manager import service
 
-    monkeypatch.setattr(service, "run_manager_from_options", lambda _options: 7)
+    seen = {}
+
+    def _fake(_options, session_id=None):
+        seen["session_id"] = session_id
+        return 7
+
+    monkeypatch.setattr(service, "run_manager_from_options", _fake)
 
     result = run_manager(RcloneManagerOptions(report=True))
 
     assert result == RcloneManagerResult(exit_code=7)
+    # ADR-046 D2: the standalone public entry forwards session_id=None.
+    assert seen["session_id"] is None
+
+
+def test_report_fails_when_dedup_record_persistence_fails(monkeypatch):
+    import javdb.integrations.rclone.manager.service as rm
+
+    folder = FolderInfo(
+        full_path="gdrive:/root/2026/Actor/ABC-123/有码-无字",
+        year="2026",
+        actor="Actor",
+        movie_code="ABC-123",
+        sensor_category="有码",
+        subtitle_category="无字",
+        folder_name="有码-无字",
+        size=100,
+        file_count=1,
+    )
+    result = DedupResult(
+        movie_code="ABC-123",
+        year="2026",
+        actor="Actor",
+        folders_to_delete=[(folder, "duplicate")],
+    )
+
+    monkeypatch.setattr(
+        rm,
+        "load_inventory_as_folder_structure",
+        lambda _csv_path: {"2026": {"Actor": [folder]}},
+    )
+    monkeypatch.setattr(
+        rm,
+        "analyze_all_duplicates",
+        lambda *_args, **_kwargs: [result],
+    )
+    monkeypatch.setattr(
+        rm,
+        "generate_csv_report",
+        lambda *_args, **_kwargs: "report.csv",
+    )
+    monkeypatch.setattr(rm, "print_summary", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        rm,
+        "validate_dedup_records_against_inventory",
+        lambda **_kwargs: (0, []),
+    )
+    monkeypatch.setattr(rm, "export_dedup_history", lambda: 0)
+
+    def _raise(_path, _record, *, session_id=None):
+        raise RuntimeError("persist boom")
+
+    import javdb.spider.services.dedup_store as dedup_store
+    monkeypatch.setattr(dedup_store, "append_dedup_record", _raise)
+
+    with pytest.raises(RuntimeError, match="persist boom"):
+        rm.run_report_from_inventory("inventory.csv")
 
 
 # ============================================================================
@@ -342,7 +491,8 @@ def test_scan_sqlite_uses_staging_when_no_active_session(
     monkeypatch, tmp_path, storage_mode_db
 ):
     import javdb.integrations.rclone.manager.service as rm
-    from javdb.storage.db import set_active_session_id, db_replace_rclone_inventory, get_db
+    from javdb.storage.db import get_db
+    from javdb.storage.db._db_operations import db_replace_rclone_inventory
 
     output = tmp_path / "inventory.csv"
     seed = {
@@ -361,7 +511,6 @@ def test_scan_sqlite_uses_staging_when_no_active_session(
         "scan_datetime": "2026-05-05 00:00:00",
     })
 
-    set_active_session_id(None)
     db_replace_rclone_inventory([seed], session_id=None)
 
     def fake_scan(*_args, row_callback=None, **_kwargs):
@@ -409,9 +558,6 @@ def _patch_rclone_repo_mocks(monkeypatch, rm, order, overrides=None):
     class FakeSessionLifecycleRepo:
         def init_storage(self):
             order.append("init_db")
-
-        def get_active_session_id(self):
-            return overrides.get("get_active_session_id", lambda: None)()
 
         def create_report_session(self, **_kwargs):
             return overrides.get(
@@ -655,24 +801,15 @@ def test_scan_failure_does_not_mark_inherited_session_failed(
     monkeypatch.setattr(rm, "check_rclone_installed", lambda: (True, "ok"))
     monkeypatch.setattr(rm, "check_remote_exists", lambda _remote: (True, "ok"))
     monkeypatch.setattr(rm, "scan_inventory", fake_scan)
-    _patch_rclone_repo_mocks(monkeypatch, rm, order, overrides={
-        # Inherited session id: _created_local_staging_session stays False.
-        "get_active_session_id": lambda: "inherited-1",
-    })
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        [
-            "rclone_manager",
-            "--scan",
-            "--root-path",
-            "gdrive:/root",
-            "--output",
-            str(output),
-        ],
-    )
+    _patch_rclone_repo_mocks(monkeypatch, rm, order)
+    # Inherited session id passed explicitly (ADR-046 P5): the ambient probe is
+    # gone, so a non-None session_id arg means _created_local_staging_session
+    # stays False (caller owns the session).
+    options = options_from_args(parse_arguments([
+        "--scan", "--root-path", "gdrive:/root", "--output", str(output),
+    ]))
 
-    assert main() == 1
+    assert rm.run_manager_from_options(options, session_id="inherited-1") == 1
     # No "create_session" because the active session was inherited.
     assert "create_session" not in order
     # Inherited session must NOT be marked failed.
@@ -706,7 +843,7 @@ def test_scan_failure_marks_locally_created_session_failed(
     monkeypatch.setattr(rm, "check_rclone_installed", lambda: (True, "ok"))
     monkeypatch.setattr(rm, "check_remote_exists", lambda _remote: (True, "ok"))
     monkeypatch.setattr(rm, "scan_inventory", fake_scan)
-    # Default mocks: get_active_session_id -> None, so a local session (id=123)
+    # Standalone CLI path (main → session_id=None), so a local session (id=123)
     # is created and _created_local_staging_session becomes True.
     _patch_rclone_repo_mocks(monkeypatch, rm, order)
     monkeypatch.setattr(
@@ -933,7 +1070,7 @@ class TestLoadInventoryAsFolderStructure:
     @patch('javdb.integrations.rclone.manager.service.get_configured_drive_name', return_value='gdrive')
     @patch('javdb.integrations.rclone.manager.service.get_configured_root_folder', return_value='root')
     def test_loads_from_db(self, _mock_root, _mock_dn, storage_mode_db):
-        from javdb.storage.db import db_replace_rclone_inventory
+        from javdb.storage.db._db_operations import db_replace_rclone_inventory
         db_replace_rclone_inventory([
             {
                 'video_code': 'DB-001',
@@ -958,7 +1095,7 @@ class TestLoadInventoryAsFolderStructure:
     @patch('javdb.integrations.rclone.manager.service.get_configured_drive_name', return_value='gdrive')
     def test_db_priority_over_csv(self, _mock_dn, tmp_path, storage_mode_db):
         """When DB has data, CSV should not be loaded even if it exists."""
-        from javdb.storage.db import db_replace_rclone_inventory
+        from javdb.storage.db._db_operations import db_replace_rclone_inventory
         db_replace_rclone_inventory([
             {
                 'video_code': 'DB-ONLY',
@@ -1172,7 +1309,7 @@ class TestIsDeletedUpdate:
 
 class TestExecuteMode:
     @patch('javdb.integrations.rclone.manager.service.get_configured_drive_name', return_value='gdrive')
-    @patch('javdb.integrations.rclone.helper.subprocess.run')
+    @patch('javdb.integrations.rclone.dedup.subprocess.run')
     def test_dry_run_does_not_update_csv(self, mock_run, _mock_dn, tmp_path):
         mock_run.return_value = MagicMock(returncode=0)
         path = str(tmp_path / 'dedup.csv')
@@ -1192,7 +1329,7 @@ class TestExecuteMode:
 
     @patch('javdb.integrations.rclone.manager.service.get_configured_drive_name', return_value='gdrive')
     @patch('javdb.integrations.rclone.manager.service.export_dedup_history')
-    @patch('javdb.integrations.rclone.helper.subprocess.run')
+    @patch('javdb.integrations.rclone.dedup.subprocess.run')
     def test_run_execute_live(self, mock_run, mock_export, _mock_dn, tmp_path):
         mock_run.return_value = MagicMock(returncode=0)
         path = str(tmp_path / 'dedup.csv')
@@ -1215,7 +1352,7 @@ class TestExecuteMode:
         assert result == 0
 
     @patch('javdb.integrations.rclone.manager.service.get_configured_drive_name', return_value='')
-    @patch('javdb.integrations.rclone.helper.subprocess.run')
+    @patch('javdb.integrations.rclone.dedup.subprocess.run')
     def test_run_execute_refuses_when_no_drive_name(self, mock_run, _mock_dn, tmp_path):
         """Without a remote prefix and without a configured drive name, the
         executor must refuse rather than letting rclone treat the relative
@@ -1238,7 +1375,7 @@ class TestExecuteMode:
 
     @patch('javdb.integrations.rclone.manager.service.get_configured_drive_name', return_value='')
     @patch('javdb.integrations.rclone.manager.service.export_dedup_history')
-    @patch('javdb.integrations.rclone.helper.subprocess.run')
+    @patch('javdb.integrations.rclone.dedup.subprocess.run')
     def test_run_execute_allows_explicit_remote_prefix_without_drive_name(
         self, mock_run, _mock_export, _mock_dn, tmp_path,
     ):
@@ -1295,11 +1432,11 @@ class TestPrependDriveName:
         assert prepend_drive_name('root/folder:name', 'gdrive') == 'gdrive:root/folder:name'
 
     def test_no_drive_name_given(self):
-        with patch('javdb.integrations.rclone.helper.get_configured_drive_name', return_value='auto'):
+        with patch('javdb.integrations.rclone.path_utils.get_configured_drive_name', return_value='auto'):
             assert prepend_drive_name('path') == 'auto:path'
 
     def test_no_drive_configured(self):
-        with patch('javdb.integrations.rclone.helper.get_configured_drive_name', return_value=''):
+        with patch('javdb.integrations.rclone.path_utils.get_configured_drive_name', return_value=''):
             assert prepend_drive_name('path') == 'path'
 
     def test_empty_path(self):
@@ -1335,8 +1472,8 @@ class TestGetConfiguredDriveName:
 
 class TestMigrateStripDriveNames:
     def test_strips_drive_names_in_db(self):
-        from javdb.storage.db import db_replace_rclone_inventory
         from javdb.storage.db import get_db, OPERATIONS_DB_PATH
+        from javdb.storage.db._db_operations import db_replace_rclone_inventory
         db_replace_rclone_inventory([
             {
                 'video_code': 'MIG-001',
@@ -1359,8 +1496,8 @@ class TestMigrateStripDriveNames:
         assert row[0] == 'root/2025/Actor/MIG-001 [有码-中字]'
 
     def test_idempotent(self):
-        from javdb.storage.db import db_replace_rclone_inventory
         from javdb.storage.db import get_db, OPERATIONS_DB_PATH
+        from javdb.storage.db._db_operations import db_replace_rclone_inventory
         db_replace_rclone_inventory([
             {
                 'video_code': 'MIG-002',
@@ -1409,7 +1546,7 @@ from javdb.integrations.rclone.manager.service import (
 
 
 def _add_inventory(rows):
-    from javdb.storage.db import db_replace_rclone_inventory
+    from javdb.storage.db._db_operations import db_replace_rclone_inventory
     entries = []
     for code, path in rows:
         entries.append({
@@ -1422,7 +1559,7 @@ def _add_inventory(rows):
 
 
 def _add_dedup_pending(code, path, reason='Subtitle upgrade'):
-    from javdb.storage.db import db_append_dedup_record
+    from javdb.storage.db._db_operations import db_append_dedup_record
     db_append_dedup_record({
         'video_code': code, 'existing_sensor': '有码',
         'existing_subtitle': '中字', 'existing_gdrive_path': path,
@@ -1451,7 +1588,7 @@ class TestValidateDedupRecords:
         assert len(orphans) == 1
         assert orphans[0]['VideoCode'] == 'C'
 
-        from javdb.storage.db import db_load_dedup_records
+        from javdb.storage.db._db_operations import db_load_dedup_records
         rows = db_load_dedup_records()
         deleted = [r for r in rows if int(r.get('IsDeleted') or 0) == 1]
         pending = [r for r in rows if int(r.get('IsDeleted') or 0) == 0]
@@ -1477,7 +1614,7 @@ class TestValidateDedupRecords:
         _add_dedup_pending('X', '2025/Actor/X/有码-中字')
         count, orphans = validate_dedup_records_against_inventory()
         assert count == 0 and orphans == []
-        from javdb.storage.db import db_load_dedup_records
+        from javdb.storage.db._db_operations import db_load_dedup_records
         rows = db_load_dedup_records()
         assert int(rows[0].get('IsDeleted') or 0) == 0
 
@@ -1534,7 +1671,7 @@ class TestRunValidateInventory:
         )
         assert rc == 0
 
-        from javdb.storage.db import db_load_rclone_inventory, db_load_dedup_records
+        from javdb.storage.db._db_operations import db_load_rclone_inventory, db_load_dedup_records
         inv = db_load_rclone_inventory()
         assert 'A' in inv and 'B' in inv
         assert 'X' not in inv
@@ -1569,7 +1706,7 @@ class TestRunValidateInventory:
             'gdrive', 'root', year_filter=None, max_workers=1, prune=False,
         )
         assert rc == 0
-        from javdb.storage.db import db_load_rclone_inventory
+        from javdb.storage.db._db_operations import db_load_rclone_inventory
         inv = db_load_rclone_inventory()
         assert 'A' in inv and 'X' in inv  # not pruned
 
@@ -1586,7 +1723,7 @@ class TestRunValidateInventory:
             'gdrive', 'root', year_filter=None, max_workers=1, prune=True,
         )
         assert rc == 1
-        from javdb.storage.db import db_load_rclone_inventory
+        from javdb.storage.db._db_operations import db_load_rclone_inventory
         assert 'A' in db_load_rclone_inventory()
 
 

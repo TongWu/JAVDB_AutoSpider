@@ -148,6 +148,64 @@ def test_state_setup_proxy_pool_uses_active_runtime_services(monkeypatch):
     assert runtime.services.proxy_pool is proxy_pool
 
 
+def test_runtime_setup_proxy_pool_closes_signal_when_wiring_fails(monkeypatch):
+    """Runtime path must not leak the refresh thread when wiring fails.
+
+    ADR-023 Phase 4: if ``set_health_provider`` raises after the signal
+    has started, the started signal is closed (best-effort) and never
+    stored on ``runtime.services.proxy_selection_signal``. The bootstrap
+    stays fail-open (no raise).
+    """
+    import javdb.spider.runtime.state as state
+    import javdb.proxy.selection.signal as signal_mod
+
+    runtime = SpiderRuntime()
+
+    class FailingPool:
+        def set_health_provider(self, _provider):
+            raise RuntimeError("pool rejected provider")
+
+    failing_pool = FailingPool()
+    fake_signal = MagicMock()
+    fake_signal.label = "recommend_proxy+coordinator_health"
+
+    monkeypatch.setattr(
+        state,
+        "create_proxy_pool_from_config",
+        lambda *_args, **_kwargs: failing_pool,
+    )
+    monkeypatch.setattr(state, "setup_proxy_coordinator", lambda: None)
+    monkeypatch.setattr(state, "setup_login_state_client", lambda: None)
+    monkeypatch.setattr(state, "setup_movie_claim_client", lambda: None)
+    monkeypatch.setattr(state, "enforce_movie_claim_for_d1", lambda: None)
+    monkeypatch.setattr(state, "setup_runner_registry_client", lambda: None)
+    monkeypatch.setattr(state, "setup_work_distributor_client", lambda: None)
+    monkeypatch.setattr(state, "PROXY_MODE", "pool")
+    monkeypatch.setattr(
+        state,
+        "PROXY_POOL",
+        [{"name": "proxy-a", "http": "http://a:1", "https": "http://a:1"}],
+    )
+    monkeypatch.setattr(state, "PROXY_HTTP", "")
+    monkeypatch.setattr(state, "PROXY_HTTPS", "")
+    monkeypatch.setattr(
+        signal_mod.ProxySelectionSignal,
+        "from_runtime_config",
+        MagicMock(return_value=fake_signal),
+    )
+
+    state.bind_active_runtime(runtime)
+    try:
+        # Must not raise — the wiring failure is swallowed (fail-open).
+        state.setup_proxy_pool(True)
+    finally:
+        state.clear_active_runtime(runtime)
+
+    fake_signal.start.assert_called_once_with()
+    fake_signal.close.assert_called_once_with()
+    assert runtime.services.proxy_selection_signal is None
+
+
 def test_runtime_request_handler_callbacks_use_runtime_coordinator(monkeypatch):
     import javdb.spider.runtime.state as state
 
@@ -395,6 +453,36 @@ def test_runtime_proxy_coordinator_injects_runtime_sleep(monkeypatch):
 
     assert runtime.sleep.movie_sleep_mgr._coordinator is client
     assert legacy_mgr._coordinator is legacy_coordinator
+
+
+def test_runtime_proxy_coordinator_closes_client_when_health_check_fails(monkeypatch):
+    """A failed /health must close the discarded client so its requests.Session
+    connection pool is released — mirrors setup_login_state_client and the
+    create_coordinator_from_env factory.
+    """
+    import javdb.spider.runtime.state as state
+
+    runtime = SpiderRuntime()
+    client = MagicMock()
+    client.health_check.return_value = False
+
+    monkeypatch.setattr(
+        "javdb.infra.config.cfg",
+        lambda name, default="": {
+            "PROXY_COORDINATOR_URL": "https://coord.test",
+            "PROXY_COORDINATOR_TOKEN": "t",
+        }.get(name, default),
+    )
+    monkeypatch.setattr(
+        state,
+        "ProxyCoordinatorClient",
+        lambda base_url, token: client,
+    )
+
+    assert runtime.setup_proxy_coordinator() is None
+
+    client.close.assert_called_once()
+    assert runtime.services.proxy_coordinator is None
 
 
 def test_sleep_runtime_copies_existing_coordinator_binding():
@@ -682,6 +770,10 @@ def test_login_coordinator_uses_explicit_runtime_do_client_and_holder(monkeypatc
     # Smoke the unknown-target park path without relying on a global client.
     task_queue = queue.Queue()
     coordinator._park_login_task_for_unknown_target(object(), task_queue, "proxy-a")
+    # Parking spins up the real ``login-state-poller`` daemon; stop it so it
+    # does not outlive the test polling the MagicMock DO client on its own
+    # cadence (mirrors test_login_coordinator_park._stop_leaked_pollers).
+    coordinator.stop_poller()
     assert coordinator._pending_login_tasks[0][0] == "proxy-a"
 
 
@@ -1148,7 +1240,7 @@ def test_clear_active_runtime_clears_runtime_service_globals_only():
     runtime.services.proxy_coordinator = object()
     runtime.services.login_state_client = object()
     runtime.services.runner_registry_client = object()
-    runtime.services.recommend_proxy_policy = object()
+    runtime.services.proxy_selection_signal = object()
     runtime.services.work_distributor_client = object()
     runtime.movie_claim.client_public = object()
 

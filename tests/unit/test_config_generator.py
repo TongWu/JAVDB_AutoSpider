@@ -329,6 +329,123 @@ class TestGetConfigMap:
         assert entry[3] == 'false'
         assert entry[4] == 'RUNNER REGISTRY CONFIGURATION'
 
+    def test_contains_torrent_quality_evidence_keys(self):
+        """Should expose torrent quality evidence config under its own section."""
+        config_map = get_config_map()
+        entries = {item[0]: item for item in config_map if item[0] in {
+            'TORRENT_QUALITY_EVIDENCE_ENABLED',
+            'TORRENT_QUALITY_POLICY_MODE',
+            'TORRENT_QUALITY_CATEGORIES',
+        }}
+
+        assert entries['TORRENT_QUALITY_EVIDENCE_ENABLED'][1] == 'TORRENT_QUALITY_EVIDENCE_ENABLED'
+        assert entries['TORRENT_QUALITY_EVIDENCE_ENABLED'][3] is False
+        assert entries['TORRENT_QUALITY_EVIDENCE_ENABLED'][4] == 'TORRENT QUALITY EVIDENCE'
+
+        assert entries['TORRENT_QUALITY_POLICY_MODE'][1] == 'TORRENT_QUALITY_POLICY_MODE'
+        assert entries['TORRENT_QUALITY_POLICY_MODE'][3] == 'shadow'
+        assert entries['TORRENT_QUALITY_POLICY_MODE'][4] == 'TORRENT QUALITY EVIDENCE'
+
+        assert entries['TORRENT_QUALITY_CATEGORIES'][1] == 'TORRENT_QUALITY_CATEGORIES'
+        assert entries['TORRENT_QUALITY_CATEGORIES'][3] == ''
+        assert entries['TORRENT_QUALITY_CATEGORIES'][4] == 'TORRENT QUALITY EVIDENCE'
+
+
+class TestNotifyBackends:
+    """ADR-039: NOTIFY_BACKENDS / TELEGRAM_* must reach the generated config.py.
+
+    cfg() only reads the generated config.py (never env directly), so without
+    these entries the pluggable notify backends are dead in the GH Actions path.
+    """
+
+    def test_config_map_contains_notify_backend_entries(self):
+        config_map = get_config_map()
+        by_name = {item[0]: item for item in config_map}
+        assert by_name['NOTIFY_BACKENDS'][1] == 'NOTIFY_BACKENDS_JSON'
+        assert by_name['NOTIFY_BACKENDS'][3] == ['email']
+        assert by_name['NOTIFY_BACKENDS'][4] == 'NOTIFICATION BACKENDS'
+        assert by_name['TELEGRAM_BOT_TOKEN'][1] == 'TELEGRAM_BOT_TOKEN'
+        assert by_name['TELEGRAM_BOT_TOKEN'][3] == ''
+        assert by_name['TELEGRAM_CHAT_ID'][1] == 'TELEGRAM_CHAT_ID'
+
+    def test_generated_config_defaults_to_email_only(self):
+        with patch.dict(os.environ, {}, clear=True):
+            content = generate_config_content()
+        assert 'NOTIFY_BACKENDS = ["email"]' in content
+        assert "TELEGRAM_BOT_TOKEN = ''" in content
+        assert "TELEGRAM_CHAT_ID = ''" in content
+
+    def test_generated_config_honours_env_overrides(self):
+        env = {
+            'VAR_NOTIFY_BACKENDS_JSON': '["email", "telegram"]',
+            'VAR_TELEGRAM_BOT_TOKEN': '123:ABC',
+            'VAR_TELEGRAM_CHAT_ID': '-100123',
+        }
+        with patch.dict(os.environ, env, clear=True):
+            content = generate_config_content()
+        assert 'NOTIFY_BACKENDS = ["email", "telegram"]' in content
+        assert "TELEGRAM_BOT_TOKEN = '123:ABC'" in content
+        assert "TELEGRAM_CHAT_ID = '-100123'" in content
+
+
+class TestMagnetSources:
+    """ADR-054 WS3: MAGNET_SOURCES must reach generated config.py and API metadata."""
+
+    def test_config_map_contains_magnet_source_entries(self):
+        config_map = get_config_map()
+        by_name = {item[0]: item for item in config_map}
+
+        assert by_name['MAGNET_SOURCES'][1] == 'MAGNET_SOURCES_JSON'
+        assert by_name['MAGNET_SOURCES'][2] is get_env_json
+        assert by_name['MAGNET_SOURCES'][3] == []
+        assert by_name['MAGNET_SOURCES'][4] == 'MAGNET SOURCES / INDEXERS'
+
+        assert by_name['JAVBUS_BASE_URL'][1] == 'JAVBUS_BASE_URL'
+        assert by_name['JAVBUS_BASE_URL'][3] == 'https://www.javbus.com'
+        assert by_name['JAVBUS_BASE_URL'][4] == 'MAGNET SOURCES / INDEXERS'
+
+        assert by_name['SUKEBEI_BASE_URL'][1] == 'SUKEBEI_BASE_URL'
+        assert by_name['SUKEBEI_BASE_URL'][3] == 'https://sukebei.nyaa.si'
+        assert by_name['SUKEBEI_BASE_URL'][4] == 'MAGNET SOURCES / INDEXERS'
+
+        assert by_name['MAGNET_SOURCES_USE_PROXY'][1] == 'MAGNET_SOURCES_USE_PROXY'
+        assert by_name['MAGNET_SOURCES_USE_PROXY'][2] is get_env_bool
+        assert by_name['MAGNET_SOURCES_USE_PROXY'][3] is True
+        assert by_name['MAGNET_SOURCES_USE_PROXY'][4] == 'MAGNET SOURCES / INDEXERS'
+
+        assert by_name['MAGNET_SOURCE_TIMEOUT_SECONDS'][1] == 'MAGNET_SOURCE_TIMEOUT_SECONDS'
+        assert by_name['MAGNET_SOURCE_TIMEOUT_SECONDS'][2] is get_env_float
+        assert by_name['MAGNET_SOURCE_TIMEOUT_SECONDS'][3] == 10.0
+        assert by_name['MAGNET_SOURCE_TIMEOUT_SECONDS'][4] == 'MAGNET SOURCES / INDEXERS'
+
+    def test_generated_config_defaults_to_feature_off_and_proxy_on(self):
+        with patch.dict(os.environ, {}, clear=True):
+            content = generate_config_content()
+
+        assert '# MAGNET SOURCES / INDEXERS' in content
+        assert 'MAGNET_SOURCES = []' in content
+        assert "JAVBUS_BASE_URL = 'https://www.javbus.com'" in content
+        assert "SUKEBEI_BASE_URL = 'https://sukebei.nyaa.si'" in content
+        assert 'MAGNET_SOURCES_USE_PROXY = True' in content
+        assert 'MAGNET_SOURCE_TIMEOUT_SECONDS = 10.0' in content
+
+    def test_generated_config_honours_env_overrides(self):
+        env = {
+            'VAR_MAGNET_SOURCES_JSON': '["javbus", "sukebei"]',
+            'VAR_JAVBUS_BASE_URL': 'https://javbus.example.test',
+            'VAR_SUKEBEI_BASE_URL': 'https://sukebei.example.test',
+            'VAR_MAGNET_SOURCES_USE_PROXY': 'false',
+            'VAR_MAGNET_SOURCE_TIMEOUT_SECONDS': '3.5',
+        }
+        with patch.dict(os.environ, env, clear=True):
+            content = generate_config_content()
+
+        assert 'MAGNET_SOURCES = ["javbus", "sukebei"]' in content
+        assert "JAVBUS_BASE_URL = 'https://javbus.example.test'" in content
+        assert "SUKEBEI_BASE_URL = 'https://sukebei.example.test'" in content
+        assert 'MAGNET_SOURCES_USE_PROXY = False' in content
+        assert 'MAGNET_SOURCE_TIMEOUT_SECONDS = 3.5' in content
+
 
 class TestGenerateConfigContent:
     """Tests for generate_config_content function."""
@@ -355,6 +472,43 @@ class TestGenerateConfigContent:
             content = generate_config_content()
             assert '# GIT CONFIGURATION' in content
             assert '# QBITTORRENT CONFIGURATION' in content
+
+    def test_includes_torrent_quality_evidence_section(self):
+        """Should include torrent quality evidence settings in generated config."""
+        env = {}
+        with patch.dict(os.environ, env, clear=True):
+            content = generate_config_content()
+            assert '# TORRENT QUALITY EVIDENCE' in content
+            assert "TORRENT_QUALITY_EVIDENCE_ENABLED = False" in content
+            assert "TORRENT_QUALITY_POLICY_MODE = 'shadow'" in content
+            assert "TORRENT_QUALITY_CATEGORIES = ''" in content
+
+    def test_torrent_quality_evidence_env_overrides(self):
+        """Should generate torrent quality evidence values from env overrides."""
+        env = {
+            'VAR_TORRENT_QUALITY_EVIDENCE_ENABLED': 'true',
+            'VAR_TORRENT_QUALITY_POLICY_MODE': 'shadow',
+            'VAR_TORRENT_QUALITY_CATEGORIES': '["Daily Ingestion"]',
+        }
+        with patch.dict(os.environ, env, clear=True):
+            content = generate_config_content()
+            assert "TORRENT_QUALITY_EVIDENCE_ENABLED = True" in content
+            assert "TORRENT_QUALITY_POLICY_MODE = 'shadow'" in content
+            assert 'TORRENT_QUALITY_CATEGORIES = \'["Daily Ingestion"]\'' in content
+
+    def test_config_example_describes_torrent_quality_categories_as_json_array(self):
+        """Should document TORRENT_QUALITY_CATEGORIES using the consumer format."""
+        example_path = os.path.join(project_root, 'config.py.example')
+        with open(example_path, encoding='utf-8') as f:
+            content = f.read()
+
+        key_index = content.index("TORRENT_QUALITY_CATEGORIES = ''")
+        section_snippet = content[max(0, key_index - 300):key_index]
+        assert "Optional JSON array of qBittorrent categories" in section_snippet
+        assert "direct collection skips" in section_snippet
+        assert "than scanning every qBittorrent category" in section_snippet
+        assert "comma-separated category allowlist" not in section_snippet
+        assert "collect evidence for all configured qBittorrent categories" not in section_snippet
     
     def test_github_actions_mode_note(self):
         """Should include GitHub Actions note in that mode."""
@@ -442,6 +596,14 @@ class TestMaskSensitiveValues:
         assert "ops-secret" not in masked
         assert "OPS_DIAGNOSIS_API_KEY = '***MASKED***'" in masked
         assert "OPS_DIAGNOSIS_MODEL = 'fallback'" in masked
+
+    def test_masks_telegram_bot_token(self):
+        """Should mask TELEGRAM_BOT_TOKEN (ADR-039) but leave the chat id."""
+        content = "TELEGRAM_BOT_TOKEN = '123456:ABCDEF'\nTELEGRAM_CHAT_ID = '-100999'"
+        masked = mask_sensitive_values(content)
+        assert "123456:ABCDEF" not in masked
+        assert "TELEGRAM_BOT_TOKEN = '***MASKED***'" in masked
+        assert "TELEGRAM_CHAT_ID = '-100999'" in masked
 
 
 class TestWriteConfig:

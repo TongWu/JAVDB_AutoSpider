@@ -1,4 +1,4 @@
-"""History-related SQLite helpers used by `utils.infra.db`."""
+"""History-related SQLite helpers used by `javdb.storage.db`."""
 
 from __future__ import annotations
 
@@ -327,6 +327,61 @@ def _build_torrent_filters(
     return where_clause, params
 
 
+def build_movie_count(
+    *,
+    q: Optional[str] = None,
+    actor: Optional[str] = None,
+    perfect_match: Optional[bool] = None,
+    hi_res: Optional[bool] = None,
+    session_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    cursor_id: Optional[int] = None,
+) -> Tuple[str, List]:
+    where_clause, params = _build_movie_filters(
+        q=q,
+        actor=actor,
+        perfect_match=perfect_match,
+        hi_res=hi_res,
+        session_id=session_id,
+        date_from=date_from,
+        date_to=date_to,
+        cursor_id=cursor_id,
+    )
+    sql = f"SELECT MIN(COUNT(*), 10000) AS cnt FROM MovieHistory m {where_clause}"
+    return sql, params
+
+
+def build_torrent_count(
+    *,
+    q: Optional[str] = None,
+    resolution_type: Optional[int] = None,
+    has_subtitle: Optional[bool] = None,
+    uncensored: Optional[bool] = None,
+    session_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    cursor_id: Optional[int] = None,
+) -> Tuple[str, List]:
+    where_clause, params = _build_torrent_filters(
+        q=q,
+        resolution_type=resolution_type,
+        has_subtitle=has_subtitle,
+        uncensored=uncensored,
+        session_id=session_id,
+        date_from=date_from,
+        date_to=date_to,
+        cursor_id=cursor_id,
+    )
+    sql = (
+        "SELECT MIN(COUNT(*), 10000) AS cnt "
+        "FROM TorrentHistory t "
+        "JOIN MovieHistory m ON m.Id = t.MovieHistoryId "
+        f"{where_clause}"
+    )
+    return sql, params
+
+
 # ── HistoryRepo (ADR-005 PR-1) ────────────────────────────────────────
 #
 # A typed surface over the write-domain function family in
@@ -351,14 +406,34 @@ class HistoryRepo:
     surface so callers can migrate incrementally; PR-2 will inline the
     SQL here and retire the underlying functions.
 
-    Construction takes only an optional ``db_path`` override (used in
-    tests / smoke runs against a fresh DB). Methods that mutate state
-    take ``session_id`` per call so a single Repo instance can service
-    multiple sessions (e.g. a sweep over stale runs) without rebuild.
+    Construction takes an optional ``db_path`` override and an optional
+    ``session_id``. Writes resolve their session as **explicit arg >
+    constructor-bound session > raise** (ADR-046 D2) — the process-global
+    is never read. Methods that take an explicit ``session_id``
+    (``commit_session``, ``resume_finalizing_session``, ``stage_*``,
+    ``pending_session_stats``) still let one Repo service a sweep over many
+    sessions; the bulk ``batch_update_*`` writes use the bound session.
     """
 
-    def __init__(self, *, db_path: Optional[str] = None) -> None:
+    def __init__(
+        self, *, db_path: Optional[str] = None, session_id: Optional[str] = None,
+    ) -> None:
         self._db_path = db_path
+        self._session_id = session_id
+
+    def _require_session(self, explicit: Optional[str] = None) -> str:
+        """Resolve the session for a write: explicit arg > bound session > raise.
+
+        The process-global ``get_active_session_id()`` is never consulted
+        (ADR-046 D2).
+        """
+        sid = explicit if explicit is not None else self._session_id
+        if not sid:
+            raise RuntimeError(
+                "HistoryRepo write requires a session_id "
+                "(pass it, or bind via HistoryRepo(session_id=...))"
+            )
+        return sid
 
     # ── Reads (no session_id required) ────────────────────────────
 
@@ -436,12 +511,11 @@ class HistoryRepo:
 
     def batch_update_last_visited(self, hrefs: List[str]) -> int:
         """Bump LastVisited on each href; staging-aware under pending mode."""
-        from javdb.storage.db import get_active_session_id
         from javdb.storage.db._db_history_write import db_batch_update_last_visited
         return db_batch_update_last_visited(
             hrefs,
             db_path=self._db_path,
-            session_id=get_active_session_id(),
+            session_id=self._require_session(),
         )
 
     def batch_update_movie_actors(
@@ -449,12 +523,11 @@ class HistoryRepo:
     ) -> int:
         """Bulk overwrite actor fields, preserving pending-mode staging."""
         # The db.py facade owns pending-mode staging for actor-only writes.
-        from javdb.storage.db import get_active_session_id
         from javdb.storage.db._db_history_write import db_batch_update_movie_actors
         return db_batch_update_movie_actors(
             updates,
             db_path=self._db_path,
-            session_id=get_active_session_id(),
+            session_id=self._require_session(),
         )
 
     # ── Search / export (Phase 2, Task 1) ────────────────────────────
@@ -491,7 +564,17 @@ class HistoryRepo:
             except Exception:
                 raise ValueError("invalid cursor")
 
-        where_clause, params = _build_movie_filters(
+        count_sql, params = build_movie_count(
+            q=q,
+            actor=actor,
+            perfect_match=perfect_match,
+            hi_res=hi_res,
+            session_id=session_id,
+            date_from=date_from,
+            date_to=date_to,
+            cursor_id=cursor_id,
+        )
+        where_clause, _ = _build_movie_filters(
             q=q,
             actor=actor,
             perfect_match=perfect_match,
@@ -502,7 +585,6 @@ class HistoryRepo:
             cursor_id=cursor_id,
         )
 
-        count_sql = f"SELECT MIN(COUNT(*), 10000) FROM MovieHistory m {where_clause}"
         data_sql = f"""
             SELECT
                 m.Id,
@@ -570,7 +652,7 @@ class HistoryRepo:
             except Exception:
                 raise ValueError("invalid cursor")
 
-        where_clause, params = _build_torrent_filters(
+        count_sql, params = build_torrent_count(
             q=q,
             resolution_type=resolution_type,
             has_subtitle=has_subtitle,
@@ -580,13 +662,16 @@ class HistoryRepo:
             date_to=date_to,
             cursor_id=cursor_id,
         )
-
-        count_sql = f"""
-            SELECT MIN(COUNT(*), 10000)
-            FROM TorrentHistory t
-            JOIN MovieHistory m ON m.Id = t.MovieHistoryId
-            {where_clause}
-        """
+        where_clause, _ = _build_torrent_filters(
+            q=q,
+            resolution_type=resolution_type,
+            has_subtitle=has_subtitle,
+            uncensored=uncensored,
+            session_id=session_id,
+            date_from=date_from,
+            date_to=date_to,
+            cursor_id=cursor_id,
+        )
         data_sql = f"""
             SELECT
                 t.Id,

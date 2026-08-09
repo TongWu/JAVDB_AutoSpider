@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from javdb.storage.contract import fragments, order_params
+
 
 class SystemStateRepo:
     """Generic KV against the `system_state` table in operations.db.
@@ -37,14 +39,11 @@ class SystemStateRepo:
             return row[0]
 
     def put(self, key: str, value: str) -> None:
+        # Single source of truth: the ADR-055 contract registry (mirrored to the
+        # TS Worker's prepareSystemStateUpsert in sql-contract.gen.ts).
         self._conn.execute(
-            """
-            INSERT INTO system_state (key, value, updated_at)
-                VALUES (?, ?, datetime('now'))
-            ON CONFLICT(key) DO UPDATE SET value = excluded.value,
-                                            updated_at = datetime('now')
-            """,
-            (key, value),
+            fragments.SYSTEM_STATE_UPSERT.sql,
+            order_params(fragments.SYSTEM_STATE_UPSERT, key=key, value=value),
         )
 
     def delete(self, key: str) -> None:

@@ -52,6 +52,11 @@
       "category": "Self-Hoster Guides"
     },
     {
+      "source": "docs/handbook/en/self-hoster/media-servers.md",
+      "wiki_page": "Media-Servers-Setup",
+      "category": "Self-Hoster Guides"
+    },
+    {
       "source": "docs/handbook/en/developer/cli-reference.md",
       "wiki_page": "CLI-Reference",
       "category": "Developer Guides"
@@ -82,6 +87,11 @@
       "category": "Developer Guides"
     },
     {
+      "source": "docs/handbook/en/developer/mcp-server.md",
+      "wiki_page": "MCP-Server",
+      "category": "Developer Guides"
+    },
+    {
       "source": "docs/handbook/en/ops/d1-rollback.md",
       "wiki_page": "D1-Rollback",
       "category": "Operations"
@@ -99,6 +109,11 @@
     {
       "source": "docs/handbook/en/ops/migration-scripts.md",
       "wiki_page": "Migration-Scripts",
+      "category": "Operations"
+    },
+    {
+      "source": "docs/handbook/en/ops/torrent-quality-evidence.md",
+      "wiki_page": "Torrent-Quality-Evidence",
       "category": "Operations"
     }
   ]

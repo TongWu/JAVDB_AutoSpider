@@ -168,6 +168,23 @@ class TestParseIndexPageInline:
         assert 'DEF-456' in codes
         assert 'GHI-789' in codes
 
+    def test_western_studio_date_family_is_exposed(self):
+        html = '''
+        <html><body>
+          <div class="movie-list h cols-4">
+            <div class="item">
+              <a class="box" href="/v/wifey">
+                <div class="video-title"><strong>Wifey.2026.05.30</strong></div>
+              </a>
+            </div>
+          </div>
+        </body></html>
+        '''
+        result = parse_index_page(html, page_num=1)
+        assert result.movies
+        assert result.movies[0].video_code == 'Wifey.2026.05.30'
+        assert result.movies[0].video_code_family == 'western_studio_date'
+
 
 # ===================================================================
 # Index parser – real HTML files

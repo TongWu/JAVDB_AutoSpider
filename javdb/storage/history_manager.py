@@ -2,7 +2,7 @@
 History Manager for JavDB Spider
 
 Storage backend is controlled by ``STORAGE_MODE`` in config:
-  - ``db``  – SQLite only (via utils.infra.db)
+  - ``db``  – SQLite only (via javdb.storage.db)
   - ``csv`` – CSV only (or Rust CSV override when available)
   - ``duo`` – SQLite first, then CSV
 
@@ -13,6 +13,7 @@ mode is disabled, the Rust implementation takes precedence for CSV ops.
 import csv
 import os
 from datetime import datetime, timedelta
+from typing import Optional
 
 from javdb.infra.config import use_sqlite, use_csv
 from javdb.infra.logging import get_logger
@@ -120,11 +121,15 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code,
                                   magnet_links=None, size_links=None,
                                   file_count_links=None, resolution_links=None,
                                   actor_name=None, actor_gender=None, actor_link=None,
-                                  supporting_actors=None):
+                                  supporting_actors=None, *, session_id: Optional[str] = None):
     """Save a parsed movie to the history, updating existing records with new magnet links.
 
     *actor_name* / *actor_gender* / *actor_link* / *supporting_actors*: passed to SQLite upsert
     when set (including ``''``); ``None`` leaves existing DB values unchanged on update.
+
+    *session_id* is the explicit run session (ADR-046 D2 — never ambient). When
+    ``None`` the SQLite stage is skipped with a warning (callers on dead/tool
+    paths pass ``None`` deliberately).
     """
     if magnet_links is None:
         magnet_links = {'no_subtitle': ''}
@@ -140,8 +145,6 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code,
     if use_sqlite():
         _ensure_db()
     if use_sqlite():
-        from javdb.storage.db import get_active_session_id
-
         history_repo = HistoryRepo()
         filtered = {}
         filtered_sizes = {}
@@ -168,7 +171,7 @@ def save_parsed_movie_to_history(history_file, href, phase, video_code,
             filtered_fc['no_subtitle'] = file_count_links.get('no_subtitle', 0)
             filtered_res['no_subtitle'] = resolution_links.get('no_subtitle')
 
-        active_sid = get_active_session_id()
+        active_sid = session_id
         if active_sid is None:
             logger.warning(
                 "No active session id set; skipping history save for %s", href,
@@ -220,12 +223,18 @@ def validate_history_file(history_file):
     return _csv_validate_history_file(history_file)
 
 
-def batch_update_last_visited(history_file, visited_hrefs):
-    """Update last_visited_datetime for a set of hrefs."""
+def batch_update_last_visited(history_file, visited_hrefs, *, session_id):
+    """Update last_visited_datetime for a set of hrefs.
+
+    ``session_id`` is the explicit run session (ADR-046 D2), bound onto the
+    write repo instead of resolved from a process-global.
+    """
     if use_sqlite():
         _ensure_db()
     if use_sqlite():
-        updated = HistoryRepo().batch_update_last_visited(list(visited_hrefs))
+        updated = HistoryRepo(session_id=session_id).batch_update_last_visited(
+            list(visited_hrefs)
+        )
         if updated:
             logger.debug(f"Updated last_visited_datetime for {updated} movies")
 
@@ -350,12 +359,18 @@ def is_downloaded_torrent(torrent_content):
     return torrent_content.strip().startswith("[DOWNLOADED PREVIOUSLY]")
 
 
-def mark_torrent_as_downloaded(history_file, href, video_code, torrent_type):
-    """Mark a specific torrent type as downloaded in history."""
+def mark_torrent_as_downloaded(history_file, href, video_code, torrent_type,
+                               *, session_id: Optional[str] = None):
+    """Mark a specific torrent type as downloaded in history.
+
+    *session_id* is the explicit run session (ADR-046 D2 — never ambient),
+    forwarded to the history write. ``None`` skips the SQLite stage (warn).
+    """
     try:
         save_parsed_movie_to_history(
             history_file, href, "2", video_code,
             {torrent_type: f'magnet:?dn=downloaded&vc={video_code}'},
+            session_id=session_id,
         )
         logger.debug(f"Marked {torrent_type} as downloaded for {video_code} ({href})")
         return True
@@ -726,6 +741,13 @@ if not use_sqlite():
             mark_torrent_as_downloaded,
         )
         RUST_HISTORY_AVAILABLE = True
+        # ADR-046 D2: the module-level batch_update_last_visited takes a
+        # keyword-only session_id (the SQLite pending path uses it). CSV mode
+        # has no sessions, so wrap the Rust fn to accept and ignore it — keeping
+        # the call signature identical across storage modes.
+        _rust_batch_update_last_visited = batch_update_last_visited
+        def batch_update_last_visited(history_file, visited_hrefs, *, session_id):  # noqa: F811
+            return _rust_batch_update_last_visited(history_file, visited_hrefs)
         logger.debug("Rust history manager loaded - using high-performance Rust implementation")
     except ImportError as e:
         logger.warning(f"Rust history manager not available (ImportError: {e}) - using pure-Python implementation")

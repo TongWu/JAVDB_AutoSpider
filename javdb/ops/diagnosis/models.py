@@ -8,9 +8,18 @@ import hashlib
 import json
 from typing import Any, Literal
 
+from javdb.storage.contract.fragments import (
+    OPS_ALERT_POLICY_ID_HASH_LENGTH,
+    OPS_ALERT_POLICY_ID_PREFIX,
+    OPS_ALERT_POLICY_ID_SALT,
+)
+
 
 Confidence = Literal["low", "medium", "high"]
 IncidentStatus = Literal["open", "acknowledged", "resolved", "dismissed"]
+AlertStatus = Literal["fired", "suppressed", "skipped"]
+
+_CONFIDENCE_ORDER: dict[str, int] = {"low": 0, "medium": 1, "high": 2}
 
 
 def utc_now_iso() -> str:
@@ -20,6 +29,10 @@ def utc_now_iso() -> str:
 
 def _json_dumps(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def confidence_rank(value: str) -> int:
+    return _CONFIDENCE_ORDER.get(value, 0)
 
 
 def build_incident_id(
@@ -39,6 +52,14 @@ def build_incident_id(
     ])
     digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
     return f"opsinc_{digest}"
+
+
+def build_alert_policy_id(incident_type: str) -> str:
+    salt = str(OPS_ALERT_POLICY_ID_SALT.values)
+    prefix = str(OPS_ALERT_POLICY_ID_PREFIX.values)
+    hash_length = int(OPS_ALERT_POLICY_ID_HASH_LENGTH.values)
+    digest = hashlib.sha256(f"{salt}{incident_type}".encode("utf-8")).hexdigest()[:hash_length]
+    return f"{prefix}{digest}"
 
 
 @dataclass(frozen=True)
@@ -147,3 +168,168 @@ class OpsIncidentRecord:
         data["persistence_status"] = status
         data["updated_at"] = utc_now_iso()
         return OpsIncidentRecord(**data)
+
+
+@dataclass(frozen=True)
+class OpsIncidentFeatures:
+    incident_id: str
+    incident_type: str
+    status: IncidentStatus
+    confidence: Confidence
+    workflow_name: str | None
+    run_id: str | None
+    run_attempt: int | None
+    session_id: str | None
+    feature_version: str
+    categorical_features_json: str
+    text_tokens_json: str
+    unsafe_action_tokens_json: str
+    evidence_kinds_json: str
+    created_at: str
+    updated_at: str
+
+
+@dataclass(frozen=True)
+class OpsAlertPolicy:
+    policy_id: str
+    incident_type: str
+    min_confidence: Confidence
+    enabled: bool
+    channels_json: str
+    updated_by: str | None
+    created_at: str
+    updated_at: str
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        incident_type: str,
+        min_confidence: Confidence = "medium",
+        enabled: bool = True,
+        channels: list[str] | None = None,
+        updated_by: str | None = None,
+    ) -> "OpsAlertPolicy":
+        now = utc_now_iso()
+        return cls(
+            policy_id=build_alert_policy_id(incident_type),
+            incident_type=incident_type,
+            min_confidence=min_confidence,
+            enabled=enabled,
+            channels_json=_json_dumps(channels or []),
+            updated_by=updated_by,
+            created_at=now,
+            updated_at=now,
+        )
+
+
+@dataclass(frozen=True)
+class OpsAlertEvent:
+    alert_id: str
+    incident_id: str
+    policy_id: str | None
+    status: AlertStatus
+    reason: str | None
+    fired_at: str
+
+
+@dataclass(frozen=True)
+class AlertDecision:
+    alert_id: str
+    incident_id: str
+    policy_id: str | None
+    status: AlertStatus
+    reason: str
+
+    def to_event(self) -> OpsAlertEvent:
+        return OpsAlertEvent(
+            alert_id=self.alert_id,
+            incident_id=self.incident_id,
+            policy_id=self.policy_id,
+            status=self.status,
+            reason=self.reason,
+            fired_at=utc_now_iso(),
+        )
+
+
+@dataclass(frozen=True)
+class SimilarIncident:
+    incident_id: str
+    score: float
+    matched_reasons: list[str]
+
+
+ActionType = Literal[
+    "open_runbook",
+    "prepare_rollback_workflow",
+    "prepare_rerun_workflow",
+    "prepare_drift_apply_command",
+    "inspect_qb_side_effects",
+    "inspect_recovery_outbox",
+]
+ProposalStatus = Literal["proposed", "approved", "rejected", "expired"]
+SafetyLevel = Literal["safe_to_prepare", "requires_review", "blocked"]
+
+
+def build_proposal_id(incident_id: str, action_type: str) -> str:
+    digest = hashlib.sha256(f"{incident_id}|{action_type}".encode("utf-8")).hexdigest()[:24]
+    return f"opsprop_{digest}"
+
+
+@dataclass(frozen=True)
+class OpsRemediationProposal:
+    proposal_id: str
+    incident_id: str
+    action_type: ActionType
+    status: ProposalStatus
+    safety_level: SafetyLevel
+    title: str
+    rationale: str
+    command_preview: str | None
+    runbook_ref: str | None
+    evidence_refs_json: str
+    required_checks_json: str
+    blocked_reasons_json: str
+    proposed_by: str
+    decided_by: str | None
+    decision_note: str | None
+    created_at: str
+    updated_at: str
+    decided_at: str | None = None
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        incident_id: str,
+        action_type: ActionType,
+        safety_level: SafetyLevel,
+        title: str,
+        rationale: str,
+        command_preview: str | None = None,
+        runbook_ref: str | None = None,
+        evidence_refs: list[EvidenceRef] | None = None,
+        required_checks: list[str] | None = None,
+        blocked_reasons: list[str] | None = None,
+        proposed_by: str = "adr026-policy-v1",
+    ) -> "OpsRemediationProposal":
+        now = utc_now_iso()
+        return cls(
+            proposal_id=build_proposal_id(incident_id, action_type),
+            incident_id=incident_id,
+            action_type=action_type,
+            status="proposed",
+            safety_level=safety_level,
+            title=title,
+            rationale=rationale,
+            command_preview=command_preview,
+            runbook_ref=runbook_ref,
+            evidence_refs_json=_json_dumps([asdict(ref) for ref in evidence_refs or []]),
+            required_checks_json=_json_dumps(required_checks or []),
+            blocked_reasons_json=_json_dumps(blocked_reasons or []),
+            proposed_by=proposed_by,
+            decided_by=None,
+            decision_note=None,
+            created_at=now,
+            updated_at=now,
+        )

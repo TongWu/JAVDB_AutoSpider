@@ -32,7 +32,16 @@ def _clear_rust_ban_manager():
     session bans recorded via the singleton don't leak across cases (the Rust
     GLOBAL_BAN_MANAGER OnceCell persists even when the Python wrapper is reset)."""
     def _clear():
-        mgr = get_ban_manager()
+        try:
+            mgr = get_ban_manager()
+        except RuntimeError:
+            # Rust core unavailable, or a test (test_rust_required_guard_raises_
+            # _without_rust) has monkeypatched RUST_BAN_MANAGER_AVAILABLE off and
+            # that patch is still active during this teardown. No global manager
+            # exists, so there are no leaked bans to clear.
+            return
+        if hasattr(mgr, "set_ban_dispatch_callback"):
+            mgr.set_ban_dispatch_callback(None)
         for name in list(mgr.get_banned_proxy_names()):
             mgr.remove_ban(name)
 
@@ -163,6 +172,34 @@ class TestProxyBanManager:
         manager2 = ProxyBanManager()
         assert manager2.is_proxy_banned("proxy-1") is False
 
+    def test_rust_ban_dispatch_callback_fires_once_per_new_ban(self):
+        from javdb.rust_core import RustProxyBanManager
+
+        manager = RustProxyBanManager()
+        calls: list[tuple[str, object]] = []
+        manager.set_ban_dispatch_callback(lambda name, reason: calls.append((name, reason)))
+
+        manager.add_ban("proxy-a", None, "ban page detected")
+        manager.add_ban("proxy-a", None, "ban page detected")
+        manager.add_ban("proxy-b", None, None)
+
+        assert calls == [
+            ("proxy-a", "ban page detected"),
+            ("proxy-b", None),
+        ]
+
+    def test_set_ban_dispatch_callback_none_clears(self):
+        from javdb.rust_core import RustProxyBanManager
+
+        manager = RustProxyBanManager()
+        calls: list[str] = []
+        manager.set_ban_dispatch_callback(lambda name, _reason: calls.append(name))
+        manager.set_ban_dispatch_callback(None)
+
+        manager.add_ban("proxy-c", None, None)
+
+        assert calls == []
+
 
 class TestGetBanManager:
     """Test cases for the get_ban_manager singleton accessor."""
@@ -188,16 +225,12 @@ class TestGetBanManager:
         with pytest.raises(RuntimeError, match="requires the Rust core"):
             get_ban_manager()
 
-
 class TestRemoteBanDispatcher:
     """The cross-runner ban dispatcher function ``_dispatch_remote_ban``.
 
-    ADR-041 made the proxy ban manager Rust-Required; the Rust ``add_ban`` cannot
-    reach the Python ``_dispatch_remote_ban`` hook from inside the extension, so
-    the former ``ProxyBanManager().add_ban`` → hook wiring tests (which exercised
-    the now-removed *Python* ban manager) were dropped. That cross-runner
-    dispatch gap on the Rust path is tracked in BFR-009. What remains valid is
-    the dispatcher function's own input guarding.
+    BFR-009 is fixed by registering this dispatcher as the Rust ban-manager
+    callback. These tests pin the Python-side guard behaviour and the
+    production Rust callback wiring.
     """
 
     def setup_method(self):
@@ -223,7 +256,33 @@ class TestRemoteBanDispatcher:
             set_remote_ban_hook,
         )
         captured: list = []
-        set_remote_ban_hook(lambda name: captured.append(name))
-        _dispatch_remote_ban("")
+        set_remote_ban_hook(lambda name, reason: captured.append((name, reason)))
+        _dispatch_remote_ban("", "ban page detected")
         _dispatch_remote_ban(None)  # type: ignore[arg-type]
         assert captured == []
+
+    def test_remote_hook_receives_reason(self):
+        from javdb.proxy.ban_manager import (
+            _dispatch_remote_ban,
+            set_remote_ban_hook,
+        )
+        captured: list[tuple[str, str | None]] = []
+        set_remote_ban_hook(lambda name, reason: captured.append((name, reason)))
+        _dispatch_remote_ban("proxy-x", "ban page detected")
+        assert captured == [("proxy-x", "ban page detected")]
+
+    def test_install_rust_ban_dispatch_wires_production_manager(self):
+        from javdb.proxy.ban_manager import (
+            get_ban_manager,
+            install_rust_ban_dispatch,
+            set_remote_ban_hook,
+        )
+        captured: list[tuple[str, str | None]] = []
+        set_remote_ban_hook(lambda name, reason: captured.append((name, reason)))
+        install_rust_ban_dispatch()
+
+        manager = get_ban_manager()
+        manager.add_ban("proxy-prod", None, "ban page detected")
+        manager.add_ban("proxy-prod", None, "ban page detected")
+
+        assert captured == [("proxy-prod", "ban page detected")]

@@ -60,7 +60,7 @@ on:
       runner:
         description: 'Runner type for pipeline jobs'
         required: false
-        default: 'ubuntu-latest'
+        default: 'self-hosted'
         type: choice
         options:
           - 'ubuntu-latest'
@@ -76,11 +76,12 @@ jobs:
   # Job 1: Setup and Run Pipeline - Simplified single job
   # =============================================================================
   run-pipeline:
-    runs-on: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
+    runs-on: ${{ github.event.inputs.runner || 'self-hosted' }}
     environment: Production
     env:
       TZ: Asia/Singapore
       D1_RECOVERY_OUTBOX_ENABLED: ${{ vars.D1_RECOVERY_OUTBOX_ENABLED || 'false' }}
+      D1_CIRCUIT_BREAKER_ENABLED: ${{ vars.D1_CIRCUIT_BREAKER_ENABLED || 'true' }}
       D1_BATCHING_ENABLED: ${{ vars.D1_BATCHING_ENABLED || 'false' }}
       D1_STARTUP_REPLAY_ENABLED: ${{ vars.D1_STARTUP_REPLAY_ENABLED || 'false' }}
       # Ingestion Perfect Rollback (Phase 2): TestIngestion is the
@@ -144,6 +145,7 @@ jobs:
           VAR_PAGE_END: '20'
           VAR_PHASE2_MIN_RATE: '4.0'
           VAR_PHASE2_MIN_COMMENTS: '85'
+          VAR_DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST_JSON: ${{ vars.DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST_JSON || '["western_studio_date"]' }}
           VAR_MOVIE_SLEEP: '5,15'
           VAR_LOG_LEVEL: 'INFO'
           VAR_SPIDER_LOG_FILE: 'logs/spider.log'

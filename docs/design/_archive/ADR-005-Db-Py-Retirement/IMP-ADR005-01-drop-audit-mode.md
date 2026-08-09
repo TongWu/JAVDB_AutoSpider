@@ -8,7 +8,7 @@
 
 **Architecture:** Delete audit DDL, helper functions, write paths, rollback replay, CLI tools, workflow, and tests. Simplify WriteMode to only `'pending'`. Add v14 migration to DROP the two audit tables. Do NOT delete `db.py` itself or `JAVDB_HISTORY_WRITE_MODE` (those belong to PR-5).
 
-**Related:** [ADR-005](../../design/adr/ADR-005-db-py-retirement-and-repo-pattern.md) decisions D2, D9, D10
+**Related:** [ADR-005](ADR-005-db-py-retirement-and-repo-pattern.md) decisions D2, D9, D10
 
 ---
 

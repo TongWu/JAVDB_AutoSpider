@@ -3,7 +3,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 
 from javdb.ops.reconcile import persistence
-from javdb.storage.db import OPERATIONS_DB_PATH
+from javdb.storage import db as _db
 
 
 def test_open_outcome_repo_uses_operations_db_path(monkeypatch):
@@ -22,4 +22,7 @@ def test_open_outcome_repo_uses_operations_db_path(monkeypatch):
     with persistence.open_outcome_repo() as repo:
         assert repo is fake_repo
 
-    assert seen_paths == [OPERATIONS_DB_PATH]
+    # OPERATIONS_DB_PATH is resolved at call time (BFR-016): read it from the
+    # package the same way open_outcome_repo does so the autouse _isolate_sqlite
+    # path monkeypatch is reflected on both sides.
+    assert seen_paths == [_db.OPERATIONS_DB_PATH]

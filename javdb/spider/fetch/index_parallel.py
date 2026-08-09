@@ -21,6 +21,11 @@ from typing import Dict, List, Optional
 
 from javdb.infra.logging import get_logger
 from javdb.parsing import parse_index_page
+from javdb.pipeline.index_family_blacklist import (
+    filter_blacklisted_families,
+    load_daily_family_blacklist,
+    log_family_blacklist_summary,
+)
 from javdb.pipeline.index_selection import select_index_entries
 from javdb.spider.url_helper import detect_url_type
 from javdb.spider.filename_helper import generate_output_csv_name_from_html
@@ -240,6 +245,8 @@ def fetch_all_index_pages_parallel(
     consecutive_empty = 0
 
     _sentinel_field_health.start_run()  # ADR-035: begin per-run field-health (parallel path)
+    family_blacklist_counts: dict[str, int] = {}
+    daily_family_blacklist = load_daily_family_blacklist(custom_url)
 
     for page_num in sorted_pages:
         result = results_by_page[page_num]
@@ -277,6 +284,13 @@ def fetch_all_index_pages_parallel(
         if _acc is not None and page_result is not None:
             _acc.observe("index", page_result.movies)  # ADR-035 piggyback
 
+        if page_result is not None and daily_family_blacklist:
+            page_result.movies = filter_blacklisted_families(
+                page_result.movies,
+                daily_family_blacklist,
+                family_blacklist_counts,
+            )
+
         if phase_mode in ['1', 'all']:
             page_results = select_index_entries(
                 page_result,
@@ -312,6 +326,7 @@ def fetch_all_index_pages_parallel(
         "Fetched and parsed %d pages (parallel)",
         last_valid_page - start_page + 1 if last_valid_page >= start_page else 0,
     )
+    log_family_blacklist_summary(logger, family_blacklist_counts)
 
     # ADR-035: do NOT persist field-health here — the report session does not
     # exist yet at index-fetch time (run_service creates it afterwards). The

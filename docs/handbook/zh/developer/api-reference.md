@@ -24,12 +24,51 @@
 - `GET /api/system/state?key=...` — 从 `system_state` 读取 KV 对。
 - `PUT /api/system/state` — 仅 admin;写入 KV 对。
 
+### 种子质量
+
+- `GET /api/quality/evaluations?limit=&movie_href=` — 需认证、只读，列出 ADR-024 影子质量评估。省略 `movie_href` 时返回最近评估。
+- `GET /api/quality/evidence/{info_hash}` — 需认证、只读，返回 `production_download` 角色的种子级证据。
+
+以下三个端点由 ADR-024 IMP-08（assist 模式，2026-06-19）新增。仅当 `TORRENT_QUALITY_POLICY_MODE=assist` 时，底层评估行才会被带 gate 的 assist 评估器填充。
+
+- `GET /api/quality/recommendations?movie_href=` — 需认证、只读。按分类返回当前生产选择与 `shadow_rank=1` 推荐候选，以及 reason-code 差异。响应结构：`{items: [{javdb_category, current, recommended, reason_diff}]}`。
+- `GET /api/quality/needs-review?limit=` — 需认证、只读。返回 `decision='needs_review'` 或 `would_replace_current_choice=true` 的评估。`limit` 默认 50，上限 200；`limit<=0` → 400。
+- `POST /api/quality/review-labels` — 仅 admin。请求体：`{info_hash, movie_href, scoring_version, label, note?}`，其中 `label ∈ accept | reject | skip`。通过 `TorrentQualityReviewRepo` 记录运维决策（该标注数据集供 Phase 3 调优阈值使用）。返回 `{status: "recorded"}`。`label` 非法 → 422。`reviewed_at` 由服务端生成；`reviewer` 从 JWT subject 读取。
+
+### 用户意图与发现
+
+这些端点是双后端接口：Python FastAPI surface 与 Cloudflare Worker mirror
+暴露相同 shape。UI 渲染由 `capabilities.features.watch_intent` 和
+`capabilities.features.subscriptions` gate。
+
+- `GET /api/subscriptions?active_only=&limit=&offset=` — 需认证，列出已关注演员（`ActorSubscription`）。
+- `PUT /api/subscriptions/{actor_href}` — 仅 admin；通过 `{actor_name?, active}` 关注或重新启用演员。存储键是规范化后的 `/actors/<id>` href。
+- `GET /api/subscriptions/{actor_href}` — 需认证，读取单个已关注演员。
+- `DELETE /api/subscriptions/{actor_href}` — 仅 admin；取消关注演员。
+- `GET /api/new-works?actor_href=&include_dismissed=&limit=&offset=` — 需认证，列出已关注演员的新作 feed。
+- `POST /api/new-works/{video_code}/dismiss` — 仅 admin；从默认 feed 隐藏某条新作。
+
 ### 会话(Sessions)
 
 - `GET /api/sessions?state=&cursor=&limit=` — ReportSessions 的游标分页列表。
 - `GET /api/sessions/{session_id}` — 会话完整详情,包含写入记录。
 - `POST /api/sessions/{session_id}/rollback` — 仅 admin;请求体 `{dry_run, include_pending, restore_from_audit}`。
 - `POST /api/sessions/{session_id}/commit` — 仅 admin;请求体 `{force, drop_pending, fanout_claims, emit_metrics}`。`fanout_claims` 与 `emit_metrics` 默认为 `true`,让 HTTP 路径与 CLI 的完整 commit 行为对齐(MovieClaim 协调器 fanout + `pending_session_verify` JSONL 写入);如需仅修改 DB,显式传 `false`。
+
+### 诊断 — 站点契约漂移(ADR-035)
+
+站点契约漂移哨兵的只读接口。受 `capabilities.features.site_drift_sentinel` 控制(为 `false` 时前端隐藏漂移面板)。
+
+- `GET /api/diag/ops-incidents?incident_type=site_drift` — 按类型过滤已持久化的运维事件;`incident_type=site_drift` 专门返回漂移事件(同时接受 `status`、`run_id`、`session_id`、`confidence`、`limit`)。
+- `GET /api/diag/parse-field-health` — 每个契约字段最新一次已提交(committed)的解析健康度。响应:
+
+  ```json
+  { "items": [ { "page_type": "index", "field": "href", "severity": "critical",
+                 "fill_rate": 0.99, "sample_count": 120, "observed_at": "...",
+                 "baseline": null, "threshold": 0.99, "status": "ok" } ] }
+  ```
+
+  `status ∈ ok | critical_drift | soft_drift | no_baseline | insufficient_sample`。
 
 ### 测试模式(仅供 E2E)
 

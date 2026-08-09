@@ -29,9 +29,7 @@ import os
 import queue
 import threading
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
-
-import requests
+from typing import Dict, List, Optional
 
 from javdb.proxy.coordinator.do_client_base import (
     BaseDOClient,
@@ -45,11 +43,9 @@ logger = get_logger(__name__)
 _DEFAULT_TIMEOUT_SEC = 5.0
 _DEFAULT_USER_AGENT = "javdb-spider-proxy-coordinator-client/1.0"
 
-# P1-A — default ban duration (3 days) used by `mark_proxy_banned` and the
-# Worker's `loadBanTtlMs` fallback.  Keeping the value here lets every spider
-# call site stay consistent without having to thread the constant through
-# config; if ops want to override globally they can set the Worker's
-# `BAN_TTL_MS` via `wrangler.toml [vars]` instead.
+# P1-A — Worker's fallback ban duration (3 days) when a ban report omits
+# ``ttl_ms`` and the Worker cannot map the reason to a more specific TTL.
+# Ops can override globally with `BAN_TTL_MS` in `wrangler.toml [vars]`.
 DEFAULT_BAN_TTL_MS = 3 * 24 * 60 * 60 * 1000  # 259_200_000
 
 # ── Async report dispatch ────────────────────────────────────────────────
@@ -65,8 +61,6 @@ DEFAULT_BAN_TTL_MS = 3 * 24 * 60 * 60 * 1000  # 259_200_000
 # endpoint already carries the authoritative penalty factor.
 _ASYNC_REPORT_WORKERS = 2
 _ASYNC_REPORT_QUEUE_SIZE = 64
-# Sentinel pushed at shutdown to release blocking ``queue.get`` calls.
-_ASYNC_QUEUE_SENTINEL: Tuple = (None, None)
 
 
 class CoordinatorUnavailable(DOClientUnavailable):
@@ -76,6 +70,23 @@ class CoordinatorUnavailable(DOClientUnavailable):
     (e.g. :class:`MovieSleepManager`) catch it to fall back to local
     throttling without aborting the request.
     """
+
+
+@dataclass(frozen=True)
+class AsyncReportEvent:
+    """Queued fire-and-forget report payload for async worker dispatch."""
+
+    proxy_id: str
+    kind: str
+    ttl_ms: Optional[int] = None
+    reason: Optional[str] = None
+    latency_ms: Optional[int] = None
+
+
+# Sentinel pushed at shutdown to release blocking ``queue.get`` calls.
+ASYNC_QUEUE_SENTINEL = AsyncReportEvent(proxy_id="", kind="__sentinel__")
+# Backwards-compatible private alias for existing imports.
+_ASYNC_QUEUE_SENTINEL = ASYNC_QUEUE_SENTINEL
 
 
 @dataclass(frozen=True)
@@ -256,7 +267,7 @@ class ProxyCoordinatorClient(BaseDOClient):
         # Bounded fire-and-forget pool for ``report_async``. Keep capacity at
         # least equal to the worker count so shutdown can enqueue one sentinel
         # per worker after draining pending events.
-        self._async_queue: "queue.Queue[Tuple[Optional[str], Optional[str]]]" = (
+        self._async_queue: queue.Queue[AsyncReportEvent] = (
             queue.Queue(maxsize=max(self._async_worker_count, int(async_queue_size)))
         )
         self._async_dropped = 0
@@ -294,25 +305,11 @@ class ProxyCoordinatorClient(BaseDOClient):
         except ValueError as e:
             raise CoordinatorUnavailable(f"invalid proxy_id: {e}") from e
         intended = max(0, int(intended_sleep_ms))
-        try:
-            resp = self._session.post(
-                f"{self._base_url}/lease",
-                json={"proxy_id": normalized, "intended_sleep_ms": intended},
-                timeout=self._timeout,
-            )
-        except (requests.Timeout, requests.ConnectionError) as e:
-            raise CoordinatorUnavailable(f"network error: {e}") from e
-        except requests.RequestException as e:
-            raise CoordinatorUnavailable(f"request failed: {e}") from e
-
-        if resp.status_code >= 300:
-            raise CoordinatorUnavailable(
-                f"HTTP {resp.status_code}: {resp.text[:200]}"
-            )
-        try:
-            data = resp.json()
-        except ValueError as e:
-            raise CoordinatorUnavailable(f"invalid JSON: {e}") from e
+        data = self._do_request(
+            "POST",
+            "/lease",
+            {"proxy_id": normalized, "intended_sleep_ms": intended},
+        )
 
         try:
             # P1-A — surface ban / cf_bypass piggy-backed on the lease.  All
@@ -388,9 +385,9 @@ class ProxyCoordinatorClient(BaseDOClient):
         silently bucketed under ``"cf"``.
 
         ``ttl_ms`` is honoured by ``kind="ban"`` and ``kind="cf_bypass"``;
-        ignored otherwise.  ``reason`` is a free-form ops annotation
-        (e.g. ``"manual"``, ``"penalty_2"``); the Worker stores it in the
-        analytics dataset but does not act on it.
+        ignored otherwise.  For ``kind="ban"``, omitting ``ttl_ms`` lets the
+        Worker choose the ban TTL from ``reason`` (hard JavDB ban, CF ban, or
+        default).  ``reason`` is also kept as a free-form ops annotation.
 
         ``latency_ms`` (P2-D) is folded into the per-proxy latency EMA on
         the Worker side and is honoured for any ``kind`` (typically
@@ -417,25 +414,7 @@ class ProxyCoordinatorClient(BaseDOClient):
             # EMA.  The Worker also defends against this but doing it here
             # keeps the wire payload tidy.
             body["latency_ms"] = max(0, int(latency_ms))
-        try:
-            resp = self._session.post(
-                f"{self._base_url}/report",
-                json=body,
-                timeout=self._timeout,
-            )
-        except (requests.Timeout, requests.ConnectionError) as e:
-            raise CoordinatorUnavailable(f"network error: {e}") from e
-        except requests.RequestException as e:
-            raise CoordinatorUnavailable(f"request failed: {e}") from e
-
-        if resp.status_code >= 300:
-            raise CoordinatorUnavailable(
-                f"HTTP {resp.status_code}: {resp.text[:200]}"
-            )
-        try:
-            data = resp.json()
-        except ValueError as e:
-            raise CoordinatorUnavailable(f"invalid JSON: {e}") from e
+        data = self._do_request("POST", "/report", body)
 
         try:
             return ReportResult(
@@ -490,10 +469,14 @@ class ProxyCoordinatorClient(BaseDOClient):
                     t.start()
                     self._async_workers.append(t)
             try:
-                # Always enqueue a 5-tuple; the worker unpacks defensively so
-                # legacy 2-/4-tuples in flight at upgrade time still work.
                 self._async_queue.put_nowait(
-                    (proxy_id, kind, ttl_ms, reason, latency_ms)
+                    AsyncReportEvent(
+                        proxy_id=proxy_id,
+                        kind=kind,
+                        ttl_ms=ttl_ms,
+                        reason=reason,
+                        latency_ms=latency_ms,
+                    )
                 )
             except queue.Full:
                 self._async_dropped += 1
@@ -520,16 +503,17 @@ class ProxyCoordinatorClient(BaseDOClient):
     def mark_proxy_banned(
         self,
         proxy_id: str,
-        *,
-        ttl_ms: int = DEFAULT_BAN_TTL_MS,
         reason: Optional[str] = None,
+        *,
+        ttl_ms: Optional[int] = None,
     ) -> None:
-        """Persist a cross-runner ban on *proxy_id* (default 3 days).
+        """Persist a cross-runner ban on *proxy_id*.
 
-        The Worker takes the maximum of any concurrent ban TTL so two
-        runners reporting different durations on the same proxy never
-        accidentally shorten an existing ban.  Auto-expires server-side;
-        no client-side cleanup is required.
+        When ``ttl_ms`` is ``None``, the Worker chooses the TTL from
+        ``reason`` (ADR-043 D9: JavDB hard ban → 8 d, CF → 6 h, else 3 d).
+        Explicit ``ttl_ms`` still wins for manual/ops bans. The Worker takes
+        the maximum of concurrent ban TTLs so a shorter report never shortens
+        an existing ban.
         """
         self.report_async(proxy_id, "ban", ttl_ms=ttl_ms, reason=reason)
 
@@ -565,29 +549,20 @@ class ProxyCoordinatorClient(BaseDOClient):
         while True:
             item = self._async_queue.get()
             try:
-                if item is _ASYNC_QUEUE_SENTINEL or item[0] is None:
+                if item is ASYNC_QUEUE_SENTINEL:
                     return
-                # Backwards-compat: existing tests / call sites may push a
-                # 2-tuple ``(proxy_id, kind)`` or a 4-tuple including
-                # ``ttl_ms`` / ``reason``; new P2-D sites push a 5-tuple
-                # adding ``latency_ms``.  Unpack defensively.
-                proxy_id = item[0]
-                kind = item[1]
-                ttl_ms = item[2] if len(item) > 2 else None
-                reason = item[3] if len(item) > 3 else None
-                latency_ms = item[4] if len(item) > 4 else None
                 # Only forward optional kwargs when explicitly set so test
                 # stubs that monkeypatch ``report`` with the legacy 2-arg
                 # signature stay compatible.
                 kwargs: dict = {}
-                if ttl_ms is not None:
-                    kwargs["ttl_ms"] = ttl_ms
-                if reason is not None:
-                    kwargs["reason"] = reason
-                if latency_ms is not None:
-                    kwargs["latency_ms"] = latency_ms
+                if item.ttl_ms is not None:
+                    kwargs["ttl_ms"] = item.ttl_ms
+                if item.reason is not None:
+                    kwargs["reason"] = item.reason
+                if item.latency_ms is not None:
+                    kwargs["latency_ms"] = item.latency_ms
                 try:
-                    self.report(proxy_id, kind, **kwargs)
+                    self.report(item.proxy_id, item.kind, **kwargs)
                 except CoordinatorUnavailable as e:
                     logger.warning("Coordinator report_async failed: %s", e)
                 except Exception:  # noqa: BLE001 — must never escape a daemon worker
@@ -599,7 +574,7 @@ class ProxyCoordinatorClient(BaseDOClient):
         """Reliably enqueue one shutdown sentinel for a worker without blocking."""
         while True:
             try:
-                self._async_queue.put_nowait(_ASYNC_QUEUE_SENTINEL)
+                self._async_queue.put_nowait(ASYNC_QUEUE_SENTINEL)
                 return
             except queue.Full:
                 try:

@@ -24,53 +24,50 @@ Invalid: ``scan + execute`` without ``report``.
 import os
 import re
 import csv
-import gc
 import tempfile
-from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
-
-_YEAR_RE = re.compile(r"^\d{4}$")
-
-REPO_ROOT = Path(__file__).resolve().parents[4]
 
 from javdb.infra.config import cfg
 from javdb.infra.logging import setup_logging, get_logger
 from javdb.infra.paths import find_latest_report_in_dated_dirs, ensure_dated_dir
 
-from javdb.integrations.rclone.helper import (
-    FolderInfo,
-    DedupResult,
-    check_rclone_installed,
-    check_remote_exists,
-    setup_rclone_config_from_base64,
-    get_year_folders,
-    get_actor_folders,
-    get_movie_folders_with_stats,
-    get_all_movie_folders_for_year,
-    get_folder_stats_batch,
-    filter_folders_by_recent_changes,
-    group_folders_by_movie_code,
+from javdb.integrations.rclone.dedup import (
     analyze_all_duplicates,
-    analyze_duplicates_for_code,
-    rclone_purge,
-    rclone_move,
-    format_size,
     generate_csv_report,
     print_summary,
-    strip_drive_name,
+    rclone_move,
+    rclone_purge,
+)
+from javdb.integrations.rclone.path_utils import (
     get_configured_drive_name,
-    prepend_drive_name,
     get_configured_root_folder,
+    has_remote_prefix,
+    strip_drive_name,
     strip_root_folder,
     to_full_remote_path,
-    has_remote_prefix,
+)
+from javdb.integrations.rclone.scan import (
+    check_rclone_installed,
+    check_remote_exists,
+    filter_folders_by_recent_changes,
+    get_actor_folders,
+    get_all_movie_folders_for_year,
+    get_movie_folders_with_stats,
+    get_year_folders,
+    setup_rclone_config_from_base64,
+)
+from javdb.integrations.rclone.types import (
+    DedupResult,
+    FolderInfo,
     INCREMENTAL_DAYS,
 )
 from javdb.storage.repos.operations_repo import OperationsRepo
 from javdb.storage.repos.session_lifecycle_repo import SessionLifecycleRepo
 from javdb.integrations.rclone.manager.options import RcloneManagerOptions
 from javdb.integrations.rclone.manager.result import RcloneManagerResult
+
+_YEAR_RE = re.compile(r"^\d{4}$")
 
 # Config defaults
 RCLONE_FOLDER_PATH = cfg('RCLONE_FOLDER_PATH', None)
@@ -92,9 +89,15 @@ INVENTORY_FIELDNAMES = [
 ]
 
 
-def run_manager(options: RcloneManagerOptions) -> RcloneManagerResult:
-    """Public service entry point: run the manager for the given options."""
-    exit_code = run_manager_from_options(options)
+def run_manager(
+    options: RcloneManagerOptions, session_id: Optional[str] = None,
+) -> RcloneManagerResult:
+    """Public service entry point: run the manager for the given options.
+
+    *session_id* (ADR-046 D2 — never ambient) is forwarded as the
+    standalone-vs-inherited signal; the standalone CLI passes ``None``.
+    """
+    exit_code = run_manager_from_options(options, session_id=session_id)
     return RcloneManagerResult(exit_code=exit_code)
 
 
@@ -390,12 +393,16 @@ def run_report_from_inventory(
     csv_path: str,
     max_workers: int = 4,
     incremental: bool = False,
+    session_id: Optional[str] = None,
 ) -> int:
     """Analyse inventory for duplicates and generate a report.
 
     This function never executes deletions — it only persists dedup
     records with ``is_deleted=False``.  Actual deletion is handled
     separately by :func:`run_execute_from_csv`.
+
+    *session_id* (ADR-046 D2) tags the dedup-record writes; standalone
+    callers pass ``None`` (DedupRecords.SessionId is nullable).
 
     Returns 0 on success, 1 on failure.
     """
@@ -424,28 +431,34 @@ def run_report_from_inventory(
 
     print_summary(csv_report, 0, 0, 0, 0, dry_run=True)
 
-    _persist_dedup_records(dedup_results)
+    _persist_dedup_records(dedup_results, session_id=session_id)
 
     # Self-heal: drop any pending DedupRecords whose path is no longer in
     # the freshly loaded inventory. Zero remote calls; safe to run always.
-    validate_dedup_records_against_inventory()
+    validate_dedup_records_against_inventory(session_id=session_id)
 
     export_dedup_history()
 
     return 0
 
 
-def _persist_dedup_records(dedup_results: List[DedupResult]) -> None:
+def _persist_dedup_records(
+    dedup_results: List[DedupResult], session_id: Optional[str] = None,
+) -> None:
     """Save dedup records to DB via spider/dedup_checker.
 
     Records are always written with ``is_deleted=False``.  The execute
     phase is responsible for updating the flag after purging.
 
+    *session_id* (ADR-046 D2) tags the dedup-record writes; standalone
+    callers pass ``None`` (DedupRecords.SessionId is nullable).
+
     No per-run CSV file is generated; use :func:`export_dedup_history`
     to produce a consolidated ``dedup_history.csv`` from the DB.
     """
     try:
-        from javdb.spider.services.dedup import DedupRecord, append_dedup_record
+        from javdb.spider.services.dedup_store import append_dedup_record
+        from javdb.spider.services.dedup_types import DedupRecord
 
         now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         appended = 0
@@ -465,13 +478,14 @@ def _persist_dedup_records(dedup_results: List[DedupResult]) -> None:
                     delete_datetime='',
                 )
                 # csv_path arg kept for API compat but no longer written
-                if append_dedup_record('', rec):
+                if append_dedup_record('', rec, session_id=session_id):
                     appended += 1
                 else:
                     skipped += 1
         logger.info(f"Persisted dedup records: {appended} appended, {skipped} duplicates skipped")
-    except Exception as e:
-        logger.warning(f"Could not persist dedup records: {e}")
+    except Exception:
+        logger.exception("Could not persist dedup records")
+        raise
 
 
 # ============================================================================
@@ -530,7 +544,9 @@ def _write_inventory_orphan_csv(rows: List[dict]) -> Optional[str]:
     return out_path
 
 
-def validate_dedup_records_against_inventory() -> Tuple[int, List[dict]]:
+def validate_dedup_records_against_inventory(
+    session_id: Optional[str] = None,
+) -> Tuple[int, List[dict]]:
     """Self-heal DedupRecords whose path no longer exists in the inventory.
 
     The truth set is the current ``RcloneInventory`` (FolderPath column,
@@ -541,6 +557,10 @@ def validate_dedup_records_against_inventory() -> Tuple[int, List[dict]]:
     - ``DeletionReason`` is suffixed with :data:`ORPHAN_REASON_SUFFIX`.
     - The original row dicts are returned (and persisted to a CSV report
       by the caller) so operators can audit the self-heal.
+
+    *session_id* (ADR-046 D2 — never ambient) tags the orphan write. DedupRecords
+    has a nullable SessionId, so a standalone caller passes ``None`` and the row
+    persists untagged (the orphan update is non-raising).
 
     Returns ``(orphan_count, orphan_rows)``. Zero remote calls are made.
     """
@@ -593,9 +613,11 @@ def validate_dedup_records_against_inventory() -> Tuple[int, List[dict]]:
         return 0, []
 
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    updated = OperationsRepo().mark_orphan_records(
+    # ADR-046 D2: bind the explicit session on the repo (the global is never
+    # read). DedupRecords.SessionId is nullable, so a None session_id persists
+    # the orphan untagged without raising (Phase-2 contract).
+    updated = OperationsRepo(session_id=session_id).mark_orphan_records(
         orphan_paths, ORPHAN_REASON_SUFFIX, now_str,
-        session_id=SessionLifecycleRepo().get_active_session_id(),
     )
     for r in orphans:
         r['DateTimeDeleted'] = now_str
@@ -709,6 +731,7 @@ def run_validate_inventory(
     year_filter: Optional[List[str]] = None,
     max_workers: int = 4,
     prune: bool = True,
+    session_id: Optional[str] = None,
 ) -> int:
     """Re-validate ``RcloneInventory`` against the remote.
 
@@ -791,7 +814,7 @@ def run_validate_inventory(
 
     # Chain dedup self-heal so callers don't need to run --report just to
     # clean up dedup pendings that referenced removed paths.
-    validate_dedup_records_against_inventory()
+    validate_dedup_records_against_inventory(session_id=session_id)
 
     return 0
 
@@ -801,7 +824,7 @@ def export_dedup_history() -> int:
 
     Mirrors the pattern used by :func:`export_db_to_csv` for inventory.
     """
-    from javdb.spider.services.dedup import export_dedup_db_to_csv
+    from javdb.spider.services.dedup_store import export_dedup_db_to_csv
 
     output_path = os.path.join(REPORTS_DIR, 'dedup_history.csv')
     return export_dedup_db_to_csv(output_path)
@@ -901,6 +924,7 @@ def run_execute_from_csv(
     dedup_csv: str,
     dry_run: bool = False,
     from_file_only: bool = False,
+    session_id: Optional[str] = None,
 ) -> int:
     """Read pending dedup records, purge them, and update the DB.
 
@@ -911,10 +935,13 @@ def run_execute_from_csv(
     After execution (non-dry-run), the DB state is exported to
     ``reports/dedup_history.csv``.
 
+    *session_id* (ADR-046 D2) tags the deletion update; standalone callers
+    pass ``None`` (DedupRecords.SessionId is nullable).
+
     Returns 0 when at least one purge succeeded (or nothing to do);
     returns 1 only when all attempted purges failed.
     """
-    from javdb.spider.services.dedup import (
+    from javdb.spider.services.dedup_store import (
         load_dedup_csv, mark_records_deleted, cleanup_deleted_records,
     )
 
@@ -971,7 +998,7 @@ def run_execute_from_csv(
             fail_count += 1
 
     if not dry_run and purged_pairs:
-        mark_records_deleted(dedup_csv, purged_pairs)
+        mark_records_deleted(dedup_csv, purged_pairs, session_id=session_id)
         logger.info(f"Marked {len(purged_pairs)} paths as deleted in DB")
 
     if not dry_run:
@@ -1142,6 +1169,7 @@ def run_rclone_manager(
     report: bool = True,
     execute: bool = False,
     dry_run: bool = True,
+    session_id: Optional[str] = None,
 ) -> dict:
     """Programmatic entry point for the rclone manager pipeline.
 
@@ -1151,6 +1179,11 @@ def run_rclone_manager(
 
     Only the phases that actually ran appear in ``phase_results``.  Each
     phase's value is a dict with at least ``{"exit_code": int}``.
+
+    *session_id* (ADR-046 D2 — never ambient) is the standalone-vs-inherited
+    signal: ``None`` (the default, used by every standalone caller) makes this
+    run create + own + finalize a local report session; a caller-supplied id is
+    treated as inherited (we use it but don't finalize it).
 
     Raises:
         ValueError: Invalid flag combination (e.g. execute without report).
@@ -1202,9 +1235,12 @@ def run_rclone_manager(
         operations_repo = OperationsRepo()
 
         session_repo.init_storage()
-        staging_sid = session_repo.get_active_session_id()
+        # ADR-046 D2: the active session is passed in explicitly (never read
+        # from the process-global). A None session_id means "standalone" — we
+        # create + own + finalize a local session here.
+        staging_sid = session_id
         # Only finalize (commit/fail) a session we created ourselves — an
-        # inherited active session is owned by the caller.
+        # inherited session is owned by the caller.
         created_local_session = staging_sid is None
         if created_local_session:
             staging_sid = session_repo.create_report_session(
@@ -1263,13 +1299,15 @@ def run_rclone_manager(
             # Report-only: resolve remote for CSV path but don't scan.
             os.makedirs(REPORTS_DIR, exist_ok=True)
         output_path = os.path.join(REPORTS_DIR, RCLONE_INVENTORY_CSV)
-        exit_code = run_report_from_inventory(output_path)
+        exit_code = run_report_from_inventory(output_path, session_id=session_id)
         phase_results["report"] = {"exit_code": exit_code}
 
     # ── Execute phase ─────────────────────────────────────────────────────
     if execute:
         dedup_csv = os.path.join(REPORTS_DIR, 'dedup_history.csv')
-        exit_code = run_execute_from_csv(dedup_csv, dry_run=dry_run)
+        exit_code = run_execute_from_csv(
+            dedup_csv, dry_run=dry_run, session_id=session_id,
+        )
         phase_results["execute"] = {"exit_code": exit_code, "dry_run": dry_run}
 
     return {"phase_results": phase_results, "dry_run": dry_run}
@@ -1295,7 +1333,12 @@ def _describe_mode(options: "RcloneManagerOptions") -> str:
     return '+'.join(parts) or 'NONE'
 
 
-def run_manager_from_options(options: "RcloneManagerOptions") -> int:
+def run_manager_from_options(
+    options: "RcloneManagerOptions", session_id: Optional[str] = None,
+) -> int:
+    # ADR-046 D2: session_id is the explicit standalone-vs-inherited signal
+    # (never read from the process-global). None ⇒ standalone: create + own +
+    # finalize a local staging session below.
     setup_logging(log_level=options.log_level)
 
     mode_label = _describe_mode(options)
@@ -1317,7 +1360,10 @@ def run_manager_from_options(options: "RcloneManagerOptions") -> int:
             # a fallback path inside load_dedup_csv when DB is empty.
             dedup_csv = os.path.join(REPORTS_DIR, 'dedup_history.csv')
             from_file_only = False
-        return run_execute_from_csv(dedup_csv, dry_run=options.dry_run, from_file_only=from_file_only)
+        return run_execute_from_csv(
+            dedup_csv, dry_run=options.dry_run,
+            from_file_only=from_file_only, session_id=session_id,
+        )
 
     if options.execute_soft_delete and not options.scan and not options.report and not options.execute:
         soft_delete_csv = options.soft_delete_csv or os.path.join(REPORTS_DIR, SOFT_DELETE_CSV)
@@ -1389,6 +1435,7 @@ def run_manager_from_options(options: "RcloneManagerOptions") -> int:
             year_filter=year_filter,
             max_workers=options.workers,
             prune=options.validate_prune,
+            session_id=session_id,
         )
 
     # ── Scan phase ───────────────────────────────────────────────────
@@ -1405,7 +1452,8 @@ def run_manager_from_options(options: "RcloneManagerOptions") -> int:
         if _use_sqlite():
             try:
                 session_repo.init_storage()
-                _staging_session_id = session_repo.get_active_session_id()
+                # ADR-046 D2: inherit the explicit session_id (never the global).
+                _staging_session_id = session_id
                 if _staging_session_id is None:
                     _staging_session_id = session_repo.create_report_session(
                         report_type="rclone_inventory",
@@ -1644,6 +1692,7 @@ def run_manager_from_options(options: "RcloneManagerOptions") -> int:
             csv_path=output_path,
             max_workers=options.workers,
             incremental=options.incremental,
+            session_id=session_id,
         )
         if rc != 0:
             return rc
@@ -1663,7 +1712,10 @@ def run_manager_from_options(options: "RcloneManagerOptions") -> int:
             # read from DB (authoritative source).
             dedup_csv = os.path.join(REPORTS_DIR, 'dedup_history.csv')
             from_file_only = False
-        return run_execute_from_csv(dedup_csv, dry_run=options.dry_run, from_file_only=from_file_only)
+        return run_execute_from_csv(
+            dedup_csv, dry_run=options.dry_run,
+            from_file_only=from_file_only, session_id=session_id,
+        )
 
     if options.execute_soft_delete:
         logger.info("")

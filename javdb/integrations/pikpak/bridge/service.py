@@ -5,6 +5,7 @@ import os
 import time
 from pathlib import Path
 from datetime import datetime, timedelta
+from typing import Optional
 import requests
 from pikpakapi import PikPakApi
 
@@ -138,9 +139,9 @@ def initialize_proxy_helper(proxy_override):
                 PROXY_POOL,
                 max_failures=PROXY_POOL_MAX_FAILURES
             )
-            logger.info(f"Proxy pool initialized successfully")
+            logger.info("Proxy pool initialized successfully")
         elif PROXY_MODE == 'single':
-            logger.info(f"Initializing single proxy mode (using first proxy from pool)...")
+            logger.info("Initializing single proxy mode (using first proxy from pool)...")
             global_proxy_pool = create_proxy_pool_from_config(
                 [PROXY_POOL[0]],
                 max_failures=PROXY_POOL_MAX_FAILURES
@@ -406,8 +407,15 @@ async def process_pikpak_single(magnet, email, password, root_folder=None, categ
 # --------------------------
 # PikPak History Management
 # --------------------------
-def save_to_pikpak_history(torrent_info, transfer_status, error_msg=None):
-    """Save torrent transfer information to PikPak history."""
+def save_to_pikpak_history(torrent_info, transfer_status, error_msg=None,
+                           session_id: Optional[str] = None):
+    """Save torrent transfer information to PikPak history.
+
+    ``session_id`` (ADR-046 P5) tags the PikpakHistory row with the active
+    workflow session so a rollback can scope to just these rows. PikpakHistory
+    has a NULLABLE SessionId, so a session-less standalone call (``None``)
+    persists the row untagged — never raises.
+    """
     from javdb.infra.config import use_sqlite, use_csv
 
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -426,14 +434,13 @@ def save_to_pikpak_history(torrent_info, transfer_status, error_msg=None):
 
     if use_sqlite():
         try:
-            from javdb.storage.db import (
-                init_db,
-                get_active_session_id,
-            )
+            from javdb.storage.db import init_db
             from javdb.storage.repos.operations_repo import OperationsRepo
             init_db()
-            OperationsRepo().append_pikpak_history(
-                record, session_id=get_active_session_id(),
+            # ADR-046 P5: bind the explicit session on the repo (the process
+            # global is never read). None → untagged row (nullable SessionId).
+            OperationsRepo(session_id=session_id).append_pikpak_history(
+                record,
             )
         except Exception as e:
             logger.warning(f"Failed to write pikpak history to db backend: {e}")
@@ -459,28 +466,12 @@ def save_to_pikpak_history(torrent_info, transfer_status, error_msg=None):
 # --------------------------
 def pikpak_bridge(days, dry_run, batch_mode=True, use_proxy=None, from_pipeline=False,
                   session_id=None, root_folder=None):
-    active_session_setter = None
-    # Tag every D1 write inside this PikPak run with the workflow's session id
-    # so a downstream rollback can scope cleanly to just our rows.
-    if session_id is not None:
-        try:
-            from javdb.storage.db import set_active_session_id
-            active_session_setter = set_active_session_id
-            active_session_setter(session_id)
-        except Exception as e:
-            logger.warning(f"Could not set active session_id for PikPak: {e}")
-
-    try:
-        return _pikpak_bridge_impl(
-            days, dry_run, batch_mode, use_proxy, from_pipeline,
-            session_id=session_id, root_folder=root_folder,
-        )
-    finally:
-        if active_session_setter is not None:
-            try:
-                active_session_setter(None)
-            except Exception as e:
-                logger.warning(f"Could not clear active session_id for PikPak: {e}")
+    # ADR-046 P5: thin pass-through. ``session_id`` is threaded explicitly to
+    # the PikpakHistory writes (no ambient process-global set/clear).
+    return _pikpak_bridge_impl(
+        days, dry_run, batch_mode, use_proxy, from_pipeline,
+        session_id=session_id, root_folder=root_folder,
+    )
 
 
 def _pikpak_bridge_impl(days, dry_run, batch_mode=True, use_proxy=None, from_pipeline=False,
@@ -504,7 +495,7 @@ def _pikpak_bridge_impl(days, dry_run, batch_mode=True, use_proxy=None, from_pip
             if PROXY_MODE == 'pool':
                 logger.info(f"PROXY POOL MODE for PikPak bridge: {stats['total_proxies']} proxies with automatic failover")
             elif PROXY_MODE == 'single':
-                logger.info(f"SINGLE PROXY MODE for PikPak bridge: Using main proxy only")
+                logger.info("SINGLE PROXY MODE for PikPak bridge: Using main proxy only")
                 if stats['total_proxies'] > 0 and stats['proxies']:
                     main_proxy_name = stats['proxies'][0]['name']
                     logger.info(f"Main proxy: {main_proxy_name}")
@@ -698,28 +689,28 @@ def _pikpak_bridge_impl(days, dry_run, batch_mode=True, use_proxy=None, from_pip
                         )
                 if not delete_errors:
                     logger.info(f"Successfully deleted from qBittorrent: {torrent['name']}")
-                    save_to_pikpak_history(torrent, 'success')
+                    save_to_pikpak_history(torrent, 'success', session_id=session_id)
                     successfully_transferred.append(torrent)
                 else:
                     combined = "; ".join(str(e) for e in delete_errors)
-                    save_to_pikpak_history(torrent, 'failed_but_deleted', combined)
+                    save_to_pikpak_history(torrent, 'failed_but_deleted', combined, session_id=session_id)
                     delete_failed_count += 1
                     failed_transfers.append((torrent, f"qB delete failed: {combined}"))
-            
+
             # Process failed uploads
             for magnet, error_msg in failed_magnets:
                 torrent = torrent_by_magnet[magnet]
                 logger.error(f"Failed to upload to PikPak: {torrent['name']}, Error: {error_msg}")
-                save_to_pikpak_history(torrent, 'failed', error_msg)
+                save_to_pikpak_history(torrent, 'failed', error_msg, session_id=session_id)
                 failed_transfers.append((torrent, error_msg))
-                
+
         except Exception as e:
             logger.error(f"Unexpected error during batch processing: {e}")
             # If batch processing fails completely, mark all as failed
             failed_transfers = [(torrent, str(e)) for torrent in old_torrents]
             successfully_transferred = []
             for torrent in old_torrents:
-                save_to_pikpak_history(torrent, 'failed', str(e))
+                save_to_pikpak_history(torrent, 'failed', str(e), session_id=session_id)
     else:
         logger.info("Using individual mode: processing each torrent separately")
         
@@ -757,23 +748,23 @@ def _pikpak_bridge_impl(days, dry_run, batch_mode=True, use_proxy=None, from_pip
                             )
                     if not delete_errors:
                         logger.info(f"Successfully deleted from qBittorrent: {torrent['name']}")
-                        save_to_pikpak_history(torrent, 'success')
+                        save_to_pikpak_history(torrent, 'success', session_id=session_id)
                         successfully_transferred.append(torrent)
                     else:
                         combined = "; ".join(str(e) for e in delete_errors)
-                        save_to_pikpak_history(torrent, 'failed_but_deleted', combined)
+                        save_to_pikpak_history(torrent, 'failed_but_deleted', combined, session_id=session_id)
                         delete_failed_count += 1
                         failed_transfers.append((torrent, f"qB delete failed: {combined}"))
-                        
+
                 else:  # Upload failed
                     error_msg = failed_magnets[0][1] if failed_magnets else "Unknown error"
                     logger.error(f"Failed to upload to PikPak: {torrent['name']}, Error: {error_msg}")
-                    save_to_pikpak_history(torrent, 'failed', error_msg)
+                    save_to_pikpak_history(torrent, 'failed', error_msg, session_id=session_id)
                     failed_transfers.append((torrent, error_msg))
-                    
+
             except Exception as e:
                 logger.error(f"Unexpected error processing torrent {torrent['name']}: {e}")
-                save_to_pikpak_history(torrent, 'failed', str(e))
+                save_to_pikpak_history(torrent, 'failed', str(e), session_id=session_id)
                 failed_transfers.append((torrent, str(e)))
             
             # Add a small delay between processing different torrents to be respectful

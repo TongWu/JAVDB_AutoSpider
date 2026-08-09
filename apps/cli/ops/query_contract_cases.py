@@ -35,6 +35,10 @@ MOVIE_FILTER_CASES = [
     ("movie_filters", "actor_hires_session", {"actor": "Jane", "hi_res": True, "session_id": "S1"}),
     ("movie_filters", "date_range_cursor", {"date_from": "2026-01-01", "date_to": "2026-02-01", "cursor_id": 42}),
 ]
+MOVIE_COUNT_CASES = [
+    ("movie_count", name, kwargs)
+    for _, name, kwargs in MOVIE_FILTER_CASES
+]
 TORRENT_FILTER_CASES = [
     ("torrent_filters", "empty", {}),
     ("torrent_filters", "cursor_only", {"cursor_id": 7}),
@@ -53,6 +57,10 @@ TORRENT_FILTER_CASES = [
     ),
     ("torrent_filters", "date_range_cursor", {"date_from": "2026-01-01", "date_to": "2026-02-01", "cursor_id": 7}),
 ]
+TORRENT_COUNT_CASES = [
+    ("torrent_count", name, kwargs)
+    for _, name, kwargs in TORRENT_FILTER_CASES
+]
 SESSION_QUERY_CASES = [
     ("session_query", "default", {"state": None, "cursor": None, "limit": 50}),
     ("session_query", "state_only", {"state": "committed", "cursor": None, "limit": 50}),
@@ -65,4 +73,60 @@ STATS_TREND_QUERY_CASES = [
     ("stats_trend_query", "history_growth", {"metric": "history_growth", "cutoff": "2026-01-01"}),
     ("stats_trend_query", "pikpak", {"metric": "pikpak", "cutoff": "2026-01-01"}),
     ("stats_trend_query", "dedup", {"metric": "dedup", "cutoff": "2026-01-01"}),
+]
+
+LIBRARY_SUMMARY_QUERY_CASES = [
+    ("library_summary_query", "all", {}),
+]
+
+LIBRARY_RECENT_QUERY_CASES = [
+    ("library_recent_query", "no_state", {"state": None, "limit": 50, "offset": 0}),
+    ("library_recent_query", "with_state", {"state": "completed", "limit": 20, "offset": 40}),
+]
+
+LIBRARY_TREND_QUERY_CASES = [
+    ("library_trend_query", "default", {"cutoff": "2026-01-01"}),
+]
+
+OWNERSHIP_SUMMARY_BY_SOURCE_QUERY_CASES = [
+    ("ownership_summary_by_source_query", "all", {}),
+]
+
+OWNERSHIP_SUMMARY_DISTINCT_QUERY_CASES = [
+    ("ownership_summary_distinct_query", "all", {}),
+]
+
+OWNERSHIP_RECENT_QUERY_CASES = [
+    ("ownership_recent_query", "no_source", {"source": None, "limit": 50, "offset": 0}),
+    ("ownership_recent_query", "with_source", {"source": "qb", "limit": 20, "offset": 10}),
+]
+
+CONSUMPTION_SUMMARY_QUERY_CASES = [
+    ("consumption_summary_query", "all", {}),
+]
+
+CONSUMPTION_SUMMARY_UNRESOLVED_COUNT_QUERY_CASES = [
+    ("consumption_summary_unresolved_count_query", "all", {}),
+]
+
+CONSUMPTION_RECENT_QUERY_CASES = [
+    ("consumption_recent_query", "no_filters",
+     {"instance": None, "watched": None, "limit": 50, "offset": 0}),
+    ("consumption_recent_query", "watched_true",
+     {"instance": None, "watched": True, "limit": 50, "offset": 0}),
+    ("consumption_recent_query", "watched_false",
+     {"instance": None, "watched": False, "limit": 50, "offset": 0}),
+    ("consumption_recent_query", "instance_and_watched",
+     {"instance": "emby-home", "watched": True, "limit": 20, "offset": 10}),
+]
+
+CONSUMPTION_TREND_QUERY_CASES = [
+    ("consumption_trend_query", "default", {"cutoff": "2026-01-01"}),
+]
+
+CONSUMPTION_UNRESOLVED_QUERY_CASES = [
+    ("consumption_unresolved_query", "no_instance",
+     {"instance": None, "limit": 50, "offset": 0}),
+    ("consumption_unresolved_query", "with_instance",
+     {"instance": "emby-home", "limit": 25, "offset": 5}),
 ]

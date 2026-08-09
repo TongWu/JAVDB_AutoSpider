@@ -120,6 +120,34 @@ Re-run `python3 -m apps.cli.login` when:
 
 The `DailyIngestion.yml` and `AdHocIngestion.yml` workflows include a login step that refreshes the session cookie automatically before each run.
 
+## Sharing Login With CI Runners
+
+GitHub Actions runners share a session cookie through the Proxy Coordinator's
+`GlobalLoginState` Durable Object: the first runner to log in publishes its
+cookie, and every other runner adopts it and skips its own login. That cache is
+only filled by a **successful** login — when Cloudflare blocks the CI login
+(captcha rejected, HTTP 403 on the POST), nothing is published and every run
+re-logins from scratch.
+
+To break that deadlock, run `python3 -m apps.cli.login` locally — where you can use an
+unflagged IP and solve the captcha — and it will publish the resulting cookie
+to the coordinator on success. Subsequent CI runs then adopt it and skip login.
+
+This requires the coordinator to be configured (the same values the spider
+uses):
+
+```python
+# In config.py
+PROXY_COORDINATOR_URL = 'https://proxy-coordinator.<account>.workers.dev'
+PROXY_COORDINATOR_TOKEN = 'your_shared_secret'
+```
+
+For the published cookie to bind to a CI worker, log in through a proxy that
+also exists in the runners' `PROXY_POOL` — setting `LOGIN_PROXY_NAME` to a
+pooled proxy does this. When the coordinator is unset or unreachable, the
+publish step is silently skipped; the local cookie and `config.py` update still
+succeed.
+
 ## Manual Cookie Extraction
 
 If auto login fails, extract the cookie manually:

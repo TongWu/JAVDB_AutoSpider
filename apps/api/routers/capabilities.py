@@ -14,6 +14,8 @@ from apps.api.schemas.capabilities_payloads import (
     Features,
     GhActions,
 )
+from javdb.storage.contract import fragments
+from javdb.storage.db import get_db
 
 
 def _get_git_sha() -> str:
@@ -37,6 +39,101 @@ def _bool_env(name: str, default: bool = False) -> bool:
     if val is None:
         return default
     return val.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _closed_loop_enabled() -> bool:
+    """True when the ADR-033 AcquisitionOutcome table is queryable (capability honesty)."""
+    try:
+        from javdb.storage.db import OPERATIONS_DB_PATH, get_db
+        with get_db(OPERATIONS_DB_PATH) as conn:
+            conn.execute("SELECT 1 FROM AcquisitionOutcome LIMIT 1").fetchone()
+        return True
+    except Exception:
+        return False
+
+
+def _library_ownership_enabled() -> bool:
+    """True when the ADR-034 OwnershipLedger table is queryable (capability honesty)."""
+    try:
+        from javdb.storage.db import OPERATIONS_DB_PATH, get_db
+        with get_db(OPERATIONS_DB_PATH) as conn:
+            conn.execute("SELECT 1 FROM OwnershipLedger LIMIT 1").fetchone()
+        return True
+    except Exception:
+        return False
+
+
+def _library_consumption_enabled() -> bool:
+    """True when the ADR-034 ConsumptionSignal table is queryable (capability honesty)."""
+    try:
+        from javdb.storage.db import OPERATIONS_DB_PATH, get_db
+        with get_db(OPERATIONS_DB_PATH) as conn:
+            conn.execute("SELECT 1 FROM ConsumptionSignal LIMIT 1").fetchone()
+        return True
+    except Exception:
+        return False
+
+
+def _watch_intent_enabled() -> bool:
+    """True when the ADR-054 WatchIntent table is queryable (capability honesty)."""
+    try:
+        from javdb.storage.db import HISTORY_DB_PATH, get_db
+        with get_db(HISTORY_DB_PATH) as conn:
+            conn.execute("SELECT 1 FROM WatchIntent LIMIT 1").fetchone()
+        return True
+    except Exception:
+        return False
+
+
+def _content_filter_enabled() -> bool:
+    """True when the ADR-040 ContentFilterRule table is queryable in REPORTS_DB
+    (capability honesty). NOTE: REPORTS_DB, not HISTORY_DB — distinct from
+    watch_intent above."""
+    try:
+        from javdb.storage.db import REPORTS_DB_PATH, get_db
+        with get_db(REPORTS_DB_PATH) as conn:
+            conn.execute("SELECT 1 FROM ContentFilterRule LIMIT 1").fetchone()
+        return True
+    except Exception:
+        return False
+
+
+def _magnet_aggregation_enabled() -> bool:
+    """True when at least one indexer source is configured (ADR-054 WS3, capability honesty).
+
+    v1 is ephemeral (no cache table) so there is nothing to probe; the flag is
+    config-presence -- MAGNET_SOURCES non-empty -- via the dispatcher's parser.
+    """
+    try:
+        from javdb.integrations.indexer.dispatch import active_sources
+
+        return bool(active_sources())
+    except Exception:
+        return False
+
+
+def _subscriptions_enabled() -> bool:
+    """True when the ADR-054 ActorSubscription table is queryable."""
+    try:
+        from javdb.storage.db import HISTORY_DB_PATH, get_db
+        with get_db(HISTORY_DB_PATH) as conn:
+            conn.execute("SELECT 1 FROM ActorSubscription LIMIT 1").fetchone()
+        return True
+    except Exception:
+        return False
+
+
+def _ops_alerting_enabled() -> bool:
+    """True when both ADR-026 alert tables are queryable in REPORTS_DB."""
+    try:
+        from javdb.storage.db import REPORTS_DB_PATH, get_db
+
+        with get_db(REPORTS_DB_PATH) as conn:
+            conn.execute(fragments.OPS_ALERT_POLICY_PROBE.sql).fetchone()
+            conn.execute(fragments.OPS_ALERT_EVENT_PROBE.sql).fetchone()
+        return True
+    except Exception:
+        return False
 
 
 def build_capabilities() -> CapabilitiesResponse:
@@ -72,6 +169,17 @@ def build_capabilities() -> CapabilitiesResponse:
             proxy_pool=_bool_env("PROXY_MODE_POOL", default=True),
             javdb_login=bool(os.getenv("JAVDB_USERNAME")),
             proxy_preview=True,
+            closed_loop=_closed_loop_enabled(),
+            library_ownership=_library_ownership_enabled(),
+            library_consumption=_library_consumption_enabled(),
+            watch_intent=_watch_intent_enabled(),
+            content_filter=_content_filter_enabled(),
+            magnet_aggregation=_magnet_aggregation_enabled(),
+            subscriptions=_subscriptions_enabled(),
+            # ADR-035: site-contract drift sentinel ships with the system; the
+            # frontend hides the drift panel only when explicitly disabled.
+            site_drift_sentinel=_bool_env("FEATURE_SITE_DRIFT_SENTINEL", default=True),
+            ops_alerting=_ops_alerting_enabled(),
         ),
         deployment=deployment,
         build=Build(

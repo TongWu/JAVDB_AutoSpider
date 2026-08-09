@@ -2,10 +2,10 @@
 
 | Field       | Value                                                                 |
 | ----------- | --------------------------------------------------------------------- |
-| **Status**  | Proposed — umbrella; execution delegated to per-phase IMPs            |
+| **Status**  | Proposed — umbrella; Phases 1 & 2 implemented & verified; Phase 2 (entry-point discovery + downloader category, demonstrator) landed 2026-06-10; Phase 3 (ecosystem) optional/deferred |
 | **Date**    | 2026-05-29                                                            |
 | **Authors** | Ted                                                                   |
-| **Related** | [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md), [ADR-038](../ADR-038-Agentic-Operator-MCP/ADR-038-agentic-operator-mcp-surface.md), [ADR-033](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) |
+| **Related** | [ADR-015](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md), [ADR-036](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md), [ADR-038](../ADR-038-Agentic-Operator-MCP/ADR-038-agentic-operator-mcp-surface.md), [ADR-033](../_archive/ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md) |
 
 > Originated from a 2026-05-29 brainstorming session on net-new directions
 > (Direction 6 — a pluggable extension platform).
@@ -71,8 +71,26 @@ second route.
 **D4. Dispatch fans out with failure isolation.** `notify.send(message)` iterates
 the active plugins, calls each `.send()`, and collects `NotifyResult`s; one
 backend's failure (e.g. Telegram down) does not block the others (e.g. email).
-Existing callers (the pipeline's email summary) route through `notify.send` and
-keep working.
+`send(message, exclude=…)` lets a caller skip a backend it has already handled by
+another route.
+
+**D4 follow-up — pipeline wiring (IMP-ADR039-01).** The rich pipeline email
+report (`run_email_notification`: log analysis, stats, attachments) is *not*
+expressible as a generic `NotifyMessage(subject, body)`, so it stays on its own
+path. The pipeline notification step (`apps.cli.notify.email`, run by the
+pipeline service subprocess and the GitHub Actions workflows) therefore:
+
+1. runs the **rich report for the `email` backend** (unchanged — no regression),
+   and additionally produces a compact plaintext `summary` of the run;
+2. fans that `summary` out as a generic `NotifyMessage` to **every other active
+   backend** via `notify.send(message, exclude={'email'})`, with per-backend
+   failure isolation, so `email` is never double-notified; and
+3. when `email` is **not** in `NOTIFY_BACKENDS`, computes the report for the
+   summary but suppresses delivery (`run_email_notification(..., deliver=False)`),
+   so a telegram-only operator is not emailed.
+
+This honours D3 (the email internals are untouched) while making the second
+backend actually receive run notifications.
 
 **D5. Module shape.**
 
@@ -124,8 +142,9 @@ event-consumer / MCP-tool composition.
 | Phase | IMP | Ships | Deferred |
 | --- | --- | --- | --- |
 | Phase 1 — Registry + notify | [IMP-ADR039-01](IMP-ADR039-01-notify-plugins.md) | `plugins/registry`; `NotifyPlugin` contract; `EmailNotifyPlugin` (wraps existing); `TelegramNotifyPlugin` (new); `NOTIFY_BACKENDS` config; `notify.send` fan-out | entry-point discovery; other categories |
-| Phase 2 — Entry points + downloader | IMP-ADR039-02 (stub) | `discover_entry_points` (third-party); `downloader` category (qB + Transmission) | — |
-| Phase 3 — Ecosystem (optional) | IMP-ADR039-03 (stub) | media-server/destination categories; plugins as ADR-036 consumers / ADR-038 tools | — |
+| Phase 2 — Entry points + downloader | [IMP-ADR039-02](IMP-ADR039-02-entry-points-downloader.md) ✅ 2026-06-10 | `discover_entry_points` (third-party); `downloader` category (qB + Transmission); demonstrator CLI | `run_uploader` re-route deferred (deep qB coupling — see D3) |
+| Phase 3 — Ecosystem (optional) | IMP-ADR039-03 (deferred) | media-server/destination categories; plugins as ADR-036 consumers / ADR-038 tools | — |
+| Phase 4 — Alert delivery + routing | [IMP-ADR039-04](IMP-ADR039-04-alerting-delivery-routing.md) | `WebhookNotifyPlugin`; D1 routing rules (`(level, source) → backends`, default fan-out preserved); digest queue + `flush_digest`; operator API/Worker/Web config + test-send | per-backend templating; incident detection (ADR-026) |
 
 Phase 1 stands alone and is backward-compatible. Phases 2/3 widen the platform.
 
@@ -147,6 +166,8 @@ Phase 1 stands alone and is backward-compatible. Phases 2/3 widen the platform.
 - **Plugin contract** — the per-category `Protocol` a plugin satisfies.
 - **Built-in plugin** — a plugin shipped in-repo (e.g. `EmailNotifyPlugin`).
 - **Notify backend** — an active notify plugin selected via `NOTIFY_BACKENDS`.
+- **Downloader plugin** — a registered `DownloaderPlugin` backend (e.g. qB, Transmission).
+- **Downloader backend** — the single active downloader selected via `DOWNLOADER_BACKEND` (single-select, mutually exclusive; default `'qb'`).
 
 ## Alternatives Considered
 
@@ -163,8 +184,20 @@ Phase 1 stands alone and is backward-compatible. Phases 2/3 widen the platform.
 - [ADR-015 — Integrations Interface Boundary](../_archive/ADR-015-Integrations-Interface/ADR-015-integrations-interface-boundary.md)
 - [ADR-036 — Event-Sourced Pipeline Spine](../ADR-036-Event-Sourced-Pipeline-Spine/ADR-036-event-sourced-pipeline-spine.md)
 - [ADR-038 — Agentic Operator MCP Surface](../ADR-038-Agentic-Operator-MCP/ADR-038-agentic-operator-mcp-surface.md)
-- [ADR-033 — Media Closed-Loop](../ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
+- [ADR-033 — Media Closed-Loop](../_archive/ADR-033-Media-Closed-Loop/ADR-033-media-closed-loop.md)
 
 ## Status Log
 
 - 2026-05-29: Proposed (umbrella; three phases scoped, IMPs pending).
+- 2026-06-06: Phase 1 (IMP-ADR039-01) implemented **and wired** — the registry,
+  `NotifyPlugin` contract, email/telegram built-ins, and `notify.dispatch` ship,
+  and the pipeline notification step now fans a run summary out to the secondary
+  backends. D4 updated with the wiring follow-up note.
+- 2026-06-10: Phase 2 (IMP-ADR039-02) implemented — `discover_entry_points` wired
+  into both notify and downloader dispatch; `downloader` category ships with
+  `QbDownloaderPlugin` (thin adapter over existing qB client) and
+  `TransmissionDownloaderPlugin` (new Transmission JSON-RPC client); demonstrator
+  CLI `apps.cli.download.add` exercises the full stack end-to-end; ~45 new unit
+  tests green; `run_uploader` re-route deliberately deferred (deep qB coupling).
+  Subagent-driven (8 tasks, implementer + review per task).
+- 2026-06-13: Added Phase 4 (IMP-ADR039-04, alert delivery + routing + digest + webhook + web config) to cover the gap where the notify registry can only fan-out to all backends with no routing/digest/webhook/operator control. The NotifyPlugin contract is unchanged; routing/digest sit above `notify.send`. Incident detection stays in ADR-026; the reserved Phase 3 (ecosystem) is untouched.

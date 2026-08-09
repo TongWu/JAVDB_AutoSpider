@@ -15,14 +15,20 @@ from javdb.storage.db import (
     init_db, _init_single_db, _init_single_legacy_db, _REPORTS_DDL,
     moviehistory_actor_layout_ok, _normalize_moviehistory_actor_column_order,
     SESSION_ID_PATTERN as _SESSION_ID_PATTERN,
+)
+from javdb.storage.db._db_history_read import db_load_history
+from javdb.storage.db._db_history_write import db_stage_history_write
+from javdb.storage.db._db_reports import (
     db_create_report_session, db_insert_report_rows, db_get_report_rows,
     db_get_latest_session, db_get_sessions_by_date, db_find_in_progress_sessions,
-    db_load_history,
-    db_stage_history_write,
+)
+from javdb.storage.db._db_operations import (
     db_replace_rclone_inventory, db_load_rclone_inventory,
     db_append_dedup_record, db_load_dedup_records, db_save_dedup_records,
     db_mark_records_deleted, db_cleanup_deleted_records, db_mark_orphan_records,
     db_delete_rclone_inventory_paths, db_append_pikpak_history,
+)
+from javdb.storage.db._db_stats import (
     db_save_spider_stats, db_get_spider_stats,
     db_save_uploader_stats, db_get_uploader_stats,
     db_save_pikpak_stats, db_get_pikpak_stats,
@@ -349,6 +355,7 @@ class TestInitDb:
             assert 'SessionId' in _columns(history_path, 'MovieHistory')
             assert 'SessionId' in _columns(history_path, 'TorrentHistory')
             assert 'Status' in _columns(reports_path, 'ReportSessions')
+            assert 'CommittedAt' in _columns(reports_path, 'ReportSessions')
             assert 'SessionId' in _columns(operations_path, 'PikpakHistory')
             assert 'SessionId' in _columns(operations_path, 'DedupRecords')
             assert 'SessionId' in _columns(

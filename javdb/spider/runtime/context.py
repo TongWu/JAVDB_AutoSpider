@@ -95,7 +95,7 @@ class RuntimeServices:
     login_state_client: Any = None
     movie_claim_client: Any = None
     runner_registry_client: Any = None
-    recommend_proxy_policy: Any = None
+    proxy_selection_signal: Any = None
     work_distributor_client: Any = None
 
 
@@ -168,12 +168,12 @@ class SpiderRuntime:
         self._close_service(client)
         self.services.runner_registry_client = None
 
-        policy = self.services.recommend_proxy_policy
-        shutdown = getattr(policy, "shutdown", None)
-        if callable(shutdown):
+        signal = self.services.proxy_selection_signal
+        close = getattr(signal, "close", None)
+        if callable(close):
             with contextlib.suppress(Exception):
-                shutdown()
-        self.services.recommend_proxy_policy = None
+                close()
+        self.services.proxy_selection_signal = None
 
         for attr in (
             "proxy_coordinator",
@@ -577,7 +577,10 @@ class SpiderRuntime:
         if pool is not None:
             for proxy_id in new_bans:
                 try:
-                    pool.ban_proxy(proxy_id)
+                    pool.ban_proxy(
+                        proxy_id,
+                        legacy_state.REMOTE_BAN_MIRROR_REASON,
+                    )
                     legacy_state.logger.warning(
                         "W5.4 ban_proxy signal applied: %s now banned",
                         proxy_id,
@@ -869,6 +872,10 @@ class SpiderRuntime:
                 "falling back to local throttling for this run",
                 url,
             )
+            # Close the discarded client so its requests.Session connection pool
+            # is released — mirrors setup_login_state_client below and the
+            # create_coordinator_from_env factory.
+            client.close()
             self.services.proxy_coordinator = None
             legacy_state._sync_legacy_globals_from_runtime(self)
             return None
@@ -877,8 +884,16 @@ class SpiderRuntime:
             url,
         )
         self.services.proxy_coordinator = client
-        legacy_state.set_remote_ban_hook(client.mark_proxy_banned)
-        legacy_state.set_remote_unban_hook(client.mark_proxy_unbanned)
+
+        def _remote_ban_hook(proxy_id: str, reason: Optional[str] = None) -> None:
+            client.mark_proxy_banned(proxy_id, reason=reason)
+
+        def _remote_unban_hook(proxy_id: str) -> None:
+            client.mark_proxy_unbanned(proxy_id)
+
+        legacy_state.set_remote_ban_hook(_remote_ban_hook)
+        legacy_state.set_remote_unban_hook(_remote_unban_hook)
+        legacy_state.install_rust_ban_dispatch()
 
         try:
             from javdb.spider.runtime.sleep import ensure_sleep_runtime
@@ -966,6 +981,7 @@ class SpiderRuntime:
             cf_bypass_service_port=legacy_state.CF_BYPASS_SERVICE_PORT,
             cf_bypass_port_map=legacy_state.CF_BYPASS_PORT_MAP,
             cf_bypass_enabled=legacy_state.CF_BYPASS_ENABLED,
+            cf_bypass_via_proxy=legacy_state.CF_BYPASS_VIA_PROXY,
             cf_bypass_max_failures=3,
             cf_turnstile_cooldown=_cd,
             fallback_cooldown=_cd,
@@ -1075,45 +1091,32 @@ class SpiderRuntime:
             self.services.proxy_pool is not None
             and hasattr(self.services.proxy_pool, "set_health_provider")
         ):
-            provider_label = None
+            from javdb.proxy.selection.signal import ProxySelectionSignal
+
+            signal = None
             try:
-                from javdb.proxy.recommend.client import (
-                    create_recommend_proxy_client_from_env,
+                proxy_ids = [p.get("name", "") for p in (legacy_state.PROXY_POOL or [])
+                             if isinstance(p, dict) and p.get("name")]
+                signal = ProxySelectionSignal.from_runtime_config(
+                    proxy_ids=proxy_ids,
+                    coordinator=self.services.proxy_coordinator,
                 )
-                from javdb.proxy.recommend.policy import (
-                    RecommendProxyPolicy,
-                )
-                rec_client = create_recommend_proxy_client_from_env()
-                if rec_client is not None:
-                    proxy_ids = [p.get("name", "") for p in (legacy_state.PROXY_POOL or [])
-                                 if isinstance(p, dict) and p.get("name")]
-                    policy = RecommendProxyPolicy(rec_client, proxy_ids=proxy_ids)
-                    policy.start()
-                    self.services.recommend_proxy_policy = policy
-                    self.services.proxy_pool.set_health_provider(policy.score_for)
-                    _atexit.register(policy.shutdown)
-                    provider_label = "W5.5 /recommend_proxy"
+                if signal is not None:
+                    signal.start()
+                    self.services.proxy_pool.set_health_provider(signal.score_for)
+                    self.services.proxy_selection_signal = signal
+                    legacy_state.logger.info(
+                        "Proxy pool health-weighted selection enabled (%s)",
+                        signal.label,
+                    )
             except Exception:
+                # A failure after signal.start() would otherwise leak the
+                # primary's background refresh thread — close best-effort.
+                if signal is not None:
+                    with contextlib.suppress(Exception):
+                        signal.close()
                 legacy_state.logger.warning(
-                    "Failed to wire RecommendProxy policy; will fall back to local cache",
+                    "Failed to wire ProxySelectionSignal; falling back to round-robin",
                     exc_info=True,
-                )
-
-            if provider_label is None and self.services.proxy_coordinator is not None:
-                try:
-                    self.services.proxy_pool.set_health_provider(
-                        self.services.proxy_coordinator.get_proxy_health_score
-                    )
-                    provider_label = "P2-D coordinator cache"
-                except Exception:
-                    legacy_state.logger.warning(
-                        "Failed to wire proxy health provider; falling back to round-robin",
-                        exc_info=True,
-                    )
-
-            if provider_label is not None:
-                legacy_state.logger.info(
-                    "Proxy pool health-weighted selection enabled (%s)",
-                    provider_label,
                 )
         legacy_state._sync_legacy_globals_from_runtime(self)

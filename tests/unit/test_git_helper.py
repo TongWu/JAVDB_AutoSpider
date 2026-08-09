@@ -712,6 +712,28 @@ class TestMaskSensitiveInfoAdvanced:
         masked = mask_sensitive_info(text)
         assert 'mysecretpassword' not in masked
 
+    def test_masks_password_for_github_lookalike_domain(self):
+        """A look-alike host (github.com.evil.com) must NOT be treated as
+        github.com — its password must still be masked.
+
+        Guards against the substring bypass (CodeQL
+        py/incomplete-url-substring-sanitization): ``'github.com' in domain``
+        is True for ``github.com.evil.com``, which would have leaked the
+        password. The host-based check closes this.
+        """
+        text = 'URL: https://user:supersecret@github.com.evil.com/repo.git'
+        masked = mask_sensitive_info(text)
+        assert 'supersecret' not in masked
+        assert '***MASKED***' in masked
+
+    def test_preserves_real_github_subdomain_in_url(self):
+        """A genuine *.github.com subdomain is still recognised as GitHub."""
+        text = 'URL: https://user:token@gist.github.com/user/id.git'
+        masked = mask_sensitive_info(text)
+        assert 'gist.github.com' in masked
+        # GitHub (sub)domains intentionally preserve credentials per existing design
+        assert 'token' in masked
+
 
 class TestGitPushBasicAuthNoPlaintextInArgv:
     """B.9 (2026-05-12): credentials must NOT appear in plaintext in the

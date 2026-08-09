@@ -18,6 +18,7 @@ _HISTORY_DB_PATH = None
 _load_history_joined = None
 _batch_update_movie_actors = None
 _category_to_indicators = None
+_indicators_to_category = None
 _movie_href_lookup_values = None
 _cfg = None
 
@@ -26,7 +27,8 @@ def _ensure_imports():
     """Lazy import to avoid circular dependency with db_connection."""
     global _get_db, _HISTORY_DB_PATH
     global _load_history_joined, _batch_update_movie_actors
-    global _category_to_indicators, _movie_href_lookup_values, _cfg
+    global _category_to_indicators, _indicators_to_category
+    global _movie_href_lookup_values, _cfg
     if _get_db is None:
         from javdb.storage.db._db_connection import (
             get_db,
@@ -36,7 +38,10 @@ def _ensure_imports():
             load_history_joined,
             batch_update_movie_actors,
         )
-        from javdb.spider.contracts import category_to_indicators
+        from javdb.spider.contracts import (
+            category_to_indicators,
+            indicators_to_category,
+        )
         from javdb.parsing.common import movie_href_lookup_values
         from javdb.infra.config import cfg
         _get_db = get_db
@@ -44,6 +49,7 @@ def _ensure_imports():
         _load_history_joined = load_history_joined
         _batch_update_movie_actors = batch_update_movie_actors
         _category_to_indicators = category_to_indicators
+        _indicators_to_category = indicators_to_category
         _movie_href_lookup_values = movie_href_lookup_values
         _cfg = cfg
 
@@ -94,17 +100,6 @@ def db_load_history_snapshot(
         Dict mapping href to movie dict with torrent data (including pending)
     """
     _ensure_imports()
-
-    def indicators_to_category(sub_ind: int, cen_ind: int) -> str:
-        """Map (SubtitleIndicator, CensorIndicator) to category name."""
-        if sub_ind == 1 and cen_ind == 0:
-            return 'hacked_subtitle'
-        elif sub_ind == 0 and cen_ind == 0:
-            return 'hacked_no_subtitle'
-        elif sub_ind == 1 and cen_ind == 1:
-            return 'subtitle'
-        else:  # sub_ind == 0 and cen_ind == 1
-            return 'no_subtitle'
 
     with _get_db(db_path or _HISTORY_DB_PATH) as conn:
         snapshot = _load_history_joined(conn)
@@ -161,7 +156,7 @@ def db_load_history_snapshot(
                 "torrents": {},
             }
             snapshot[href] = item
-        cat = indicators_to_category(int(sub), int(cen))
+        cat = _indicators_to_category(int(sub), int(cen))
         if cat not in item["torrent_types"]:
             item["torrent_types"].append(cat)
         item["torrents"][(int(sub), int(cen))] = {

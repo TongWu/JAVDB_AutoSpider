@@ -112,7 +112,7 @@ def db_swap_rclone_inventory(
     if session_id is None:
         raise ValueError(
             "db_swap_rclone_inventory requires a session_id "
-            "(set via set_active_session_id or pass explicitly)."
+            "(pass it explicitly)."
         )
     _ensure_imports()
     with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
@@ -238,6 +238,26 @@ def db_save_dedup_records(rows: List[dict], db_path: Optional[str] = None) -> No
 
 
 # ── PikpakHistory ────────────────────────────────────────────────────────
+
+
+def db_load_pikpak_history(
+    db_path: Optional[str] = None,
+) -> List[dict]:
+    """Load all PikpakHistory rows as a list of dicts (read-only).
+
+    Mirrors db_load_dedup_records / db_load_rclone_inventory. Used by
+    PikpakOwnershipCollector in run_ownership (ADR-033 Phase 2).
+
+    Args:
+        db_path: Database path (defaults to OPERATIONS_DB_PATH)
+
+    Returns:
+        List of PikpakHistory row dicts (all columns).
+    """
+    _ensure_imports()
+    with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
+        rows = conn.execute("SELECT * FROM PikpakHistory").fetchall()
+    return [dict(r) for r in rows]
 
 
 def db_append_pikpak_history(
@@ -519,7 +539,7 @@ def db_merge_rclone_inventory_from_stage(
     if session_id is None:
         raise ValueError(
             "db_merge_rclone_inventory_from_stage requires a "
-            "session_id (set via set_active_session_id or pass explicitly)."
+            "session_id (pass it explicitly)."
         )
     if years is None:
         raise ValueError("db_merge_rclone_inventory_from_stage requires years")

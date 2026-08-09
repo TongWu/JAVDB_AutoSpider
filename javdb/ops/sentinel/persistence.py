@@ -8,26 +8,36 @@ import json
 
 from javdb.ops.diagnosis.models import OpsIncidentRecord, build_incident_id
 from javdb.ops.sentinel.models import SentinelVerdict, utc_now_iso
-from javdb.storage.db import REPORTS_DB_PATH, get_db
+from javdb.storage import db as _db
+from javdb.storage.db import get_db
 from javdb.storage.repos.ops_incident_repo import OpsIncidentRepo
-from javdb.storage.repos.parse_run_field_fill_repo import ParseRunFieldFillRepo
 
 
+# REPORTS_DB_PATH is resolved at call time via ``_db`` (not bound at import) so
+# pytest's path monkeypatch is honoured (BFR-016).
 @contextlib.contextmanager
 def open_fill_repo():
-    with get_db(REPORTS_DB_PATH) as conn:
+    # Imported lazily (not at module level) to break the import cycle
+    # parse_run_field_fill_repo -> ops.sentinel(.models via __init__) -> service
+    # -> persistence -> parse_run_field_fill_repo. A module-level import here
+    # made the storage repo un-importable in isolation (it forced ops.sentinel to
+    # finish initialising first). The repo must import standalone (ADR-035 P3).
+    from javdb.storage.repos.parse_run_field_fill_repo import ParseRunFieldFillRepo
+
+    with get_db(_db.REPORTS_DB_PATH) as conn:
         yield ParseRunFieldFillRepo(conn)
 
 
 @contextlib.contextmanager
 def open_incident_repo():
-    with get_db(REPORTS_DB_PATH) as conn:
+    with get_db(_db.REPORTS_DB_PATH) as conn:
         yield OpsIncidentRepo(conn)
 
 
 def build_drift_incident(
     verdict: SentinelVerdict, *, session_id: str | None,
     run_id: str | None, run_attempt: int | None,
+    trigger_source: str = "sentinel",
 ) -> OpsIncidentRecord:
     now = utc_now_iso()
     findings = [
@@ -36,14 +46,22 @@ def build_drift_incident(
         for f in verdict.findings
     ]
     confidence = "high" if verdict.critical else "medium"
-    actions = (["Inspect the parser/selectors; the commit was gated."]
-               if verdict.critical else ["Inspect the soft-field selector; run committed."])
+    if trigger_source == "canary":
+        actions = (
+            ["Between-run canary detected critical drift; inspect the parser/"
+             "selectors. The next daily run will gate the commit."]
+            if verdict.critical else
+            ["Between-run canary detected soft drift; inspect the soft-field selector."]
+        )
+    else:
+        actions = (["Inspect the parser/selectors; the commit was gated."]
+                   if verdict.critical else ["Inspect the soft-field selector; run committed."])
     return OpsIncidentRecord(
         incident_id=build_incident_id(
-            trigger_source="sentinel", run_id=run_id, run_attempt=run_attempt,
+            trigger_source=trigger_source, run_id=run_id, run_attempt=run_attempt,
             session_id=session_id, incident_type="site_drift",
         ),
-        trigger_source="sentinel",
+        trigger_source=trigger_source,
         run_id=run_id,
         run_attempt=run_attempt,
         session_id=session_id,

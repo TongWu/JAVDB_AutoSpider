@@ -52,3 +52,4 @@ Rollback procedures, troubleshooting, and daily maintenance.
 | Troubleshooting | [troubleshooting.md](handbook/en/ops/troubleshooting.md) | [troubleshooting.md](handbook/zh/ops/troubleshooting.md) |
 | Logging | [logging.md](handbook/en/ops/logging.md) | [logging.md](handbook/zh/ops/logging.md) |
 | Migration Scripts | [migration-scripts.md](handbook/en/ops/migration-scripts.md) | [migration-scripts.md](handbook/zh/ops/migration-scripts.md) |
+| Torrent Quality Evidence | [torrent-quality-evidence.md](handbook/en/ops/torrent-quality-evidence.md) | [torrent-quality-evidence.md](handbook/zh/ops/torrent-quality-evidence.md) |

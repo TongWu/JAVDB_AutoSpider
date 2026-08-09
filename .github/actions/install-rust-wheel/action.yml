@@ -37,18 +37,39 @@ runs:
         echo "python_cmd=${python_cmd}" >> "$GITHUB_OUTPUT"
         echo "python_version=$("${python_cmd}" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')" >> "$GITHUB_OUTPUT"
 
+    - name: Clean wheel staging dir
+      shell: bash
+      run: |
+        # Self-hosted runners are persistent: /tmp/rust-wheel survives
+        # between jobs, and stale wheels from earlier builds would make
+        # the `pip install /tmp/rust-wheel/*.whl` glob ambiguous
+        # (ResolutionImpossible on two same-version wheels).
+        rm -rf /tmp/rust-wheel
+
     - name: Restore Rust wheel from cache
       id: wheel-cache
-      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+      # restore-only: the combined actions/cache post step saves even when
+      # the build failed, which poisoned keys with empty or mixed dirs on
+      # persistent runners. Saving is an explicit success-gated step below.
+      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
       with:
         path: /tmp/rust-wheel
-        key: rust-wheel-${{ runner.os }}-${{ runner.arch }}-py${{ steps.pip.outputs.python_version }}-${{ hashFiles('javdb/rust_core/src/**', 'javdb/rust_core/Cargo.toml', 'javdb/rust_core/Cargo.lock') }}
+        # The crate builds an abi3-py39 wheel (cp39-abi3 tag), so one wheel
+        # per OS/arch serves every Python >= 3.9 — keying by Python version
+        # would force needless rebuilds on machines without a C toolchain.
+        key: rust-wheel-${{ runner.os }}-${{ runner.arch }}-abi3-${{ hashFiles('javdb/rust_core/src/**', 'javdb/rust_core/Cargo.toml', 'javdb/rust_core/Cargo.lock') }}
 
     - name: Install from cached wheel
       if: steps.wheel-cache.outputs.cache-hit == 'true'
       shell: bash
       run: |
-        ${{ steps.pip.outputs.cmd }} install /tmp/rust-wheel/*.whl
+        shopt -s nullglob
+        wheels=(/tmp/rust-wheel/*.whl)
+        if [ "${#wheels[@]}" -ne 1 ]; then
+          echo "::error::install-rust-wheel: cached entry holds ${#wheels[@]} wheels (expected exactly 1) — delete the cache key and re-run: gh cache delete 'rust-wheel-${{ runner.os }}-${{ runner.arch }}-abi3-*'"
+          exit 1
+        fi
+        ${{ steps.pip.outputs.cmd }} install "${wheels[0]}"
         echo "✓ Installed Rust extension from cache"
 
     - name: Install Rust toolchain
@@ -71,12 +92,45 @@ runs:
       if: steps.wheel-cache.outputs.cache-hit != 'true'
       shell: bash
       run: |
-        ${{ steps.pip.outputs.cmd }} install maturin[patchelf]
+        # ziglang provides the linker for `maturin build --zig`: several
+        # self-hosted fleet machines have no system C toolchain (rustc
+        # otherwise dies with "linker `cc` not found"), and zig links
+        # against a portable glibc floor so the wheel works fleet-wide.
+        # Pinned like the other bootstrap tools in this repo; bump
+        # deliberately together with a local `maturin build --zig` check.
+        ${{ steps.pip.outputs.cmd }} install maturin[patchelf] ziglang==0.16.0
+        # Rebuild the output dir from scratch so it holds exactly the one
+        # wheel this build produces (the leading clean step already cleared
+        # any cross-job leftovers; this also covers a same-job retry).
+        rm -rf /tmp/rust-wheel
         mkdir -p /tmp/rust-wheel
         cd javdb/rust_core
         # User installs (common on self-hosted) put scripts in ~/.local/bin, which is often not on PATH.
         export PATH="${HOME}/.local/bin:${PATH}"
-        ${{ steps.pip.outputs.python_cmd }} -m maturin build --release --out /tmp/rust-wheel
+        # maturin --zig only wires zig in as the TARGET linker
+        # (CARGO_TARGET_APPLIES_TO_HOST=false); build scripts and
+        # proc-macros are HOST artifacts and still link via plain `cc`.
+        # On machines without one, shim cc to zig — the explicit -target
+        # makes zig use its bundled libc instead of system dev files.
+        if ! command -v cc >/dev/null 2>&1; then
+          case "$(uname -m)" in
+            aarch64) ZIG_NATIVE_TARGET="aarch64-linux-gnu" ;;
+            x86_64)  ZIG_NATIVE_TARGET="x86_64-linux-gnu" ;;
+            *)
+              echo "::error::install-rust-wheel: no system cc and unsupported arch '$(uname -m)' for the zig shim"
+              exit 1
+              ;;
+          esac
+          CC_SHIM_DIR="$(mktemp -d)"
+          {
+            echo '#!/usr/bin/env bash'
+            echo "exec ${{ steps.pip.outputs.python_cmd }} -m ziglang cc -target ${ZIG_NATIVE_TARGET} \"\$@\""
+          } > "${CC_SHIM_DIR}/cc"
+          chmod +x "${CC_SHIM_DIR}/cc"
+          export PATH="${CC_SHIM_DIR}:${PATH}"
+          echo "No system cc — shimming the host linker to zig (${ZIG_NATIVE_TARGET})"
+        fi
+        ${{ steps.pip.outputs.python_cmd }} -m maturin build --release --zig --out /tmp/rust-wheel
         echo "✓ Built Rust extension wheel:"
         ls -lh /tmp/rust-wheel/*.whl
 
@@ -84,5 +138,22 @@ runs:
       if: steps.wheel-cache.outputs.cache-hit != 'true'
       shell: bash
       run: |
-        ${{ steps.pip.outputs.cmd }} install /tmp/rust-wheel/*.whl
+        shopt -s nullglob
+        wheels=(/tmp/rust-wheel/*.whl)
+        if [ "${#wheels[@]}" -ne 1 ]; then
+          echo "::error::install-rust-wheel: build produced ${#wheels[@]} wheels in /tmp/rust-wheel (expected exactly 1)"
+          exit 1
+        fi
+        ${{ steps.pip.outputs.cmd }} install "${wheels[0]}"
         echo "✓ Installed Rust extension from freshly built wheel"
+
+    - name: Save Rust wheel to cache
+      # Explicit, success-gated save (paired with the restore-only step
+      # above). Composite steps abort on first failure, so reaching here
+      # means the build and install succeeded — we never persist a partial
+      # or empty /tmp/rust-wheel, which is what poisoned keys before.
+      if: steps.wheel-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+      with:
+        path: /tmp/rust-wheel
+        key: ${{ steps.wheel-cache.outputs.cache-primary-key }}

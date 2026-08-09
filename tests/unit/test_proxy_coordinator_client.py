@@ -9,7 +9,6 @@ from __future__ import annotations
 import os
 import sys
 import threading
-import time
 from unittest.mock import patch
 
 import pytest
@@ -18,13 +17,14 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 sys.path.insert(0, project_root)
 
 from javdb.proxy.coordinator.proxy_coordinator_client import (  # noqa: E402
+    ASYNC_QUEUE_SENTINEL,
+    AsyncReportEvent,
     CoordinatorUnavailable,
     DEFAULT_BAN_TTL_MS,
     LeaseResult,
     ProxyCoordinatorClient,
     ProxyHealthSnapshot,
     ReportResult,
-    _ASYNC_QUEUE_SENTINEL,
     create_coordinator_from_env,
     _extract_server_time_ms,
     _normalize_proxy_id,
@@ -284,9 +284,42 @@ def test_sentinel_terminates_worker_promptly():
     assert not worker.is_alive()
 
 
-def test_sentinel_constant_is_a_pair_of_nones():
-    """Worker termination check relies on the sentinel shape."""
-    assert _ASYNC_QUEUE_SENTINEL == (None, None)
+def test_sentinel_constant_has_stable_identity():
+    """Worker termination relies on identity, not tuple shape."""
+    assert ASYNC_QUEUE_SENTINEL is ASYNC_QUEUE_SENTINEL
+
+
+def test_async_report_loop_exits_on_typed_sentinel_identity():
+    c = _make_client(async_workers=1)
+    with patch.object(c, "report") as report:
+        c._async_queue.put(ASYNC_QUEUE_SENTINEL)
+        c._async_report_loop()
+    report.assert_not_called()
+    assert c._async_queue.unfinished_tasks == 0
+
+
+def test_async_report_loop_dispatches_event_by_named_fields():
+    c = _make_client(async_workers=1)
+    with patch.object(c, "report") as report:
+        c._async_queue.put(
+            AsyncReportEvent(
+                proxy_id="proxy-A",
+                kind="ban",
+                ttl_ms=60_000,
+                reason="manual",
+                latency_ms=123,
+            )
+        )
+        c._async_queue.put(ASYNC_QUEUE_SENTINEL)
+        c._async_report_loop()
+    report.assert_called_once_with(
+        "proxy-A",
+        "ban",
+        ttl_ms=60_000,
+        reason="manual",
+        latency_ms=123,
+    )
+    assert c._async_queue.unfinished_tasks == 0
 
 
 # ── Kind validation (no silent coercion) ─────────────────────────────────
@@ -365,6 +398,26 @@ def _fake_response(payload: dict, status_code: int = 200):
             return self._payload
 
     return _R()
+
+
+def test_lease_raises_unavailable_on_non_dict_json_response():
+    c = _make_client(async_workers=1)
+    try:
+        with patch.object(c._session, "post", return_value=_fake_response([])):  # type: ignore[arg-type]
+            with pytest.raises(CoordinatorUnavailable, match="expected object"):
+                c.lease("p1", 100)
+    finally:
+        c.close(wait=True, timeout=2.0)
+
+
+def test_report_raises_unavailable_on_non_dict_json_response():
+    c = _make_client(async_workers=1)
+    try:
+        with patch.object(c._session, "post", return_value=_fake_response([])):  # type: ignore[arg-type]
+            with pytest.raises(CoordinatorUnavailable, match="expected object"):
+                c.report("p1", "cf")
+    finally:
+        c.close(wait=True, timeout=2.0)
 
 
 def test_lease_parses_server_time_ms_wire_key():
@@ -545,7 +598,7 @@ def test_report_omits_ttl_ms_and_reason_when_not_provided():
         c.close(wait=True, timeout=2.0)
 
 
-def test_mark_proxy_banned_dispatches_default_3_day_ttl():
+def test_mark_proxy_banned_omits_ttl_so_worker_maps_reason():
     c = _make_client(async_workers=1)
     captured: list = []
 
@@ -554,14 +607,14 @@ def test_mark_proxy_banned_dispatches_default_3_day_ttl():
 
     try:
         with patch.object(c, "report", side_effect=fake_report):
-            c.mark_proxy_banned("proxy-A")
+            c.mark_proxy_banned("proxy-A", "ban page detected")
             c._async_queue.join()
         assert len(captured) == 1
         proxy_id, kind, ttl_ms, reason = captured[0]
         assert proxy_id == "proxy-A"
         assert kind == "ban"
-        assert ttl_ms == DEFAULT_BAN_TTL_MS
-        assert reason is None
+        assert ttl_ms is None
+        assert reason == "ban page detected"
     finally:
         c.close(wait=True, timeout=2.0)
 

@@ -26,6 +26,7 @@ sys.path.insert(0, project_root)
 from javdb.proxy.coordinator.runner_registry_client import (  # noqa: E402
     Signal,
 )
+from javdb.proxy.ban_manager import REMOTE_BAN_MIRROR_REASON  # noqa: E402
 from javdb.spider.runtime.sleep import (  # noqa: E402
     COMPOSITE_MULTIPLIER_CAP,
     MovieSleepManager,
@@ -195,7 +196,10 @@ class TestApplyActiveSignals:
         fake_pool = MagicMock()
         with patch.object(state_mod, "global_proxy_pool", fake_pool):
             _apply_active_signals([_sig("ban_proxy", proxy_id="Proxy-3")])
-        fake_pool.ban_proxy.assert_called_once_with("Proxy-3")
+        fake_pool.ban_proxy.assert_called_once_with(
+            "Proxy-3",
+            REMOTE_BAN_MIRROR_REASON,
+        )
 
     def test_ban_proxy_signal_idempotent_across_heartbeats(self):
         from javdb.spider.runtime.state import (

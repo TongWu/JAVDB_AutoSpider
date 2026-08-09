@@ -1,0 +1,99 @@
+name: Purge Missing Files
+
+# Clean up torrents stuck in qB's `missingFiles` state on BOTH the primary and
+# adhoc qBittorrent instances. A torrent reaches `missingFiles` once its files
+# are removed from disk (the normal end state after upload to cloud). qB exposes
+# no live folder size, so per torrent we stop it, force a recheck, then read the
+# re-verified per-file progress: the entry is deleted WITH its files only when
+# the content has shrunk past 50% of the original size and every still-present
+# file is at most the QBFileFilter threshold (100MB). A torrent whose big file
+# is actually still on disk is left alone (stopped, files intact). Unlike the
+# reconcile acquisition pass this is not scoped to tracked AcquisitionOutcome
+# rows or specific categories — it sweeps all categories of every configured qB.
+# Runs on self-hosted so the job can reach the operator's qBittorrent Web UIs.
+
+permissions:
+  contents: read
+
+on:
+  schedule:
+    - cron: '0 14 * * *'  # daily 22:00 SGT
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'List missingFiles torrents but delete nothing.'
+        required: false
+        default: false
+        type: boolean
+      min_age_hours:
+        description: 'Only consider torrents that completed at least this many hours ago.'
+        required: false
+        default: '22'
+        type: string
+
+concurrency:
+  group: purge-missing-files
+  cancel-in-progress: false
+
+jobs:
+  purge:
+    name: Purge
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: Production
+    env:
+      TZ: Asia/Singapore
+      INPUT_DRY_RUN: ${{ inputs.dry_run || 'false' }}
+      INPUT_MIN_AGE_HOURS: ${{ inputs.min_age_hours || '22' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+          persist-credentials: false
+
+      - name: Set up Python, venv, dependencies, Rust extension
+        uses: ./.github/actions/setup-python-env
+        with:
+          python-version: '3.11'
+
+      - name: Generate config.py from GitHub Variables and Secrets
+        env:
+          # Primary qB
+          VAR_QB_URL: ${{ secrets.QB_URL }}
+          VAR_QB_USERNAME: ${{ secrets.QB_USERNAME }}
+          VAR_QB_PASSWORD: ${{ secrets.QB_PASSWORD }}
+          # Adhoc qB (optional — empty disables the adhoc pass)
+          VAR_QB_URL_ADHOC: ${{ secrets.QB_URL_ADHOC }}
+          VAR_QB_USERNAME_ADHOC: ${{ secrets.QB_USERNAME_ADHOC }}
+          VAR_QB_PASSWORD_ADHOC: ${{ secrets.QB_PASSWORD_ADHOC }}
+          VAR_LOG_LEVEL: ${{ vars.LOG_LEVEL || 'INFO' }}
+        run: python3 -m apps.cli.ops.config_generator --github-actions
+
+      - name: Purge missingFiles torrents from all qB instances
+        run: |
+          set -e
+          set -o pipefail
+          CMD=(python3 -m apps.cli.qb.purge_missing_files --json --min-age-hours "$INPUT_MIN_AGE_HOURS")
+          if [ "$INPUT_DRY_RUN" = "true" ]; then
+            CMD+=(--dry-run)
+          fi
+          mkdir -p logs
+          echo "Executing: ${CMD[*]}"
+          "${CMD[@]}" | tee logs/purge_missing_files.json
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Purge Missing Files"
+            echo ""
+            echo "- Dry run: $INPUT_DRY_RUN"
+            echo ""
+            if [ -f logs/purge_missing_files.json ]; then
+              echo '```json'
+              cat logs/purge_missing_files.json
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

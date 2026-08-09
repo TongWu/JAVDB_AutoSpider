@@ -22,3 +22,9 @@ def test_collect_maps_progress_and_state():
 def test_collect_skips_hashless_rows():
     obs = QbCollector().collect([{"progress": 1.0, "state": "uploading"}])
     assert obs == []
+
+
+def test_collect_maps_missing_files_as_completed():
+    torrents = [{"hash": "m", "progress": 0.0, "state": "missingFiles"}]
+    obs = {o.qb_hash: o for o in QbCollector().collect(torrents)}
+    assert obs["m"].state == "completed"

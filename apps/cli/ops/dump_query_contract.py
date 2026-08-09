@@ -11,16 +11,48 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from apps.cli.ops.query_contract_cases import (  # noqa: E402
+    CONSUMPTION_RECENT_QUERY_CASES,
+    CONSUMPTION_SUMMARY_QUERY_CASES,
+    CONSUMPTION_SUMMARY_UNRESOLVED_COUNT_QUERY_CASES,
+    CONSUMPTION_TREND_QUERY_CASES,
+    CONSUMPTION_UNRESOLVED_QUERY_CASES,
+    LIBRARY_RECENT_QUERY_CASES,
+    LIBRARY_SUMMARY_QUERY_CASES,
+    LIBRARY_TREND_QUERY_CASES,
+    MOVIE_COUNT_CASES,
     MOVIE_FILTER_CASES,
+    OWNERSHIP_RECENT_QUERY_CASES,
+    OWNERSHIP_SUMMARY_BY_SOURCE_QUERY_CASES,
+    OWNERSHIP_SUMMARY_DISTINCT_QUERY_CASES,
     SESSION_QUERY_CASES,
     STATS_TREND_QUERY_CASES,
+    TORRENT_COUNT_CASES,
     TORRENT_FILTER_CASES,
     normalize_sql,
+)
+from apps.api.routers.library_query_builders import (  # noqa: E402
+    build_acquisition_recent_query,
+    build_acquisition_summary_query,
+    build_acquisition_trend_query,
+)
+from apps.api.routers.library_ownership_query_builders import (  # noqa: E402
+    build_ownership_recent_query,
+    build_ownership_summary_by_source_query,
+    build_ownership_summary_distinct_query,
+)
+from apps.api.routers.library_consumption_query_builders import (  # noqa: E402
+    build_consumption_recent_query,
+    build_consumption_summary_query,
+    build_consumption_summary_unresolved_count_query,
+    build_consumption_trend_query,
+    build_consumption_unresolved_query,
 )
 from apps.api.routers.stats_query_builders import build_stats_trend_query  # noqa: E402
 from javdb.storage.repos.history_repo import (  # noqa: E402
     _build_movie_filters,
     _build_torrent_filters,
+    build_movie_count,
+    build_torrent_count,
 )
 from javdb.storage.repos.sessions_repo import (  # noqa: E402
     _build_session_query,
@@ -45,9 +77,22 @@ def _build_stats_trend_query_for_contract(*, metric: str, cutoff: str) -> tuple[
 
 _BUILDERS = {
     "movie_filters": _build_movie_filters,
+    "movie_count": build_movie_count,
     "torrent_filters": _build_torrent_filters,
+    "torrent_count": build_torrent_count,
     "session_query": _build_session_query,
     "stats_trend_query": _build_stats_trend_query_for_contract,
+    "library_summary_query": build_acquisition_summary_query,
+    "library_recent_query": build_acquisition_recent_query,
+    "library_trend_query": build_acquisition_trend_query,
+    "ownership_summary_by_source_query": build_ownership_summary_by_source_query,
+    "ownership_summary_distinct_query": build_ownership_summary_distinct_query,
+    "ownership_recent_query": build_ownership_recent_query,
+    "consumption_summary_query": build_consumption_summary_query,
+    "consumption_summary_unresolved_count_query": build_consumption_summary_unresolved_count_query,
+    "consumption_recent_query": build_consumption_recent_query,
+    "consumption_trend_query": build_consumption_trend_query,
+    "consumption_unresolved_query": build_consumption_unresolved_query,
 }
 
 
@@ -64,9 +109,22 @@ def main() -> int:
     cases = []
     for builder_id, name, kwargs in (
         *MOVIE_FILTER_CASES,
+        *MOVIE_COUNT_CASES,
         *TORRENT_FILTER_CASES,
+        *TORRENT_COUNT_CASES,
         *SESSION_QUERY_CASES,
         *STATS_TREND_QUERY_CASES,
+        *LIBRARY_SUMMARY_QUERY_CASES,
+        *LIBRARY_RECENT_QUERY_CASES,
+        *LIBRARY_TREND_QUERY_CASES,
+        *OWNERSHIP_SUMMARY_BY_SOURCE_QUERY_CASES,
+        *OWNERSHIP_SUMMARY_DISTINCT_QUERY_CASES,
+        *OWNERSHIP_RECENT_QUERY_CASES,
+        *CONSUMPTION_SUMMARY_QUERY_CASES,
+        *CONSUMPTION_SUMMARY_UNRESOLVED_COUNT_QUERY_CASES,
+        *CONSUMPTION_RECENT_QUERY_CASES,
+        *CONSUMPTION_TREND_QUERY_CASES,
+        *CONSUMPTION_UNRESOLVED_QUERY_CASES,
     ):
         sql, bindings, resolved = _run_case(builder_id, kwargs)
         cases.append(

@@ -18,8 +18,23 @@ from javdb.infra.logging import get_logger
 
 from javdb.integrations.notify.email._config import (
     DEDUP_LOG_FILE,
-    _EMAIL_REPORTS_DIR,
     _MAX_READ_BYTES,
+)
+from javdb.storage.sessions.pending_verify import (
+    F_CLEANUP_PATH_MISMATCH_COUNT,
+    F_COMMIT_ATTEMPTS,
+    F_D1_REQUEST_COUNT_AUDIT_BASELINE_RATIO,
+    F_DERIVED_RECOMPUTE_DRIFT,
+    F_FINAL_STATUS,
+    F_KIND,
+    F_PENDING_RESIDUAL_COUNT,
+    F_RUN_ATTEMPT,
+    F_RUN_ID,
+    F_STAGED_CLAIM_ORPHAN_COUNT,
+    F_STATS_READ_ERROR,
+    F_TS,
+    F_WORKER_STAGE_ROLLBACK_FAILED,
+    KIND_PENDING_SESSION_VERIFY,
 )
 
 logger = get_logger(__name__)
@@ -178,9 +193,21 @@ def analyze_pikpak_log(log_path):
         "Connection refused"
     ]
 
-    for pattern in critical_patterns:
-        if pattern in log_content:
-            return True, f"Cannot access qBittorrent in PikPak bridge: {pattern}", True
+    # The adhoc qB instance is optional: pikpak_bridge logs its connection
+    # failures at WARNING and keeps going on the primary QB (the process still
+    # exits 0 — see javdb/integrations/pikpak/bridge/service.py). Those WARNING
+    # lines carry the same "Failed to login / Connection refused" text as a real
+    # primary-QB outage, so scan per line and skip the ones tagged "adhoc";
+    # otherwise a tolerated degradation flips the whole pipeline email to FAILED.
+    # ponytail: heuristic on the bridge's log wording — the exit code is the true
+    # signal, but this analyzer only has the log file. Revisit if the bridge ever
+    # stops labelling adhoc failures with "adhoc".
+    for line in log_content.splitlines():
+        if "adhoc" in line.lower():
+            continue
+        for pattern in critical_patterns:
+            if pattern in line:
+                return True, f"Cannot access qBittorrent in PikPak bridge: {pattern}", True
 
     return False, None, True
 
@@ -947,6 +974,7 @@ _PHASE2_PENDING_ALERT_THRESHOLDS = {
     'derived_recompute_drift_max': 0,
     'd1_request_count_audit_baseline_ratio_max': 2.0,
     'worker_stage_rollback_failed_max': 0,
+    'stats_read_error_max': 0,
 }
 
 # Phase 3 thresholds — production SLO.  See plan §Phase 3.A.
@@ -956,6 +984,7 @@ _PHASE3_PENDING_ALERT_THRESHOLDS = {
     'derived_recompute_drift_max': 0,
     'd1_request_count_audit_baseline_ratio_max': 1.8,
     'worker_stage_rollback_failed_max': 0,
+    'stats_read_error_max': 0,
     'cleanup_path_mismatch_count_max': 0,
     'staged_claim_orphan_count_max': 0,
 }
@@ -984,9 +1013,10 @@ def _resolve_pending_alert_thresholds():
 # annotate the subject line.  Names match the JSON field names of
 # `pending_session_verify` records.
 _CRITICAL_ALERT_FIELDS = (
-    'pending_residual_count',
-    'derived_recompute_drift',
-    'cleanup_path_mismatch_count',
+    F_PENDING_RESIDUAL_COUNT,
+    F_DERIVED_RECOMPUTE_DRIFT,
+    F_CLEANUP_PATH_MISMATCH_COUNT,
+    F_STATS_READ_ERROR,
 )
 
 
@@ -1012,14 +1042,13 @@ def _load_pending_verify_records(jsonl_path, run_id=None, run_attempt=None):
                     rec = __import__('json').loads(line)
                 except Exception:
                     continue
-                if rec.get('kind') != 'pending_session_verify':
+                if rec.get(F_KIND) != KIND_PENDING_SESSION_VERIFY:
                     continue
-                if run_id is not None:
-                    if str(rec.get('run_id') or '') != str(run_id):
-                        continue
+                if run_id is not None and str(rec.get(F_RUN_ID) or '') != str(run_id):
+                    continue
                 if run_attempt is not None:
                     try:
-                        if int(rec.get('run_attempt') or -1) != int(run_attempt):
+                        if int(rec.get(F_RUN_ATTEMPT) or -1) != int(run_attempt):
                             continue
                     except (TypeError, ValueError):
                         continue
@@ -1043,15 +1072,16 @@ def _evaluate_pending_alerts(records, thresholds=None):
     has_critical = False
     for rec in records:
         for key, max_key in (
-            ('pending_residual_count', 'pending_residual_count_max'),
-            ('commit_attempts', 'commit_attempts_max'),
-            ('derived_recompute_drift', 'derived_recompute_drift_max'),
-            ('worker_stage_rollback_failed',
+            (F_PENDING_RESIDUAL_COUNT, 'pending_residual_count_max'),
+            (F_COMMIT_ATTEMPTS, 'commit_attempts_max'),
+            (F_DERIVED_RECOMPUTE_DRIFT, 'derived_recompute_drift_max'),
+            (F_WORKER_STAGE_ROLLBACK_FAILED,
              'worker_stage_rollback_failed_max'),
-            ('cleanup_path_mismatch_count',
+            (F_CLEANUP_PATH_MISMATCH_COUNT,
              'cleanup_path_mismatch_count_max'),
-            ('staged_claim_orphan_count', 'staged_claim_orphan_count_max'),
-            ('d1_request_count_audit_baseline_ratio',
+            (F_STAGED_CLAIM_ORPHAN_COUNT, 'staged_claim_orphan_count_max'),
+            (F_STATS_READ_ERROR, 'stats_read_error_max'),
+            (F_D1_REQUEST_COUNT_AUDIT_BASELINE_RATIO,
              'd1_request_count_audit_baseline_ratio_max'),
         ):
             limit = th.get(max_key)
@@ -1069,7 +1099,7 @@ def _evaluate_pending_alerts(records, thresholds=None):
                 if severity == 'critical':
                     has_critical = True
         # final_status='finalizing' = commit stuck
-        if rec.get('final_status') == 'finalizing':
+        if rec.get(F_FINAL_STATUS) == 'finalizing':
             alerts.append((
                 'final_status_finalizing', 1, 0, 'soft', rec,
             ))
@@ -1114,13 +1144,15 @@ def _build_dual_drift_advisory(reports_dir: str) -> str:
                     # A non-object JSON line (list/str/number) has no .get();
                     # skip it instead of raising AttributeError.
                     continue
-                ts = str(rec.get('ts') or '')
+                ts = str(rec.get(F_TS) or '')
                 if not ts.startswith(today_utc):
                     continue
                 try:
                     failure_count = int(rec.get('failure_count') or 0)
                     uncommitted_d1_writes = int(rec.get('uncommitted_d1_writes') or 0)
-                    pending_residual_count = int(rec.get('pending_residual_count') or 0)
+                    pending_residual_count = int(
+                        rec.get(F_PENDING_RESIDUAL_COUNT) or 0
+                    )
                 except (TypeError, ValueError):
                     continue
                 todays_records += 1

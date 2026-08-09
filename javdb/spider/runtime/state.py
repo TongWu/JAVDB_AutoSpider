@@ -6,6 +6,7 @@ compatibility helpers in this module until the facade is frozen or removed.
 """
 
 import atexit
+import contextlib
 import json
 import os
 import re
@@ -31,6 +32,8 @@ from javdb.proxy.coordinator.movie_claim_client import (
     parse_movie_claim_mode,
 )
 from javdb.proxy.ban_manager import (
+    REMOTE_BAN_MIRROR_REASON,
+    install_rust_ban_dispatch,
     set_remote_ban_hook,
     set_remote_unban_hook,
 )
@@ -55,7 +58,7 @@ from javdb.infra.paths import ensure_dated_dir
 from javdb.spider.runtime.config import (
     BASE_URL,
     CF_BYPASS_SERVICE_PORT, CF_BYPASS_ENABLED,
-    CF_BYPASS_PORT_MAP,
+    CF_BYPASS_PORT_MAP, CF_BYPASS_VIA_PROXY,
     JAVDB_SESSION_COOKIE,
     PROXY_HTTP, PROXY_HTTPS, PROXY_MODULES, PROXY_MODE,
     PROXY_POOL, PROXY_POOL_MAX_FAILURES,
@@ -549,7 +552,7 @@ def _sync_legacy_globals_from_runtime(runtime: SpiderRuntime) -> None:
     global_proxy_coordinator = runtime.services.proxy_coordinator
     global_login_state_client = runtime.services.login_state_client
     global_runner_registry_client = runtime.services.runner_registry_client
-    global_recommend_proxy_policy = runtime.services.recommend_proxy_policy
+    global_recommend_proxy_policy = runtime.services.proxy_selection_signal
     global_work_distributor_client = runtime.services.work_distributor_client
     runtime.services.movie_claim_client = runtime.movie_claim.client_public
     global_movie_claim_client = runtime.movie_claim.client_public
@@ -582,7 +585,7 @@ def _clear_runtime_service_globals(runtime: SpiderRuntime) -> None:
         ("global_proxy_coordinator", "proxy_coordinator"),
         ("global_login_state_client", "login_state_client"),
         ("global_runner_registry_client", "runner_registry_client"),
-        ("global_recommend_proxy_policy", "recommend_proxy_policy"),
+        ("global_recommend_proxy_policy", "proxy_selection_signal"),
         ("global_work_distributor_client", "work_distributor_client"),
     )
     for global_name, service_name in service_globals:
@@ -719,8 +722,15 @@ def _setup_proxy_coordinator_legacy() -> Optional[ProxyCoordinatorClient]:
     # P1-A — wire the ProxyBanManager → coordinator bridge.  Bound to ``client``
     # via closure so a later disable / re-init naturally rebinds; pure
     # fire-and-forget so a coordinator outage cannot stall the ban path.
-    set_remote_ban_hook(lambda name: client.mark_proxy_banned(name))
-    set_remote_unban_hook(lambda name: client.mark_proxy_unbanned(name))
+    def _remote_ban_hook(proxy_id: str, reason: Optional[str] = None) -> None:
+        client.mark_proxy_banned(proxy_id, reason=reason)
+
+    def _remote_unban_hook(proxy_id: str) -> None:
+        client.mark_proxy_unbanned(proxy_id)
+
+    set_remote_ban_hook(_remote_ban_hook)
+    set_remote_unban_hook(_remote_unban_hook)
+    install_rust_ban_dispatch()
 
     # P0-5 — inject coordinator into the module-level movie_sleep_mgr singleton.
     # The singleton is created at import time before the coordinator is
@@ -1287,10 +1297,12 @@ def _apply_active_signals_legacy(signals: list) -> None:
 
     * ``throttle_global`` (factor) → ``movie_sleep_mgr.set_global_factor``.
       When no such signal exists, factor resets to 1.0.
-    * ``ban_proxy`` (proxy_id, ttl) → ``proxy_pool.ban_proxy(name)``.
+    * ``ban_proxy`` (proxy_id, ttl) → ``proxy_pool.ban_proxy(name, reason)``.
       Once banned, the runner does NOT unban (ProxyPool bans are
       session-permanent today). Signal TTL is intentionally not
-      honoured locally — see plan W6 trade-off #1.
+      honoured locally — see plan W6 trade-off #1. The mirrored
+      ``reason`` is a local-only sentinel so this path does not
+      re-broadcast the same ban into the coordinator.
     * ``pause_all`` (ttl) → ``movie_sleep_mgr.set_pause_until_ms``.
       When no such signal exists, the pause expiry resets to 0.
     * ``resume`` never appears in this list (Worker consumes it as a
@@ -1342,7 +1354,7 @@ def _apply_active_signals_legacy(signals: list) -> None:
         )
 
     # Apply ban_proxy deltas. The full reconcile model:
-    #   new_bans     = desired - applied → call pool.ban_proxy()
+    #   new_bans     = desired - applied → call pool.ban_proxy(..., local_only)
     #   removed_bans = applied - desired → call pool.unban_proxy()
     # Bookkeeping uses set replacement (not update) so an empty
     # desired set correctly produces an empty applied set, restoring
@@ -1358,7 +1370,7 @@ def _apply_active_signals_legacy(signals: list) -> None:
         if new_bans:
             for proxy_id in new_bans:
                 try:
-                    pool.ban_proxy(proxy_id)
+                    pool.ban_proxy(proxy_id, REMOTE_BAN_MIRROR_REASON)
                     logger.warning(
                         "W5.4 ban_proxy signal applied: %s now banned",
                         proxy_id,
@@ -1991,6 +2003,7 @@ def _initialize_request_handler_legacy():
         cf_bypass_service_port=CF_BYPASS_SERVICE_PORT,
         cf_bypass_port_map=CF_BYPASS_PORT_MAP,
         cf_bypass_enabled=CF_BYPASS_ENABLED,
+        cf_bypass_via_proxy=CF_BYPASS_VIA_PROXY,
         cf_bypass_max_failures=3,
         cf_turnstile_cooldown=_cd,
         fallback_cooldown=_cd,
@@ -2113,59 +2126,49 @@ def _setup_proxy_pool_legacy(use_proxy) -> None:
             logger.warning("Proxy enabled but no proxy configuration found (neither PROXY_POOL nor PROXY_HTTP/PROXY_HTTPS)")
         global_proxy_pool = None
 
-    # W6.B (W5.5) — when the operator has enabled cross-DO health
-    # aggregation via RECOMMEND_PROXY_ENABLED=true, prefer that policy
-    # over the local per-proxy cache: it integrates cohort-wide health
-    # data rather than only this runner's lease history. The local
-    # ``coord.get_proxy_health_score`` fallback runs unchanged when
-    # RecommendProxy is disabled or unreachable.
+    # ADR-023 Phase 4 (IMP-ADR023-04 Task 5): route the no-active-runtime
+    # legacy global path through ProxySelectionSignal, mirroring the runtime
+    # path in RuntimeContext.setup_proxy_pool. The signal collapses the W5.5
+    # /recommend_proxy primary (preferred when RECOMMEND_PROXY_ENABLED=true,
+    # for cohort-wide health data) and the P2-D coordinator-cache fallback
+    # into a single fail-open chain. ``global_recommend_proxy_policy`` keeps
+    # its name for compatibility but now holds the signal (matching the
+    # runtime _sync_legacy_globals_from_runtime mapping). atexit registers
+    # signal.close (→ inner RecommendProxyPolicy.shutdown) so the policy's
+    # background refresh thread is still stopped — no leaked thread.
     if (
         global_proxy_pool is not None
         and hasattr(global_proxy_pool, "set_health_provider")
     ):
-        provider_label = None
+        from javdb.proxy.selection.signal import ProxySelectionSignal
+
+        global global_recommend_proxy_policy
+        signal = None
         try:
-            from javdb.proxy.recommend.client import (
-                create_recommend_proxy_client_from_env,
+            proxy_ids = [p.get('name', '') for p in (PROXY_POOL or [])
+                         if isinstance(p, dict) and p.get('name')]
+            signal = ProxySelectionSignal.from_runtime_config(
+                proxy_ids=proxy_ids,
+                coordinator=global_proxy_coordinator,
             )
-            from javdb.proxy.recommend.policy import (
-                RecommendProxyPolicy,
-            )
-            global global_recommend_proxy_policy
-            rec_client = create_recommend_proxy_client_from_env()
-            if rec_client is not None:
-                proxy_ids = [p.get('name', '') for p in (PROXY_POOL or [])
-                             if isinstance(p, dict) and p.get('name')]
-                policy = RecommendProxyPolicy(rec_client, proxy_ids=proxy_ids)
-                policy.start()
-                global_recommend_proxy_policy = policy
-                global_proxy_pool.set_health_provider(policy.score_for)
-                atexit.register(policy.shutdown)
-                provider_label = "W5.5 /recommend_proxy"
+            if signal is not None:
+                signal.start()
+                global_proxy_pool.set_health_provider(signal.score_for)
+                global_recommend_proxy_policy = signal
+                atexit.register(signal.close)
+                logger.info(
+                    "Proxy pool health-weighted selection enabled (%s)",
+                    signal.label,
+                )
         except Exception:  # noqa: BLE001 — Worker policy is best-effort
+            # A failure after signal.start() (before atexit.register) would
+            # otherwise leak the primary's refresh thread — close best-effort.
+            if signal is not None:
+                with contextlib.suppress(Exception):
+                    signal.close()
             logger.warning(
-                "Failed to wire RecommendProxy policy; will fall back to local cache",
+                "Failed to wire ProxySelectionSignal; falling back to round-robin",
                 exc_info=True,
-            )
-
-        # Fallback: existing P2-D local-cache provider when RecommendProxy
-        # is off or failed to start.
-        if provider_label is None and global_proxy_coordinator is not None:
-            try:
-                global_proxy_pool.set_health_provider(
-                    global_proxy_coordinator.get_proxy_health_score
-                )
-                provider_label = "P2-D coordinator cache"
-            except Exception:  # noqa: BLE001
-                logger.warning(
-                    "Failed to wire proxy health provider; falling back to round-robin",
-                    exc_info=True,
-                )
-
-        if provider_label is not None:
-            logger.info(
-                "Proxy pool health-weighted selection enabled (%s)",
-                provider_label,
             )
 
 # ---------------------------------------------------------------------------

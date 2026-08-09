@@ -133,6 +133,137 @@
     },
     {
       "bindings": [],
+      "builder": "movie_count",
+      "name": "empty",
+      "params": {},
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM MovieHistory m"
+    },
+    {
+      "bindings": [
+        42
+      ],
+      "builder": "movie_count",
+      "name": "cursor_only",
+      "params": {
+        "cursor_id": 42
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM MovieHistory m WHERE m.Id > ?"
+    },
+    {
+      "bindings": [
+        "%ABC-123%",
+        "%ABC-123%",
+        "%ABC-123%"
+      ],
+      "builder": "movie_count",
+      "name": "q_only",
+      "params": {
+        "q": "ABC-123"
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM MovieHistory m WHERE (m.VideoCode LIKE ? OR m.ActorName LIKE ? OR m.SupportingActors LIKE ?)"
+    },
+    {
+      "bindings": [
+        "%ABC%",
+        "%ABC%",
+        "%ABC%",
+        1
+      ],
+      "builder": "movie_count",
+      "name": "q_and_perfect_match",
+      "params": {
+        "perfect_match": true,
+        "q": "ABC"
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM MovieHistory m WHERE (m.VideoCode LIKE ? OR m.ActorName LIKE ? OR m.SupportingActors LIKE ?) AND m.PerfectMatchIndicator = ?"
+    },
+    {
+      "bindings": [
+        0
+      ],
+      "builder": "movie_count",
+      "name": "perfect_match_false",
+      "params": {
+        "perfect_match": false
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM MovieHistory m WHERE m.PerfectMatchIndicator = ?"
+    },
+    {
+      "bindings": [
+        "Jane"
+      ],
+      "builder": "movie_count",
+      "name": "actor_only",
+      "params": {
+        "actor": "Jane"
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM MovieHistory m WHERE m.ActorName = ?"
+    },
+    {
+      "bindings": [
+        1
+      ],
+      "builder": "movie_count",
+      "name": "hi_res_true",
+      "params": {
+        "hi_res": true
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM MovieHistory m WHERE m.HiResIndicator = ?"
+    },
+    {
+      "bindings": [
+        0
+      ],
+      "builder": "movie_count",
+      "name": "hi_res_false",
+      "params": {
+        "hi_res": false
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM MovieHistory m WHERE m.HiResIndicator = ?"
+    },
+    {
+      "bindings": [
+        "S1"
+      ],
+      "builder": "movie_count",
+      "name": "session_only",
+      "params": {
+        "session_id": "S1"
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM MovieHistory m WHERE m.SessionId = ?"
+    },
+    {
+      "bindings": [
+        "Jane",
+        1,
+        "S1"
+      ],
+      "builder": "movie_count",
+      "name": "actor_hires_session",
+      "params": {
+        "actor": "Jane",
+        "hi_res": true,
+        "session_id": "S1"
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM MovieHistory m WHERE m.ActorName = ? AND m.HiResIndicator = ? AND m.SessionId = ?"
+    },
+    {
+      "bindings": [
+        42,
+        "2026-01-01 00:00:00",
+        "2026-02-01 23:59:59"
+      ],
+      "builder": "movie_count",
+      "name": "date_range_cursor",
+      "params": {
+        "cursor_id": 42,
+        "date_from": "2026-01-01",
+        "date_to": "2026-02-01"
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM MovieHistory m WHERE m.Id > ? AND m.DateTimeCreated >= ? AND m.DateTimeCreated <= ?"
+    },
+    {
+      "bindings": [],
       "builder": "torrent_filters",
       "name": "empty",
       "params": {},
@@ -250,6 +381,126 @@
         "date_to": "2026-02-01"
       },
       "sql": "WHERE t.Id > ? AND t.DateTimeCreated >= ? AND t.DateTimeCreated <= ?"
+    },
+    {
+      "bindings": [],
+      "builder": "torrent_count",
+      "name": "empty",
+      "params": {},
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM TorrentHistory t JOIN MovieHistory m ON m.Id = t.MovieHistoryId"
+    },
+    {
+      "bindings": [
+        7
+      ],
+      "builder": "torrent_count",
+      "name": "cursor_only",
+      "params": {
+        "cursor_id": 7
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM TorrentHistory t JOIN MovieHistory m ON m.Id = t.MovieHistoryId WHERE t.Id > ?"
+    },
+    {
+      "bindings": [
+        "%ABC-123%"
+      ],
+      "builder": "torrent_count",
+      "name": "q_only",
+      "params": {
+        "q": "ABC-123"
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM TorrentHistory t JOIN MovieHistory m ON m.Id = t.MovieHistoryId WHERE m.VideoCode LIKE ?"
+    },
+    {
+      "bindings": [
+        1
+      ],
+      "builder": "torrent_count",
+      "name": "resolution_only",
+      "params": {
+        "resolution_type": 1
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM TorrentHistory t JOIN MovieHistory m ON m.Id = t.MovieHistoryId WHERE t.ResolutionType = ?"
+    },
+    {
+      "bindings": [
+        1
+      ],
+      "builder": "torrent_count",
+      "name": "has_subtitle_true",
+      "params": {
+        "has_subtitle": true
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM TorrentHistory t JOIN MovieHistory m ON m.Id = t.MovieHistoryId WHERE t.SubtitleIndicator = ?"
+    },
+    {
+      "bindings": [
+        0
+      ],
+      "builder": "torrent_count",
+      "name": "has_subtitle_false",
+      "params": {
+        "has_subtitle": false
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM TorrentHistory t JOIN MovieHistory m ON m.Id = t.MovieHistoryId WHERE t.SubtitleIndicator = ?"
+    },
+    {
+      "bindings": [],
+      "builder": "torrent_count",
+      "name": "uncensored_true",
+      "params": {
+        "uncensored": true
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM TorrentHistory t JOIN MovieHistory m ON m.Id = t.MovieHistoryId WHERE t.CensorIndicator = 0"
+    },
+    {
+      "bindings": [],
+      "builder": "torrent_count",
+      "name": "uncensored_false",
+      "params": {
+        "uncensored": false
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM TorrentHistory t JOIN MovieHistory m ON m.Id = t.MovieHistoryId WHERE t.CensorIndicator != 0"
+    },
+    {
+      "bindings": [
+        "S1"
+      ],
+      "builder": "torrent_count",
+      "name": "session_only",
+      "params": {
+        "session_id": "S1"
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM TorrentHistory t JOIN MovieHistory m ON m.Id = t.MovieHistoryId WHERE t.SessionId = ?"
+    },
+    {
+      "bindings": [
+        1,
+        1
+      ],
+      "builder": "torrent_count",
+      "name": "resolution_subtitle_uncensored",
+      "params": {
+        "has_subtitle": true,
+        "resolution_type": 1,
+        "uncensored": false
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM TorrentHistory t JOIN MovieHistory m ON m.Id = t.MovieHistoryId WHERE t.ResolutionType = ? AND t.SubtitleIndicator = ? AND t.CensorIndicator != 0"
+    },
+    {
+      "bindings": [
+        7,
+        "2026-01-01 00:00:00",
+        "2026-02-01 23:59:59"
+      ],
+      "builder": "torrent_count",
+      "name": "date_range_cursor",
+      "params": {
+        "cursor_id": 7,
+        "date_from": "2026-01-01",
+        "date_to": "2026-02-01"
+      },
+      "sql": "SELECT MIN(COUNT(*), 10000) AS cnt FROM TorrentHistory t JOIN MovieHistory m ON m.Id = t.MovieHistoryId WHERE t.Id > ? AND t.DateTimeCreated >= ? AND t.DateTimeCreated <= ?"
     },
     {
       "bindings": [
@@ -370,8 +621,213 @@
         "metric": "dedup"
       },
       "sql": "SELECT DATE(DateTimeDetected), COALESCE(SUM(ExistingFolderSize), 0) FROM DedupRecords WHERE IsDeleted=1 AND DateTimeDetected >= ? GROUP BY DATE(DateTimeDetected) ORDER BY DATE(DateTimeDetected)"
+    },
+    {
+      "bindings": [],
+      "builder": "library_summary_query",
+      "name": "all",
+      "params": {},
+      "sql": "SELECT COALESCE(SUM(CASE WHEN state='queued' THEN 1 ELSE 0 END), 0) AS queued, COALESCE(SUM(CASE WHEN state='downloading' THEN 1 ELSE 0 END), 0) AS downloading, COALESCE(SUM(CASE WHEN state='completed' THEN 1 ELSE 0 END), 0) AS completed, COALESCE(SUM(CASE WHEN state='stalled' THEN 1 ELSE 0 END), 0) AS stalled, COALESCE(SUM(CASE WHEN state='failed' THEN 1 ELSE 0 END), 0) AS failed, COUNT(*) AS total FROM AcquisitionOutcome"
+    },
+    {
+      "bindings": [
+        50,
+        0
+      ],
+      "builder": "library_recent_query",
+      "name": "no_state",
+      "params": {
+        "limit": 50,
+        "offset": 0,
+        "state": null
+      },
+      "sql": "SELECT qb_hash, video_code, href, category, state, queued_at, completed_at, last_seen_at FROM AcquisitionOutcome ORDER BY queued_at DESC LIMIT ? OFFSET ?"
+    },
+    {
+      "bindings": [
+        "completed",
+        20,
+        40
+      ],
+      "builder": "library_recent_query",
+      "name": "with_state",
+      "params": {
+        "limit": 20,
+        "offset": 40,
+        "state": "completed"
+      },
+      "sql": "SELECT qb_hash, video_code, href, category, state, queued_at, completed_at, last_seen_at FROM AcquisitionOutcome WHERE state = ? ORDER BY queued_at DESC LIMIT ? OFFSET ?"
+    },
+    {
+      "bindings": [
+        "2026-01-01"
+      ],
+      "builder": "library_trend_query",
+      "name": "default",
+      "params": {
+        "cutoff": "2026-01-01"
+      },
+      "sql": "SELECT substr(last_seen_at, 1, 10) AS d, COALESCE(SUM(CASE WHEN state='completed' THEN 1 ELSE 0 END), 0) AS completed, COALESCE(SUM(CASE WHEN state='stalled' THEN 1 ELSE 0 END), 0) AS stalled, COALESCE(SUM(CASE WHEN state='failed' THEN 1 ELSE 0 END), 0) AS failed FROM AcquisitionOutcome WHERE state IN ('completed','stalled','failed') AND last_seen_at >= ? GROUP BY d ORDER BY d"
+    },
+    {
+      "bindings": [],
+      "builder": "ownership_summary_by_source_query",
+      "name": "all",
+      "params": {},
+      "sql": "SELECT source, COUNT(DISTINCT video_code) AS unique_titles, COALESCE(SUM(CASE WHEN present = 1 THEN 1 ELSE 0 END), 0) AS present_rows, COALESCE(SUM(size), 0) AS total_bytes FROM OwnershipLedger WHERE present = 1 GROUP BY source ORDER BY source"
+    },
+    {
+      "bindings": [],
+      "builder": "ownership_summary_distinct_query",
+      "name": "all",
+      "params": {},
+      "sql": "SELECT COUNT(DISTINCT video_code) AS total_owned_titles FROM OwnershipLedger WHERE present = 1"
+    },
+    {
+      "bindings": [
+        50,
+        0
+      ],
+      "builder": "ownership_recent_query",
+      "name": "no_source",
+      "params": {
+        "limit": 50,
+        "offset": 0,
+        "source": null
+      },
+      "sql": "SELECT video_code, source, category, path, size, present, observed_at FROM OwnershipLedger ORDER BY observed_at DESC, video_code, source, category LIMIT ? OFFSET ?"
+    },
+    {
+      "bindings": [
+        "qb",
+        20,
+        10
+      ],
+      "builder": "ownership_recent_query",
+      "name": "with_source",
+      "params": {
+        "limit": 20,
+        "offset": 10,
+        "source": "qb"
+      },
+      "sql": "SELECT video_code, source, category, path, size, present, observed_at FROM OwnershipLedger WHERE source = ? ORDER BY observed_at DESC, video_code, source, category LIMIT ? OFFSET ?"
+    },
+    {
+      "bindings": [],
+      "builder": "consumption_summary_query",
+      "name": "all",
+      "params": {},
+      "sql": "SELECT COUNT(*) AS total_signals, COALESCE(SUM(CASE WHEN watched = 1 THEN 1 ELSE 0 END), 0) AS watched_count, COALESCE(SUM(CASE WHEN watched = 0 THEN 1 ELSE 0 END), 0) AS unwatched_count, AVG(rating) AS avg_rating, COUNT(DISTINCT video_code) AS unique_titles, COUNT(DISTINCT instance) AS instance_count FROM ConsumptionSignal"
+    },
+    {
+      "bindings": [],
+      "builder": "consumption_summary_unresolved_count_query",
+      "name": "all",
+      "params": {},
+      "sql": "SELECT COUNT(*) AS unresolved_count FROM UnresolvedMediaItem"
+    },
+    {
+      "bindings": [
+        50,
+        0
+      ],
+      "builder": "consumption_recent_query",
+      "name": "no_filters",
+      "params": {
+        "instance": null,
+        "limit": 50,
+        "offset": 0,
+        "watched": null
+      },
+      "sql": "SELECT video_code, source_type, instance, library_id, library_name, watched, progress_pct, play_count, rating, watched_at, resolved_confidence, observed_at FROM ConsumptionSignal ORDER BY observed_at DESC, video_code, instance, library_id LIMIT ? OFFSET ?"
+    },
+    {
+      "bindings": [
+        50,
+        0
+      ],
+      "builder": "consumption_recent_query",
+      "name": "watched_true",
+      "params": {
+        "instance": null,
+        "limit": 50,
+        "offset": 0,
+        "watched": true
+      },
+      "sql": "SELECT video_code, source_type, instance, library_id, library_name, watched, progress_pct, play_count, rating, watched_at, resolved_confidence, observed_at FROM ConsumptionSignal WHERE watched = 1 ORDER BY observed_at DESC, video_code, instance, library_id LIMIT ? OFFSET ?"
+    },
+    {
+      "bindings": [
+        50,
+        0
+      ],
+      "builder": "consumption_recent_query",
+      "name": "watched_false",
+      "params": {
+        "instance": null,
+        "limit": 50,
+        "offset": 0,
+        "watched": false
+      },
+      "sql": "SELECT video_code, source_type, instance, library_id, library_name, watched, progress_pct, play_count, rating, watched_at, resolved_confidence, observed_at FROM ConsumptionSignal WHERE watched = 0 ORDER BY observed_at DESC, video_code, instance, library_id LIMIT ? OFFSET ?"
+    },
+    {
+      "bindings": [
+        "emby-home",
+        20,
+        10
+      ],
+      "builder": "consumption_recent_query",
+      "name": "instance_and_watched",
+      "params": {
+        "instance": "emby-home",
+        "limit": 20,
+        "offset": 10,
+        "watched": true
+      },
+      "sql": "SELECT video_code, source_type, instance, library_id, library_name, watched, progress_pct, play_count, rating, watched_at, resolved_confidence, observed_at FROM ConsumptionSignal WHERE instance = ? AND watched = 1 ORDER BY observed_at DESC, video_code, instance, library_id LIMIT ? OFFSET ?"
+    },
+    {
+      "bindings": [
+        "2026-01-01"
+      ],
+      "builder": "consumption_trend_query",
+      "name": "default",
+      "params": {
+        "cutoff": "2026-01-01"
+      },
+      "sql": "SELECT substr(watched_at, 1, 10) AS d, COALESCE(SUM(CASE WHEN watched = 1 THEN 1 ELSE 0 END), 0) AS watched, COUNT(*) AS total_signals FROM ConsumptionSignal WHERE watched_at IS NOT NULL AND watched_at >= ? GROUP BY d ORDER BY d"
+    },
+    {
+      "bindings": [
+        50,
+        0
+      ],
+      "builder": "consumption_unresolved_query",
+      "name": "no_instance",
+      "params": {
+        "instance": null,
+        "limit": 50,
+        "offset": 0
+      },
+      "sql": "SELECT instance, source_type, library_id, library_name, item_id, raw_title, file_path, observed_at FROM UnresolvedMediaItem ORDER BY observed_at DESC, instance, library_id, item_id LIMIT ? OFFSET ?"
+    },
+    {
+      "bindings": [
+        "emby-home",
+        25,
+        5
+      ],
+      "builder": "consumption_unresolved_query",
+      "name": "with_instance",
+      "params": {
+        "instance": "emby-home",
+        "limit": 25,
+        "offset": 5
+      },
+      "sql": "SELECT instance, source_type, library_id, library_name, item_id, raw_title, file_path, observed_at FROM UnresolvedMediaItem WHERE instance = ? ORDER BY observed_at DESC, instance, library_id, item_id LIMIT ? OFFSET ?"
     }
   ],
   "normalization": "collapse-whitespace-runs-to-single-space-and-trim",
-  "version": "85fef51b76f3decc"
+  "version": "fe08ee6c2ccb71b6"
 }

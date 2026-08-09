@@ -3,13 +3,15 @@
 Health Check Script for JAVDB AutoSpider
 
 This script performs pre-flight health checks before running the main pipeline.
-It verifies connectivity to services:
 
-Critical checks (will fail the pipeline if not passed):
-- Proxy pool availability (when PROXY_MODE='pool' and all proxies banned)
+Critical checks (abort the run with exit 1 if not passed):
+- D1 schema drift on the rollback/pending columns (D1/dual backends only;
+  see BFR-017) — aborts before the spider runs if remote D1 is missing a
+  column the commit/rollback path writes.
 
 Non-critical checks (warnings only, pipeline continues):
 - qBittorrent Web UI (uploader step may fail, but spider can still run)
+- Proxy pool availability (informational; the ban manager is session-scoped)
 - SMTP server (optional, email notification may fail)
 
 Usage:
@@ -30,7 +32,9 @@ from pathlib import Path
 from typing import Tuple, List
 from datetime import datetime
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+# This file lives at javdb/infra/health_check.py, so the repo root is two
+# levels up (parents[2]). parents[3] would land on the repo's parent dir.
+REPO_ROOT = Path(__file__).resolve().parents[2]
 os.chdir(REPO_ROOT)
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -231,6 +235,67 @@ def check_smtp_connection() -> Tuple[bool, str]:
         return False, f"Error: {str(e)}"
 
 
+def check_d1_schema() -> Tuple[bool, str]:
+    """Verify remote D1 carries the rollback/pending columns the
+    commit_session / rollback paths write.
+
+    D1 schema is migrated out-of-band (``javdb/migrations/d1/*.sql`` run via
+    wrangler), so a migration that ships in code but is never applied leaves
+    D1 missing a column. That drift would otherwise surface only at *commit*
+    time — after the spider has scraped and staged a whole run — as
+    ``no such column`` (BFR-017). Catching it pre-flight aborts the run
+    before any work is wasted and before a session is stranded in
+    ``finalizing``.
+
+    Only meaningful for the D1 / dual backends; SQLite self-heals via
+    ``_ensure_rollback_columns`` at init, so this is skipped there.
+    """
+    try:
+        from javdb.storage.db._db_connection import current_backend
+        from javdb.storage.d1_client import make_d1_connection
+        from javdb.storage.db._db_migrations import find_missing_rollback_columns
+    except Exception as e:  # pragma: no cover - import wiring
+        return False, f"Cannot import D1 schema helpers: {e}"
+
+    # Resolve the backend the way get_db() does — env var OR config.py — not
+    # os.environ alone: a self-hosted / API-triggered run may set
+    # STORAGE_BACKEND only in config.py, where reading os.environ would
+    # mis-detect 'sqlite' and silently skip the audit while get_db() still
+    # connects to D1. (PR #170 review)
+    backend = current_backend()
+    if backend not in ('d1', 'dual'):
+        return True, f"Skipped (backend={backend!r} — D1 audit not applicable)"
+
+    missing: List[str] = []
+    for logical in ('history', 'reports', 'operations'):
+        try:
+            conn = make_d1_connection(logical)
+        except Exception as e:
+            return False, f"Cannot connect to D1 '{logical}': {e}"
+        try:
+            for table, column in find_missing_rollback_columns(conn):
+                missing.append(f"{logical}.{table}.{column}")
+        except Exception as e:
+            return False, f"Error auditing D1 '{logical}' schema: {e}"
+        # Intentionally no conn.close(): D1Connection.close() calls
+        # write_summary(), mutating the git-tracked
+        # reports/D1/d1_port_summary.json. The workflow runs `git pull
+        # --rebase` immediately after the health check, and a dirty tracked
+        # file there would break the rebase. This is a read-only PRAGMA audit
+        # (no pending writes to flush), and health_check is a short-lived CLI
+        # whose HTTP session is reclaimed on process exit. (PR #170 review)
+
+    if missing:
+        return False, (
+            "D1 schema drift — missing column(s): "
+            + ", ".join(sorted(missing))
+            + ". A javdb/migrations/d1/*.sql migration was merged but never "
+            "applied to remote D1; apply it with `wrangler d1 execute <db> "
+            "--remote --file=...` (see BFR-017)."
+        )
+    return True, "All rollback/pending columns present on D1"
+
+
 def parse_arguments():
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(description='Health Check for JavDB Pipeline')
@@ -255,11 +320,24 @@ def main():
     logger.info("=" * 60)
     
     all_passed = True
+    critical_failures: List[str] = []
     results: List[Tuple[str, bool, str]] = []
     
-    # Check 1: qBittorrent (non-critical - just informational)
+    # Check 1: D1 schema (CRITICAL — drift here makes commit/rollback fail
+    # only after the spider has run; abort pre-flight instead. See BFR-017.)
     logger.info("")
-    logger.info("[1/3] Checking qBittorrent connectivity...")
+    logger.info("[1/4] Checking D1 schema (rollback/pending columns)...")
+    d1_success, d1_message = check_d1_schema()
+    results.append(("D1 Schema", d1_success, d1_message))
+    if d1_success:
+        logger.info(f"  ✓ {d1_message}")
+    else:
+        logger.error(f"  ✗ {d1_message}")
+        critical_failures.append("D1 Schema")
+
+    # Check 2: qBittorrent (non-critical - just informational)
+    logger.info("")
+    logger.info("[2/4] Checking qBittorrent connectivity...")
     qb_success, qb_message = check_qbittorrent_connection()
     results.append(("qBittorrent", qb_success, qb_message))
     if qb_success:
@@ -268,9 +346,9 @@ def main():
         logger.warning(f"  ⚠ {qb_message} (non-critical - uploader step may fail)")
         # qBittorrent failure is non-critical - spider can still run
     
-    # Check 2: Proxy Pool (if configured or --use-proxy)
+    # Check 3: Proxy Pool (if configured or --use-proxy)
     logger.info("")
-    logger.info("[2/3] Checking proxy pool status...")
+    logger.info("[3/4] Checking proxy pool status...")
     if should_check_proxy:
         proxy_success, proxy_message = check_proxy_pool_status()
         results.append(("Proxy Pool", proxy_success, proxy_message))
@@ -282,10 +360,10 @@ def main():
         logger.info("  ✓ Skipped (proxy forced off or no proxy-enabled modules configured)")
         results.append(("Proxy Pool", True, "Skipped"))
     
-    # Check 3: SMTP (optional)
+    # Check 4: SMTP (optional)
     logger.info("")
     if args.check_smtp:
-        logger.info("[3/3] Checking SMTP server connectivity...")
+        logger.info("[4/4] Checking SMTP server connectivity...")
         smtp_success, smtp_message = check_smtp_connection()
         results.append(("SMTP", smtp_success, smtp_message))
         if smtp_success:
@@ -294,7 +372,7 @@ def main():
             logger.warning(f"  ⚠ {smtp_message} (non-critical)")
             # SMTP failure is not critical - just a warning
     else:
-        logger.info("[3/3] SMTP check skipped (use --check-smtp to enable)")
+        logger.info("[4/4] SMTP check skipped (use --check-smtp to enable)")
         results.append(("SMTP", True, "Skipped"))
     
     # Summary
@@ -308,6 +386,16 @@ def main():
         logger.info(f"  {status}: {name} - {message}")
     
     logger.info("")
+    if critical_failures:
+        logger.error(
+            "✗ CRITICAL health check(s) FAILED: %s",
+            ", ".join(critical_failures),
+        )
+        logger.error(
+            "  Aborting pre-flight — downstream commit/rollback would fail."
+        )
+        logger.info("=" * 60)
+        return 1
     if all_passed:
         logger.info("✓ All critical health checks PASSED")
         logger.info("=" * 60)

@@ -1,6 +1,7 @@
 """
 Pytest configuration and fixtures for JAVDB AutoSpider tests.
 """
+import logging
 import os
 from pathlib import Path
 import sqlite3
@@ -27,7 +28,7 @@ import pytest
 import tempfile
 import shutil
 import javdb.infra.config as _cfg_mod
-import javdb.spider.services.dedup as _dedup_mod
+import javdb.spider.services.dedup_store as _dedup_store_mod
 import javdb.storage.db as _db_pkg
 import javdb.storage.db._db_connection as _db_conn_mod
 import javdb.storage.db._db_history_read as _db_history_read_mod
@@ -123,15 +124,26 @@ def _isolate_sqlite(tmp_path):
     _db_rollback_mod._get_db = None
     _db_stats_mod._get_db = None
 
-    # Reset dedup_checker module-level state
-    _dedup_mod._db_initialised = False
-    _dedup_mod._pending_paths_cache = None
+    # Reset dedup_store module-level state
+    _dedup_store_mod._db_initialised = False
+    _dedup_store_mod._pending_paths_cache = None
 
     _db_migrations_mod.init_db(test_db)
 
     yield test_db
 
     _db_conn_mod.close_db()
+    # Reclaim the per-test SQLite files. This fixture is autouse, so without
+    # cleanup every test leaves a ~0.6-1.7 MB database (schema + WAL) behind in
+    # its tmp_path for the whole session. Across ~5k tests that is several GB,
+    # which has filled CI runners mid-run (sqlite3 "database or disk is full").
+    # unlink() works even if a stray connection is still open (POSIX), so space
+    # is reclaimed regardless. Covers .db plus -wal/-shm/-journal sidecars.
+    for leftover in tmp_path.glob("test.db*"):
+        try:
+            leftover.unlink()
+        except OSError:
+            pass
     _db_conn_mod.DB_PATH = orig_db_path
     _db_conn_mod.HISTORY_DB_PATH = orig_history
     _db_conn_mod.REPORTS_DB_PATH = orig_reports
@@ -152,6 +164,106 @@ def _isolate_sqlite(tmp_path):
         os.environ.pop("STORAGE_BACKEND", None)
     else:
         os.environ["STORAGE_BACKEND"] = orig_storage_backend
+
+
+@pytest.fixture(autouse=True)
+def _reset_global_sleep_coordinator():
+    """Stop the module-global ``movie_sleep_mgr`` leaking a coordinator.
+
+    The no-runtime proxy-pool setup path
+    (``_setup_proxy_coordinator_legacy``) injects a live
+    ``ProxyCoordinatorClient`` into the module-level ``movie_sleep_mgr``
+    singleton and never restores it. A later test that calls
+    ``ensure_sleep_runtime`` then copies that stale coordinator into its
+    fresh runtime manager (the global is the documented fallback source),
+    breaking order-independent assertions such as
+    ``test_runtime_proxy_coordinator_injects_runtime_sleep`` — it sees the
+    leaked client instead of its own MagicMock.
+
+    Snapshot the coordinator-related fields before each test and restore
+    them afterwards so the global never leaks a coordinator between tests.
+    Lazy-imported so tests that never touch the spider runtime pay only the
+    (cached) import cost.
+    """
+    from javdb.spider.runtime import sleep as _sleep_mod
+
+    mgr = _sleep_mod.movie_sleep_mgr
+    saved = (
+        mgr._coordinator,
+        mgr._proxy_id,
+        mgr._coord_failures,
+        mgr._degraded,
+    )
+    try:
+        yield
+    finally:
+        (
+            mgr._coordinator,
+            mgr._proxy_id,
+            mgr._coord_failures,
+            mgr._degraded,
+        ) = saved
+
+
+@pytest.fixture(autouse=True)
+def _drop_dead_root_log_handlers() -> None:
+    """Drop root-logger handlers leaked from a prior test's closed capture stream.
+
+    ``javdb.infra.logging.setup_logging`` (called by entry points such as
+    ``apps.cli.ops.reconcile.main``) installs a console ``StreamHandler`` on the
+    ROOT logger bound to the ``sys.stderr`` active at call time. Under pytest that
+    stream is the per-test capture buffer; the handler outlives the test (the
+    ``_our_handler_present`` early-return means later calls don't rebuild it), so
+    once pytest closes that buffer a later test's root-level log write raises
+    ``ValueError: I/O operation on closed file``. Python's logging then prints a
+    ``--- Logging error ---`` block to the real stderr, breaking assertions like
+    ``assert captured.err == ""`` in an order-dependent way.
+
+    Before each test, remove any handler whose underlying stream is *already
+    closed*. This touches only dead leaked handlers — never a live handler and
+    never pytest's ``caplog`` handler (whose stream is open during the test) — so
+    it does not interfere with ``caplog``-based assertions.
+    """
+    root = logging.getLogger()
+    for handler in root.handlers[:]:
+        stream = getattr(handler, "stream", None)
+        if stream is not None and getattr(stream, "closed", False):
+            root.removeHandler(handler)
+    # Setup-only fixture (no teardown): cleanup runs before each test, then return.
+    return
+
+
+@pytest.fixture(autouse=True)
+def _isolate_d1_circuit_breaker(monkeypatch):
+    """Keep the process-global D1 circuit breaker inert + un-leaked per test.
+
+    The breaker (ADR-056) defaults ON in production and lives in a process-global
+    registry (``javdb.storage.d1_circuit_breaker._BREAKERS``) keyed by D1 endpoint
+    URL, consulted by ``D1AccessPort._post_with_retry``. Left at its production
+    default, any test that drives ``_post_with_retry`` through ``trip_threshold``
+    consecutive transient 5xx (e.g. the retry-exhaustion cases in
+    ``test_d1_port.py``) trips it; the elected prober then sleeps real time every
+    ``probe_interval_sec`` up to ``max_open_sec`` (900s default) — hanging the test
+    for ~15 min and leaking a tripped breaker into every later test that shares the
+    registry.
+
+    Default the breaker OFF for the suite and reset the registry around each test
+    so it never trips or leaks. Tests that actually exercise the breaker opt back
+    in explicitly and run *after* this (broader-scoped) fixture, so they win:
+    ``test_d1_circuit_breaker`` constructs ``D1CircuitBreaker`` instances directly
+    with explicit kwargs (env-independent), and the ``test_d1_port_circuit_breaker``
+    ``_fresh_breaker`` fixture re-enables the env flag and registers its own
+    deterministic breaker. Lazy-imported so tests that never touch D1 pay only the
+    cached import cost.
+    """
+    from javdb.storage import d1_circuit_breaker
+
+    monkeypatch.setenv("D1_CIRCUIT_BREAKER_ENABLED", "false")
+    d1_circuit_breaker.reset_circuit_breaker()
+    try:
+        yield
+    finally:
+        d1_circuit_breaker.reset_circuit_breaker()
 
 
 @pytest.fixture

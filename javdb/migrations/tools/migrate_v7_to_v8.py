@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Standalone migration: align split SQLite DBs with current schema (v9).
 
-The same schema steps run automatically on every ``utils.infra.db.init_db()`` when
-any database file's ``SchemaVersion`` is below ``utils.infra.db.SCHEMA_VERSION``.
+The same schema steps run automatically on every ``javdb.storage.db.init_db()`` when
+any database file's ``SchemaVersion`` is below ``javdb.storage.db.SCHEMA_VERSION``.
 
 **MovieHistory actor columns (history.db):**
 
@@ -29,7 +29,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import queue as queue_module
 import shutil
 import sqlite3
 import sys
@@ -39,7 +38,7 @@ from pathlib import Path
 from typing import List
 from urllib.parse import urljoin
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 os.chdir(REPO_ROOT)
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -528,11 +527,7 @@ def run_actor_backfill(
             orphaned = engine.shutdown(timeout=30)
 
             drained = 0
-            while True:
-                try:
-                    result = engine._result_queue.get_nowait()
-                except queue_module.Empty:
-                    break
+            for result in engine.drain_remaining():
                 drained += 1
                 p, f, s = _apply_backfill_result(
                     result,

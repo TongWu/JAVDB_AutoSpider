@@ -13,14 +13,14 @@ ReportMovies and ReportTorrents store the snapshot of movies and torrents
 discovered in each run (used for CSV report generation).
 """
 
-import os
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 import sqlite3
 from typing import Dict, List, Optional, Tuple
 
 from javdb.infra.config import cfg
 from javdb.infra.logging import get_logger
+from javdb.spider.contracts import indicators_to_category
 
 logger = get_logger(__name__)
 
@@ -123,7 +123,7 @@ def db_create_report_session(
         )
 
     if created_at is None:
-        created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        created_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     sid = session_id if session_id is not None else _generate_session_id()
     resolved_mode = _resolve_write_mode(write_mode)
 
@@ -138,6 +138,33 @@ def db_create_report_session(
              url, start_page, end_page, csv_filename, created_at,
              run_id, run_attempt, resolved_mode),
         )
+        # BFR-021: verify the row actually landed before returning success.
+        # A silent write loss (the backend ACKs the INSERT but the row is not
+        # present — observed on D1, run 27810377978) would otherwise let the
+        # whole pipeline run against a session that does not exist: every
+        # downstream FK child (ReportMovies/ReportTorrents/*Stats) orphans with
+        # "FOREIGN KEY constraint failed", and commit_session finally dies with
+        # the cryptic "None -> committed is not allowed".
+        #
+        # Verify against the canonical backend. Under dual mode
+        # DualConnection.execute() transparently falls back to the SQLite
+        # mirror when the D1 read errors (dual_connection.py) — and the INSERT
+        # writes the SQLite leg first, so a fallback read would happily find
+        # the local row and mask a lost D1 write. Read the D1 leg directly
+        # there (``conn._d1``) so the check cannot be satisfied by the mirror.
+        # In d1/sqlite mode ``conn`` already is the canonical connection. The
+        # read-back shares the write's connection, so it is read-your-write
+        # consistent (no D1 replica lag) and adds one cheap round-trip per run.
+        verify_conn = getattr(conn, "_d1", conn)
+        if verify_conn.execute(
+            "SELECT 1 FROM ReportSessions WHERE Id=?", (sid,)
+        ).fetchone() is None:
+            raise RuntimeError(
+                f"ReportSessions row {sid!r} is absent immediately after "
+                f"INSERT; the session write did not durably land on the "
+                f"reports backend. Refusing to start the pipeline against a "
+                f"non-existent session."
+            )
     return sid
 
 
@@ -161,8 +188,11 @@ def db_mark_session_committed(
 
     with _get_db(db_path or _REPORTS_DB_PATH) as conn:
         cur = conn.execute(
-            "UPDATE ReportSessions SET Status='committed' WHERE Id=? "
-            "AND Status IS NOT 'committed'",
+            "UPDATE ReportSessions "
+            "SET Status='committed', "
+            "CommittedAt=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') "
+            "WHERE Id=? "
+            "AND (Status IS NULL OR Status != 'committed')",
             (session_id,),
         )
         marked = cur.rowcount or 0
@@ -474,17 +504,6 @@ def db_get_report_rows(
     """
     _ensure_imports()
 
-    def indicators_to_category(sub_ind: int, cen_ind: int) -> str:
-        """Map (SubtitleIndicator, CensorIndicator) to category name."""
-        if sub_ind == 1 and cen_ind == 0:
-            return 'hacked_subtitle'
-        elif sub_ind == 0 and cen_ind == 0:
-            return 'hacked_no_subtitle'
-        elif sub_ind == 1 and cen_ind == 1:
-            return 'subtitle'
-        else:  # sub_ind == 0 and cen_ind == 1
-            return 'no_subtitle'
-
     with _get_db(db_path or _REPORTS_DB_PATH) as conn:
         movies = conn.execute(
             "SELECT * FROM ReportMovies WHERE SessionId = ? ORDER BY Id",
@@ -524,7 +543,7 @@ def db_get_report_rows(
             ).fetchall()
             for t in torrents:
                 t = dict(t)
-                cat = indicators_to_category(t['SubtitleIndicator'], t['CensorIndicator'])
+                cat = indicators_to_category(int(t['SubtitleIndicator']), int(t['CensorIndicator']))
                 flat[cat] = t.get('MagnetUri', '')
                 flat[f'size_{cat}'] = t.get('Size', '')
                 flat[f'file_count_{cat}'] = t.get('FileCount', 0)
@@ -763,7 +782,9 @@ def db_finish_commit_session(
     _ensure_imports()
     with _get_db(db_path or _REPORTS_DB_PATH) as conn:
         cur = conn.execute(
-            "UPDATE ReportSessions SET Status='committed' "
+            "UPDATE ReportSessions "
+            "SET Status='committed', "
+            "CommittedAt=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') "
             "WHERE Id=? AND Status='finalizing'",
             (session_id,),
         )

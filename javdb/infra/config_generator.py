@@ -320,6 +320,19 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         ('SMTP_PASSWORD', 'SMTP_PASSWORD', get_env, '', 'SMTP CONFIGURATION'),
         ('EMAIL_FROM', 'EMAIL_FROM', get_env, '', 'SMTP CONFIGURATION'),
         ('EMAIL_TO', 'EMAIL_TO', get_env, '', 'SMTP CONFIGURATION'),
+        # Notification backends (ADR-039 pluggable notify platform). Defaults to
+        # email-only so existing deployments are unchanged; add 'telegram' to
+        # NOTIFY_BACKENDS_JSON and set the TELEGRAM_* values to enable Telegram.
+        ('NOTIFY_BACKENDS', 'NOTIFY_BACKENDS_JSON', get_env_json, ['email'], 'NOTIFICATION BACKENDS'),
+        ('TELEGRAM_BOT_TOKEN', 'TELEGRAM_BOT_TOKEN', get_env, '', 'NOTIFICATION BACKENDS'),
+        ('TELEGRAM_CHAT_ID', 'TELEGRAM_CHAT_ID', get_env, '', 'NOTIFICATION BACKENDS'),
+        # Magnet sources / indexers (ADR-054 WS3). Defaults to empty so
+        # aggregation is feature-off unless the operator explicitly opts in.
+        ('MAGNET_SOURCES', 'MAGNET_SOURCES_JSON', get_env_json, [], 'MAGNET SOURCES / INDEXERS'),
+        ('JAVBUS_BASE_URL', 'JAVBUS_BASE_URL', get_env, 'https://www.javbus.com', 'MAGNET SOURCES / INDEXERS'),
+        ('SUKEBEI_BASE_URL', 'SUKEBEI_BASE_URL', get_env, 'https://sukebei.nyaa.si', 'MAGNET SOURCES / INDEXERS'),
+        ('MAGNET_SOURCES_USE_PROXY', 'MAGNET_SOURCES_USE_PROXY', get_env_bool, True, 'MAGNET SOURCES / INDEXERS'),
+        ('MAGNET_SOURCE_TIMEOUT_SECONDS', 'MAGNET_SOURCE_TIMEOUT_SECONDS', get_env_float, 10.0, 'MAGNET SOURCES / INDEXERS'),
         # Proxy Configuration
         ('PROXY_MODE', 'PROXY_MODE', get_env, 'pool', 'PROXY CONFIGURATION'),
         ('PROXY_POOL', 'PROXY_POOL_JSON', get_env_json, [], 'PROXY CONFIGURATION'),
@@ -347,6 +360,7 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         # Cloudflare Bypass Configuration
         ('CF_BYPASS_SERVICE_PORT', 'CF_BYPASS_SERVICE_PORT', get_env_int, 8000, 'CLOUDFLARE BYPASS CONFIGURATION'),
         ('CF_BYPASS_ENABLED', 'CF_BYPASS_ENABLED', get_env_bool, True, 'CLOUDFLARE BYPASS CONFIGURATION'),
+        ('CF_BYPASS_VIA_PROXY', 'CF_BYPASS_VIA_PROXY', get_env_bool, False, 'CLOUDFLARE BYPASS CONFIGURATION'),
         ('CF_BYPASS_PORT_MAP', 'CF_BYPASS_PORT_MAP_JSON', get_env_json, {}, 'CLOUDFLARE BYPASS CONFIGURATION'),
         # Spider Configuration
         # Fall back to legacy START_PAGE / END_PAGE env vars for backward compatibility
@@ -354,7 +368,16 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         ('PAGE_END', 'PAGE_END', get_env_int, get_env_int('END_PAGE', 10), 'SPIDER CONFIGURATION'),
         ('PHASE2_MIN_RATE', 'PHASE2_MIN_RATE', get_env_float, 4.0, 'SPIDER CONFIGURATION'),
         ('PHASE2_MIN_COMMENTS', 'PHASE2_MIN_COMMENTS', get_env_int, 85, 'SPIDER CONFIGURATION'),
+        (
+            'DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST',
+            'DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST_JSON',
+            get_env_json,
+            ['western_studio_date'],
+            'SPIDER CONFIGURATION',
+        ),
         ('BASE_URL', 'BASE_URL', get_env, 'https://javdb.com', 'SPIDER CONFIGURATION'),
+        ('SENTINEL_CANARY_INDEX_URL', 'SENTINEL_CANARY_INDEX_URL', get_env, 'https://javdb.com/', 'ADR-035 SITE-CONTRACT SENTINEL'),
+        ('SENTINEL_CANARY_ANCHORS', 'SENTINEL_CANARY_ANCHORS_JSON', get_env_json, [], 'ADR-035 SITE-CONTRACT SENTINEL'),
         # JavDB Login Configuration
         ('JAVDB_USERNAME', 'JAVDB_USERNAME', get_env, '', 'JAVDB LOGIN CONFIGURATION'),
         ('JAVDB_PASSWORD', 'JAVDB_PASSWORD', get_env, '', 'JAVDB LOGIN CONFIGURATION'),
@@ -397,6 +420,16 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         # qBittorrent File Filter Configuration
         ('QB_FILE_FILTER_MIN_SIZE_MB', 'QB_FILE_FILTER_MIN_SIZE_MB', get_env_int, 100, 'QBITTORRENT FILE FILTER CONFIGURATION'),
         ('QB_FILE_FILTER_LOG_FILE', 'QB_FILE_FILTER_LOG_FILE', get_env, 'logs/qb_file_filter.log', 'QBITTORRENT FILE FILTER CONFIGURATION'),
+        # Torrent Quality Evidence
+        ('TORRENT_QUALITY_EVIDENCE_ENABLED', 'TORRENT_QUALITY_EVIDENCE_ENABLED', get_env_bool, False, 'TORRENT QUALITY EVIDENCE'),
+        ('TORRENT_QUALITY_POLICY_MODE', 'TORRENT_QUALITY_POLICY_MODE', get_env, 'shadow', 'TORRENT QUALITY EVIDENCE'),
+        ('TORRENT_QUALITY_CATEGORIES', 'TORRENT_QUALITY_CATEGORIES', get_env, '', 'TORRENT QUALITY EVIDENCE'),
+        ('QUALITY_PROBE_ENABLED', 'QUALITY_PROBE_ENABLED', get_env_bool, False, 'TORRENT QUALITY EVIDENCE'),
+        ('QUALITY_PROBE_QB_URL', 'QUALITY_PROBE_QB_URL', get_env, '', 'TORRENT QUALITY EVIDENCE'),
+        ('QUALITY_PROBE_QB_USERNAME', 'QUALITY_PROBE_QB_USERNAME', get_env, '', 'TORRENT QUALITY EVIDENCE'),
+        ('QUALITY_PROBE_QB_PASSWORD', 'QUALITY_PROBE_QB_PASSWORD', get_env, '', 'TORRENT QUALITY EVIDENCE'),
+        ('QUALITY_PROBE_TOPK', 'QUALITY_PROBE_TOPK', get_env_int, 2, 'TORRENT QUALITY EVIDENCE'),
+        ('QUALITY_PROBE_GLOBAL_CAP', 'QUALITY_PROBE_GLOBAL_CAP', get_env_int, 50, 'TORRENT QUALITY EVIDENCE'),
         # Rclone Configuration
         ('RCLONE_CONFIG_BASE64', 'RCLONE_CONFIG_BASE64', get_env, '', 'RCLONE CONFIGURATION'),
         ('RCLONE_FOLDER_PATH', 'RCLONE_FOLDER_PATH', get_env, 'gdrive:', 'RCLONE CONFIGURATION'),
@@ -455,6 +488,11 @@ def get_config_map(github_actions_mode: bool = False) -> List[Tuple[str, str, Ca
         ('GH_ACTIONS_REPO', 'GH_ACTIONS_REPO', get_env, '', 'API CONSOLE / BACKEND'),
         ('GH_ACTIONS_TOKEN', 'GH_ACTIONS_TOKEN', get_env, '', 'API CONSOLE / BACKEND'),
         ('COOKIE_SECURE', 'COOKIE_SECURE', get_env_bool, True, 'API CONSOLE / BACKEND'),
+        # ADR-033 Phase 3: media servers for the consumption pass (--pass all).
+        # Supplied as a JSON-encoded secret MEDIA_SERVERS_JSON (list of
+        # {type,instance,base_url,token,libraries?}); tokens are inline because
+        # config.py is encrypted at rest as config.py.enc.
+        ('MEDIA_SERVERS', 'MEDIA_SERVERS_JSON', get_env_json, [], 'MEDIA SERVERS CONFIGURATION'),
     ]
 
 
@@ -533,6 +571,10 @@ def mask_sensitive_values(content: str) -> str:
     # Mask generic API keys such as OPS_DIAGNOSIS_API_KEY.
     masked = re.sub(r"([A-Z0-9_]*API_KEY\s*=\s*')[^']*(')", r"\1***MASKED***\2", masked)
     masked = re.sub(r'([A-Z0-9_]*API_KEY\s*=\s*")[^"]*(")', r"\1***MASKED***\2", masked)
+    # Mask service tokens such as TELEGRAM_BOT_TOKEN. The leading '_' keeps this
+    # from matching a bare ``TOKEN = 'ghp_...'`` (handled by the ghp_ rule below).
+    masked = re.sub(r"([A-Z0-9_]*_TOKEN\s*=\s*')[^']*(')", r"\1***MASKED***\2", masked)
+    masked = re.sub(r'([A-Z0-9_]*_TOKEN\s*=\s*")[^"]*(")', r"\1***MASKED***\2", masked)
     # Mask GitHub tokens
     masked = re.sub(r"(ghp_)[a-zA-Z0-9]+", r"\1***MASKED***", masked)
     # Mask cookies - use \s* instead of .* to avoid greedy matching
@@ -542,6 +584,9 @@ def mask_sensitive_values(content: str) -> str:
     masked = re.sub(r"(PROXY_POOL\s*=\s*\[)[^\]]*(\])", r"\1***MASKED***\2", masked)
     # Mask CF bypass port map (may expose internal topology)
     masked = re.sub(r"(CF_BYPASS_PORT_MAP\s*=\s*)\{[^}]*\}", r"\1***MASKED***", masked)
+    # Mask media-server API tokens in MEDIA_SERVERS dicts (single- or double-quoted).
+    masked = re.sub(r"('token'\s*:\s*')[^']*(')", r"\1***MASKED***\2", masked)
+    masked = re.sub(r'("token"\s*:\s*")[^"]*(")', r'\1***MASKED***\2', masked)
     return masked
 
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Upgrade all SQLite DBs to the current schema (split layout + MovieHistory v9).
 
-Delegates schema bumps to ``utils.infra.db.init_db`` via ``run_schema_migration`` from
+Delegates schema bumps to ``javdb.storage.db.init_db`` via ``run_schema_migration`` from
 ``migrate_v7_to_v8`` (which also handles version alignment across history /
 reports / operations).
 
@@ -473,6 +473,9 @@ def main() -> int:
             enqueue_qb=args.align_enqueue_qb,
             qb_category=args.align_qb_category,
             execute_delete=args.align_execute_delete,
+            # No --session-id on the migration CLI: run_alignment opens its
+            # own pending session and commits it (ADR-005 PR-4 staging path).
+            session_id=None,
         )
         arc = run_alignment(align_ns)
         if arc != 0:

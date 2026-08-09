@@ -2,7 +2,7 @@
 
 | 字段        | 值                                                                    |
 | ----------- | --------------------------------------------------------------------- |
-| **状态**    | Proposed                                                              |
+| **状态**    | Accepted —— Phase 1 已实现并验证 2026-06-02；Phase 2-3 待执行 |
 | **日期**    | 2026-05-27                                                            |
 | **作者**    | Ted                                                                   |
 | **关联**    | [ADR-010](../_archive/ADR-010-D1-Access-Port/ADR-010-d1-access-port.md), [ADR-022](../_archive/ADR-022-User-Preference-Foundation/ADR-022-user-preference-foundation.zh.md) |
@@ -162,9 +162,17 @@ Phase 1 的 scoring 刻意保持可解释：
 
 | 阶段 | IMP | 交付内容 | 推迟内容 |
 | --- | --- | --- | --- |
-| Phase 1 | Future IMP | D1 evidence schema、生产/probe evidence 采集、有边界的 Top-K shadow scoring、qB capability canary、日志/API 报告 | 不改变生产下载行为 |
-| Phase 2 | Future IMP | Assist mode，可推荐每个分类的替换候选，并在 API/Web 中暴露 review 动作 | 完全自动执行 |
-| Phase 3 | Future IMP | Enforce mode，带 rollout gate、阈值调优、backfill/reporting jobs | 视频抽帧/CV 检查和重量级 ML runtime |
+| Phase 1 | [IMP-ADR024-01](IMP-ADR024-01-d1-schema.md) · [-02](IMP-ADR024-02-models-repo.md) · [-03](IMP-ADR024-03-feature-extraction-scoring.md) · [-04](IMP-ADR024-04-file-filter-modularize.md) · [-05](IMP-ADR024-05-evidence-collection.md) · [-06](IMP-ADR024-06-read-api.md) · [-07](IMP-ADR024-07-docs-verification.md) | D1 evidence schema、**生产下载**（production_download）evidence 采集（复用 QBFileFilter 读取轮子）、可解释 shadow scoring、日志 + 只读 API 报告 | 远端 `quality_probe` 端点 + 仅元数据能力金丝雀；有边界的 Top-K 候补采集；任何生产下载行为变化 |
+| Phase 2 前置 | [IMP-ADR024-10](IMP-ADR024-10-remote-probe-topk.md) | 远端 `quality_probe` 端点（D4-D7）+ 有界 Top-K 候补采集（D8）→ `target_role=quality_probe` 证据行。默认全关、fail-closed、不改生产路径。 | 跨候选评分、API/Web（属 IMP-08） |
+| Phase 2 | [IMP-ADR024-08](IMP-ADR024-08-phase2-assist.md) | **Assist 后端已落地（2026-06-20）：** 分类内候选排名、`TorrentQualityReviewLabel` 存储、生产+探测证据关联、带 gate 的评估器（`TORRENT_QUALITY_POLICY_MODE=assist`）、三个新 `/api/quality` 端点（recommendations / needs-review / review-labels）、带 gate 的 CLI + 工作流步骤。不改变生产下载决策。 | Web review UI（独立 `javdb-autospider-web` 轮次）；完全自动执行 |
+| Phase 3 | [IMP-ADR024-09](IMP-ADR024-09-phase3-enforce.md)（轮廓） | Enforce mode，带 rollout gate、通过离线重放进行阈值调优、backfill/reporting jobs | 视频抽帧/CV 检查和重量级 ML runtime |
+
+> **Phase 1 范围说明（2026-05-31，IMP 规划时记录）。** 原 Phase 1 一行把远端 probe 证据、
+> 有边界的 Top-K shadow scoring、qB 仅元数据能力金丝雀打包在一起。在 IMP 规划过程中这些被
+> 拆分出去：Phase 1 现在只对**生产选中的种子**（`production_download` 角色）采集证据，复用
+> QBFileFilter 读取路径。远端 `quality_probe` 端点（D4-D7）、能力金丝雀（D7）以及有边界的
+> Top-K 候补采集（D8）推迟到后续 IMP（很可能是 Phase 2 的前置条件）。这让首次上线成为风险
+> 最低、完全 shadow 的切片，同时仍验证 D1 证据 → 评分 → 报告 的闭环。
 
 ## 参考
 
@@ -180,3 +188,34 @@ Phase 1 的 scoring 刻意保持可解释：
 ## 状态日志
 
 - 2026-05-27：以 ADR-024 提出。
+- 2026-05-31：Phase 1 拆分为 IMP-ADR024-01..07；Phase 2/3 以 IMP-ADR024-08/09
+  轮廓呈现。Phase 1 范围收窄为仅生产下载证据 —— 远端 `quality_probe` 端点、仅元数据
+  能力金丝雀、以及有边界的 Top-K 候补采集推迟到后续 IMP（见 Phase 1 范围说明）。
+- 2026-06-02：Phase 1（IMP-ADR024-01..07）已实现并验证。七个 IMP 全部标记
+  Completed；66 个质量单元测试 + 76 个回归邻居测试通过,D1 一致性守卫通过,两张表
+  已在远端 `javdb-reports` 上线（0 行 —— 纯 shadow,`TORRENT_QUALITY_EVIDENCE_ENABLED`
+  默认 False,生产中尚未运行）。状态由 Proposed 推进为 Accepted。Phase 2/3
+  (assist / enforce)仍为大纲；在其落地前不归档该文件夹。
+- 2026-06-19：Phase 2/3 范围经 grill 收敛。决策:(1) 先在生产启用 Phase 1 的
+  `production_download` 采集,积累真实 shadow 数据;(2) Phase 2 assist 取**完整**
+  形态(推荐更优备选候选),需要被推迟的远端 probe + Top-K —— 拆为新的可执行
+  [IMP-ADR024-10](IMP-ADR024-10-remote-probe-topk.md)(gating 前置);(3) 运维方
+  已有一台专用远端 qB 用于探测;(4) Phase 3 仅构建 enforce *机器*(gate / 离线
+  replay / backfill / off-switch),enforce 默认关 —— 阈值等待 assist 期的标注
+  数据;(5) Phase 2 的 Web review UI 推迟到独立的 `javdb-autospider-web` 轮次
+  (本轮仅 API)。IMP-10 已编写并进入执行;IMP-08/09 待 IMP-10 落地后从大纲细化。
+- 2026-06-19:IMP-ADR024-10 **已实现并验证**(11 个提交;40 个新单元测试;广回归
+  1016 通过、0 失败)。远端 `quality_probe` 端点 + 有界 Top-K 候补采集落地,默认
+  全关。执行期纠正两处设计疏漏(生产安全的并行 `_bucket_magnets` + drift guard;
+  probe 必须 `paused=False` 才能只抓 metadata)。待运维步骤:应用
+  `TorrentProbeCandidate` D1 迁移并重对齐 SQLite。IMP-08(assist)/IMP-09
+  (enforce 机器)仍为大纲,留待后续轮次。
+- 2026-06-19:IMP-ADR024-08 **assist 后端已实现**（分支 `claude/adr024-imp08-assist`）。
+  交付内容:分类内候选排名（`javdb/quality/assist.py`）、`TorrentQualityReviewLabel`
+  D1-first 存储 + repo、生产+探测证据关联（`list_evidence_for_movie`）、带 gate 的
+  评估器（`javdb/quality/assist_evaluator.py`，仅在
+  `TORRENT_QUALITY_POLICY_MODE=assist` 时生效）、三个新 `/api/quality` 端点
+  （`GET /recommendations`、`GET /needs-review`、`POST /review-labels`）、以及带
+  双重 gate 的 CLI + `QBFileFilter.yml` 工作流步骤。不改变生产下载决策。
+  Web review UI 推迟到独立的 `javdb-autospider-web` 轮次。待运维步骤：将
+  `TorrentQualityReviewLabel` D1 迁移应用到远端 `javdb-reports`。

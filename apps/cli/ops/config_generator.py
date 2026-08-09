@@ -1,7 +1,9 @@
 """Canonical config generator CLI entrypoint.
 
-Aliases :mod:`javdb.infra.config_generator` so tests can patch module-level
-attributes via this import path.
+Thin adapter that delegates to :mod:`javdb.infra.config_generator`. Importing this
+module yields a real module exposing ``main`` (not a ``sys.modules`` self-alias),
+so ``python -m apps.cli.ops.config_generator`` and any
+``import apps.cli.ops.config_generator`` behave conventionally.
 """
 
 from __future__ import annotations
@@ -13,10 +15,9 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-import importlib
+from javdb.infra.config_generator import main
 
-_module = importlib.import_module("javdb.infra.config_generator")
-sys.modules[__name__] = _module
+__all__ = ["main"]
 
 if __name__ == "__main__":
-    raise SystemExit(_module.main())
+    raise SystemExit(main())

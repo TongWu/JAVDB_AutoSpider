@@ -40,6 +40,71 @@ def _ensure_imports():
         _OPERATIONS_DB_PATH = OPERATIONS_DB_PATH
 
 
+# ── Session-owned table coverage (single source of truth) ────────────────
+#
+# Every table tagged with a session id falls into exactly one bucket below.
+# Keeping the buckets module-level lets a regression test assert the schema has
+# no session-tagged table that escaped a deliberate decision — so adding a new
+# such table without wiring it into rollback fails CI rather than silently
+# orphaning rows on the next failed run (see
+# ``tests/unit/test_rollback_table_coverage.py``).
+
+# reports DB — CLEARED on rollback ({table: session-id column}). ONLY the four
+# FK children that declare ``REFERENCES ReportSessions(Id)`` — they are the
+# session's own report rows and orphaning them violates the FK. ReportSessions
+# (the PK) and ReportTorrents (cascaded via ReportMovies; no session column) are
+# handled by bespoke statements in ``_rollback_reports``. The newer per-run
+# event/metric tables are enrichment whose session_id is provenance — they are
+# in ROLLBACK_PRESERVED_TABLES, NOT here.
+ROLLBACK_REPORTS_TABLES = {
+    'ReportMovies': 'SessionId',
+    'SpiderStats': 'SessionId',
+    'UploaderStats': 'SessionId',
+    'PikpakStats': 'SessionId',
+}
+
+# operations DB — CLEARED on rollback ({table: session-id column}). The
+# pre-existing session-owned operations tables (DedupRecords additionally
+# restores pre-images). AcquisitionOutcome is NOT here — see
+# ROLLBACK_PRESERVED_TABLES.
+ROLLBACK_OPERATIONS_TABLES = {
+    'PikpakHistory': 'SessionId',
+    'DedupRecords': 'SessionId',
+    'InventoryAlignNoExactMatch': 'SessionId',
+}
+
+# history DB — CLEARED on rollback ({table: session-id column}). Only the
+# pending-write staging tables are session-scoped-deleted; committed
+# MovieHistory / TorrentHistory are durable dedup memory rollback preserves
+# (see ROLLBACK_PRESERVED_TABLES).
+ROLLBACK_HISTORY_PENDING_TABLES = {
+    'PendingMovieHistoryWrites': 'SessionId',
+    'PendingTorrentHistoryWrites': 'SessionId',
+}
+
+# Session-tagged tables DELIBERATELY NOT session-scoped-deleted by rollback —
+# their session id is PROVENANCE, not an ownership pointer, so they outlive a
+# rolled-back session by design. Cascading a rollback into these would be a bug
+# (it would drop the very record of the failed run, or orphan a live external
+# resource from its tracker). Adding a table here is a conscious decision the
+# coverage test forces.
+ROLLBACK_PRESERVED_TABLES = frozenset({
+    'PipelineEvent',             # ADR-036 append-only event spine (SessionFailed)
+    'RunEventSummary',           # ADR-036 projection OF that append-only spine
+    'AcquisitionOutcomeShadow',  # ADR-036 P2 shadow projection OF the append-only
+                                 # spine (cross-validation only; rebuilt by replay)
+    'ParseRunFieldFill',         # ADR-035 enrichment, off the Pending->Commit path
+    'OpsIncidents',              # ADR-035/026 the failed run's own diagnosis record
+    'OpsIncidentFeatures',       # ADR-026 derived similarity/analytics metadata of a preserved incident
+    'AcquisitionOutcome',        # ADR-033 D10: bypasses session/rollback; keyed by
+                                 # qb_hash — the torrent really sits in qB and the
+                                 # reconcile loop tracks its fate (provenance only)
+    'EmailNotificationHistory',  # records emails really sent (external action)
+    'MovieHistory',              # durable dedup memory; only Pending* is undone
+    'TorrentHistory',            # durable dedup memory (FK child of MovieHistory)
+})
+
+
 # ── Dedup rollback helpers ──────────────────────────────────────────────
 
 _DEDUP_RECORD_COLUMNS = (
@@ -175,33 +240,21 @@ def _rollback_pending_in_progress(
     sessions' rows.
     """
     _ensure_imports()
-    counts: Dict[str, int] = {
-        "PendingMovieHistoryWrites": 0,
-        "PendingTorrentHistoryWrites": 0,
-    }
+    # Data-driven from ROLLBACK_HISTORY_PENDING_TABLES so the cleared set stays
+    # the single source of truth (the coverage test asserts against it).
+    counts: Dict[str, int] = {t: 0 for t in ROLLBACK_HISTORY_PENDING_TABLES}
     with _get_db(db_path or _HISTORY_DB_PATH) as conn:
-        if dry_run:
-            counts["PendingMovieHistoryWrites"] = (conn.execute(
-                "SELECT COUNT(*) AS n FROM PendingMovieHistoryWrites "
-                "WHERE SessionId=?",
-                (session_id,),
-            ).fetchone() or {"n": 0})["n"]
-            counts["PendingTorrentHistoryWrites"] = (conn.execute(
-                "SELECT COUNT(*) AS n FROM PendingTorrentHistoryWrites "
-                "WHERE SessionId=?",
-                (session_id,),
-            ).fetchone() or {"n": 0})["n"]
-        else:
-            cur_m = conn.execute(
-                "DELETE FROM PendingMovieHistoryWrites WHERE SessionId=?",
-                (session_id,),
-            )
-            cur_t = conn.execute(
-                "DELETE FROM PendingTorrentHistoryWrites WHERE SessionId=?",
-                (session_id,),
-            )
-            counts["PendingMovieHistoryWrites"] = cur_m.rowcount or 0
-            counts["PendingTorrentHistoryWrites"] = cur_t.rowcount or 0
+        for table, col in ROLLBACK_HISTORY_PENDING_TABLES.items():
+            if dry_run:
+                counts[table] = (conn.execute(
+                    f"SELECT COUNT(*) AS n FROM {table} WHERE {col}=?",
+                    (session_id,),
+                ).fetchone() or {"n": 0})["n"]
+            else:
+                counts[table] = (conn.execute(
+                    f"DELETE FROM {table} WHERE {col}=?",
+                    (session_id,),
+                ).rowcount or 0)
     return counts
 
 
@@ -217,6 +270,12 @@ def _rollback_reports(
     """
     _ensure_imports()
     counts: Dict[str, int] = {}
+    # Only the FK children in ROLLBACK_REPORTS_TABLES are cleared — they are the
+    # session's own report rows and would violate the ReportSessions FK if left
+    # behind. The newer per-run event/metric tables (PipelineEvent /
+    # RunEventSummary / ParseRunFieldFill / OpsIncidents) are enrichment whose
+    # session_id is provenance; they are intentionally preserved (see
+    # ROLLBACK_PRESERVED_TABLES).
     with _get_db(db_path or _REPORTS_DB_PATH) as conn:
         if dry_run:
             counts['ReportTorrents'] = (conn.execute(
@@ -224,17 +283,14 @@ def _rollback_reports(
                 "WHERE ReportMovieId IN (SELECT Id FROM ReportMovies WHERE SessionId=?)",
                 (session_id,),
             ).fetchone() or {'n': 0})['n']
-            for table in (
-                'ReportMovies', 'SpiderStats', 'UploaderStats',
-                'PikpakStats',
-            ):
+            for table, col in ROLLBACK_REPORTS_TABLES.items():
                 counts[table] = (conn.execute(
-                    f"SELECT COUNT(*) AS n FROM {table} WHERE SessionId=?",
+                    f"SELECT COUNT(*) AS n FROM {table} WHERE {col}=?",
                     (session_id,),
                 ).fetchone() or {'n': 0})['n']
             counts['ReportSessions'] = (conn.execute(
                 "SELECT COUNT(*) AS n FROM ReportSessions "
-                "WHERE Id=? AND Status IS NOT 'committed'",
+                "WHERE Id=? AND (Status IS NULL OR Status != 'committed')",
                 (session_id,),
             ).fetchone() or {'n': 0})['n']
             return counts
@@ -244,18 +300,15 @@ def _rollback_reports(
             "WHERE ReportMovieId IN (SELECT Id FROM ReportMovies WHERE SessionId=?)",
             (session_id,),
         ).rowcount or 0)
-        for table in (
-            'ReportMovies', 'SpiderStats', 'UploaderStats',
-            'PikpakStats',
-        ):
+        for table, col in ROLLBACK_REPORTS_TABLES.items():
             counts[table] = (conn.execute(
-                f"DELETE FROM {table} WHERE SessionId=?", (session_id,),
+                f"DELETE FROM {table} WHERE {col}=?", (session_id,),
             ).rowcount or 0)
         # Only delete the ReportSessions row if it isn't committed (so a
         # late-arriving rollback can never wipe a successful run).
         counts['ReportSessions'] = (conn.execute(
             "DELETE FROM ReportSessions "
-            "WHERE Id=? AND Status IS NOT 'committed'",
+            "WHERE Id=? AND (Status IS NULL OR Status != 'committed')",
             (session_id,),
         ).rowcount or 0)
     return counts
@@ -273,18 +326,16 @@ def _rollback_operations(
     staging_table = f"RcloneInventoryStaging_{_session_id_to_identifier_suffix(session_id)}"
     dedup_backup_table = _dedup_rollback_table(session_id)
     with _get_db(db_path or _OPERATIONS_DB_PATH) as conn:
-        op_specs = [
-            ('PikpakHistory', "DELETE FROM PikpakHistory WHERE SessionId=?"),
-            ('DedupRecords',
-             "DELETE FROM DedupRecords WHERE SessionId=?"),
-            ('InventoryAlignNoExactMatch',
-             "DELETE FROM InventoryAlignNoExactMatch WHERE SessionId=?"),
-        ]
+        # (table, session-id column) for the pre-existing session-owned ops
+        # tables. AcquisitionOutcome (ADR-033 D10) and EmailNotificationHistory
+        # are deliberately absent — they track external resources/actions that a
+        # rollback cannot undo, so their session_id is provenance only (see
+        # ROLLBACK_PRESERVED_TABLES).
+        op_specs = list(ROLLBACK_OPERATIONS_TABLES.items())
         if dry_run:
-            for table, _ in op_specs:
-                where = "WHERE SessionId=?"
+            for table, col in op_specs:
                 counts[table] = (conn.execute(
-                    f"SELECT COUNT(*) AS n FROM {table} {where}",
+                    f"SELECT COUNT(*) AS n FROM {table} WHERE {col}=?",
                     (session_id,),
                 ).fetchone() or {'n': 0})['n']
             if _dedup_rollback_table_exists(conn, session_id):
@@ -313,8 +364,10 @@ def _rollback_operations(
         )
         counts['DedupRecords.restored'] = restored
         counts['DedupRecords.restore_skipped'] = restore_skipped
-        for table, sql in op_specs:
-            counts[table] = (conn.execute(sql, (session_id,)).rowcount or 0)
+        for table, col in op_specs:
+            counts[table] = (conn.execute(
+                f"DELETE FROM {table} WHERE {col}=?", (session_id,),
+            ).rowcount or 0)
         if restore_skipped == 0:
             try:
                 conn.execute(f"DROP TABLE IF EXISTS {dedup_backup_table}")

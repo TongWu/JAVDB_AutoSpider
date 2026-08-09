@@ -67,7 +67,8 @@ Migration `--backfill-metadata` 运行把一部需要登录的影片报成了解
 - **上报而非失败**：`run_backfill_metadata` 单独统计 `login_required`（不算 hard failure——
   页面没问题、是会话过期），逐条 warning，并用结构化的 `log_summary_block`（ok / failed /
   login-gated / total）输出汇总，附带运行 `python3 -m apps.cli.login` 后重跑的提示。job 退出
-  码仍只取决于真正的 `failed`。
+  码只在本批次所有 href 都 hard-fail 时才非零；只要有部分进展，migration step 继续保持绿色，
+  失败 href 仍通过日志暴露。
 
 **检测是 best-effort；`use_cookie=True` 才是承重的改动。** cookie 有效时根本不会出现登录墙，
 影片直接被抓取。`is_login_page` 分类只在登录 HTML 真正回传到 `_process_href` 时才生效——

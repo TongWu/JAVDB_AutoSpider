@@ -224,3 +224,51 @@ python3 -m apps.cli.ops.diagnose_run \
 ```
 
 该助手只提供建议。它不会 rollback session、重跑 workflow、修改 D1，或删除 qBittorrent 任务。
+
+### Incident 历史与相似事件
+
+diagnostics API 会通过下面的接口暴露已持久化 incident：
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  "<api>/api/diag/ops-incidents?status=open&incident_type=failed_ingestion"
+```
+
+Web UI 会在 **诊断 -> Ops Incidents** 展示同样的只读记录。相似 incident 基于确定性 feature overlap：incident type、confidence、trigger source、text tokens、unsafe action tokens 和 evidence kinds。Phase 2 的 score 是可解释的，不使用 embedding。
+
+这个页面只用于调查。它不能 rollback、rerun、delete、apply drift fix，也不能把 recovery work 标记为 resolved。
+
+### 门控式修复建议
+
+ADR-026 Phase 3 可以给 incident 附加 remediation proposal。proposal 是可审计的建议，不是已经执行的任务。系统可以展示 runbook 链接或 command preview，但 operator 仍必须手动执行底层 rollback、rerun、drift apply、qB inspection 或 recovery 命令。
+
+Proposal 状态：
+
+- `proposed` - 由确定性 policy 生成。
+- `approved` - admin 复核后接受该建议。
+- `rejected` - admin 拒绝该建议。
+- `expired` - 对当前 incident 状态已经不再有效。
+
+Safety level：
+
+- `safe_to_prepare` - 可以安全展示为下一步只读操作。
+- `requires_review` - 使用 command preview 前必须复核 required checks。
+- `blocked` - blocked reasons 解决前不能执行。
+
+### 主动 incident 告警
+
+ADR-026 Phase 4 可以在检测到 incident 时主动告警 operator。incident 持久化到 D1 之后，一个确定性 policy 决定是否告警。投递本身由现有的 ADR-039 notify dispatch 负责；这一层只决定是否触发并记录结果。它不执行 remediation。
+
+Alert policy 由 operator 按 incident type 调整：
+
+- `enabled` - 该 incident type 是否告警。
+- `min_confidence` - 仅当诊断 confidence 至少达到该级别时才告警（`low` < `medium` < `high`）。
+- `channels` - 该 policy 允许使用的 ADR-039 backend 名称。为空表示使用 ADR-039 常规 active backend 列表；非空时通过 ADR-039 现有 backend 选择逻辑过滤投递目标。
+
+Alert event 状态：
+
+- `fired` - 存在匹配且启用的 policy、confidence 达到阈值，且当前进程已取得 incident 级告警 claim；随后投递交给 ADR-039。
+- `suppressed` - 该 incident 此前已经告警过（按 `incident_id` 去重）。
+- `skipped` - 没有匹配且启用的 policy、incident confidence 低于 policy 阈值，或 policy channel 与 active ADR-039 notify backend 没有交集（`no_delivery`）。
+
+告警是 opt-in 且尽力而为：投递失败会记录日志但不会让诊断崩溃，alert event 仍会被记录以供审计。
