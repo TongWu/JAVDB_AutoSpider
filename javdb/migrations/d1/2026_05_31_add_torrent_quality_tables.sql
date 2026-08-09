@@ -1,12 +1,20 @@
 -- 2026-05-31: Add TorrentQualityEvidence + TorrentQualityEvaluation tables (ADR-024 Phase 1).
 -- Write-Class: additive
 --
--- Additive (ADR-042 D6): both tables hold replayable, rebuildable state --
--- evidence is re-derivable by re-probing the torrent, evaluation by re-scoring
--- that evidence. They sit OUTSIDE the Pending->Commit session flow (see below)
--- and never determine whether a session commits; losing them just means the
--- next probe/scoring pass repopulates them. Same class as the
--- TorrentProbeCandidate queue that feeds them (2026_06_19).
+-- Additive (ADR-042 D6): neither table participates in the Pending->Commit
+-- session flow (see below), so no write here decides whether a session commits
+-- -- that is what puts both outside `authoritative`, and they are not drift /
+-- recovery observability either, which rules out `diagnostic`.
+--
+-- Rebuildability differs between the two, and the class does not claim
+-- otherwise. TorrentQualityEvidence is re-derivable by re-probing the torrent.
+-- TorrentQualityEvaluation is derived from that evidence by scoring, but a
+-- re-score repopulates it at the CURRENT scoring_version -- it does not
+-- reproduce historical rows, so the decision / would_replace_current_choice /
+-- shadow_rank / timestamp values behind list_needs_review(),
+-- list_recent_evaluations() and the quality API are not recoverable verbatim
+-- once dropped. Back it up like state you cannot re-derive; the write class
+-- governs the commit boundary, not the retention policy.
 --
 -- Apply with:
 --   wrangler d1 execute javdb-reports --remote \

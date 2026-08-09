@@ -43,13 +43,25 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
 
-# ``publish-to-public.yml`` is stripped from the mirror by the
-# ``exclude_paths`` list in ``.publish-config.yml``, so its absence marks a
-# public-mirror checkout. There the same publish run has already rewritten
-# every ``# PUBLIC_RUNNER``-marked ``runs-on`` to its GitHub-hosted
-# replacement, so the private-runner expectations below no longer describe
-# the tree under test.
-IS_PUBLIC_MIRROR = not (WORKFLOWS_DIR / "publish-to-public.yml").exists()
+_PUBLISH_WORKFLOW = WORKFLOWS_DIR / "publish-to-public.yml"
+_PUBLISH_CONFIG = REPO_ROOT / ".publish-config.yml"
+
+# Both files are stripped from the mirror by the ``exclude_paths`` list in
+# ``.publish-config.yml``, so "both absent" identifies a public-mirror
+# checkout and "both present" a private one. Exactly one missing is neither
+# — that is a private checkout someone has half-deleted, and silently
+# downgrading the runner contract below to a skip is the one outcome that
+# must not happen there, so fail loudly instead of guessing.
+if _PUBLISH_WORKFLOW.exists() != _PUBLISH_CONFIG.exists():
+    raise RuntimeError(
+        "inconsistent public-mirror markers: "
+        f".github/workflows/publish-to-public.yml={_PUBLISH_WORKFLOW.exists()}, "
+        f".publish-config.yml={_PUBLISH_CONFIG.exists()}. "
+        "Both are excluded from the public mirror and present in the private "
+        "repo, so exactly one missing means this checkout is broken."
+    )
+
+IS_PUBLIC_MIRROR = not _PUBLISH_WORKFLOW.exists()
 
 # Mirror of the rewrite pattern in publish-to-public.yml ("Replace private
 # runners for public repo" step). Both must stay in sync. The private value is
