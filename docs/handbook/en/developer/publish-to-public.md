@@ -192,6 +192,31 @@ The replacement runner (after `PUBLIC_RUNNER:`) is still a single token; the
 GitHub-hosted fallback never needs an array. Expression forms like
 `${{ matrix.runner }}` carry no marker and are left untouched.
 
+### Q: A workflow contract test passes here but fails on the public repo. Why?
+
+Because the mirror is a *rewritten* tree, not a copy. Any test that asserts on
+`.github/` content can see a different tree than the one you committed:
+
+- workflows in `exclude_paths` (e.g. `publish-to-public.yml`) are **absent**, so
+  reading one raises `FileNotFoundError`;
+- `# PUBLIC_RUNNER`-marked `runs-on:` lines are **already rewritten** to their
+  GitHub-hosted replacement, so asserting `[self-hosted, …]` fails.
+
+Guard such assertions on whether this checkout is the mirror. The absence of
+`publish-to-public.yml` is the marker — it is excluded from the mirror and
+present everywhere else:
+
+```python
+IS_PUBLIC_MIRROR = not (WORKFLOWS_DIR / "publish-to-public.yml").exists()
+
+@pytest.mark.skipif(IS_PUBLIC_MIRROR, reason="rewritten on the public mirror")
+def test_jobs_run_self_hosted():
+    ...
+```
+
+The private repo still enforces the full contract; only the derived mirror
+skips. See `tests/unit/test_workflow_public_runner_markers.py` for live usage.
+
 ### Q: How do I change the target branch?
 
 Edit `.publish-config.yml`:
