@@ -23,7 +23,7 @@ import requests
 import time
 import logging
 import threading
-from typing import Callable, Optional, Dict, Any, Tuple
+from typing import Callable, Optional, Dict, Any, Tuple, Union
 from urllib.parse import urljoin, urlparse, quote
 from bs4 import BeautifulSoup
 from dataclasses import dataclass, field
@@ -40,9 +40,60 @@ from javdb.infra.masking import (
 )
 from javdb.proxy.policy import should_proxy_module
 from javdb.spider.html_validators import (
+    is_cf_challenge_page as _is_cf_challenge_page,
     is_login_page as _is_login_page,
     is_maintenance_page as _is_maintenance_page,
 )
+
+# Connect timeout for the CF bypass service. The service sits on the proxy
+# host itself, so a TCP handshake either completes in well under a second or
+# the port is firewalled off — waiting the full read timeout (60s) for a
+# connect that will never land stalls every worker in turn.
+BYPASS_CONNECT_TIMEOUT = 5.0
+BYPASS_READ_TIMEOUT = 60.0
+
+# Statuses a forward proxy returns when *it* could not reach the bypass
+# service. Squid answers 503 when nothing is listening on the tunnelled
+# loopback port, which arrives as an HTTPError rather than a ConnectionError —
+# so without these the "bypass is down on this host" cache never fills and the
+# proxy is retried, and eventually banned, for a fault it does not have.
+_BYPASS_UPSTREAM_UNREACHABLE_STATUSES = frozenset({502, 503, 504})
+
+# How long a host stays in the "its bypass is down" cache before being probed
+# again. Forensics on a full run showed these failures flap — 7 of the 9 hosts
+# that returned a 5xx had both succeeded before and succeeded after, in the
+# same run — so latching a host off for the whole phase retires a service that
+# was only briefly unavailable. One minute is long enough that a genuinely dead
+# service is not re-probed once per page, short enough that a restarting one
+# comes back within the run.
+BYPASS_UNREACHABLE_TTL = 60.0
+
+
+def _describe_bypass_error(error: Optional[Exception]) -> str:
+    """Exception name plus the HTTP status, when there is one.
+
+    The status is the whole diagnosis and the name alone hides it: 503 means
+    the proxy could not open the connection (the service is refusing), 504
+    means it connected and the service never answered (the solver is
+    overloaded). Those want opposite fixes, and the status was previously
+    DEBUG-only — so an INFO-level run could tell you the bypass was
+    unreachable but never why.
+    """
+    name = type(error).__name__
+    status = getattr(getattr(error, 'response', None), 'status_code', None)
+    return f"{name} {status}" if status else name
+
+
+def _is_bypass_unreachable_error(error: Optional[Exception]) -> bool:
+    """Whether *error* means this host's bypass service cannot be reached."""
+    if isinstance(error, requests.ConnectionError):
+        return True
+    response = getattr(error, 'response', None)
+    return (
+        isinstance(error, requests.HTTPError)
+        and response is not None
+        and response.status_code in _BYPASS_UPSTREAM_UNREACHABLE_STATUSES
+    )
 
 # NOTE: there is no Rust request handler. The Rust `requester/` module was a
 # phantom adapter — exported from the crate but never driving a fetch — and was
@@ -157,7 +208,7 @@ class RequestHandler:
     
     def __init__(self, proxy_pool=None, config: Optional[RequestConfig] = None,
                  penalty_tracker=None, on_cf_event=None,
-                 on_request_complete=None):
+                 on_request_complete=None, on_site_challenge=None):
         """
         Initialize request handler.
 
@@ -192,6 +243,14 @@ class RequestHandler:
                 lease.  Best-effort; exceptions are swallowed so a
                 slow/unavailable coordinator can't block the request
                 hot path.
+            on_site_challenge: Optional callback invoked instead of
+                ``on_cf_event`` when the CF event was caused by a
+                *site-wide* challenge.  Signature is ``callback() -> None``.
+                Such a challenge is served to every egress IP, so it is a
+                property of the run, not of a proxy — reporting it per
+                proxy bans the whole pool for something no proxy caused
+                (ADR-043 D7).  The fetch layer uses this to switch the run
+                to bypass-first.  Best-effort; exceptions are swallowed.
         """
         self.proxy_pool = proxy_pool
         self.config = config or RequestConfig()
@@ -199,10 +258,23 @@ class RequestHandler:
         self.penalty_tracker = penalty_tracker
         self._on_cf_event = on_cf_event
         self._on_request_complete = on_request_complete
+        self._on_site_challenge = on_site_challenge
 
         # Counter for consecutive CF bypass failures (small responses)
         self.cf_bypass_failure_count: int = 0
         self.cf_bypass_force_refresh: bool = False
+
+        # Set by get_page() when a fetch ultimately failed because the target
+        # site served a Cloudflare challenge. Callers (FetchEngine) read it to
+        # tell a site-wide block apart from a broken proxy before soft-banning.
+        self.last_site_challenge: bool = False
+
+        # Hosts whose bypass service could not be reached, mapped to when that
+        # was last observed. Retrying once per page burns the connect timeout
+        # N times, but latching the host off for the whole run retires a
+        # service that only blipped — so entries age out after
+        # BYPASS_UNREACHABLE_TTL and the host is probed again.
+        self._bypass_unreachable: Dict[str, float] = {}
 
         # Initialize curl_cffi session if available and enabled
         self.curl_cffi_session = None
@@ -241,7 +313,8 @@ class RequestHandler:
         except Exception:  # noqa: BLE001 — telemetry must not block requests
             logger.debug("on_request_complete callback raised", exc_info=True)
 
-    def _record_cf_event(self, proxy_name: Optional[str] = None) -> None:
+    def _record_cf_event(self, proxy_name: Optional[str] = None, *,
+                         site_wide: bool = False) -> None:
         """Combined hook for local penalty tracking + cross-instance report.
 
         Replaces the bare ``penalty_tracker.record_event()`` calls in the
@@ -254,9 +327,33 @@ class RequestHandler:
         handler whose ``on_cf_event`` callback isn't pinned to a single
         proxy (it dispatches to whichever DO matches the current proxy).
         Per-worker callbacks ignore this argument.
+
+        ``site_wide`` marks an event caused by a Cloudflare challenge that
+        every egress IP receives.  The local pacing signal still fires —
+        backing off while CF pushes back is correct either way — but the
+        per-proxy coordinator report is replaced by ``on_site_challenge``.
+        Publishing a site-wide wall to each proxy's DO makes all of them
+        cross ``CF_AUTO_BAN_THRESHOLD`` at once, which bans the entire pool
+        for a condition no proxy can influence (BFR-024, ADR-043 D7).
+        ``proxy_name`` is forwarded so the callback can still name the
+        observing proxy: the Worker's circuit breaker counts *distinct*
+        proxies that saw a wall, which is exactly what tells a site-wide
+        outage apart from one unlucky IP.
         """
         if self.penalty_tracker:
-            self.penalty_tracker.record_event()
+            # Local pacing always fires; the tracker's own per-proxy report
+            # must not, or a site-wide wall reaches every DO as a ``cf``
+            # event through this back door and bans the pool anyway.
+            self.penalty_tracker.record_event(publish_remote=not site_wide)
+
+        if site_wide:
+            if self._on_site_challenge is not None:
+                try:
+                    self._on_site_challenge(proxy_name)
+                except Exception:  # noqa: BLE001 — telemetry must not block requests
+                    logger.debug("on_site_challenge callback raised", exc_info=True)
+            return
+
         if self._on_cf_event is not None:
             try:
                 self._on_cf_event(proxy_name)
@@ -400,7 +497,54 @@ class RequestHandler:
             except (TypeError, ValueError):
                 pass
         return f"http://127.0.0.1:{port}"
-    
+
+    def _bypass_cache_key(self, proxy_ip: Optional[str]) -> str:
+        """Key for the per-run "this host's bypass is down" cache.
+
+        Under ``CF_BYPASS_VIA_PROXY`` every proxy's bypass URL is
+        ``http://127.0.0.1:<port>``, so the URL alone is not a key — one
+        proxy's dead service would disable the tier for the whole pool. The
+        per-worker handlers each own a single proxy and never collide, but the
+        global handler rotates the pool through one handler and does.
+        """
+        return f"{proxy_ip or 'local'}|{self.get_cf_bypass_service_url(proxy_ip)}"
+
+    def _masked_bypass_base(self, proxy_ip: Optional[str]) -> str:
+        """``http://<masked-ip>:<port>`` for log lines.
+
+        The port is read back off the resolved service URL rather than off
+        ``cf_bypass_service_port``, so a host remapped through
+        ``CF_BYPASS_PORT_MAP`` is reported at the port actually dialled
+        instead of the pool-wide default.
+        """
+        resolved = urlparse(self.get_cf_bypass_service_url(proxy_ip))
+        port = resolved.port or self.config.cf_bypass_service_port
+        masked_ip = mask_ip_address(proxy_ip) if proxy_ip else '127.0.0.1'
+        return f"http://{masked_ip}:{port}"
+
+    def _bypass_is_unreachable(self, cache_key: str) -> bool:
+        """Whether this host's bypass is still inside its cool-off window.
+
+        Expired entries are dropped on read, so the next attempt re-probes.
+        """
+        marked_at = self._bypass_unreachable.get(cache_key)
+        if marked_at is None:
+            return False
+        if time.time() - marked_at < BYPASS_UNREACHABLE_TTL:
+            return True
+        del self._bypass_unreachable[cache_key]
+        return False
+
+    def _mark_bypass_unreachable(self, cache_key: str) -> bool:
+        """Start (or restart) the cool-off; True when it was not already open.
+
+        Callers use the return value to log once per window rather than once
+        per failed request.
+        """
+        was_cooling = cache_key in self._bypass_unreachable
+        self._bypass_unreachable[cache_key] = time.time()
+        return not was_cooling
+
     @staticmethod
     def is_cf_bypass_failure(html_content: str) -> bool:
         """Check if the CF bypass response indicates a failure.
@@ -496,7 +640,7 @@ class RequestHandler:
         target_url: str,
         req_headers: Dict,
         req_proxies: Optional[Dict],
-        timeout: float,
+        timeout: Union[float, Tuple[float, float]],
         context_msg: str,
         session: Optional[requests.Session] = None,
         *,
@@ -537,7 +681,10 @@ class RequestHandler:
             if response.status_code == 403:
                 body = response.text
                 logger.debug(f"[{context_msg}] HTTP 403 Forbidden (body {len(body)} bytes)")
-                if report_health:
+                # A Cloudflare challenge is served to every egress IP alike —
+                # charging it to this proxy's health EMA would deflate the
+                # whole pool's score for something no proxy can influence.
+                if report_health and not _is_cf_challenge_page(body):
                     self._record_request_complete(proxy_name, "failure", elapsed_ms)
                 return body, requests.HTTPError(
                     f"403 Client Error: Forbidden for url: {target_url}",
@@ -699,7 +846,11 @@ class RequestHandler:
             if response.status_code == 403:
                 body = response.text
                 logger.debug(f"[{context_msg}] [curl_cffi] HTTP 403 Forbidden (body {len(body)} bytes)")
-                if report_health:
+                # Same reasoning as the requests branch: a Cloudflare challenge
+                # is served to every egress IP, so it is not evidence about
+                # this proxy's health. This is the path that actually fires in
+                # production — _fetch_direct prefers curl_cffi.
+                if report_health and not _is_cf_challenge_page(body):
                     self._record_request_complete(proxy_name, "failure", elapsed_ms)
                 return body, Exception(
                     f"403 Client Error: Forbidden for url: {target_url}"
@@ -802,6 +953,9 @@ class RequestHandler:
                 return False
         
         bypass_base_url = self.get_cf_bypass_service_url(proxy_ip)
+        if self._bypass_is_unreachable(self._bypass_cache_key(proxy_ip)):
+            logger.debug("[CF Bypass] Cannot refresh cache: service previously unreachable")
+            return False
         encoded_url = quote(url, safe='')
         refresh_url = f"{bypass_base_url}/html?url={encoded_url}"
 
@@ -815,8 +969,7 @@ class RequestHandler:
         }
         
         # Mask the proxy IP in the URL for logging (use 127.0.0.1 when proxy_ip is None)
-        masked_ip = mask_ip_address(proxy_ip) if proxy_ip else '127.0.0.1'
-        masked_bypass_url = f"http://{masked_ip}:{self.config.cf_bypass_service_port}/html?url=..."
+        masked_bypass_url = f"{self._masked_bypass_base(proxy_ip)}/html?url=..."
         logger.debug(f"[CF Bypass] Refreshing bypass cache: {masked_bypass_url}")
         
         try:
@@ -874,20 +1027,42 @@ class RequestHandler:
         encoded_url = quote(url, safe='')
         bypass_url = f"{bypass_base_url}/html?url={encoded_url}"
 
+        cache_key = self._bypass_cache_key(proxy_ip)
+        if self._bypass_is_unreachable(cache_key):
+            logger.debug(
+                f"[CF Bypass] {context_msg}: service previously unreachable, skipping"
+            )
+            return None, False, False
+
         # By default the bypass service is dialled directly. With
         # cf_bypass_via_proxy the request is tunnelled through the proxy so the
         # service can bind to loopback on the proxy host (off the public net).
         bypass_proxies = self._build_bypass_proxies(req_proxies, proxy_ip)
 
         # Mask the proxy IP in the URL for logging (use 127.0.0.1 when proxy_ip is None)
-        masked_ip = mask_ip_address(proxy_ip) if proxy_ip else '127.0.0.1'
-        masked_bypass_base = f"http://{masked_ip}:{self.config.cf_bypass_service_port}"
+        masked_bypass_base = self._masked_bypass_base(proxy_ip)
         logger.debug(f"[CF Bypass] {context_msg}: {url} -> {masked_bypass_base}/html?url=...")
 
-        html_content, error = self._do_request(bypass_url, self.BYPASS_HEADERS, bypass_proxies,
-                                                timeout=60, context_msg=f"CF Bypass {context_msg}",
-                                                session=session)
-        
+        html_content, error = self._do_request(
+            bypass_url, self.BYPASS_HEADERS, bypass_proxies,
+            timeout=(BYPASS_CONNECT_TIMEOUT, BYPASS_READ_TIMEOUT),
+            context_msg=f"CF Bypass {context_msg}",
+            session=session,
+        )
+
+        # The service isn't listening, is firewalled off, or the proxy itself
+        # reports it can't be reached. Remember it so the remaining pages skip
+        # this proxy's bypass instead of re-paying the timeout on every
+        # fallback step.
+        if html_content is None and _is_bypass_unreachable_error(error):
+            if self._mark_bypass_unreachable(cache_key):
+                logger.warning(
+                    f"[CF Bypass] {context_msg}: service unreachable at "
+                    f"{masked_bypass_base} ({_describe_bypass_error(error)}) — "
+                    f"bypass skipped for this proxy for "
+                    f"{BYPASS_UNREACHABLE_TTL:.0f}s, then re-probed"
+                )
+
         if html_content:
             # Check for IP ban page before any other inspection
             if self.is_ban_page(html_content):
@@ -898,16 +1073,14 @@ class RequestHandler:
                 )
 
             content_size = len(html_content)
-            has_turnstile_keyword = 'turnstile' in html_content.lower()
-            has_security_verification = 'Security Verification' in html_content
+            is_challenge = _is_cf_challenge_page(html_content)
             is_bypass_failure = self.is_cf_bypass_failure(html_content)
-            
-            logger.debug(f"[CF Bypass] {context_msg} response: size={content_size}, turnstile_keyword={has_turnstile_keyword}, security_verification={has_security_verification}, bypass_failure={is_bypass_failure}")
-            
+
+            logger.debug(f"[CF Bypass] {context_msg} response: size={content_size}, cf_challenge={is_challenge}, bypass_failure={is_bypass_failure}")
+
             if not is_bypass_failure:
-                is_turnstile = has_security_verification and has_turnstile_keyword
-                if is_turnstile:
-                    logger.warning(f"[CF Bypass] {context_msg} returned Turnstile page (size={content_size} bytes)")
+                if is_challenge:
+                    logger.warning(f"[CF Bypass] {context_msg} returned Cloudflare challenge page (size={content_size} bytes)")
                     return html_content, False, True
                 
                 # Check for age verification modal without content
@@ -1088,9 +1261,9 @@ class RequestHandler:
                     html=html_content,
                 )
 
-            is_turnstile = 'Security Verification' in html_content and 'turnstile' in html_content.lower()
+            is_turnstile = _is_cf_challenge_page(html_content)
             if is_turnstile:
-                logger.warning(f"[Direct] {context_msg} returned Turnstile page (size={len(html_content)} bytes)")
+                logger.warning(f"[Direct] {context_msg} returned Cloudflare challenge page (size={len(html_content)} bytes)")
                 return html_content, False, True
             success = error is None
             if success and should_report:
@@ -1125,9 +1298,10 @@ class RequestHandler:
         if use_cookie and self.config.javdb_session_cookie:
             headers['Cookie'] = f'_jdb_session={self.config.javdb_session_cookie}'
         
-        # Check for Cloudflare Turnstile verification page
-        if 'Security Verification' in html_content and 'turnstile' in html_content.lower():
-            logger.warning(f"Cloudflare Turnstile verification page detected for {url} (Size: {len(html_content)} bytes)")
+        # Check for a Cloudflare challenge interstitial (managed challenge or
+        # the older Turnstile page) — never a usable JavDB page.
+        if _is_cf_challenge_page(html_content):
+            logger.warning(f"Cloudflare challenge page detected for {url} (Size: {len(html_content)} bytes)")
             return None
         
         # Check for age verification modal.
@@ -1200,7 +1374,8 @@ class RequestHandler:
             HTML content as string, or None if failed
         """
         use_session = session or self.session
-        
+        self.last_site_challenge = False
+
         # Check if CF bypass is globally disabled
         effective_use_cf_bypass = use_cf_bypass and self.config.cf_bypass_enabled
         if use_cf_bypass and not self.config.cf_bypass_enabled:
@@ -1317,7 +1492,7 @@ class RequestHandler:
         )
         self.cf_bypass_failure_count += 1
         if is_turnstile:
-            self._record_cf_event(proxy_name)
+            self._record_cf_event(proxy_name, site_wide=True)
         
         if self._is_deadline_exceeded():
             logger.debug(f"[{module_name}] Task deadline exceeded before fallback step (a)")
@@ -1351,7 +1526,7 @@ class RequestHandler:
                 logger.warning(f"{log_ctx} Step (a) returned small response ({len(result)} bytes), continuing to next step")
         
         if is_turnstile:
-            self._record_cf_event(proxy_name)
+            self._record_cf_event(proxy_name, site_wide=True)
         turnstile_detected = turnstile_detected or is_turnstile
         
         # Refresh bypass cache between step (a) and (b) if turnstile detected
@@ -1390,7 +1565,7 @@ class RequestHandler:
                         self.proxy_pool.mark_success()
                     return result
             if is_turnstile:
-                self._record_cf_event(proxy_name)
+                self._record_cf_event(proxy_name, site_wide=True)
             turnstile_detected = turnstile_detected or is_turnstile
         
         # Step (c) & (d): Try other proxies if in pool mode
@@ -1434,7 +1609,7 @@ class RequestHandler:
                         self.proxy_pool.mark_success()
                         return result
                 if is_turnstile:
-                    self._record_cf_event(proxy_name)
+                    self._record_cf_event(proxy_name, site_wide=True)
                 turnstile_detected = turnstile_detected or is_turnstile
                 
                 if self.config.fallback_cooldown > 0:
@@ -1463,7 +1638,7 @@ class RequestHandler:
                         logger.warning(f"{log_ctx} Step (d) returned small response ({len(result)} bytes), continuing to next proxy")
                 
                 if is_turnstile:
-                    self._record_cf_event(proxy_name)
+                    self._record_cf_event(proxy_name, site_wide=True)
                 turnstile_detected = turnstile_detected or is_turnstile
                 
                 # Refresh bypass cache after step (d) if turnstile detected
@@ -1481,6 +1656,17 @@ class RequestHandler:
         # actually a maintenance or login page — those are site-wide issues,
         # not proxy-specific CF blocks.
         if _last_fallback_html:
+            if _is_cf_challenge_page(_last_fallback_html):
+                # Every egress IP sees the same challenge, so banning this
+                # proxy removes capacity without removing the problem. The
+                # pacing events already fired during the cascade; what we skip
+                # here is the ProxyBannedError below.
+                self.last_site_challenge = True
+                logger.warning(
+                    f"{log_ctx} Last response is a Cloudflare challenge page — "
+                    "site-wide block, not a proxy fault; skipping ban accounting"
+                )
+                return None
             if _is_maintenance_page(_last_fallback_html):
                 logger.warning(
                     f"{log_ctx} Last response appears to be a maintenance page — "
@@ -1493,6 +1679,22 @@ class RequestHandler:
                     "skipping CF event recording (session issue, not proxy-specific)"
                 )
                 return None
+
+        # A bypass service that isn't reachable is a fault of that host's
+        # bypass tier, not of the proxy's ability to relay traffic. Charging it
+        # to the proxy bans it — and, through the coordinator, for days — so it
+        # stays banned long after the service is restarted. The proxy keeps
+        # serving direct requests; only its bypass is skipped.
+        if self._bypass_is_unreachable(
+            self._bypass_cache_key(
+                self._get_bypass_ip(proxies, use_local_bypass)
+            )
+        ):
+            logger.warning(
+                f"{log_ctx} Bypass service is unreachable on this host — "
+                "skipping ban accounting (proxy fault not established)"
+            )
+            return None
 
         self.cf_bypass_failure_count += 1
         self._record_cf_event(proxy_name)
@@ -1550,14 +1752,27 @@ class RequestHandler:
                         return result
             
             if is_turnstile:
-                self._record_cf_event(proxy_name)
+                # The penalty tracker is a pacing signal (back off while CF is
+                # pushing back), so it still fires. What a challenge must NOT
+                # do is get this proxy banned — locally via
+                # last_site_challenge, or cross-runner via the coordinator,
+                # which site_wide=True routes around.
+                self.last_site_challenge = True
+                self._record_cf_event(proxy_name, site_wide=True)
                 if retry_count < max_retries - 1:
-                    logger.warning(f"[{module_name}] Turnstile detected, waiting {self.config.cf_turnstile_cooldown}s before retry...")
+                    logger.warning(f"[{module_name}] Cloudflare challenge detected, waiting {self.config.cf_turnstile_cooldown}s before retry...")
                     self._pause_between_attempts(legacy_seconds=self.config.cf_turnstile_cooldown)
                 else:
-                    logger.warning(f"[{module_name}] Turnstile detected, no retries remaining")
+                    logger.warning(f"[{module_name}] Cloudflare challenge detected, no retries remaining")
             
-            if use_proxy_pool_mode and self.proxy_pool and retry_count < max_retries - 1:
+            # A challenge skips the proxy switch entirely: mark_failure_and_switch()
+            # charges a failure to the pool (PROXY_POOL_MAX_FAILURES → ban), and
+            # the next proxy would get the same challenge anyway. Retrying the
+            # same proxy after the cooldown is both cheaper and honest.
+            if (not is_turnstile
+                    and use_proxy_pool_mode
+                    and self.proxy_pool
+                    and retry_count < max_retries - 1):
                 switched = self.proxy_pool.mark_failure_and_switch()
                 if switched:
                     proxies = self.proxy_pool.get_current_proxy()

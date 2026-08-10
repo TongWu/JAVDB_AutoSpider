@@ -21,7 +21,7 @@ from javdb.pipeline.events import emit as _emit_event  # ADR-036 event spine
 from javdb.infra.git_helper import git_commit_and_push, flush_log_handlers, has_git_credentials
 from javdb.spider.filename_helper import generate_output_csv_name
 from javdb.infra.paths import ensure_dated_dir
-from javdb.infra.csv_writer import set_active_session
+from javdb.infra.csv_writer import ensure_csv_exists, set_active_session
 from javdb.proxy.policy import (
     describe_proxy_override,
     resolve_proxy_override,
@@ -44,6 +44,7 @@ from javdb.spider.app.cli import parse_arguments, OUTPUT_CSV
 from javdb.spider.app.options import SpiderRunOptions, spider_options_from_args
 from javdb.spider.runtime.sleep import ensure_sleep_runtime, movie_sleep_mgr
 from javdb.spider.fetch.index import fetch_all_index_pages
+from javdb.spider.fetch.page_scan import POLICY_DERIVED_STOP_REASONS, STOP_FLOOR
 from javdb.spider.detail.parallel_mode import build_parallel_detail_backend
 from javdb.spider.detail.runner import load_content_filter_rules, process_detail_entries
 from javdb.spider.detail.sequential_mode import build_sequential_detail_backend
@@ -96,6 +97,39 @@ def _get_result_context() -> _SpiderResultContext | None:
 
 def _fetch_index_for_runtime(*, runtime: SpiderRuntime, **kwargs: Any) -> dict[str, Any]:
     return fetch_all_index_pages(runtime=runtime, **kwargs)
+
+
+def resolve_page_range(
+    start_page: int,
+    end_page: int,
+    parse_all: bool,
+    *,
+    effective_end_page: int | None = None,
+    page_scan_stop_reason: str | None = None,
+) -> str:
+    """The page range to report, reconciled with what the scan actually did.
+
+    ADR-057 lets the daily scan reach past its configured end, so the reported
+    range has to follow the scan rather than the configuration — the workflows
+    read this out of the result JSON. A non-`floor` stop reason is appended as a
+    label so a capped (possibly truncated) run is visible where operators look.
+
+    Only ``None`` means "no dynamic scan ran". A scan cut down to nothing still
+    has a reason worth reporting, so the label is applied even when there is no
+    effective end page to report with it — otherwise a run killed by a dead
+    proxy pool reads as a clean pass over the configured range.
+    """
+    label = ""
+    if page_scan_stop_reason and page_scan_stop_reason != STOP_FLOOR:
+        # D7 disables the extension under --all, so a reason the rule derived
+        # describes a decision that was never taken there. One forced by the
+        # fetch layer — a dead proxy pool — cut the run short all the same, and
+        # dropping it would let a truncated --all run report a full sweep.
+        if not (parse_all and page_scan_stop_reason in POLICY_DERIVED_STOP_REASONS):
+            label = f" ({page_scan_stop_reason})"
+    if parse_all or effective_end_page is None or effective_end_page < start_page:
+        return f"{_page_range(start_page, end_page, parse_all)}{label}"
+    return f"{_page_range(start_page, effective_end_page, parse_all)}{label}"
 
 
 def _page_range(start_page: int, end_page: int, parse_all: bool) -> str:
@@ -461,6 +495,19 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
     csv_path = idx_result['csv_path']
     result_context.csv_path = str(csv_path) if csv_path else None
 
+    # ADR-057: the scan may have reached past the configured end, so report where
+    # it actually stopped. This has to land on the result object, not just the
+    # log summary: the workflows read stats.pages out of the result JSON (via
+    # run_result_outputs), not the SPIDER_STAT_PAGES stdout line.
+    effective_end_page = idx_result.get('effective_end_page')
+    page_scan_stop_reason = idx_result.get('page_scan_stop_reason')
+    page_range = resolve_page_range(
+        start_page, end_page, parse_all,
+        effective_end_page=effective_end_page,
+        page_scan_stop_reason=page_scan_stop_reason,
+    )
+    result_context.page_range = page_range
+
     # Create a report session in DB-backed storage (when enabled)
     _session_id = None
     db_storage_enabled = False
@@ -797,12 +844,15 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
             sys.exit(124)
 
     if not dry_run:
+        ensure_csv_exists(csv_path, fieldnames)
         logger.info(f"CSV file written incrementally to: {csv_path}")
 
     generate_summary_report(
         runtime=state.get_active_runtime(),
         phase_mode=phase_mode, parse_all=parse_all,
         start_page=start_page, end_page=end_page,
+        effective_end_page=effective_end_page,
+        page_scan_stop_reason=page_scan_stop_reason,
         max_consecutive_empty=max_consecutive_empty,
         phase1_rows=phase1_rows, phase2_rows=phase2_rows, rows=rows,
         use_history_for_loading=use_history_for_loading,
@@ -850,7 +900,13 @@ def _run_spider_main_body(options: SpiderRunOptions) -> SpiderRunResult:
             }
             StatsRepo().save_spider_stats(_session_id, stats)
 
-            last_page = idx_result.get('last_valid_page')
+            # ADR-057: when the dynamic scan ran, record how far it actually
+            # reached, so D1 — the canonical source — matches the run result
+            # instead of stopping at the last page that happened to have content.
+            last_page = (
+                idx_result.get('effective_end_page')
+                or idx_result.get('last_valid_page')
+            )
             if last_page is not None:
                 with get_db(REPORTS_DB_PATH) as conn:
                     conn.execute("UPDATE ReportSessions SET EndPage=? WHERE Id=?", (last_page, _session_id))

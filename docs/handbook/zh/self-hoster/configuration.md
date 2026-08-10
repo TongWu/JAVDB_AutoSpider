@@ -236,7 +236,13 @@ PROXY_POOL = [
 
 ## 5. CloudFlare 绕过
 
-[CloudflareBypassForScraping](https://github.com/sarperavci/CloudflareBypassForScraping) 服务的配置。该服务必须使用相同端口部署在每台 proxy 服务器上。
+[CloudflareBypassForScraping](https://github.com/sarperavci/CloudflareBypassForScraping) 服务的配置。该服务必须部署在每台 proxy 服务器上。所有 proxy 默认使用
+`CF_BYPASS_SERVICE_PORT`，除非 `CF_BYPASS_PORT_MAP` 为该 proxy 覆盖了端口 ——
+因此各主机并不需要都监听同一个端口。
+
+请求使用 CloudflareBypassForScraping 的 URL 参数接口 ——
+`GET {service_url}/html?url={urlencoded_target}` —— 且不携带任何自定义请求头。完整协议
+见 [CloudFlare 绕过](cloudflare-bypass.md#请求协议)。
 
 完整的服务 URL 在运行时动态构建：
 - 无 proxy：`http://localhost:{CF_BYPASS_SERVICE_PORT}`
@@ -244,10 +250,15 @@ PROXY_POOL = [
 - 使用 proxy 池**且** `CF_BYPASS_VIA_PROXY=True`：经由当前 proxy 转发到
   `http://127.0.0.1:{CF_BYPASS_SERVICE_PORT}` —— 使绕过服务可仅绑定回环地址。
 
+以上三种情况使用的端口都是 `CF_BYPASS_SERVICE_PORT`，除非该 proxy 的 IP 出现在
+`CF_BYPASS_PORT_MAP` 中 —— 此时以映射值为准，且只影响该 proxy。
+
 | 变量 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `CF_BYPASS_SERVICE_PORT` | `int` | `8000` | CloudFlare 绕过服务监听的端口。必须与服务 `docker-compose.yml` 中配置的端口一致。 |
+| `CF_BYPASS_ENABLED` | `bool` | `True` | 绕过层的总开关。为 `False` 时跳过所有绕过尝试，受验证保护的页面会直接在直连路径上失败。由 GH 变量 `CF_BYPASS_ENABLED` 提供。 |
 | `CF_BYPASS_VIA_PROXY` | `bool` | `False` | 为 `True` 时，通过当前 proxy 隧道转发到 `127.0.0.1:{port}` 来访问该 proxy 的绕过服务，而非直接拨号 `{proxy_ip}:{port}`。这样无需防火墙或 VPN 即可让每个绕过服务仅绑定回环地址（脱离公网）。要求 proxy 软件允许转发到 `127.0.0.1`（Clash/mihomo 默认允许；Squid 需放行 `to_localhost`）。 |
+| `CF_BYPASS_PORT_MAP` | `dict` | `{}` | 以 proxy IP 为键的按 proxy 端口覆盖，例如 `{'10.0.0.5': 9001}`。只有列出的 proxy 会偏离 `CF_BYPASS_SERVICE_PORT`；主要用于灰度上线，即部分主机上的 solver 监听不同端口。由 GH 变量 `CF_BYPASS_PORT_MAP_JSON` 提供，目前没有任何工作流设置它。 |
 
 ---
 
@@ -258,11 +269,27 @@ PROXY_POOL = [
 | 变量 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `PAGE_START` | `int` | `1` | 起始抓取页码。 |
-| `PAGE_END` | `int` | `20` | 结束抓取页码（含）。 |
+| `PAGE_END` | `int` | `10` | 结束抓取页码（含）。每日模式下这是**下限**而非上限——见 `PAGE_SCAN_DYNAMIC`。 |
+| `PAGE_SCAN_DYNAMIC` | `bool` | `True` | 只要页面仍带有今日/昨日新种徽章，就继续扫过 `PAGE_END`，避免集中放种的日子被截断（[ADR-057](https://github.com/TongWu/JAVDB_AutoSpider_CICD/blob/main/docs/design/ADR-057-Dynamic-Daily-Index-Pagination/ADR-057-dynamic-daily-index-pagination.zh.md)）。设为 `False` 则退回固定区间。自定义 URL、`--all`、`--ignore-release-date` 和 `IGNORE_RELEASE_DATE_FILTER` 下不生效。 |
+| `PAGE_SCAN_MAX` | `int` | `30` | 动态扫描的硬上限。触顶会打 WARNING，因为当天新种可能已被截断。 |
+| `PAGE_SCAN_STOP_AFTER` | `int` | `2` | 连续多少页没有新种徽章即结束扫描。抓取失败的页面不算作「无新种」，但连续同样页数读不出来也会结束扫描。 |
 | `PHASE2_MIN_RATE` | `float` | `4.0` | Phase 2（高评分非字幕条目）中影片的最低用户评分。 |
 | `PHASE2_MIN_COMMENTS` | `int` | `100` | Phase 2 中影片的最低评论数。 |
 | `DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST` | `list[str]` | `['western_studio_date']` | 仅用于每日模式的 family 黑名单，在索引解析和 sentinel 计数之后应用。解析器仍会识别这些 family，而临时抓取会绕过此黑名单。在 GitHub Actions 中，将仓库 Variable `DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST_JSON` 设为 JSON 数组（例如 `[]`）即可退出静态默认值。 |
 | `BASE_URL` | `str` | `'https://javdb.com'` | JavDB 基础 URL。仅在使用镜像站时更改。 |
+
+### 硬编码黑名单
+
+另外两个黑名单以纯 Python 常量的形式硬编码——没有环境变量或 `config.py`
+覆盖项，需要修改时直接编辑源码：
+
+- [`javdb/spider/runtime/config.py`](../../../../javdb/spider/runtime/config.py)
+  中的 `BLACKLIST_CODE_KEYWORDS` —— 番号厂牌前缀（例如 `IDBD` 会匹配
+  `IDBD-123`）。在索引解析阶段应用，仅限每日模式（临时/自定义 URL 抓取会绕过，
+  与上方的 `DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST` 规则相同）。
+- 同一文件中的 `BLACKLIST_ACTOR_NAMES` —— 需要排除的演员名字。以合成的
+  `actor` / `exclude` 内容过滤规则形式，叠加在 `ContentFilterRule` 中运营者维护的规则之上
+  （参见 `apps/cli/ops/content_filter.py`），因此每日模式和临时抓取的每次详情页请求都会生效，且不依赖数据库是否可用。
 
 ---
 

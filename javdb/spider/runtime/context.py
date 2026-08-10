@@ -31,6 +31,25 @@ class ProxyRunState:
     cf_bypass_lock: threading.Lock = field(default_factory=threading.Lock)
     signal_banned_proxies: set[str] = field(default_factory=set)
     signal_lock: threading.Lock = field(default_factory=threading.Lock)
+    # Set when a fetch failed because the target site served a Cloudflare
+    # challenge to every proxy. Such a run is no longer banned-out, so the
+    # summary report needs this to tell "the site walled us off" apart from
+    # "there was genuinely nothing new today". Latched for the whole run.
+    site_challenge_seen: bool = False
+    # Live view of the same condition: True while the site is walled off,
+    # cleared as soon as any direct fetch succeeds again. The fetch layer
+    # reads this to decide whether to lead with the bypass tier or with the
+    # direct path — under a site-wide wall, leading with direct means every
+    # task burns one attempt per proxy before reaching the only tier that
+    # can actually answer.
+    site_challenge_active: bool = False
+    # Consecutive site-wide-challenge re-queues, counted across the whole run
+    # rather than per worker. A live wall answers every proxy the same way, so
+    # once N proxies in a row have come back with nothing the remaining ones
+    # will too — handing the task on regardless grinds the pool for the
+    # workflow's entire time budget. Reset by any successful fetch.
+    site_challenge_requeues: int = 0
+    site_challenge_lock: threading.Lock = field(default_factory=threading.Lock)
 
 
 @dataclass
@@ -1005,10 +1024,25 @@ class SpiderRuntime:
                 return
             coord.report_async(proxy_name, kind, latency_ms=latency_ms)
 
+        def _global_site_challenge_cb(proxy_name=None):
+            # Reported as ``site_challenge``, never as ``cf``: the kind is
+            # inert on the proxy's own DO (no cfEvents, no auto-ban) and only
+            # feeds the Worker's cross-proxy circuit breaker, which needs to
+            # see how many *distinct* proxies hit the wall. The sequential
+            # path has no mode switch to drive, but the summary report still
+            # needs the latch to explain a zero-entry run instead of exiting 0
+            # with a header-only CSV.
+            coord = self.services.proxy_coordinator
+            if coord is not None and proxy_name:
+                coord.report_async(proxy_name, "site_challenge")
+            self.proxy.site_challenge_seen = True
+            self.proxy.site_challenge_active = True
+
         self.services.request_handler = legacy_state.RequestHandler(
             proxy_pool=self.services.proxy_pool, config=config, penalty_tracker=_pt,
             on_cf_event=_global_cf_event_cb,
             on_request_complete=_global_request_complete_cb,
+            on_site_challenge=_global_site_challenge_cb,
         )
         legacy_state.logger.info("Request handler initialized successfully")
         legacy_state._sync_legacy_globals_from_runtime(self)

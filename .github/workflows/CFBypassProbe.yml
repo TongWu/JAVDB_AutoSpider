@@ -1,0 +1,155 @@
+name: CF Bypass Probe
+
+# Diagnostic sweep over the proxy pool's Cloudflare bypass tier.
+# Answers three questions a normal ingestion run cannot, because every
+# failure on that tier is DEBUG-only (BFR-024):
+#   1. Is javdb.com currently serving a site-wide challenge, per proxy?
+#   2. What protocol does each proxy's bypass service actually speak —
+#      CloudflareBypassForScraping (GET /html?url=) or FlareSolverr
+#      (POST /v1)?
+#   3. When a solver does answer, is the payload a real page or the
+#      interstitial returned as a false success?
+# Read-only: touches no database, writes no history, commits nothing.
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      proxies:
+        description: 'Comma-separated proxy names. Empty = every proxy in PROXY_POOL.'
+        required: false
+        default: ''
+        type: string
+      limit:
+        description: 'Probe at most N proxies (0 = no cap). Applied after the name filter.'
+        required: false
+        default: '0'
+        type: string
+      target:
+        description: 'URL to ask the bypass service for. Must be https:// on javdb.com or a subdomain.'
+        required: false
+        default: 'https://javdb.com/'
+        type: string
+      verbose:
+        description: 'Print the first 300 chars of every response body.'
+        required: false
+        default: true
+        type: boolean
+      bench:
+        description: 'Benchmark mode: N sequential trials per proxy per port (0 = protocol probe instead).'
+        required: false
+        default: '0'
+        type: string
+      ports:
+        description: 'Comma-separated bypass ports to benchmark, e.g. 8000,8002. Empty = the port resolved per proxy from CF_BYPASS_PORT_MAP / CF_BYPASS_SERVICE_PORT.'
+        required: false
+        default: ''
+        type: string
+      runner:
+        description: 'Runner type.'
+        required: false
+        default: 'ubuntu-latest'
+        type: choice
+        options:
+          - 'ubuntu-latest'
+          - 'self-hosted'
+  push:
+    branches:
+      - 'claude/ingestion-cloudflare-bypass-debug-**'
+    paths:
+      - 'apps/cli/ops/cf_bypass_probe.py'
+      - '.github/workflows/CFBypassProbe.yml'
+
+# Two probes running at once fan out across the same proxies and can drive
+# several browser solves per host, exhausting the shared bypass services this
+# workflow exists to measure. Queue instead of cancelling: a run already
+# talking to the solvers should finish rather than leave them mid-solve.
+concurrency:
+  group: cf-bypass-probe-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
+    timeout-minutes: 25
+    environment: Production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Set up Python, venv, dependencies, Rust extension
+        uses: ./.github/actions/setup-python-env
+        with:
+          python-version: '3.11'
+
+      - name: Generate config.py from GitHub Variables and Secrets
+        env:
+          VAR_PROXY_MODE: ${{ vars.PROXY_MODE }}
+          VAR_PROXY_POOL_JSON: ${{ secrets.PROXY_POOL_JSON }}
+          VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}
+          VAR_CF_BYPASS_SERVICE_PORT: ${{ vars.CF_BYPASS_SERVICE_PORT || '8000' }}
+          VAR_CF_BYPASS_ENABLED: ${{ vars.CF_BYPASS_ENABLED || 'True' }}
+          VAR_CF_BYPASS_VIA_PROXY: ${{ vars.CF_BYPASS_VIA_PROXY || 'False' }}
+          VAR_CF_BYPASS_PORT_MAP_JSON: ${{ vars.CF_BYPASS_PORT_MAP_JSON || '{}' }}
+        run: python3 -m apps.cli.ops.config_generator --github-actions
+
+      - name: Probe bypass tier
+        env:
+          # A push carries no dispatch inputs, so each setting falls back to a
+          # default here. workflow_dispatch overrides all of them.
+          IN_PROXIES: ${{ inputs.proxies }}
+          IN_LIMIT: ${{ inputs.limit }}
+          IN_TARGET: ${{ inputs.target }}
+          IN_VERBOSE: ${{ inputs.verbose }}
+          IN_BENCH: ${{ inputs.bench }}
+          IN_PORTS: ${{ inputs.ports }}
+          # Empty DEF_PROXIES sweeps the whole pool; DEF_BENCH=0 selects the
+          # protocol probe, which reports the site's challenge state per proxy
+          # as well as which dialect each bypass service answers.
+          DEF_PROXIES: ''
+          DEF_TARGET: 'https://javdb.com/?page=1'
+          DEF_BENCH: '0'
+          DEF_PORTS: ''
+        run: |
+          set -euo pipefail
+
+          PROXIES="${IN_PROXIES:-$DEF_PROXIES}"
+          TARGET="${IN_TARGET:-$DEF_TARGET}"
+          BENCH="${IN_BENCH:-$DEF_BENCH}"
+          PORTS="${IN_PORTS:-$DEF_PORTS}"
+
+          ARGS=()
+          IFS=',' read -ra NAMES <<< "$PROXIES"
+          for n in "${NAMES[@]}"; do
+            trimmed="$(echo "$n" | xargs)"
+            if [ -n "$trimmed" ]; then
+              ARGS+=(--proxy "$trimmed")
+            fi
+          done
+
+          if [ -n "${IN_LIMIT:-}" ] && [ "${IN_LIMIT}" != "0" ]; then
+            ARGS+=(--limit "$IN_LIMIT")
+          fi
+
+          if [ "$BENCH" != "0" ]; then
+            ARGS+=(--bench "$BENCH")
+            if [ -n "$PORTS" ]; then
+              ARGS+=(--ports "$PORTS")
+            fi
+          elif [ "${IN_VERBOSE:-true}" != "false" ]; then
+            ARGS+=(--verbose)
+          fi
+
+          python3 -m apps.cli.ops.cf_bypass_probe \
+            --target "$TARGET" "${ARGS[@]}" 2>&1 | tee "$RUNNER_TEMP/probe.log"
+
+      - name: Upload probe log
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: cf-bypass-probe-log
+          path: ${{ runner.temp }}/probe.log
+          retention-days: 3
+          if-no-files-found: ignore

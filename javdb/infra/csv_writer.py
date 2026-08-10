@@ -219,3 +219,31 @@ def write_csv(rows, csv_path, fieldnames, dry_run=False, append_mode=False):
                 SessionLifecycleRepo().insert_report_rows(_active_session_id, rows)
         except Exception as e:
             logger.warning(f"[CSV] Failed to write rows to SQLite: {e}")
+
+
+def ensure_csv_exists(csv_path, fieldnames, dry_run=False):
+    """Materialise a header-only CSV when a run parsed no entries.
+
+    ``write_csv`` is only reached once the first row is persisted, so a run
+    where every entry is filtered leaves no file on disk even though the
+    caller still reports ``csv_path`` downstream.  Consumers that receive
+    that path (the qBittorrent uploader, the report artifact bundle) then
+    cannot tell "nothing to do" apart from "the spider wrote a broken
+    file".  Writing the header keeps the advertised path honest.
+
+    Returns True when a file was created.
+    """
+    from javdb.infra.config import use_csv as _use_csv
+
+    if dry_run or not csv_path or not _use_csv():
+        return False
+    if os.path.exists(csv_path):
+        return False
+
+    parent = os.path.dirname(csv_path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
+        csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore').writeheader()
+    logger.info(f"[CSV] No entries parsed; wrote header-only file: {csv_path}")
+    return True

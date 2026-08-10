@@ -11,6 +11,9 @@ container that lacks ``git-lfs``). The expected behaviour is:
 2. Try ``git lfs pull`` exactly once.
 3. Fall back to ``STORAGE_BACKEND=d1`` when the pull cannot recover
    them — alignment must still run, writing only to D1.
+
+Since BFR-023 the *default* is ``d1`` regardless of mirror health, so the
+LFS recovery flow only applies to an explicit ``dual`` / ``sqlite``.
 """
 
 from __future__ import annotations
@@ -85,24 +88,42 @@ class TestBootstrapStorageBackend:
             paths.append(str(p))
         return paths
 
-    def test_intact_local_picks_dual_with_strict(self, tmp_path, monkeypatch):
+    def test_default_picks_d1_even_with_intact_mirror(self, tmp_path):
+        # BFR-023: alignment's work list comes from a D1 read, so it
+        # re-scrapes exactly the hrefs where D1 and the mirror disagree.
+        # Mirroring the commit lets a stale mirror row veto a MovieHistory
+        # INSERT that D1 accepts, aborting the drain after the session has
+        # crossed into 'finalizing'. An intact mirror is NOT a reason to
+        # write to it — that was the pre-BFR-023 default and it failed
+        # every weekly run.
         paths = self._make_valid_sqlite(tmp_path)
-        assert m2c._bootstrap_storage_backend_for_align(paths) == "dual"
-        assert os.environ["STORAGE_BACKEND"] == "dual"
-        assert os.environ["STRICT_DUAL_WRITE"] == "1"
-
-    def test_pointers_with_failing_lfs_pull_degrade_to_d1(
-        self, tmp_path, monkeypatch,
-    ):
-        paths = self._make_pointers(tmp_path)
-        monkeypatch.setattr(m2c, "_try_lfs_pull", lambda _paths: False)
         assert m2c._bootstrap_storage_backend_for_align(paths) == "d1"
         assert os.environ["STORAGE_BACKEND"] == "d1"
+        # STRICT_DUAL_WRITE is meaningless with a single live backend.
+        assert "STRICT_DUAL_WRITE" not in os.environ
 
-    def test_pointers_with_successful_lfs_pull_promotes_to_dual(
+    def test_default_skips_lfs_pull_entirely(self, tmp_path, monkeypatch):
+        # d1 neither reads nor writes the mirror, so recovering LFS
+        # pointers is wasted work on the default path.
+        paths = self._make_pointers(tmp_path)
+        called = {"n": 0}
+
+        def must_not_call(_paths):
+            called["n"] += 1
+            return False
+
+        monkeypatch.setattr(m2c, "_try_lfs_pull", must_not_call)
+        assert m2c._bootstrap_storage_backend_for_align(paths) == "d1"
+        assert called["n"] == 0
+
+    def test_explicit_dual_pulls_lfs_and_keeps_mirroring(
         self, tmp_path, monkeypatch,
     ):
+        # Opting into dual for migration validation must keep working,
+        # including the LFS recovery that makes the mirror usable.
         paths = self._make_pointers(tmp_path)
+        monkeypatch.setenv("STORAGE_BACKEND", "dual")
+
         # Simulate a successful pull: rewrite the files in-place to look
         # like real SQLite so subsequent checks pass.
         def fake_pull(_paths):
@@ -115,6 +136,15 @@ class TestBootstrapStorageBackend:
         assert m2c._bootstrap_storage_backend_for_align(paths) == "dual"
         assert os.environ["STORAGE_BACKEND"] == "dual"
         assert os.environ["STRICT_DUAL_WRITE"] == "1"
+
+    def test_explicit_dual_degrades_to_d1_when_lfs_pull_fails(
+        self, tmp_path, monkeypatch,
+    ):
+        paths = self._make_pointers(tmp_path)
+        monkeypatch.setenv("STORAGE_BACKEND", "dual")
+        monkeypatch.setattr(m2c, "_try_lfs_pull", lambda _paths: False)
+        assert m2c._bootstrap_storage_backend_for_align(paths) == "d1"
+        assert os.environ["STORAGE_BACKEND"] == "d1"
 
     def test_explicit_d1_respected_even_with_pointers(
         self, tmp_path, monkeypatch,

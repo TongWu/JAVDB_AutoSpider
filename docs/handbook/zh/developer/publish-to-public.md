@@ -177,6 +177,25 @@ build-arm:
 
 单 token 形式（`runs-on: self-hosted`）和按架构固定的数组形式（`runs-on: [self-hosted, ARM64]`）都受支持——当自托管任务必须锁定某一架构时需要数组形式，因为 fleet 只用默认的 `self-hosted` / `Linux` / `X64` / `ARM64` 标签标记机器。替换 runner（`PUBLIC_RUNNER:` 之后）仍为单 token，GitHub 托管的回退 runner 永远不需要数组。表达式形式（如 `${{ matrix.runner }}`）不带标记，保持原样。
 
+### 问：某个工作流契约测试在这里通过，却在公开仓库失败，为什么？
+
+因为镜像是**被重写过的**代码树，而不是原样拷贝。任何对 `.github/` 内容做断言的测试，看到的树都可能与你提交的不同：
+
+- 位于 `exclude_paths` 中的工作流（例如 `publish-to-public.yml`）**并不存在**，读取时会抛出 `FileNotFoundError`；
+- 带 `# PUBLIC_RUNNER` 标记的 `runs-on:` 行**已被重写**为对应的 GitHub 托管 runner，因此断言 `[self-hosted, …]` 会失败。
+
+请根据「当前检出是否为镜像」来保护这类断言。`publish-to-public.yml` 是否缺失即为判定标记——它被排除在镜像之外，而在其他任何地方都存在：
+
+```python
+IS_PUBLIC_MIRROR = not (WORKFLOWS_DIR / "publish-to-public.yml").exists()
+
+@pytest.mark.skipif(IS_PUBLIC_MIRROR, reason="rewritten on the public mirror")
+def test_jobs_run_self_hosted():
+    ...
+```
+
+私有仓库仍然完整执行该契约，只有派生出的镜像会跳过。实际用法见 `tests/unit/test_workflow_public_runner_markers.py`。
+
 ### 问：如何更改目标分支？
 
 编辑 `.publish-config.yml`：

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import os
+import queue as queue_module
 import sys
 import threading
 import time
+from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -66,6 +68,9 @@ def _make_handler_stub(*_args, **_kwargs):
     handler.get_page = MagicMock(return_value=None)
     handler.config = MagicMock()
     handler.config.javdb_session_cookie = None
+    # Real RequestHandler exposes this as a bool; leaving it a MagicMock would
+    # read as "site-wide CF challenge" and suppress the soft-ban path.
+    handler.last_site_challenge = False
     return handler
 
 
@@ -160,6 +165,48 @@ class TestEngineSimpleMode:
             '2 consecutive None returns',
         )
         assert any(result.error == 'all_proxies_banned' for result in results)
+
+    def test_site_wide_cf_challenge_does_not_soft_ban_worker(self):
+        """BFR-024: a challenge every proxy sees must not burn the pool.
+
+        Same shape as the soft-ban test above, except the handler reports the
+        failure as a site-wide Cloudflare challenge — no ban, and the task
+        ends as all_proxies_failed once the pool is exhausted.
+        """
+        from javdb.spider.fetch.fetch_engine import FetchEngine
+
+        ban_mgr = _make_ban_manager_stub()
+
+        def _challenged_handler_stub(*args, **kwargs):
+            handler = _make_handler_stub(*args, **kwargs)
+            handler.last_site_challenge = True
+            return handler
+
+        with patch('javdb.spider.fetch.fetch_engine.RequestHandler', side_effect=_challenged_handler_stub), \
+                patch('javdb.spider.fetch.fetch_engine.create_proxy_pool_from_config', return_value=MagicMock()), \
+                patch('javdb.spider.fetch.fetch_engine.get_ban_manager', return_value=ban_mgr), \
+                patch('javdb.spider.fetch.fetch_engine.PROXY_POOL', [
+                    {'name': 'proxy-a', 'http': 'http://a:1', 'https': 'http://a:1'},
+                ]), \
+                patch('javdb.spider.fetch.fetch_engine.LOGIN_PROXY_NAME', None):
+            engine = FetchEngine(
+                process_fn=lambda _ctx, _task: None,
+                use_cookie=False,
+                sleep_min=0.01,
+                sleep_max=0.02,
+            )
+            engine.start()
+            _patch_workers(engine, lambda url, _cf: '<html></html>')
+
+            engine.submit('https://javdb.com/v/none-1', entry_index='none-1')
+            engine.submit('https://javdb.com/v/none-2', entry_index='none-2')
+            engine.mark_done()
+            results = list(engine.results())
+            engine.shutdown()
+
+        ban_mgr.add_ban.assert_not_called()
+        assert results
+        assert all(result.error == 'all_proxies_failed' for result in results)
 
     @_engine_patches
     def test_parse_failure_retries_on_other_proxy(self, *_mocks):
@@ -1247,3 +1294,381 @@ class TestRunLifecycle:
 
         engine._backend.run.assert_called_once_with(tasks)
         assert out == ['r1', 'r2']
+
+
+# ---------------------------------------------------------------------------
+# login-only routing — pages that only the logged-in worker can serve
+# ---------------------------------------------------------------------------
+
+class TestLoginOnlyRouting:
+    """Ad-hoc index pages need the session cookie, which lives on exactly one
+    worker.  Handing them to any other proxy costs a fetch, a login wall and a
+    coordinator round-trip before they get re-routed there anyway."""
+
+    def test_submit_login_only_bypasses_the_shared_task_queue(self):
+        from javdb.spider.fetch.fetch_engine import ParallelFetchBackend
+
+        backend = ParallelFetchBackend.__new__(ParallelFetchBackend)
+        backend._done = False
+        backend._count_lock = threading.Lock()
+        backend._submitted = 0
+        backend._task_queue = queue_module.Queue()
+        backend._login_queue = queue_module.Queue()
+
+        backend.submit('https://javdb.com/actors/X?page=3', login_only=True)
+
+        assert backend._task_queue.empty()
+        task = backend._login_queue.get_nowait()
+        assert task.login_only is True
+
+    def test_submit_task_honours_login_only_on_prebuilt_tasks(self):
+        """``run(tasks)`` submits pre-built tasks through this door — it must
+        route them like submit() does, not dump them on the shared queue."""
+        from javdb.spider.fetch.fetch_engine import EngineTask, ParallelFetchBackend
+
+        backend = ParallelFetchBackend.__new__(ParallelFetchBackend)
+        backend._done = False
+        backend._count_lock = threading.Lock()
+        backend._submitted = 0
+        backend._task_queue = queue_module.Queue()
+        backend._login_queue = queue_module.Queue()
+
+        backend.submit_task(EngineTask(url='u', login_only=True))
+        backend.submit_task(EngineTask(url='u2'))
+
+        assert backend._login_queue.get_nowait().url == 'u'
+        assert backend._task_queue.get_nowait().url == 'u2'
+
+    def test_has_login_worker_is_false_before_start(self):
+        from javdb.spider.fetch.fetch_engine import ParallelFetchBackend
+
+        backend = ParallelFetchBackend.__new__(ParallelFetchBackend)
+        backend._coordinator = None
+        assert backend.has_login_worker is False
+
+    def test_low_queue_pressure_shortcut_is_skipped_for_login_only_tasks(self):
+        """That shortcut drops CF bypass so a *different* proxy can retry —
+        pointless for a login-only task, since no other proxy has the cookie."""
+        from javdb.spider.fetch.fetch_engine import EngineTask, WorkerContext
+
+        def _fetch(task):
+            ctx = WorkerContext.__new__(WorkerContext)
+            ctx._current_task = task
+            ctx._last_used_cf = False
+            worker = MagicMock()
+            worker._should_prefer_bypass.return_value = False
+            worker._site_challenge_active.return_value = False
+            worker._fetch_html.return_value = None      # direct attempt fails
+            worker._active_workers = 8
+            ctx._worker = worker
+            with patch.object(
+                WorkerContext, 'queue_pressure',
+                new_callable=lambda: property(lambda _self: 'low'),
+            ), patch.object(
+                WorkerContext, 'is_expired',
+                new_callable=lambda: property(lambda _self: False),
+            ):
+                return ctx.fetch('https://javdb.com/actors/X?page=3'), worker
+
+        # Ordinary task: bail out early, let another proxy have it.
+        _, worker = _fetch(EngineTask(url='u'))
+        assert worker._fetch_html.call_count == 1
+
+        # Login-only task: stay on it and try the CF bypass.
+        _, worker = _fetch(EngineTask(url='u', login_only=True))
+        assert worker._fetch_html.call_count > 1
+
+    def test_low_queue_pressure_shortcut_is_suspended_under_a_site_challenge(self):
+        """A failed recovery probe must still reach the bypass tier.
+
+        Under a site-wide wall the probe task leads with direct; when that
+        fails, re-queuing it to another proxy only buys another failed direct
+        attempt, because the wall is not proxy-specific. Bypass is the only
+        tier that can answer, so the shortcut has to stand down.
+        """
+        from javdb.spider.fetch.fetch_engine import EngineTask, WorkerContext
+
+        ctx = WorkerContext.__new__(WorkerContext)
+        ctx._current_task = EngineTask(url='u')
+        ctx._last_used_cf = False
+        worker = MagicMock()
+        worker._should_prefer_bypass.return_value = False   # probe: direct first
+        worker._site_challenge_active.return_value = True
+        worker._fetch_html.return_value = None
+        worker._active_workers = 8
+        ctx._worker = worker
+
+        with patch.object(
+            WorkerContext, 'queue_pressure',
+            new_callable=lambda: property(lambda _self: 'low'),
+        ), patch.object(
+            WorkerContext, 'is_expired',
+            new_callable=lambda: property(lambda _self: False),
+        ):
+            ctx.fetch('https://javdb.com/?page=1')
+
+        assert worker._fetch_html.call_count > 1
+
+    def test_bypass_first_falls_back_to_direct_and_marks_recovery(self):
+        """Under a site-wide challenge the cascade inverts, and the direct leg
+        doubles as the probe that clears the flag once the wall comes down."""
+        from javdb.spider.fetch.fetch_engine import EngineTask, WorkerContext
+
+        ctx = WorkerContext.__new__(WorkerContext)
+        ctx._current_task = EngineTask(url='u')
+        ctx._last_used_cf = True
+        worker = MagicMock()
+        worker._should_prefer_bypass.return_value = True
+        # Bypass fails, direct answers.
+        worker._fetch_html.side_effect = [None, '<div class="movie-list"></div>']
+        worker._active_workers = 8
+        ctx._worker = worker
+
+        with patch.object(
+            WorkerContext, 'is_expired',
+            new_callable=lambda: property(lambda _self: False),
+        ):
+            html = ctx.fetch('https://javdb.com/?page=1')
+
+        assert html == '<div class="movie-list"></div>'
+        assert [c.args[1] for c in worker._fetch_html.call_args_list] == [True, False]
+        worker._mark_site_recovered.assert_called_once_with()
+        assert ctx._last_used_cf is False
+
+    def test_bypass_first_returns_bypass_html_without_probing_direct(self):
+        from javdb.spider.fetch.fetch_engine import EngineTask, WorkerContext
+
+        ctx = WorkerContext.__new__(WorkerContext)
+        ctx._current_task = EngineTask(url='u')
+        ctx._last_used_cf = False
+        worker = MagicMock()
+        worker._should_prefer_bypass.return_value = True
+        worker._fetch_html.return_value = '<div class="movie-list"></div>'
+        worker._active_workers = 8
+        ctx._worker = worker
+
+        with patch.object(
+            WorkerContext, 'is_expired',
+            new_callable=lambda: property(lambda _self: False),
+        ):
+            html = ctx.fetch('https://javdb.com/?page=1')
+
+        assert html == '<div class="movie-list"></div>'
+        assert worker._fetch_html.call_count == 1
+        worker._mark_site_recovered.assert_not_called()
+        assert ctx._last_used_cf is True
+
+    def test_configured_login_proxy_absent_from_pool_is_not_an_owner(self):
+        """start() filters pre-banned proxies out of the pool but still passes
+        LOGIN_PROXY_NAME in.  Claiming ownership no live worker honours would
+        strand login_queue forever."""
+        from javdb.spider.fetch.login_coordinator import LoginCoordinator
+
+        workers = [SimpleNamespace(proxy_name='proxy-a', worker_id=0)]
+        coord = LoginCoordinator(workers, login_proxy_name='proxy-banned')
+        assert coord.has_login_owner() is False
+
+        coord._login_proxy_name = 'proxy-a'
+        assert coord.has_login_owner() is True
+
+    def test_designated_worker_id_absent_from_pool_is_not_an_owner(self):
+        from javdb.spider.fetch.login_coordinator import LoginCoordinator
+
+        workers = [SimpleNamespace(proxy_name='proxy-a', worker_id=0)]
+        coord = LoginCoordinator(workers)
+        coord.logged_in_worker_id = 7
+        assert coord.has_login_owner() is False
+
+        coord.logged_in_worker_id = 0
+        assert coord.has_login_owner() is True
+
+    def test_speculation_skips_login_only_tasks(self):
+        """Idle workers racing a login-only task would each buy a login wall."""
+        from javdb.spider.fetch.fetch_engine import EngineTask, _EngineWorker
+
+        worker = MagicMock(spec=_EngineWorker)
+        worker.proxy_name = 'proxy-b'
+        worker._in_flight_lock = threading.Lock()
+        worker._completed_lock = threading.Lock()
+        worker._completed_entries = set()
+        worker._in_flight = {
+            'page-3': EngineTask(url='u', entry_index='page-3', login_only=True),
+        }
+
+        assert _EngineWorker._try_speculative_task(worker) is None
+
+        worker._in_flight['page-3'].login_only = False
+        spec = _EngineWorker._try_speculative_task(worker)
+        assert spec is not None and spec._speculative is True
+
+    def test_unowned_login_queue_is_drained_by_any_worker(self):
+        """When no worker owns the login session, whatever is parked in
+        login_queue would starve — only the owner drains it."""
+        from javdb.spider.fetch.fetch_engine import EngineTask, _EngineWorker
+
+        parked = EngineTask(url='u', entry_index='page-3', login_only=True)
+        worker = MagicMock(spec=_EngineWorker)
+        worker.proxy_name = 'proxy-b'
+        worker.worker_id = 1
+        worker._stop_event = threading.Event()
+        worker.login_queue = queue_module.Queue()
+        worker.login_queue.put(parked)
+        worker.task_queue = queue_module.Queue()
+        worker._coordinator = MagicMock()
+        worker._coordinator.lock = threading.Lock()
+        worker._coordinator.is_login_worker.return_value = False
+        worker._coordinator.has_login_owner.return_value = False
+
+        assert _EngineWorker._get_next_task(worker) is parked
+
+
+class TestShouldPreferBypass:
+    """Ordering between the sticky bypass window and the recovery probe.
+
+    The sticky ``--always-bypass-time`` window is unconditional, and permanent
+    when the value is 0. An earlier revision short-circuited on it first, so
+    the probe counter never advanced and the periodic direct re-test never
+    ran — a run that entered sticky mode stayed on the slower tier for its
+    whole life even after javdb dropped the wall.
+    """
+
+    def _worker(self, *, sticky, site_challenge):
+        from javdb.spider.fetch.fetch_engine import _EngineWorker
+
+        worker = _EngineWorker.__new__(_EngineWorker)
+        worker._bypass_first_streak = 0
+        worker.proxy_name = 'proxy-a'
+        worker._runtime = SimpleNamespace(
+            proxy=SimpleNamespace(site_challenge_active=site_challenge),
+        )
+        worker._should_shortcircuit_cf = lambda: sticky
+        return worker
+
+    def test_probe_still_fires_while_the_sticky_window_is_open(self):
+        from javdb.spider.fetch.fetch_engine import SITE_RECOVERY_PROBE_INTERVAL
+
+        worker = self._worker(sticky=True, site_challenge=True)
+
+        decisions = [
+            worker._should_prefer_bypass()
+            for _ in range(SITE_RECOVERY_PROBE_INTERVAL)
+        ]
+
+        assert decisions[:-1] == [True] * (SITE_RECOVERY_PROBE_INTERVAL - 1)
+        assert decisions[-1] is False          # the Nth task probes direct
+
+    def test_sticky_window_alone_still_prefers_bypass(self):
+        worker = self._worker(sticky=True, site_challenge=False)
+
+        assert worker._should_prefer_bypass() is True
+        assert worker._bypass_first_streak == 0
+
+    def test_neither_trigger_means_direct_first(self):
+        worker = self._worker(sticky=False, site_challenge=False)
+
+        assert worker._should_prefer_bypass() is False
+
+    def test_site_challenge_alone_prefers_bypass(self):
+        worker = self._worker(sticky=False, site_challenge=True)
+
+        assert worker._should_prefer_bypass() is True
+
+    def test_the_streak_resets_when_the_wall_comes_down(self):
+        worker = self._worker(sticky=True, site_challenge=True)
+        worker._should_prefer_bypass()
+        assert worker._bypass_first_streak == 1
+
+        worker._runtime.proxy.site_challenge_active = False
+        worker._should_prefer_bypass()
+        assert worker._bypass_first_streak == 0
+
+
+class TestSiteChallengeRequeueCap:
+    """A site-wide wall must not be swept across the whole pool forever.
+
+    Every re-queue costs one bypass timeout, and the wall answers all 28
+    proxies identically — an ad-hoc page once burned 80 minutes this way.
+    """
+
+    def _worker(self):
+        from javdb.spider.fetch.fetch_engine import _EngineWorker
+        from javdb.spider.runtime.context import ProxyRunState
+
+        worker = _EngineWorker.__new__(_EngineWorker)
+        worker._runtime = SimpleNamespace(proxy=ProxyRunState())
+        return worker
+
+    def test_the_streak_is_shared_across_workers(self):
+        """The counter lives on the run state, not on one worker."""
+        from javdb.spider.runtime.context import ProxyRunState
+
+        shared = SimpleNamespace(proxy=ProxyRunState())
+        first, second = self._worker(), self._worker()
+        first._runtime = second._runtime = shared
+
+        assert first._note_site_challenge_requeue() == 1
+        assert second._note_site_challenge_requeue() == 2
+        assert first._note_site_challenge_requeue() == 3
+
+    def test_any_success_resets_the_streak(self):
+        worker = self._worker()
+        worker._note_site_challenge_requeue()
+        worker._note_site_challenge_requeue()
+
+        worker._reset_site_challenge_requeues()
+
+        assert worker._note_site_challenge_requeue() == 1
+
+    def test_a_missing_runtime_is_tolerated(self):
+        worker = self._worker()
+        worker._runtime = None
+
+        assert worker._note_site_challenge_requeue() == 0
+        worker._reset_site_challenge_requeues()      # must not raise
+
+    def test_the_run_gives_up_once_the_cap_is_reached(self):
+        """End to end: a permanently walled-off site stops re-queuing."""
+        from javdb.spider.fetch.fetch_engine import (
+            FetchEngine, SITE_CHALLENGE_REQUEUE_LIMIT,
+        )
+
+        ban_mgr = _make_ban_manager_stub()
+
+        def _challenged_handler_stub(*args, **kwargs):
+            handler = _make_handler_stub(*args, **kwargs)
+            handler.last_site_challenge = True
+            return handler
+
+        pool = [
+            {'name': f'proxy-{i}', 'http': f'http://h{i}:1',
+             'https': f'http://h{i}:1'}
+            for i in range(SITE_CHALLENGE_REQUEUE_LIMIT + 4)
+        ]
+
+        with patch('javdb.spider.fetch.fetch_engine.RequestHandler', side_effect=_challenged_handler_stub), \
+                patch('javdb.spider.fetch.fetch_engine.create_proxy_pool_from_config', return_value=MagicMock()), \
+                patch('javdb.spider.fetch.fetch_engine.get_ban_manager', return_value=ban_mgr), \
+                patch('javdb.spider.fetch.fetch_engine.PROXY_POOL', pool), \
+                patch('javdb.spider.fetch.fetch_engine.LOGIN_PROXY_NAME', None):
+            engine = FetchEngine(
+                process_fn=lambda _ctx, _task: None,
+                use_cookie=False,
+                sleep_min=0.01,
+                sleep_max=0.02,
+            )
+            engine.start()
+            _patch_workers(engine, lambda url, _cf: '<html></html>')
+
+            engine.submit('https://javdb.com/v/walled', entry_index='walled')
+            engine.mark_done()
+            results = list(engine.results())
+            engine.shutdown()
+
+        ban_mgr.add_ban.assert_not_called()
+        assert results
+        assert results[0].success is False
+        # Whichever terminal path wins the race, the run must stop — never
+        # keep sweeping the pool.
+        assert results[0].error in (
+            'site_challenge_exhausted', 'all_proxies_failed',
+        )

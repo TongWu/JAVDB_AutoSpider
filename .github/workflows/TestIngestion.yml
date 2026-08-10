@@ -143,6 +143,9 @@ jobs:
           VAR_BASE_URL: 'https://javdb.com'
           VAR_PAGE_START: '1'
           VAR_PAGE_END: '20'
+          # ADR-057: keep the mock run on a plain fixed range so its page count
+          # stays predictable regardless of how fresh the live index is.
+          VAR_PAGE_SCAN_DYNAMIC: 'False'
           VAR_PHASE2_MIN_RATE: '4.0'
           VAR_PHASE2_MIN_COMMENTS: '85'
           VAR_DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST_JSON: ${{ vars.DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST_JSON || '["western_studio_date"]' }}
@@ -155,7 +158,17 @@ jobs:
           VAR_PARSED_MOVIES_CSV: 'parsed_movies_history.csv'
           VAR_IGNORE_RELEASE_DATE_FILTER: 'False'
           VAR_CF_BYPASS_ENABLED: 'True'
-          VAR_CF_BYPASS_SERVICE_PORT: '8000'
+          # Follow the same variable Daily/AdHoc use, so a port change (e.g.
+          # moving to FlareSolverr) is picked up here instead of this canary
+          # silently probing a port nothing listens on.
+          VAR_CF_BYPASS_SERVICE_PORT: ${{ vars.CF_BYPASS_SERVICE_PORT || '8000' }}
+          # BFR-024: every proxy's bypass service binds to loopback only
+          # (never exposed on the proxy's public IP), so the runner must
+          # tunnel the bypass request *through* the proxy to 127.0.0.1
+          # instead of dialling {proxy_ip}:{port} directly — otherwise every
+          # bypass call times out against a port nothing public listens on.
+          VAR_CF_BYPASS_VIA_PROXY: ${{ vars.CF_BYPASS_VIA_PROXY || 'False' }}
+          VAR_CF_BYPASS_PORT_MAP_JSON: ${{ vars.CF_BYPASS_PORT_MAP_JSON || '{}' }}
           VAR_PROXY_POOL_MAX_FAILURES: '3'
           VAR_STORAGE_MODE: ${{ vars.STORAGE_MODE }}
           # D1 / Cloudflare (only required when STORAGE_BACKEND in {d1,dual})
@@ -489,17 +502,32 @@ jobs:
               -H "Content-Type: application/json" \
               "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database/$db_id/query" \
               -d "{\"sql\":\"SELECT COUNT(*) AS n FROM $table WHERE RunId='$RUN_ID' AND RunAttempt=$ATTEMPT;\"}")
-            n=$(echo "$resp" | python3 -c 'import json,sys; r=json.load(sys.stdin); print(r["result"][0]["results"][0]["n"])')
-            if [ "$n" != "0" ]; then
-              echo "[FAIL] D1::$table has $n row(s) for run $RUN_ID/$ATTEMPT"
-              fail=1
-            else
-              echo "[ok]   D1::$table = 0 rows"
-            fi
+            # Mirror the SQLite check's tolerance: a query against a table that
+            # no longer exists is a skip, not a crash. Blind-indexing the
+            # envelope made a dropped table an IndexError under `set -e`, which
+            # aborted the step before the assertions that matter ever ran.
+            n=$(echo "$resp" | python3 -c 'import json,sys; r=json.load(sys.stdin); e="; ".join(x.get("message","") for x in (r.get("errors") or [])); print(r["result"][0]["results"][0]["n"] if r.get("success") else ("SKIP" if "no such table" in e.lower() else "ERR:"+(e or "unknown")))')
+            case "$n" in
+              SKIP)
+                echo "[skip] D1::$table — table does not exist"
+                ;;
+              ERR:*)
+                echo "[FAIL] D1::$table query failed: ${n#ERR:}"
+                fail=1
+                ;;
+              0)
+                echo "[ok]   D1::$table = 0 rows"
+                ;;
+              *)
+                echo "[FAIL] D1::$table has $n row(s) for run $RUN_ID/$ATTEMPT"
+                fail=1
+                ;;
+            esac
           }
           check_d1 "$D1_REPORTS_DB_ID" "ReportSessions"
-          check_d1 "$D1_HISTORY_DB_ID" "MovieHistoryAudit"
-          check_d1 "$D1_HISTORY_DB_ID" "TorrentHistoryAudit"
+          # MovieHistoryAudit / TorrentHistoryAudit were dropped by
+          # javdb/migrations/d1/2026_05_22_drop_audit_tables_history.sql
+          # (ADR-005 PR-4 retired audit mode), so they are not checked here.
           # Ingestion Perfect Rollback (Phase 2) — pending tables.
           check_d1 "$D1_HISTORY_DB_ID" "PendingMovieHistoryWrites"
           check_d1 "$D1_HISTORY_DB_ID" "PendingTorrentHistoryWrites"

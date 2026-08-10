@@ -60,6 +60,9 @@ class _FakeBackend:
     def __init__(self, results: Iterable[Any]) -> None:
         self._results: list[Any] = list(results)
         self.submitted: list[tuple[str, dict[str, Any], str, int]] = []
+        self.login_routed: list[bool] = []
+        self.submitted_at_result: list[int] = []
+        self.has_login_worker: bool = False
         self.marked_done: bool = False
         self.started: bool = False
         self.shutdown_called: bool = False
@@ -68,14 +71,23 @@ class _FakeBackend:
     def start(self) -> None:
         self.started = True
 
-    def submit(self, url: str, meta: dict[str, Any], entry_index: str, priority: int) -> None:
+    def submit(
+        self, url: str, meta: dict[str, Any], entry_index: str, priority: int,
+        login_only: bool = False,
+    ) -> None:
         self.submitted.append((url, meta, entry_index, priority))
+        self.login_routed.append(login_only)
 
     def mark_done(self) -> None:
         self.marked_done = True
 
     def results(self) -> Iterator[Any]:
-        yield from self._results
+        for r in self._results:
+            # Snapshot how many pages had been submitted by the time each
+            # result came back — that is how the probe-then-release
+            # submission shape is observable from outside.
+            self.submitted_at_result.append(len(self.submitted))
+            yield r
 
     def shutdown(self) -> None:
         self.shutdown_called = True
@@ -406,3 +418,101 @@ class TestRequeueFrontPriorityQueue:
 
         assert q.get_nowait().url == 'requeued'
         assert q.get_nowait().url == 'first'
+
+
+# ---------------------------------------------------------------------------
+# _submit_page — login-only routing for cookie-mode (ad-hoc) index pages
+# ---------------------------------------------------------------------------
+
+def test_submit_page_pins_adhoc_pages_to_the_logged_in_worker():
+    """In cookie mode the session cookie lives on one worker only, so pages
+    must go straight to it instead of being handed to a random proxy that is
+    guaranteed to hit the login wall."""
+    backend = _FakeBackend([])
+    backend.has_login_worker = True
+    index_parallel._submit_page(backend, 3, 'https://javdb.com/actors/EvkJ')
+    assert backend.login_routed == [True]
+
+
+def test_submit_page_uses_shared_queue_before_a_login_worker_exists():
+    """That first login wall is what designates the owner — routing to an
+    unowned login_queue would strand the page."""
+    backend = _FakeBackend([])
+    backend.has_login_worker = False
+    index_parallel._submit_page(backend, 3, 'https://javdb.com/actors/EvkJ')
+    assert backend.login_routed == [False]
+
+
+def test_submit_page_never_pins_daily_pages():
+    """Daily (non-ad-hoc) index pages need no cookie — keep the full fan-out."""
+    backend = _FakeBackend([])
+    backend.has_login_worker = True
+    index_parallel._submit_page(backend, 3, None)
+    assert backend.login_routed == [False]
+
+
+# ---------------------------------------------------------------------------
+# Cookie-mode probe — establish the login owner before submitting in bulk
+# ---------------------------------------------------------------------------
+
+def _run_index_fetch(monkeypatch, tmp_path, backend, *, custom_url, parse_all, end_page):
+    monkeypatch.setattr(index_parallel, "build_parallel_index_backend", lambda **_kwargs: backend)
+    monkeypatch.setattr(index_parallel, "parse_index_page", lambda _html, _page_num: _page_result())
+    monkeypatch.setattr(
+        index_parallel,
+        "_sentinel_field_health",
+        SimpleNamespace(start_run=lambda: None, current=lambda: None),
+    )
+    monkeypatch.setattr(index_parallel, "_check_stop_condition", lambda *_a, **_k: False)
+    monkeypatch.setattr(index_parallel, "detect_url_type", lambda *_a, **_k: "actors")
+    monkeypatch.setattr(index_parallel, "generate_output_csv_name_from_html", lambda *_a, **_k: "resolved.csv")
+    monkeypatch.setattr(index_parallel, "load_daily_family_blacklist", lambda _custom_url: set())
+    monkeypatch.setattr(index_parallel, "log_family_blacklist_summary", lambda *_a, **_k: None)
+    monkeypatch.setattr(index_parallel, "PROXY_POOL", [{'name': f'p{i}'} for i in range(8)])
+    return index_parallel.fetch_all_index_pages_parallel(
+        runtime=None, start_page=1, end_page=end_page, parse_all=parse_all,
+        phase_mode="1", custom_url=custom_url, ignore_release_date=False,
+        use_proxy=False, use_cf_bypass=False, max_consecutive_empty=1,
+        output_csv="out.csv", output_dated_dir=str(tmp_path),
+        csv_path=str(tmp_path / "out.csv"), user_specified_output=True,
+        cancel_event=None,
+    )
+
+
+def test_fixed_range_cookie_mode_probes_one_page_before_releasing_the_rest(monkeypatch, tmp_path):
+    """A cold start (no login state inherited from the DO) must not submit the
+    whole range before an owner exists — every one of those pages would pay its
+    own login wall."""
+    backend = _FakeBackend([_fake_result(1, "h1"), _fake_result(2, "h2"), _fake_result(3, "h3")])
+    _run_index_fetch(
+        monkeypatch, tmp_path, backend,
+        custom_url="https://javdb.com/actors/EvkJ", parse_all=False, end_page=3,
+    )
+    # One page out; pages 2-3 released only after the probe came back.
+    assert backend.submitted_at_result[0] == 1
+    assert backend.submitted_at_result[1] == 3
+    assert backend.marked_done is True
+
+
+def test_fixed_range_daily_mode_submits_the_whole_range_up_front(monkeypatch, tmp_path):
+    """Daily pages need no cookie — keep the full fan-out."""
+    backend = _FakeBackend([_fake_result(1, "h1"), _fake_result(2, "h2"), _fake_result(3, "h3")])
+    _run_index_fetch(monkeypatch, tmp_path, backend, custom_url=None, parse_all=False, end_page=3)
+    assert backend.submitted_at_result[0] == 3
+
+
+def test_parse_all_cookie_mode_probes_before_opening_the_window(monkeypatch, tmp_path):
+    backend = _FakeBackend([_fake_result(1, "h1"), _fake_result(2, "h2")])
+    _run_index_fetch(
+        monkeypatch, tmp_path, backend,
+        custom_url="https://javdb.com/actors/EvkJ", parse_all=True, end_page=0,
+    )
+    assert backend.submitted_at_result[0] == 1
+    # Window opens once the probe has answered.
+    assert backend.submitted_at_result[1] > 1
+
+
+def test_parse_all_daily_mode_opens_the_full_window_up_front(monkeypatch, tmp_path):
+    backend = _FakeBackend([_fake_result(1, "h1"), _fake_result(2, "h2")])
+    _run_index_fetch(monkeypatch, tmp_path, backend, custom_url=None, parse_all=True, end_page=0)
+    assert backend.submitted_at_result[0] == 16  # max(len(PROXY_POOL) * 2, 4)

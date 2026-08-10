@@ -16,6 +16,7 @@ import pytest
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
+from javdb.proxy.coordinator.do_client_base import _POOL_MAXSIZE  # noqa: E402
 from javdb.proxy.coordinator.proxy_coordinator_client import (  # noqa: E402
     ASYNC_QUEUE_SENTINEL,
     AsyncReportEvent,
@@ -945,5 +946,20 @@ def test_lease_does_not_overwrite_cache_when_health_is_missing():
             c.lease("proxy-A", 0)
         # Cache is sticky on missing ``health`` — last good value wins.
         assert c.get_proxy_health_score("proxy-A") == 0.9
+    finally:
+        c.close(wait=True, timeout=2.0)
+
+
+def test_session_pool_is_sized_for_the_whole_worker_pool():
+    """The session is shared by ~30 spider worker threads; urllib3's default
+    ``pool_maxsize=10`` would discard connections and re-handshake TLS on the
+    hot path (``lease`` per request)."""
+    c = _make_client(async_workers=1)
+    try:
+        for scheme in ("https://", "http://"):
+            adapter = c._session.get_adapter(f"{scheme}example.com")
+            assert adapter._pool_maxsize == _POOL_MAXSIZE
+        # The value itself must clear the worker fleet (28 proxies today).
+        assert _POOL_MAXSIZE >= 32
     finally:
         c.close(wait=True, timeout=2.0)

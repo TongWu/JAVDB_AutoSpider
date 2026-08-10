@@ -3,7 +3,9 @@ name: Reconcile Library
 # ADR-033 Phase 1+2+3: `--pass all` runs all three closed-loop reconcile passes
 # (acquisition + ownership + consumption).
 # The acquisition pass reconciles AcquisitionOutcome rows against live qB state.
-# Torrents with missingFiles state are treated as completed and deleted from qB.
+# Torrents with missingFiles state are treated as completed. This pass does not
+# delete from qB — PurgeMissingFiles.yml owns that, behind a stop + recheck +
+# per-file verification this pass cannot do from a state snapshot.
 # The ownership pass collects from gdrive (RcloneInventory), qb (AcquisitionOutcome
 # bridge), pikpak (PikpakHistory success rows), and nas (a forward-compat stub that
 # is currently always a no-op, regardless of RCLONE_NAS_REMOTE).

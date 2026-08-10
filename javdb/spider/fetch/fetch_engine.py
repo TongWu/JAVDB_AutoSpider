@@ -86,6 +86,22 @@ from javdb.spider.runtime.config import (
 
 logger = get_logger(__name__)
 
+# While a site-wide Cloudflare challenge is live the cascade leads with the
+# bypass tier, so the direct leg — which is what clears the flag — only runs
+# when the bypass fails. Every Nth task leads with direct anyway, so a run
+# whose bypass keeps working still notices when the wall comes down instead of
+# paying the slower tier for its whole life. One success clears it pool-wide.
+SITE_RECOVERY_PROBE_INTERVAL = 25
+
+# How many proxies in a row may come back empty under a site-wide challenge
+# before the run stops handing the task to yet another one. A wall that is
+# genuinely site-wide answers all 28 proxies identically, so sweeping the whole
+# pool costs one bypass timeout per proxy and still ends in nothing — that is
+# how a single ad-hoc page once burned 80 minutes. Set well above the handful
+# of individually-broken bypass services a run typically sees, and well below
+# the pool size, so a coincidental cluster of bad hosts still gets ridden out.
+SITE_CHALLENGE_REQUEUE_LIMIT = 8
+
 __all__ = [
     'FetchBackend', 'FetchRuntimeState',
     'EngineTask', 'EngineResult', 'LoginRequired',
@@ -201,6 +217,11 @@ class EngineTask:
     different proxy) instead of triggering yet another login attempt — the
     cookie is provably valid against fixed login-required pages, so the
     failure must be specific to this URL or this proxy IP.
+
+    ``login_only`` marks a task that only the logged-in worker can serve
+    (the session cookie lives on that worker alone).  It excludes the task
+    from speculative execution — every other proxy would just hit the login
+    wall.  Set by ``ParallelFetchBackend.submit(login_only=True)``.
     """
 
     url: str
@@ -210,6 +231,7 @@ class EngineTask:
     meta: dict = field(default_factory=dict)
     priority: int = 0
     login_verified_after_refresh: bool = False
+    login_only: bool = False
     _deadline: Optional[float] = field(default=None, repr=False, compare=False)
     _speculative: bool = field(default=False, repr=False, compare=False)
 
@@ -402,12 +424,23 @@ class WorkerContext:
         if self.is_expired:
             return None
 
-        if worker._should_shortcircuit_cf():
+        if worker._should_prefer_bypass():
             html = worker._fetch_html(url, True)
             if html:
                 if is_login_page(html):
                     raise LoginRequired()
                 self._last_used_cf = True
+                return html
+            if self.is_expired:
+                return None
+            # Direct still runs as the fallback, and doubles as the probe
+            # that clears site_challenge_active once the wall comes down.
+            html = worker._fetch_html(url, False)
+            if html:
+                if is_login_page(html):
+                    raise LoginRequired()
+                worker._mark_site_recovered()
+                self._last_used_cf = False
                 return html
             return None
 
@@ -415,13 +448,25 @@ class WorkerContext:
         if html:
             if is_login_page(html):
                 raise LoginRequired()
+            worker._mark_site_recovered()
             self._last_used_cf = False
             return html
 
         # Skip expensive CF bypass when queue pressure is low, UNLESS
         # this task has already exhausted most proxies via direct path
-        # (tail-task scenario where CF bypass may be the only way).
-        if self.queue_pressure == 'low':
+        # (tail-task scenario where CF bypass may be the only way), or is
+        # login-only — the shortcut exists to hand the task to a different
+        # proxy, and no other proxy holds the cookie this one needs.
+        #
+        # A live site-wide challenge suspends the shortcut outright: reaching
+        # here under a wall means this task is a recovery probe whose direct
+        # leg just failed, and re-queuing it to another proxy only buys
+        # another failed direct attempt. Bypass is the only tier that answers.
+        if (
+            self.queue_pressure == 'low'
+            and not self._current_task.login_only
+            and not worker._site_challenge_active()
+        ):
             active = worker._active_workers
             if len(self._current_task.failed_proxies) < max(1, active - 1):
                 return None
@@ -539,6 +584,9 @@ class _EngineWorker(threading.Thread):
         self._per_worker_completed = 0
         self._consecutive_none_count = 0
         self._none_ban_threshold = 2
+        # Tasks this worker has led with the bypass tier because a site-wide
+        # challenge is live. Drives the periodic direct probe below.
+        self._bypass_first_streak = 0
         self._task_timeout = max(0.0, float(task_timeout))
         self.proxy_config = proxy_config
         self._runtime = runtime or state.get_active_runtime()
@@ -639,6 +687,32 @@ class _EngineWorker(threading.Thread):
             _cf_event_cb = None
             _request_complete_cb = None
 
+        # Wired unconditionally: a site-wide challenge has to flip the run
+        # to bypass-first whether or not a coordinator is configured.
+        def _site_challenge_cb(
+            _unused_proxy_name=None,
+            _rt=self._runtime,
+            _c=coordinator,
+            _p=coord_proxy_id,
+        ):
+            # The Worker counts *distinct* proxies that saw a wall inside its
+            # window, so this reports every observation rather than only the
+            # first: repeats from one proxy just refresh its timestamp, while
+            # silence would starve the breaker that exists to notice exactly
+            # this condition. The kind is inert per-proxy — it touches no
+            # cfEvents / successEvents counter, so it cannot ban anything.
+            if _c is not None and _p:
+                _c.report_async(_p, "site_challenge")
+            if _rt is None:
+                return
+            _rt.proxy.site_challenge_seen = True
+            if not _rt.proxy.site_challenge_active:
+                _rt.proxy.site_challenge_active = True
+                logger.info(
+                    "Site-wide Cloudflare challenge detected — switching the "
+                    "run to bypass-first (direct is walled off for every proxy)"
+                )
+
         self._handler = RequestHandler(
             proxy_pool=self._proxy_pool,
             config=RequestConfig(
@@ -660,6 +734,7 @@ class _EngineWorker(threading.Thread):
             penalty_tracker=penalty_tracker,
             on_cf_event=_cf_event_cb,
             on_request_complete=_request_complete_cb,
+            on_site_challenge=_site_challenge_cb,
         )
 
     # -- task deadline -------------------------------------------------------
@@ -706,6 +781,85 @@ class _EngineWorker(threading.Thread):
             return True
         self._cf_bypass_since = None
         return False
+
+    def _site_challenge_active(self) -> bool:
+        """Whether javdb is currently walling off every proxy."""
+        return (
+            self._runtime is not None
+            and self._runtime.proxy.site_challenge_active
+        )
+
+    def _note_site_challenge_requeue(self) -> int:
+        """Count one more consecutive site-wide-challenge failure.
+
+        Returns the new run-level total. The counter is shared by every
+        worker — the wall is a property of the site, not of one proxy.
+        """
+        if self._runtime is None:
+            return 0
+        proxy_state = self._runtime.proxy
+        with proxy_state.site_challenge_lock:
+            proxy_state.site_challenge_requeues += 1
+            return proxy_state.site_challenge_requeues
+
+    def _reset_site_challenge_requeues(self) -> None:
+        """Clear the streak after any successful fetch."""
+        if self._runtime is None:
+            return
+        proxy_state = self._runtime.proxy
+        with proxy_state.site_challenge_lock:
+            proxy_state.site_challenge_requeues = 0
+
+    def _should_prefer_bypass(self) -> bool:
+        """Whether to try the bypass tier before the direct path.
+
+        Two independent triggers. ``--always-bypass-time`` is a per-proxy
+        hint earned by a previous bypass success; a live site-wide challenge
+        is a run-level fact — javdb answers every egress IP with the
+        interstitial, so leading with direct spends one failed attempt per
+        proxy before reaching the only tier that can answer, and each of
+        those attempts is a CF event.
+        """
+        if not self._site_challenge_active():
+            self._bypass_first_streak = 0
+            return self._should_shortcircuit_cf()
+
+        # Recovery probe. The direct leg only runs as the bypass's fallback, so
+        # a run whose bypass keeps succeeding would never re-test direct and
+        # would stay on the slower tier for its whole life — even if javdb
+        # dropped the challenge minutes in. Every Nth task leads with direct
+        # instead; one success clears the flag for every worker.
+        #
+        # This is deliberately checked ahead of the sticky ``--always-bypass-time``
+        # window: that window is unconditional (and permanent when the value is
+        # 0), so short-circuiting on it first would mean the counter never
+        # advanced and the probe never ran.
+        self._bypass_first_streak += 1
+        if self._bypass_first_streak % SITE_RECOVERY_PROBE_INTERVAL == 0:
+            logger.debug(
+                "[%s] Site-challenge recovery probe — leading with direct",
+                self.proxy_name,
+            )
+            return False
+        return True
+
+    def _mark_site_recovered(self) -> None:
+        """Clear the live site-challenge flag after a direct fetch succeeds.
+
+        ``site_challenge_seen`` stays latched — the summary report uses it to
+        explain a zero-entry run — but the live flag has to fall back so the
+        run returns to direct-first once the wall comes down.
+        """
+        if self._runtime is None:
+            return
+        if not self._runtime.proxy.site_challenge_active:
+            return
+        self._runtime.proxy.site_challenge_active = False
+        logger.info(
+            "[%s] Direct fetch succeeded — site-wide Cloudflare challenge "
+            "cleared, returning to direct-first",
+            self.proxy_name,
+        )
 
     def _mark_cf_bypass(self) -> None:
         if self._runtime is not None:
@@ -756,6 +910,10 @@ class _EngineWorker(threading.Thread):
                     if entry_idx in self._completed_entries:
                         continue
                 if self.proxy_name in task.failed_proxies:
+                    continue
+                # Only the logged-in worker holds the cookie this task
+                # needs — racing it on our proxy buys a login wall.
+                if task.login_only:
                     continue
                 spec = EngineTask(
                     url=task.url,
@@ -815,8 +973,15 @@ class _EngineWorker(threading.Thread):
                 am_logged_in = self._coordinator.is_login_worker(
                     self.proxy_name, self.worker_id,
                 )
+                # Nobody owns the login session right now (a stale-cookie
+                # wall or an exhausted budget just cleared the designation).
+                # Whatever is parked in ``login_queue`` would otherwise sit
+                # there forever — only the designated worker drains it. Let
+                # any worker take it: the login wall it hits re-enters the
+                # login flow and designates a new owner.
+                login_queue_orphaned = not self._coordinator.has_login_owner()
 
-            if am_logged_in:
+            if am_logged_in or login_queue_orphaned:
                 try:
                     return self.login_queue.get_nowait()
                 except queue_module.Empty:
@@ -994,6 +1159,9 @@ class _EngineWorker(threading.Thread):
                 data = self._process_fn(ctx, task)
                 if data is not None:
                     self._consecutive_none_count = 0
+                    # Any success means the pool is still getting through, so
+                    # the site-wide-challenge give-up streak starts over.
+                    self._reset_site_challenge_requeues()
                     if not self._mark_entry_completed(task.entry_index):
                         # Another worker (speculative or original) already
                         # produced a result for this entry — discard ours.
@@ -1035,6 +1203,42 @@ class _EngineWorker(threading.Thread):
                         continue
                     task.failed_proxies.add(self.proxy_name)
                     task.retry_count += 1
+                    # A site-wide Cloudflare challenge hits every proxy alike,
+                    # so counting it toward the soft-ban just burns the pool —
+                    # 28 proxies "banned" for something none of them caused.
+                    # The task still accumulates failed_proxies and ends as
+                    # all_proxies_failed once the pool is exhausted.
+                    if getattr(self._handler, 'last_site_challenge', False):
+                        if self._runtime is not None:
+                            self._runtime.proxy.site_challenge_seen = True
+                        streak = self._note_site_challenge_requeue()
+                        if streak >= SITE_CHALLENGE_REQUEUE_LIMIT:
+                            logger.warning(
+                                "%s Site-wide Cloudflare challenge — giving up "
+                                "after %d consecutive proxies returned nothing; "
+                                "the wall is not proxy-specific, so sweeping the "
+                                "rest of the pool would only cost more time",
+                                _task_worker_ctx(
+                                    task.entry_index, self.proxy_name
+                                ),
+                                streak,
+                            )
+                            self.result_queue.put(EngineResult(
+                                task=task, success=False,
+                                error='site_challenge_exhausted',
+                                worker_name=self.proxy_name,
+                            ))
+                            continue
+                        logger.info(
+                            "%s Site-wide Cloudflare challenge — re-queued "
+                            "without counting toward soft-ban "
+                            "(%d/%d proxies, streak=%d/%d)",
+                            _task_worker_ctx(task.entry_index, self.proxy_name),
+                            len(task.failed_proxies), self._active_workers,
+                            streak, SITE_CHALLENGE_REQUEUE_LIMIT,
+                        )
+                        requeue_front(self.task_queue, task)
+                        continue
                     self._consecutive_none_count += 1
                     logger.info(
                         "%s Process returned None, re-queued "
@@ -1586,6 +1790,25 @@ class ParallelFetchBackend(FetchBackend):
 
     # -- task submission -----------------------------------------------------
 
+    @property
+    def has_login_worker(self) -> bool:
+        """True when a worker owns the login session and drains ``login_queue``.
+
+        Callers use this to decide whether ``submit(login_only=True)`` is
+        safe — see :meth:`LoginCoordinator.has_login_owner`.
+
+        Read without the coordinator lock on purpose: a worker holds that
+        lock for the whole login + fixed-page verification (5–30 s), and the
+        submitting thread must not stall behind it.  The answer is advisory
+        and both races are benign — a designation that appears right after
+        the read just costs one more login wall (today's behaviour), and one
+        that is cleared right after is caught by the orphaned-queue drain in
+        :meth:`_EngineWorker._get_next_task`.
+        """
+        if self._coordinator is None:
+            return False
+        return self._coordinator.has_login_owner()
+
     def submit(
         self,
         url: str,
@@ -1593,25 +1816,46 @@ class ParallelFetchBackend(FetchBackend):
         meta: Optional[dict] = None,
         entry_index: str = '',
         priority: int = 0,
+        login_only: bool = False,
     ) -> None:
-        """Submit a URL for processing.  Thread-safe."""
+        """Submit a URL for processing.  Thread-safe.
+
+        ``login_only=True`` routes the task straight to ``login_queue`` so
+        only the logged-in worker picks it up.  Use it for URLs that are
+        known to need the session cookie (which lives on that one worker
+        only) — it skips the wasted fetch + login-wall round-trip every
+        other worker would otherwise pay.  Only safe while
+        :attr:`has_login_worker` is ``True``.
+        """
         if self._done:
             raise RuntimeError("Cannot submit after mark_done()")
-        task = EngineTask(
+        self._enqueue(EngineTask(
             url=url, entry_index=entry_index, meta=meta or {},
-            priority=priority,
-        )
+            priority=priority, login_only=login_only,
+        ))
+
+    def _enqueue(self, task: EngineTask) -> None:
+        """Count *task* and put it on the queue its flags demand.
+
+        Both submission doors route through here so a ``login_only`` task
+        can never land on the shared queue, where any proxy would pick it
+        up and buy a login wall.
+        """
         with self._count_lock:
             self._submitted += 1
-        self._task_queue.put(task)
+        if task.login_only:
+            self._login_queue.put(task)
+        else:
+            self._task_queue.put(task)
 
     def submit_task(self, task: EngineTask) -> None:
-        """Submit a pre-built :class:`EngineTask`.  Thread-safe."""
+        """Submit a pre-built :class:`EngineTask`.  Thread-safe.
+
+        Honours ``task.login_only`` — see :meth:`_enqueue`.
+        """
         if self._done:
             raise RuntimeError("Cannot submit after mark_done()")
-        with self._count_lock:
-            self._submitted += 1
-        self._task_queue.put(task)
+        self._enqueue(task)
 
     def mark_done(self) -> None:
         """Signal that no more tasks will be submitted.
@@ -1826,8 +2070,8 @@ class ParallelFetchBackend(FetchBackend):
             if ctx.is_expired:
                 return None
 
-            # CF sticky short-circuit
-            if worker._should_shortcircuit_cf():
+            # Bypass-first: sticky window, or a live site-wide challenge
+            if worker._should_prefer_bypass():
                 html = ctx.fetch_html(task.url, use_cf=True)
                 if html:
                     if is_login_page(html):
@@ -1840,6 +2084,23 @@ class ParallelFetchBackend(FetchBackend):
                         "%s parse failed: CF Bypass (marked)",
                         _task_worker_ctx(task.entry_index, ctx.proxy_name),
                     )
+                if ctx.is_expired:
+                    return None
+                # Direct still runs as the fallback, and doubles as the probe
+                # that clears site_challenge_active once the wall comes down.
+                html = ctx.fetch_html(task.url, use_cf=False)
+                if html:
+                    if is_login_page(html):
+                        raise LoginRequired()
+                    data = parse_fn(html, task)
+                    if data is not None:
+                        worker._mark_site_recovered()
+                        ctx._last_used_cf = False
+                        return data
+                    logger.debug(
+                        "%s parse failed: Direct (after bypass)",
+                        _task_worker_ctx(task.entry_index, ctx.proxy_name),
+                    )
                 return None
 
             # Direct attempt
@@ -1849,6 +2110,7 @@ class ParallelFetchBackend(FetchBackend):
                     raise LoginRequired()
                 data = parse_fn(html, task)
                 if data is not None:
+                    worker._mark_site_recovered()
                     ctx._last_used_cf = False
                     return data
                 logger.debug(
@@ -1860,8 +2122,15 @@ class ParallelFetchBackend(FetchBackend):
             # expensive CF bypass cascade and re-queue immediately so
             # another worker can attempt the direct path with a different
             # proxy — unless this task has already exhausted most proxies
-            # via direct path (tail-task scenario).
-            if ctx.queue_pressure == 'low':
+            # via direct path (tail-task scenario), or is login-only, where
+            # no other proxy holds the cookie it needs. A live site-wide
+            # challenge also suspends it: another proxy's direct path is
+            # walled off just the same, so bypass is the only tier left.
+            if (
+                ctx.queue_pressure == 'low'
+                and not task.login_only
+                and not worker._site_challenge_active()
+            ):
                 active = ctx._worker._active_workers
                 if len(task.failed_proxies) < max(1, active - 1):
                     logger.debug(
@@ -1942,8 +2211,12 @@ class FetchEngine:
         meta: Optional[dict] = None,
         entry_index: str = '',
         priority: int = 0,
+        login_only: bool = False,
     ) -> None:
-        self._backend.submit(url, meta=meta, entry_index=entry_index, priority=priority)
+        self._backend.submit(
+            url, meta=meta, entry_index=entry_index, priority=priority,
+            login_only=login_only,
+        )
 
     def submit_task(self, task: EngineTask) -> None:
         self._backend.submit_task(task)

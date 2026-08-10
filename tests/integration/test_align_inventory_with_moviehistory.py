@@ -531,8 +531,57 @@ def test_finalize_alignment_session_commits_on_success(monkeypatch):
     assert rolled_back == []
 
 
+def test_finalize_alignment_session_leaves_committed_session_alone(
+    monkeypatch, caplog,
+):
+    """A post-commit failure must not attempt (or report) a rollback.
+
+    The commit boundary sits mid-``_run_alignment_core``; the CSV writes and
+    ``_enqueue_qb_from_csv`` run after it. When one of those raises, the outer
+    guard finalizes with rc=1 on an already-``committed`` session —
+    ``rollback_session`` refuses it, and the old code surfaced that refusal as
+    "pending writes left undrained", sending the operator to re-commit a
+    session that had drained cleanly (GH Actions run 30196995600).
+    """
+    import logging
+
+    from javdb.migrations.tools import align_inventory_with_moviehistory as mod
+    import javdb.storage.db._db_reports as reports_mod
+
+    class _FakeHistoryRepo:
+        def __init__(self, **_kw):
+            pass
+
+        def commit_session(self, session_id, **_kw):
+            raise AssertionError('rc != 0 must not commit')
+
+    class _FakeSessionRepo:
+        def __init__(self, **_kw):
+            pass
+
+        def rollback_session(self, session_id, **_kwargs):
+            raise AssertionError('a committed session must not be rolled back')
+
+    monkeypatch.setattr(mod, 'HistoryRepo', _FakeHistoryRepo)
+    monkeypatch.setattr(mod, 'SessionLifecycleRepo', _FakeSessionRepo)
+    monkeypatch.setattr(
+        reports_mod, 'db_get_session_status',
+        lambda *a, **k: ('pending', 'committed'),
+    )
+
+    with caplog.at_level(logging.INFO, logger=mod.logger.name):
+        rc = mod._finalize_alignment_session('SID-1', 1)
+
+    assert rc == 0
+    assert 'undrained' not in caplog.text
+    assert 'commit_session --session-id' not in caplog.text
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert 'already committed' in caplog.text
+
+
 def test_finalize_alignment_session_rolls_back_on_failure(monkeypatch):
     from javdb.migrations.tools import align_inventory_with_moviehistory as mod
+    import javdb.storage.db._db_reports as reports_mod
 
     committed = []
     rolled_back = []
@@ -555,6 +604,10 @@ def test_finalize_alignment_session_rolls_back_on_failure(monkeypatch):
 
     monkeypatch.setattr(mod, 'HistoryRepo', _FakeHistoryRepo)
     monkeypatch.setattr(mod, 'SessionLifecycleRepo', _FakeSessionRepo)
+    monkeypatch.setattr(
+        reports_mod, 'db_get_session_status',
+        lambda *a, **k: ('pending', 'in_progress'),
+    )
 
     # rc != 0 (e.g. parallel interrupt): roll back, never commit, preserve rc.
     rc = mod._finalize_alignment_session('SID-1', 130)
@@ -563,6 +616,51 @@ def test_finalize_alignment_session_rolls_back_on_failure(monkeypatch):
     assert committed == []
     assert len(rolled_back) == 1
     assert rolled_back[0][0] == 'SID-1'
+
+
+def test_finalize_alignment_session_reports_unrecoverable_cleanup(
+    monkeypatch, caplog,
+):
+    """A failed cleanup must name the stuck session, not just "rollback failed".
+
+    BFR-023: ``rollback_session`` recovers a ``finalizing`` session by
+    re-running the same drain, so a deterministic drain failure fails again
+    and leaves the pending writes undrained. This log line is the only
+    signal the operator gets before the 48h stale-session sweep.
+    """
+    import logging
+
+    from javdb.migrations.tools import align_inventory_with_moviehistory as mod
+    import javdb.storage.db._db_reports as reports_mod
+
+    class _FakeHistoryRepo:
+        def __init__(self, **_kw):
+            pass
+
+        def commit_session(self, session_id, **_kw):
+            raise AssertionError('rc != 0 must not commit')
+
+    class _FakeSessionRepo:
+        def __init__(self, **_kw):
+            pass
+
+        def rollback_session(self, session_id, **_kwargs):
+            raise RuntimeError('UNIQUE constraint failed: MovieHistory.Href')
+
+    monkeypatch.setattr(mod, 'HistoryRepo', _FakeHistoryRepo)
+    monkeypatch.setattr(mod, 'SessionLifecycleRepo', _FakeSessionRepo)
+    monkeypatch.setattr(
+        reports_mod, 'db_get_session_status',
+        lambda *a, **k: ('pending', 'finalizing'),
+    )
+
+    with caplog.at_level(logging.ERROR, logger=mod.logger.name):
+        rc = mod._finalize_alignment_session('SID-1', 1)
+
+    assert rc == 0  # finalize returns 0; caller keeps its own non-zero rc
+    assert 'SID-1' in caplog.text
+    assert 'undrained' in caplog.text
+    assert 'apps.cli.db.commit_session --session-id SID-1' in caplog.text
 
 
 def test_blank_actor_field_to_none():
@@ -910,3 +1008,36 @@ def test_run_alignment_non_dry_run_opens_stages_and_commits(monkeypatch, temp_di
     assert _FakeHistoryRepo.committed == [SID]
     # run_alignment stamped the resolved session back onto args.
     assert args.session_id == SID
+
+
+def test_enqueue_qb_from_csv_import_target_is_live(monkeypatch):
+    """The qB helpers are imported lazily, so only a real call proves the path.
+
+    ADR-007 Phase 3 retired ``scripts/qb_uploader.py``; this function-local
+    import kept pointing at it and only blew up in production, after the
+    alignment session had already committed.
+    """
+    from javdb.integrations.qb.uploader import service as qb_service
+    from javdb.migrations.tools import align_inventory_with_moviehistory as mod
+
+    calls = []
+    monkeypatch.setattr(
+        qb_service, 'initialize_proxy_helper', lambda override: calls.append(override)
+    )
+    # Bail out right after the import so the test touches no network.
+    monkeypatch.setattr(qb_service, 'test_qbittorrent_connection', lambda _p: False)
+
+    assert mod._enqueue_qb_from_csv('missing.csv', use_proxy=False) is False
+    assert calls == [False]
+
+    # Every attribute the function reaches for must exist on the target module.
+    for name in (
+        'initialize_proxy_helper',
+        'test_qbittorrent_connection',
+        'login_to_qbittorrent',
+        'read_csv_file',
+        'get_existing_torrents',
+        'is_torrent_exists',
+        'add_torrent_to_qbittorrent',
+    ):
+        assert callable(getattr(qb_service, name)), name

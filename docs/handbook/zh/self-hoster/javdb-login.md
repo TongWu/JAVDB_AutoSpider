@@ -8,7 +8,7 @@
 - 登录 JavDB
 - 年龄验证
 - 会话 cookie 提取和更新
-- 验证码识别（手动、OCR 或基于 GPT）
+- 验证码识别（通过 OpenAI 兼容 API 的 AI 视觉模型）
 
 ## 快速开始
 
@@ -19,9 +19,9 @@
 JAVDB_USERNAME = 'your_email@example.com'
 JAVDB_PASSWORD = 'your_password'
 
-# 可选：基于 GPT 的验证码识别
-GPT_API_URL = ''   # GPT API 端点
-GPT_API_KEY = ''   # GPT API 密钥
+# 自动识别验证码所必需（登录是非交互式的）
+GPT_API_URL = 'https://api.gpt.ge/v1/chat/completions'  # OpenAI 兼容端点
+GPT_API_KEY = ''   # 你的 API 密钥
 ```
 
 ### 2. 运行登录
@@ -31,9 +31,9 @@ python3 -m apps.cli.login
 ```
 
 脚本将执行以下操作：
-1. 下载并显示验证码图片
-2. 提示你输入验证码（如果配置了 GPT 则自动识别）
-3. 登录并提取会话 cookie
+1. 获取登录页并处理年龄验证
+2. 下载验证码图片并用配置的 AI 视觉模型识别
+3. 登录并提取会话 cookie（验证码识别错误时会重试）
 4. 在 `config.py` 中更新 `JAVDB_SESSION_COOKIE`
 
 ### 3. 使用自定义 URL
@@ -45,39 +45,40 @@ python3 -m apps.cli.pipeline --url "https://javdb.com/actors/RdEb4"
 
 ## 验证码处理
 
-### 手动输入（默认）
+JavDB 在登录表单上显示一个扭曲的图片验证码。脚本通过把图片发送给一个
+OpenAI 兼容的视觉模型（`GPT_API_URL` + `GPT_API_KEY`）来自动识别。**没有手动
+输入的回退方式**——如果未配置 GPT API，登录无法进行。
 
-1. 脚本下载验证码图片
-2. 自动打开图片（取决于平台）
-3. 你在提示时输入验证码
+### 工作原理
 
-### 基于 GPT（推荐用于自动化）
+1. 脚本从登录页下载验证码图片。
+2. 把图片连同"只返回字符"的提示词发送给配置的模型（`CAPTCHA_MODEL`）。
+3. 对返回内容做清洗（剥离代码块 / 引号 / 空白，再转小写——JavDB 的比较是
+   大小写敏感的，且答案为小写）。
+4. 提交候选答案。识别错误时会用新验证码重试，最多 `LOGIN_MAX_RETRIES` 次。
 
-在 `config.py` 中配置 `GPT_API_URL` 和 `GPT_API_KEY`。脚本将验证码图片发送到 GPT API 进行自动识别。
+### 为什么需要重试
 
-### OCR（Tesseract）
+JavDB 扭曲验证码的单次识别准确率本身就很低（在一次 720 次的压测中，最好的
+模型也只有约 25%），因此脚本依赖重试：总成功率 `= 1 - (1 - p)^n`。当 `p≈0.25`
+时，8 次重试可把登录成功率提升到约 90%。如果经常登录失败，调高
+`LOGIN_MAX_RETRIES`。
 
-使用 Tesseract 进行本地 OCR。安装方式：
+### 模型选择
 
-```bash
-# macOS
-brew install tesseract
+`CAPTCHA_MODEL` 接受你的端点提供的任意支持视觉的模型。已压测的选项（准确率在
+第一梯队内统计上并无显著差异）：
 
-# Ubuntu/Debian
-sudo apt-get install tesseract-ocr
+| 模型 | 单次准确率 | 说明 |
+|---|---|---|
+| `qwen-vl-ocr`（默认） | ~25% | 最快、最便宜，输出干净 |
+| `gpt-4o` | ~28% | 最高，但有时会把输出包在代码块里 |
+| `gpt-4o-mini` | ~19% | 更便宜，准确率更低 |
 
-# Windows — download from https://github.com/UB-Mannheim/tesseract/wiki
-```
-
-### 识别方法
-
-```python
-# 位于 utils/login/javdb_captcha_solver.py
-solve_captcha(image_data, method='manual')    # 手动输入
-solve_captcha(image_data, method='ocr')       # 本地 Tesseract OCR
-solve_captcha(image_data, method='2captcha')  # 2Captcha API（遗留）
-solve_captcha(image_data, method='auto')      # 优先 OCR，失败后回退
-```
+> **推理模型**（如 `gpt-5-mini-high`）可用，但更慢且准确率并不更高。它们在
+> 输出答案前会消耗数百个隐藏 token，因此 `CAPTCHA_MAX_TOKENS` 必须保持较高
+> （≥2000），否则会返回空答案且 `finish_reason=length`。这就是默认值为 2000
+> 而非 50 的原因。
 
 ## 配置
 
@@ -89,9 +90,14 @@ JAVDB_PASSWORD = 'your_password'
 # 由登录脚本自动更新
 JAVDB_SESSION_COOKIE = ''
 
-# GPT 验证码（推荐）
+# GPT 验证码识别（自动登录必需）
 GPT_API_URL = ''
 GPT_API_KEY = ''
+
+# 验证码识别调优（可选——下面是合理的默认值）
+CAPTCHA_MODEL = 'qwen-vl-ocr'   # 你的端点提供的任意视觉模型
+CAPTCHA_MAX_TOKENS = 2000       # 推理模型需保持 >=2000
+LOGIN_MAX_RETRIES = 8           # 每次登录的重试次数（单次准确率低）
 
 # 登录策略（高级）
 LOGIN_ATTEMPTS_PER_PROXY_LIMIT = 3

@@ -464,7 +464,7 @@ DO 的 `next_available_at` + 三窗口把每代理总吞吐限死在拟人化节
 
 ### Q3. `429 Too Many Requests` 或日累计 100 k 触顶
 - 升级到 Workers Paid Plan（$5/月，提供 10M req/月）
-- 或临时降低 `PAGE_END` GH Variable 减少单次 ingestion 量级
+- 或临时降低单次 ingestion 量级。自 [ADR-057](../../../design/ADR-057-Dynamic-Daily-Index-Pagination/ADR-057-dynamic-daily-index-pagination.zh.md) 起，`PAGE_END` 只是扫描**下限**——只要页面还带今日/昨日徽章，每日扫描就会继续向后延伸，因此在放种多的日子里单独调低它并不能限流。要恢复 `PAGE_END` 的硬上限语义，设 `PAGE_SCAN_DYNAMIC=False`；要保留动态扫描但限制延伸幅度，调低 `PAGE_SCAN_MAX`
 
 ### Q4. `wait_ms` 异常长（>30 s）
 1. 检查 DO 状态 dump：

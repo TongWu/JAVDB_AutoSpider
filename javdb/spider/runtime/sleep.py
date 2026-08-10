@@ -127,10 +127,22 @@ class PenaltyTracker:
         self._remote_expires_at: float = 0.0
         self._remote_ttl_sec: float = 10.0
 
-    def record_event(self) -> None:
+    def record_event(self, *, publish_remote: bool = True) -> None:
+        """Record one CF/failure event, optionally publishing it upstream.
+
+        ``publish_remote=False`` keeps the local pacing signal — backing off
+        while CF pushes back is correct however the challenge arose — but
+        suppresses the per-proxy coordinator report. Callers pass it for a
+        site-wide Cloudflare challenge: publishing that as a ``cf`` event
+        pushes every proxy past ``CF_AUTO_BAN_THRESHOLD`` at once and bans
+        the whole pool for a condition none of them caused (BFR-025). No
+        production tracker is wired to a coordinator today, so this is a
+        latent path — which is exactly why it needs the guard rather than a
+        comment.
+        """
         with self._lock:
             self._events.append(time.monotonic())
-        if self._coordinator and self._proxy_id:
+        if publish_remote and self._coordinator and self._proxy_id:
             self._coordinator.report_async(self._proxy_id, "cf")
 
     def set_remote_factor(self, factor: float, ttl_sec: float = 10.0) -> None:

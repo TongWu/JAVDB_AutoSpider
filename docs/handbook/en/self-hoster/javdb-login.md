@@ -8,7 +8,7 @@ When scraping custom URLs with `--url`, JavDB requires a valid session cookie. W
 - Logging into JavDB
 - Age verification
 - Session cookie extraction and update
-- Captcha solving (manual, OCR, or GPT-based)
+- Captcha solving (AI vision model via an OpenAI-compatible API)
 
 ## Quick Start
 
@@ -19,9 +19,9 @@ When scraping custom URLs with `--url`, JavDB requires a valid session cookie. W
 JAVDB_USERNAME = 'your_email@example.com'
 JAVDB_PASSWORD = 'your_password'
 
-# Optional: GPT-based captcha solving
-GPT_API_URL = ''   # Your GPT API endpoint
-GPT_API_KEY = ''   # Your GPT API key
+# Required for automatic captcha solving (login is non-interactive)
+GPT_API_URL = 'https://api.gpt.ge/v1/chat/completions'  # OpenAI-compatible endpoint
+GPT_API_KEY = ''   # Your API key
 ```
 
 ### 2. Run Login
@@ -31,9 +31,9 @@ python3 -m apps.cli.login
 ```
 
 The script will:
-1. Download and display a captcha image
-2. Prompt you to enter the captcha code (or solve it automatically if GPT is configured)
-3. Log in and extract the session cookie
+1. Fetch the login page and handle age verification
+2. Download the captcha image and solve it with the configured AI vision model
+3. Log in and extract the session cookie (retrying on wrong captchas)
 4. Update `JAVDB_SESSION_COOKIE` in `config.py`
 
 ### 3. Use Custom URLs
@@ -45,39 +45,43 @@ python3 -m apps.cli.pipeline --url "https://javdb.com/actors/RdEb4"
 
 ## Captcha Handling
 
-### Manual Input (Default)
+JavDB shows a distorted image captcha on the login form. The script solves it
+automatically by sending the image to an OpenAI-compatible vision model
+(`GPT_API_URL` + `GPT_API_KEY`). There is no manual-entry fallback — if the GPT
+API is not configured, login cannot proceed.
 
-1. Script downloads captcha image
-2. Opens image automatically (platform-dependent)
-3. You enter the code when prompted
+### How it works
 
-### GPT-Based (Recommended for Automation)
+1. The script downloads the captcha image from the login page.
+2. It sends the image to the configured model (`CAPTCHA_MODEL`) with a prompt
+   asking for the characters only.
+3. The reply is sanitized (code fences / quotes / whitespace stripped, then
+   lowercased — JavDB's comparison is case-sensitive against a lowercase code).
+4. The candidate is submitted. A wrong captcha is retried with a fresh image up
+   to `LOGIN_MAX_RETRIES` times.
 
-Configure `GPT_API_URL` and `GPT_API_KEY` in `config.py`. The script sends the captcha image to the GPT API for automatic solving.
+### Why retries matter
 
-### OCR (Tesseract)
+Single-shot accuracy on JavDB's distorted captcha is inherently low (~25% for
+the best models in a 720-attempt benchmark), so the script relies on retries:
+overall success `= 1 - (1 - p)^n`. At `p≈0.25`, 8 retries lifts login success
+to roughly 90%. If logins often fail, raise `LOGIN_MAX_RETRIES`.
 
-Local OCR using Tesseract. Install:
+### Model selection
 
-```bash
-# macOS
-brew install tesseract
+`CAPTCHA_MODEL` accepts any vision-capable model your endpoint exposes.
+Benchmarked options (accuracy statistically tied within the top tier):
 
-# Ubuntu/Debian
-sudo apt-get install tesseract-ocr
+| Model | Single-shot acc | Notes |
+|---|---|---|
+| `qwen-vl-ocr` (default) | ~25% | Fastest + cheapest, clean output |
+| `gpt-4o` | ~28% | Highest, but sometimes wraps output in code fences |
+| `gpt-4o-mini` | ~19% | Cheaper, lower accuracy |
 
-# Windows — download from https://github.com/UB-Mannheim/tesseract/wiki
-```
-
-### Solver Methods
-
-```python
-# In utils/login/javdb_captcha_solver.py
-solve_captcha(image_data, method='manual')    # Manual input
-solve_captcha(image_data, method='ocr')       # Local Tesseract OCR
-solve_captcha(image_data, method='2captcha')  # 2Captcha API (legacy)
-solve_captcha(image_data, method='auto')      # Try OCR first, fallback
-```
+> **Reasoning models** (e.g. `gpt-5-mini-high`) work but are slower and no more
+> accurate. They consume hundreds of hidden tokens before answering, so
+> `CAPTCHA_MAX_TOKENS` must stay high (≥2000) or they return an empty answer
+> with `finish_reason=length`. This is why the default is 2000, not 50.
 
 ## Configuration
 
@@ -89,9 +93,14 @@ JAVDB_PASSWORD = 'your_password'
 # Auto-updated by login script
 JAVDB_SESSION_COOKIE = ''
 
-# GPT captcha (recommended)
+# GPT captcha solving (required for automatic login)
 GPT_API_URL = ''
 GPT_API_KEY = ''
+
+# Captcha solver tuning (optional — sensible defaults shown)
+CAPTCHA_MODEL = 'qwen-vl-ocr'   # any vision model your endpoint exposes
+CAPTCHA_MAX_TOKENS = 2000       # keep >=2000 for reasoning models
+LOGIN_MAX_RETRIES = 8           # retries per login (single-shot acc is low)
 
 # Login policy (advanced)
 LOGIN_ATTEMPTS_PER_PROXY_LIMIT = 3

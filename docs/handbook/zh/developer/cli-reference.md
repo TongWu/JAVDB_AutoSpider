@@ -27,6 +27,7 @@ python3 -m apps.cli.<command> [options]
 - [内容过滤 CLI](#内容过滤-cli)（`apps.cli.ops.content_filter`）
 - [事件主线消费者 CLI](#事件主线消费者-cli)（`apps.cli.ops.events`）
 - [站点契约哨兵 CLI](#站点契约哨兵-cli)（`apps.cli.ops.sentinel`）
+- [CF Bypass Probe CLI](#cf-bypass-probe-cli)（`apps.cli.ops.cf_bypass_probe`）
 - [Config Generator CLI](#config-generator-cli)（`apps.cli.ops.config_generator`）
 - [Spider 完整参数参考](#spider-完整参数参考)
 
@@ -939,6 +940,89 @@ STORAGE_BACKEND=d1 python3 -m apps.cli.ops.subscription_monitor --use-proxy
 
 ---
 
+## CF Bypass Probe CLI
+
+**模块：** `apps.cli.ops.cf_bypass_probe`
+
+对代理池的 Cloudflare 绕过层做诊断扫描。只读：不触碰数据库，也不写入任何历史。
+
+绕过请求遵循当前 run 自身的 `CF_BYPASS_VIA_PROXY` 配置：为 `True` 时**经由 proxy 隧道**
+发往 `127.0.0.1`，为 `False` 时直接拨向 `{proxy_ip}:{port}`。若探测的拓扑与生产实际使用
+的不一致，会把健康的绕过层报成故障，反之亦然。端口优先取自 `CF_BYPASS_PORT_MAP`，未配置
+时回退到 `CF_BYPASS_SERVICE_PORT`。proxy 列表取自 `config.py` 中的 `PROXY_POOL`。
+
+### 参数
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--proxy` | 只探测该名称的 proxy。可重复传入。 | `PROXY_POOL` 全部 |
+| `--limit` | 最多探测 N 个 proxy（`0` = 不限）。在 `--proxy` 之后生效。 | `0` |
+| `--target` | 要求绕过服务抓取的 URL。必须是 `javdb.com` 或其子域名上的 `https://` 地址。 | `https://javdb.com/` |
+| `--workers` | 并行探测 proxy 的线程池大小。必须 `> 0`。 | `8` |
+| `--verbose` | 打印每个响应正文的前 300 个字符。 | `False` |
+| `--json` | 输出机器可读的 JSON，而不是表格。 | `False` |
+| `--bench` | 基准测试模式：每个 proxy 每个端口做 N 次串行试探（`0` = 协议探测）。 | `0` |
+| `--ports` | 逗号分隔的待测端口。仅基准测试模式使用；一旦传入，会覆盖所有 proxy 各自解析出的端口。 | 按 proxy 解析出的端口 |
+
+扫描完成时退出码为 `0`；当筛选后没有任何 proxy 时为 `1`；参数被拒绝时为 `2`。非法取值
+会在发出任何请求之前被拒绝：`--workers` 非正数、`--limit` / `--bench` 为负数、`--ports`
+中出现不在 `1..65535` 范围内的非整数值，以及任何不是允许主机上 `https://` 地址的
+`--target`。之所以对 target 做白名单，是因为该值既会被直连抓取，也会被交给每个 proxy 的
+绕过服务，而响应正文会打印到 CI 工作流上传为 artifact 的日志里。
+
+**端口解析。** 不传 `--ports` 时，每个 proxy 都按生产环境为它选用的端口探测 ——
+即 `CF_BYPASS_SERVICE_PORT`，或 `CF_BYPASS_PORT_MAP` 中以该 proxy IP 为键的覆盖值。
+
+### 默认模式 —— 协议探测
+
+对每个 proxy 拨号四种方言，并分别报告状态码、正文大小与内容标记
+（`challenge`、`movie_list`、`json`、`blocked_1020`）：
+
+| 探测项 | 回答的问题 |
+|---|---|
+| `DIRECT javdb.com` | 对该出口 IP 而言，站点当前是否被墙 |
+| `GET :{port}/` | 服务根路径 —— FlareSolverr 在此返回版本 banner，CloudflareBypassForScraping 不会 |
+| `GET :{port}/html?url=` | 爬虫实际使用的方言 |
+| `GET :8191/` + `POST :8191/v1` | 原生 FlareSolverr，会拆开其 JSON 外层封装 |
+
+结尾的汇总会按 proxy 列出哪些探测项有响应 —— 或者 `NOTHING`。
+
+### 基准测试模式（`--bench N`）
+
+对 `/html?url=` 端点，每个 proxy 每个端口做 N 次串行试探，报告准确率与延迟。在同一个
+（proxy, 端口）组合内保持串行，是因为这类 solver 会驱动真实浏览器，并发试探测到的是
+资源争用而不是求解时间。
+
+只有**同时**满足以下三点，一次试探才算成功：
+
+1. HTTP 200；
+2. 正文不是验证页；
+3. 正文中至少包含一个 `href="/v/"` 条目链接。
+
+第三个条件才是关键：以 200 返回验证页的 solver，仅看状态码和大小时同样像是成功。输出
+包含 `ok/trials`、p50 与最大延迟、条目数中位数，以及每个端口第一个失败响应的正文。
+
+### 示例
+
+```bash
+# 对 PROXY_POOL 中的每个 proxy 做协议探测
+python3 -m apps.cli.ops.cf_bypass_probe
+
+# 只测一个 proxy，并打印响应正文
+python3 -m apps.cli.ops.cf_bypass_probe --proxy Singapore-ARM1 --verbose
+
+# 前 5 个 proxy 针对指定页面，输出 JSON
+python3 -m apps.cli.ops.cf_bypass_probe --limit 5 --target "https://javdb.com/?page=1" --json
+
+# 在一个 proxy 上对比两个 solver 端口，每个各 5 次试探
+python3 -m apps.cli.ops.cf_bypass_probe --proxy Singapore-ARM1 --bench 5 --ports 8000,8002
+```
+
+CI 入口是 `CFBypassProbe.yml`，参见
+[GitHub Actions 部署](../self-hoster/github-actions-setup.md)。
+
+---
+
 ## Config Generator CLI
 
 **模块：** `apps.cli.ops.config_generator`
@@ -972,7 +1056,7 @@ python3 -m apps.cli.ops.config_generator --github-actions
 | `--dry-run` | 标志 | 打印条目但不写入 CSV | `False` | `--dry-run` |
 | `--output-file` | 字符串 | 自定义 CSV 文件名（不改变目录） | 自动生成 | `--output-file results.csv` |
 | `--start-page` | 整数 | 起始页码 | `1` | `--start-page 5` |
-| `--end-page` | 整数 | 结束页码 | `20` | `--end-page 10` |
+| `--end-page` | 整数 | 结束页码。每日模式下是**下限**而非上限——`PAGE_SCAN_DYNAMIC` 开启时，只要页面还带今日/昨日徽章，扫描就会继续越过它，直到 `PAGE_SCAN_MAX`。要限制每日运行的量级，请调低 `PAGE_SCAN_MAX` 或设 `PAGE_SCAN_DYNAMIC=False` | `10` | `--end-page 10` |
 | `--all` | 标志 | 解析直到空页面（忽略 `--end-page`） | `False` | `--all` |
 | `--ignore-history` | 标志 | 读取时忽略历史记录（抓取所有页面）但仍保存到历史记录。Ad-hoc 模式默认已忽略读取历史记录 | `False` | `--ignore-history` |
 | `--use-history` | 标志 | 在 ad-hoc 模式中启用历史记录过滤（ad-hoc 默认忽略读取历史记录） | `False` | `--use-history` |

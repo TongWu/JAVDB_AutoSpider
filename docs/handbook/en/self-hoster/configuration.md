@@ -259,7 +259,13 @@ Per-day mutex that prevents duplicate work across concurrent runners.
 ## 5. CloudFlare Bypass
 
 Configuration for the [CloudflareBypassForScraping](https://github.com/sarperavci/CloudflareBypassForScraping)
-service. The service must be deployed on each proxy server using the same port.
+service. The service must be deployed on each proxy server. Every proxy uses
+`CF_BYPASS_SERVICE_PORT` unless `CF_BYPASS_PORT_MAP` overrides the port for
+that proxy — so hosts do not all have to listen on the same port.
+
+Requests use CloudflareBypassForScraping's URL-parameter API —
+`GET {service_url}/html?url={urlencoded_target}` — with no custom headers. See
+[CloudFlare Bypass](cloudflare-bypass.md#request-protocol) for the full protocol.
 
 The full service URL is built dynamically at runtime:
 - Without proxy: `http://localhost:{CF_BYPASS_SERVICE_PORT}`
@@ -269,10 +275,15 @@ The full service URL is built dynamically at runtime:
   `http://127.0.0.1:{CF_BYPASS_SERVICE_PORT}` reached *through* the current
   proxy — lets the bypass service bind to loopback only.
 
+In all three cases the port is `CF_BYPASS_SERVICE_PORT` unless the proxy's IP
+appears in `CF_BYPASS_PORT_MAP`, which wins for that proxy alone.
+
 | Variable | Type | Default | Description |
 |---|---|---|---|
 | `CF_BYPASS_SERVICE_PORT` | `int` | `8000` | Port the CloudFlare bypass service listens on. Must match the port configured in the service's `docker-compose.yml`. |
+| `CF_BYPASS_ENABLED` | `bool` | `True` | Master switch for the bypass tier. When `False`, every bypass attempt is skipped and challenge-protected pages simply fail on the direct path. Fed by GH Variable `CF_BYPASS_ENABLED`. |
 | `CF_BYPASS_VIA_PROXY` | `bool` | `False` | When `True`, reach each proxy's bypass service by tunnelling through that proxy to `127.0.0.1:{port}` instead of dialling `{proxy_ip}:{port}` directly. Lets every bypass service bind to loopback only (off the public internet) without a firewall or VPN. Requires the proxy software to allow forwarding to `127.0.0.1` (Clash/mihomo: OK by default; Squid: allow `to_localhost`). |
+| `CF_BYPASS_PORT_MAP` | `dict` | `{}` | Per-proxy port overrides keyed by proxy IP, e.g. `{'10.0.0.5': 9001}`. Only the listed proxies deviate from `CF_BYPASS_SERVICE_PORT`; useful during a staged rollout where some hosts run a solver on a different port. Fed by GH Variable `CF_BYPASS_PORT_MAP_JSON`, which no workflow currently sets. |
 
 ---
 
@@ -283,11 +294,30 @@ Controls page range and filtering thresholds for the scraping phases.
 | Variable | Type | Default | Description |
 |---|---|---|---|
 | `PAGE_START` | `int` | `1` | First page number to scrape. |
-| `PAGE_END` | `int` | `20` | Last page number to scrape (inclusive). |
+| `PAGE_END` | `int` | `10` | Last page number to scrape (inclusive). In daily mode this is a **floor**, not a ceiling — see `PAGE_SCAN_DYNAMIC`. |
+| `PAGE_SCAN_DYNAMIC` | `bool` | `True` | Keep scanning past `PAGE_END` while pages still carry today/yesterday new-torrent badges, so a heavy day is not truncated ([ADR-057](https://github.com/TongWu/JAVDB_AutoSpider_CICD/blob/main/docs/design/ADR-057-Dynamic-Daily-Index-Pagination/ADR-057-dynamic-daily-index-pagination.md)). Set `False` for a plain fixed range. Inert for ad-hoc URLs, `--all`, `--ignore-release-date` and `IGNORE_RELEASE_DATE_FILTER`. |
+| `PAGE_SCAN_MAX` | `int` | `30` | Hard ceiling for the dynamic scan. Reaching it logs a warning, because the day's new torrents may have been cut short. |
+| `PAGE_SCAN_STOP_AFTER` | `int` | `2` | How many consecutive pages with no new-torrent badges end the scan. Pages that fail to load don't count as empty, but the same number of consecutive unreadable pages also ends it. |
 | `PHASE2_MIN_RATE` | `float` | `4.0` | Minimum user rating for a movie to qualify in Phase 2 (high-rated non-subtitle entries). |
 | `PHASE2_MIN_COMMENTS` | `int` | `100` | Minimum comment count for a movie to qualify in Phase 2. |
 | `DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST` | `list[str]` | `['western_studio_date']` | Daily-only family blacklist applied after index parsing and sentinel accounting. The parser still recognizes these families, and ad-hoc ingestion bypasses this blacklist. In GitHub Actions, set repo Variable `DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST_JSON` to a JSON array such as `[]` to opt out of the static default. |
 | `BASE_URL` | `str` | `'https://javdb.com'` | Base URL for JavDB. Change only if using a mirror. |
+
+### Hardcoded Blacklists
+
+Two additional blacklists are hardcoded as plain Python constants — no env
+var or `config.py` override, edit the source directly to change them:
+
+- `BLACKLIST_CODE_KEYWORDS` in
+  [`javdb/spider/runtime/config.py`](../../../../javdb/spider/runtime/config.py) —
+  studio/label code prefixes (e.g. `IDBD` matches `IDBD-123`). Applied at
+  index-parsing time, daily runs only (bypassed by ad-hoc/custom-URL
+  ingestion, same as `DAILY_INDEX_VIDEO_CODE_FAMILY_BLACKLIST` above).
+- `BLACKLIST_ACTOR_NAMES` in the same file — actor names to exclude.
+  Applied as synthetic `actor` / `exclude` content-filter rules merged on
+  top of the operator-managed rules in `ContentFilterRule` (see
+  `apps/cli/ops/content_filter.py`), so it runs for every detail-page
+  fetch (daily and ad-hoc alike) regardless of DB availability.
 
 ---
 

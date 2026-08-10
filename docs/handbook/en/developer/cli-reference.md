@@ -27,6 +27,7 @@ python3 -m apps.cli.<command> [options]
 - [Content Filter CLI](#content-filter-cli) (`apps.cli.ops.content_filter`)
 - [Event Spine Consumer CLI](#event-spine-consumer-cli) (`apps.cli.ops.events`)
 - [Site-Contract Sentinel CLI](#site-contract-sentinel-cli) (`apps.cli.ops.sentinel`)
+- [CF Bypass Probe CLI](#cf-bypass-probe-cli) (`apps.cli.ops.cf_bypass_probe`)
 - [Config Generator CLI](#config-generator-cli) (`apps.cli.ops.config_generator`)
 - [Complete Spider Argument Reference](#complete-spider-argument-reference)
 
@@ -965,6 +966,98 @@ daily after the main ingestion window and can also be dispatched manually.
 
 ---
 
+## CF Bypass Probe CLI
+
+**Module:** `apps.cli.ops.cf_bypass_probe`
+
+Diagnostic sweep over the proxy pool's Cloudflare bypass tier. Read-only: it
+touches no database and writes no history.
+
+Bypass requests follow the run's own `CF_BYPASS_VIA_PROXY` setting: tunnelled
+**through the proxy** to `127.0.0.1` when it is `True`, dialled straight at
+`{proxy_ip}:{port}` when it is `False`. Probing the topology production does
+not use would report a healthy tier as down, or the reverse. Ports come from
+`CF_BYPASS_PORT_MAP` where set, falling back to `CF_BYPASS_SERVICE_PORT`.
+Proxies come from `PROXY_POOL` in `config.py`.
+
+### Arguments
+
+| Argument | Description | Default |
+|----------|-------------|---------|
+| `--proxy` | Probe only this proxy name. Repeatable. | All of `PROXY_POOL` |
+| `--limit` | Probe at most N proxies (`0` = all). Applied after `--proxy`. | `0` |
+| `--target` | URL to ask the bypass service for. Must be `https://` on `javdb.com` or a subdomain. | `https://javdb.com/` |
+| `--workers` | Thread pool size for probing proxies in parallel. Must be `> 0`. | `8` |
+| `--verbose` | Print the first 300 chars of each response body. | `False` |
+| `--json` | Emit machine-readable JSON instead of a table. | `False` |
+| `--bench` | Benchmark mode: N sequential trials per proxy per port (`0` = protocol probe). | `0` |
+| `--ports` | Comma-separated ports to benchmark. Benchmark mode only; overrides the resolved port for every proxy. | Per-proxy resolved port |
+
+Exit code is `0` on a completed sweep, `1` when the proxy selection is empty,
+and `2` when an argument is rejected. Invalid values are refused before any
+request is made: a non-positive `--workers`, a negative `--limit` / `--bench`, a
+`--ports` entry that is not an integer in `1..65535`, and any `--target` that is
+not an `https://` URL on an allowed host. The target allowlist exists because
+the value is fetched directly *and* handed to every proxy's bypass service,
+with response bodies printed into a log the CI workflow uploads as an artifact.
+
+**Port resolution.** Without `--ports`, each proxy is probed on the port
+production would use for it — `CF_BYPASS_SERVICE_PORT`, or the
+`CF_BYPASS_PORT_MAP` override keyed by that proxy's IP.
+
+### Default mode -- protocol probe
+
+Per proxy, four dialects are dialled and each is reported with status, body
+size and content markers (`challenge`, `movie_list`, `json`, `blocked_1020`):
+
+| Attempt | What it answers |
+|---|---|
+| `DIRECT javdb.com` | Whether the site is currently walled off for that egress IP |
+| `GET :{port}/` | Service root — FlareSolverr returns a version banner here, CloudflareBypassForScraping does not |
+| `GET :{port}/html?url=` | The dialect the spider actually speaks |
+| `GET :8191/` + `POST :8191/v1` | Native FlareSolverr, unwrapping its JSON envelope |
+
+A closing summary lists, per proxy, which attempts answered — or `NOTHING`.
+
+### Benchmark mode (`--bench N`)
+
+Runs N sequential trials per proxy per port against the `/html?url=` endpoint
+and reports accuracy plus latency. Trials are sequential within one
+(proxy, port) pair because these solvers drive a real browser, so concurrent
+trials would measure contention rather than solve time.
+
+A trial counts as good only when **all three** hold:
+
+1. HTTP 200,
+2. the body is not a challenge page, and
+3. the body contains at least one `href="/v/"` entry link.
+
+That third condition is the point: a solver returning the interstitial with a
+200 looks like success by status and size alone. Output includes `ok/trials`,
+p50 and max latency, median entry count, and the first failing response body
+per port.
+
+### Examples
+
+```bash
+# Protocol probe over every proxy in PROXY_POOL
+python3 -m apps.cli.ops.cf_bypass_probe
+
+# One proxy, with response bodies
+python3 -m apps.cli.ops.cf_bypass_probe --proxy Singapore-ARM1 --verbose
+
+# First 5 proxies against a specific page, as JSON
+python3 -m apps.cli.ops.cf_bypass_probe --limit 5 --target "https://javdb.com/?page=1" --json
+
+# Compare two solver ports on one proxy, 5 trials each
+python3 -m apps.cli.ops.cf_bypass_probe --proxy Singapore-ARM1 --bench 5 --ports 8000,8002
+```
+
+The CI entrypoint is `CFBypassProbe.yml`; see
+[GitHub Actions Setup](../self-hoster/github-actions-setup.md).
+
+---
+
 ## Config Generator CLI
 
 **Module:** `apps.cli.ops.config_generator`
@@ -998,7 +1091,7 @@ All arguments accepted by `apps.cli.spider`:
 | `--dry-run` | flag | Print items without writing CSV | `False` | `--dry-run` |
 | `--output-file` | string | Custom CSV filename (without changing directory) | Auto-generated | `--output-file results.csv` |
 | `--start-page` | int | Starting page number | `1` | `--start-page 5` |
-| `--end-page` | int | Ending page number | `20` | `--end-page 10` |
+| `--end-page` | int | Last page number. In daily mode a **floor**, not a limit — with `PAGE_SCAN_DYNAMIC` on the scan continues past it while pages carry today/yesterday badges, up to `PAGE_SCAN_MAX`. To cap a daily run, lower `PAGE_SCAN_MAX` or set `PAGE_SCAN_DYNAMIC=False` | `10` | `--end-page 10` |
 | `--all` | flag | Parse until empty page (ignores `--end-page`) | `False` | `--all` |
 | `--ignore-history` | flag | Ignore history for READING (scrape all pages) but still SAVE to history. Ad-hoc mode already ignores history for reading by default | `False` | `--ignore-history` |
 | `--use-history` | flag | Enable history filter in ad-hoc mode (ad-hoc ignores history for reading by default) | `False` | `--use-history` |

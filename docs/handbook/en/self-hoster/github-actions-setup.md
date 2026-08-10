@@ -139,7 +139,10 @@ Python API or call external indexer aggregation.
 | Variable | Default | Purpose |
 |---|---|---|
 | `PAGE_START` | `1` | First page to scrape |
-| `PAGE_END` | `20` | Last page to scrape |
+| `PAGE_END` | `10` | Last page to scrape (a floor in daily mode — see `PAGE_SCAN_DYNAMIC`) |
+| `PAGE_SCAN_DYNAMIC` | `True` | Keep scanning past `PAGE_END` while pages still have today/yesterday new torrents |
+| `PAGE_SCAN_MAX` | `30` | Hard page ceiling for that extension |
+| `PAGE_SCAN_STOP_AFTER` | `2` | Consecutive pages with no new torrents that end the scan |
 | `PHASE2_MIN_RATE` | `4.0` | Minimum rating for Phase 2 quality filter |
 | `PHASE2_MIN_COMMENTS` | `100` | Minimum comment count for Phase 2 quality filter |
 | `BASE_URL` | `https://javdb.com` | JavDB base URL |
@@ -170,6 +173,8 @@ Python API or call external indexer aggregation.
 | `PROXY_POOL_MAX_FAILURES` | `3` | Max consecutive failures before banning a proxy for the session |
 | `CF_BYPASS_SERVICE_PORT` | `8000` | CloudFlare bypass service port |
 | `CF_BYPASS_ENABLED` | `True` | Enable/disable CF bypass fallback |
+| `CF_BYPASS_VIA_PROXY` | `False` | Reach each bypass service by tunnelling through its proxy to `127.0.0.1:{port}` |
+| `CF_BYPASS_PORT_MAP_JSON` | `{}` | JSON per-proxy port overrides, e.g. `{"10.0.0.5": 9001}`. Not set by any workflow today |
 | `LOGIN_PROXY_NAME` | (empty) | Pin login to a specific proxy name |
 
 ### Proxy Coordinator Variables
@@ -331,6 +336,7 @@ openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
 | `RollbackD1.yml` | Manual dispatch | Manual session rollback |
 | `StaleSessionCleanup.yml` | Daily cron | Auto-cleanup sessions stuck > 48h |
 | `AuditArchive.yml` | Weekly cron | Prune audit rows older than 30 days |
+| `CFBypassProbe.yml` | Manual dispatch / scoped branch push | Read-only diagnostic sweep over the proxy pool's CloudFlare bypass tier. Inputs: `proxies`, `limit`, `target`, `verbose`, `bench`, `ports`, `runner` |
 | `Migration.yml` | Manual dispatch | Database migration runner |
 | `TestIngestion.yml` | Push / PR / manual dispatch | Smoke-test the full ingestion path; rollback runs on cleanup |
 | `build-rust-extension.yml` | On push/PR | Build Rust wheel for CI |
@@ -351,8 +357,11 @@ STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --pass all --json
    `AcquisitionOutcome` rows (`queued` / `downloading` → `downloading`,
    `completed`, `stalled`, or `failed`). A torrent reported in qB's
    `missingFiles` state (its files were deleted from disk after the download
-   completed) is treated as `completed`; once the outcome is recorded, the
-   stale torrent is deleted from qB along with any remaining files.
+   completed) is treated as `completed`. This pass does **not** delete
+   anything from qB: `missingFiles` cannot distinguish "files genuinely gone"
+   from "disk temporarily unavailable", so deleting on the strength of a state
+   snapshot risks destroying content that is still on disk. Deletion belongs to
+   `PurgeMissingFiles.yml`, which stops and rechecks each torrent first.
 2. **Ownership pass** — collects ownership observations from four sources and
    upserts them into `OwnershipLedger`:
    - `gdrive` — projects the existing `RcloneInventory` table (no extra rclone
@@ -388,6 +397,41 @@ Manual dispatch inputs:
 |---|---|---|
 | `stalled_after_days` | `7` | Positive integer. Active outcomes unseen for this many days become `stalled`; after 2x this window they become `failed`. |
 | `dry_run` | `false` | Compute transitions and print JSON without writing rows. |
+
+### CFBypassProbe Workflow
+
+`CFBypassProbe.yml` runs `apps.cli.ops.cf_bypass_probe` against the proxy pool.
+It answers three questions a normal ingestion run cannot, because failures on
+the bypass tier are `DEBUG`-only:
+
+1. Is JavDB currently serving a site-wide challenge, per proxy?
+2. What protocol does each proxy's bypass service actually speak —
+   CloudflareBypassForScraping (`GET /html?url=`) or FlareSolverr (`POST /v1`)?
+3. When a solver does answer, is the payload a real page or the interstitial
+   returned as a false success?
+
+It is read-only: no database access, no history writes, no commits. The probe
+log is uploaded as the `cf-bypass-probe-log` artifact.
+
+Manual dispatch inputs:
+
+| Input | Default | Purpose |
+|---|---|---|
+| `proxies` | `''` | Comma-separated proxy names. Empty = every proxy in `PROXY_POOL`. |
+| `limit` | `0` | Probe at most N proxies (`0` = no cap). Applied after the name filter. |
+| `target` | `https://javdb.com/` | URL to ask the bypass service for. Must be `https://` on `javdb.com` or a subdomain; anything else fails the step. |
+| `verbose` | `true` | Print the first 300 chars of every response body. Protocol-probe mode only. |
+| `bench` | `0` | Benchmark mode: N sequential trials per proxy per port (`0` = protocol probe instead). |
+| `ports` | `''` | Comma-separated bypass ports to benchmark, e.g. `8000,8002`. Empty = the port resolved per proxy from `CF_BYPASS_PORT_MAP` / `CF_BYPASS_SERVICE_PORT`. |
+| `runner` | `ubuntu-latest` | Runner type: `ubuntu-latest` or `self-hosted`. |
+
+The workflow also runs on pushes to `claude/ingestion-cloudflare-bypass-debug-**`
+branches that touch the probe or the workflow file. A push carries no dispatch
+inputs, so that path falls back to its own in-workflow defaults rather than the
+values above.
+
+See the [CLI Reference](../developer/cli-reference.md#cf-bypass-probe-cli) for
+what each mode reports.
 
 ### Media Servers secret {#media-servers-secret}
 

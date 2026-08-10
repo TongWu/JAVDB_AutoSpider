@@ -74,8 +74,9 @@ class TestSpiderUsesProxyFlag:
         for p in patches:
             p.start()
         try:
-            # login.py calls sys.exit(1) at import time when config.py is missing (typical CI);
-            # mock.patch loads that module to patch login_with_retry, so sys.exit must be stubbed first.
+            # patch('sys.exit') is a defensive no-op: login.py no longer calls
+            # sys.exit at import time (the required-config guard lives in main()),
+            # but keeping it stubbed is harmless and guards against regressions.
             with patch('sys.exit'), patch(
                 'javdb.spider.auth.login.login_with_retry',
                 mock_login,

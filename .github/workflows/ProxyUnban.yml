@@ -1,0 +1,89 @@
+name: Proxy Coordinator — Clear Bans
+
+# Ad-hoc ops tool. Proxy bans propagate cross-runner via the coordinator
+# Worker (P1-A, javdb/proxy/ban_manager.py) with TTLs up to 8 days for a
+# JavDB hard ban (ADR-043 D9). A burst of transient failures unrelated to
+# actual proxy health can poison that shared state — see BFR-024
+# (CF_BYPASS_VIA_PROXY was never set, so every bypass call timed out and
+# some proxies got soft-banned for reasons that had nothing to do with the
+# proxy itself). Run this only after independently verifying the target
+# proxies are healthy again; the safe default is to let the TTL expire.
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      proxies:
+        description: 'Comma-separated proxy names to unban. Leave empty + tick "all" to clear every proxy in PROXY_POOL.'
+        required: false
+        default: ''
+        type: string
+      all:
+        description: 'Unban every proxy in PROXY_POOL (ignores the proxies input above).'
+        required: false
+        default: false
+        type: boolean
+      reason:
+        description: 'Annotation stored with the unban event.'
+        required: false
+        default: 'ops manual clear'
+        type: string
+      runner:
+        description: 'Runner type.'
+        required: false
+        default: 'self-hosted'
+        type: choice
+        options:
+          - 'ubuntu-latest'
+          - 'self-hosted'
+
+jobs:
+  unban:
+    runs-on: ${{ inputs.runner || 'self-hosted' }}
+    timeout-minutes: 15
+    environment: Production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+
+      - name: Set up Python, venv, dependencies, Rust extension
+        uses: ./.github/actions/setup-python-env
+        with:
+          python-version: '3.11'
+
+      - name: Generate config.py from GitHub Variables and Secrets
+        env:
+          VAR_PROXY_MODE: ${{ vars.PROXY_MODE }}
+          VAR_PROXY_POOL_JSON: ${{ secrets.PROXY_POOL_JSON }}
+          VAR_PROXY_MODULES_JSON: ${{ vars.PROXY_MODULES_JSON }}
+          VAR_PROXY_COORDINATOR_URL: ${{ vars.PROXY_COORDINATOR_URL }}
+          VAR_PROXY_COORDINATOR_TOKEN: ${{ secrets.PROXY_COORDINATOR_TOKEN }}
+        run: python3 -m apps.cli.ops.config_generator --github-actions
+
+      - name: Clear proxy ban(s)
+        run: |
+          set -e
+          set -o pipefail
+
+          if [ "${{ inputs.all }}" = "true" ]; then
+            ARGS=(--all)
+          else
+            IFS=',' read -ra NAMES <<< "${{ inputs.proxies }}"
+            ARGS=()
+            for n in "${NAMES[@]}"; do
+              trimmed="$(echo "$n" | xargs)"
+              if [ -n "$trimmed" ]; then
+                ARGS+=(--proxy "$trimmed")
+              fi
+            done
+            if [ "${#ARGS[@]}" -eq 0 ]; then
+              echo "No proxies given and 'all' is false — nothing to do."
+              exit 1
+            fi
+          fi
+
+          python3 -m apps.cli.ops.proxy_unban "${ARGS[@]}" --reason "${{ inputs.reason }}"

@@ -11,6 +11,7 @@ from javdb.infra.logging import (
 )
 
 import javdb.spider.runtime.state as state
+from javdb.spider.fetch.page_scan import POLICY_DERIVED_STOP_REASONS, STOP_FLOOR
 from javdb.spider.runtime.config import (
     PROXY_MODE, REPORTS_DIR, PARSED_MOVIES_CSV,
     INCLUDE_DOWNLOADED_IN_REPORT,
@@ -55,6 +56,7 @@ def log_phase_summary(phase_name: str, phase_rows: list) -> None:
 
 def generate_summary_report(
     *, runtime=None, phase_mode, parse_all, start_page, end_page, max_consecutive_empty,
+    effective_end_page=None, page_scan_stop_reason=None,
     phase1_rows, phase2_rows, rows,
     use_history_for_loading, ignore_history,
     skipped_history_count, failed_count, no_new_torrents_count,
@@ -62,7 +64,13 @@ def generate_summary_report(
     use_proxy, any_proxy_banned, any_proxy_banned_phase2,
     dedup_csv_path=None,
 ) -> None:
-    """Log the final summary report, proxy stats, and check exit conditions."""
+    """Log the final summary report, proxy stats, and check exit conditions.
+
+    *effective_end_page* is the last page the ADR-057 dynamic scan actually
+    reached; it replaces the configured *end_page* in the reported range so a
+    run that extended past its floor does not report the floor.
+    """
+    reported_end_page = effective_end_page if effective_end_page is not None else end_page
     if phase_mode in ['1', 'all']:
         log_phase_summary("PHASE 1", phase1_rows)
     if phase_mode in ['2', 'all']:
@@ -72,9 +80,16 @@ def generate_summary_report(
 
     overall_pairs = []
     if parse_all:
-        overall_pairs.append(('pages', f"{start_page} to last page with results"))
+        pages_value = f"{start_page} to last page with results"
     else:
-        overall_pairs.append(('pages', f"{start_page}-{end_page}"))
+        pages_value = f"{start_page}-{reported_end_page}"
+    # A reason the policy derived says nothing under --all, where the rule never
+    # ran. One forced by the fetch layer cut the run short regardless, and
+    # "to last page with results" would otherwise read as a completed sweep.
+    if page_scan_stop_reason and page_scan_stop_reason != STOP_FLOOR:
+        if not (parse_all and page_scan_stop_reason in POLICY_DERIVED_STOP_REASONS):
+            pages_value = f"{pages_value} ({page_scan_stop_reason})"
+    overall_pairs.append(('pages', pages_value))
     overall_pairs.extend([
         ('found',   total_discovered),
         ('parsed',  len(rows)),
@@ -101,9 +116,14 @@ def generate_summary_report(
         if dedup_csv_path:
             print(f"SPIDER_DEDUP_CSV={dedup_csv_path}")
         page_range = (
-            f"{start_page}-*" if parse_all else f"{start_page}-{end_page}"
+            f"{start_page}-*" if parse_all else f"{start_page}-{reported_end_page}"
         )
         print(f"SPIDER_STAT_PAGES={page_range}")
+        # ADR-057 D9: a shell parent reading these lines must be able to tell a
+        # run that may have been truncated from one that finished cleanly. Kept
+        # as its own line so SPIDER_STAT_PAGES stays a bare page range.
+        if page_scan_stop_reason:
+            print(f"SPIDER_STAT_PAGE_SCAN_STOP_REASON={page_scan_stop_reason}")
         print(f"SPIDER_STAT_FOUND={total_discovered}")
         print(f"SPIDER_STAT_PARSED={len(rows)}")
         print(f"SPIDER_STAT_SKIPPED={skipped_history_count}")
@@ -176,3 +196,18 @@ def generate_summary_report(
     if len(rows) == 0 and use_proxy:
         log_section(logger, "WARNING: No entries found while using proxy", emoji='⚠', level=logging.WARNING)
         logger.warning("This might indicate proxy issues or CF bypass service problems.")
+
+        site_challenge_seen = (
+            runtime.proxy.site_challenge_seen if runtime is not None else False
+        )
+        if site_challenge_seen and total_discovered == 0:
+            # A site-wide Cloudflare challenge no longer bans the pool, so the
+            # ban branch above cannot catch this. Without an explicit failure
+            # the run would exit 0 with a header-only CSV and look like a
+            # legitimately empty day.
+            logger.error(
+                "Spider discovered ZERO entries and every fetch hit a Cloudflare "
+                "challenge — the site walled off all proxies. Failing the run so "
+                "this is not mistaken for an empty day."
+            )
+            sys.exit(2)

@@ -52,6 +52,10 @@ def _patch_sequential_dependencies(
     )
     monkeypatch.setattr(index_fetch, "parse_index_page", lambda _html, _page_num: _page_result())
     monkeypatch.setattr(index_fetch, "_sleep_manager", lambda _runtime=None: _NoopSleepManager())
+    # These tests assert how the blacklist is applied to a single page, not how
+    # far the scan reaches, so pin the ADR-057 dynamic extension off: the fake
+    # page is "fresh" on every fetch and would otherwise be scanned repeatedly.
+    monkeypatch.setattr(index_fetch, "PAGE_SCAN_DYNAMIC", False)
     monkeypatch.setattr(
         index_fetch,
         "_sentinel_field_health",

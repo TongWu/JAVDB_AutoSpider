@@ -10,7 +10,7 @@ import javdb.spider.runtime.state as state
 from javdb.spider.fetch.session import is_login_page, can_attempt_login, attempt_login_refresh
 from javdb.spider.runtime.config import (
     BASE_URL,
-    CF_BYPASS_ENABLED, CF_BYPASS_SERVICE_PORT,
+    CF_BYPASS_ENABLED, CF_BYPASS_SERVICE_PORT, CF_BYPASS_VIA_PROXY,
     PROXY_MODE, PROXY_POOL_MAX_FAILURES,
 )
 from javdb.proxy.policy import is_cf_bypass_reachable
@@ -140,13 +140,25 @@ def _login_refresh_for_spider(use_proxy, *, runtime=None):
 def _effective_cf_bypass(requested: bool) -> bool:
     """Return whether CF bypass should actually be attempted.
 
-    Returns *False* (skip bypass) when the feature is globally disabled
-    or the local bypass service is not reachable.
+    Returns *False* (skip bypass) when the feature is globally disabled or,
+    for a genuinely local deployment, when nothing is listening on the
+    bypass port.
+
+    The reachability probe only means anything when the bypass service is
+    expected on *this* host. With a proxy pool each service lives on its own
+    proxy host — under ``CF_BYPASS_VIA_PROXY`` it is reached by tunnelling to
+    the proxy's loopback — so probing the runner's ``127.0.0.1`` answers a
+    question nobody asked. On GitHub Actions it always failed, which silently
+    disabled the entire bypass tier for this path. ``RequestHandler`` already
+    tracks per-proxy reachability in ``_bypass_unreachable``, at the only
+    layer that knows which host to ask.
     """
     if not requested:
         return False
     if not CF_BYPASS_ENABLED:
         return False
+    if PROXY_MODE == 'pool' or CF_BYPASS_VIA_PROXY:
+        return True
     if not is_cf_bypass_reachable(port=CF_BYPASS_SERVICE_PORT):
         logger.debug("CF bypass service not reachable on port %d, skipping", CF_BYPASS_SERVICE_PORT)
         return False

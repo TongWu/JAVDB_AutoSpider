@@ -72,14 +72,14 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: rust-extension-wheel-x64-${{ github.sha }}
-          path: /tmp/rust-wheel/*.whl
+          path: ${{ runner.temp }}/rust-wheel/*.whl
           retention-days: 30
 
       - name: Upload Rust extension wheel artifact (branch latest)
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: rust-extension-wheel-x64-latest-${{ steps.branch.outputs.name }}
-          path: /tmp/rust-wheel/*.whl
+          path: ${{ runner.temp }}/rust-wheel/*.whl
           retention-days: 7
 
       # Rust/Python value-parity drift detection retired by ADR-041: the
@@ -127,12 +127,12 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: rust-extension-wheel-arm-${{ github.sha }}
-          path: /tmp/rust-wheel/*.whl
+          path: ${{ runner.temp }}/rust-wheel/*.whl
           retention-days: 30
 
       - name: Upload Rust extension wheel artifact (branch latest)
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: rust-extension-wheel-arm-latest-${{ steps.branch.outputs.name }}
-          path: /tmp/rust-wheel/*.whl
+          path: ${{ runner.temp }}/rust-wheel/*.whl
           retention-days: 7

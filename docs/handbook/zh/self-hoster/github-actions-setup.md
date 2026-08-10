@@ -138,7 +138,10 @@ GitHub Actions 部署提供：
 | Variable | 默认值 | 用途 |
 |---|---|---|
 | `PAGE_START` | `1` | 起始抓取页码 |
-| `PAGE_END` | `20` | 结束抓取页码 |
+| `PAGE_END` | `10` | 结束抓取页码（每日模式下为下限——见 `PAGE_SCAN_DYNAMIC`） |
+| `PAGE_SCAN_DYNAMIC` | `True` | 页面仍有今日/昨日新种时继续扫过 `PAGE_END` |
+| `PAGE_SCAN_MAX` | `30` | 该延伸的硬页码上限 |
+| `PAGE_SCAN_STOP_AFTER` | `2` | 连续多少页无新种即结束扫描 |
 | `PHASE2_MIN_RATE` | `4.0` | Phase 2 质量过滤的最低评分 |
 | `PHASE2_MIN_COMMENTS` | `100` | Phase 2 质量过滤的最低评论数 |
 | `BASE_URL` | `https://javdb.com` | JavDB 基础 URL |
@@ -169,6 +172,8 @@ GitHub Actions 部署提供：
 | `PROXY_POOL_MAX_FAILURES` | `3` | 当前会话中封禁 proxy 前的最大连续失败次数 |
 | `CF_BYPASS_SERVICE_PORT` | `8000` | CloudFlare 绕过服务端口 |
 | `CF_BYPASS_ENABLED` | `True` | 启用/禁用 CF 绕过回退 |
+| `CF_BYPASS_VIA_PROXY` | `False` | 经由各自的 proxy 隧道转发到 `127.0.0.1:{port}` 来访问绕过服务 |
+| `CF_BYPASS_PORT_MAP_JSON` | `{}` | 按 proxy 覆盖端口的 JSON，例如 `{"10.0.0.5": 9001}`。目前没有任何工作流设置它 |
 | `LOGIN_PROXY_NAME` | （空） | 将登录绑定到特定 proxy 名称 |
 
 ### Proxy Coordinator Variables
@@ -325,6 +330,7 @@ openssl enc -aes-256-cbc -d -pbkdf2 -iter 100000 \
 | `RollbackD1.yml` | 手动触发 | 手动会话回滚 |
 | `StaleSessionCleanup.yml` | 每日定时 | 自动清理超过 48 小时的卡住会话 |
 | `AuditArchive.yml` | 每周定时 | 清理超过 30 天的 audit 行 |
+| `CFBypassProbe.yml` | 手动触发 / 指定分支 push | 对代理池的 CloudFlare 绕过层做只读诊断扫描。输入：`proxies`、`limit`、`target`、`verbose`、`bench`、`ports`、`runner` |
 | `Migration.yml` | 手动触发 | 数据库迁移运行器 |
 | `TestIngestion.yml` | Push / PR / 手动触发 | 烟雾测试完整摄取路径；清理阶段执行回滚 |
 | `build-rust-extension.yml` | 推送/PR 时 | 为 CI 构建 Rust wheel |
@@ -343,8 +349,10 @@ STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --pass all --json
 1. **采集轮次（acquisition pass）** — 读取实时 qBittorrent 状态，将
    `AcquisitionOutcome` 行从 `queued` / `downloading` 推进到 `downloading`、
    `completed`、`stalled` 或 `failed`。若某个种子在 qB 中处于 `missingFiles`
-   状态（下载完成后文件被从磁盘删除），则将其视作 `completed`；记录 outcome
-   后，该残留种子会连同其剩余文件一起从 qB 删除。
+   状态（下载完成后文件被从磁盘删除），则将其视作 `completed`。本轮次**不会**
+   从 qB 删除任何东西：`missingFiles` 无法区分「文件确实没了」和「磁盘临时不可
+   用」，仅凭状态快照删除有可能销毁仍在磁盘上的内容。删除职责属于
+   `PurgeMissingFiles.yml`，它会先停止种子并强制 recheck。
 2. **所有权轮次（ownership pass）** — 从四个来源收集所有权观测结果并 upsert
    到 `OwnershipLedger`：
    - `gdrive` — 投影现有 `RcloneInventory` 表（无需额外 rclone 调用；由
@@ -375,6 +383,38 @@ STORAGE_BACKEND=d1 python3 -m apps.cli.ops.reconcile --pass all --json
 |---|---|---|
 | `stalled_after_days` | `7` | 正整数。活跃 outcome 超过该天数未被观测到会变为 `stalled`；超过 2 倍窗口会变为 `failed`。 |
 | `dry_run` | `false` | 只计算状态迁移并输出 JSON，不写入数据行。 |
+
+### CFBypassProbe 工作流
+
+`CFBypassProbe.yml` 针对代理池运行 `apps.cli.ops.cf_bypass_probe`。它回答三个普通摄取
+run 无法回答的问题 —— 因为绕过层上的失败只在 `DEBUG` 级别可见：
+
+1. 按 proxy 看，JavDB 当前是否正在返回全站验证页？
+2. 每个 proxy 的绕过服务实际使用什么协议 ——
+   CloudflareBypassForScraping（`GET /html?url=`）还是 FlareSolverr（`POST /v1`）？
+3. 当 solver 确实有响应时，返回的是真实页面，还是伪装成功的验证页？
+
+它是只读的：不访问数据库、不写历史、不提交任何内容。探测日志会作为
+`cf-bypass-probe-log` artifact 上传。
+
+手动触发输入：
+
+| 输入 | 默认值 | 用途 |
+|---|---|---|
+| `proxies` | `''` | 逗号分隔的 proxy 名称。留空 = `PROXY_POOL` 中的每个 proxy。 |
+| `limit` | `0` | 最多探测 N 个 proxy（`0` = 不限）。在名称筛选之后生效。 |
+| `target` | `https://javdb.com/` | 要求绕过服务抓取的 URL。必须是 `javdb.com` 或其子域名上的 `https://` 地址；其他取值会让该步骤失败。 |
+| `verbose` | `true` | 打印每个响应正文的前 300 个字符。仅协议探测模式有效。 |
+| `bench` | `0` | 基准测试模式：每个 proxy 每个端口做 N 次串行试探（`0` = 改为协议探测）。 |
+| `ports` | `''` | 逗号分隔的待测绕过端口，例如 `8000,8002`。留空 = 按 proxy 从 `CF_BYPASS_PORT_MAP` / `CF_BYPASS_SERVICE_PORT` 解析出的端口。 |
+| `runner` | `ubuntu-latest` | Runner 类型：`ubuntu-latest` 或 `self-hosted`。 |
+
+该工作流也会在推送到 `claude/ingestion-cloudflare-bypass-debug-**` 分支且改动探测脚本
+或工作流文件时运行。推送不携带触发输入，因此这条路径使用的是工作流内部自己的默认值，
+而不是上表中的值。
+
+各模式分别报告什么，参见
+[CLI 参考手册](../developer/cli-reference.md#cf-bypass-probe-cli)。
 
 ### 媒体服务器 secret {#media-servers-secret}
 

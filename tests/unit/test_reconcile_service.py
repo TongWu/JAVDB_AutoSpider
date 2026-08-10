@@ -324,32 +324,35 @@ def test_run_rejects_nonpositive_stalled_threshold_without_transitions(repo):
     assert res.errors == ["stalled_after_days must be >= 1"]
 
 
-def test_run_treats_missing_files_as_completed_and_deletes_from_qb(repo):
+def test_run_treats_missing_files_as_completed_without_deleting_from_qb(repo):
+    # The state transition stays (missingFiles is in _QB_COMPLETED_STATES), but
+    # this pass must never delete: `missingFiles` cannot distinguish "files
+    # gone" from "disk temporarily unavailable", so deleting on a snapshot can
+    # destroy content still on disk. purge_missing_files owns deletion, behind
+    # a stop + recheck + per-file verification it does not have here.
     repo.upsert(AcquisitionOutcomeRecord(qb_hash="m1", href="/v/1", state="queued",
                                          last_seen_at=_old_iso(0)))
     qb = _FakeQb([{"hash": "m1", "progress": 0.0, "state": "missingFiles"}])
     res = service.run(ReconcileOptions(), repo=repo, qb_client=qb)
     assert repo.get("m1").state == "completed"
     assert res.marked_completed == 1
-    assert res.missing_files_deleted == 1
-    assert "m1" in qb.deleted
+    assert qb.deleted == []
 
 
 def test_run_missing_files_does_not_delete_when_dry_run(repo):
     repo.upsert(AcquisitionOutcomeRecord(qb_hash="m2", href="/v/1", state="queued",
                                          last_seen_at=_old_iso(0)))
     qb = _FakeQb([{"hash": "m2", "progress": 0.0, "state": "missingFiles"}])
-    res = service.run(ReconcileOptions(dry_run=True), repo=repo, qb_client=qb)
+    service.run(ReconcileOptions(dry_run=True), repo=repo, qb_client=qb)
     assert repo.get("m2").state == "queued"  # no write in dry_run
-    assert res.missing_files_deleted == 0
     assert qb.deleted == []
 
 
-def test_run_missing_files_skips_untracked_hashes(repo):
-    # "m3" has missingFiles in qB but no AcquisitionOutcome row — must not be deleted.
+def test_run_never_deletes_untracked_missing_files_hashes(repo):
+    # "m3" has missingFiles in qB but no AcquisitionOutcome row. Nothing here
+    # deletes from qB at all, tracked or not.
     qb = _FakeQb([{"hash": "m3", "progress": 0.0, "state": "missingFiles"}])
-    res = service.run(ReconcileOptions(), repo=repo, qb_client=qb)
-    assert res.missing_files_deleted == 0
+    service.run(ReconcileOptions(), repo=repo, qb_client=qb)
     assert qb.deleted == []
 
 

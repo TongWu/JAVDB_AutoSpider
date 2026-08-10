@@ -471,7 +471,7 @@ same throughput across more runners.
 
 ### Q3. `429 Too Many Requests` or daily cumulative 100k ceiling hit
 - Upgrade to the Workers Paid Plan ($5/month, provides 10M req/month)
-- Or temporarily reduce the `PAGE_END` GH Variable to lower the ingestion volume per run
+- Or temporarily lower the ingestion volume per run. Since [ADR-057](../../../design/ADR-057-Dynamic-Daily-Index-Pagination/ADR-057-dynamic-daily-index-pagination.md), `PAGE_END` is only the scan *floor* — the daily scan keeps extending past it while pages carry today/yesterday badges, so lowering it alone does not cap anything on a busy day. Set `PAGE_SCAN_DYNAMIC=False` to restore a hard `PAGE_END` limit, or lower `PAGE_SCAN_MAX` to cap the extension while keeping dynamic pagination enabled.
 
 ### Q4. `wait_ms` is abnormally long (>30 s)
 1. Check the DO state dump:

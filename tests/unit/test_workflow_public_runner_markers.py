@@ -26,10 +26,11 @@ so these tests pin the convention:
    needed by impact-selected tests; see commit c1a78737) via
    ``./.github/actions/ensure-git-lfs`` after checkout;
 5. ``build-rust-extension.yml`` pins each wheel-build job to an
-   architecture-specific GitHub-hosted runner (``ubuntu-latest`` for x64 /
-   ``ubuntu-24.04-arm`` for arm64; commit 831a296f moved the wheel build off
-   the fleet). Pointing both jobs at the same image would build an x64 wheel
-   under the ``*-arm-*`` artifact name and warm the wrong per-arch cache.
+   architecture-specific self-hosted runner via the array form
+   ``[self-hosted, X64]`` / ``[self-hosted, ARM64]`` (each carrying a
+   ``# PUBLIC_RUNNER:`` marker for the public mirror). Pointing both jobs at
+   the same arch would build an x64 wheel under the ``*-arm-*`` artifact name
+   and warm the wrong per-arch cache.
 """
 
 from __future__ import annotations
@@ -62,6 +63,21 @@ if _PUBLISH_WORKFLOW.exists() != _PUBLISH_CONFIG.exists():
     )
 
 IS_PUBLIC_MIRROR = not _PUBLISH_WORKFLOW.exists()
+
+# On the mirror the publish run has already rewritten each wheel-build
+# ``runs-on`` to the GitHub-hosted replacement named by its
+# ``# PUBLIC_RUNNER`` marker, so assert those values there rather than
+# skipping the arch contract. The marker is a YAML comment — invisible to
+# ``yaml.safe_load`` — and
+# ``test_literal_self_hosted_runners_carry_public_runner_marker`` accepts any
+# non-self-hosted token, so a ``# PUBLIC_RUNNER: ubuntu-latest`` typo on
+# ``build-arm`` is caught here or nowhere, and it would build an x64 wheel
+# under the ``*-arm-*`` artifact name.
+EXPECTED_WHEEL_RUNNERS = (
+    {"build-x64": "ubuntu-latest", "build-arm": "ubuntu-24.04-arm"}
+    if IS_PUBLIC_MIRROR
+    else {"build-x64": ["self-hosted", "X64"], "build-arm": ["self-hosted", "ARM64"]}
+)
 
 # Mirror of the rewrite pattern in publish-to-public.yml ("Replace private
 # runners for public repo" step). Both must stay in sync. The private value is
@@ -205,12 +221,16 @@ def test_setup_python_env_composite_seeds_tool_cache_first():
 
 
 def test_build_rust_extension_jobs_pin_runner_arch():
-    """Each wheel-build job must pin an architecture-specific runner image.
+    """Each wheel-build job must pin an architecture-specific self-hosted runner.
 
-    The wheel build runs on GitHub-hosted runners (commit 831a296f). Pointing
-    both jobs at the same image would build an x64 wheel under the ``*-arm-*``
-    artifact name (and warm the wrong per-arch cache), so each job pins a
-    distinct arch: ``ubuntu-latest`` (x64) and ``ubuntu-24.04-arm`` (arm64).
+    The wheel build runs on the self-hosted fleet via the arch-label array form
+    ``[self-hosted, <arch>]`` (the bare ``self-hosted`` label is unsafe — see
+    the module docstring). Pointing both jobs at the same arch would build an
+    x64 wheel under the ``*-arm-*`` artifact name (and warm the wrong per-arch
+    cache), so build-x64 pins ``X64`` and build-arm pins ``ARM64``. On the
+    public mirror the equivalent contract is the rewritten GitHub-hosted pair —
+    see ``EXPECTED_WHEEL_RUNNERS`` for why that side is asserted rather than
+    skipped.
     """
     workflow = yaml.safe_load(
         (WORKFLOWS_DIR / "build-rust-extension.yml").read_text(encoding="utf-8")
@@ -218,5 +238,5 @@ def test_build_rust_extension_jobs_pin_runner_arch():
     runners = {
         job_id: job.get("runs-on") for job_id, job in workflow["jobs"].items()
     }
-    assert runners.get("build-x64") == "ubuntu-latest", runners
-    assert runners.get("build-arm") == "ubuntu-24.04-arm", runners
+    assert runners.get("build-x64") == EXPECTED_WHEEL_RUNNERS["build-x64"], runners
+    assert runners.get("build-arm") == EXPECTED_WHEEL_RUNNERS["build-arm"], runners
