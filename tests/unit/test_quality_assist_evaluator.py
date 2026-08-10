@@ -46,6 +46,60 @@ def test_evaluator_ranks_and_flags_replacement():
     assert summary["would_replace"] == 1
 
 
+def test_duplicate_role_info_hash_writes_one_row_and_keeps_rank_1():
+    """Regression: one info_hash can be both the production download and a probe
+    runner-up. Both UPSERT onto (info_hash, movie_href, scoring_version), so the
+    second write used to clobber the first — dropping rank 1 or the production
+    row. The two rows are the same torrent, so exactly one evaluation is written,
+    it keeps the production role, and it is not flagged as replacing itself."""
+    repo = _Repo({"/v/abc": [
+        _ev("shared", "production_download", junk_ratio=0.0),
+        _ev("shared", "quality_probe", junk_ratio=0.0),
+        _ev("probeB", "quality_probe", junk_ratio=0.40),  # junk -> loses
+    ]})
+    summary = evaluate_assist_for_movies(["/v/abc"], repo=repo, policy_mode="assist")
+
+    assert summary["candidates"] == 2
+    written = [e.info_hash for e in repo.evaluations]
+    assert written.count("shared") == 1
+    by_hash = {e.info_hash: e for e in repo.evaluations}
+    assert by_hash["shared"].shadow_rank == 1
+    # The production download is not "replaced" by its own probe copy.
+    assert by_hash["shared"].would_replace_current_choice is False
+    assert summary["would_replace"] == 0
+
+
+def test_collapse_prefers_production_regardless_of_input_order():
+    """The evaluator test above only exercises the 'first one wins' path, because
+    the production row happens to come first. EvaluationRecord carries no
+    target_role, so it cannot prove which row survived either. Test the collapse
+    directly with the probe row first — that is the branch where production has
+    to displace an already-kept probe."""
+    from javdb.quality.assist import PRODUCTION_TARGET_ROLE
+    from javdb.quality.assist_evaluator import _collapse_duplicate_roles
+
+    probe_first = _collapse_duplicate_roles([
+        _ev("shared", "quality_probe"),
+        _ev("shared", "production_download"),
+    ])
+    assert len(probe_first) == 1
+    assert probe_first[0]["target_role"] == PRODUCTION_TARGET_ROLE
+
+    production_first = _collapse_duplicate_roles([
+        _ev("shared", "production_download"),
+        _ev("shared", "quality_probe"),
+    ])
+    assert len(production_first) == 1
+    assert production_first[0]["target_role"] == PRODUCTION_TARGET_ROLE
+
+    # Distinct hashes are never collapsed, whatever their roles.
+    distinct = _collapse_duplicate_roles([
+        _ev("a", "production_download"),
+        _ev("b", "quality_probe"),
+    ])
+    assert {row["info_hash"] for row in distinct} == {"a", "b"}
+
+
 def test_evaluator_noop_when_not_assist():
     repo = _Repo({"/v/abc": [_ev("prod", "production_download")]})
     summary = evaluate_assist_for_movies(["/v/abc"], repo=repo, policy_mode="shadow")

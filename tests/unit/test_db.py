@@ -1239,3 +1239,136 @@ class TestGetDbLogicalNameGuard:
         # A real filesystem path must NOT trip the guard.
         with get_db(_isolate_sqlite) as conn:
             assert conn is not None
+
+
+class TestAdditiveColumnMigration:
+    """BFR-027: AcquisitionOutcome.state_changed_at on pre-existing databases.
+
+    reports/operations.db is LFS-tracked, so a checkout can carry an
+    AcquisitionOutcome table created before the column existed. The operations
+    DDL builds an index over that column, and CREATE INDEX raises "no such
+    column" against such a table — which made init_db() itself blow up for every
+    caller, not just the trend query.
+    """
+
+    _LEGACY_DDL = (
+        "CREATE TABLE AcquisitionOutcome ("
+        " qb_hash TEXT PRIMARY KEY NOT NULL, href TEXT NOT NULL DEFAULT '',"
+        " video_code TEXT, category TEXT, state TEXT NOT NULL DEFAULT 'queued',"
+        " queued_at TEXT, completed_at TEXT, landed_at TEXT, last_seen_at TEXT,"
+        " session_id TEXT)"
+    )
+
+    def test_adds_column_and_unblocks_the_index(self, tmp_path):
+        from javdb.storage.db._db_migrations import _ensure_additive_columns
+
+        conn = sqlite3.connect(str(tmp_path / "ops.db"))
+        try:
+            conn.executescript(self._LEGACY_DDL)
+
+            # Pre-condition: this is exactly what failed on CI.
+            with pytest.raises(sqlite3.OperationalError, match="no such column"):
+                conn.execute(
+                    "CREATE INDEX idx_probe ON AcquisitionOutcome(state_changed_at)"
+                )
+
+            _ensure_additive_columns(conn)
+
+            cols = [r[1] for r in conn.execute("PRAGMA table_info('AcquisitionOutcome')")]
+            assert "state_changed_at" in cols
+            # The DDL's index is now creatable.
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_acq_outcome_state_changed "
+                "ON AcquisitionOutcome(state_changed_at)"
+            )
+        finally:
+            conn.close()
+
+    def test_is_idempotent(self, tmp_path):
+        from javdb.storage.db._db_migrations import _ensure_additive_columns
+
+        conn = sqlite3.connect(str(tmp_path / "ops.db"))
+        try:
+            conn.executescript(self._LEGACY_DDL)
+            _ensure_additive_columns(conn)
+            _ensure_additive_columns(conn)  # second pass must not raise
+            cols = [r[1] for r in conn.execute("PRAGMA table_info('AcquisitionOutcome')")]
+            assert cols.count("state_changed_at") == 1
+        finally:
+            conn.close()
+
+    def test_backfills_existing_rows_like_the_d1_migration(self, tmp_path):
+        """Adding the column is not enough. Terminal rows leave list_active()
+        forever, so a NULL state_changed_at is permanent — and the acquisition
+        trend filters on that column, so those rows would vanish from it for
+        good. Precedence must match the paired D1 migration:
+        COALESCE(landed_at, completed_at, last_seen_at, queued_at).
+        """
+        from javdb.storage.db._db_migrations import _ensure_additive_columns
+
+        conn = sqlite3.connect(str(tmp_path / "ops.db"))
+        try:
+            conn.executescript(self._LEGACY_DDL)
+            conn.executemany(
+                "INSERT INTO AcquisitionOutcome "
+                "(qb_hash, state, queued_at, completed_at, landed_at, last_seen_at) "
+                "VALUES (?,?,?,?,?,?)",
+                [
+                    # landed_at wins (in_library is the latest transition).
+                    ("h1", "in_library", "Q", "C", "L", "S"),
+                    # then completed_at.
+                    ("h2", "completed", "Q", "C", None, "S"),
+                    # then last_seen_at.
+                    ("h3", "failed", "Q", None, None, "S"),
+                    # then queued_at.
+                    ("h4", "queued", "Q", None, None, None),
+                    # nothing to seed from — stays NULL, must not raise.
+                    ("h5", "queued", None, None, None, None),
+                ],
+            )
+            conn.commit()
+
+            _ensure_additive_columns(conn)
+
+            got = dict(
+                conn.execute("SELECT qb_hash, state_changed_at FROM AcquisitionOutcome")
+            )
+            assert got == {
+                "h1": "L", "h2": "C", "h3": "S", "h4": "Q", "h5": None,
+            }
+        finally:
+            conn.close()
+
+    def test_backfill_does_not_overwrite_an_existing_value(self, tmp_path):
+        """Re-running must not disturb rows already carrying a transition date."""
+        from javdb.storage.db._db_migrations import _ensure_additive_columns
+
+        conn = sqlite3.connect(str(tmp_path / "ops.db"))
+        try:
+            conn.executescript(self._LEGACY_DDL)
+            _ensure_additive_columns(conn)
+            conn.execute(
+                "INSERT INTO AcquisitionOutcome "
+                "(qb_hash, state, completed_at, state_changed_at) VALUES (?,?,?,?)",
+                ("h1", "completed", "2026-06-01T00:00:00Z", "2026-06-09T00:00:00Z"),
+            )
+            conn.commit()
+
+            _ensure_additive_columns(conn)
+
+            value = conn.execute(
+                "SELECT state_changed_at FROM AcquisitionOutcome WHERE qb_hash='h1'"
+            ).fetchone()[0]
+            assert value == "2026-06-09T00:00:00Z"
+        finally:
+            conn.close()
+
+    def test_noop_when_table_absent(self, tmp_path):
+        """A fresh DB has no such table yet; the DDL creates the column directly."""
+        from javdb.storage.db._db_migrations import _ensure_additive_columns
+
+        conn = sqlite3.connect(str(tmp_path / "empty.db"))
+        try:
+            _ensure_additive_columns(conn)  # must not raise
+        finally:
+            conn.close()

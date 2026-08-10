@@ -52,7 +52,10 @@ class _FlakyCleanupRepo:
     def __init__(self, repo):
         self._repo = repo
 
-    def mark_state(self, qb_hash, state, *, completed_at=None, last_seen_at=None):
+    def mark_state(
+        self, qb_hash, state, *, completed_at=None, last_seen_at=None,
+        state_changed_at=None,
+    ):
         if qb_hash == "h1":
             raise RuntimeError("bad hash")
         return self._repo.mark_state(
@@ -60,6 +63,7 @@ class _FlakyCleanupRepo:
             state,
             completed_at=completed_at,
             last_seen_at=last_seen_at,
+            state_changed_at=state_changed_at,
         )
 
     def get(self, qb_hash):
@@ -179,6 +183,71 @@ def test_run_marks_stalled_when_absent_and_old(repo):
     res = service.run(ReconcileOptions(stalled_after_days=7), repo=repo, qb_client=qb)
     assert repo.get("s1").state == "stalled"
     assert res.marked_stalled == 1
+
+
+def test_absent_transition_stamps_state_changed_at_today_not_last_seen_at(repo, monkeypatch):
+    """Regression: the acquisition trend groups stalled/failed by the transition.
+
+    last_seen_at stays at the last successful qB observation (10 days ago here),
+    so a failure detected today used to be plotted 10 days in the past — and
+    could fall out of a 7-day window entirely.
+    """
+    seen = _old_iso(10)
+    repo.upsert(AcquisitionOutcomeRecord(qb_hash="s1", href="/v/1", state="queued",
+                                         last_seen_at=seen))
+    # Freeze the clock: reading "today" back after the write is flaky across a
+    # UTC midnight that lands between the two calls.
+    frozen = "2026-08-10T12:00:00Z"
+    monkeypatch.setattr(service, "utc_now_iso", lambda: frozen)
+
+    service.run(ReconcileOptions(stalled_after_days=7), repo=repo, qb_client=_FakeQb([]))
+
+    got = repo.get("s1")
+    assert got.state == "stalled"
+    assert got.last_seen_at == seen                       # untouched: still absent
+    assert got.state_changed_at == frozen
+
+
+def test_repeat_pass_does_not_walk_state_changed_at_forward(repo):
+    """A still-absent 'stalled' row keeps its original transition date: the
+    absent branch re-derives 'stalled' every pass, so stamping unconditionally
+    would move the point one day forward per run."""
+    repo.upsert(AcquisitionOutcomeRecord(qb_hash="s1", href="/v/1", state="queued",
+                                         last_seen_at=_old_iso(10)))
+    service.run(ReconcileOptions(stalled_after_days=7), repo=repo, qb_client=_FakeQb([]))
+    first = repo.get("s1").state_changed_at
+
+    service.run(ReconcileOptions(stalled_after_days=7), repo=repo, qb_client=_FakeQb([]))
+
+    assert repo.get("s1").state_changed_at == first
+
+
+def test_stalled_row_restamps_when_it_crosses_into_failed(repo, monkeypatch):
+    repo.upsert(AcquisitionOutcomeRecord(qb_hash="s1", href="/v/1", state="stalled",
+                                         last_seen_at=_old_iso(20),
+                                         state_changed_at=_old_iso(6)))
+    frozen = "2026-08-10T12:00:00Z"
+    monkeypatch.setattr(service, "utc_now_iso", lambda: frozen)
+
+    service.run(ReconcileOptions(stalled_after_days=7), repo=repo, qb_client=_FakeQb([]))
+
+    got = repo.get("s1")
+    assert got.state == "failed"
+    assert got.state_changed_at == frozen
+
+
+def test_observed_unchanged_state_keeps_state_changed_at(repo):
+    """Refreshing last_seen_at for a torrent still visible in qB is not a
+    transition, so the recorded transition date must survive the upsert."""
+    stamped = _old_iso(3)
+    repo.upsert(AcquisitionOutcomeRecord(qb_hash="d1", href="/v/1", state="downloading",
+                                         last_seen_at=_old_iso(3),
+                                         state_changed_at=stamped))
+    qb = _FakeQb([{"hash": "d1", "state": "downloading", "progress": 0.5}])
+
+    service.run(ReconcileOptions(), repo=repo, qb_client=qb)
+
+    assert repo.get("d1").state_changed_at == stamped
 
 
 def test_run_handles_naive_last_seen_timestamp_when_absent_and_old(repo):

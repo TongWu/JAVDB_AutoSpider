@@ -81,6 +81,7 @@ def record_queued(torrent: dict, session_id: str | None, *, repo=None) -> None:
         queued_at=now,
         last_seen_at=now,
         session_id=session_id,
+        state_changed_at=now,
     )
     try:
         with _repo_ctx(repo) as r:
@@ -100,7 +101,13 @@ def apply_cleanup_completed(stats: dict, *, repo=None) -> ReconcileResult:
     with _repo_ctx(repo) as r:
         for qb_hash in hashes:
             try:
-                r.mark_state(qb_hash, "completed", completed_at=now, last_seen_at=now)
+                r.mark_state(
+                    qb_hash,
+                    "completed",
+                    completed_at=now,
+                    last_seen_at=now,
+                    state_changed_at=now,
+                )
                 result.marked_completed += 1
             except Exception as exc:
                 logger.warning(
@@ -170,6 +177,7 @@ def run(options: ReconcileOptions, *, repo=None, qb_client=None) -> ReconcileRes
 
         for qb_hash, rec in active.items():
             obs = observations.get(qb_hash)
+            previous_state = rec.state
             new_state = None
             extra = {}
             counter_name = None
@@ -201,6 +209,12 @@ def run(options: ReconcileOptions, *, repo=None, qb_client=None) -> ReconcileRes
                 continue
 
             rec.state = new_state
+            if new_state != previous_state:
+                # Date the transition, not the last live observation. Guarded on
+                # an actual change because the absent branch re-derives 'stalled'
+                # on every pass until the 2x window opens; re-stamping there
+                # would walk the transition date forward day by day.
+                rec.state_changed_at = now
             for attr, value in extra.items():
                 setattr(rec, attr, value)
             try:

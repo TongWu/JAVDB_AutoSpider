@@ -222,11 +222,24 @@ def run_subscription_monitor(
         logger.info("No active subscriptions - nothing to scrape.")
         return 0
 
+    normalized_hrefs = [
+        normalize_javdb_href_path(raw_href) or raw_href for raw_href in actor_hrefs
+    ]
+    # Snapshot every actor's baseline BEFORE any scrape is committed. Loading it
+    # per-iteration meant a release shared by two subscribed actors was already
+    # in MovieHistory (with the second actor in SupportingActors) by the time the
+    # second actor's baseline was read, so process_actor treated it as seen and
+    # dropped the (actor_href, video_code) feed row — defeating the composite
+    # NewWorks identity that exists to preserve shared releases.
+    baselines = {
+        actor_href: load_seen_video_codes(actor_href, db_path=db_path)
+        for actor_href in normalized_hrefs
+    }
+
     total_added = 0
     failed_count = 0
-    for raw_href in actor_hrefs:
-        actor_href = normalize_javdb_href_path(raw_href) or raw_href
-        seen_before = load_seen_video_codes(actor_href, db_path=db_path)
+    for actor_href in normalized_hrefs:
+        seen_before = baselines[actor_href]
         try:
             session_id = scrape_actor(actor_href, use_proxy=use_proxy)
         except subprocess.CalledProcessError as exc:

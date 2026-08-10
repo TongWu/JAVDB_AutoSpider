@@ -15,7 +15,8 @@ _OUTCOME_DDL = """
 CREATE TABLE AcquisitionOutcome (
   qb_hash TEXT PRIMARY KEY, href TEXT NOT NULL DEFAULT '', video_code TEXT,
   category TEXT, state TEXT NOT NULL DEFAULT 'queued', queued_at TEXT,
-  completed_at TEXT, landed_at TEXT, last_seen_at TEXT, session_id TEXT
+  completed_at TEXT, landed_at TEXT, last_seen_at TEXT, session_id TEXT,
+  state_changed_at TEXT
 );
 """
 
@@ -58,6 +59,33 @@ def test_mark_in_library_sets_state_and_landed_at(outcome_repo):
     got = outcome_repo.get("c")
     assert got.state == "in_library"
     assert got.landed_at == "t-land"
+    # completed -> in_library is a real transition, so it is dated.
+    assert got.state_changed_at == "t-land"
+
+
+def test_mark_in_library_is_idempotent_on_an_already_landed_row(outcome_repo):
+    """Re-running the landing pass must not drag landed_at / state_changed_at to
+    the retry time — the row already reached in_library."""
+    outcome_repo.upsert(AcquisitionOutcomeRecord(qb_hash="c", video_code="A-3", state="completed"))
+    outcome_repo.mark_in_library("c", landed_at="t-land")
+
+    outcome_repo.mark_in_library("c", landed_at="t-much-later")
+
+    got = outcome_repo.get("c")
+    assert got.state == "in_library"
+    assert got.landed_at == "t-land"
+    assert got.state_changed_at == "t-land"
+
+
+def test_mark_in_library_batch_is_idempotent_on_already_landed_rows(outcome_repo):
+    outcome_repo.upsert(AcquisitionOutcomeRecord(qb_hash="c", video_code="A-3", state="completed"))
+    outcome_repo.mark_in_library_batch(["c"], landed_at="t-land")
+
+    outcome_repo.mark_in_library_batch(["c"], landed_at="t-much-later")
+
+    got = outcome_repo.get("c")
+    assert got.landed_at == "t-land"
+    assert got.state_changed_at == "t-land"
 
 
 # --- Service half (ADR-033 Phase 2 D-P2-8) ----------------------------------

@@ -66,7 +66,12 @@ FastAPI 只读表面会暴露同一批持久化行：
 - `GET /api/quality/evaluations?movie_href=/v/...` — 单个影片的评估。
 - `GET /api/quality/evidence/{info_hash}` — 已被生产选中且 qBittorrent 元数据已采集种子的客观文件列表证据。
 
-所有 `/api/quality/*` 端点都需要认证，且只读。
+所有 `/api/quality/*` 端点都需要认证。上面几个都是只读；该表面上唯一的写入端点仅 admin 可用：
+
+- `POST /api/quality/review-labels` — 为某条评估记录运维 review 标注
+  （`accept` / `reject` / `skip`）。这些标注是共享的可调状态 —— 即 ADR-024 Phase 3
+  用来调阈值的那份数据集 —— 而非按用户隔离的数据，因此 readonly token 不能写入。
+  请求体与响应结构见 [api-reference.md](../developer/api-reference.md)。
 
 ## Reason Codes
 

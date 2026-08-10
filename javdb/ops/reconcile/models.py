@@ -46,6 +46,10 @@ class AcquisitionOutcomeRecord:
     landed_at: Optional[str] = None
     last_seen_at: Optional[str] = None
     session_id: Optional[str] = None
+    # When `state` last changed. Distinct from last_seen_at, which is the last
+    # successful qB observation: an absent torrent transitions to stalled/failed
+    # days after it was last seen, so last_seen_at cannot date the transition.
+    state_changed_at: Optional[str] = None
 
 
 @dataclass(frozen=True)
