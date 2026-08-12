@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from types import SimpleNamespace
 from pathlib import Path
 
@@ -15,6 +16,10 @@ from javdb.spider.app.result import (
     write_spider_result_atomic,
 )
 from javdb.spider.runtime.config import PAGE_END, PAGE_START
+
+# Realistic SessionId: TEXT, format YYYYMMDDTHHMMSS.ffffffZ-TTTT-SSSS
+# (see javdb.storage.db.generate_session_id).
+_SESSION_ID = "20260520T010200.123456Z-a3f2-0001"
 
 
 class FakeStepRunner:
@@ -45,7 +50,7 @@ class FakeStepRunner:
 def _successful_spider_result():
     return SpiderRunResult(
         csv_path="reports/DailyReport/2026/03/Javdb_Test.csv",
-        session_id="273",
+        session_id=_SESSION_ID,
         dedup_csv_path=None,
         stats=SpiderRunStats(
             pages="1-10",
@@ -69,7 +74,7 @@ def _successful_spider_result():
 def _partial_failed_spider_result():
     return SpiderRunResult(
         csv_path=None,
-        session_id="273",
+        session_id=_SESSION_ID,
         dedup_csv_path=None,
         stats=None,
         mode="daily",
@@ -178,8 +183,31 @@ def _make_args(**overrides):
     return SimpleNamespace(**defaults)
 
 
-def _patch_runner(monkeypatch, runner):
+class RecordingSessionLifecycle:
+    """Stands in for the commit / rollback library calls main() makes."""
+
+    def __init__(self, *, commit_error=None, rollback_error=None):
+        self.commits = []
+        self.rollbacks = []
+        self.commit_error = commit_error
+        self.rollback_error = rollback_error
+
+    def commit(self, session_id):
+        self.commits.append(session_id)
+        if self.commit_error is not None:
+            raise self.commit_error
+
+    def rollback(self, session_id):
+        self.rollbacks.append(session_id)
+        if self.rollback_error is not None:
+            raise self.rollback_error
+
+
+def _patch_runner(monkeypatch, runner, lifecycle=None):
     FakeInProcessSpiderStepRunner.instances.clear()
+    lifecycle = lifecycle or RecordingSessionLifecycle()
+    monkeypatch.setattr(pipeline_service, '_commit_spider_session', lifecycle.commit)
+    monkeypatch.setattr(pipeline_service, '_rollback_spider_session', lifecycle.rollback)
     monkeypatch.setattr(pipeline_service, 'parse_arguments', lambda: _make_args())
     monkeypatch.setattr(pipeline_service, 'check_rust_core_status', lambda: None)
     monkeypatch.setattr(pipeline_service, 'SubprocessStepRunner', lambda: runner, raising=False)
@@ -195,6 +223,8 @@ def _patch_runner(monkeypatch, runner):
         lambda options: pytest.fail("fake spider runner should own execution"),
         raising=False,
     )
+    return lifecycle
+
 
 def _command_for(runner, module_name):
     return next(call for call in runner.calls if module_name in call[1])
@@ -292,9 +322,9 @@ def test_pipeline_main_uses_auto_proxy_by_default(monkeypatch):
         'javdb.spider.app.run_service.run_spider',
     )
     assert '--session-id' in uploader_call[1]
-    assert uploader_call[1][uploader_call[1].index('--session-id') + 1] == '273'
+    assert uploader_call[1][uploader_call[1].index('--session-id') + 1] == _SESSION_ID
     assert '--session-id' in pikpak_call[1]
-    assert pikpak_call[1][pikpak_call[1].index('--session-id') + 1] == '273'
+    assert pikpak_call[1][pikpak_call[1].index('--session-id') + 1] == _SESSION_ID
 
 
 def test_pipeline_main_force_enables_proxy_for_all_steps(monkeypatch):
@@ -406,7 +436,7 @@ def test_pipeline_main_writes_failure_result_json_after_required_step_failure(mo
     assert result.status == "failed"
     assert result.exit_code == 1
     assert "qb_uploader" in result.failure_reason
-    assert result.spider_result["session_id"] == "273"
+    assert result.spider_result["session_id"] == _SESSION_ID
     assert [step.name for step in result.steps] == [
         "spider",
         "qb_uploader",
@@ -618,7 +648,7 @@ def test_pipeline_main_preserves_partial_spider_result_on_spider_failure(monkeyp
     assert exc.value.code == 1
     result = read_pipeline_result(result_path)
     assert result.status == "failed"
-    assert result.spider_result["session_id"] == "273"
+    assert result.spider_result["session_id"] == _SESSION_ID
     assert result.spider_result["failure_reason"] == "proxy ban detected"
     assert [step.name for step in result.steps] == [
         "spider",
@@ -629,3 +659,155 @@ def test_pipeline_main_preserves_partial_spider_result_on_spider_failure(monkeyp
         output_file='Javdb_Test.csv',
         enable_redownload=True,
     )
+
+
+def test_pipeline_main_commits_spider_session_on_success(monkeypatch):
+    runner = FakeStepRunner()
+    lifecycle = _patch_runner(monkeypatch, runner)
+
+    with pytest.raises(SystemExit) as exc:
+        pipeline_service.main()
+
+    assert exc.value.code == 0
+    assert lifecycle.commits == [_SESSION_ID]
+    assert lifecycle.rollbacks == []
+
+
+def test_pipeline_main_skips_commit_when_spider_has_no_session(monkeypatch):
+    runner = FakeStepRunner()
+    lifecycle = _patch_runner(monkeypatch, runner)
+
+    class NoSessionSpiderStepRunner(FakeInProcessSpiderStepRunner):
+        def __init__(self, *, run_spider=None):
+            super().__init__(run_spider=run_spider)
+            self.result = replace(_successful_spider_result(), session_id=None)
+
+    FakeInProcessSpiderStepRunner.instances.clear()
+    monkeypatch.setattr(
+        pipeline_service,
+        'InProcessSpiderStepRunner',
+        NoSessionSpiderStepRunner,
+        raising=False,
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        pipeline_service.main()
+
+    assert exc.value.code == 0
+    assert lifecycle.commits == []
+    assert lifecycle.rollbacks == []
+    assert '--session-id' not in _command_for(runner, 'apps.cli.qb.uploader')[1]
+
+
+def test_pipeline_main_rolls_back_spider_session_on_required_step_failure(monkeypatch, tmp_path):
+    runner = FakeStepRunner(outcomes={"qb_uploader": ("failed", 2, "exit code 2")})
+    result_path = tmp_path / "pipeline-result.json"
+    lifecycle = _patch_runner(monkeypatch, runner)
+    monkeypatch.setattr(
+        pipeline_service,
+        'parse_arguments',
+        lambda: _make_args(result_json=str(result_path)),
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        pipeline_service.main()
+
+    assert exc.value.code == 1
+    assert lifecycle.commits == []
+    assert lifecycle.rollbacks == [_SESSION_ID]
+    assert read_pipeline_result(result_path).status == "failed"
+
+
+def test_pipeline_main_rolls_back_session_from_partial_spider_result(monkeypatch):
+    runner = FakeStepRunner()
+    lifecycle = _patch_runner(monkeypatch, runner)
+    FakeInProcessSpiderStepRunner.instances.clear()
+    monkeypatch.setattr(
+        pipeline_service,
+        'InProcessSpiderStepRunner',
+        SpiderFailureSidecarStepRunner,
+        raising=False,
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        pipeline_service.main()
+
+    assert exc.value.code == 1
+    assert lifecycle.commits == []
+    assert lifecycle.rollbacks == [_SESSION_ID]
+
+
+def test_pipeline_main_fails_when_session_commit_fails(monkeypatch, tmp_path):
+    runner = FakeStepRunner()
+    result_path = tmp_path / "pipeline-result.json"
+    lifecycle = _patch_runner(
+        monkeypatch,
+        runner,
+        RecordingSessionLifecycle(commit_error=RuntimeError("commit exploded")),
+    )
+    monkeypatch.setattr(
+        pipeline_service,
+        'parse_arguments',
+        lambda: _make_args(result_json=str(result_path)),
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        pipeline_service.main()
+
+    assert exc.value.code == 1
+    assert lifecycle.commits == [_SESSION_ID]
+    assert lifecycle.rollbacks == [_SESSION_ID]
+    result = read_pipeline_result(result_path)
+    assert result.status == "failed"
+    assert result.failure_reason == "commit exploded"
+    # The commit runs before the notification step, so the success email is
+    # never sent and the failure email takes its place.
+    assert [step.name for step in result.steps] == [
+        "spider",
+        "qb_uploader",
+        "pikpak_bridge",
+        "email_notification_failure",
+    ]
+
+
+def test_pipeline_main_rollback_failure_does_not_mask_original_failure(monkeypatch, tmp_path):
+    runner = FakeStepRunner(outcomes={"qb_uploader": ("failed", 2, "exit code 2")})
+    result_path = tmp_path / "pipeline-result.json"
+    lifecycle = _patch_runner(
+        monkeypatch,
+        runner,
+        RecordingSessionLifecycle(rollback_error=RuntimeError("rollback exploded")),
+    )
+    monkeypatch.setattr(
+        pipeline_service,
+        'parse_arguments',
+        lambda: _make_args(result_json=str(result_path)),
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        pipeline_service.main()
+
+    assert exc.value.code == 1
+    assert lifecycle.rollbacks == [_SESSION_ID]
+    result = read_pipeline_result(result_path)
+    assert result.status == "failed"
+    assert "qb_uploader" in result.failure_reason
+    assert [step.name for step in result.steps] == [
+        "spider",
+        "qb_uploader",
+        "email_notification_failure",
+    ]
+
+
+def test_pipeline_main_does_not_roll_back_after_successful_commit(monkeypatch):
+    runner = FakeStepRunner(
+        outcomes={"email_notification": ("failed", 2, "exit code 2")},
+    )
+    lifecycle = _patch_runner(monkeypatch, runner)
+
+    with pytest.raises(SystemExit) as exc:
+        pipeline_service.main()
+
+    assert exc.value.code == 1
+    assert lifecycle.commits == [_SESSION_ID]
+    assert lifecycle.rollbacks == []

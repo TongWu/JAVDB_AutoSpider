@@ -30,6 +30,7 @@ _get_local_sqlite_db = None
 _REPORTS_DB_PATH = None
 _HISTORY_DB_PATH = None
 _generate_session_id = None
+_generate_integer_id = None
 _resolve_write_mode = None
 _DB_OPERATIONAL_ERRORS = None
 
@@ -37,7 +38,8 @@ _DB_OPERATIONAL_ERRORS = None
 def _ensure_imports():
     """Lazy import to avoid circular dependency with db_connection and db_session."""
     global _get_db, _get_local_sqlite_db, _REPORTS_DB_PATH, _HISTORY_DB_PATH
-    global _generate_session_id, _resolve_write_mode, _DB_OPERATIONAL_ERRORS
+    global _generate_session_id, _generate_integer_id
+    global _resolve_write_mode, _DB_OPERATIONAL_ERRORS
     if _get_db is None:
         from javdb.storage.db._db_connection import (
             get_db,
@@ -47,6 +49,7 @@ def _ensure_imports():
         )
         from javdb.storage.db._db_session import (
             generate_session_id,
+            generate_integer_id,
             _resolve_write_mode as resolve_wm,
         )
         _get_db = get_db
@@ -54,6 +57,7 @@ def _ensure_imports():
         _REPORTS_DB_PATH = REPORTS_DB_PATH
         _HISTORY_DB_PATH = HISTORY_DB_PATH
         _generate_session_id = generate_session_id
+        _generate_integer_id = generate_integer_id
         _resolve_write_mode = resolve_wm
 
         try:
@@ -456,18 +460,33 @@ def db_insert_report_rows(
     with _get_db(db_path or _REPORTS_DB_PATH) as conn:
         for row in rows:
             href = javdb_absolute_url(row.get('href') or '', base_url)
-            cur = conn.execute(
+            # ReportMovies.Id is supplied explicitly (52-bit application
+            # snowflake, < 2**53 so safe for D1 JSON transport) instead of
+            # being read back from ``cur.lastrowid``.
+            #
+            # Under STORAGE_BACKEND=dual, SQLite and D1 keep independent
+            # AUTOINCREMENT counters and ``DualCursor.lastrowid`` surfaces
+            # the SQLite one (dual_connection.py). Any past asymmetric
+            # INSERT leaves the counters permanently offset, so using the
+            # SQLite rowid as ReportTorrents.ReportMovieId silently
+            # attached the D1-side torrent rows to whatever movie happened
+            # to occupy that Id on D1 — usually a *different* session's
+            # movie, which satisfies the FK and therefore raises nothing.
+            # Same-Id-on-both-backends is the fix applied to
+            # MovieHistory / TorrentHistory (see the "Batch C" note in
+            # dual_connection.APPLICATION_GENERATED_ID_PK_COLUMN).
+            rm_id = _generate_integer_id()
+            conn.execute(
                 """INSERT INTO ReportMovies
-                   (SessionId, Href, VideoCode, Page, Actor, Rate, CommentNumber)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (session_id,
+                   (Id, SessionId, Href, VideoCode, Page, Actor, Rate, CommentNumber)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (rm_id, session_id,
                  href, row.get('video_code'),
                  int(row['page']) if row.get('page') else None,
                  row.get('actor'),
                  float(row['rate']) if row.get('rate') else None,
                  int(row['comment_number']) if row.get('comment_number') else None),
             )
-            rm_id = cur.lastrowid
             vc = row.get('video_code')
             for cat, size_cat, fc_cat, res_cat, sub_ind, cen_ind in _CATS:
                 magnet = (row.get(cat) or '').strip()

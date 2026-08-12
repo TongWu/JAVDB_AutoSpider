@@ -761,7 +761,7 @@ def _finalize_alignment_session(session_id: Optional[str], rc: int) -> int:
     still ``in_progress``.
 
     That resume re-runs the *same* drain, so it only recovers a transient
-    failure. A deterministic one (BFR-023: a stale local-SQLite row vetoing a
+    failure. A deterministic one (BFR-035: a stale local-SQLite row vetoing a
     ``MovieHistory`` INSERT that D1 accepts) fails again and leaves the row in
     ``finalizing`` with its pending writes undrained for the 48h stale-session
     sweep — so name that state instead of logging a bare "rollback failed".

@@ -77,6 +77,19 @@ class SiteContractDriftError(RuntimeError):
     """Raised when critical site-contract drift refuses a session commit."""
 
 
+def _row_value(row: Any, name: str, index: int) -> Any:
+    """Read one column from a DB row, whatever shape the backend returned.
+
+    D1 returns plain dicts (name access only); sqlite3.Row supports both name
+    and index access; plain tuples support index access only. Same idiom as
+    ``javdb.storage.repos.system_state_repo.SystemStateRepo.get``.
+    """
+    try:
+        return row[name]
+    except (KeyError, TypeError, IndexError):
+        return row[index]
+
+
 def _sentinel_evaluate(session_id: str) -> Any:
     """Evaluate persisted site-contract fills for the session.
 
@@ -167,8 +180,8 @@ def commit_session(req: CommitRequest) -> CommitResult:
     if row is None:
         raise LookupError(f"Session not found: session_id={req.session_id!r}")
 
-    write_mode = row[1] if hasattr(row, '__getitem__') else row["WriteMode"]
-    current_status = row[2] if hasattr(row, '__getitem__') else row["Status"]
+    write_mode = _row_value(row, "WriteMode", 1)
+    current_status = _row_value(row, "Status", 2)
 
     # Already committed — idempotent unless force is irrelevant here.
     if current_status == "committed" and not req.force:

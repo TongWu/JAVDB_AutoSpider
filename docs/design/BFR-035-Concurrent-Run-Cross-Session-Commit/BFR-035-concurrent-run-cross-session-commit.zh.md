@@ -1,4 +1,4 @@
-# BFR-023：并发 ingestion run 互相提交对方的活跃 session，导致 pending 写入被搁浅
+# BFR-035：并发 ingestion run 互相提交对方的活跃 session，导致 pending 写入被搁浅
 
 **状态**：Fixed
 **日期**：2026-07-26

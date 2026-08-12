@@ -50,7 +50,12 @@ DEDUP_CSV = cfg('DEDUP_CSV', 'dedup.csv')
 from javdb.infra.paths import get_dated_report_path
 
 # --- LOGGING SETUP ---
-from javdb.infra.logging import setup_logging, get_logger
+from javdb.infra.logging import (
+    setup_logging,
+    get_logger,
+    log_section,
+    log_summary_block,
+)
 setup_logging(PIPELINE_LOG_FILE, LOG_LEVEL)
 logger = get_logger(__name__)
 
@@ -184,6 +189,49 @@ def _failed_step_from_exception(policy, command, error, *, result_path=None):
     )
 
 
+def _commit_spider_session(session_id):
+    """Promote the spider session's staged history writes.
+
+    Under the default pending write mode every MovieHistory / TorrentHistory
+    row is staged in PendingMovieHistoryWrites / PendingTorrentHistoryWrites
+    and only lands at session commit. GitHub Actions performs this as its own
+    ``apps.cli.db.commit_session`` step; a local pipeline run has no such step,
+    so the orchestrator owns the session-end contract itself.
+    """
+    from javdb.storage.sessions.commit import CommitRequest, commit_session
+
+    result = commit_session(
+        CommitRequest(session_id=str(session_id), fanout_claims=True),
+    )
+    logger.info(
+        "Committed pipeline session %s (state=%s)",
+        result.session_id,
+        result.new_state,
+    )
+
+
+def _rollback_spider_session(session_id):
+    """Unwind the spider session's staged writes after a failed run.
+
+    Mirrors the ``apps.cli.db.rollback`` step the ingestion workflows run in
+    their cleanup-on-failure job, so a failed local run does not leave the
+    session stuck in ``in_progress``.
+    """
+    from javdb.storage.rollback import RollbackRequest, apply_rollback
+
+    result = apply_rollback(
+        RollbackRequest(
+            session_id=str(session_id),
+            failure_reason="pipeline_failed",
+        ),
+    )
+    logger.info(
+        "Rolled back pipeline session %s: %s",
+        result.session_id,
+        result.summary,
+    )
+
+
 def _write_pipeline_result_best_effort(
     *,
     args,
@@ -227,6 +275,8 @@ def main():
     runner = SubprocessStepRunner()
     steps = []
     spider_result = None
+    session_id = None
+    session_committed = False
     pipeline_started_at = utc_now_iso()
     proxy_override = resolve_proxy_override(args.use_proxy, args.no_proxy)
     if args.always_bypass_time is not None and args.always_bypass_time < 0:
@@ -400,6 +450,28 @@ def main():
             else:
                 logger.info("✓ Rclone Dedup Executor completed successfully")
 
+        # 3.9 Commit the spider session so its staged history writes land.
+        # Ordered like DailyIngestion.yml, which commits after the D1-writing
+        # steps and before the notification job. A commit failure is fatal:
+        # it propagates to the failure path below.
+        if session_id:
+            log_section(
+                logger,
+                f"Step 3.9: Committing session {session_id} history writes",
+            )
+            _commit_spider_session(session_id)
+            session_committed = True
+            log_summary_block(
+                logger,
+                "Session history writes committed",
+                {"Session ID": session_id},
+                emoji='✅',
+            )
+        else:
+            logger.warning(
+                "Spider result carried no session ID; skipping session commit",
+            )
+
         # 4. Run Email Notification
         # Build email args after spider runs (csv_path is now known)
         email_args = ['--from-pipeline']
@@ -429,7 +501,24 @@ def main():
         logger.error("=" * 60)
         logger.error(f'Error: {e}')
         pipeline_success = False
-        
+
+        # Unwind the spider session so its staged writes are not stranded in
+        # the Pending tables. Already-committed sessions are left alone.
+        # A rollback failure is logged but never masks the original error.
+        rollback_session_id = session_id or getattr(spider_result, 'session_id', None)
+        if rollback_session_id and not session_committed:
+            try:
+                logger.info("Rolling back session %s...", rollback_session_id)
+                _rollback_spider_session(rollback_session_id)
+            except Exception as rollback_error:
+                logger.error(
+                    "Failed to roll back session %s: %s",
+                    rollback_session_id,
+                    rollback_error,
+                )
+        elif not rollback_session_id:
+            logger.info("No spider session to roll back")
+
         # Still try to send email notification on failure
         email_args = ['--from-pipeline']
         if csv_path:

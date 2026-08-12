@@ -191,7 +191,21 @@ jobs:
           fi
 
           git fetch origin "$CURRENT_BRANCH"
-          git pull --rebase origin "$CURRENT_BRANCH" || git pull --no-edit origin "$CURRENT_BRANCH" || true
+          # BFR-033 follow-up: a failed sync must not vanish into `|| true`.
+          # It stays non-fatal — this runs before the job has produced anything,
+          # so the only cost is a stale base — but it is annotated instead of
+          # silent, and any half-finished rebase/merge is aborted so a
+          # conflicted tree can never survive into this run's own `git add`.
+          if ! git pull --rebase origin "$CURRENT_BRANCH"; then
+            git rebase --abort 2>/dev/null || true
+            # `--no-rebase` is explicit: a repo-level `pull.rebase=true` would
+            # otherwise make this fallback a *second* rebase attempt instead of
+            # the merge it is meant to be.
+            if ! git pull --no-rebase --no-edit origin "$CURRENT_BRANCH"; then
+              git merge --abort 2>/dev/null || true
+              echo "::warning::Could not sync with origin/$CURRENT_BRANCH before the run — continuing from $(git rev-parse --short HEAD)"
+            fi
+          fi
 
       - name: Run scan + report + execute
         env:
@@ -283,10 +297,27 @@ jobs:
           RETRY_DELAY=3
           for i in $(seq 1 $MAX_RETRIES); do
             git fetch origin "$CURRENT_BRANCH"
-            git pull --rebase origin "$CURRENT_BRANCH" || true
-            if git push origin "$CURRENT_BRANCH"; then
-              echo "✓ Results committed and pushed"
-              exit 0
+            # BFR-033 follow-up: this used to be
+            # `git pull --rebase ... || true`, which swallowed a *conflicted*
+            # rebase and left the tree mid-conflict — the push then failed,
+            # every later attempt died on "there is already a rebase-merge
+            # directory", and the whole retry budget burned with no annotation
+            # naming the real cause. Abort the rebase so the next attempt starts
+            # from a clean tree, and say out loud that a conflict happened. The
+            # append-only report files are `merge=union` (85fd3cfa), so the
+            # first rung normally succeeds losslessly; reaching this branch
+            # means a whole-rewrite report (rclone_inventory.csv,
+            # dedup_history.csv, d1_port_summary.json) genuinely collided and
+            # needs the fallback branch, not a silent whole-hunk pick.
+            if git pull --rebase origin "$CURRENT_BRANCH"; then
+              if git push origin "$CURRENT_BRANCH"; then
+                echo "✓ Results committed and pushed"
+                exit 0
+              fi
+              echo "::warning::Push to $CURRENT_BRANCH rejected on attempt $i/$MAX_RETRIES — the branch moved again; retrying"
+            else
+              echo "::warning::Rebase onto origin/$CURRENT_BRANCH conflicted on attempt $i/$MAX_RETRIES — aborting it so the retry starts from a clean tree (dedup results are still held in $LOCAL_COMMIT)"
+              git rebase --abort 2>/dev/null || true
             fi
             sleep $RETRY_DELAY
             RETRY_DELAY=$((RETRY_DELAY * 2))

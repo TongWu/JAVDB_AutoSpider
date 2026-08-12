@@ -11,9 +11,9 @@ to ``reports/profiling/<benchmark>.prof`` for follow-up inspection
 with ``snakeviz`` or ``gprof2dot``.
 
 Usage:
-    python3 scripts/profile_hot_paths.py
-    python3 scripts/profile_hot_paths.py --only parse_detail
-    python3 scripts/profile_hot_paths.py --iterations 50
+    python3 -m apps.cli.ops.profile_hot_paths
+    python3 -m apps.cli.ops.profile_hot_paths --only parse_detail
+    python3 -m apps.cli.ops.profile_hot_paths --iterations 50
 
 Design notes:
 
@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import argparse
 import cProfile
+import contextlib
 import io
 import os
 import pstats
@@ -42,7 +43,7 @@ import time
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 REPORTS_DIR = PROJECT_ROOT / "reports" / "profiling"
@@ -249,8 +250,46 @@ def bench_throttle_compute(iterations: int) -> Dict[str, float]:
 # ---------------------------------------------------------------------------
 
 
+@contextlib.contextmanager
+def _sqlite_only_backend():
+    """Force the DB layer onto local SQLite for the duration of the block.
+
+    ``get_db()`` routes purely on ``STORAGE_BACKEND`` — the *path* argument
+    plays no part in the decision (``javdb/storage/db/_db_connection.py``,
+    ``_get_connection``). So under ``STORAGE_BACKEND=d1`` / ``dual`` the DB
+    benchmarks below hand their throwaway tempfile to the real backend
+    router: today that stops at ``_logical_name_for()``, which rejects the
+    unmapped path with a ``ValueError`` (so the benchmark aborts rather than
+    writing to production D1 — ``main()`` prints it as ``FAILED``), but a
+    profiler should neither depend on that accident nor be one mapping entry
+    away from touching the canonical database.
+
+    ``_STORAGE_BACKEND_INIT_OVERRIDE`` is the documented escape hatch for
+    exactly this case — see ``_backend_mode``: "a deliberate escape hatch for
+    callers (e.g. external scripts or test harnesses) that want to force
+    sqlite-only behaviour for an entire process". Forcing it here also makes
+    the benchmark's ``init_db`` actually create the schema under ``d1``
+    (where ``init_db`` is otherwise a no-op) and keeps the seeded writes
+    provably local.
+    """
+    key = "_STORAGE_BACKEND_INIT_OVERRIDE"
+    prev = os.environ.get(key)
+    os.environ[key] = "sqlite"
+    try:
+        yield
+    finally:
+        if prev is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = prev
+
+
 def _setup_in_memory_db() -> str:
-    """Initialise a fresh in-memory SQLite history DB and return its path."""
+    """Initialise a fresh in-memory SQLite history DB and return its path.
+
+    Call inside ``_sqlite_only_backend()`` — the returned path is a tempfile
+    the D1 router has no logical name for.
+    """
     import tempfile
     # NB: SQLite ``:memory:`` is process-local; using a tempfile gives us a
     # path the get_db() routing layer can consistently reopen.
@@ -262,43 +301,58 @@ def _setup_in_memory_db() -> str:
 
 
 def _seed_history(db_path: str, n_movies: int) -> None:
-    """Insert ``n_movies`` synthetic rows into MovieHistory + TorrentHistory."""
-    from javdb.storage.db import get_db
+    """Insert ``n_movies`` synthetic rows into MovieHistory + TorrentHistory.
+
+    Both ids are supplied explicitly (52-bit application snowflakes) instead
+    of being read back from ``cur.lastrowid``. MovieHistory / TorrentHistory
+    are guarded in ``dual_connection.APPLICATION_GENERATED_ID_PK_COLUMN``
+    because the SQLite and D1 AUTOINCREMENT counters are independent: a rowid
+    from one leg reused as ``TorrentHistory.MovieHistoryId`` points at a
+    different movie on the other (BFR-034). Callers wrap this in
+    ``_sqlite_only_backend()``, so the writes are provably local and the
+    guard cannot fire — but the invariant "every writer to a guarded table
+    supplies Id" holds here too.
+    """
+    from javdb.storage.db import generate_integer_id, get_db
     with get_db(db_path) as conn:
         for i in range(n_movies):
-            cur = conn.execute(
+            movie_id = generate_integer_id()
+            conn.execute(
                 """INSERT INTO MovieHistory
-                   (Href, VideoCode, PerfectMatchIndicator, HiResIndicator,
+                   (Id, Href, VideoCode, PerfectMatchIndicator, HiResIndicator,
                     DateTimeVisited)
-                   VALUES (?, ?, 0, 0, '2026-05-15 12:00:00')""",
-                (f"/v/PROF-{i:06d}", f"PROF-{i:06d}"),
+                   VALUES (?, ?, ?, 0, 0, '2026-05-15 12:00:00')""",
+                (movie_id, f"/v/PROF-{i:06d}", f"PROF-{i:06d}"),
             )
-            movie_id = cur.lastrowid
             # One subtitle torrent per movie so the join returns data.
             conn.execute(
                 """INSERT INTO TorrentHistory
-                   (MovieHistoryId, SubtitleIndicator, CensorIndicator,
+                   (Id, MovieHistoryId, SubtitleIndicator, CensorIndicator,
                     MagnetUri, Size, FileCount, ResolutionType)
-                   VALUES (?, 1, 1, 'magnet:?xt=fake', '1GB', 1, 1080)""",
-                (movie_id,),
+                   VALUES (?, ?, 1, 1, 'magnet:?xt=fake', '1GB', 1, 1080)""",
+                (generate_integer_id(), movie_id),
             )
 
 
 def bench_db_load_history(iterations: int) -> Dict[str, float]:
     """db_load_history with 1000 seeded rows in an in-memory DB."""
     from javdb.storage.db._db_history_read import db_load_history
-    db_path = _setup_in_memory_db()
-    try:
-        _seed_history(db_path, n_movies=1000)
-        return _bench(
-            "db_load_history", iterations,
-            lambda: db_load_history(db_path=db_path),
-        )
-    finally:
+    # Every DB access below (init_db, the seeder, and db_load_history itself)
+    # goes through the backend-routed get_db(), so the whole benchmark runs
+    # under the sqlite-only override — never against D1.
+    with _sqlite_only_backend():
+        db_path = _setup_in_memory_db()
         try:
-            os.unlink(db_path)
-        except OSError:
-            pass
+            _seed_history(db_path, n_movies=1000)
+            return _bench(
+                "db_load_history", iterations,
+                lambda: db_load_history(db_path=db_path),
+            )
+        finally:
+            try:
+                os.unlink(db_path)
+            except OSError:
+                pass
 
 
 def bench_compute_indicators(iterations: int) -> Dict[str, float]:

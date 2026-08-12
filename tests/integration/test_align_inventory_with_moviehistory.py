@@ -623,7 +623,7 @@ def test_finalize_alignment_session_reports_unrecoverable_cleanup(
 ):
     """A failed cleanup must name the stuck session, not just "rollback failed".
 
-    BFR-023: ``rollback_session`` recovers a ``finalizing`` session by
+    BFR-035: ``rollback_session`` recovers a ``finalizing`` session by
     re-running the same drain, so a deterministic drain failure fails again
     and leaves the pending writes undrained. This log line is the only
     signal the operator gets before the 48h stale-session sweep.

@@ -415,7 +415,21 @@ jobs:
           fi
           
           git fetch origin "$CURRENT_BRANCH"
-          git pull --rebase origin "$CURRENT_BRANCH" || git pull --no-edit origin "$CURRENT_BRANCH" || true
+          # BFR-033 follow-up: a failed sync must not vanish into `|| true`.
+          # It stays non-fatal — this runs before the job has produced anything,
+          # so the only cost is a stale base — but it is annotated instead of
+          # silent, and any half-finished rebase/merge is aborted so a
+          # conflicted tree can never survive into this run's own `git add`.
+          if ! git pull --rebase origin "$CURRENT_BRANCH"; then
+            git rebase --abort 2>/dev/null || true
+            # `--no-rebase` is explicit: a repo-level `pull.rebase=true` would
+            # otherwise make this fallback a *second* rebase attempt instead of
+            # the merge it is meant to be.
+            if ! git pull --no-rebase --no-edit origin "$CURRENT_BRANCH"; then
+              git merge --abort 2>/dev/null || true
+              echo "::warning::Could not sync with origin/$CURRENT_BRANCH before the run — continuing from $(git rev-parse --short HEAD)"
+            fi
+          fi
 
       - name: Display Ad-Hoc parameters
         env:
@@ -1279,7 +1293,7 @@ jobs:
           set -o pipefail
           # Detection stays best-effort — a transient failure reading the
           # verify records must not fail the run. Everything after a
-          # positive decision is enforcement and IS fatal (BFR-023): a
+          # positive decision is enforcement and IS fatal (BFR-035): a
           # pause that never reaches the branch is the exact failure this
           # mechanism exists to prevent, so it must not pass as a warning.
           if ! DECISION=$(python3 -m apps.cli.db.pending_alert_decision); then
@@ -1303,7 +1317,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .publish-config.yml
           git commit -m "ci(pipeline): pause for 24h — $DECISION" || true
-          # BFR-023: ingestion runs are deliberately concurrent and all
+          # BFR-035: ingestion runs are deliberately concurrent and all
           # auto-commit to this branch, so a bare push loses the race
           # ("! [rejected] (fetch first)") and the pause silently never
           # engages. Rebase and retry. --autostash because the email job
@@ -1382,7 +1396,7 @@ jobs:
       # SQLite mirror files are never written by the pipeline (the DB
       # layer uses a D1Connection, not _open_sqlite_connection), so
       # staging them is at best a misleading no-op and at worst keeps a
-      # stale binary in git that two parallel runtimes would `-X ours`
+      # stale binary in git that two parallel runtimes would `-X theirs`
       # clobber. D1 is the source of truth in that mode.
       STORAGE_BACKEND: ${{ vars.STORAGE_BACKEND || 'sqlite' }}
     
@@ -1455,7 +1469,7 @@ jobs:
           # MR-2 (multi-runtime): in d1-only mode the SQLite mirror files
           # (history.db / reports.db / operations.db) are never written by
           # the pipeline — D1 is the source of truth — so staging them
-          # only risks two parallel runtimes `-X ours`-clobbering a stale
+          # only risks two parallel runtimes `-X theirs`-clobbering a stale
           # binary. Skip them entirely. dual / sqlite modes keep the
           # original behaviour.
           stage_db_mirrors() {
@@ -1561,10 +1575,22 @@ jobs:
                     echo "Merge also failed"
                     git merge --abort 2>/dev/null || true
                     
-                    # Try to accept our changes to resolve conflict
-                    echo "Attempting to resolve conflicts by keeping local changes..."
-                    if git rebase "origin/$CURRENT_BRANCH" -X ours 2>/dev/null; then
-                      echo "Rebase with ours strategy successful"
+                    # Last resort before the fallback branch: replay this
+                    # run's commit onto the remote, keeping OUR hunks where
+                    # they conflict. In rebase the sides are swapped
+                    # relative to merge — "ours" is the upstream being
+                    # replayed onto (the other run's commit), "theirs" is
+                    # the commit being replayed (this run's). So keeping
+                    # local changes needs -X theirs; -X ours silently threw
+                    # this run's reports away and still exited 0 (the
+                    # 2026-07-26 parallel-AdHoc data loss — this workflow
+                    # has no concurrency group, so runs do overlap).
+                    # Conflict output stays on the log — do not re-add
+                    # 2>/dev/null.
+                    echo "Attempting to resolve conflicts by keeping this run's changes..."
+                    if git rebase "origin/$CURRENT_BRANCH" -X theirs; then
+                      echo "Rebase with theirs strategy successful (this run's version kept)"
+                      echo "::warning::Push conflict auto-resolved with -X theirs (this run's version kept for conflicting hunks) — verify shared report files (reports/D1/d1_recovery_outbox.jsonl, reports/D1/d1_drift.jsonl, reports/AdHoc/**.csv) for rows dropped from a concurrent run"
                     else
                       git rebase --abort 2>/dev/null || true
                       echo "Could not resolve conflicts, will retry..."

@@ -28,7 +28,7 @@ import tempfile
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
-from javdb.infra.config import cfg
+from javdb.infra.config import cfg, use_db_storage
 from javdb.infra.logging import setup_logging, get_logger
 from javdb.infra.paths import find_latest_report_in_dated_dirs, ensure_dated_dir
 
@@ -62,12 +62,24 @@ from javdb.integrations.rclone.types import (
     FolderInfo,
     INCREMENTAL_DAYS,
 )
+from javdb.storage import advisory_lock
 from javdb.storage.repos.operations_repo import OperationsRepo
 from javdb.storage.repos.session_lifecycle_repo import SessionLifecycleRepo
 from javdb.integrations.rclone.manager.options import RcloneManagerOptions
 from javdb.integrations.rclone.manager.result import RcloneManagerResult
 
 _YEAR_RE = re.compile(r"^\d{4}$")
+
+# Cross-runner lease guarding the destructive dedup execute path. Every caller
+# of the executor competes for this one key, whichever workflow launched it.
+DEDUP_EXECUTE_LOCK_KEY = "lock:rclone_dedup_execute"
+
+# Exit code for a lock-held skip in the file-specific execute mode
+# (``--dedup-csv``), where the lease holder will NOT cover this file's plan.
+# 75 mirrors sysexits.h ``EX_TEMPFAIL``: the work was not done, the cause is
+# temporary, retry once the holder finishes. The shared-queue mode returns 0
+# instead — there the holder drains the very rows this run would have.
+EXIT_LOCK_HELD = 75
 
 # Config defaults
 RCLONE_FOLDER_PATH = cfg('RCLONE_FOLDER_PATH', None)
@@ -926,7 +938,144 @@ def run_execute_from_csv(
     from_file_only: bool = False,
     session_id: Optional[str] = None,
 ) -> int:
+    """Purge pending dedup records under the dedup advisory lease.
+
+    The executor drains **every** pending ``DedupRecords`` row, so two
+    concurrent runs would purge the same paths twice. ``WeeklyDedup.yml`` and
+    ``RcloneManager.yml`` serialise on a shared GitHub ``concurrency`` group,
+    but ``DailyIngestion.yml`` / ``AdHocIngestion.yml`` run this same CLI
+    outside it — hence the cross-runner lease taken here (see
+    :mod:`javdb.storage.advisory_lock`).
+
+    Losing the lease means different things per mode, so the skip exit differs:
+
+    * **Shared-queue mode** (*from_file_only* False — every workflow caller):
+      the holder is draining the very same pending ``DedupRecords`` rows, so the
+      work does happen and losing is not an error. We name the holder and return
+      0. Both ingestion workflows mark this step ``continue-on-error`` and the
+      dedicated dedup workflows do not, so a clean 0 keeps a scheduled pipeline
+      green while the skip stays visible in the log.
+    * **File-only mode** (*from_file_only* True — an explicit ``--dedup-csv``
+      working set): the holder drains the shared queue, **not** this file's
+      plan, so nobody executes it. Reporting 0 would claim success for work that
+      never ran, so we return :data:`EXIT_LOCK_HELD` (75, ``EX_TEMPFAIL``) to
+      mean "resource busy, retry later".
+
+    The lease is only as shared as the operations DB behind it: under
+    ``STORAGE_BACKEND=sqlite`` it is machine-local and grants no cross-runner
+    exclusion, which is logged as a warning rather than refused (see
+    :mod:`javdb.storage.advisory_lock`).
+
+    Scan / report stay lock-free; only this destructive path is guarded.
+
+    Returns 0 when at least one purge succeeded, when there was nothing to do,
+    or when the lease was held elsewhere in shared-queue mode;
+    :data:`EXIT_LOCK_HELD` when the lease was held elsewhere in file-only mode;
+    1 when all attempted purges failed, or when the lease could not be
+    evaluated at all.
+    """
+    if dry_run:
+        # A dry run purges nothing and writes no DB rows, so it needs no lease
+        # — and must never be able to block a real execution.
+        return _execute_dedup_purge(
+            dedup_csv, dry_run=True, from_file_only=from_file_only,
+            session_id=session_id,
+        )
+
+    if not use_db_storage():
+        # CSV-only / ``JAVDB_FORBID_DB_WRITES`` (TestIngestion): taking the
+        # lease would itself be a forbidden DB write, and the pending set is a
+        # local file rather than the shared queue — nothing to serialise.
+        logger.warning(
+            "DB storage disabled — running dedup execute WITHOUT the "
+            "advisory lease (no shared pending queue to race over)"
+        )
+        return _execute_dedup_purge(
+            dedup_csv, dry_run=False, from_file_only=from_file_only,
+            session_id=session_id,
+        )
+
+    # The lease is only as shared as the operations DB holding it. Under
+    # sqlite that DB is this checkout's own file, so the lease still serialises
+    # runs on one machine (useful to a self-hoster) but cannot referee two
+    # runners. Production runs d1, where it genuinely is shared — so degrade
+    # visibly instead of implying a guarantee we don't have here.
+    from javdb.storage.db import current_backend
+
+    if current_backend() == 'sqlite':
+        logger.warning(
+            "Dedup advisory lease %s is MACHINE-LOCAL under "
+            "STORAGE_BACKEND=sqlite — it lives in this machine's own "
+            "operations.db and provides NO cross-runner mutual exclusion "
+            "(concurrent runners would each acquire it and drain the same "
+            "pending records). Cross-runner safety requires "
+            "STORAGE_BACKEND=d1. Proceeding anyway.",
+            DEDUP_EXECUTE_LOCK_KEY,
+        )
+
+    try:
+        attempt = advisory_lock.try_acquire(DEDUP_EXECUTE_LOCK_KEY)
+    except Exception:
+        # Fail closed: this path already depends on the operations DB (it reads
+        # DedupRecords and records deletions through it). If that DB cannot be
+        # reached, purging first and failing to mark the rows deleted would
+        # leave them pending for the next run — the exact double-purge this
+        # lease exists to prevent. Refuse instead, loudly.
+        logger.error(
+            "Cannot evaluate the dedup advisory lease (%s) — refusing to "
+            "purge anything; no records drained",
+            DEDUP_EXECUTE_LOCK_KEY, exc_info=True,
+        )
+        return 1
+
+    if attempt.lease is None:
+        if from_file_only:
+            # The holder drains the shared pending queue; it will never look at
+            # this file. Skipping quietly with 0 would report success for a
+            # deletion plan that nobody executed.
+            logger.warning(
+                "EXECUTE SKIPPED — dedup advisory lease %s is held by %s. The "
+                "deletion plan in %s was NOT executed and will not be: the "
+                "holder drains the shared pending queue, not this file's "
+                "working set. Retry after the holder finishes (exit %s).",
+                DEDUP_EXECUTE_LOCK_KEY, attempt.holder, dedup_csv,
+                EXIT_LOCK_HELD,
+            )
+            return EXIT_LOCK_HELD
+        logger.warning(
+            "EXECUTE SKIPPED — dedup advisory lease %s is held by %s; another "
+            "run is draining the same pending records. Nothing purged.",
+            DEDUP_EXECUTE_LOCK_KEY, attempt.holder,
+        )
+        return 0
+
+    try:
+        return _execute_dedup_purge(
+            dedup_csv, dry_run=False, from_file_only=from_file_only,
+            session_id=session_id,
+        )
+    finally:
+        try:
+            advisory_lock.release(attempt.lease)
+        except Exception:
+            logger.warning(
+                "Failed to release dedup advisory lease %s — it expires on "
+                "its own at %s",
+                DEDUP_EXECUTE_LOCK_KEY, attempt.lease.expires_at,
+                exc_info=True,
+            )
+
+
+def _execute_dedup_purge(
+    dedup_csv: str,
+    dry_run: bool = False,
+    from_file_only: bool = False,
+    session_id: Optional[str] = None,
+) -> int:
     """Read pending dedup records, purge them, and update the DB.
+
+    Call through :func:`run_execute_from_csv`, which holds the advisory lease
+    for the duration of this work.
 
     When *from_file_only* is True, only the given CSV file is read
     (e.g. a per-run CSV passed via ``--dedup-csv``).  Otherwise,

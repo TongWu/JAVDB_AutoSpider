@@ -78,6 +78,7 @@ def commit_harness(monkeypatch):
         transitions=[],
         marked=[],
         status="in_progress",
+        row_shape="tuple",
     )
 
     class _Conn:
@@ -87,6 +88,13 @@ def commit_harness(monkeypatch):
             return self
 
         def fetchone(self):
+            if state.row_shape == "dict":
+                # D1 / dual backends return plain dicts (name access only).
+                return {
+                    "Id": "S1",
+                    "WriteMode": "pending",
+                    "Status": state.status,
+                }
             return ("S1", "pending", state.status)
 
     class _DB:
@@ -244,3 +252,64 @@ def test_sentinel_mark_committed_failure_does_not_fail_library_commit(
     assert result.new_state == "committed"
     assert commit_harness.drained == ["S1"]
     assert commit_harness.transitions == [("S1", "committed")]
+
+
+def test_dict_row_shape_drains_pending_session(commit_harness, monkeypatch):
+    """D1/dual return dict rows — WriteMode must be read by name, not row[1].
+
+    Regression: the row-shape read used ``row[1]``/``row[2]`` behind an
+    inverted ``hasattr(row, '__getitem__')`` guard, so a dict row raised
+    ``KeyError: 1`` before any status logic ran.
+    """
+    commit_harness.row_shape = "dict"
+    monkeypatch.setattr(
+        commit_lib,
+        "_sentinel_evaluate",
+        lambda sid: SentinelVerdict(critical=False),
+        raising=False,
+    )
+
+    result = commit_session(CommitRequest(session_id="S1"))
+
+    assert result.new_state == "committed"
+    assert commit_harness.drained == ["S1"]
+    assert commit_harness.transitions == [("S1", "committed")]
+    assert commit_harness.marked == ["S1"]
+
+
+def test_dict_row_shape_reads_committed_status_by_name(
+    commit_harness,
+    monkeypatch,
+):
+    """Status must be read by name too: a committed dict row stays idempotent."""
+    commit_harness.row_shape = "dict"
+    commit_harness.status = "committed"
+    monkeypatch.setattr(
+        commit_lib,
+        "_sentinel_evaluate",
+        lambda sid: SentinelVerdict(critical=False),
+        raising=False,
+    )
+
+    result = commit_session(CommitRequest(session_id="S1"))
+
+    assert result.new_state == "committed"
+    assert commit_harness.drained == []
+    assert commit_harness.transitions == []
+    assert commit_harness.marked == ["S1"]
+
+
+def test_row_value_supports_dict_tuple_and_sqlite_row():
+    """_row_value reads every production row shape for the same column."""
+    import sqlite3
+
+    assert commit_lib._row_value({"WriteMode": "pending"}, "WriteMode", 1) == "pending"
+    assert commit_lib._row_value(("S1", "pending"), "WriteMode", 1) == "pending"
+
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    try:
+        row = conn.execute("SELECT 'S1' AS Id, 'pending' AS WriteMode").fetchone()
+        assert commit_lib._row_value(row, "WriteMode", 1) == "pending"
+    finally:
+        conn.close()

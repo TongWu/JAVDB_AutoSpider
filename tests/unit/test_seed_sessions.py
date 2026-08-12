@@ -109,6 +109,46 @@ def test_seed_sessions_creates_pending_torrent_table(client: TestClient, tmp_pat
         history.close()
 
 
+def test_seed_rows_carry_application_generated_ids(client: TestClient, tmp_path: Path) -> None:
+    """Seeded MovieHistory / TorrentHistory rows must have explicit Ids.
+
+    Both tables are guarded in
+    ``javdb.storage.dual_connection.APPLICATION_GENERATED_ID_PK_COLUMN``:
+    every writer supplies ``Id`` from ``generate_integer_id()`` because the
+    SQLite and D1 AUTOINCREMENT counters are independent, so an
+    AUTOINCREMENT-derived id reused as ``TorrentHistory.MovieHistoryId``
+    addresses a different movie on the other backend. The seeder used to
+    rely on AUTOINCREMENT + ``cur.lastrowid``, which baked ids 1/2/3 —
+    values production never mints — into the E2E fixtures.
+    """
+    assert client.post("/api/test/seed-sessions").status_code == 200
+
+    history = _connect(tmp_path, "history.db")
+    try:
+        movie_ids = [
+            r[0] for r in history.execute("SELECT Id FROM MovieHistory").fetchall()
+        ]
+        torrents = history.execute(
+            "SELECT Id, MovieHistoryId FROM TorrentHistory"
+        ).fetchall()
+
+        assert len(movie_ids) == 3
+        assert len(set(movie_ids)) == 3
+        assert len(torrents) == 3
+
+        # Application snowflake: orders of magnitude above any AUTOINCREMENT
+        # rowid a fresh database hands out, and below D1's 2**53 JSON
+        # (IEEE-754 double) transport ceiling.
+        for row_id in movie_ids + [t[0] for t in torrents]:
+            assert 2 ** 32 < row_id < 2 ** 53, f"not an application id: {row_id}"
+
+        # The FK must still resolve to a seeded movie on this backend.
+        for _t_id, movie_fk in torrents:
+            assert movie_fk in movie_ids
+    finally:
+        history.close()
+
+
 def test_seed_sessions_is_idempotent(client: TestClient, tmp_path: Path) -> None:
     first = client.post("/api/test/seed-sessions")
     second = client.post("/api/test/seed-sessions")

@@ -140,7 +140,7 @@ def _bootstrap_storage_backend_for_align(paths: list[str]) -> str:
     a row D1 accepts: the drain dies with ``UNIQUE constraint failed:
     MovieHistory.Href`` *after* the session has crossed into ``finalizing``,
     leaving its pending writes undrained, and the status-aware guard's
-    resume only re-runs the same failing drain (BFR-023). D1 is canonical,
+    resume only re-runs the same failing drain (BFR-035). D1 is canonical,
     nothing in this run reads the mirror, and the mirror is only committed
     back on success — so ``dual`` buys no validation here and costs the
     drain.
@@ -188,7 +188,7 @@ def _bootstrap_storage_backend_for_align(paths: list[str]) -> str:
     logger.info(
         "STORAGE_BACKEND=d1 selected for alignment — local SQLite writes are "
         "SKIPPED so a stale mirror row cannot abort the session drain "
-        "(BFR-023). D1 is the source of truth; set STORAGE_BACKEND=dual "
+        "(BFR-035). D1 is the source of truth; set STORAGE_BACKEND=dual "
         "explicitly to mirror writes, and rebuild the local mirror with "
         "`python3 -m apps.cli.db.sync_d1_to_sqlite --apply "
         "--force-overwrite-all`.",

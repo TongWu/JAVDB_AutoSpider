@@ -1,4 +1,4 @@
-# BFR-023: Concurrent ingestion runs commit each other's live sessions, stranding pending writes
+# BFR-035: Concurrent ingestion runs commit each other's live sessions, stranding pending writes
 
 **Status**: Fixed
 **Date**: 2026-07-26
