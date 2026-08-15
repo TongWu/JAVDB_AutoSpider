@@ -69,6 +69,10 @@ Common issues and their solutions for JAVDB AutoSpider.
 - Ensure `GIT_BRANCH` matches an existing branch in your repository.
 - For new repositories, create the branch first or use `main`.
 
+**Concurrent runs conflict on shared report files**
+- Append-only report files (`reports/D1/*.jsonl`, dated `reports/DailyReport/**` and `reports/AdHoc/**` CSVs, `reports/pikpak_bridge_history.csv`) carry `merge=union` in `.gitattributes`, so the auto-commit rebase keeps both runs' appended lines automatically.
+- Whole-file snapshot reports (`reports/parsed_movies_history.csv`, `reports/rclone_inventory.csv`, `reports/dedup_history.csv`, `reports/D1/d1_port_summary.json`) are deliberately excluded: on conflict the push step keeps this run's version (`git rebase -X theirs`) and emits a workflow warning naming the files — check the run's annotations if rows look missing after overlapping runs.
+
 ## Proxy Issues
 
 **All proxies banned during a run**

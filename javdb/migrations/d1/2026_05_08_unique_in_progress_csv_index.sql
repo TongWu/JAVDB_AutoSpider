@@ -1,3 +1,12 @@
+-- 2026-05-08: unique in-progress (RunId, RunAttempt, CsvFilename) index.
+--
+-- Apply with:
+--   wrangler d1 execute javdb-reports --remote \
+--     --file=javdb/migrations/d1/2026_05_08_unique_in_progress_csv_index.sql
+--
+-- Header added so the admin migration runner can resolve a target database
+-- (ReportSessions lives in the reports database).
+
 -- 2026-05-08 (evening) — schema-level invariant against same-CSV double-INSERT.
 --
 -- Background: the spider self-check used to refuse any second in-progress

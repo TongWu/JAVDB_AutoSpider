@@ -31,7 +31,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from javdb.infra.logging import setup_logging, get_logger
 from javdb.storage.sqlite_datetime import normalize_storage_datetime
-from javdb.storage.db import generate_session_id
+from javdb.storage.db import generate_integer_id, generate_session_id
 from javdb.parsing.common import javdb_absolute_url
 from javdb.infra.config import cfg
 from javdb.spider.services.dedup_types import DEDUP_FIELDNAMES
@@ -123,18 +123,46 @@ def migrate_history(csv_path: str, db_path: str, dry_run: bool = False) -> int:
             hack_sub_val = (row.get('hacked_subtitle', '') or '').strip()
             perfect_match = 1 if (sub_val and 'magnet:' in sub_val and hack_sub_val and 'magnet:' in hack_sub_val) else 0
 
-            # Delete existing TorrentHistory before REPLACE to avoid FK constraint
-            existing = conn.execute("SELECT Id FROM MovieHistory WHERE Href = ?", (href,)).fetchone()
-            if existing:
-                conn.execute("DELETE FROM TorrentHistory WHERE MovieHistoryId = ?", (existing[0],))
+            # Drop the previous generation of rows for this Href before the
+            # re-insert, so the REPLACE never trips the TorrentHistory FK.
+            #
+            # The id must be resolved *inside* each DELETE rather than by a
+            # separate ``SELECT Id FROM MovieHistory WHERE Href = ?``: under
+            # STORAGE_BACKEND=dual, DualConnection routes reads to D1 but
+            # writes to BOTH legs, so a pre-fetched id would make the SQLite
+            # leg delete by a D1-side id and leave its own stale rows behind.
+            # Deleting by the Href business key keeps each backend
+            # self-consistent.
+            conn.execute(
+                """DELETE FROM TorrentHistory
+                   WHERE MovieHistoryId IN (SELECT Id FROM MovieHistory WHERE Href = ?)""",
+                (href,),
+            )
+            conn.execute("DELETE FROM MovieHistory WHERE Href = ?", (href,))
 
-            # Eleven columns ↔ eleven bound values (actor fields empty for legacy CSV import).
+            # MovieHistory.Id / TorrentHistory.Id are supplied explicitly (52-bit
+            # application snowflake, < 2**53 so safe for D1 JSON transport)
+            # rather than left to AUTOINCREMENT.
+            #
+            # ``get_db`` is backend-routed, so under STORAGE_BACKEND=dual both
+            # tables hit a DualConnection.  They are guarded in
+            # ``APPLICATION_GENERATED_ID_PK_COLUMN`` because the SQLite and D1
+            # AUTOINCREMENT counters are independent: an INSERT that omits Id
+            # aborts with DualWriteIdMismatchError once they diverge, and
+            # reading the Id back with a SELECT is no better — DualConnection
+            # routes reads to D1, so the D1-side Id would be written as the
+            # SQLite leg's TorrentHistory.MovieHistoryId FK, attaching the
+            # torrents to a different movie there.  Same fix as
+            # ``db_insert_report_rows`` / the "Batch C" history writers.
+            movie_id = generate_integer_id()
+            # Twelve columns ↔ twelve bound values (actor fields empty for legacy CSV import).
             conn.execute(
                 """INSERT OR REPLACE INTO MovieHistory
-                   (VideoCode, Href, DateTimeCreated, DateTimeUpdated, DateTimeVisited,
+                   (Id, VideoCode, Href, DateTimeCreated, DateTimeUpdated, DateTimeVisited,
                     PerfectMatchIndicator, HiResIndicator, ActorName, ActorGender, ActorLink, SupportingActors)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
+                    movie_id,
                     video_code,
                     href,
                     create_dt,
@@ -148,9 +176,6 @@ def migrate_history(csv_path: str, db_path: str, dry_run: bool = False) -> int:
                     '',
                 ),
             )
-            movie_id = conn.execute(
-                "SELECT Id FROM MovieHistory WHERE Href = ?", (href,)
-            ).fetchone()[0]
             movie_count += 1
 
             for cat in ('hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle'):
@@ -166,10 +191,11 @@ def migrate_history(csv_path: str, db_path: str, dry_run: bool = False) -> int:
 
                 conn.execute(
                     """INSERT OR REPLACE INTO TorrentHistory
-                       (MovieHistoryId, MagnetUri, SubtitleIndicator, CensorIndicator,
+                       (Id, MovieHistoryId, MagnetUri, SubtitleIndicator, CensorIndicator,
                         Size, FileCount, DateTimeCreated, DateTimeUpdated)
-                       VALUES (?, ?, ?, ?, ?, 0, ?, ?)""",
-                    (movie_id, magnet_uri, sub_ind, cen_ind, size_val, torrent_dt_created, torrent_dt_updated),
+                       VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)""",
+                    (generate_integer_id(), movie_id, magnet_uri, sub_ind, cen_ind,
+                     size_val, torrent_dt_created, torrent_dt_updated),
                 )
                 torrent_count += 1
 
@@ -664,18 +690,24 @@ def migrate_single_csv(csv_path: str, filename: str, is_adhoc: bool,
 
         for row in rows:
             href = javdb_absolute_url(row.get('href', ''), _BASE_URL)
-            cur = conn.execute(
+            # ReportMovies.Id is supplied explicitly and reused verbatim as
+            # ReportTorrents.ReportMovieId, mirroring db_insert_report_rows.
+            # ``cur.lastrowid`` cannot be trusted here: ``get_db`` is
+            # backend-routed and DualCursor.lastrowid surfaces the SQLite leg's
+            # rowid while D1 allocates from its own AUTOINCREMENT counter, so
+            # the FK silently pointed at another session's movie on D1.
+            report_movie_id = generate_integer_id()
+            conn.execute(
                 """INSERT INTO ReportMovies
-                   (SessionId, Href, VideoCode, Page, Actor, Rate, CommentNumber)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (session_id,
+                   (Id, SessionId, Href, VideoCode, Page, Actor, Rate, CommentNumber)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (report_movie_id, session_id,
                  href, row.get('video_code', ''),
                  int(row['page']) if row.get('page') else None,
                  row.get('actor', ''),
                  float(row['rate']) if row.get('rate') else None,
                  int(row['comment_number']) if row.get('comment_number') else None),
             )
-            report_movie_id = cur.lastrowid
             video_code = row.get('video_code', '')
 
             for cat in ('hacked_subtitle', 'hacked_no_subtitle', 'subtitle', 'no_subtitle'):

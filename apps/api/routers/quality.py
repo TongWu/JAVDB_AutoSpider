@@ -11,7 +11,7 @@ from typing import Annotated, Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from apps.api.infra.auth import _require_auth
+from apps.api.infra.auth import _require_auth, require_role
 from apps.api.schemas.quality import (
     QualityRecommendationListResponse,
     QualityRecommendationSchema,
@@ -292,9 +292,14 @@ def list_needs_review(
 )
 def write_review_label(
     body: ReviewLabelRequest,
-    _user=Depends(_require_auth),
+    _user=Depends(require_role("admin")),
 ) -> ReviewLabelResponse:
     """Record an operator review label (accept / reject / skip) for an evaluation.
+
+    Admin-only: the labels are shared, tunable state (the dataset ADR-024 Phase 3
+    tunes thresholds against), not per-user data, so a readonly JWT must not be
+    able to overwrite them. ``require_role`` still runs ``_require_auth``, so the
+    returned payload is the same JWT claims dict the reviewer identity reads from.
 
     Stamps reviewed_at server-side and stores the reviewer from the JWT subject.
     Idempotent: a second call with the same (info_hash, movie_href, scoring_version)

@@ -75,7 +75,14 @@ The FastAPI read surface exposes the same stored rows:
 - `GET /api/quality/evidence/{info_hash}` — objective file-list evidence for a
   production-selected torrent whose qBittorrent metadata was captured.
 
-All `/api/quality/*` endpoints are authenticated and read-only.
+Every `/api/quality/*` endpoint is authenticated. All of the above are read-only;
+the one write on this surface is admin-only:
+
+- `POST /api/quality/review-labels` — records an operator review label
+  (`accept` / `reject` / `skip`) against an evaluation. The labels are shared,
+  tunable state — the dataset ADR-024 Phase 3 tunes thresholds against — not
+  per-user data, so a readonly token cannot write them. Request body and
+  response shape are in [api-reference.md](../developer/api-reference.md).
 
 ## Reason Codes
 

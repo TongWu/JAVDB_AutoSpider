@@ -12,7 +12,7 @@ container that lacks ``git-lfs``). The expected behaviour is:
 3. Fall back to ``STORAGE_BACKEND=d1`` when the pull cannot recover
    them — alignment must still run, writing only to D1.
 
-Since BFR-023 the *default* is ``d1`` regardless of mirror health, so the
+Since BFR-035 the *default* is ``d1`` regardless of mirror health, so the
 LFS recovery flow only applies to an explicit ``dual`` / ``sqlite``.
 """
 
@@ -89,12 +89,12 @@ class TestBootstrapStorageBackend:
         return paths
 
     def test_default_picks_d1_even_with_intact_mirror(self, tmp_path):
-        # BFR-023: alignment's work list comes from a D1 read, so it
+        # BFR-035: alignment's work list comes from a D1 read, so it
         # re-scrapes exactly the hrefs where D1 and the mirror disagree.
         # Mirroring the commit lets a stale mirror row veto a MovieHistory
         # INSERT that D1 accepts, aborting the drain after the session has
         # crossed into 'finalizing'. An intact mirror is NOT a reason to
-        # write to it — that was the pre-BFR-023 default and it failed
+        # write to it — that was the pre-BFR-035 default and it failed
         # every weekly run.
         paths = self._make_valid_sqlite(tmp_path)
         assert m2c._bootstrap_storage_backend_for_align(paths) == "d1"

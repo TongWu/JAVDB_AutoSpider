@@ -29,6 +29,43 @@ def test_apply_cleanup_completed_promotes_hashes_and_orphan_minimal_insert(repo)
     assert got_h2.state == "completed"
     assert got_h2.href == ""
     assert result.marked_completed == 2
+    # queued -> completed is a real transition, so it is dated.
+    assert got_h1.state_changed_at is not None
+    assert got_h1.state_changed_at == got_h1.completed_at
+
+
+def test_cleanup_of_already_completed_row_keeps_original_transition_time(repo):
+    """Regression: the hourly acquisition pass can mark a hash 'completed' before
+    the daily PikPak cleanup hands the same hash to apply_cleanup_completed().
+    That second call is not a transition, so it must not drag state_changed_at
+    (and the completed trend point) from the real completion to the cleanup time.
+    """
+    repo.upsert(AcquisitionOutcomeRecord(
+        qb_hash="h1",
+        href="/v/1",
+        state="completed",
+        completed_at="2026-06-01T00:00:00Z",
+        state_changed_at="2026-06-01T00:00:00Z",
+    ))
+
+    reconcile_service.apply_cleanup_completed({"hashes": ["h1"]}, repo=repo)
+
+    got = repo.get("h1")
+    assert got.state == "completed"
+    assert got.state_changed_at == "2026-06-01T00:00:00Z"
+    assert got.completed_at == "2026-06-01T00:00:00Z"
+
+
+def test_cleanup_backfills_transition_time_when_missing(repo):
+    """A row predating the column has state_changed_at=NULL; the no-transition
+    branch still COALESCEs one in rather than leaving it null forever."""
+    repo.upsert(AcquisitionOutcomeRecord(
+        qb_hash="h1", href="/v/1", state="completed", state_changed_at=None,
+    ))
+
+    reconcile_service.apply_cleanup_completed({"hashes": ["h1"]}, repo=repo)
+
+    assert repo.get("h1").state_changed_at is not None
 
 
 class _FakeQBClient:

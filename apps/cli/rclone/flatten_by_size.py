@@ -7,8 +7,9 @@
   已在根目录下的文件跳过。
 - **小于** 阈值：``deletefile`` 删除（包含根目录下的小文件）。
 
-同名冲突（多个子目录内同名文件都要提到根目录）时，自动在文件名前加上
-相对路径前缀（把 ``/`` 换成 ``_``）以保证目标路径唯一。
+同名冲突（多个子目录内同名文件都要提到根目录，或与根目录下已存在的大文件
+同名）时，自动在文件名前加上相对路径前缀（把 ``/`` 换成 ``_``）以保证目标
+路径唯一，避免 ``moveto`` 静默覆盖根目录下的原文件。
 
 用法示例::
 
@@ -142,16 +143,30 @@ def depth_one_name(rel_path: str) -> bool:
     return "/" not in rel_path
 
 
-def choose_dst_names(large_under_subdir: List[FileRow]) -> Dict[str, str]:
-    """rel_path -> 根目录下的目标文件名（仅 basename，冲突已消解）。"""
-    # 先按 basename 分组，冲突时加入目录前缀
+def choose_dst_names(
+    large_under_subdir: List[FileRow],
+    large_at_root: Optional[List[FileRow]] = None,
+) -> Dict[str, str]:
+    """rel_path -> 根目录下的目标文件名（仅 basename，冲突已消解）。
+
+    ``large_at_root`` 是留在根目录下、不会被移动的大文件。它们的名字必须
+    一起参与冲突消解并预先占位，否则单个子目录内与根文件同名的文件会算出
+    与根文件完全相同的目标路径，``rclone moveto`` 默认会静默覆盖它。
+    """
+    # 先按 basename 分组（含根目录下的既有文件），冲突时加入目录前缀
     basenames: Dict[str, List[str]] = {}
+    used: Set[str] = set()
+
+    for row in large_at_root or []:
+        base = posix_basename(row.rel_path)
+        basenames.setdefault(base, []).append(row.rel_path)
+        used.add(base)
+
     for row in large_under_subdir:
         base = posix_basename(row.rel_path)
         basenames.setdefault(base, []).append(row.rel_path)
 
     result: Dict[str, str] = {}
-    used: Set[str] = set()
 
     for row in large_under_subdir:
         base = posix_basename(row.rel_path)
@@ -343,7 +358,7 @@ def main() -> int:
         len(small),
     )
 
-    dst_by_rel = choose_dst_names(large_nested)
+    dst_by_rel = choose_dst_names(large_nested, large_root)
 
     delete_targets = [join_remote(root, r.rel_path) for r in small]
     move_jobs: List[Tuple[str, str, str]] = []

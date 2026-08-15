@@ -35,11 +35,8 @@ on:
   #   paths:
   #     # Python entry points & CLI modules
   #     - 'apps/**/*.py'
-  #     - 'pipeline.py'
-  #     - 'compat.py'
   #     # Python libraries used by daily & adhoc ingestion
-  #     - 'packages/python/**/*.py'
-  #     - 'utils/**/*.py'
+  #     - 'javdb/**/*.py'
   #     - 'scripts/**/*.py'
   #     # Python dependency manifest
   #     - 'requirements.txt'

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 import requests
@@ -25,6 +26,40 @@ class _PlexHttp:
         resp = requests.get(url, headers=headers, params=params or {}, timeout=_TIMEOUT)
         resp.raise_for_status()
         return resp.json()
+
+
+def _watched_at_iso(value: Any) -> Optional[str]:
+    """Normalize Plex ``lastViewedAt`` to the UTC ISO shape ConsumptionSignal expects.
+
+    Plex returns a numeric Unix epoch (seconds); Emby's ``LastPlayedDate`` is
+    already an ISO string. ConsumptionSignal consumers compare ``watched_at``
+    against a ``YYYY-MM-DD`` cutoff and group with ``substr(watched_at, 1, 10)``,
+    so a raw epoch is either excluded from the trend or lands under an invalid
+    day key. Convert the epoch; pass any non-numeric value through unchanged so a
+    server that already sends ISO keeps working.
+    """
+    # Falsy covers absent, empty, and a numeric 0.
+    if not value:
+        return None
+    try:
+        epoch = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    # The falsy check above misses the *string* forms — '0' and '0.0' are truthy
+    # strings — and a negative epoch is equally meaningless here. Both mean
+    # "never viewed"; without this they became 1970-01-01 / a 1969 date and
+    # polluted the consumption trend with a real-looking day.
+    if epoch <= 0:
+        return None
+    try:
+        return (
+            datetime.fromtimestamp(epoch, tz=timezone.utc)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
+    except (OverflowError, OSError, ValueError):
+        logger.warning("Plex: uninterpretable lastViewedAt %r; dropping", value)
+        return None
 
 
 def _first_file_path(raw: dict) -> Optional[str]:
@@ -88,7 +123,7 @@ class PlexAdapter:
                     progress_pct=pct,
                     play_count=view_count,
                     rating=float(rating) if rating is not None else None,
-                    watched_at=str(raw["lastViewedAt"]) if raw.get("lastViewedAt") else None,
+                    watched_at=_watched_at_iso(raw.get("lastViewedAt")),
                 ))
         logger.info("Plex %s: collected %d items", self.config.instance, len(out))
         return out

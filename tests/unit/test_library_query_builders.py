@@ -31,8 +31,16 @@ def test_recent_query_with_state_binds_state_first():
 
 def test_trend_query_uses_substr_day_and_terminal_states():
     sql, bindings = build_acquisition_trend_query(cutoff="2026-01-01")
-    assert "substr(last_seen_at, 1, 10)" in sql
+    assert "substr(state_changed_at, 1, 10)" in sql
     assert "state IN ('completed','stalled','failed')" in sql
-    assert "last_seen_at >= ?" in sql
+    assert "state_changed_at >= ?" in sql
     assert "GROUP BY d ORDER BY d" in sql
     assert bindings == ["2026-01-01"]
+
+
+def test_trend_query_never_groups_by_last_seen_at():
+    """Regression: last_seen_at is the last successful qB observation, so a
+    stalled/failed row carries a value 7-14 days older than its transition —
+    plotting the failure in the past and dropping it from short windows."""
+    sql, _ = build_acquisition_trend_query(cutoff="2026-01-01")
+    assert "last_seen_at" not in sql

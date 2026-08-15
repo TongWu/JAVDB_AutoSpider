@@ -16,8 +16,8 @@ permissions:
   contents: read
 
 on:
-  schedule:
-    - cron: '0 14 * * *'  # daily 22:00 SGT
+  # schedule: # DISABLED FOR PUBLIC REPO
+    # - cron: '0 14 * * *'  # daily 22:00 SGT
   workflow_dispatch:
     inputs:
       dry_run:

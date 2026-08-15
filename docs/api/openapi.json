@@ -4725,6 +4725,11 @@
       },
       "RunMigrationRequest": {
         "properties": {
+          "acknowledge_unrecorded": {
+            "default": false,
+            "title": "Acknowledge Unrecorded",
+            "type": "boolean"
+          },
           "dry_run": {
             "default": true,
             "title": "Dry Run",
@@ -12357,7 +12362,7 @@
     },
     "/api/migrations/{migration_id}/run": {
       "post": {
-        "description": "Preview or run a migration.",
+        "description": "Preview a migration, or apply it to D1.\n\nWith dry_run=true (the default) returns the SQL and its executable statement\ncount, changing nothing. With dry_run=false the migration is applied to the\nD1 database named by its own `wrangler d1 execute javdb-<db>` header line and\nrecorded in system_state.\n\nRefuses before running anything when STORAGE_BACKEND is not d1/dual (409),\nwhen the migration is already recorded as applied (409 \u2014 ALTER TABLE ADD\nCOLUMN is not idempotent), when it has no ledger marker at all and the caller\nhas not acknowledged that it may already have been applied out of band (409),\nwhen the target database cannot be resolved unambiguously from the header\n(400), or when the script has more statements than one atomic D1 batch\nholds (400).\n\nThe statements run as a single D1 batch, so they land whole or roll back\nwhole. A rejection by D1 returns 502 with nothing applied and the ledger\nclaim released. A timeout or dropped connection returns 502 as well but\nkeeps the claim, because D1 may have committed and lost the response \u2014 the\noutcome is unknown, not rolled back. Claiming the ledger entry before\nexecution is also what makes two concurrent applies resolve safely.",
         "operationId": "run_migration_api_migrations__migration_id__run_post",
         "parameters": [
           {
@@ -15352,7 +15357,7 @@
     },
     "/api/quality/review-labels": {
       "post": {
-        "description": "Record an operator review label (accept / reject / skip) for an evaluation.\n\nStamps reviewed_at server-side and stores the reviewer from the JWT subject.\nIdempotent: a second call with the same (info_hash, movie_href, scoring_version)\noverwrites the previous label.",
+        "description": "Record an operator review label (accept / reject / skip) for an evaluation.\n\nAdmin-only: the labels are shared, tunable state (the dataset ADR-024 Phase 3\ntunes thresholds against), not per-user data, so a readonly JWT must not be\nable to overwrite them. ``require_role`` still runs ``_require_auth``, so the\nreturned payload is the same JWT claims dict the reviewer identity reads from.\n\nStamps reviewed_at server-side and stores the reviewer from the JWT subject.\nIdempotent: a second call with the same (info_hash, movie_href, scoring_version)\noverwrites the previous label.",
         "operationId": "write_review_label_api_quality_review_labels_post",
         "requestBody": {
           "content": {

@@ -822,12 +822,17 @@ CREATE TABLE IF NOT EXISTS AcquisitionOutcome (
     completed_at  TEXT,
     landed_at     TEXT,
     last_seen_at  TEXT,
-    session_id    TEXT
+    session_id    TEXT,
+    -- Appended last to match the column order D1 ends up with after
+    -- 2026_08_09_add_acquisition_state_changed_at.sql (ALTER TABLE ADD COLUMN).
+    state_changed_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_acq_outcome_state ON AcquisitionOutcome(state);
 CREATE INDEX IF NOT EXISTS idx_acq_outcome_video_code ON AcquisitionOutcome(video_code);
 CREATE INDEX IF NOT EXISTS idx_acq_outcome_session ON AcquisitionOutcome(session_id);
 CREATE INDEX IF NOT EXISTS idx_acq_outcome_last_seen ON AcquisitionOutcome(last_seen_at);
+CREATE INDEX IF NOT EXISTS idx_acq_outcome_state_changed
+    ON AcquisitionOutcome(state_changed_at);
 
 CREATE TABLE IF NOT EXISTS OwnershipLedger (
   video_code  TEXT NOT NULL,
@@ -1282,6 +1287,63 @@ ROLLBACK_COLUMN_SPECS: List[Tuple[str, str, str]] = [
     # ReportSessions, gating the pending dispatch.
     ('ReportSessions', 'WriteMode', "TEXT DEFAULT 'pending'"),
 ]
+
+
+# Additive columns on enrichment tables that sit OUTSIDE the pending-write /
+# rollback machinery. Same idempotent-ALTER treatment as ROLLBACK_COLUMN_SPECS,
+# deliberately kept in a separate constant so ``find_missing_rollback_columns``
+# (the BFR-017 D1 drift guard) keeps its precise meaning — AcquisitionOutcome
+# explicitly bypasses session/rollback (ADR-033 D10).
+# Each entry is (table, column, ddl, backfill_expr). ``backfill_expr`` is a SQL
+# expression seeding the column on rows that predate it, or None when a NULL is
+# an acceptable starting value. It MUST mirror the paired D1 migration's
+# backfill: D1 and local SQLite have to reach the same state, or the two
+# backends disagree about rows neither will ever revisit.
+ADDITIVE_COLUMN_SPECS: List[Tuple[str, str, str, Optional[str]]] = [
+    # BFR-027: dates the state transition itself, as distinct from last_seen_at
+    # (the last successful qB observation). Mirrors
+    # javdb/migrations/d1/2026_08_09_add_acquisition_state_changed_at.sql,
+    # backfill included — terminal rows (completed / failed / in_library) leave
+    # list_active() forever, so a NULL here is permanent and would drop them out
+    # of the acquisition trend, which filters on this column.
+    (
+        'AcquisitionOutcome',
+        'state_changed_at',
+        'TEXT',
+        'COALESCE(landed_at, completed_at, last_seen_at, queued_at)',
+    ),
+]
+
+
+def _ensure_additive_columns(conn: sqlite3.Connection) -> None:
+    """Add :data:`ADDITIVE_COLUMN_SPECS` to pre-existing tables (idempotent).
+
+    Must run BEFORE the DDL script, not just after it. ``_OPERATIONS_DDL``
+    creates an index over ``AcquisitionOutcome(state_changed_at)``, and
+    ``CREATE INDEX`` raises ``no such column`` on a pre-existing table that
+    lacks it — which is exactly what the LFS-tracked ``reports/operations.db``
+    looks like on any checkout predating the migration. A fresh DB has no such
+    table yet, so ``_has_table`` makes this a no-op there and the DDL creates
+    the column directly.
+
+    The backfill runs on every pass, not only when the ALTER succeeds: it is
+    guarded by ``WHERE <column> IS NULL``, so it is idempotent and cheap once
+    seeded, and a database whose column was added by an earlier pass that then
+    failed before backfilling still gets repaired.
+    """
+    for table, column, ddl, backfill in ADDITIVE_COLUMN_SPECS:
+        if not _has_table(conn, table):
+            continue
+        try:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+        except sqlite3.OperationalError:
+            # Column already exists; ALTER raises "duplicate column name".
+            pass
+        if backfill:
+            conn.execute(
+                f"UPDATE {table} SET {column} = {backfill} "  # noqa: S608
+                f"WHERE {column} IS NULL"
+            )
 
 
 def _column_names(conn, table: str) -> List[str]:
@@ -2091,6 +2153,7 @@ def _init_single_db(db_path: str, ddl: str, *, force: bool = False):
         # below creates everything from scratch. The post-DDL call kept
         # below is a redundant idempotent safety net.
         _ensure_rollback_columns(conn)
+        _ensure_additive_columns(conn)
 
         # P1: dedupe pre-existing SpiderStats / UploaderStats / PikpakStats
         # rows that share a SessionId before the DDL's new UNIQUE indexes
@@ -2113,6 +2176,7 @@ def _init_single_db(db_path: str, ddl: str, *, force: bool = False):
         _ensure_newworks_composite_pk(conn)
         _normalize_moviehistory_actor_column_order(conn)
         _ensure_rollback_columns(conn)
+        _ensure_additive_columns(conn)
         _materialize_report_session_status_default(conn)
 
         if current > 0 and current < 10:
@@ -2152,6 +2216,7 @@ def _init_single_legacy_db(db_path: str, *, force: bool = False):
         # that reference SessionId / Status would fail on a legacy DB
         # whose tables predate X3 rollback.
         _ensure_rollback_columns(conn)
+        _ensure_additive_columns(conn)
 
         conn.executescript(_TABLES_SQL)
 
@@ -2165,6 +2230,7 @@ def _init_single_legacy_db(db_path: str, *, force: bool = False):
         _ensure_newworks_composite_pk(conn)
         _normalize_moviehistory_actor_column_order(conn)
         _ensure_rollback_columns(conn)
+        _ensure_additive_columns(conn)
         _materialize_report_session_status_default(conn)
 
         if current < 6:
@@ -2323,6 +2389,7 @@ def ensure_rollback_columns(db_path: Optional[str] = None) -> None:
     conn.row_factory = sqlite3.Row
     try:
         _ensure_rollback_columns(conn)
+        _ensure_additive_columns(conn)
         conn.commit()
     finally:
         conn.close()

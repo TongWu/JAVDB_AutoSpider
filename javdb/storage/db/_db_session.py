@@ -279,11 +279,11 @@ def is_valid_session_id(session_id: str) -> bool:
 #   • Must be unlikely to collide across processes (dual-mode multi-runner)
 #
 # Layout (52 bits, little-headroom below 2**53):
-#   relative_ms (40 bits) — ms since 2026-01-01T00:00:00Z; overflows year 2060
+#   relative_ms (40 bits) — ms since 2025-01-01T00:00:00Z; overflows year 2059
 #   process_tag  (6 bits) — secrets.randbits(6) per process (64 slots)
 #   counter      (6 bits) — monotonic per-ms in-process counter (64 per ms)
 
-_INT_ID_EPOCH_BASE_MS: int = 1_735_689_600_000  # 2026-01-01T00:00:00Z
+_INT_ID_EPOCH_BASE_MS: int = 1_735_689_600_000  # 2025-01-01T00:00:00Z
 _INT_ID_PROCESS_TAG: int = secrets.randbits(6)
 _INT_ID_LOCK = threading.Lock()
 _INT_ID_LAST_MS: int = -1

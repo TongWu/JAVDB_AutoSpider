@@ -207,22 +207,35 @@ def _insert_session(
     )
 
 
+# MovieHistory / TorrentHistory are guarded in
+# ``javdb.storage.dual_connection.APPLICATION_GENERATED_ID_PK_COLUMN``: every
+# writer must supply ``Id`` explicitly (52-bit application snowflake, < 2**53
+# so it survives D1's JSON transport) because the SQLite and D1 AUTOINCREMENT
+# counters are independent, and an AUTOINCREMENT-derived Id used as
+# TorrentHistory.MovieHistoryId points at a different movie on the other
+# backend.  The seeder writes through plain ``sqlite3`` connections, so it
+# cannot trip DualWriteIdMismatchError today — but it is the same invariant,
+# and the fixtures then carry production-shaped ids instead of 1/2/3.
 def _insert_movie(
     conn: sqlite3.Connection,
     session_id: str,
     video_code: str,
     href: str,
 ) -> int:
-    cur = conn.execute(
+    from javdb.storage.db import generate_integer_id
+
+    movie_id = int(generate_integer_id())
+    conn.execute(
         """
         INSERT INTO MovieHistory
-            (VideoCode, Href, ActorName, DateTimeCreated, DateTimeUpdated,
+            (Id, VideoCode, Href, ActorName, DateTimeCreated, DateTimeUpdated,
              DateTimeVisited, PerfectMatchIndicator, HiResIndicator, SessionId)
-        VALUES (?, ?, 'Seed Actor', ?, ?, ?, 1, 0, ?)
+        VALUES (?, ?, ?, 'Seed Actor', ?, ?, ?, 1, 0, ?)
         """,
-        (video_code, href, _SEED_TIMESTAMP, _SEED_TIMESTAMP, _SEED_TIMESTAMP, session_id),
+        (movie_id, video_code, href, _SEED_TIMESTAMP, _SEED_TIMESTAMP,
+         _SEED_TIMESTAMP, session_id),
     )
-    return int(cur.lastrowid)
+    return movie_id
 
 
 def _insert_torrent(
@@ -232,14 +245,18 @@ def _insert_torrent(
     subtitle: int,
     censor: int,
 ) -> int:
-    cur = conn.execute(
+    from javdb.storage.db import generate_integer_id
+
+    torrent_id = int(generate_integer_id())
+    conn.execute(
         """
         INSERT INTO TorrentHistory
-            (MovieHistoryId, MagnetUri, SubtitleIndicator, CensorIndicator,
+            (Id, MovieHistoryId, MagnetUri, SubtitleIndicator, CensorIndicator,
              ResolutionType, Size, FileCount, DateTimeCreated, DateTimeUpdated, SessionId)
-        VALUES (?, ?, ?, ?, 1, '1.5GB', 1, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, 1, '1.5GB', 1, ?, ?, ?)
         """,
         (
+            torrent_id,
             movie_id,
             f"magnet:?xt=urn:btih:seed-{movie_id}-{subtitle}-{censor}",
             subtitle,
@@ -249,7 +266,7 @@ def _insert_torrent(
             session_id,
         ),
     )
-    return int(cur.lastrowid)
+    return torrent_id
 
 
 def _insert_pending_movie(

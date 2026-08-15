@@ -15,7 +15,7 @@ import logging
 from collections import defaultdict
 from typing import Any, Optional
 
-from javdb.quality.assist import rank_candidates
+from javdb.quality.assist import PRODUCTION_TARGET_ROLE, rank_candidates
 from javdb.quality.features import PROBE_SCHEMA_VERSION
 from javdb.quality.models import EvaluationRecord
 from javdb.quality.scoring import SCORING_VERSION, score_torrent
@@ -51,6 +51,37 @@ def _features_from_evidence(row: dict[str, Any]) -> dict[str, Any]:
             main_video_name = (features_json or {}).get("main_video_name")
     features["main_video_name"] = main_video_name
     return features
+
+
+def _collapse_duplicate_roles(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep one candidate per evaluation row identity, preferring the production row.
+
+    ``list_evidence_for_movie`` UNIONs the production-download branch with the
+    probe branch, so a torrent that was both the production download and a probe
+    runner-up for the same movie surfaces twice. Both would UPSERT onto the same
+    ``TorrentQualityEvaluation`` primary key ``(info_hash, movie_href,
+    scoring_version)``, and the later write would clobber the earlier one's
+    shadow_rank and would_replace_current_choice — the stored recommendation
+    could lose rank 1, or lose the production row entirely.
+
+    The two rows describe the *same torrent*, so collapsing them before ranking
+    is what keeps the output honest: the torrent is ranked once, and
+    would_replace_current_choice can only be raised by a genuinely different
+    info_hash rather than by the production download outranking itself. The
+    production row wins because it carries the current-choice semantics.
+    ``rank_candidates`` still tolerates duplicate hashes; this is the persist-side
+    guarantee that the row identity is unique.
+    """
+    kept: dict[tuple[Any, Any], dict[str, Any]] = {}
+    for row in rows:
+        key = (row.get("info_hash"), row.get("movie_href"))
+        existing = kept.get(key)
+        if existing is None or (
+            existing.get("target_role") != PRODUCTION_TARGET_ROLE
+            and row.get("target_role") == PRODUCTION_TARGET_ROLE
+        ):
+            kept[key] = row
+    return list(kept.values())
 
 
 def _context_from_evidence(row: dict[str, Any]) -> dict[str, Any]:
@@ -93,7 +124,7 @@ def evaluate_assist_for_movies(
 
         # Score each candidate
         scored_candidates: list[dict[str, Any]] = []
-        for row in evidence_rows:
+        for row in _collapse_duplicate_roles(evidence_rows):
             features = _features_from_evidence(row)
             context = _context_from_evidence(row)
             scored = score_torrent(features, context)

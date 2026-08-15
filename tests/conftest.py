@@ -11,8 +11,11 @@ import sys
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 _PROJECT_ROOT = Path(project_root)
-_ACQUISITION_OUTCOME_MIGRATION = (
-    _PROJECT_ROOT / "javdb" / "migrations" / "d1" / "2026_05_29_add_acquisition_outcome.sql"
+# Replayed in order, so the fixture schema is exactly what D1 ends up with.
+_ACQUISITION_OUTCOME_MIGRATIONS = (
+    _PROJECT_ROOT / "javdb" / "migrations" / "d1" / "2026_05_29_add_acquisition_outcome.sql",
+    _PROJECT_ROOT / "javdb" / "migrations" / "d1"
+    / "2026_08_09_add_acquisition_state_changed_at.sql",
 )
 
 # Mock pikpakapi before any other imports to avoid Python 3.9 compatibility issues
@@ -295,7 +298,8 @@ def acquisition_outcome_conn():
     """Create an in-memory AcquisitionOutcome schema from the D1 migration."""
     conn = sqlite3.connect(":memory:")
     conn.execute("PRAGMA foreign_keys = ON")
-    conn.executescript(_ACQUISITION_OUTCOME_MIGRATION.read_text(encoding="utf-8"))
+    for migration in _ACQUISITION_OUTCOME_MIGRATIONS:
+        conn.executescript(migration.read_text(encoding="utf-8"))
     try:
         yield conn
     finally:

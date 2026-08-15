@@ -71,6 +71,9 @@ FORCE_FULL_GLOBS = (
 # sub-second, DB-free string comparison.) In full-python runs it runs anyway.
 ALWAYS_RUN_TESTS = (
     "tests/unit/test_query_contract_golden.py",
+    # .gitattributes is not a Python source, so impact selection cannot see
+    # edits to it; this sub-second contract test pins the union-merge set.
+    "tests/unit/test_gitattributes_union_merge.py",
 )
 
 RUST_ADAPTER_GLOBS = (
@@ -616,6 +619,23 @@ def is_rust_source_change(path: str) -> bool:
     return path.startswith(f"{RUST_ROOT}/") and (path.endswith(".rs") or Path(path).name in {"Cargo.toml", "Cargo.lock"})
 
 
+def is_importable_python_module(path: str) -> bool:
+    """True when *path* is a Python file that other modules can import.
+
+    Mirrors the node set of :func:`build_import_graph` (``PYTHON_SOURCE_ROOTS``
+    + ``TEST_ROOTS`` + ``TOP_LEVEL_PYTHON_FILES``) minus the ``test_*.py``
+    leaves, which nothing imports. Used to decide whether a *deleted* path can
+    still be reasoned about through the import graph.
+    """
+
+    if not path.endswith(".py") or is_test_file(path):
+        return False
+    return (
+        any(path.startswith(f"{root}/") for root in PYTHON_SOURCE_ROOTS + TEST_ROOTS)
+        or path in TOP_LEVEL_PYTHON_FILES
+    )
+
+
 def select_for_changed_files(
     changed_files: Iterable[str],
     repo_root: Path = REPO_ROOT,
@@ -666,6 +686,34 @@ def select_for_changed_files(
     if source_change_count > SOURCE_CHANGE_LIMIT:
         run_full_python = True
         reason.append(f"{source_change_count} source files changed, above limit {SOURCE_CHANGE_LIMIT}")
+
+    # Deleted paths reach the selector because ``run_git_diff`` keeps ``D`` in
+    # its --diff-filter. They need their own conservative valve: the import
+    # graph is built from the *post*-deletion working tree
+    # (:func:`build_import_graph`), so a deleted module has no node and no
+    # reverse edges — the tests that imported it cannot be discovered, and
+    # impact analysis would silently select nothing. A deletion is therefore
+    # escalated to a full Python run.
+    #
+    # Exempt by design:
+    # * deleted ``test_*.py`` files — nothing imports them, and the existence
+    #   filter on ``selected_targets`` keeps them off the pytest command line;
+    # * deleted non-Python files (docs, YAML, SQL, …) — treated exactly as when
+    #   they are merely modified (FORCE_FULL_GLOBS / IMPACT_RULES still apply).
+    deleted_modules = [
+        path
+        for path in changed
+        if is_importable_python_module(path) and not (repo_root / path).exists()
+    ]
+    if deleted_modules:
+        run_full_python = True
+        sample = ", ".join(deleted_modules[:3])
+        suffix = f" (+{len(deleted_modules) - 3} more)" if len(deleted_modules) > 3 else ""
+        reason.append(
+            f"{len(deleted_modules)} deleted Python module(s) require full Python tests "
+            f"(consumers are not discoverable from the post-deletion import graph): "
+            f"{sample}{suffix}"
+        )
 
     for path in changed:
         if matches_any(path, FORCE_FULL_GLOBS):
@@ -744,7 +792,11 @@ def select_for_changed_files(
     unknown_python_sources = [
         path
         for path in changed
-        if is_python_source_change(path) and module_for_changed_path(path, graph, repo_root) is None
+        # Deleted sources are never in the graph; they have their own valve above,
+        # so keep this reason for paths that exist but stayed unmapped.
+        if is_python_source_change(path)
+        and (repo_root / path).exists()
+        and module_for_changed_path(path, graph, repo_root) is None
     ]
     if unknown_python_sources:
         run_full_python = True
@@ -780,7 +832,11 @@ def select_for_changed_files(
     )
 
 
-def run_git_diff(base: str, head: str, repo_root: Path, diff_filter: str = "ACMRTUXB") -> list[str]:
+# ``D`` (deleted) is part of the default filter on purpose: a deletion must reach
+# ``select_for_changed_files`` so it counts toward SOURCE_CHANGE_LIMIT and trips
+# the deleted-module escalation. Dropping it made large refactors (delete + one
+# small edit) merge on a 2-file selective run.
+def run_git_diff(base: str, head: str, repo_root: Path, diff_filter: str = "ACDMRTUXB") -> list[str]:
     if not base or is_zero_sha(base):
         raise RuntimeError("base revision is missing or is the zero SHA")
     if not head:

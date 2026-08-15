@@ -1,6 +1,18 @@
 import sqlite3
+from datetime import datetime, timedelta, timezone
 
 import pytest
+
+
+def _days_ago_iso(days: int) -> str:
+    """Seed dates relative to now: the trend cutoff is computed from the current
+    UTC date, so hard-coded dates silently fall out of the window over time."""
+    stamp = datetime.now(timezone.utc) - timedelta(days=days)
+    return stamp.strftime("%Y-%m-%dT00:00:00.000000Z")
+
+
+def _days_ago_day(days: int) -> str:
+    return (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
 
 
 @pytest.fixture(autouse=True, scope="module")
@@ -17,18 +29,23 @@ def seeded_outcomes(_isolate_sqlite):
         conn.executemany(
             """
             INSERT INTO AcquisitionOutcome
-                (qb_hash, href, video_code, category, state, queued_at, completed_at, last_seen_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (qb_hash, href, video_code, category, state, queued_at, completed_at,
+                 last_seen_at, state_changed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 ("h1", "/v/a", "AAA-001", "subtitle", "queued",
-                 "2026-06-01T00:00:00.000000Z", None, "2026-06-01T00:00:00.000000Z"),
+                 _days_ago_iso(40), None, _days_ago_iso(40), _days_ago_iso(40)),
                 ("h2", "/v/b", "BBB-002", "no_subtitle", "downloading",
-                 "2026-06-02T00:00:00.000000Z", None, "2026-06-02T00:00:00.000000Z"),
+                 _days_ago_iso(39), None, _days_ago_iso(39), _days_ago_iso(39)),
                 ("h3", "/v/c", "CCC-003", "subtitle", "completed",
-                 "2026-06-03T00:00:00.000000Z", "2026-06-04T00:00:00.000000Z", "2026-06-04T00:00:00.000000Z"),
+                 _days_ago_iso(38), _days_ago_iso(37), _days_ago_iso(37),
+                 _days_ago_iso(37)),
+                # Last seen alive 36 days ago, transitioned to stalled a week
+                # later: the trend must plot it on the transition day, not on
+                # last_seen_at.
                 ("h4", "/v/d", "DDD-004", "subtitle", "stalled",
-                 "2026-05-30T00:00:00.000000Z", None, "2026-06-05T00:00:00.000000Z"),
+                 _days_ago_iso(41), None, _days_ago_iso(36), _days_ago_iso(29)),
             ],
         )
         conn.commit()
@@ -95,9 +112,12 @@ def test_trend_groups_terminal_states_by_day(admin_client, seeded_outcomes):
     assert r.status_code == 200
     points = r.json()
     by_date = {p["date"]: p for p in points}
-    assert by_date["2026-06-04"]["completed"] == 1
-    assert by_date["2026-06-05"]["stalled"] == 1
-    assert "2026-06-02" not in by_date
+    assert by_date[_days_ago_day(37)]["completed"] == 1
+    # Grouped on the transition day (29 days ago), NOT on last_seen_at (36).
+    assert by_date[_days_ago_day(29)]["stalled"] == 1
+    assert _days_ago_day(36) not in by_date
+    # The still-downloading row is not a terminal state at all.
+    assert _days_ago_day(39) not in by_date
 
 
 def test_trend_rejects_bad_period(admin_client, seeded_outcomes):
@@ -125,14 +145,17 @@ def test_summary_in_library_counts_toward_total_only(admin_client, _isolate_sqli
         conn.executemany(
             """
             INSERT INTO AcquisitionOutcome
-                (qb_hash, href, video_code, category, state, queued_at, completed_at, last_seen_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (qb_hash, href, video_code, category, state, queued_at, completed_at,
+                 last_seen_at, state_changed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 ("c1", "/v/c1", "CCC-1", "subtitle", "completed",
-                 "2026-06-03T00:00:00.000000Z", "2026-06-04T00:00:00.000000Z", "2026-06-04T00:00:00.000000Z"),
+                 _days_ago_iso(38), _days_ago_iso(37), _days_ago_iso(37),
+                 _days_ago_iso(37)),
                 ("il1", "/v/il1", "ILL-1", "subtitle", "in_library",
-                 "2026-06-03T00:00:00.000000Z", "2026-06-04T00:00:00.000000Z", "2026-06-04T00:00:00.000000Z"),
+                 _days_ago_iso(38), _days_ago_iso(37), _days_ago_iso(37),
+                 _days_ago_iso(37)),
             ],
         )
         conn.commit()

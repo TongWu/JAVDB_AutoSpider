@@ -1,4 +1,4 @@
-"""Contract tests for the ADR-006 pause push (BFR-023).
+"""Contract tests for the ADR-006 pause push (BFR-035).
 
 The pause gate reads ``pipeline_paused_until`` out of the *checked-out*
 ``.publish-config.yml``, so a pause only engages if the marker reaches
@@ -63,7 +63,7 @@ def test_pause_push_retries_and_verifies_the_marker_landed(workflow_name):
     assert "git pull --rebase" in run, (
         f"{workflow_name}: the pause push must rebase onto the remote and "
         "retry — a bare push loses the race against a concurrent run's "
-        "auto-commit (BFR-023)"
+        "auto-commit (BFR-035)"
     )
     assert 'git show "origin/$GITHUB_REF_NAME:.publish-config.yml"' in run, (
         f"{workflow_name}: the pause step must read back "
@@ -87,7 +87,7 @@ def test_pause_step_is_fatal_not_annotated(workflow_name):
 
     assert not step.get("continue-on-error"), (
         f"{workflow_name}: continue-on-error keeps the run green when the "
-        "pause fails to engage — the exact BFR-023 failure mode"
+        "pause fails to engage — the exact BFR-035 failure mode"
     )
     assert "git push || echo" not in step["run"], (
         f"{workflow_name}: `git push || echo ::warning::` downgrades a "

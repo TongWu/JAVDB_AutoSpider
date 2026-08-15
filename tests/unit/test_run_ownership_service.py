@@ -21,7 +21,8 @@ _OUTCOME_DDL = """
 CREATE TABLE AcquisitionOutcome (
   qb_hash TEXT PRIMARY KEY, href TEXT NOT NULL DEFAULT '', video_code TEXT,
   category TEXT, state TEXT NOT NULL DEFAULT 'queued', queued_at TEXT,
-  completed_at TEXT, landed_at TEXT, last_seen_at TEXT, session_id TEXT
+  completed_at TEXT, landed_at TEXT, last_seen_at TEXT, session_id TEXT,
+  state_changed_at TEXT
 );
 """
 

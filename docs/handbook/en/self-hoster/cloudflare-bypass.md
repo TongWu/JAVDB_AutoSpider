@@ -136,6 +136,21 @@ before the cascade reached the bypass tier at all.
 With `CF_BYPASS_ENABLED = False` the detection message is still logged, but
 there is no bypass tier to lead with — every request stays on the direct path.
 
+### When the wall wins
+
+A site-wide challenge bans no proxy — it is not any proxy's fault — so a run
+that the wall shuts out entirely cannot be caught by ban accounting. The
+summary report fails it instead, with exit code `2`:
+
+```text
+Spider produced ZERO usable entries (40 discovered entries all failed) and every fetch hit a Cloudflare challenge — the site walled off all proxies. Failing the run so this is not mistaken for an empty day.
+```
+
+This fires when a challenge was seen and the run produced nothing usable —
+whether the index fetch itself was walled, or it survived and every detail
+fetch was walled. Entries that failed do not count as a result. Entries skipped
+against history do, so a partially-recovered run stays a success.
+
 ## Configuration
 
 ```python

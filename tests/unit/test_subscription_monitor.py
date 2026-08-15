@@ -280,6 +280,51 @@ def test_run_subscription_monitor_commits_spider_session_before_diff(
     assert items[0]["video_code"] == "NEW-1"
 
 
+def test_shared_release_lands_in_both_actors_feeds(db_path, monkeypatch):
+    """Regression: two subscribed actors sharing one new release.
+
+    The baseline used to be read at the top of each loop iteration, i.e. after
+    the previous actor's scrape had already committed the shared work into
+    MovieHistory with this actor in SupportingActors. The second actor's feed row
+    was therefore skipped as 'already seen', defeating the composite NewWorks
+    identity that exists to preserve shared releases.
+    """
+    subs = ActorSubscriptionRepo(db_path=db_path)
+    subs.upsert(actor_href="/actors/A", actor_name="A")
+    subs.upsert(actor_href="/actors/B", actor_name="B")
+
+    def fake_commit(session_id):
+        # Actor A's scrape commits the co-starring work; B is a supporting actor.
+        conn = sqlite3.connect(db_path)
+        conn.execute(
+            "INSERT OR IGNORE INTO MovieHistory "
+            "(VideoCode, Href, ActorLink, SupportingActors, DateTimeCreated) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (
+                "SHARED-1",
+                "/v/shared1",
+                "/actors/A",
+                json.dumps([{"name": "B", "href": "/actors/B"}]),
+                "2026-06-15",
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+    monkeypatch.setattr(
+        monitor, "scrape_actor", lambda actor_href, *, use_proxy=False: "SESSION-1"
+    )
+    monkeypatch.setattr(monitor, "commit_spider_session", fake_commit)
+
+    added = monitor.run_subscription_monitor(db_path=db_path)
+
+    assert added == 2
+    items, total = NewWorksRepo(db_path=db_path).list()
+    assert total == 2
+    assert {item["actor_href"] for item in items} == {"/actors/A", "/actors/B"}
+    assert {item["video_code"] for item in items} == {"SHARED-1"}
+
+
 def test_run_subscription_monitor_fails_when_commit_fails(db_path, monkeypatch):
     """A post-scrape commit failure must fail the workflow, not go green."""
     subs = ActorSubscriptionRepo(db_path=db_path)

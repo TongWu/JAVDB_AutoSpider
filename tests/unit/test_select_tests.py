@@ -139,9 +139,10 @@ def test_changed_test_file_selects_only_that_file():
     result = select("tests/unit/test_parser.py")
 
     assert result.run_full_python is False
-    # The changed test file plus the always-run contract guard (ADR-018), which
-    # is force-selected on every selective build.
+    # The changed test file plus the always-run contract guards, which are
+    # force-selected on every selective build.
     assert result.pytest_targets == [
+        "tests/unit/test_gitattributes_union_merge.py",
         "tests/unit/test_parser.py",
         "tests/unit/test_query_contract_golden.py",
     ]
@@ -245,6 +246,119 @@ def test_docstring_only_changes_skip_impact_analysis(monkeypatch):
     assert any(
         "docstring/string-literal-only" in reason for reason in result.reason
     )
+
+
+def test_git_diff_default_filter_includes_deletions(monkeypatch):
+    """``run_git_diff`` must ask git for deleted paths too. Without ``D`` in
+    --diff-filter, deletions never reach the selector at all: they count for
+    nothing in SOURCE_CHANGE_LIMIT and cannot trip any conservative valve."""
+
+    captured: dict[str, list[str]] = {}
+
+    class _Completed:
+        stdout = "javdb/storage/repos/gone_repo.py\njavdb/pipeline/engine.py\n"
+
+    def fake_run(argv, **kwargs):  # noqa: ARG001
+        captured["argv"] = argv
+        return _Completed()
+
+    monkeypatch.setattr(select_tests.subprocess, "run", fake_run)
+
+    changed = select_tests.run_git_diff(base="base-sha", head="HEAD", repo_root=REPO_ROOT)
+
+    diff_filter = next(
+        arg.removeprefix("--diff-filter=")
+        for arg in captured["argv"]
+        if arg.startswith("--diff-filter=")
+    )
+    assert "D" in diff_filter, f"deletions are filtered out of git diff: {diff_filter}"
+    assert changed == ["javdb/storage/repos/gone_repo.py", "javdb/pipeline/engine.py"]
+
+
+def test_deleted_python_source_forces_full_python():
+    """A deleted Python source (present in the diff, absent from the working
+    tree) must escalate to a full run: the import graph is built from the
+    post-deletion tree, so the tests that imported it have no edge to follow."""
+    result = select("javdb/storage/repos/gone_repo.py")
+
+    assert result.run_full_python is True
+    assert result.pytest_targets == []
+    assert any("deleted Python module(s)" in reason for reason in result.reason)
+
+
+def test_deleted_test_helper_forces_full_python():
+    """Test-tree helpers (non ``test_*.py`` modules under ``tests/``) are import
+    graph nodes too — deleting one hides its consumers just as thoroughly."""
+    result = select("tests/harness/gone_helper.py")
+
+    assert result.run_full_python is True
+    assert any("deleted Python module(s)" in reason for reason in result.reason)
+
+
+def test_deleted_sources_count_toward_source_change_limit():
+    """Deletions must be counted by ``source_change_count`` — the guard that
+    forces a full run on large refactors. Asserted via the ``above limit``
+    reason, which is independent of the deleted-module escalation."""
+    changed = [
+        f"javdb/storage/repos/gone_repo_{index}.py"
+        for index in range(select_tests.SOURCE_CHANGE_LIMIT + 1)
+    ]
+    result = select(*changed)
+
+    assert result.run_full_python is True
+    assert any(
+        f"{select_tests.SOURCE_CHANGE_LIMIT + 1} source files changed, above limit" in reason
+        for reason in result.reason
+    )
+
+
+def test_deleted_test_file_is_not_passed_to_pytest():
+    """A deleted test file must never reach the pytest command line (it would
+    fail collection with ``file or directory not found``), and it must not
+    escalate to a full run either — there is nothing left to execute."""
+    result = select("tests/unit/test_gone_thing.py")
+
+    assert result.run_full_python is False
+    assert "tests/unit/test_gone_thing.py" not in result.pytest_targets
+    assert result.pytest_targets == [
+        "tests/unit/test_gitattributes_union_merge.py",
+        "tests/unit/test_query_contract_golden.py",
+    ]
+
+
+def test_deleted_non_python_file_does_not_escalate():
+    """A deleted doc gets the same treatment as a modified doc: no escalation,
+    no extra selection."""
+    result = select("docs/handbook/en/ops/gone-page.md")
+
+    assert result.run_full_python is False
+    assert not any("deleted Python module(s)" in reason for reason in result.reason)
+
+
+def test_mass_deletion_plus_leaf_edit_escalates(monkeypatch):
+    """End-to-end regression: 24 deleted storage modules plus one edited leaf
+    used to yield ``run_full_python=False`` with 2 of ~400 test files selected,
+    because git diff never reported the deletions."""
+
+    deleted = [f"javdb/storage/repos/gone_repo_{index}.py" for index in range(24)]
+
+    class _Completed:
+        stdout = "\n".join(deleted + ["javdb/pipeline/engine.py"]) + "\n"
+
+    monkeypatch.setattr(select_tests.subprocess, "run", lambda argv, **kwargs: _Completed())
+    monkeypatch.setattr(select_tests, "is_docstring_only_change", lambda *args: False)
+
+    selection = select_tests.selection_from_git(
+        repo_root=REPO_ROOT,
+        event_name="pull_request",
+        ref_name="feature-branch",
+        base="base-sha",
+        head="HEAD",
+    )
+
+    assert selection.run_full_python is True
+    assert selection.pytest_targets == []
+    assert set(deleted).issubset(set(selection.changed_files))
 
 
 def test_docstring_only_filter_disabled_without_base():

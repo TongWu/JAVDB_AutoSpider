@@ -20,6 +20,12 @@ class MigrationListResponse(BaseModel):
 
 class RunMigrationRequest(BaseModel):
     dry_run: bool = True
+    # Operator assertion that this migration has NOT already been applied out of
+    # band. The ledger only records what this endpoint applied, so for any file
+    # without a marker "already applied?" is genuinely unknown — see
+    # migrations.unrecorded. A migration this endpoint did apply is stopped
+    # earlier by migrations.already_applied and never needs the flag.
+    acknowledge_unrecorded: bool = False
 
 
 class RunMigrationResponse(BaseModel):

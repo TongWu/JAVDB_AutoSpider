@@ -82,6 +82,15 @@ def _authed_client():
     return client
 
 
+def _readonly_client():
+    from apps.api.services.runtime import app, _jwt_encode
+
+    token = _jwt_encode({"sub": "viewer", "role": "readonly", "typ": "access"}, 3600)
+    client = TestClient(app)
+    client.headers.update({"Authorization": f"Bearer {token}"})
+    return client
+
+
 def _unauthed_client():
     from apps.api.services.runtime import app
 
@@ -256,6 +265,27 @@ class TestReviewLabels:
             },
         )
         assert response.status_code in {401, 403}
+
+    def test_readonly_role_is_rejected(self, monkeypatch):
+        """Regression: the route is documented admin-only, but it used to hang off
+        _require_auth, which accepts a readonly JWT — letting a readonly user
+        overwrite the shared accept/reject/skip dataset."""
+        fake_review_repo = _FakeReviewRepo()
+        monkeypatch.setattr(
+            quality_router, "_review_repo", lambda: nullcontext(fake_review_repo)
+        )
+        response = _readonly_client().post(
+            "/api/quality/review-labels",
+            json={
+                "info_hash": "h1",
+                "movie_href": "/v/abc",
+                "scoring_version": "adr024-shadow-v1",
+                "label": "accept",
+            },
+            headers={"X-CSRF-Token": "tok", "Cookie": "csrf_token=tok"},
+        )
+        assert response.status_code == 403
+        assert fake_review_repo.written == []
 
     def test_invalid_label_returns_422(self, monkeypatch):
         fake_review_repo = _FakeReviewRepo()

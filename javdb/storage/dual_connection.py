@@ -295,6 +295,15 @@ APPLICATION_GENERATED_ID_PK_COLUMN: "dict[str, str]" = {
     # snowflake, always < 2**53 so safe for D1 JSON transport).
     "MovieHistory": "Id",
     "TorrentHistory": "Id",
+    # ReportMovies.Id is INTEGER AUTOINCREMENT and is used verbatim as
+    # ReportTorrents.ReportMovieId by ``db_insert_report_rows``. With the
+    # per-backend counters offset, the SQLite-side rowid points at a
+    # different (or absent) movie on D1 — and because that stale Id usually
+    # *does* exist there, the FK is satisfied and the torrent rows silently
+    # attach to another session's movie. ``db_insert_report_rows`` now
+    # supplies an explicit Id; this entry makes the invariant enforced
+    # rather than merely assumed.
+    "ReportMovies": "Id",
 }
 APPLICATION_GENERATED_ID_TABLES: frozenset = frozenset(
     APPLICATION_GENERATED_ID_PK_COLUMN
@@ -1201,10 +1210,17 @@ class DualConnection:
         """Track AUTOINCREMENT delta drift per table; warn only on *changes*.
 
         A constant offset between SQLite and D1 ``lastrowid`` is the normal
-        post-migration steady state and is harmless (FK resolution uses
-        business keys). What *is* a real signal is the offset *changing* —
-        that means one side committed an INSERT the other did not since
-        this process started, i.e. fresh asymmetric drift.
+        post-migration steady state. It is harmless ONLY for code that never
+        reuses ``lastrowid`` across backends: the drift reconciler re-resolves
+        parents by business key, but any writer that reads ``lastrowid`` from
+        this cursor and persists it as a foreign key corrupts the D1 side
+        (BFR-034). Guarded tables must supply an application-generated id
+        (``APPLICATION_GENERATED_ID_PK_COLUMN``) — a missing id raises
+        ``DualWriteIdMismatchError``, and ``tests/unit/test_lastrowid_call_sites.py``
+        pins the classified inventory of every remaining ``lastrowid`` read.
+        What *is* a real signal is the offset *changing* — that means one
+        side committed an INSERT the other did not since this process
+        started, i.e. fresh asymmetric drift.
 
         Emits:
           * INFO once per table for the baseline delta (first observation).

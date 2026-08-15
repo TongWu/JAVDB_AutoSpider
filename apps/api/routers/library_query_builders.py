@@ -46,16 +46,22 @@ def build_acquisition_recent_query(
 def build_acquisition_trend_query(*, cutoff: str) -> tuple[str, list]:
     """Daily completed/stalled/failed counts since cutoff (YYYY-MM-DD).
 
-    substr() not DATE(): last_seen_at is a T-separated ISO timestamp DATE()
-    cannot parse. last_seen_at is the transition date (refreshed every pass).
+    substr() not DATE(): state_changed_at is a T-separated ISO timestamp DATE()
+    cannot parse.
+
+    Grouped by state_changed_at, NOT last_seen_at. For stalled and failed rows
+    last_seen_at is the last *successful* qB observation — the reconciler waits
+    7 / 14 days past it before transitioning and never refreshes it for an absent
+    torrent — so grouping on it plotted a failure detected today up to two weeks
+    in the past, sometimes outside the requested window entirely.
     """
     sql = (
-        "SELECT substr(last_seen_at, 1, 10) AS d, "
+        "SELECT substr(state_changed_at, 1, 10) AS d, "
         "COALESCE(SUM(CASE WHEN state='completed' THEN 1 ELSE 0 END), 0) AS completed, "
         "COALESCE(SUM(CASE WHEN state='stalled' THEN 1 ELSE 0 END), 0) AS stalled, "
         "COALESCE(SUM(CASE WHEN state='failed' THEN 1 ELSE 0 END), 0) AS failed "
         "FROM AcquisitionOutcome "
-        "WHERE state IN ('completed','stalled','failed') AND last_seen_at >= ? "
+        "WHERE state IN ('completed','stalled','failed') AND state_changed_at >= ? "
         "GROUP BY d ORDER BY d"
     )
     return sql, [cutoff]

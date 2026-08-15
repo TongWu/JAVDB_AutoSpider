@@ -69,6 +69,10 @@ JAVDB AutoSpider 的常见问题及解决方案。
 - 确保 `GIT_BRANCH` 与你仓库中的现有分支匹配。
 - 对于新仓库，先创建分支或使用 `main`。
 
+**并行运行在共享报告文件上发生冲突**
+- 追加型报告文件（`reports/D1/*.jsonl`、按日期归档的 `reports/DailyReport/**` 与 `reports/AdHoc/**` CSV、`reports/pikpak_bridge_history.csv`）在 `.gitattributes` 中标记了 `merge=union`，自动提交时的 rebase 会自动保留两次运行各自追加的行。
+- 整文件快照型报告（`reports/parsed_movies_history.csv`、`reports/rclone_inventory.csv`、`reports/dedup_history.csv`、`reports/D1/d1_port_summary.json`）被有意排除：冲突时推送步骤保留本次运行的版本（`git rebase -X theirs`）并发出列明相关文件的 workflow 警告——若并行运行后发现数据行缺失，请检查该运行的 annotations。
+
 ## 代理问题
 
 **运行期间所有代理被封禁**
