@@ -38,7 +38,7 @@ env:
 
 jobs:
   build:
-    runs-on: [self-hosted, ARM64]  # PUBLIC_RUNNER: ubuntu-latest
+    runs-on: ubuntu-latest
     # Only run when PR is from dev branch, or on tag push, or manual trigger
     if: |
       (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'dev') ||

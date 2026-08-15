@@ -35,7 +35,7 @@ on:
 
 jobs:
   test:
-    runs-on: [self-hosted, ARM64]  # PUBLIC_RUNNER: ubuntu-latest
+    runs-on: ubuntu-latest
     
     steps:
       - name: Checkout code

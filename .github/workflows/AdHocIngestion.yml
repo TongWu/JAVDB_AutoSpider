@@ -122,7 +122,7 @@ jobs:
   # Job 1: Setup - Checkout, install dependencies, generate config (includes Rust wheel build/cache)
   # =============================================================================
   setup:
-    runs-on: [self-hosted, ARM64]  # PUBLIC_RUNNER: ubuntu-latest
+    runs-on: ubuntu-latest
     environment: Production
     permissions:
       contents: read
@@ -350,7 +350,7 @@ jobs:
   # Job 2: Run Pipeline - Health checks, then spider, uploader, and pikpak bridge
   # =============================================================================
   run-pipeline:
-    runs-on: [self-hosted, ARM64]  # PUBLIC_RUNNER: ubuntu-latest
+    runs-on: ubuntu-latest
     environment: Production
     permissions:
       contents: read
@@ -925,7 +925,7 @@ jobs:
   # See docs/D1_ROLLBACK.md for the X3 hybrid strategy.
   # =============================================================================
   cleanup-on-failure:
-    runs-on: [self-hosted, ARM64]  # PUBLIC_RUNNER: ubuntu-latest
+    runs-on: ubuntu-latest
     environment: Production
     permissions:
       contents: read
@@ -1022,7 +1022,7 @@ jobs:
   # (Runs in parallel with commit-results on a self-hosted runner)
   # =============================================================================
   email-notification:
-    runs-on: [self-hosted, ARM64]  # PUBLIC_RUNNER: ubuntu-latest
+    runs-on: ubuntu-latest
     environment: Production
     permissions:
       # ADR-006 — email job also runs the alert+pause step which may
@@ -1377,7 +1377,7 @@ jobs:
   # (Runs in parallel with email-notification on a self-hosted runner)
   # =============================================================================
   commit-results:
-    runs-on: [self-hosted, ARM64]  # PUBLIC_RUNNER: ubuntu-latest
+    runs-on: ubuntu-latest
     environment: Production
     needs: [setup, run-pipeline]
     if: ${{ needs.setup.outputs.paused != 'true' && needs.run-pipeline.result == 'success' }}

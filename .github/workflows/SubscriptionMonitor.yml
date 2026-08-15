@@ -39,9 +39,9 @@ on:
           - INFO
           - WARNING
           - ERROR
-  schedule:
+  # schedule: # DISABLED FOR PUBLIC REPO
     # Daily at 14:00 UTC, offset from DailyIngestion's 12:00 UTC cron.
-    - cron: '00 14 * * *'
+    # - cron: '00 14 * * *'
 
 concurrency:
   group: subscription-monitor-${{ github.ref }}
