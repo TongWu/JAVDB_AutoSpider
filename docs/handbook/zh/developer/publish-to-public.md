@@ -65,6 +65,8 @@ workflow_modifications:
     - ".github/workflows/StaleSessionCleanup.yml"
     - ".github/workflows/SiteContractSentinel.yml"
     - ".github/workflows/ReconcileLibrary.yml"
+    - ".github/workflows/PurgeMissingFiles.yml"
+    - ".github/workflows/SubscriptionMonitor.yml"
   # 取消注释公开仓库的 push 触发器
   enable_push_trigger:
     - ".github/workflows/docker-publish-ghcr.yml"
