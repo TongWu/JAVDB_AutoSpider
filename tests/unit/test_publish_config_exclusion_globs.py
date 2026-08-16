@@ -85,12 +85,21 @@ def test_config_still_contains_glob_entries():
     assert globs, "expected glob entries (e.g. '*.key') in exclude_paths"
 
 
-@pytest.mark.parametrize("pattern,path", [
+_GLOB_PROBE_CASES = [
+    ("*.db", "scratch.db"),
+    ("*.db", "reports/history.db"),
+    ("*.env", ".env"),
+    ("*.env.local", ".env.local"),
+    ("*.env.*.local", "frontend/.env.production.local"),
     ("*.key", "server.key"),
     ("*.key", "certs/nested/server.key"),
+    ("*.pem", "tls/cert.pem"),
     ("secrets/", "secrets/token.txt"),
     ("**/secrets/", "a/b/secrets/token.txt"),
-])
+]
+
+
+@pytest.mark.parametrize("pattern,path", _GLOB_PROBE_CASES)
 def test_glob_entries_are_not_no_ops(pattern, path):
     """A glob entry must strip what it names, at the root and when nested.
 
@@ -98,7 +107,20 @@ def test_glob_entries_are_not_no_ops(pattern, path):
     every one of them match nothing at all, so the config looked configured
     while excluding nothing.
     """
+    assert pattern in _exclude_paths(), (
+        f"{pattern!r} is no longer configured; update the probe cases"
+    )
     assert _excludes(pattern, path)
+
+
+def test_every_configured_glob_has_a_probe_case():
+    """Every glob entry in exclude_paths must be exercised above, or a glob
+    that quietly stopped matching (a typo, a routing change) would go
+    unnoticed instead of failing test_glob_entries_are_not_no_ops."""
+    configured_globs = {p for p in _exclude_paths() if _is_glob(p)}
+    probed = {pattern for pattern, _ in _GLOB_PROBE_CASES}
+    missing = configured_globs - probed
+    assert not missing, f"glob(s) in exclude_paths with no probe case: {missing}"
 
 
 @pytest.fixture

@@ -101,3 +101,12 @@ def test_list_with_rows(monkeypatch, capsys):
     # only the year survives, which is what the cache is debugged against.
     assert "1990-05-20" not in out
     assert "1990-**-**" in out
+
+
+def test_mask_birthdate_rejects_non_digit_prefix():
+    import apps.cli.ops.actor_age as cli
+
+    assert cli._mask_birthdate("1990-05-20") == "1990-**-**"
+    # A malformed cached value must not be echoed back as a fake year.
+    assert cli._mask_birthdate("unknown") == "****"
+    assert cli._mask_birthdate("abc") == "****"

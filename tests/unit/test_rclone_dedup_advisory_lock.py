@@ -42,9 +42,10 @@ def _write_dedup_csv_file(path, folders):
     ``csv_path`` argument they take is a legacy no-op — see their
     docstrings), so file-only mode's read-from-disk contract has no other
     seeding path: it is ``load_dedup_csv(..., from_file_only=True)``'s only
-    source, and results never get written back to this file either — the
-    executor still marks completion in the DB, so a file-only test must
-    verify by call count, not by re-reading the CSV.
+    source. Completion is still recorded in the DB, but in file-only mode
+    ``_execute_dedup_purge`` also rewrites this file in place at each
+    renewal checkpoint, so a test may assert on either the purge call count
+    or the re-read CSV.
     """
     with open(path, 'w', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=list(DedupRecord._fields))
@@ -573,6 +574,29 @@ class TestExecutorLocking:
             'lease lost mid-purge' in str(call.args[0])
             for call in spy_logger.error.call_args_list
         ), spy_logger.error.call_args_list
+
+    @patch('javdb.integrations.rclone.manager.service.get_configured_drive_name', return_value='gdrive')
+    @patch('javdb.spider.services.dedup_store.cleanup_deleted_records')
+    @patch('javdb.integrations.rclone.manager.service.export_dedup_history')
+    @patch('javdb.integrations.rclone.dedup.subprocess.run')
+    def test_lease_lost_mid_run_skips_retention_cleanup_but_still_exports(
+        self, mock_run, mock_export, mock_cleanup, _mock_dn, monkeypatch, tmp_path,
+    ):
+        """Losing the lease mid-purge must not let this runner delete rows out
+        from under whoever holds the lease now — cleanup_deleted_records is a
+        destructive DB write and must be skipped. export_dedup_history only
+        snapshots the DB to a report file, so it still runs either way."""
+        mock_run.return_value = MagicMock(returncode=0)
+        path = _pending_record(str(tmp_path / 'dedup.csv'))
+        _pending_record(path, video_code='A-002', folder='/test/path-2')
+        monkeypatch.setattr(rm, 'DEDUP_LEASE_RENEW_INTERVAL_SECONDS', 0)
+        monkeypatch.setattr(rm, 'use_db_storage', lambda: True)
+
+        with patch.object(rm.advisory_lock, 'renew', return_value=None):
+            rm.run_execute_from_csv(path, dry_run=False)
+
+        mock_cleanup.assert_not_called()
+        mock_export.assert_called_once()
 
     @patch('javdb.integrations.rclone.manager.service.get_configured_drive_name', return_value='gdrive')
     @patch('javdb.integrations.rclone.manager.service.export_dedup_history')

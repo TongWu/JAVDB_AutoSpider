@@ -76,6 +76,19 @@ class TestResolveJobResultFile:
     def test_load_result_summary_ignores_a_path_outside_the_dir(self):
         assert job_store.load_result_summary("/etc/passwd") is None
 
+    def test_rejects_a_symlink_that_resolves_outside_the_job_log_dir(self, tmp_path):
+        """The traversal tests above cover '..' in the input; a symlink planted
+        inside the job log dir still names a file outside it after resolve()."""
+        outside = tmp_path / "not_a_job_result.json"
+        outside.write_text('{"leaked": true}')
+        link = context.RESOLVED_JOB_LOG_DIR / "escape.result.json"
+        link.symlink_to(outside)
+        try:
+            with pytest.raises(ValueError):
+                job_store.resolve_job_result_file(str(link))
+        finally:
+            link.unlink()
+
 
 class TestValidateJobResultFile:
     def test_rejects_path_outside_job_log_dir(self):

@@ -26,7 +26,12 @@ def _mask_birthdate(birthdate: str) -> str:
     ``age_now``), so the rest is masked — matching javdb.infra.masking's
     partial-masking convention for values that stay useful when abbreviated.
     """
-    return f"{birthdate[:4]}-**-**" if len(birthdate) >= 4 else "****"
+    year = birthdate[:4]
+    return (
+        f"{year}-**-**"
+        if len(birthdate) >= 4 and year.isascii() and year.isdecimal()
+        else "****"
+    )
 
 
 def _build_parser() -> argparse.ArgumentParser:

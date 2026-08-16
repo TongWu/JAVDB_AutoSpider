@@ -110,13 +110,15 @@ def test_proxy_required_success_returns_without_fallback(monkeypatch):
         "file:///etc/passwd",                 # non-http scheme
     ],
 )
+@pytest.mark.parametrize("use_proxy", [False, True])
 def test_hosts_outside_the_javdb_allowlist_never_reach_an_outbound_call(
-    monkeypatch, url,
+    monkeypatch, url, use_proxy,
 ):
     """SSRF guard: every fetch path in this module validates the URL against the
     JavDB host allowlist *before* any request is built, so a caller-supplied URL
     can never redirect the fetch at another host. Neither the request-handler
-    path nor the simple-fetch path may be entered."""
+    path nor the simple-fetch path may be entered, whether or not a proxy was
+    requested."""
     reached = {"handler": False, "simple": False}
 
     def handler(_cfg):
@@ -132,7 +134,7 @@ def test_hosts_outside_the_javdb_allowlist_never_reach_an_outbound_call(
     monkeypatch.setattr(fetch, "simple_fetch_javdb_html", simple)
 
     with pytest.raises(HTTPException) as exc:
-        fetch.fetch_javdb_html(url, use_proxy=False)
+        fetch.fetch_javdb_html(url, use_proxy=use_proxy)
 
     assert exc.value.status_code == 422
     assert reached == {"handler": False, "simple": False}

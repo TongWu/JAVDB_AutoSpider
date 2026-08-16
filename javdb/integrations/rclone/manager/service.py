@@ -1302,8 +1302,15 @@ def _execute_dedup_purge(
             _write_dedup_csv_rows(dedup_csv, rows, file_fieldnames)
 
     if not dry_run:
-        retention = int(cfg('DEDUP_RETENTION_DAYS', '30'))
-        cleanup_deleted_records(dedup_csv, older_than_days=retention)
+        if lease_lost:
+            logger.warning(
+                "Skipping dedup retention cleanup — the lease was lost "
+                "mid-purge and another runner may now hold it and be "
+                "writing these same rows"
+            )
+        else:
+            retention = int(cfg('DEDUP_RETENTION_DAYS', '30'))
+            cleanup_deleted_records(dedup_csv, older_than_days=retention)
         export_dedup_history()
 
     total_unique = success_count + fail_count

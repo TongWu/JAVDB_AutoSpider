@@ -5,7 +5,6 @@ Unit tests for the git_helper module.
 import os
 import re
 import sys
-from urllib.parse import urlparse
 
 import pytest
 from unittest.mock import patch, MagicMock
@@ -683,16 +682,20 @@ class TestGitCommitAndPushAdvanced:
 
 
 def _masked_url_host(masked: str) -> str:
-    """Host of the first URL in *masked*, parsed rather than substring-matched.
+    """Host immediately after ``@`` in *masked*, parsed rather than substring-matched.
 
     ``'gist.github.com' in masked`` would also be satisfied by
     ``gist.github.com.evil.com`` or by a query string carrying the name (CodeQL
     py/incomplete-url-substring-sanitization), so these tests assert on the
-    parsed netloc host — the same thing ``mask_sensitive_info`` itself compares.
+    domain mask_email_password itself captured — the text right after ``@`` up
+    to the next ``/`` or whitespace. Matched directly (not via ``urlparse``)
+    because masking collapses ``scheme://user:pass`` into a single
+    ``scheme:***MASKED***`` token ahead of the ``@``, which is not a parseable
+    URL on its own.
     """
-    match = re.search(r'https?://\S+', masked)
-    assert match, f'no URL found in {masked!r}'
-    return (urlparse(match.group(0)).hostname or '').lower()
+    match = re.search(r'@([^/\s]+)', masked)
+    assert match, f'no host found in {masked!r}'
+    return match.group(1).lower()
 
 
 class TestMaskSensitiveInfoAdvanced:
@@ -743,12 +746,13 @@ class TestMaskSensitiveInfoAdvanced:
         assert '***MASKED***' in masked
 
     def test_preserves_real_github_subdomain_in_url(self):
-        """A genuine *.github.com subdomain is still recognised as GitHub."""
+        """A genuine *.github.com subdomain is still recognised as GitHub,
+        and its credentials are masked like any other host."""
         text = 'URL: https://user:token@gist.github.com/user/id.git'
         masked = mask_sensitive_info(text)
         assert _masked_url_host(masked) == 'gist.github.com'
-        # GitHub (sub)domains intentionally preserve credentials per existing design
-        assert 'token' in masked
+        assert 'token' not in masked
+        assert '***MASKED***' in masked
 
 
 class TestGitPushBasicAuthNoPlaintextInArgv:
