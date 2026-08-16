@@ -36,6 +36,14 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GITATTRIBUTES = REPO_ROOT / ".gitattributes"
 
+# .gitattributes is itself in exclude_paths (it only governs the private
+# repo's LFS/merge-driver setup for reports/*), so it does not exist on the
+# public mirror. See test_workflow_public_runner_markers.py for the same guard.
+pytestmark = pytest.mark.skipif(
+    not GITATTRIBUTES.exists(),
+    reason=".gitattributes is stripped from the public mirror",
+)
+
 # The exact set of patterns allowed to carry ``merge=union``. Widening union
 # coverage is a deliberate act that needs a writer-code review, so this set is
 # asserted for equality, not containment.
