@@ -3,7 +3,10 @@ Unit tests for the git_helper module.
 """
 
 import os
+import re
 import sys
+from urllib.parse import urlparse
+
 import pytest
 from unittest.mock import patch, MagicMock
 
@@ -679,6 +682,19 @@ class TestGitCommitAndPushAdvanced:
                 assert result is True
 
 
+def _masked_url_host(masked: str) -> str:
+    """Host of the first URL in *masked*, parsed rather than substring-matched.
+
+    ``'gist.github.com' in masked`` would also be satisfied by
+    ``gist.github.com.evil.com`` or by a query string carrying the name (CodeQL
+    py/incomplete-url-substring-sanitization), so these tests assert on the
+    parsed netloc host — the same thing ``mask_sensitive_info`` itself compares.
+    """
+    match = re.search(r'https?://\S+', masked)
+    assert match, f'no URL found in {masked!r}'
+    return (urlparse(match.group(0)).hostname or '').lower()
+
+
 class TestMaskSensitiveInfoAdvanced:
     """Additional tests for mask_sensitive_info function."""
     
@@ -698,7 +714,7 @@ class TestMaskSensitiveInfoAdvanced:
         """Should preserve github.com domain in URL."""
         text = 'URL: https://user:token@github.com/user/repo.git'
         masked = mask_sensitive_info(text)
-        assert 'github.com' in masked
+        assert _masked_url_host(masked) == 'github.com'
     
     def test_masks_password_with_equals_format(self):
         """Should mask password in equals format."""
@@ -730,7 +746,7 @@ class TestMaskSensitiveInfoAdvanced:
         """A genuine *.github.com subdomain is still recognised as GitHub."""
         text = 'URL: https://user:token@gist.github.com/user/id.git'
         masked = mask_sensitive_info(text)
-        assert 'gist.github.com' in masked
+        assert _masked_url_host(masked) == 'gist.github.com'
         # GitHub (sub)domains intentionally preserve credentials per existing design
         assert 'token' in masked
 

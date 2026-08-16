@@ -25,8 +25,9 @@ import os
 import re
 import csv
 import tempfile
+import time
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 from javdb.infra.config import cfg, use_db_storage
 from javdb.infra.logging import setup_logging, get_logger
@@ -73,6 +74,14 @@ _YEAR_RE = re.compile(r"^\d{4}$")
 # Cross-runner lease guarding the destructive dedup execute path. Every caller
 # of the executor competes for this one key, whichever workflow launched it.
 DEDUP_EXECUTE_LOCK_KEY = "lock:rclone_dedup_execute"
+
+# How often the purge loop pushes that lease's deadline out. Neither
+# WeeklyDedup.yml nor RcloneManager.yml caps the job below the lease TTL, and
+# the purge marks nothing deleted until the whole pass finishes, so a backlog
+# that runs past the deadline would let a second run steal the lease and purge
+# the same paths concurrently. 30 min keeps hours of headroom while costing one
+# tiny UPDATE per half hour, whatever the folder count.
+DEDUP_LEASE_RENEW_INTERVAL_SECONDS = 30 * 60
 
 # Exit code for a lock-held skip in the file-specific execute mode
 # (``--dedup-csv``), where the lease holder will NOT cover this file's plan.
@@ -959,7 +968,9 @@ def run_execute_from_csv(
       working set): the holder drains the shared queue, **not** this file's
       plan, so nobody executes it. Reporting 0 would claim success for work that
       never ran, so we return :data:`EXIT_LOCK_HELD` (75, ``EX_TEMPFAIL``) to
-      mean "resource busy, retry later".
+      mean "resource busy, retry later". The same applies if the lease is lost
+      *mid*-purge (see the lease-renewal heartbeat below): a partial run of this
+      file's plan is exactly as incomplete as never starting it.
 
     The lease is only as shared as the operations DB behind it: under
     ``STORAGE_BACKEND=sqlite`` it is machine-local and grants no cross-runner
@@ -969,10 +980,10 @@ def run_execute_from_csv(
     Scan / report stay lock-free; only this destructive path is guarded.
 
     Returns 0 when at least one purge succeeded, when there was nothing to do,
-    or when the lease was held elsewhere in shared-queue mode;
-    :data:`EXIT_LOCK_HELD` when the lease was held elsewhere in file-only mode;
-    1 when all attempted purges failed, or when the lease could not be
-    evaluated at all.
+    or when the lease was held elsewhere (or lost mid-purge) in shared-queue
+    mode; :data:`EXIT_LOCK_HELD` when the lease was held elsewhere, or lost
+    mid-purge, in file-only mode; 1 when all attempted purges failed, or when
+    the lease could not be evaluated at all.
     """
     if dry_run:
         # A dry run purges nothing and writes no DB rows, so it needs no lease
@@ -1049,21 +1060,78 @@ def run_execute_from_csv(
         )
         return 0
 
+    # The purge marks nothing deleted until every path is done, so a large
+    # backlog can outlive the lease's TTL — and an expired lease is stealable
+    # while we are still purging. Heartbeat it instead: each renewal returns a
+    # NEW token, so the release below must use the latest one.
+    lease = attempt.lease
+
+    def _renew_lease() -> bool:
+        nonlocal lease
+        try:
+            renewed = advisory_lock.renew(lease)
+        except Exception:
+            # A transient D1/sqlite error here must not propagate: it would
+            # abort _execute_dedup_purge() mid-loop and skip the
+            # mark_records_deleted() call below the loop, losing every path
+            # already purged in this pass. Treat "can't confirm we still hold
+            # it" the same as "confirmed lost" — the loop below checkpoints
+            # purged_pairs before returning either way. If the UPDATE actually
+            # landed before this raised, `lease` still holds the pre-renewal
+            # token; the release() below already tolerates a stale token
+            # (logs and lets the row expire on its own).
+            logger.error(
+                "Dedup advisory lease %s renewal raised — treating as lost",
+                lease.key, exc_info=True,
+            )
+            return False
+        if renewed is None:
+            return False
+        lease = renewed
+        return True
+
     try:
         return _execute_dedup_purge(
             dedup_csv, dry_run=False, from_file_only=from_file_only,
-            session_id=session_id,
+            session_id=session_id, renew_lease=_renew_lease,
         )
     finally:
         try:
-            advisory_lock.release(attempt.lease)
+            advisory_lock.release(lease)
         except Exception:
             logger.warning(
                 "Failed to release dedup advisory lease %s — it expires on "
                 "its own at %s",
-                DEDUP_EXECUTE_LOCK_KEY, attempt.lease.expires_at,
+                DEDUP_EXECUTE_LOCK_KEY, lease.expires_at,
                 exc_info=True,
             )
+
+
+def _write_dedup_csv_rows(path: str, rows: List[Dict[str, str]], fieldnames: List[str]) -> None:
+    """Atomically rewrite *path* with *rows* (temp file + :func:`os.replace`).
+
+    file-only mode's own progress tracking: :func:`mark_records_deleted` never
+    rewrites this file (DB-only by design, see its docstring), and an
+    externally-sourced ``--dedup-csv`` plan may have no matching DedupRecords
+    rows at all — the DB cross-check in :func:`_execute_dedup_purge` cannot
+    help such a plan, so this file is the only durable record of what already
+    purged. ``os.replace`` is atomic on the same filesystem, so a crash
+    mid-write leaves the previous, still-consistent file in place.
+    """
+    directory = os.path.dirname(os.path.abspath(path)) or '.'
+    fd, tmp_path = tempfile.mkstemp(dir=directory, suffix='.tmp')
+    try:
+        with os.fdopen(fd, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
+            writer.writeheader()
+            writer.writerows(rows)
+        os.replace(tmp_path, path)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
 
 
 def _execute_dedup_purge(
@@ -1071,11 +1139,21 @@ def _execute_dedup_purge(
     dry_run: bool = False,
     from_file_only: bool = False,
     session_id: Optional[str] = None,
+    renew_lease: Optional[Callable[[], bool]] = None,
 ) -> int:
     """Read pending dedup records, purge them, and update the DB.
 
     Call through :func:`run_execute_from_csv`, which holds the advisory lease
     for the duration of this work.
+
+    *renew_lease* extends that lease between purges (see
+    :data:`DEDUP_LEASE_RENEW_INTERVAL_SECONDS`); it returns False once the lease
+    is no longer ours — including when confirming that raised an error, which
+    is treated the same as confirmed loss rather than propagated — which stops
+    the pass so a runner that took it over is not purging the same remote
+    paths alongside us. Paths already purged before that point are still
+    persisted below (this is not an abort). The unlocked callers (dry run, DB
+    storage disabled) pass None.
 
     When *from_file_only* is True, only the given CSV file is read
     (e.g. a per-run CSV passed via ``--dedup-csv``).  Otherwise,
@@ -1087,8 +1165,10 @@ def _execute_dedup_purge(
     *session_id* (ADR-046 D2) tags the deletion update; standalone callers
     pass ``None`` (DedupRecords.SessionId is nullable).
 
-    Returns 0 when at least one purge succeeded (or nothing to do);
-    returns 1 only when all attempted purges failed.
+    Returns 0 when at least one purge succeeded (or nothing to do); 1 when all
+    attempted purges failed; :data:`EXIT_LOCK_HELD` when *from_file_only* is
+    True and the lease was lost mid-purge, since the caller's file-mode plan is
+    left incomplete either way (see :func:`run_execute_from_csv`).
     """
     from javdb.spider.services.dedup_store import (
         load_dedup_csv, mark_records_deleted, cleanup_deleted_records,
@@ -1107,6 +1187,46 @@ def _execute_dedup_purge(
     if not rows:
         logger.info("No dedup records found — nothing to do")
         return 0
+
+    # Preserved for _write_dedup_csv_rows below, before anything mutates the
+    # row dicts: DictReader keys already mirror the file's own header order.
+    file_fieldnames = list(rows[0].keys())
+
+    rows_by_path: Dict[str, List[Dict[str, str]]] = {}
+    if from_file_only:
+        for r in rows:
+            path = r.get('ExistingGdrivePath', r.get('existing_gdrive_path', ''))
+            if path:
+                rows_by_path.setdefault(path, []).append(r)
+
+        # mark_records_deleted() only ever writes the DB (see its own
+        # docstring) — this file is never rewritten by it — so a retry after
+        # EXIT_LOCK_HELD (lease lost mid-purge; see below) needs some other
+        # record of what already purged. The DB is kept current at each
+        # renewal checkpoint (see the purge loop) for the common case where
+        # this file was produced by export_dedup_history(), so cross-check it
+        # here. A path the DB has never heard of (a plan sourced outside the
+        # normal scan pipeline) falls back to the file's own column — the
+        # purge loop below additionally rewrites this file in place at each
+        # checkpoint, which is what actually closes that gap for such a path.
+        #
+        # uq_dedup_active_path only constrains IsDeleted=0 rows, so a path can
+        # legally carry both an old deleted row AND a fresh pending one (a new
+        # duplicate landed where an earlier one was already purged). Treating
+        # ANY deleted row for the path as "done" would then hide that fresh
+        # pending row from the purge queue entirely. Only apply "already
+        # done" where the DB has no pending row left for that path.
+        db_deleted_paths: set = set()
+        db_pending_paths: set = set()
+        for r in load_dedup_csv(dedup_csv, from_file_only=False):
+            path = r.get('ExistingGdrivePath', r.get('existing_gdrive_path', ''))
+            if not path:
+                continue
+            (db_deleted_paths if r.get('is_deleted') == 'True' else db_pending_paths).add(path)
+        already_deleted = db_deleted_paths - db_pending_paths
+        for path in already_deleted & rows_by_path.keys():
+            for r in rows_by_path[path]:
+                r['is_deleted'] = 'True'
 
     pending = [r for r in rows if r.get('is_deleted', 'False') != 'True']
     logger.info(f"Total records: {len(rows)}, pending deletion: {len(pending)}")
@@ -1136,19 +1256,50 @@ def _execute_dedup_purge(
     )
 
     purged_pairs: list = []
+    lease_lost = False
+    next_renew_at = time.monotonic() + DEDUP_LEASE_RENEW_INTERVAL_SECONDS
     for folder_path in unique_paths:
+        if renew_lease is not None and time.monotonic() >= next_renew_at:
+            # Flush before risking the lease: if renewal below fails or
+            # raises, a new holder can start reading pending rows from the DB
+            # immediately, and any path we've already purged but not yet
+            # marked is exactly the double-purge this lease exists to
+            # prevent. mark_records_deleted's WHERE ... AND IsDeleted=0 guard
+            # makes re-flushing already-marked pairs at the next checkpoint a
+            # safe no-op, so there is no need to track what changed since the
+            # last flush.
+            if not dry_run and purged_pairs:
+                mark_records_deleted(dedup_csv, purged_pairs, session_id=session_id)
+                if from_file_only:
+                    _write_dedup_csv_rows(dedup_csv, rows, file_fieldnames)
+            if not renew_lease():
+                lease_lost = True
+                logger.error(
+                    "Dedup advisory lease lost mid-purge — stopping after %s of "
+                    "%s paths. The records left pending stay for whoever holds "
+                    "the lease now; purging on would double-purge them.",
+                    success_count + fail_count, len(unique_paths),
+                )
+                break
+            next_renew_at = time.monotonic() + DEDUP_LEASE_RENEW_INTERVAL_SECONDS
         full_path = to_full_remote_path(folder_path, drive=drive_name, root=root)
         ok = rclone_purge(full_path, dry_run=dry_run)
         if ok:
             now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             purged_pairs.append((folder_path, now_str))
             success_count += 1
+            if from_file_only:
+                for r in rows_by_path.get(folder_path, ()):
+                    r['is_deleted'] = 'True'
+                    r['delete_datetime'] = now_str
         else:
             fail_count += 1
 
     if not dry_run and purged_pairs:
         mark_records_deleted(dedup_csv, purged_pairs, session_id=session_id)
         logger.info(f"Marked {len(purged_pairs)} paths as deleted in DB")
+        if from_file_only:
+            _write_dedup_csv_rows(dedup_csv, rows, file_fieldnames)
 
     if not dry_run:
         retention = int(cfg('DEDUP_RETENTION_DAYS', '30'))
@@ -1161,6 +1312,19 @@ def _execute_dedup_purge(
     logger.info(f"Pending rows: {len(pending)}, unique paths: {total_unique}")
     logger.info(f"Purged: {success_count}, failed: {fail_count}, skipped (empty path): {skip_count}")
     logger.info("=" * 60)
+
+    if lease_lost and from_file_only:
+        # Same contract as failing to acquire the lease up front (see
+        # run_execute_from_csv): in file-only mode nobody else will pick up
+        # this file's remaining paths, so reporting 0 here would claim success
+        # for a deletion plan that only partially (or, if lost on the first
+        # checkpoint, not at all) ran. EXIT_LOCK_HELD tells the caller to retry.
+        logger.warning(
+            "File-mode purge incomplete — lease lost after %s of %s paths; "
+            "reporting exit %s so the caller retries the remainder.",
+            success_count + fail_count, len(unique_paths), EXIT_LOCK_HELD,
+        )
+        return EXIT_LOCK_HELD
 
     # Partial success (some purged, some failed) is still success — allow workflow to commit.
     # Only fail when every attempted purge failed (no success at all).

@@ -97,3 +97,42 @@ def test_proxy_required_success_returns_without_fallback(monkeypatch):
     result = fetch.fetch_javdb_html("https://javdb.com/v/abc", use_proxy=True)
     assert "real page" in result
     assert called["simple"] is False
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://evil.com/v/abc",             # plain foreign host
+        "https://javdb.com.evil.com/v/abc",   # look-alike suffix
+        "https://javdb.com@evil.com/v/abc",   # userinfo trick
+        "https://127.0.0.1/v/abc",            # loopback
+        "https://169.254.169.254/latest/",    # cloud metadata
+        "file:///etc/passwd",                 # non-http scheme
+    ],
+)
+def test_hosts_outside_the_javdb_allowlist_never_reach_an_outbound_call(
+    monkeypatch, url,
+):
+    """SSRF guard: every fetch path in this module validates the URL against the
+    JavDB host allowlist *before* any request is built, so a caller-supplied URL
+    can never redirect the fetch at another host. Neither the request-handler
+    path nor the simple-fetch path may be entered."""
+    reached = {"handler": False, "simple": False}
+
+    def handler(_cfg):
+        reached["handler"] = True
+        return _Handler()
+
+    def simple(*a, **k):
+        reached["simple"] = True
+        return "<html>leak</html>"
+
+    monkeypatch.setattr(fetch.config_service, "load_runtime_config", lambda: {})
+    monkeypatch.setattr(fetch, "new_request_handler", handler)
+    monkeypatch.setattr(fetch, "simple_fetch_javdb_html", simple)
+
+    with pytest.raises(HTTPException) as exc:
+        fetch.fetch_javdb_html(url, use_proxy=False)
+
+    assert exc.value.status_code == 422
+    assert reached == {"handler": False, "simple": False}

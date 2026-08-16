@@ -1537,6 +1537,29 @@ class TestRunMigration:
         # Must not be 200 — either 400 (invalid id) or 404 (not found after resolve)
         assert resp.status_code in (400, 404)
 
+    def test_symlink_out_of_the_migrations_dir_is_refused(
+        self, admin_client, migrations_dir, tmp_path, monkeypatch
+    ):
+        """The ID allowlist stops separators, but a symlink planted in the
+        migrations directory still names a file outside it — and a dry run hands
+        the caller that file's contents verbatim. Containment is therefore
+        re-checked on the resolved path."""
+        import apps.api.routers.migrations as migrations_module
+
+        outside = tmp_path / "not_a_migration.sql"
+        outside.write_text("SELECT 'private-contents';")
+        (migrations_dir / "escape.sql").symlink_to(outside)
+        monkeypatch.setattr(migrations_module, "_MIGRATIONS_DIR", migrations_dir)
+
+        resp = admin_client.post(
+            "/api/migrations/escape/run",
+            json={"dry_run": True},
+        )
+
+        assert resp.status_code == 400
+        assert resp.json()["detail"]["error"]["code"] == "migrations.invalid_id"
+        assert "private-contents" not in resp.text
+
 
 class TestStatementSplitting:
     """`--` and `;` are only structure OUTSIDE a literal.

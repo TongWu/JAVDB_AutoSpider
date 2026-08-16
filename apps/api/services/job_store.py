@@ -126,15 +126,24 @@ def read_log_chunk(
 
 
 def resolve_job_result_file(value: str) -> Path:
+    """Resolve *value* to a path inside the job log dir.
+
+    Containment is enforced here rather than in each caller: this is the one
+    place a job-result path is built from untrusted input, so no caller can end
+    up holding a path that escaped ``context.RESOLVED_JOB_LOG_DIR``. Raises
+    ``ValueError`` when the resolved path lands outside it (symlinks included —
+    the check runs after ``resolve()``).
+    """
     raw_path = Path(value).expanduser()
     base_path = raw_path if raw_path.is_absolute() else context.REPO_ROOT / raw_path
-    return base_path.resolve()
+    candidate = base_path.resolve()
+    candidate.relative_to(context.RESOLVED_JOB_LOG_DIR)
+    return candidate
 
 
 def validate_job_result_file(value: str) -> None:
     try:
         candidate = resolve_job_result_file(value)
-        candidate.relative_to(context.RESOLVED_JOB_LOG_DIR)
     except (OSError, ValueError):
         raise HTTPException(status_code=400, detail="Invalid task command") from None
     if candidate.suffixes[-2:] != [".result", ".json"]:
@@ -144,11 +153,10 @@ def validate_job_result_file(value: str) -> None:
 def load_result_summary(result_path: str | None) -> Dict[str, Any] | None:
     if not result_path:
         return None
-    path = resolve_job_result_file(result_path)
     try:
-        path.relative_to(context.RESOLVED_JOB_LOG_DIR)
-    except ValueError:
-        logger.warning("Task result JSON outside job log dir ignored: %s", path)
+        path = resolve_job_result_file(result_path)
+    except (OSError, ValueError):
+        logger.warning("Task result JSON outside job log dir ignored: %s", result_path)
         return None
     if not path.exists():
         return None
