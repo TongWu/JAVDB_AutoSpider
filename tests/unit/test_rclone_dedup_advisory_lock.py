@@ -7,6 +7,7 @@ the lease primitive itself and the executor's use of it.
 """
 # ruff: noqa: E402
 
+import csv
 import os
 import sys
 from datetime import datetime, timedelta, timezone
@@ -26,11 +27,32 @@ T0 = datetime(2026, 8, 12, 10, 0, 0, tzinfo=timezone.utc)
 KEY = "lock:test_dedup_execute"
 
 
-def _pending_record(path):
+def _pending_record(path, video_code='A-001', folder='/test/path'):
     """Persist one pending dedup record and return the CSV path."""
     append_dedup_record(
-        path, DedupRecord('A-001', 's', 'sub', '/test/path', 100, 'cat', 'r', 't', 'False', ''),
+        path, DedupRecord(video_code, 's', 'sub', folder, 100, 'cat', 'r', 't', 'False', ''),
     )
+    return path
+
+
+def _write_dedup_csv_file(path, folders):
+    """Write an actual on-disk dedup CSV, for ``from_file_only=True`` tests.
+
+    ``append_dedup_record``/``mark_records_deleted`` are DB-only (the
+    ``csv_path`` argument they take is a legacy no-op — see their
+    docstrings), so file-only mode's read-from-disk contract has no other
+    seeding path: it is ``load_dedup_csv(..., from_file_only=True)``'s only
+    source, and results never get written back to this file either — the
+    executor still marks completion in the DB, so a file-only test must
+    verify by call count, not by re-reading the CSV.
+    """
+    with open(path, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=list(DedupRecord._fields))
+        writer.writeheader()
+        for i, folder in enumerate(folders):
+            writer.writerow(DedupRecord(
+                f'A-{i:03d}', 's', 'sub', folder, 100, 'cat', 'r', 't', 'False', '',
+            )._asdict())
     return path
 
 
@@ -98,6 +120,62 @@ class TestLeaseAcquisition:
         assert winner.lease is not None
         assert loser.lease is None
         assert "run-b" in loser.holder
+
+
+class TestLeaseRenewal:
+    """A TTL bounds a crashed holder, not the work. Long purges renew instead."""
+
+    def test_renew_extends_the_deadline_and_keeps_the_owner(self):
+        held = advisory_lock.try_acquire(KEY, owner="run-a", ttl_seconds=3600, now=T0)
+
+        renewed = advisory_lock.renew(
+            held.lease, ttl_seconds=3600, now=T0 + timedelta(minutes=45),
+        )
+
+        assert renewed is not None
+        assert renewed.owner == "run-a"
+        assert renewed.expires_at > held.lease.expires_at
+        assert _stored_value() == renewed.token
+
+    def test_renewed_lease_is_not_stealable_at_the_original_deadline(self):
+        """The double-purge race: without renewal the lease expires while its
+        holder is still purging and a second run takes it over."""
+        held = advisory_lock.try_acquire(KEY, owner="run-a", ttl_seconds=3600, now=T0)
+        advisory_lock.renew(
+            held.lease, ttl_seconds=3600, now=T0 + timedelta(minutes=45),
+        )
+
+        rival = advisory_lock.try_acquire(
+            KEY, owner="run-b", now=T0 + timedelta(minutes=61),
+        )
+
+        assert rival.lease is None
+        assert "run-a" in rival.holder
+
+    def test_renew_of_an_already_stolen_lease_reports_the_loss(self, caplog):
+        first = advisory_lock.try_acquire(KEY, owner="run-a", ttl_seconds=3600, now=T0)
+        later = T0 + timedelta(hours=2)
+        second = advisory_lock.try_acquire(KEY, owner="run-b", now=later)
+
+        with caplog.at_level("ERROR"):
+            assert advisory_lock.renew(first.lease, now=later) is None
+
+        # The new holder's lease is untouched by the loser's renewal attempt.
+        assert _stored_value() == second.lease.token
+        assert "could not be renewed" in caplog.text
+        assert "run-b" in caplog.text
+
+    def test_only_the_renewed_token_releases_the_lock(self):
+        held = advisory_lock.try_acquire(KEY, owner="run-a", ttl_seconds=3600, now=T0)
+        renewed = advisory_lock.renew(
+            held.lease, ttl_seconds=3600, now=T0 + timedelta(minutes=45),
+        )
+
+        # The pre-renewal token is dead — releasing it must not clear the row.
+        assert advisory_lock.release(held.lease) is False
+        assert _stored_value() == renewed.token
+        assert advisory_lock.release(renewed) is True
+        assert _stored_value() is None
 
 
 class TestLeaseRelease:
@@ -439,6 +517,225 @@ class TestExecutorLocking:
 
         assert spy_release.call_count == 1
         assert _stored_value(rm.DEDUP_EXECUTE_LOCK_KEY) is None
+
+    @patch('javdb.integrations.rclone.manager.service.get_configured_drive_name', return_value='gdrive')
+    @patch('javdb.integrations.rclone.manager.service.export_dedup_history')
+    @patch('javdb.integrations.rclone.dedup.subprocess.run')
+    def test_purge_renews_the_lease_and_releases_the_renewed_token(
+        self, mock_run, _mock_export, _mock_dn, monkeypatch, tmp_path,
+    ):
+        """A purge longer than the TTL must not leave its own lease stealable.
+        With the renew interval at 0 every folder is a checkpoint."""
+        mock_run.return_value = MagicMock(returncode=0)
+        path = _pending_record(str(tmp_path / 'dedup.csv'))
+        _pending_record(path, video_code='A-002', folder='/test/path-2')
+        monkeypatch.setattr(rm, 'DEDUP_LEASE_RENEW_INTERVAL_SECONDS', 0)
+        # Pin use_db_storage() True: an environment with storage off takes the
+        # unlocked branch, where there is no lease to renew at all.
+        monkeypatch.setattr(rm, 'use_db_storage', lambda: True)
+
+        with patch.object(
+            rm.advisory_lock, 'renew', side_effect=advisory_lock.renew,
+        ) as spy_renew:
+            result = rm.run_execute_from_csv(path, dry_run=False)
+
+        assert result == 0
+        assert spy_renew.call_count >= 2
+        assert [r['is_deleted'] for r in load_dedup_csv(path)] == ['True', 'True']
+        # The release used the renewed token, so the row really is gone.
+        assert _stored_value(rm.DEDUP_EXECUTE_LOCK_KEY) is None
+
+    @patch('javdb.integrations.rclone.manager.service.get_configured_drive_name', return_value='gdrive')
+    @patch('javdb.integrations.rclone.manager.service.export_dedup_history')
+    @patch('javdb.integrations.rclone.dedup.subprocess.run')
+    def test_purge_stops_when_the_lease_is_lost_mid_run(
+        self, mock_run, _mock_export, _mock_dn, monkeypatch, tmp_path,
+    ):
+        """Losing the lease means someone else may be purging the same paths —
+        stop rather than delete alongside them."""
+        mock_run.return_value = MagicMock(returncode=0)
+        path = _pending_record(str(tmp_path / 'dedup.csv'))
+        _pending_record(path, video_code='A-002', folder='/test/path-2')
+        monkeypatch.setattr(rm, 'DEDUP_LEASE_RENEW_INTERVAL_SECONDS', 0)
+        # Pin use_db_storage() True: an environment with storage off takes the
+        # unlocked branch, which purges without ever consulting the lease.
+        monkeypatch.setattr(rm, 'use_db_storage', lambda: True)
+
+        # Spy on the logger rather than caplog: _execute_dedup_purge calls
+        # setup_logging(), which re-points handlers and drops caplog's.
+        with patch.object(rm.advisory_lock, 'renew', return_value=None), \
+                patch.object(rm, 'logger', wraps=rm.logger) as spy_logger:
+            rm.run_execute_from_csv(path, dry_run=False)
+
+        mock_run.assert_not_called()
+        assert [r['is_deleted'] for r in load_dedup_csv(path)] == ['False', 'False']
+        assert any(
+            'lease lost mid-purge' in str(call.args[0])
+            for call in spy_logger.error.call_args_list
+        ), spy_logger.error.call_args_list
+
+    @patch('javdb.integrations.rclone.manager.service.get_configured_drive_name', return_value='gdrive')
+    @patch('javdb.integrations.rclone.manager.service.export_dedup_history')
+    @patch('javdb.integrations.rclone.dedup.subprocess.run')
+    def test_purge_checkpoints_prior_paths_when_renew_raises(
+        self, mock_run, _mock_export, _mock_dn, monkeypatch, tmp_path,
+    ):
+        """A transient D1/sqlite error out of renew() must not propagate: that
+        would skip the mark_records_deleted() call below the loop entirely,
+        losing the bookkeeping for every path already purged in this pass
+        (they would stay 'pending' and be purged again next run)."""
+        mock_run.return_value = MagicMock(returncode=0)
+        path = _pending_record(str(tmp_path / 'dedup.csv'))
+        _pending_record(path, video_code='A-002', folder='/test/path-2')
+        monkeypatch.setattr(rm, 'DEDUP_LEASE_RENEW_INTERVAL_SECONDS', 0)
+        monkeypatch.setattr(rm, 'use_db_storage', lambda: True)
+
+        real_renew = advisory_lock.renew
+        calls = {'n': 0}
+
+        def _flaky_renew(lease, **kwargs):
+            calls['n'] += 1
+            if calls['n'] == 1:
+                return real_renew(lease, **kwargs)
+            raise RuntimeError('transient D1 error')
+
+        with patch.object(rm.advisory_lock, 'renew', side_effect=_flaky_renew), \
+                patch.object(rm, 'logger', wraps=rm.logger) as spy_logger:
+            result = rm.run_execute_from_csv(path, dry_run=False)
+
+        # Checkpoint 1 (real renewal) lets folder 1 purge; checkpoint 2 raises
+        # and stops the pass before folder 2. Folder 1's purge must still be
+        # persisted even though the pass ended on an error, not a clean stop.
+        rows = load_dedup_csv(path)
+        assert result == 0
+        assert rows[0]['is_deleted'] == 'True'
+        assert rows[1]['is_deleted'] == 'False'
+        assert any(
+            'renewal raised' in str(call.args[0])
+            for call in spy_logger.error.call_args_list
+        ), spy_logger.error.call_args_list
+
+    @patch('javdb.integrations.rclone.manager.service.get_configured_drive_name', return_value='gdrive')
+    @patch('javdb.integrations.rclone.manager.service.export_dedup_history')
+    @patch('javdb.integrations.rclone.dedup.subprocess.run')
+    def test_file_only_purge_reports_busy_when_lease_lost_mid_run(
+        self, mock_run, _mock_export, _mock_dn, monkeypatch, tmp_path,
+    ):
+        """File-only mode has no shared queue for a lost-lease run to fall back
+        on: a plan left incomplete by a mid-purge lease loss must be reported
+        the same retryable way as never starting it (EXIT_LOCK_HELD) — even
+        though folder 1 did purge, the file's plan as a whole did not finish."""
+        mock_run.return_value = MagicMock(returncode=0)
+        path = _write_dedup_csv_file(str(tmp_path / 'dedup.csv'), ['/test/path', '/test/path-2'])
+        monkeypatch.setattr(rm, 'DEDUP_LEASE_RENEW_INTERVAL_SECONDS', 0)
+        monkeypatch.setattr(rm, 'use_db_storage', lambda: True)
+
+        real_renew = advisory_lock.renew
+        calls = {'n': 0}
+
+        def _flaky_renew(lease, **kwargs):
+            calls['n'] += 1
+            if calls['n'] == 1:
+                return real_renew(lease, **kwargs)
+            return None
+
+        with patch.object(rm.advisory_lock, 'renew', side_effect=_flaky_renew):
+            result = rm.run_execute_from_csv(path, dry_run=False, from_file_only=True)
+
+        # mark_records_deleted is DB-only and these records were seeded
+        # straight into the file (bypassing the DB), so completion can only be
+        # observed via how many paths were actually purged before the break.
+        assert result == rm.EXIT_LOCK_HELD
+        assert mock_run.call_count == 1
+
+        # Retry: this CSV has no matching DedupRecords rows at all (seeded
+        # straight into the file, not via the DB), so the DB cross-check on
+        # load cannot help here — _execute_dedup_purge must instead have
+        # rewritten path 1's is_deleted=True into this same file in place at
+        # the checkpoint before it lost the lease, for exactly this case.
+        second = rm.run_execute_from_csv(path, dry_run=False, from_file_only=True)
+
+        assert second == 0
+        assert mock_run.call_count == 2
+
+    @patch('javdb.integrations.rclone.manager.service.get_configured_drive_name', return_value='gdrive')
+    @patch('javdb.integrations.rclone.manager.service.export_dedup_history')
+    @patch('javdb.integrations.rclone.dedup.subprocess.run')
+    def test_file_only_retry_skips_paths_the_db_already_marked_deleted(
+        self, mock_run, _mock_export, _mock_dn, monkeypatch, tmp_path,
+    ):
+        """mark_records_deleted() never rewrites the CSV (see its docstring),
+        so a retry re-reads the identical file. Without a DB cross-check on
+        load, a retry after a lease-loss EXIT_LOCK_HELD would re-purge
+        whatever this same file already finished — the DB, kept current at
+        each renewal checkpoint, must be the retry's authority on what is
+        actually left. Seeds via the DB + a real export, matching how
+        --dedup-csv is produced in production (export_dedup_history)."""
+        from javdb.spider.services.dedup_store import export_dedup_db_to_csv
+
+        mock_run.return_value = MagicMock(returncode=0)
+        db_seed_path = str(tmp_path / 'unused.csv')  # append_dedup_record ignores this arg
+        _pending_record(db_seed_path, video_code='A-001', folder='/test/path')
+        _pending_record(db_seed_path, video_code='A-002', folder='/test/path-2')
+        csv_path = str(tmp_path / 'dedup.csv')
+        export_dedup_db_to_csv(csv_path)
+
+        monkeypatch.setattr(rm, 'DEDUP_LEASE_RENEW_INTERVAL_SECONDS', 0)
+        monkeypatch.setattr(rm, 'use_db_storage', lambda: True)
+
+        real_renew = advisory_lock.renew
+        calls = {'n': 0}
+
+        def _flaky_renew(lease, **kwargs):
+            calls['n'] += 1
+            if calls['n'] == 1:
+                return real_renew(lease, **kwargs)
+            return None
+
+        with patch.object(rm.advisory_lock, 'renew', side_effect=_flaky_renew):
+            first = rm.run_execute_from_csv(csv_path, dry_run=False, from_file_only=True)
+
+        assert first == rm.EXIT_LOCK_HELD
+        assert mock_run.call_count == 1
+
+        # Retry: the CSV file is byte-identical (never rewritten), but the
+        # first path's DB row is already IsDeleted from the checkpoint flush
+        # during the first attempt — only the second path should be attempted.
+        second = rm.run_execute_from_csv(csv_path, dry_run=False, from_file_only=True)
+
+        assert second == 0
+        assert mock_run.call_count == 2
+
+    @patch('javdb.integrations.rclone.manager.service.get_configured_drive_name', return_value='gdrive')
+    @patch('javdb.integrations.rclone.manager.service.export_dedup_history')
+    @patch('javdb.integrations.rclone.dedup.subprocess.run')
+    def test_file_only_purges_a_fresh_duplicate_at_a_previously_purged_path(
+        self, mock_run, _mock_export, _mock_dn, tmp_path,
+    ):
+        """uq_dedup_active_path only constrains IsDeleted=0 rows, so a path can
+        legally carry both an old deleted row and a fresh pending one — a new
+        duplicate landing where an earlier one was already purged. The DB
+        cross-check on load must key on "does this path still have a pending
+        DB row", not "does this path have any deleted DB row at all", or the
+        historical deleted row hides the fresh pending one from the purge
+        queue entirely and the run falsely reports success."""
+        from javdb.spider.services.dedup_store import export_dedup_db_to_csv, mark_records_deleted
+
+        mock_run.return_value = MagicMock(returncode=0)
+        db_seed_path = str(tmp_path / 'unused.csv')
+        _pending_record(db_seed_path, video_code='A-001', folder='/test/path')
+        mark_records_deleted(db_seed_path, [('/test/path', '2026-01-01 00:00:00')])
+        # A fresh duplicate lands at the same path after the earlier one was
+        # purged — legal, since the unique constraint only covers pending rows.
+        _pending_record(db_seed_path, video_code='A-002', folder='/test/path')
+
+        csv_path = str(tmp_path / 'dedup.csv')
+        export_dedup_db_to_csv(csv_path)
+
+        result = rm.run_execute_from_csv(csv_path, dry_run=False, from_file_only=True)
+
+        assert result == 0
+        mock_run.assert_called_once()
 
     def test_dry_run_takes_no_lease(self, tmp_path):
         with patch.object(rm.advisory_lock, 'try_acquire') as mock_acquire:

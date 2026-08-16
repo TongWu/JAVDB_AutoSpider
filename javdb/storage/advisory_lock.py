@@ -16,9 +16,13 @@ Row shape — one ``system_state`` row per lock, in the operations DB::
 ``expires_at`` is a fixed-width (20-char) ISO-8601 UTC timestamp, so a lease
 deadline can be compared *inside* SQL with ``substr(value, 1, 20)`` — ASCII
 order and chronological order coincide. Acquire is therefore a single
-conditional upsert and release a single conditional delete: one statement each,
-atomic on both backends (sqlite3 applies a statement atomically; D1
-auto-commits per statement).
+conditional upsert, renewal a single conditional update and release a single
+conditional delete: one statement each, atomic on both backends (sqlite3
+applies a statement atomically; D1 auto-commits per statement).
+
+A lease bounds how long a *crashed* holder blocks the lock; it cannot bound the
+work. Long destructive jobs therefore call :func:`renew` at safe checkpoints —
+see its docstring — instead of relying on the TTL to outlast them.
 
 Why acquire verifies by read-back
 ---------------------------------
@@ -103,6 +107,10 @@ ON CONFLICT(key) DO UPDATE SET
     updated_at = excluded.updated_at
 WHERE substr(system_state.value, 1, {_TS_WIDTH}) <= ?
 """
+
+# Conditional update: only the exact lease we wrote gets a new deadline, so a
+# lease that expired and was stolen meanwhile stays with its new owner.
+_RENEW_SQL = "UPDATE system_state SET value = ?, updated_at = ? WHERE key = ? AND value = ?"
 
 # Conditional delete: only the exact lease we wrote is removed, so a lease that
 # expired and was stolen meanwhile is left alone.
@@ -203,6 +211,57 @@ def try_acquire(
             key, holder, owner, rowcount,
         )
         return LockAttempt(lease=None, holder=holder)
+
+
+def renew(
+    lease: Lease,
+    *,
+    ttl_seconds: int = DEFAULT_LEASE_TTL_SECONDS,
+    now: Optional[datetime] = None,
+) -> Optional[Lease]:
+    """Push *lease*'s deadline out; returns ``None`` when it is no longer ours.
+
+    A fixed TTL only bounds how long a *crashed* holder blocks the lock — it
+    cannot bound the work. The dedup purge deletes remote folder after remote
+    folder and marks nothing deleted until the whole pass finishes, so a large
+    backlog can outlive any deadline picked up front, and an expired lease is
+    stealable *while its holder is still purging* — the double purge this lock
+    exists to prevent. Callers therefore renew at safe checkpoints during long
+    destructive work rather than guessing a TTL.
+
+    The UPDATE is conditional on our exact current token, so a lease already
+    stolen by another runner is never overwritten. As in :func:`try_acquire` the
+    verdict is the read-back, not the row count (see the module docstring for
+    the dual-backend reason).
+
+    On success the returned lease carries the **new** token: the old one is dead
+    and releasing it would delete nothing, so callers must keep the value
+    returned here and release that.
+    """
+    moment = now or datetime.now(timezone.utc)
+    renewed = Lease(
+        key=lease.key,
+        owner=lease.owner,
+        expires_at=_format(moment + timedelta(seconds=ttl_seconds)),
+    )
+
+    with _operations_db() as conn:
+        conn.execute(_RENEW_SQL, (renewed.token, _format(moment), lease.key, lease.token))
+        stored = _read_value(conn, lease.key)
+
+    if stored == renewed.token:
+        logger.info(
+            "Renewed advisory lease %s for %s (now expires %s)",
+            renewed.key, renewed.owner, renewed.expires_at,
+        )
+        return renewed
+
+    logger.error(
+        "Advisory lease %s could not be renewed for %s — it is now held by %s "
+        "(our lease expired at %s while we were still working)",
+        lease.key, lease.owner, _describe(stored), lease.expires_at,
+    )
+    return None
 
 
 def release(lease: Lease) -> bool:

@@ -130,8 +130,27 @@ def _target_logical_db(sql: str) -> Optional[str]:
 
 def _validate_migration_id(migration_id: str) -> None:
     """Reject migration IDs containing path separators or traversal sequences."""
-    if not _SAFE_MIGRATION_ID.match(migration_id):
+    if not _SAFE_MIGRATION_ID.fullmatch(migration_id):
         raise HTTPException(status_code=400, detail=_ERR_INVALID_ID)
+
+
+def _migration_file(migration_id: str) -> Path:
+    """Resolve *migration_id* to a .sql file inside :data:`_MIGRATIONS_DIR`.
+
+    The character allowlist above already rejects separators, but the file is
+    read (and its SQL returned to the caller), so containment is verified on the
+    *resolved* path as well: ``resolve()`` follows symlinks, and a link planted
+    in the migrations directory is the one way an allowlisted ID can still name
+    a file outside it.
+    """
+    _validate_migration_id(migration_id)
+    base = _MIGRATIONS_DIR.resolve()
+    candidate = (base / f"{migration_id}.sql").resolve()
+    try:
+        candidate.relative_to(base)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=_ERR_INVALID_ID) from None
+    return candidate
 
 
 def _row_value(row: Any, name: str, index: int) -> Any:
@@ -377,8 +396,7 @@ def run_migration(
     outcome is unknown, not rolled back. Claiming the ledger entry before
     execution is also what makes two concurrent applies resolve safely.
     """
-    _validate_migration_id(migration_id)
-    migration_file = _MIGRATIONS_DIR / f"{migration_id}.sql"
+    migration_file = _migration_file(migration_id)
 
     if not migration_file.exists():
         raise HTTPException(

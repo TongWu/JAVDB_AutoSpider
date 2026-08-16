@@ -1,192 +1,219 @@
 # 发布到公开仓库指南
 
-本文档说明代码如何从私有仓库自动同步到公开仓库。
+代码如何从私有仓库同步到公开镜像。
 
-## 概述
+## 目录
 
+- [概览](#概览)
+- [工作原理](#工作原理)
+- [配置](#配置)
+- [触发方式与输入](#触发方式与输入)
+- [所需 Secrets](#所需-secrets)
+- [从 dev 晋升到 main](#从-dev-晋升到-main)
+- [全量重镜像（破坏性）](#全量重镜像破坏性)
+- [FAQ](#faq)
+
+## 概览
+
+```text
+Private repo (main branch)
+    ↓ (手动触发)
+GitHub Actions: .github/scripts/publish_mirror.py
+    ↓ (擦除排除路径，应用 workflow 改写)
+Private repo (public-sync branch)
+    ↓ (fast-forward push)
+Public repo (dev branch)
+    ↓ (晋升 PR)
+Public repo (main branch)
 ```
-私有仓库（main 分支）
-    ↓ （push 时自动触发，或手动触发）
-GitHub Actions 工作流（git-filter-repo）
-    ↓ （重写历史，移除敏感文件）
-私有仓库（public-sync 分支）
-    ↓ （强制推送）
-公开仓库（dev 分支）
-```
+
+镜像以 **append-only（只追加）** 方式构建。每个尚未进入镜像的私有 commit，会被重放
+为一个公开 commit，接在镜像当前 tip 之上。每次发布都是 fast-forward，正常路径下
+绝不强推公开仓库。
 
 ## 工作原理
 
-发布过程使用 `git-filter-repo` 来：
+1. **从同步游标续跑。** 每个已发布的 commit 都携带 `Private-Commit: <sha>`
+   trailer，记录它由哪个私有 commit 构建而来。从镜像 tip 可达的最新一条即告诉下次
+   运行从何处续跑——没有独立的状态文件。
 
-1. **从整个 git 历史中完全移除被排除的文件**
-   - 公开仓库中不会有 `reports/`、日志文件或此工作流本身的任何痕迹
-   - 这比仅在最新提交中删除文件更加安全
+2. **重放每个新的私有 commit。** 按 first-parent 顺序，对每一个：
+   - 通过 git index 读入该 commit 的 tree（全程不落工作区）；
+   - 丢弃所有匹配 `exclude_paths` 的路径；
+   - 应用配置好的 workflow 改写；
+   - 把结果提交到上一个公开 commit 之上，保留原始作者与日期。
 
-2. **修剪文件移除后变为空的提交**
-   - 例如，仅修改了 `reports/` 的 "Auto-commit" 提交将被移除
-   - 这使公开仓库的历史记录保持干净且有意义
+3. **剪掉擦除后为空的 commit。** 只动了 `reports/` 的 `Auto-commit` 不会产出任何
+   公开 commit。
 
-3. **保留原始提交时间戳**
-   - 你的开发历史在公开仓库中保持准确
+4. **推送前校验。** 两道闸门，均为致命：
+   - 任何新 commit 中都不得出现匹配 `exclude_paths` 的路径；
+   - 不得**丢失**任何擦除规则并未要求丢弃的路径。
+
+5. **Fast-forward 推送**到公开目标分支。推送被拒即任务失败——这意味着镜像在我们脚下
+   发生了变化，而静默覆盖它正是本设计要防止的事。
+
+> **为什么改成 append-only？** 此前发布流程用 `git filter-repo` 重写整个历史再强推。
+> filter-repo 是确定性的，但 `exclude_paths` 本身就是它的输入之一——因此改动这个列表
+> 会让每个 commit 重新编号，并摧毁与公开 `main` 的 merge base。详见
+> [BFR-036](../../../design/BFR-036-Mirror-Rewrite-Rekeys-History/BFR-036-mirror-rewrite-rekeys-history.zh.md)。
 
 ## 配置
 
-所有发布配置集中在 `.publish-config.yml` 中：
+所有发布配置集中在 `.publish-config.yml`：
 
 ```yaml
-# 从公开仓库中排除的文件/目录（从整个历史中移除）
+# 不进入公开仓库的文件/目录
 exclude_paths:
   - "reports/"
   - "logs/"
-  - "config.py"          # 已解析的 secrets — 绝不发布
+  - "config.py"          # 已解析的密钥 —— 绝不发布
   - "CLAUDE.md"
   - "AGENTS.md"
   - "CONTEXT.md"
   - "*.db"
-  - ".github/workflows/block-public-sync-to-main.yml"
   - ".github/workflows/publish-to-public.yml"
+  - ".github/scripts/publish_mirror.py"
   - ".publish-config.yml"
-  # 仅私有仓库使用的基础设施 workflow — 整体移除，
-  # 使其绝不会进入（或运行于）公开仓库：
-  - ".github/workflows/publish-api-image.yml"
-  - ".github/workflows/sync-docs-to-wiki.yml"
-  - ".github/workflows/publish-openapi.yml"
-  - ".github/workflows/publish-query-contract.yml"
-  - ".github/workflows/publish-sql-contract.yml"
   # ... 完整列表见 .publish-config.yml
 
-# 应用到公开镜像的逐个 workflow 修改
+# 应用到公开镜像的逐 workflow 改写
 workflow_modifications:
-  # 注释掉 `schedule:` 触发器（公开仓库不做 cron 自动运行）
-  disable_schedule:
+  disable_schedule:        # 注释掉 `schedule:` 触发器
     - ".github/workflows/DailyIngestion.yml"
-    - ".github/workflows/QBFileFilter.yml"
-    - ".github/workflows/WeeklyDedup.yml"
-    - ".github/workflows/StaleSessionCleanup.yml"
-    - ".github/workflows/SiteContractSentinel.yml"
-    - ".github/workflows/ReconcileLibrary.yml"
-    - ".github/workflows/PurgeMissingFiles.yml"
-    - ".github/workflows/SubscriptionMonitor.yml"
-  # 取消注释公开仓库的 push 触发器
-  enable_push_trigger:
+  enable_push_trigger:     # 取消注释公开仓库的 push 触发器
     - ".github/workflows/docker-publish-ghcr.yml"
-  # 注释掉 PRIVATE_ONLY_PUSH 区块（保留文件，去掉 push 触发）
-  disable_push_trigger:
+  disable_push_trigger:    # 注释掉 PRIVATE_ONLY_PUSH 区块
     - ".github/workflows/TestIngestion.yml"
-  # 注释掉整个 `on:` 块。当前刻意为空——仅私有使用的 workflow
-  # 改为通过 `exclude_paths` 整体移除，因为没有触发器的 workflow
-  # 文件是无效文件，每次发布都会产生空的失败 run。
-  disable_all_triggers: []
+  disable_all_triggers: [] # 注释掉整个 `on:` 区块
 
-# 目标分支
 branches:
   publish_branch: "public-sync"
   public_target_branch: "dev"
 ```
 
-## 触发条件
+### 条目语义
 
-工作流通过两种方式触发：
+| 条目形态 | 匹配方式 |
+|---|---|
+| 不含 glob 元字符（`*`、`?`、`[`） | 精确路径；若指向目录，则其下所有路径 |
+| 含 glob 元字符 | `fnmatch`，其中 `*` 也跨越 `/` —— 所以 `*.env` 能匹配任意深度的 `.env` |
 
-### 1. 自动触发（push 到 main 时）
+以 `**/` 开头的 glob 要求前面必须有一个 `/`，因此它永远覆盖不到根层级的情况。
+需要搭配一个字面量条目（`secrets/` 与 `**/secrets/` 并列）。
 
-```yaml
-push:
-  branches:
-    - main
-  paths-ignore:
-    - 'reports/**'
-    - 'logs/**'
-    - '*.csv'
-```
+### 改动 `exclude_paths` 是廉价的——但不追溯
 
-当你将代码更改推送到 `main` 时，工作流会自动运行并同步到公开仓库。
+新增条目只影响**此后发布的 commit**。它**不会**把该路径从已发布的历史中移除；
+那需要[全量重镜像](#全量重镜像破坏性)。
 
-### 2. 手动触发（workflow_dispatch）
+## 触发方式与输入
 
-进入 GitHub Actions → "Publish to Public Repository" → "Run workflow"
+仅支持手动触发：GitHub Actions → "Publish to Public Repository" → "Run workflow"。
 
-选项：
-- **dry_run**：勾选复选框可进行模拟运行而不实际推送
+| 输入 | 用途 |
+|---|---|
+| `dry_run` | 构建镜像 commit 并跑完两道闸门，但不推送 |
+| `target_branch` | 覆盖公开目标分支（默认取自配置） |
+| `full_remirror` | **破坏性。** 重建全部历史并强推——见下文 |
+| `bootstrap_private_commit` | 镜像 tip 对应的私有 commit。仅在镜像尚无 `Private-Commit` trailer 时需要传一次 |
+| `allow_public_drift` | 覆盖镜像分支上存在、但本次发布不会重现的内容。仅在看过构建步骤列出的路径后使用 |
 
 ## 所需 Secrets
 
-在 GitHub 仓库设置 → Secrets and variables → Actions 中配置：
-
 | Secret | 说明 |
 |--------|------|
-| `DEPLOY_KEY` | 用于访问私有仓库的 SSH 密钥 |
-| `GIT_USERNAME` | 用于公开仓库认证的 Git 用户名 |
-| `GIT_PASSWORD` | 用于公开仓库认证的 Git 密码/Personal Access Token |
+| `DEPLOY_KEY` | 访问私有仓库的 SSH key |
+| `GIT_USERNAME` | 公开仓库认证用的 Git 用户名 |
+| `GIT_PASSWORD` | 公开仓库的 PAT。需要 workflow 权限（classic：`repo` + `workflow`），因为 `GITHUB_TOKEN` 无法更新 `.github/workflows/**` |
 | `GIT_REPO_URL_REMOTE` | 公开仓库 URL（HTTPS 格式） |
 
-## 发布过程详解
+## 从 dev 晋升到 main
 
-### 步骤 1：检出和创建分支
-- 检出完整的 git 历史
-- 创建新的 `public-sync` 分支
+公开仓库的 `dev` 分支接收每一次发布；`main` 通过 pull request 从它晋升。
 
-### 步骤 2：重写历史
-- `git-filter-repo` 从每个提交中移除所有被排除的文件
-- 修剪变为空的提交
-- 保留原始时间戳
-- 仅私有仓库使用的基础设施 workflow（`publish-api-image`、`sync-docs-to-wiki`、`publish-openapi`、`publish-query-contract`、`publish-sql-contract`）已列入 `exclude_paths`，因此被整体移除——它们绝不会出现在公开仓库、也不会在其中运行
+由于发布是 append-only 的，`dev` 始终是上一次晋升状态的后代，因此晋升 PR 展示的是
+真实差异，并且能干净合并。
 
-### 步骤 3：工作流修改
-- 禁用定时触发器（防止 fork 自动运行）
-- 为公开仓库启用 Docker push 触发器
-- 仅私有仓库使用的 push 触发器（如 `TestIngestion`）在原处被注释掉
-- 标记了 `# PUBLIC_RUNNER: <name>` 的 `runs-on:` 行会被重写为使用 `<name>`，使得在私有自托管 runner 上运行的任务在公开仓库中回退到 GitHub 托管的等效 runner
+> **晋升 PR 必须用 merge commit 合并，绝不能用 squash 或 rebase。**
+> merge commit 会让 `dev` 的 tip 成为 `main` 的祖先，于是下一次晋升的 merge base
+> 就是你刚晋升的那个 commit，差异中只包含此后新发布的内容。squash 和 rebase 都会
+> 给 `main` 产生 `dev` 中不存在的全新 SHA，导致 merge base 停留在**上上次**晋升处
+> ——已晋升的改动会在下一个 PR 中再次出现，正是本设计要消除的那种膨胀 diff。
 
-### 步骤 4：推送到公开仓库
-- 强制推送到私有仓库的 `public-sync` 分支
-- 强制推送到公开仓库的 `dev` 分支
+另外还有两件事会破坏这个保证——都要避免：
 
-## 重要说明
+- **直接向公开 `dev` 提交。** 每个发布出的 commit，其 tree 是过滤后私有 commit 的
+  完整快照而非补丁；因此直接提交在下次发布时**仍然是 fast-forward**，但它的内容会从
+  tree 里消失。构建步骤会直接拒绝，并列出每一个将被丢失的路径。正确做法是把该改动
+  移入私有仓库再从那里发布；只有在你已经看过那份清单、并确认要以镜像为准时，才使用
+  `allow_public_drift`。
+- **在两次晋升之间跑全量重镜像。** 它会替换 `dev` 的历史，于是 `main` 会失去与它的
+  共同祖先。
 
-### 强制推送警告
+万一某次晋升不慎用了 squash 或 rebase，补救办法是在下次晋升前把 `main` 合回 `dev`
+（`sync-main-to-dev.yml`，手动触发）。这样能恢复共同祖先，且不重写任何历史。
 
-由于 `git-filter-repo` 会重写提交历史，工作流总是对公开仓库执行**强制推送**。这是预期行为。
+## 全量重镜像（破坏性）
 
-### 安全提醒
+`full_remirror: true` 会按今天的 `exclude_paths` 从根重建每一个 commit，并**强推**
+结果。
 
-1. **永远不要提交 secrets** — 使用环境变量或 GitHub secrets
-2. **检查 `.publish-config.yml`** — 确保所有敏感路径都已列出
-3. **先使用 dry-run** — 实际发布前先用 dry_run=true 测试
+**仅用于把某个东西追溯性地从已发布历史中擦除**——即那种本就不该发布、且在旧 commit
+中仍然可见的路径。
 
-## 常见问题
+代价：
 
-### 问：如何添加新的排除文件/目录？
+- 已发布历史被替换。任何从它分叉出来的分支——包括公开 `main`——都会失去共同祖先，
+  于是下一个晋升 PR 会变成整仓库差异，并需要手工解决冲突。
+- 重建出的历史是线性的：它只走 first-parent，因此私有仓库的 merge commit 会被压平。
 
-编辑 `.publish-config.yml` 并在 `exclude_paths` 中添加路径：
+全量重镜像之后，应当用新的 `dev` 重置公开 `main`，而不是对一条它已不再共享的历史
+发起晋升 PR。
 
-```yaml
-exclude_paths:
-  - "reports/"
-  - "your-new-path/"  # 在这里添加
-```
+## FAQ
 
-### 问：如何让自托管任务在公开仓库中工作？
+### Q：如何新增一个要排除的文件/目录？
 
-公开仓库无法访问私有的自托管 runner 池，因此任何带有 `runs-on: self-hosted`（或其他私有标签）的任务都会在那里挂起。使用内联注释标记你希望公开仓库使用的 GitHub 托管 runner：
+把路径加到 `.publish-config.yml` 的 `exclude_paths` 中。它从下一次发布开始生效。
+若还需要把它从已发布历史中移除，请执行[全量重镜像](#全量重镜像破坏性)。
+
+### Q：推送到公开仓库被拒了，怎么办？
+
+镜像分支不是所构建内容的 fast-forward——说明有人对它强推过或直接提交过。请手工核对
+调和。**不要强推**，除非你打算做全量重镜像并接受随后重置 `main`。
+
+### Q：任务提示没有同步游标，我该传什么？
+
+该镜像是在 append-only 模式之前发布的，不带 `Private-Commit` trailer。找到它的 tip
+对应的那个私有 commit，作为 `bootstrap_private_commit` 传入。脚本拒绝猜测，因为猜错
+会静默地丢失或重复 commit。
+
+### Q：如何让 self-hosted 的 job 在公开仓库上也能跑？
+
+公开仓库无法访问私有的 self-hosted runner 池，所以任何 `runs-on: self-hosted` 的 job
+在那边都会一直挂起。在该行内联标注：
 
 ```yaml
 build-arm:
   runs-on: [self-hosted, ARM64]  # PUBLIC_RUNNER: ubuntu-24.04-arm
 ```
 
-发布时，`publish-to-public.yml` 会将匹配此模式的每一行重写为 `runs-on: <public-runner>`（此处为 `ubuntu-24.04-arm`）。该标记会扫描所有 `.github/workflows/*.yml` 文件，因此无需在 `.publish-config.yml` 中添加额外条目。
+所有 `.github/workflows/*.yml` 中带此标记的 `runs-on:` 行都会被改写为
+`runs-on: <name>`，因此 `.publish-config.yml` 里无需任何条目。单 token 形式与锁定
+架构的数组形式都支持；替换值始终是单个 token。像 `${{ matrix.runner }}` 这样的表达式
+形式不带标记，会原样保留。
 
-单 token 形式（`runs-on: self-hosted`）和按架构固定的数组形式（`runs-on: [self-hosted, ARM64]`）都受支持——当自托管任务必须锁定某一架构时需要数组形式，因为 fleet 只用默认的 `self-hosted` / `Linux` / `X64` / `ARM64` 标签标记机器。替换 runner（`PUBLIC_RUNNER:` 之后）仍为单 token，GitHub 托管的回退 runner 永远不需要数组。表达式形式（如 `${{ matrix.runner }}`）不带标记，保持原样。
+### Q：某个 workflow 契约测试在本仓库通过，却在公开仓库失败，为什么？
 
-### 问：某个工作流契约测试在这里通过，却在公开仓库失败，为什么？
+因为镜像是一棵*被改写过*的树，不是拷贝。任何对 `.github/` 内容做断言的测试，看到的树
+都可能与你提交的不同：
 
-因为镜像是**被重写过的**代码树，而不是原样拷贝。任何对 `.github/` 内容做断言的测试，看到的树都可能与你提交的不同：
+- 位于 `exclude_paths` 中的 workflow（例如 `publish-to-public.yml`）**不存在**，
+  读取它会抛 `FileNotFoundError`；
+- 带 `# PUBLIC_RUNNER` 标记的 `runs-on:` 行**已经被改写**。
 
-- 位于 `exclude_paths` 中的工作流（例如 `publish-to-public.yml`）**并不存在**，读取时会抛出 `FileNotFoundError`；
-- 带 `# PUBLIC_RUNNER` 标记的 `runs-on:` 行**已被重写**为对应的 GitHub 托管 runner，因此断言 `[self-hosted, …]` 会失败。
-
-请根据「当前检出是否为镜像」来保护这类断言。`publish-to-public.yml` 是否缺失即为判定标记——它被排除在镜像之外，而在其他任何地方都存在：
+请根据当前 checkout 是否为镜像来保护这类断言。`publish-to-public.yml` 的缺失就是判据：
 
 ```python
 IS_PUBLIC_MIRROR = not (WORKFLOWS_DIR / "publish-to-public.yml").exists()
@@ -196,39 +223,18 @@ def test_jobs_run_self_hosted():
     ...
 ```
 
-私有仓库仍然完整执行该契约，只有派生出的镜像会跳过。实际用法见 `tests/unit/test_workflow_public_runner_markers.py`。
+实际用法见 `tests/unit/test_workflow_public_runner_markers.py`。
 
-### 问：如何更改目标分支？
+### Q：如何修改目标分支？
 
-编辑 `.publish-config.yml`：
+要么修改 `.publish-config.yml` 中的 `branches.public_target_branch`，要么在触发
+workflow 时传 `target_branch` 做一次性覆盖。
 
-```yaml
-branches:
-  public_target_branch: "main"  # 从 "dev" 改为 "main"
-```
+若该分支在公开仓库上尚不存在，构建会从默认分支分叉出它，以保证有正常的 merge base、
+始终可合并。分支由推送创建，不需要预先建好。
 
-### 问：工作流失败了，如何调试？
+### Q：workflow 失败了，如何排查？
 
-1. 检查 GitHub Actions 中的工作流运行日志
-2. 使用 `dry_run: true` 运行，查看不推送时会发生什么
-3. 验证所有 secrets 是否正确配置
-
-### 问：如何手动回滚？
-
-```bash
-# 回滚到公开仓库的上一个提交
-git push -f public HEAD~1:dev
-
-# 或推送特定提交
-git push -f public <commit-hash>:dev
-```
-
-## 对比：旧脚本 vs 新工作流
-
-| 特性 | 旧脚本 | 新工作流 |
-|------|--------|----------|
-| 触发方式 | 仅手动 | 自动 + 手动 |
-| 历史清理 | 在最新提交中删除文件 | 从整个历史中移除 |
-| 空提交 | 仍然可见 | 自动修剪 |
-| 配置方式 | 硬编码在脚本中 | 集中的 YAML 配置 |
-| 运行环境 | 本地机器 | GitHub Actions |
+1. 查看运行日志——构建步骤会逐条列出它重放、跳过或拒绝的每个 commit。
+2. 用 `dry_run: true` 重跑，可在不推送的前提下走完两道校验闸门。
+3. 确认所有 secrets 配置正确。

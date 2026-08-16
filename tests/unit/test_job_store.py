@@ -56,6 +56,27 @@ class TestResolvedPathStaysUnderDir:
         assert job_store.job_meta_path("daily-1").name == "daily-1.meta.json"
 
 
+class TestResolveJobResultFile:
+    """Containment sits in the resolver itself, so no caller can end up holding
+    a path that escaped the job log dir (CodeQL py/path-injection)."""
+
+    def test_rejects_absolute_path_outside_the_job_log_dir(self):
+        with pytest.raises(ValueError):
+            job_store.resolve_job_result_file("/etc/passwd")
+
+    def test_rejects_traversal_out_of_the_job_log_dir(self):
+        escaping = context.RESOLVED_JOB_LOG_DIR / ".." / "escaped.result.json"
+        with pytest.raises(ValueError):
+            job_store.resolve_job_result_file(str(escaping))
+
+    def test_returns_resolved_path_inside_the_job_log_dir(self):
+        good = context.RESOLVED_JOB_LOG_DIR / "daily-1.result.json"
+        assert job_store.resolve_job_result_file(str(good)) == good
+
+    def test_load_result_summary_ignores_a_path_outside_the_dir(self):
+        assert job_store.load_result_summary("/etc/passwd") is None
+
+
 class TestValidateJobResultFile:
     def test_rejects_path_outside_job_log_dir(self):
         with pytest.raises(HTTPException) as exc:

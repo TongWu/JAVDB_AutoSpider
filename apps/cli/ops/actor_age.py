@@ -18,6 +18,17 @@ from javdb.storage.db import HISTORY_DB_PATH, get_db
 from javdb.storage.repos.actor_metadata_repo import ActorMetadataRepo
 
 
+def _mask_birthdate(birthdate: str) -> str:
+    """Show only the birth year: ``1990-05-20`` -> ``1990-**-**``.
+
+    A full date of birth is personal data and this listing is routinely captured
+    in CI logs. The year is what the cache is debugged against (together with
+    ``age_now``), so the rest is masked — matching javdb.infra.masking's
+    partial-masking convention for values that stay useful when abbreviated.
+    """
+    return f"{birthdate[:4]}-**-**" if len(birthdate) >= 4 else "****"
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="apps.cli.ops.actor_age",
@@ -53,7 +64,8 @@ def main(argv: list[str] | None = None) -> int:
         for r in rows:
             bd = r.get("birthdate")
             age = compute_age(bd, today) if bd else None
-            print(f"{r['actor_href']}\t{bd or '-'}\t{age if age is not None else '-'}\t{r.get('source') or '-'}")
+            shown_bd = _mask_birthdate(bd) if bd else '-'
+            print(f"{r['actor_href']}\t{shown_bd}\t{age if age is not None else '-'}\t{r.get('source') or '-'}")
         return 0
 
     if args.command == "clear":

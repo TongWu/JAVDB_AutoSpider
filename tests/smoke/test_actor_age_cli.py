@@ -97,3 +97,7 @@ def test_list_with_rows(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "/actors/h" in out
     assert "minnano-av" in out
+    # A full date of birth is personal data and this listing lands in CI logs:
+    # only the year survives, which is what the cache is debugged against.
+    assert "1990-05-20" not in out
+    assert "1990-**-**" in out
